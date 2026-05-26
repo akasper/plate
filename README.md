@@ -1,13 +1,14 @@
 # plate_core
 
-**plate_core** is the shared library powering the [PLATE](https://github.com/akasper/plate_template) platform tooling. It is designed to be deployed in two forms:
+**plate_core** is the shared library powering the [PLATE](https://github.com/akasper/plate_template) platform tooling. It is designed to be deployed in three forms:
 
 | Surface | Target User | How to Install |
 |---|---|---|
 | `gh plate` extension | Humans and scripts — terminal TUI for PLATE project health | `gh extension install akasper/plate_core` |
 | `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in Copilot CLI | `npx plate-mcp` or binary install |
+| Copilot CLI plugin | Interactive Copilot CLI sessions — conversational `/agent plate` workflow | `copilot plugin install akasper/plate_core` |
 
-Both surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
+All surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
 
 ## What It Does
 
