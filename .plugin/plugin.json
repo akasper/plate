@@ -1,6 +1,6 @@
 {
   "name": "plate-core",
-  "description": "PLATE core Copilot CLI plugin scaffold (Epic 1 no-op baseline).",
+  "description": "PLATE core Copilot CLI plugin with context-first agent + MCP wiring.",
   "version": "0.1.0",
   "author": {
     "name": "PLATE / akasper"
