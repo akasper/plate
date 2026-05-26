@@ -376,3 +376,30 @@ jobs:
             });
 
             core.info(`Tracking comment posted on PR #${prNumber}.`);
+
+            // Step 4: Auto-apply risk:low and auto-merge labels to the PR.
+            // Feedback Response PRs are low-risk by design (addressing review feedback only),
+            // so they should be automatically eligible for autonomous auto-merge.
+            // This step runs in the same workflow context as the Feedback Response label creation,
+            // ensuring consistent labeling without depending on event propagation from github-script.
+            core.info(`Auto-labeling PR #${prNumber} with risk:low and auto-merge...`);
+            const prLabels = context.payload.pull_request?.labels?.map(l => l.name) || [];
+            const labelsToAdd = [];
+            if (!prLabels.includes('risk:low')) {
+              labelsToAdd.push('risk:low');
+            }
+            if (!prLabels.includes('auto-merge')) {
+              labelsToAdd.push('auto-merge');
+            }
+            if (labelsToAdd.length > 0) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner, repo,
+                  issue_number: prNumber,
+                  labels: labelsToAdd,
+                });
+                core.info(`Added labels to PR #${prNumber}: ${labelsToAdd.join(', ')}`);
+              } catch (labelErr) {
+                core.warning(`Could not add labels to PR #${prNumber}: ${labelErr.message}`);
+              }
+            }
