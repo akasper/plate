@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from .bootstrap import run_bootstrap
 from .epics import get_epic_status
 from .features import get_features
 from .health import get_health
@@ -60,6 +61,19 @@ def cmd_features(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bootstrap(args: argparse.Namespace) -> int:
+    report = run_bootstrap(args.repo, apply_mode=args.apply)
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Repo: {report.repo}")
+    print(f"Mode: {'APPLY' if report.apply_mode else 'DRY-RUN'}")
+    for action in report.actions:
+        print(f"- {action.name}: {action.state} ({action.detail})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gh plate", description="PLATE core CLI extension")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -80,6 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
     features.add_argument("--repo", help="owner/name; defaults to git remote origin")
     features.add_argument("--json", action="store_true", help="Output JSON")
     features.set_defaults(func=cmd_features)
+
+    bootstrap = sub.add_parser("bootstrap", help="Plan/apply baseline PLATE bootstrap actions")
+    bootstrap.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    bootstrap.add_argument("--apply", action="store_true", help="Apply supported actions instead of dry-run planning")
+    bootstrap.add_argument("--json", action="store_true", help="Output JSON")
+    bootstrap.set_defaults(func=cmd_bootstrap)
     return parser
 
 

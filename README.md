@@ -17,6 +17,7 @@ All surfaces are backed by the same `plate_core` library, ensuring consistent be
 - **Health check** — label coverage, branch protection status, open Epic count
 - **Epic status** — per-epic child issue summary via `gh plate epic status`
 - **Feature detection** — optional PLATE capability detection via `gh plate features`
+- **Bootstrap planning** — new-project setup planning/apply baseline via `gh plate bootstrap`
 - **MCP tools** — `plate_health` and `plate_epic_status` return structured payloads via MCP content
 - **Copilot plugin** — installable agent surface (`/agent plate`) with bundled MCP server configuration
 
@@ -30,6 +31,8 @@ gh plate health                   # PLATE health check for the current repo
 gh plate health --repo akasper/plate_core --json
 gh plate epic status --repo akasper/plate_core --json
 gh plate features --repo akasper/plate_core --json
+gh plate bootstrap --repo akasper/plate_core --json     # dry-run plan
+gh plate bootstrap --repo akasper/plate_core --apply    # apply supported steps
 ```
 
 ### As an MCP server in Copilot CLI (v1 baseline)

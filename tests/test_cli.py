@@ -5,6 +5,7 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from plate_core.cli import main
+from plate_core.bootstrap import BootstrapAction, BootstrapReport
 from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.features import FeatureFlag, FeatureReport
 from plate_core.health import HealthReport
@@ -67,6 +68,21 @@ class CliTests(unittest.TestCase):
         payload = json.loads(out.getvalue().strip())
         self.assertEqual(payload["repo"], "akasper/plate_core")
         self.assertEqual(payload["features"][0]["name"], "copilot-plugin-root")
+
+    @patch("plate_core.cli.run_bootstrap")
+    def test_bootstrap_json_output(self, mock_run_bootstrap):
+        mock_run_bootstrap.return_value = BootstrapReport(
+            repo="akasper/plate_core",
+            apply_mode=False,
+            actions=[BootstrapAction(name="enable-wiki", state="planned", detail="Set has_wiki=true")],
+        )
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["bootstrap", "--repo", "akasper/plate_core", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(payload["repo"], "akasper/plate_core")
+        self.assertEqual(payload["actions"][0]["name"], "enable-wiki")
 
 
 if __name__ == "__main__":

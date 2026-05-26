@@ -15,9 +15,14 @@ class GhApiError(RuntimeError):
 class GhClient:
     """Minimal GitHub API helper using the authenticated `gh` CLI."""
 
-    def api(self, endpoint: str) -> object:
+    def api(self, endpoint: str, method: str = "GET", fields: dict | None = None) -> object:
+        cmd = ["gh", "api", endpoint]
+        if method != "GET":
+            cmd.extend(["-X", method])
+        for key, value in (fields or {}).items():
+            cmd.extend(["-f", f"{key}={value}"])
         proc = subprocess.run(
-            ["gh", "api", endpoint],
+            cmd,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -26,4 +31,5 @@ class GhClient:
         )
         if proc.returncode != 0:
             raise GhApiError(proc.stderr.strip() or proc.stdout.strip() or "gh api call failed")
-        return json.loads(proc.stdout)
+        out = proc.stdout.strip()
+        return json.loads(out) if out else {}
