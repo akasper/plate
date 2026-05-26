@@ -168,6 +168,7 @@ audit:
   output_directory: "docs/audits"
 
 open_design_items:
-  - "Replace generic CI, audit, release, and pages placeholders with stack-specific commands in generated projects."
-  - "Define project-specific wiki page map before enabling broad wiki synchronization."
-  - "Create running example projects outside the book appendices and keep them versioned in repositories."
+  - "Select implementation stack (language/runtime) for plate_core — see open Research issue."
+  - "Define package layout for shared library, gh extension entry point, and MCP server entry point once stack is confirmed."
+  - "Replace placeholder CI, audit, and release steps with stack-specific commands after stack selection."
+  - "Decide distribution format for plate-mcp (binary release alongside gh extension, or npx-runnable npm package)."

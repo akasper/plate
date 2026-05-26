@@ -1,4 +1,65 @@
-<!-- Trivial rebuild trigger to refresh GitHub mergeability status (mobile app cache) -->
+# plate_core
+
+**plate_core** is the shared library powering the [PLATE](https://github.com/akasper/plate_template) platform tooling. It is designed to be deployed in two forms:
+
+| Surface | Target User | How to Install |
+|---|---|---|
+| `gh plate` extension | Humans and scripts — terminal TUI for PLATE project health | `gh extension install akasper/plate_core` |
+| `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in Copilot CLI | `npx plate-mcp` or binary install |
+
+Both surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
+
+## What It Does
+
+`plate_core` surfaces the live state of any PLATE project by querying the GitHub API and applying PLATE methodology rules:
+
+- **Health check** — label coverage, branch protection status, open Epic count, stale Issues
+- **Epic status** — child issue breakdown, blocked items, auto-merge queue length
+- **Feature flag detection** — detects optional secrets/variables that unlock progressive PLATE automation
+- **Issue queries** — surfaces open Questions, unresolved Feedback Response items, and unlabeled issues
+- **Bootstrap assistance** — guidance and automation for new PLATE project setup
+
+## Quick Start
+
+### As a `gh` extension
+
+```sh
+gh extension install akasper/plate_core
+gh plate health                   # PLATE health check for the current repo
+gh plate epic status              # Epic child-issue breakdown
+gh plate features                 # Detect configured optional PLATE features
+```
+
+### As an MCP server in Copilot CLI
+
+```sh
+# In your Copilot CLI session:
+/mcp connect npx plate-mcp
+# Tools are now available to the AI agent natively
+```
+
+## Architecture
+
+```
+plate_core/           ← shared library (business logic + GitHub API queries)
+├── cmd/              ← gh extension entry point (gh plate)
+│   └── plate/        ← TUI commands using gum/Charm
+├── mcp/              ← MCP server entry point (plate-mcp)
+│   └── server/       ← tool definitions exposed to AI agents
+└── pkg/              ← core library packages
+    ├── github/       ← GitHub API client wrappers
+    ├── health/       ← health check logic
+    ├── epic/         ← epic state queries
+    └── features/     ← optional feature detection
+```
+
+> **Note:** The implementation stack is under active research. See the [Research issue](../../issues) for language/runtime selection.
+
+## Contributing
+
+This repository follows the [PLATE methodology](https://github.com/akasper/plate_template). See `AGENTS.md` for agent operating rules and the full PLATE workflow.
+
+---
 
 ## Keeping Your Fork Current
 
