@@ -44,13 +44,8 @@ jobs:
               return;
             }
 
-            if (matches[0] === 'Feature' && epicLabels.length !== 1) {
-              core.setFailed(`Feature issues must carry exactly one Epic: short-name label. Found: ${epicLabels.join(', ') || '(none)'}.`);
-              return;
-            }
-
-            if (matches[0] === 'Epic' && epicLabels.length !== 1) {
-              core.setFailed(`Epic issues must carry exactly one dedicated Epic: short-name label. Found: ${epicLabels.join(', ') || '(none)'}.`);
+            if (requiresEpic.includes(matches[0]) && epicLabels.length !== 1) {
+              core.setFailed(`${matches[0]} issues must carry exactly one Epic: short-name label. Found: ${epicLabels.join(', ') || '(none)'}.`);
               return;
             }
 
