@@ -14,6 +14,8 @@ last_verified_commit: "pending-merge"
 | Feature | Status | Issue | Pull Request | Tests / Evidence | Wiki / Docs | Release | Last Verified |
 |---|---|---|---|---|---|---|---|
 | PLATE process baseline and project initialization | Implemented | — | #1 | Repository scaffolding, labels, workflows, `SPEC.md`, `README.md`, `AGENTS.md` | `README.md`, `SPEC.md`, `AGENTS.md` | Unreleased | 2025-05-27 |
+| Stack selection research | Research complete | #5 | #6 | `docs/research/stack-selection.md`, official GitHub CLI / Copilot plugin / MCP SDK docs review | `docs/research/stack-selection.md` | Unreleased | 2026-05-26 |
+| label-check.yml requiresEpic fix | Implemented | — | #7 | `.github/workflows/label-check.yml`: requiresEpic variable now used in Epic/Feature check | `AGENTS.md §Label Rules` | Unreleased | 2026-05-26 |
 
 ## Operational Behavior
 
