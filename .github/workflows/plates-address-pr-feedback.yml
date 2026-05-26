@@ -195,7 +195,7 @@ jobs:
               `3. For all other actionable comments: make the necessary code change or reply explaining why no change is needed`,
               `4. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the GitHub GraphQL \`resolveReviewThread\` mutation`,
               `5. **Push all changes to the existing branch \`${prBranch}\`** — do not open a new PR`,
-              `6. If you must open a new PR (e.g., the branch is protected), label it \`Feedback Response\` and include \`Closes #TASK_ISSUE_NUMBER\` in the PR body so CI passes and the task issue auto-closes on merge`,
+              `6. If you must open a new PR (e.g., the branch is protected), label it \`Feedback Response\` (no closing keyword is required for Feedback Response PRs)`,
               `7. If any item requires human judgment (API keys, architectural decisions, security changes, credential handling), add the \`need:human-review\` label to PR #${prNumber} and leave a comment identifying exactly what requires human input`,
               `8. Close this issue after all feedback is addressed and changes are pushed`,
               '',

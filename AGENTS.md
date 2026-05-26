@@ -186,10 +186,10 @@ When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR, the `
 |---|---|
 | Workflow fires | Issue created with `Feedback Response` label, assigned to `copilot` |
 | Copilot addresses feedback | Commits pushed to existing PR branch; review threads resolved |
-| If a new PR is needed | PR labeled `Feedback Response`, includes `Closes #TASK_ISSUE` in body |
+| If a new PR is needed | PR labeled `Feedback Response`, no closing keyword required |
 | Completion | Task issue closed; original PR re-reviewed by the original feedback author |
 
-`Feedback Response` issues and PRs are PLATES process artifacts — they are exempt from the `Epic:` label requirement and from the `CURRENT.md` update requirement. They do require a closing issue link (`Closes #N`) because the task issue is always present. The Copilot Coding Agent is reliably triggered by issue assignment via `GITHUB_TOKEN` (a fully GitHub-native, PAT-free path). The `@copilot` mention-in-comment path is blocked for `github-actions[bot]` comments by GitHub's bot-isolation routing and should not be used for machine-to-machine invocation.
+`Feedback Response` issues and PRs are PLATES process artifacts — they are exempt from the `Epic:` label requirement, from the `Closes #N` closing keyword requirement, and from the `CURRENT.md` update requirement. The Copilot Coding Agent is reliably triggered by issue assignment via `GITHUB_TOKEN` (a fully GitHub-native, PAT-free path). The `@copilot` mention-in-comment path is blocked for `github-actions[bot]` comments by GitHub's bot-isolation routing and should not be used for machine-to-machine invocation.
 
 **Deduplication:** The workflow posts a tracking comment containing the marker `<!-- plates-feedback-trigger:<agent> -->` on the PR after each trigger. A 10-minute cooldown prevents duplicate task issues when a single review fires multiple parallel events.
 
