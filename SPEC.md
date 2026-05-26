@@ -2,7 +2,7 @@
 spec_version: "0.1"
 process_version: "PLATE 0.6"
 owner: "akasper"
-updated_at: "2025-05-27"
+updated_at: "2026-05-26"
 ---
 
 # Project Specification

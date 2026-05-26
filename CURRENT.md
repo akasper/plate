@@ -1,8 +1,8 @@
 ---
 current_state_version: "0.2"
 process_version: "PLATE 0.6"
-last_verified_at: "2025-05-27"
-last_verified_commit: "pending-merge"
+last_verified_at: "2026-05-26"
+last_verified_commit: "392f91a"
 ---
 
 # Current Project State
@@ -13,7 +13,7 @@ last_verified_commit: "pending-merge"
 
 | Feature | Status | Issue | Pull Request | Tests / Evidence | Wiki / Docs | Release | Last Verified |
 |---|---|---|---|---|---|---|---|
-| PLATE process baseline and project initialization | Implemented | — | #1 | Repository scaffolding, labels, workflows, `SPEC.md`, `README.md`, `AGENTS.md` | `README.md`, `SPEC.md`, `AGENTS.md` | Unreleased | 2025-05-27 |
+| PLATE process baseline and project initialization | Implemented | — | #1 | Repository scaffolding, labels, workflows, `SPEC.md`, `README.md`, `AGENTS.md` | `README.md`, `SPEC.md`, `AGENTS.md` | Unreleased | 2026-05-26 |
 | Stack selection research | Research complete | #5 | #6 | `docs/research/stack-selection.md`, official GitHub CLI / Copilot plugin / MCP SDK docs review | `docs/research/stack-selection.md` | Unreleased | 2026-05-26 |
 | label-check.yml requiresEpic fix | Implemented | — | #7 | `.github/workflows/label-check.yml`: requiresEpic variable now used in Epic/Feature check | `AGENTS.md §Label Rules` | Unreleased | 2026-05-26 |
 
@@ -21,7 +21,7 @@ last_verified_commit: "pending-merge"
 
 | Area | Current Behavior | Evidence | Open Risk |
 |---|---|---|---|
-| Repository structure | Full PLATE template scaffolding in place: issue templates, PR template, labels, CI/CD workflows, AGENTS.md, SPEC.md, CURRENT.md, `.agentic/`, `docs/`. Stack-specific source code not yet added. | Repository files | Implementation stack not yet selected (Research issue pending). |
+| Repository structure | Full PLATE template scaffolding in place: issue templates, PR template, labels, CI/CD workflows, AGENTS.md, SPEC.md, CURRENT.md, `.agentic/`, `docs/`. Stack-specific source code not yet added. | Repository files | Implementation stack decision pending human selection after research #5. |
 | Branch protection | `main` branch requires PR, status checks (`labels`, `test`), no force-push, no deletion. | GitHub branch protection API response | Required status checks will fail until real CI is implemented. |
 | Label coverage | All PLATE standard labels plus `Epic: plate-core-v1` created and verified. | `gh label list --repo akasper/plate_core` | — |
 
@@ -29,7 +29,7 @@ last_verified_commit: "pending-merge"
 
 | Gap | Tracking Issue | Notes |
 |---|---|---|
-| Implementation stack not selected | Research issue (pending creation) | Language/runtime choice gates all Feature work. |
+| Implementation stack decision pending | #5 (research complete) | Human decision required to pick TypeScript vs Go before Feature implementation starts. |
 | No source code or tests yet | Pending stack selection | `ci.yml` test step is a placeholder. |
 | Release automation not project-specific | TBD | Release policy depends on distribution format (binary, npm package, etc.). |
 | Wiki not initialized | TBD | Opt-in; enable once content is ready. |
