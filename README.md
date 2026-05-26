@@ -47,6 +47,7 @@ plate_core/           ← shared library (business logic + GitHub API queries)
 │   └── plate/        ← TUI commands using gum/Charm
 ├── mcp/              ← MCP server entry point (plate-mcp)
 │   └── server/       ← tool definitions exposed to AI agents
+├── plugin/           ← Copilot CLI plugin surface (`/agent plate`, skills, .mcp.json wiring)
 └── pkg/              ← core library packages
     ├── github/       ← GitHub API client wrappers
     ├── health/       ← health check logic
