@@ -23,6 +23,7 @@ last_verified_commit: "0dcdda0"
 | Epic status across CLI + MCP surfaces | Implemented | #33, #36 | Pending merge | Shared Epic status query logic in `src/plate_core/epics.py`, CLI command `gh plate epic status`, MCP tool `plate_epic_status`, and expanded tests in `tests/test_cli.py`, `tests/test_epics.py`, `tests/test_mcp.py` | `README.md`, `src/plate_core/epics.py`, `src/plate_core/cli.py`, `src/plate_core/mcp_server.py`, `tests/*` | Unreleased | 2026-05-26 |
 | Optional PLATE feature detection command | Implemented | #35 | #41 | `gh plate features` with shared detection logic in `src/plate_core/features.py` and tests in `tests/test_features.py`/`tests/test_cli.py` | `README.md`, `src/plate_core/features.py`, `src/plate_core/cli.py`, `tests/*` | Unreleased | 2026-05-26 |
 | Bootstrap planning/apply baseline command | Implemented | #34 | #48 | `gh plate bootstrap` dry-run/apply baseline in `src/plate_core/bootstrap.py`, with test coverage in `tests/test_bootstrap.py` and CLI wiring tests | `README.md`, `src/plate_core/bootstrap.py`, `src/plate_core/cli.py`, `tests/*` | Unreleased | 2026-05-26 |
+| MCP tool parity for features/bootstrap | Implemented | — | Pending | MCP server now exposes `plate_features` and `plate_bootstrap` with tool schemas and dispatch wiring in `src/plate_core/mcp_server.py`; coverage added in `tests/test_mcp.py` | `README.md`, `src/plate_core/mcp_server.py`, `tests/test_mcp.py` | Unreleased | 2026-05-26 |
 
 ## Operational Behavior
 
