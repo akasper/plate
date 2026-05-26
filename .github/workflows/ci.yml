@@ -14,6 +14,7 @@ jobs:
   labels:
     name: Labels
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - name: Validate PR type label
         uses: actions/github-script@v7
@@ -105,9 +106,16 @@ jobs:
 
   test:
     needs: labels
+    if: always() && (github.event_name != 'pull_request' || needs.labels.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Run unit tests
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          python -m unittest discover -s tests -p "test_*.py"
+
       - name: Install Copilot CLI
         run: |
           set -euo pipefail

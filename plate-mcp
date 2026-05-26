@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""MCP stdio server entrypoint for plate_core."""
+
+from __future__ import annotations
+
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(ROOT, "src"))
+
+from plate_core.mcp_server import run
+
+
+if __name__ == "__main__":
+    run()
+

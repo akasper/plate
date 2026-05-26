@@ -9,6 +9,16 @@ updated_at: "2026-05-26"
 
 `SPEC.md` describes the desired future state of the project. It is human-owned and agent-assisted. Update this file when the project intent, target users, goals, non-goals, constraints, or major product decisions change.
 
+## Current v1 Implementation Scope
+
+The current implementation baseline delivers:
+
+- `gh plate health` via `gh-plate`
+- MCP tool `plate_health` via `plate-mcp`
+- installable Copilot CLI plugin scaffold (`/agent plate`)
+
+Other v1-planned capabilities in this specification (epic status, feature detection breadth, bootstrap automation) remain planned until implemented and verified in `CURRENT.md`.
+
 ## Vision
 
 `plate_core` is a single-binary, multi-surface library that makes PLATE project state inspectable, actionable, and agent-accessible from any interface. It is the runtime layer that connects human developers and AI agents to the live health, structure, and operating rules of any PLATE repository.

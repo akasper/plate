@@ -1,0 +1,42 @@
+"""CLI interface used by gh-plate extension entrypoint."""
+
+from __future__ import annotations
+
+import argparse
+import json
+
+from .health import get_health
+
+
+def cmd_health(args: argparse.Namespace) -> int:
+    report = get_health(args.repo)
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Repo: {report.repo}")
+    print(f"Status: {report.status.upper()}")
+    print(f"Label coverage: {'OK' if report.label_coverage_ok else 'MISSING'}")
+    if report.missing_labels:
+        print(f"Missing labels: {', '.join(report.missing_labels)}")
+    print(f"Branch protection: {'ENABLED' if report.branch_protection_enabled else 'DISABLED'}")
+    print(f"Open Epics: {report.open_epic_count}")
+    return 0 if report.status != "fail" else 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="gh plate", description="PLATE core CLI extension")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    health = sub.add_parser("health", help="Show PLATE health summary")
+    health.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    health.add_argument("--json", action="store_true", help="Output JSON")
+    health.set_defaults(func=cmd_health)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return args.func(args)
+

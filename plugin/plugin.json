@@ -7,5 +7,6 @@
   },
   "repository": "https://github.com/akasper/plate_core",
   "license": "MIT",
-  "agents": "agents/"
+  "agents": "agents/",
+  "mcpServers": ".mcp.json"
 }

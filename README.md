@@ -4,39 +4,36 @@
 
 | Surface | Target User | How to Install |
 |---|---|---|
-| `gh plate` extension | Humans and scripts — terminal TUI for PLATE project health | `gh extension install akasper/plate_core` |
-| `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in Copilot CLI | `npx plate-mcp` or binary install |
+| `gh plate` extension | Humans and scripts — terminal PLATE health checks | `gh extension install akasper/plate_core` |
+| `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in Copilot CLI | `./plate-mcp` (repo clone) |
 | Copilot CLI plugin | Interactive Copilot CLI sessions — conversational `/agent plate` workflow | `copilot plugin install akasper/plate_core` |
 
 All surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
 
 ## What It Does
 
-`plate_core` surfaces the live state of any PLATE project by querying the GitHub API and applying PLATE methodology rules:
+`plate_core` surfaces the live state of a PLATE project by querying the GitHub API and applying PLATE methodology rules:
 
-- **Health check** — label coverage, branch protection status, open Epic count, stale Issues
-- **Epic status** — child issue breakdown, blocked items, auto-merge queue length
-- **Feature flag detection** — detects optional secrets/variables that unlock progressive PLATE automation
-- **Issue queries** — surfaces open Questions, unresolved Feedback Response items, and unlabeled issues
-- **Bootstrap assistance** — guidance and automation for new PLATE project setup
+- **Health check** — label coverage, branch protection status, open Epic count
+- **MCP tool** — `plate_health` returns structured JSON-like payload via MCP content
+- **Copilot plugin** — installable no-op plugin foundation with `/agent plate`
 
 ## Quick Start
 
-### As a `gh` extension
+### As a `gh` extension (v1 baseline)
 
 ```sh
-gh extension install akasper/plate_core
+gh extension install /path/to/plate_core
 gh plate health                   # PLATE health check for the current repo
-gh plate epic status              # Epic child-issue breakdown
-gh plate features                 # Detect configured optional PLATE features
+gh plate health --repo akasper/plate_core --json
 ```
 
-### As an MCP server in Copilot CLI
+### As an MCP server in Copilot CLI (v1 baseline)
 
 ```sh
 # In your Copilot CLI session:
-/mcp connect npx plate-mcp
-# Tools are now available to the AI agent natively
+/mcp connect /absolute/path/to/plate_core/plate-mcp
+# Then call tool: plate_health
 ```
 
 ### As a Copilot CLI plugin (Epic 1 scaffold)
@@ -55,6 +52,19 @@ If you specifically want the dedicated plugin surface directory, this equivalent
 
 ```sh
 copilot plugin install akasper/plate_core:plugin
+```
+
+## Runtime layout (v1)
+
+```text
+plate_core/
+├── src/plate_core/
+│   ├── github_client.py   # gh api wrapper
+│   ├── health.py          # shared health logic
+│   ├── cli.py             # shared CLI command handlers
+│   └── mcp_server.py      # minimal MCP stdio server
+├── gh-plate               # gh extension entrypoint
+└── plate-mcp              # MCP server entrypoint
 ```
 
 ## Architecture
