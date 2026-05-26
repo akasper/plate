@@ -1,9 +1,10 @@
 import json
+import io
 import unittest
 from unittest.mock import patch
 
 from plate_core.health import HealthReport
-from plate_core.mcp_server import _handle_tools_call
+from plate_core.mcp_server import _handle_tools_call, run
 
 
 class McpTests(unittest.TestCase):
@@ -26,7 +27,21 @@ class McpTests(unittest.TestCase):
         self.assertEqual(payload["repo"], "akasper/plate_core")
         self.assertEqual(payload["status"], "pass")
 
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.get_health")
+    def test_tools_call_returns_error_payload_when_health_raises(self, mock_get_health, mock_write):
+        mock_get_health.side_effect = RuntimeError("boom")
+        _handle_tools_call(7, {"name": "plate_health", "arguments": {"repo": "bad/repo"}})
+        result = mock_write.call_args[0][0]["result"]
+        self.assertTrue(result["isError"])
+        self.assertIn("boom", result["content"][0]["text"])
+
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.sys.stdin", new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","method":"notifications/roots/list_changed"}\n'))
+    def test_run_ignores_notification_without_id(self, _mock_stdin, mock_write):
+        run()
+        mock_write.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
-

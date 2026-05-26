@@ -27,18 +27,30 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         )
         return
 
-    report = get_health(args.get("repo"))
-    payload = report.to_dict()
-    _write(
-        {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "result": {
-                "content": [{"type": "text", "text": json.dumps(payload)}],
-                "isError": False,
-            },
-        }
-    )
+    try:
+        report = get_health(args.get("repo"))
+        payload = report.to_dict()
+        _write(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [{"type": "text", "text": json.dumps(payload)}],
+                    "isError": False,
+                },
+            }
+        )
+    except Exception as exc:
+        _write(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [{"type": "text", "text": str(exc)}],
+                    "isError": True,
+                },
+            }
+        )
 
 
 def run() -> None:
@@ -90,6 +102,8 @@ def run() -> None:
             _handle_tools_call(req_id, req.get("params", {}) or {})
         elif method == "notifications/initialized":
             continue
+        elif req_id is None:
+            continue
         else:
             _write(
                 {
@@ -102,4 +116,3 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
-
