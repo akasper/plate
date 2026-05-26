@@ -1,0 +1,23 @@
+name: PLATES Agentic Orchestrator
+
+on:
+  issues:
+    types: [closed, reopened, labeled, unlabeled]
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Handle blocker resolution and ready-to-work
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Logic to check dependencies and update labels + trigger agent
+            console.log('PLATES orchestrator running...');

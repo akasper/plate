@@ -1,0 +1,74 @@
+name: Feature
+description: Plan a user-visible or operational capability change.
+title: "[Feature]: "
+labels:
+  - Feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature issues must carry exactly one `Epic: short-name` label. Planning state such as priority, owner, target date, and status belongs in GitHub Projects fields.
+  - type: input
+    id: epic_label
+    attributes:
+      label: Epic traceability label
+      description: "Name the existing or proposed `Epic: short-name` label that owns this feature."
+      placeholder: "Epic: onboarding"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What user, operational, or business problem does this feature address?
+    validations:
+      required: true
+  - type: textarea
+    id: desired_behavior
+    attributes:
+      label: Desired behavior
+      description: Describe the outcome in product terms rather than implementation details.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: List concrete conditions that must be true before this issue can close.
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: Test expectations
+      description: Identify unit, integration, E2E, regression, fixture, or manual verification expected.
+    validations:
+      required: true
+  - type: textarea
+    id: documentation
+    attributes:
+      label: Documentation and traceability impact
+      description: Identify expected updates to CURRENT.md, wiki/docs, release notes, public claims, or ADRs.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies, risks, and open questions
+      description: Link blockers, decisions, research issues, or risks. Add `need:*` labels when follow-up is required.
+    validations:
+      required: false
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: PLATE readiness checklist
+      options:
+        - label: "This feature has or will receive exactly one `Epic: short-name` label."
+          required: true
+        - label: Acceptance criteria are testable.
+          required: true
+        - label: Documentation impact is described.
+          required: true
+        - label: Mutable planning state will be tracked in GitHub Projects fields rather than labels.
+          required: true

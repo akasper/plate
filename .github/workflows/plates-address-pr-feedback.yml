@@ -1,0 +1,378 @@
+name: PLATES Auto-Address PR Feedback
+
+# Fires when a third-party agent submits a PR review or leaves an inline
+# comment. If the sender matches a known agent list, creates a GitHub issue
+# describing the feedback and assigns it to copilot. The Copilot Coding Agent
+# then picks up the issue, pushes fixes to the existing PR branch, and closes
+# the issue — no PAT, no human impersonation, fully GITHUB_TOKEN-native.
+#
+# This approach uses GitHub's supported issue-assignment invocation path for
+# the Copilot Coding Agent rather than the fragile @mention-in-comment path,
+# which is blocked for github-actions[bot] comments by GitHub's bot-isolation
+# routing rules.
+
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  address-feedback:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: plates-feedback-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Detect third-party agent feedback
+        id: detect
+        uses: actions/github-script@v7
+        env:
+          AGENT_LOGINS: ${{ vars.PLATE_PR_FEEDBACK_AGENTS }}
+        with:
+          script: |
+            // PLATE_PR_FEEDBACK_AGENTS repo variable: comma-separated GitHub logins
+            // of third-party agents whose feedback should trigger auto-addressing.
+            // Falls back to well-known default patterns when the variable is not set.
+            const configuredLogins = (process.env.AGENT_LOGINS || '')
+              .split(',')
+              .map((s) => s.trim().toLowerCase())
+              .filter(Boolean);
+
+            const DEFAULT_AGENT_PATTERNS = [
+              /^devin/i,
+              /^openhands/i,
+              /^codegen/i,
+              /^swe-agent/i,
+              /^aide-agent/i,
+              /^mentat-bot/i,
+            ];
+
+            const isKnownAgent = (login) => {
+              const lower = login.toLowerCase();
+              if (configuredLogins.length > 0) {
+                return configuredLogins.includes(lower);
+              }
+              return DEFAULT_AGENT_PATTERNS.some((pattern) => pattern.test(login));
+            };
+
+            let reviewer = null;
+            let prNumber = null;
+            let reviewState = null;
+            let feedbackUrl = null;
+            let isBatchReview = false;
+            let prBranch = null;
+            let prTitle = null;
+
+            if (context.eventName === 'pull_request_review') {
+              const review = context.payload.review;
+              const pr = context.payload.pull_request;
+              reviewer = review.user?.login;
+              reviewState = (review.state || '').toLowerCase();
+              feedbackUrl = review.html_url;
+              prNumber = pr.number;
+              prBranch = pr.head.ref;
+              prTitle = pr.title;
+              isBatchReview = true;
+
+              // An "approved" review with no body is a rubber stamp — nothing to act on
+              if (reviewState === 'approved' && !review.body?.trim()) {
+                core.info(`Skipping approved review with no body from @${reviewer}.`);
+                core.setOutput('should_act', 'false');
+                return;
+              }
+            } else if (context.eventName === 'pull_request_review_comment') {
+              const comment = context.payload.comment;
+              const pr = context.payload.pull_request;
+              reviewer = comment.user?.login;
+              feedbackUrl = comment.html_url;
+              prNumber = pr.number;
+              prBranch = pr.head.ref;
+              prTitle = pr.title;
+              reviewState = 'commented';
+              isBatchReview = false;
+            }
+
+            if (!reviewer || !prNumber) {
+              core.info('Unable to determine reviewer or PR number; skipping.');
+              core.setOutput('should_act', 'false');
+              return;
+            }
+
+            if (!isKnownAgent(reviewer)) {
+              core.info(`@${reviewer} is not a known third-party agent; skipping.`);
+              core.setOutput('should_act', 'false');
+              return;
+            }
+
+            core.info(`Detected feedback from known agent @${reviewer} on PR #${prNumber} (state: ${reviewState}, batch: ${isBatchReview}).`);
+
+            // Deduplication: avoid creating multiple task issues within a short
+            // window when a single review fires several parallel events.
+            // We mark each issue creation with a tracking comment on the PR.
+            const MARKER = `<!-- plates-feedback-trigger:${reviewer} -->`;
+            const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+
+            const allComments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            const recentTriggers = allComments.filter(
+              (c) => c.body?.includes(MARKER)
+            );
+            const latestTriggerAt = recentTriggers.length > 0
+              ? new Date(recentTriggers[recentTriggers.length - 1].created_at).getTime()
+              : 0;
+
+            if (Date.now() - latestTriggerAt < COOLDOWN_MS) {
+              core.info(`Agent task already created within cooldown window for @${reviewer} on PR #${prNumber}; skipping.`);
+              core.setOutput('should_act', 'false');
+              return;
+            }
+
+            const stateLabel = {
+              changes_requested: '🔴 changes requested',
+              commented: '💬 feedback',
+              approved: '✅ approved with notes',
+            }[reviewState] || reviewState;
+
+            core.setOutput('should_act', 'true');
+            core.setOutput('reviewer', reviewer);
+            core.setOutput('pr_number', String(prNumber));
+            core.setOutput('pr_branch', prBranch);
+            core.setOutput('pr_title', prTitle || `PR #${prNumber}`);
+            core.setOutput('feedback_url', feedbackUrl);
+            core.setOutput('state_label', stateLabel);
+            core.setOutput('marker', MARKER);
+
+      - name: Create Copilot agent task issue
+        if: steps.detect.outputs.should_act == 'true'
+        uses: actions/github-script@v7
+        env:
+          REVIEWER: ${{ steps.detect.outputs.reviewer }}
+          PR_NUMBER: ${{ steps.detect.outputs.pr_number }}
+          PR_BRANCH: ${{ steps.detect.outputs.pr_branch }}
+          PR_TITLE: ${{ steps.detect.outputs.pr_title }}
+          FEEDBACK_URL: ${{ steps.detect.outputs.feedback_url }}
+          STATE_LABEL: ${{ steps.detect.outputs.state_label }}
+          TRIGGER_MARKER: ${{ steps.detect.outputs.marker }}
+          # COPILOT_TRIGGER_PAT: optional repo secret. GitHub's Copilot assignment
+          # API may require a user token (PAT with `repo` scope) rather than the
+          # server-to-server GITHUB_TOKEN. Add this secret if auto-assignment fails
+          # even when Copilot Cloud Agent is enabled in Settings → Copilot.
+          COPILOT_TRIGGER_PAT: ${{ secrets.COPILOT_TRIGGER_PAT }}
+        with:
+          github-token: ${{ secrets.COPILOT_TRIGGER_PAT || github.token }}
+          script: |
+            const reviewer = process.env.REVIEWER;
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            const prBranch = process.env.PR_BRANCH;
+            const prTitle = process.env.PR_TITLE;
+            const feedbackUrl = process.env.FEEDBACK_URL;
+            const stateLabel = process.env.STATE_LABEL;
+            const MARKER = process.env.TRIGGER_MARKER;
+
+            const prUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/${prNumber}`;
+
+            const issueTitle = `[PLATES] Address @${reviewer} feedback on PR #${prNumber}`;
+            const issueBody = [
+              `> 🤖 Auto-generated by \`plates-address-pr-feedback.yml\`. Close this issue once the feedback is fully addressed.`,
+              '',
+              `**@${reviewer}** (${stateLabel}) has left feedback on **[PR #${prNumber}: ${prTitle}](${prUrl})**.`,
+              '',
+              '**Instructions:**',
+              '',
+              `1. Review all open inline comments and the overall review body from @${reviewer} on PR #${prNumber}`,
+              `2. For any comment that includes a GitHub code suggestion (\` \`\`\`suggestion \` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation`,
+              `3. For all other actionable comments: make the necessary code change or reply explaining why no change is needed`,
+              `4. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the GitHub GraphQL \`resolveReviewThread\` mutation`,
+              `5. **Push all changes to the existing branch \`${prBranch}\`** — do not open a new PR`,
+              `6. If you must open a new PR (e.g., the branch is protected), label it \`Feedback Response\` and include \`Closes #TASK_ISSUE_NUMBER\` in the PR body so CI passes and the task issue auto-closes on merge`,
+              `7. If any item requires human judgment (API keys, architectural decisions, security changes, credential handling), add the \`need:human-review\` label to PR #${prNumber} and leave a comment identifying exactly what requires human input`,
+              `8. Close this issue after all feedback is addressed and changes are pushed`,
+              '',
+              `**Feedback thread:** ${feedbackUrl}`,
+            ].join('\n');
+
+            // Step 1: Ensure the 'Feedback Response' label exists.
+            // labels.yml sync may not have run yet (e.g., freshly-templated repo).
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: 'Feedback Response' });
+            } catch (labelErr) {
+              if (labelErr.status === 404) {
+                core.info("'Feedback Response' label not found; auto-creating it.");
+                try {
+                  await github.rest.issues.createLabel({
+                    owner, repo,
+                    name: 'Feedback Response',
+                    color: 'e4e669',
+                    description: 'PLATES-auto-generated feedback response task (issue or PR).',
+                  });
+                } catch (createLabelErr) {
+                  core.warning(`Could not create label: ${createLabelErr.message}`);
+                }
+              }
+            }
+
+            // Step 2: Create the issue WITHOUT assignees — adding an invalid assignee
+            // (e.g. copilot not enabled) causes a 422 that kills the whole create call.
+            let issueNumber = null;
+            try {
+              const { data: issue } = await github.rest.issues.create({
+                owner, repo,
+                title: issueTitle,
+                body: issueBody,
+                labels: ['Feedback Response'],
+              });
+              issueNumber = issue.number;
+              core.info(`Created issue #${issueNumber}.`);
+            } catch (createErr) {
+              core.warning(`Failed to create task issue: ${createErr.message} (HTTP ${createErr.status ?? 'unknown'}). Falling back to PR comment.`);
+            }
+
+            // Step 3: Assign the Copilot Cloud Agent using the GraphQL API.
+            //
+            // IMPORTANT — two things differ from the naive REST approach:
+            //   a) The correct login is `copilot-swe-agent`, not `copilot`.
+            //      The REST assignees field needs `copilot-swe-agent[bot]`.
+            //   b) GitHub requires the `agentAssignment` input (GraphQL) or
+            //      `agent_assignment` body field (REST) to actually queue the
+            //      task; without it the assignment is a no-op.
+            //   c) The `GraphQL-Features` preview header is required.
+            //
+            // We first query `suggestedActors` to (1) verify the agent is
+            // enabled for this repo and (2) retrieve its opaque node ID which
+            // is needed by the mutation.
+            //
+            // Known limitation: GitHub's docs note this API requires a *user*
+            // token (PAT or OAuth). The GITHUB_TOKEN (installation token) may
+            // be rejected. If that happens the issue is still created — the
+            // tracking comment will tell you which step failed and why.
+            let copilotAssigned = false;
+            if (issueNumber) {
+              try {
+                const GRAPHQL_FEATURES = 'issues_copilot_assignment_api_support,coding_agent_model_selection';
+
+                // Query suggestedActors to check availability + get node ID.
+                const actorsResult = await github.graphql(
+                  `query($owner: String!, $repo: String!) {
+                    repository(owner: $owner, name: $repo) {
+                      id
+                      suggestedActors(capabilities: [CAN_BE_ASSIGNED], first: 100) {
+                        nodes {
+                          login
+                          __typename
+                          ... on Bot { id }
+                          ... on User { id }
+                        }
+                      }
+                    }
+                  }`,
+                  {
+                    owner, repo,
+                    headers: { 'GraphQL-Features': GRAPHQL_FEATURES },
+                  }
+                );
+
+                const copilotNode = actorsResult.repository.suggestedActors.nodes
+                  .find(n => n.login === 'copilot-swe-agent');
+
+                if (!copilotNode) {
+                  core.warning(
+                    'Copilot Cloud Agent is not in suggestedActors for this repo. ' +
+                    'Verify it is enabled: Settings → Copilot → Cloud Agent. ' +
+                    `Issue #${issueNumber} was created but not assigned.`
+                  );
+                } else {
+                  // Fetch the issue node ID needed by the mutation.
+                  const issueResult = await github.graphql(
+                    `query($owner: String!, $repo: String!, $number: Int!) {
+                      repository(owner: $owner, name: $repo) {
+                        issue(number: $number) { id }
+                      }
+                    }`,
+                    { owner, repo, number: issueNumber }
+                  );
+                  const issueNodeId = issueResult.repository.issue.id;
+                  const repoNodeId  = actorsResult.repository.id;
+
+                  await github.graphql(
+                    `mutation($issueId: ID!, $actorIds: [ID!]!, $repoId: ID!, $branch: String!, $instructions: String!) {
+                      replaceActorsForAssignable(input: {
+                        assignableId: $issueId,
+                        actorIds: $actorIds,
+                        agentAssignment: {
+                          targetRepositoryId: $repoId,
+                          baseRef: $branch,
+                          customInstructions: $instructions,
+                          customAgent: "",
+                          model: ""
+                        }
+                      }) {
+                        assignable { ... on Issue { id } }
+                      }
+                    }`,
+                    {
+                      issueId: issueNodeId,
+                      actorIds: [copilotNode.id],
+                      repoId: repoNodeId,
+                      branch: prBranch,
+                      // Pass the issue body as custom instructions (first 1500 chars).
+                      instructions: issueBody.substring(0, 1500),
+                      headers: { 'GraphQL-Features': GRAPHQL_FEATURES },
+                    }
+                  );
+
+                  copilotAssigned = true;
+                  core.info(`Assigned issue #${issueNumber} to copilot-swe-agent via GraphQL.`);
+                }
+              } catch (assignErr) {
+                core.warning(
+                  `Could not assign Copilot Cloud Agent: ${assignErr.message}. ` +
+                  'This may require a user PAT (COPILOT_TRIGGER_PAT secret) if GITHUB_TOKEN is insufficient. ' +
+                  `Issue #${issueNumber} was created — assign it manually to trigger the agent.`
+                );
+              }
+            }
+
+            // Post a tracking comment on the PR with MARKER for deduplication.
+            let commentBody;
+            if (issueNumber && copilotAssigned) {
+              commentBody = [
+                MARKER,
+                `🤖 **PLATES:** Created task issue #${issueNumber} and assigned to the Copilot Coding Agent to address @${reviewer}'s feedback.`,
+                `Track progress: [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber})`,
+              ].join('\n');
+            } else if (issueNumber) {
+              commentBody = [
+                MARKER,
+                `⚠️ **PLATES:** Created task issue #${issueNumber} but could not assign the Copilot Cloud Agent automatically.`,
+                `Check the [workflow run logs](https://github.com/${owner}/${repo}/actions) for the specific error.`,
+                `To trigger manually: open [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}) and assign it to **Copilot** from the Assignees panel.`,
+                `> If the error says "user token required", add a \`COPILOT_TRIGGER_PAT\` repository secret (a classic PAT with \`repo\` scope from your account).`,
+              ].join('\n');
+            } else {
+              commentBody = [
+                MARKER,
+                `⚠️ **PLATES:** Could not create a task issue to address @${reviewer}'s feedback. Check the [workflow run logs](https://github.com/${owner}/${repo}/actions) for details.`,
+                `Feedback thread: ${feedbackUrl}`,
+              ].join('\n');
+            }
+
+            await github.rest.issues.createComment({
+              owner, repo,
+              issue_number: prNumber,
+              body: commentBody,
+            });
+
+            core.info(`Tracking comment posted on PR #${prNumber}.`);

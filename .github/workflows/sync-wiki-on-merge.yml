@@ -1,0 +1,105 @@
+name: Sync to Wiki on Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sync-wiki:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine whether wiki sync should run
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map((label) => label.name);
+            const isFeature = labels.includes('Feature');
+            const enabled = String(process.env.PLATE_WIKI_SYNC_ENABLED || '').toLowerCase() === 'true';
+            core.setOutput('is_feature', String(isFeature));
+            core.setOutput('enabled', String(enabled));
+            core.info(`Feature PR: ${isFeature}`);
+            core.info(`Wiki sync enabled: ${enabled}`);
+        env:
+          PLATE_WIKI_SYNC_ENABLED: ${{ vars.PLATE_WIKI_SYNC_ENABLED }}
+      - name: Skip when not a merged Feature PR
+        if: steps.gate.outputs.is_feature != 'true'
+        run: echo "Only merged Feature PRs are eligible for PLATE wiki sync."
+      - name: Skip when wiki sync is not enabled
+        if: steps.gate.outputs.is_feature == 'true' && steps.gate.outputs.enabled != 'true'
+        run: echo "PLATE wiki sync is disabled by default. Set repository variable PLATE_WIKI_SYNC_ENABLED=true to enable."
+      - name: Validate wiki token
+        if: steps.gate.outputs.is_feature == 'true' && steps.gate.outputs.enabled == 'true'
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+        run: |
+          if [ -z "$WIKI_TOKEN" ]; then
+            echo "::error::WIKI_TOKEN is required when PLATE_WIKI_SYNC_ENABLED=true."
+            exit 1
+          fi
+      - name: Checkout repository
+        if: steps.gate.outputs.is_feature == 'true' && steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture PR context
+        if: steps.gate.outputs.is_feature == 'true' && steps.gate.outputs.enabled == 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          mkdir -p tmp_wiki_context
+          {
+            echo "# PR ${PR_NUMBER}: ${PR_TITLE}"
+            echo
+            echo "- PR: ${PR_URL}"
+            echo "- Merge commit: ${PR_MERGE_SHA}"
+            echo "- Synced at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "- Source policy: scoped PLATE wiki sync from repository documentation sources"
+          } > tmp_wiki_context/Last-Feature-Merge.md
+      - name: Clone wiki
+        if: steps.gate.outputs.is_feature == 'true' && steps.gate.outputs.enabled == 'true'
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -rf tmp_wiki
+          git clone "https://x-access-token:${WIKI_TOKEN}@github.com/${{ github.repository }}.wiki.git" tmp_wiki
+      - name: Stage scoped wiki updates
+        if: steps.gate.outputs.is_feature == 'true' && steps.gate.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          if [ -d docs/wiki ]; then
+            rsync -av --delete --exclude='.git' docs/wiki/ tmp_wiki/
+          fi
+          if [ -d docs/features ]; then
+            mkdir -p tmp_wiki/Features
+            rsync -av docs/features/ tmp_wiki/Features/
+          fi
+          if [ -f CURRENT.md ]; then
+            cp CURRENT.md tmp_wiki/Current-State.md
+          fi
+          cp tmp_wiki_context/Last-Feature-Merge.md tmp_wiki/Last-Feature-Merge.md
+      - name: Commit and push wiki updates
+        if: steps.gate.outputs.is_feature == 'true' && steps.gate.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          cd tmp_wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No wiki changes to commit."
+            exit 0
+          fi
+          git commit -m "Sync wiki from Feature PR #${{ github.event.pull_request.number }}"
+          git push

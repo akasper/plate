@@ -1,0 +1,50 @@
+traceability:
+  version: "0.1"
+  purpose: "Define the minimum evidence chain for implemented PLATE features."
+  evidence_states:
+    - "planned"
+    - "implemented"
+    - "verified"
+    - "released"
+    - "deprecated"
+    - "unsupported"
+
+required_chain:
+  intent:
+    artifact: "SPEC.md section or approved issue"
+    required: true
+  planning:
+    artifact: "Epic or issue"
+    required: true
+  decision:
+    artifact: "Discussion or ADR"
+    required: false
+  verification:
+    artifact: "Unit, integration, E2E, regression, or manual test evidence"
+    required: true
+  change:
+    artifact: "Pull request"
+    required: true
+  state:
+    artifact: "CURRENT.md entry"
+    required_for_feature_pr: true
+  explanation:
+    artifact: "Wiki page or docs section"
+    required: "when user-facing or operationally significant"
+  public_positioning:
+    artifact: "Marketing site or README claim"
+    required: "when public claims are made"
+  publication:
+    artifact: "Release note or changelog entry"
+    required: "when released"
+
+record_template:
+  feature: "TBD"
+  issue: "TBD"
+  pull_request: "TBD"
+  tests: []
+  current_md_anchor: "TBD"
+  wiki_or_docs: []
+  release: "TBD"
+  evidence_state: "planned"
+  last_verified_at: "TBD"

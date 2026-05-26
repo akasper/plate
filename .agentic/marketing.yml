@@ -1,0 +1,30 @@
+marketing:
+  version: "0.1"
+  enabled: false
+  public_url: "TBD"
+  target_audience: "TBD"
+  primary_call_to_action: "TBD"
+  publishing_mode: "disabled_until_configured"
+
+claim_review_policy:
+  source_of_product_truth: "CURRENT.md"
+  planned_claims_must_link_to:
+    - "SPEC.md"
+    - "issue"
+    - "roadmap discussion"
+  human_approval_required_for:
+    - "pricing claims"
+    - "security claims"
+    - "legal or compliance claims"
+    - "roadmap commitments"
+
+analytics_policy:
+  enabled: false
+  provider: "TBD"
+  privacy_review_required: true
+
+artifacts:
+  brief: "docs/marketing/marketing-site-brief.md"
+  launch_checklist: "docs/marketing/launch-checklist.md"
+  experiments: "docs/marketing/experiments.md"
+  site_root: "site"
