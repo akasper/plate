@@ -1,5 +1,7 @@
 name: CI
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, edited, synchronize, reopened, labeled, unlabeled]
 
@@ -106,5 +108,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run Tests
-        run: echo "Tests would run here"
+      - name: Install Copilot CLI
+        run: |
+          set -euo pipefail
+          COPILOT_VERSION="1.0.54"
+          curl -fsSL -o copilot-linux-x64.tar.gz "https://github.com/github/copilot-cli/releases/download/v${COPILOT_VERSION}/copilot-linux-x64.tar.gz"
+          tar -xzf copilot-linux-x64.tar.gz
+          chmod +x copilot
+          sudo mv copilot /usr/local/bin/copilot
+          copilot --version
+
+      - name: Plugin install smoke test (workspace path)
+        run: |
+          set -euo pipefail
+          copilot plugin install "$GITHUB_WORKSPACE"
+          copilot plugin uninstall plate-core
+
+      - name: Plugin install smoke test (GitHub repo source)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          copilot plugin install akasper/plate_core
+          copilot plugin uninstall plate-core
