@@ -1,0 +1,10 @@
+# Go build artifacts
+gh-plate
+gh-plate.exe
+dist/
+
+# Go test cache
+*.test
+
+# Go vendor directory (if used)
+vendor/

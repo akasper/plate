@@ -26,7 +26,7 @@ last_verified_commit: "pending-merge"
 | `Feedback Response` label — combined issue + PR type for PLATES agent feedback tasks | Implemented | #22 | #30 | `labels.yml`, `label-check.yml` (valid issue type, no Epic required), `ci.yml` (valid PR type), `pr-issue-link-check.yml` (closing keyword required), `AGENTS.md §Label Rules` + lifecycle table | `AGENTS.md`, `copilot-instructions.md` | Unreleased | 2026-05-25 |
 | Auto-address PR feedback from third-party agents | Implemented | #22 | #30 | `plates-address-pr-feedback.yml` fires on `pull_request_review` and `pull_request_review_comment`; posts `@copilot` invocation comment for known agent reviewers via `COPILOT_TRIGGER_PAT` (human PAT) for correct routing; concurrency-safe; instructs Copilot to apply suggestions, resolve threads, and escalate human-judgment items | `AGENTS.md §Third-Party Agent Feedback`, `copilot-instructions.md`, `.agentic/skills.yml` | Unreleased | 2026-05-25 |
 | Custom agent packaging | Implemented | #23 | Pending | `.github/agents/plate-configurator.agent.md`, `.agentic/extensions.yml`, `.agentic/skills.yml`, `docs/research/custom-agent-packaging.md` | `docs/research/custom-agent-packaging.md` | Unreleased | 2026-05-25 |
-| Automatic Epic creation research | Research complete | #28 | Pending | `docs/research/automatic-epic-creation.md`, `docs/wiki/Automatic-Epic-Creation.md` | `docs/wiki/Automatic-Epic-Creation.md` | Unreleased | 2026-05-25 |
+| `gh-plate` extension skeleton | Implemented | PR #1 | `main.go`, `cmd/root.go`, `go.mod`, `go.sum`, `.goreleaser.yml` | `go build ./...` succeeds; `go test ./...` passes | `SPEC.md`, `README.md` | Unreleased | 2026-05-26 |
 
 ## Operational Behavior
 
@@ -40,6 +40,7 @@ last_verified_commit: "pending-merge"
 | PR issue-link check | PRs that resolve issues must include a closing keyword (`Closes #N`). Feature/Bug PRs fail CI without it; other types receive a warning. PRs labeled `no-issue` are exempt. | `.github/workflows/pr-issue-link-check.yml` | Soft warning for non-Feature/Bug types; relies on agent compliance for those. |
 | Issue artifact requirement | Research, Design, Audit, and Migration issues must close with a committed artifact (see `AGENTS.md §Issue Artifact Rules`). | `AGENTS.md`, `docs/research/README.md`, `docs/design/README.md` | No automated enforcement on issue close; relies on PR content review. |
 | Wiki synchronization | Disabled by default and opt-in through repository configuration. | `.github/workflows/sync-wiki-on-merge.yml` | Requires `WIKI_TOKEN` and human approval before enabling writes. |
+| CI — Go build and test | CI now builds and tests the Go extension on every PR. `go build ./...` and `go test ./...` run as part of the `test` job in `ci.yml`. | `.github/workflows/ci.yml`, `go.mod`, `cmd/root_test.go` | None at this time. |
 | Autonomous mode | Disabled by default. Create `.github/AUTONOMOUS_MODE` to enable; delete it to disable. When active, agents may auto-merge eligible `risk:low` PRs labeled `auto-merge`. | `.github/workflows/auto-merge.yml`, `AGENTS.md §Autonomous Mode` | Requires `allow_auto_merge: true` and Actions write permissions (`default_workflow_permissions=write`) on the repository. |
 
 ## Known Gaps
