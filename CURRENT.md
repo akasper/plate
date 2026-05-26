@@ -24,6 +24,7 @@ last_verified_commit: "0dcdda0"
 | Optional PLATE feature detection command | Implemented | #35 | #41 | `gh plate features` with shared detection logic in `src/plate_core/features.py` and tests in `tests/test_features.py`/`tests/test_cli.py` | `README.md`, `src/plate_core/features.py`, `src/plate_core/cli.py`, `tests/*` | Unreleased | 2026-05-26 |
 | Bootstrap planning/apply baseline command | Implemented | #34 | #48 | `gh plate bootstrap` dry-run/apply baseline in `src/plate_core/bootstrap.py`, with test coverage in `tests/test_bootstrap.py` and CLI wiring tests | `README.md`, `src/plate_core/bootstrap.py`, `src/plate_core/cli.py`, `tests/*` | Unreleased | 2026-05-26 |
 | MCP tool parity for features/bootstrap | Implemented | — | Pending | MCP server now exposes `plate_features` and `plate_bootstrap` with tool schemas and dispatch wiring in `src/plate_core/mcp_server.py`; coverage added in `tests/test_mcp.py` | `README.md`, `src/plate_core/mcp_server.py`, `tests/test_mcp.py` | Unreleased | 2026-05-26 |
+| Feedback resolution merge gate | Implemented | — | #63 | `feedback-resolution-check.yml` fails PRs with unresolved active review threads or `reviewDecision=CHANGES_REQUESTED`, enabling auto-merge only after review commentary is addressed | `AGENTS.md §Third-Party Agent Feedback`, `.github/copilot-instructions.md`, `.github/workflows/feedback-resolution-check.yml` | Unreleased | 2026-05-26 |
 
 ## Operational Behavior
 
@@ -33,6 +34,7 @@ last_verified_commit: "0dcdda0"
 | CI plugin verification | CI includes plugin install smoke tests to catch plugin discovery/manifest regressions before release. | `.github/workflows/ci.yml` | Copilot CLI version pin may require periodic updates. |
 | Runtime capability | `gh-plate` and `plate-mcp` share health/Epic logic; `gh-plate` additionally exposes feature detection and bootstrap planning/apply baseline commands. | `gh-plate`, `plate-mcp`, `src/plate_core/*` | Branch protection application remains manual because protection rules are repo-policy-specific. |
 | Branch protection | `main` branch requires PR, status checks (`labels`, `test`), no force-push, no deletion. | GitHub branch protection API response | External review jobs (e.g., Devin) can remain pending longer than core CI checks. |
+| PR feedback resolution check | PRs fail `feedback-resolution` when any active review thread remains unresolved or when `reviewDecision` is `CHANGES_REQUESTED`. | `.github/workflows/feedback-resolution-check.yml` | Must be configured as a required branch-protection check to fully gate merges. |
 | Label coverage | All PLATE standard labels plus `Epic: plate-core-v1` created and verified. | `gh label list --repo akasper/plate_core` | — |
 
 ## Known Gaps
