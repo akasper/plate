@@ -16,12 +16,13 @@ last_verified_commit: "392f91a"
 | PLATE process baseline and project initialization | Implemented | — | #1 | Repository scaffolding, labels, workflows, `SPEC.md`, `README.md`, `AGENTS.md` | `README.md`, `SPEC.md`, `AGENTS.md` | Unreleased | 2026-05-26 |
 | Stack selection research | Research complete | #5 | #6 | `docs/research/stack-selection.md`, official GitHub CLI / Copilot plugin / MCP SDK docs review | `docs/research/stack-selection.md` | Unreleased | 2026-05-26 |
 | label-check.yml requiresEpic fix | Implemented | — | #7 | `.github/workflows/label-check.yml`: requiresEpic variable now used in Epic/Feature check | `AGENTS.md §Label Rules` | Unreleased | 2026-05-26 |
+| Copilot CLI plugin foundation scaffold | Implemented | #20 | Pending merge | `plugin/plugin.json` + `plugin/agents/plate.agent.md` provide an installable no-op plugin with deterministic invocation response | `README.md` plugin install section, `plugin/*` | Unreleased | 2026-05-26 |
 
 ## Operational Behavior
 
 | Area | Current Behavior | Evidence | Open Risk |
 |---|---|---|---|
-| Repository structure | Full PLATE template scaffolding in place: issue templates, PR template, labels, CI/CD workflows, AGENTS.md, SPEC.md, CURRENT.md, `.agentic/`, `docs/`. Stack-specific source code not yet added. | Repository files | Implementation stack decision pending human selection after research #5. |
+| Repository structure | PLATE scaffolding is in place plus initial `plugin/` Copilot CLI plugin surface (`plugin.json` + no-op `plate` agent). | Repository files, `plugin/*` | Skills and MCP wiring are intentionally deferred to future epics. |
 | Branch protection | `main` branch requires PR, status checks (`labels`, `test`), no force-push, no deletion. | GitHub branch protection API response | Required status checks will fail until real CI is implemented. |
 | Label coverage | All PLATE standard labels plus `Epic: plate-core-v1` created and verified. | `gh label list --repo akasper/plate_core` | — |
 
@@ -30,6 +31,6 @@ last_verified_commit: "392f91a"
 | Gap | Tracking Issue | Notes |
 |---|---|---|
 | Implementation stack decision pending | #5 (research complete) | Human decision required to pick TypeScript vs Go before Feature implementation starts. |
-| No source code or tests yet | Pending stack selection | `ci.yml` test step is a placeholder. |
+| No runtime skills or MCP implementation yet | #14 | Epic 1 is intentionally no-op; runtime surfaces are deferred to future epics. |
 | Release automation not project-specific | TBD | Release policy depends on distribution format (binary, npm package, etc.). |
 | Wiki not initialized | TBD | Opt-in; enable once content is ready. |
