@@ -38,7 +38,6 @@ Read those pieces together when making process changes. A change in one usually 
 
 ## Key conventions
 
--
 - Treat repository artifacts as the source of durable truth. If behavior, process, or evidence changes, update the relevant artifact instead of relying on chat history.
 - If `AGENTS.md`, `.agentic\process.yml`, and implementation files disagree, preserve the PLATE intent and keep them aligned.
 - Labels are stable process metadata, not casual tags. Use type labels (`Bug`, `Feature`, `Epic`, `Documentation`, `Research`, `Design`, `Question`, `Audit`, `Migration`) and prefixed labels (`Epic:`, `area:`, `risk:`, `need:`) according to the existing taxonomy. Do not introduce `priority:` or `status:` labels; those belong in GitHub Projects fields.
