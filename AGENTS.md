@@ -166,7 +166,7 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
 
 ## Third-Party Agent Feedback
 
-When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR, the `.github/workflows/plates-address-pr-feedback.yml` workflow creates a GitHub issue titled `[PLATES] Address @<agent> feedback on PR #N` and assigns it to `copilot`. The Copilot Coding Agent picks up the issue and should:
+When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that is **not** already labeled `Feedback Response`, the `.github/workflows/plates-address-pr-feedback.yml` workflow posts a structured `@copilot` trigger comment directly on that same PR. The automation uses `COPILOT_TRIGGER_PAT` (preferred) with fallback to `GITHUB_TOKEN`, applies a dedupe marker, and intentionally avoids creating a new issue or opening a separate PR. `Feedback Response` PRs are already in the dedicated response lane and are skipped by that workflow. The Copilot Coding Agent should:
 
 1. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 2. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
@@ -176,24 +176,23 @@ When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR, the `
    mutation { resolveReviewThread(input: { threadId: "THREAD_NODE_ID" }) { thread { isResolved } } }
    ```
    To find `THREAD_NODE_ID` for a given comment, query `repository.pullRequest.reviewThreads` and match on `comments.nodes.databaseId`.
-5. **Push all changes to the existing PR branch listed in the issue body** — do not open a new PR
+5. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
 6. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
-7. Close the task issue once all feedback is addressed and changes are pushed
 
 **Lifecycle contract for `Feedback Response` items:**
 
 | Stage | Expected artifact |
 |---|---|
-| Workflow fires | Issue created with `Feedback Response` label, assigned to `copilot` |
-| Copilot addresses feedback | Commits pushed to existing PR branch; review threads resolved |
-| If a new PR is needed | PR labeled `Feedback Response`, no closing keyword required |
-| Completion | Task issue closed; original PR re-reviewed by the original feedback author |
+| Workflow fires | Trigger comment posted on the existing PR (`<!-- plates-feedback-trigger:<agent> -->` + `@copilot` instructions) |
+| Copilot addresses feedback | Commits pushed to the same PR branch; review threads resolved |
+| Escalation | `need:human-review` label + blocking comment when human judgment is required |
+| Completion | Original PR is re-reviewed by the feedback author and merged through normal checks |
 
-`Feedback Response` issues and PRs are PLATES process artifacts — they are exempt from the `Epic:` label requirement, from the `Closes #N` closing keyword requirement, and from the `CURRENT.md` update requirement. The Copilot Coding Agent is reliably triggered by issue assignment via `GITHUB_TOKEN` (a fully GitHub-native, PAT-free path). The `@copilot` mention-in-comment path is blocked for `github-actions[bot]` comments by GitHub's bot-isolation routing and should not be used for machine-to-machine invocation.
+`Feedback Response` labels remain available process metadata, but this workflow no longer creates feedback-task issues or follow-up response PRs. Feedback is addressed inline on the original PR branch.
 
-**Deduplication:** The workflow posts a tracking comment containing the marker `<!-- plates-feedback-trigger:<agent> -->` on the PR after each trigger. A 10-minute cooldown prevents duplicate task issues when a single review fires multiple parallel events.
+**Deduplication:** The workflow posts a tracking comment containing the marker `<!-- plates-feedback-trigger:<agent> -->` on the PR after each trigger. A 10-minute cooldown prevents duplicate Copilot trigger comments when a single review fires multiple parallel events.
 
-**Configuration:** Set the `PLATE_PR_FEEDBACK_AGENTS` repository variable to a comma-separated list of GitHub logins whose feedback should be auto-addressed (e.g., `devin-ai-integration[bot],openhands-agent`). When the variable is absent, the workflow matches common agent login patterns automatically.
+**Configuration:** Set the `PLATE_PR_FEEDBACK_AGENTS` repository variable to a comma-separated list of GitHub logins whose feedback should be auto-addressed (e.g., `devin-ai-integration[bot],openhands-agent`). Set `COPILOT_TRIGGER_PAT` (classic PAT with `repo` scope) for reliable `@copilot` routing from Actions. When the variable is absent, the workflow matches common agent login patterns automatically.
 
 ## Label Rules
 
@@ -203,7 +202,7 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 |---|---|
 | `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
 | `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
-| `Feedback Response` | Combined issue + PR type for PLATES-auto-generated feedback response tasks and any resulting PRs. Auto-created by `plates-address-pr-feedback.yml`. No `Epic:` label required. |
+| `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by `plates-address-pr-feedback.yml` in the inline response flow. No `Epic:` label required. |
 | `Epic: short-name` | Epic identity and feature grouping. Required on Epic and Feature issues. |
 | `area:*` | Stable subsystem or ownership area. |
 | `risk:*` | Review burden and release caution. |
