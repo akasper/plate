@@ -6,7 +6,7 @@
 |---|---|---|
 | `gh plate` extension | Humans and scripts — terminal TUI for PLATE project health | `gh extension install akasper/plate_core` |
 | `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in Copilot CLI | `npx plate-mcp` or binary install |
-| Copilot CLI plugin | Interactive Copilot CLI sessions — conversational `/agent plate` workflow | `copilot plugin install akasper/plate_core` |
+| Copilot CLI plugin | Interactive Copilot CLI sessions — conversational `/agent plate` workflow | `copilot plugin install akasper/plate_core:plugin` |
 
 All surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
 
@@ -38,6 +38,18 @@ gh plate features                 # Detect configured optional PLATE features
 /mcp connect npx plate-mcp
 # Tools are now available to the AI agent natively
 ```
+
+### As a Copilot CLI plugin (Epic 1 scaffold)
+
+```sh
+# Install plugin from the plugin subdirectory in this repo
+copilot plugin install akasper/plate_core:plugin
+
+# In a new Copilot CLI session, invoke the no-op foundation agent
+/agent plate
+```
+
+Expected Epic 1 behavior: the `plate` agent confirms plugin installation and returns a deterministic no-op baseline message.
 
 ## Architecture
 

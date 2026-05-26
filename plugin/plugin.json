@@ -1,0 +1,11 @@
+{
+  "name": "plate-core",
+  "description": "PLATE core Copilot CLI plugin scaffold (Epic 1 no-op baseline).",
+  "version": "0.1.0",
+  "author": {
+    "name": "PLATE / akasper"
+  },
+  "repository": "https://github.com/akasper/plate_core",
+  "license": "MIT",
+  "agents": "agents/"
+}
