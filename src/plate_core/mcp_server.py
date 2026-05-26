@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 
+from .epics import get_epic_status
 from .health import get_health
 
 
@@ -17,18 +18,21 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
     name = params.get("name")
     args = params.get("arguments", {}) or {}
 
-    if name != "plate_health":
-        _write(
-            {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {"code": -32601, "message": f"Unknown tool: {name}"},
-            }
-        )
-        return
-
     try:
-        report = get_health(args.get("repo"))
+        if name == "plate_health":
+            report = get_health(args.get("repo"))
+        elif name == "plate_epic_status":
+            report = get_epic_status(args.get("repo"))
+        else:
+            _write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32601, "message": f"Unknown tool: {name}"},
+                }
+            )
+            return
+
         payload = report.to_dict()
         _write(
             {
@@ -93,7 +97,20 @@ def run() -> None:
                                         }
                                     },
                                 },
-                            }
+                            },
+                            {
+                                "name": "plate_epic_status",
+                                "description": "Return Epic and child issue summary for a repository.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        }
+                                    },
+                                },
+                            },
                         ]
                     },
                 }

@@ -3,6 +3,7 @@ import io
 import unittest
 from unittest.mock import patch
 
+from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.health import HealthReport
 from plate_core.mcp_server import _handle_tools_call, run
 
@@ -41,6 +42,28 @@ class McpTests(unittest.TestCase):
     def test_run_ignores_notification_without_id(self, _mock_stdin, mock_write):
         run()
         mock_write.assert_not_called()
+
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.get_epic_status")
+    def test_tools_call_plate_epic_status(self, mock_get_epic_status, mock_write):
+        mock_get_epic_status.return_value = EpicStatusReport(
+            repo="akasper/plate_core",
+            open_epic_count=1,
+            epics=[
+                EpicSummary(
+                    epic_label="Epic: plate-core-v1",
+                    epic_issue_number=4,
+                    epic_issue_title="v1",
+                    epic_issue_state="open",
+                    open_child_issues=5,
+                    closed_child_issues=3,
+                )
+            ],
+        )
+        _handle_tools_call(9, {"name": "plate_epic_status", "arguments": {"repo": "akasper/plate_core"}})
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload["open_epic_count"], 1)
+        self.assertEqual(payload["epics"][0]["epic_label"], "Epic: plate-core-v1")
 
 
 if __name__ == "__main__":

@@ -15,7 +15,8 @@ All surfaces are backed by the same `plate_core` library, ensuring consistent be
 `plate_core` surfaces the live state of a PLATE project by querying the GitHub API and applying PLATE methodology rules:
 
 - **Health check** — label coverage, branch protection status, open Epic count
-- **MCP tool** — `plate_health` returns structured JSON-like payload via MCP content
+- **Epic status** — per-epic child issue summary via `gh plate epic status`
+- **MCP tools** — `plate_health` and `plate_epic_status` return structured payloads via MCP content
 - **Copilot plugin** — installable agent surface (`/agent plate`) with bundled MCP server configuration
 
 ## Quick Start
@@ -26,6 +27,7 @@ All surfaces are backed by the same `plate_core` library, ensuring consistent be
 gh extension install akasper/plate_core
 gh plate health                   # PLATE health check for the current repo
 gh plate health --repo akasper/plate_core --json
+gh plate epic status --repo akasper/plate_core --json
 ```
 
 ### As an MCP server in Copilot CLI (v1 baseline)
@@ -33,7 +35,7 @@ gh plate health --repo akasper/plate_core --json
 ```sh
 # In your Copilot CLI session:
 /mcp connect /absolute/path/to/plate_core/plate-mcp
-# Then call tool: plate_health
+# Then call tools: plate_health, plate_epic_status
 ```
 
 ### As a Copilot CLI plugin

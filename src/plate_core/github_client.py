@@ -20,9 +20,10 @@ class GhClient:
             ["gh", "api", endpoint],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if proc.returncode != 0:
             raise GhApiError(proc.stderr.strip() or proc.stdout.strip() or "gh api call failed")
         return json.loads(proc.stdout)
-

@@ -5,6 +5,7 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from plate_core.cli import main
+from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.health import HealthReport
 
 
@@ -27,7 +28,31 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["repo"], "akasper/plate_core")
         self.assertEqual(payload["status"], "pass")
 
+    @patch("plate_core.cli.get_epic_status")
+    def test_epic_status_json_output(self, mock_get_epic_status):
+        mock_get_epic_status.return_value = EpicStatusReport(
+            repo="akasper/plate_core",
+            open_epic_count=1,
+            epics=[
+                EpicSummary(
+                    epic_label="Epic: plate-core-v1",
+                    epic_issue_number=4,
+                    epic_issue_title="v1 epic",
+                    epic_issue_state="open",
+                    open_child_issues=5,
+                    closed_child_issues=3,
+                )
+            ],
+        )
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["epic", "status", "--repo", "akasper/plate_core", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(payload["repo"], "akasper/plate_core")
+        self.assertEqual(payload["open_epic_count"], 1)
+        self.assertEqual(payload["epics"][0]["epic_label"], "Epic: plate-core-v1")
+
 
 if __name__ == "__main__":
     unittest.main()
-
