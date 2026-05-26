@@ -39,7 +39,7 @@ def get_features(repo: str | None = None, client: GhClient | None = None) -> Fea
     gh = client or GhClient()
     target = resolve_repo(repo)
     checks = [
-        ("autonomous-mode", ".agentic/AUTONOMOUS_MODE"),
+        ("autonomous-mode", ".github/AUTONOMOUS_MODE"),
         ("platform-monitor-workflow", ".github/workflows/platform-monitor.yml"),
         ("copilot-plugin-root", ".plugin/plugin.json"),
         ("copilot-plugin-source", "plugin/plugin.json"),
@@ -49,4 +49,3 @@ def get_features(repo: str | None = None, client: GhClient | None = None) -> Fea
     ]
     detected = [FeatureFlag(name=name, enabled=_path_exists(gh, target, path), evidence=path) for name, path in checks]
     return FeatureReport(repo=target, features=detected)
-
