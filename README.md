@@ -6,7 +6,7 @@
 |---|---|---|
 | `gh plate` extension | Humans and scripts — terminal PLATE health checks | `gh extension install akasper/plate_core` |
 | `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in Copilot CLI | `./plate-mcp` (repo clone) |
-| Copilot CLI plugin | Interactive Copilot CLI sessions — conversational `/agent plate` workflow | `copilot plugin install akasper/plate_core` |
+| Copilot CLI plugin | Interactive Copilot CLI sessions — `/agent plate` + MCP wiring | `copilot plugin install akasper/plate_core` |
 
 All surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
 
@@ -16,14 +16,14 @@ All surfaces are backed by the same `plate_core` library, ensuring consistent be
 
 - **Health check** — label coverage, branch protection status, open Epic count
 - **MCP tool** — `plate_health` returns structured JSON-like payload via MCP content
-- **Copilot plugin** — installable no-op plugin foundation with `/agent plate`
+- **Copilot plugin** — installable agent surface (`/agent plate`) with bundled MCP server configuration
 
 ## Quick Start
 
 ### As a `gh` extension (v1 baseline)
 
 ```sh
-gh extension install /path/to/plate_core
+gh extension install akasper/plate_core
 gh plate health                   # PLATE health check for the current repo
 gh plate health --repo akasper/plate_core --json
 ```
@@ -36,17 +36,15 @@ gh plate health --repo akasper/plate_core --json
 # Then call tool: plate_health
 ```
 
-### As a Copilot CLI plugin (Epic 1 scaffold)
+### As a Copilot CLI plugin
 
 ```sh
 # Install plugin from this repository
 copilot plugin install akasper/plate_core
 
-# In a new Copilot CLI session, invoke the no-op foundation agent
+# In a new Copilot CLI session, invoke the plate agent
 /agent plate
 ```
-
-Expected Epic 1 behavior: the `plate` agent confirms plugin installation and returns a deterministic no-op baseline message.
 
 If you specifically want the dedicated plugin surface directory, this equivalent command also works:
 
@@ -54,36 +52,20 @@ If you specifically want the dedicated plugin surface directory, this equivalent
 copilot plugin install akasper/plate_core:plugin
 ```
 
-## Runtime layout (v1)
+## Runtime layout (v1 baseline)
 
 ```text
 plate_core/
+├── .plugin/               # root plugin discovery manifest + agent + MCP config
+├── plugin/                # plugin source surface (mirrors .plugin metadata)
 ├── src/plate_core/
 │   ├── github_client.py   # gh api wrapper
 │   ├── health.py          # shared health logic
 │   ├── cli.py             # shared CLI command handlers
-│   └── mcp_server.py      # minimal MCP stdio server
+│   └── mcp_server.py      # MCP stdio server (plate_health)
 ├── gh-plate               # gh extension entrypoint
 └── plate-mcp              # MCP server entrypoint
 ```
-
-## Architecture
-
-```
-plate_core/           ← shared library (business logic + GitHub API queries)
-├── cmd/              ← gh extension entry point (gh plate)
-│   └── plate/        ← TUI commands using gum/Charm
-├── mcp/              ← MCP server entry point (plate-mcp)
-│   └── server/       ← tool definitions exposed to AI agents
-├── plugin/           ← Copilot CLI plugin surface (`/agent plate`, skills, .mcp.json wiring)
-└── pkg/              ← core library packages
-    ├── github/       ← GitHub API client wrappers
-    ├── health/       ← health check logic
-    ├── epic/         ← epic state queries
-    └── features/     ← optional feature detection
-```
-
-> **Note:** The implementation stack is under active research. See the [Research issue](../../issues) for language/runtime selection.
 
 ## Contributing
 
