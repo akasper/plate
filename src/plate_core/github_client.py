@@ -20,7 +20,7 @@ class GhClient:
         if method != "GET":
             cmd.extend(["-X", method])
         for key, value in (fields or {}).items():
-            cmd.extend(["-f", f"{key}={value}"])
+            cmd.extend(["-F", f"{key}={value}"])
         proc = subprocess.run(
             cmd,
             capture_output=True,
