@@ -16,13 +16,15 @@ last_verified_commit: "392f91a"
 | PLATE process baseline and project initialization | Implemented | — | #1 | Repository scaffolding, labels, workflows, `SPEC.md`, `README.md`, `AGENTS.md` | `README.md`, `SPEC.md`, `AGENTS.md` | Unreleased | 2026-05-26 |
 | Stack selection research | Research complete | #5 | #6 | `docs/research/stack-selection.md`, official GitHub CLI / Copilot plugin / MCP SDK docs review | `docs/research/stack-selection.md` | Unreleased | 2026-05-26 |
 | label-check.yml requiresEpic fix | Implemented | — | #7 | `.github/workflows/label-check.yml`: requiresEpic variable now used in Epic/Feature check | `AGENTS.md §Label Rules` | Unreleased | 2026-05-26 |
-| Copilot CLI plugin foundation scaffold | Implemented | #20 | Pending merge | `plugin/plugin.json` + `plugin/agents/plate.agent.md` provide an installable no-op plugin with deterministic invocation response | `README.md` plugin install section, `plugin/*` | Unreleased | 2026-05-26 |
+| Copilot CLI plugin foundation scaffold | Implemented | #20 | #21 | `plugin/plugin.json` + `plugin/agents/plate.agent.md` and root-discoverable `.plugin/*` manifest/agent provide an installable no-op plugin with deterministic invocation response | `README.md` plugin install section, `plugin/*`, `.plugin/*` | Unreleased | 2026-05-26 |
+| Copilot plugin install CI smoke test | Implemented | #25 | Pending merge | CI installs Copilot CLI and validates plugin installation from workspace path on PRs, plus `copilot plugin install akasper/plate_core` on pushes to `main` | `.github/workflows/ci.yml` | Unreleased | 2026-05-26 |
 
 ## Operational Behavior
 
 | Area | Current Behavior | Evidence | Open Risk |
 |---|---|---|---|
-| Repository structure | PLATE scaffolding is in place plus initial `plugin/` Copilot CLI plugin surface (`plugin.json` + no-op `plate` agent). | Repository files, `plugin/*` | Skills and MCP wiring are intentionally deferred to future epics. |
+| Repository structure | PLATE scaffolding is in place plus initial Copilot plugin surface via `plugin/*` and root plugin discovery at `.plugin/*`. | Repository files, `plugin/*`, `.plugin/*` | Skills and MCP wiring are intentionally deferred to future epics. |
+| CI plugin verification | CI includes plugin install smoke tests to catch plugin discovery/manifest regressions before release. | `.github/workflows/ci.yml` | Copilot CLI version pin may require periodic updates. |
 | Branch protection | `main` branch requires PR, status checks (`labels`, `test`), no force-push, no deletion. | GitHub branch protection API response | Required status checks will fail until real CI is implemented. |
 | Label coverage | All PLATE standard labels plus `Epic: plate-core-v1` created and verified. | `gh label list --repo akasper/plate_core` | — |
 
