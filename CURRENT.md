@@ -21,6 +21,7 @@ last_verified_commit: "0dcdda0"
 | plate_core v1 runtime baseline (`gh plate` + `plate-mcp`) | Implemented | #28 | #29 | Shared health core in `src/plate_core/health.py`, `gh-plate health` CLI entrypoint, MCP `plate_health` tool in `plate-mcp`, and unit tests in `tests/test_*.py` | `README.md`, `src/plate_core/*`, `gh-plate`, `plate-mcp`, `tests/*` | Unreleased | 2026-05-26 |
 | MCP server robustness hardening | Implemented | #30 | #31 | `tools/call` exceptions now return MCP `isError` responses instead of terminating the process; unknown notifications without `id` are ignored; tests added in `tests/test_mcp.py` | `src/plate_core/mcp_server.py`, `tests/test_mcp.py` | Unreleased | 2026-05-26 |
 | Epic status across CLI + MCP surfaces | Implemented | #33, #36 | Pending merge | Shared Epic status query logic in `src/plate_core/epics.py`, CLI command `gh plate epic status`, MCP tool `plate_epic_status`, and expanded tests in `tests/test_cli.py`, `tests/test_epics.py`, `tests/test_mcp.py` | `README.md`, `src/plate_core/epics.py`, `src/plate_core/cli.py`, `src/plate_core/mcp_server.py`, `tests/*` | Unreleased | 2026-05-26 |
+| Optional PLATE feature detection command | Implemented | #35 | Pending merge | `gh plate features` with shared detection logic in `src/plate_core/features.py` and tests in `tests/test_features.py`/`tests/test_cli.py` | `README.md`, `src/plate_core/features.py`, `src/plate_core/cli.py`, `tests/*` | Unreleased | 2026-05-26 |
 
 ## Operational Behavior
 
@@ -28,7 +29,7 @@ last_verified_commit: "0dcdda0"
 |---|---|---|---|
 | Repository structure | PLATE scaffolding is in place plus initial Copilot plugin surface via `plugin/*` and root plugin discovery at `.plugin/*`. | Repository files, `plugin/*`, `.plugin/*` | Skills and MCP wiring are intentionally deferred to future epics. |
 | CI plugin verification | CI includes plugin install smoke tests to catch plugin discovery/manifest regressions before release. | `.github/workflows/ci.yml` | Copilot CLI version pin may require periodic updates. |
-| Runtime capability | `gh-plate` and `plate-mcp` share health and Epic status logic (`src/plate_core/health.py`, `src/plate_core/epics.py`) across human and MCP surfaces. | `gh-plate`, `plate-mcp`, `src/plate_core/*` | Feature detection and bootstrap capabilities remain future work. |
+| Runtime capability | `gh-plate` and `plate-mcp` share health/Epic logic, and `gh-plate` additionally exposes optional feature detection (`src/plate_core/features.py`). | `gh-plate`, `plate-mcp`, `src/plate_core/*` | Bootstrap automation remains future work. |
 | Branch protection | `main` branch requires PR, status checks (`labels`, `test`), no force-push, no deletion. | GitHub branch protection API response | External review jobs (e.g., Devin) can remain pending longer than core CI checks. |
 | Label coverage | All PLATE standard labels plus `Epic: plate-core-v1` created and verified. | `gh label list --repo akasper/plate_core` | — |
 

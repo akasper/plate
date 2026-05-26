@@ -6,6 +6,7 @@ import argparse
 import json
 
 from .epics import get_epic_status
+from .features import get_features
 from .health import get_health
 
 
@@ -47,6 +48,18 @@ def cmd_epic_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_features(args: argparse.Namespace) -> int:
+    report = get_features(args.repo)
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Repo: {report.repo}")
+    for feature in report.features:
+        print(f"- {feature.name}: {'ENABLED' if feature.enabled else 'DISABLED'} ({feature.evidence})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gh plate", description="PLATE core CLI extension")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -62,6 +75,11 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--repo", help="owner/name; defaults to git remote origin")
     status.add_argument("--json", action="store_true", help="Output JSON")
     status.set_defaults(func=cmd_epic_status)
+
+    features = sub.add_parser("features", help="Show optional PLATE feature detection")
+    features.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    features.add_argument("--json", action="store_true", help="Output JSON")
+    features.set_defaults(func=cmd_features)
     return parser
 
 

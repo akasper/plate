@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from plate_core.cli import main
 from plate_core.epics import EpicStatusReport, EpicSummary
+from plate_core.features import FeatureFlag, FeatureReport
 from plate_core.health import HealthReport
 
 
@@ -52,6 +53,20 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["repo"], "akasper/plate_core")
         self.assertEqual(payload["open_epic_count"], 1)
         self.assertEqual(payload["epics"][0]["epic_label"], "Epic: plate-core-v1")
+
+    @patch("plate_core.cli.get_features")
+    def test_features_json_output(self, mock_get_features):
+        mock_get_features.return_value = FeatureReport(
+            repo="akasper/plate_core",
+            features=[FeatureFlag(name="copilot-plugin-root", enabled=True, evidence=".plugin/plugin.json")],
+        )
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["features", "--repo", "akasper/plate_core", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(payload["repo"], "akasper/plate_core")
+        self.assertEqual(payload["features"][0]["name"], "copilot-plugin-root")
 
 
 if __name__ == "__main__":
