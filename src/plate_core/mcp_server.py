@@ -5,8 +5,13 @@ from __future__ import annotations
 import json
 import sys
 
+<<<<<<< HEAD
 from .baseline_catalog import get_agent, get_skill, list_agents, list_skills
+=======
+from .bootstrap import run_bootstrap
+>>>>>>> origin/main
 from .epics import get_epic_status
+from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 
@@ -14,6 +19,24 @@ from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsToo
 def _write(obj: dict) -> None:
     sys.stdout.write(json.dumps(obj) + "\n")
     sys.stdout.flush()
+
+
+def _plan_epic_stub(args: dict) -> object:
+    """Stub for the interactive epic planning tool. Returns a planning schema dict."""
+    class _Stub:
+        def to_dict(self) -> dict:
+            return {
+                "tool": "plate_plan_epic",
+                "status": "stub",
+                "input_received": {k: v for k, v in args.items()},
+                "planning_schema": {
+                    "epic": {"title": None, "problem_statement": None, "acceptance_criteria": [], "scope_in": [], "scope_out": [], "dependencies": []},
+                    "session_state": {"turn": 0, "phase": "detection"},
+                    "child_issues": {"research": [], "design": [], "feature": []},
+                },
+                "note": "Phase 1 stub. Full interactive planning is handled in Copilot chat via the interactive-epic-planning skill.",
+            }
+    return _Stub()
 
 
 def _handle_tools_call(req_id: object, params: dict) -> None:
@@ -26,6 +49,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = report.to_dict()
         elif name == "plate_epic_status":
             report = get_epic_status(args.get("repo"))
+<<<<<<< HEAD
             payload = report.to_dict()
         elif name == "init_playwright":
             payload = InitPlaywrightTool.execute(
@@ -48,6 +72,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = {"skills": [skill.to_dict() for skill in list_skills()]}
         elif name == "plate_skill":
             payload = get_skill(args.get("skill_id")).to_dict()
+=======
+        elif name == "plate_features":
+            report = get_features(args.get("repo"))
+        elif name == "plate_bootstrap":
+            report = run_bootstrap(args.get("repo"), apply_mode=bool(args.get("apply", False)))
+        elif name == "plate_plan_epic":
+            report = _plan_epic_stub(args)
+>>>>>>> origin/main
         else:
             _write(
                 {
@@ -136,6 +168,7 @@ def run() -> None:
                                 },
                             },
                             {
+<<<<<<< HEAD
                                 "name": "init_playwright",
                                 "description": "Initialize Playwright E2E testing in a repository.",
                                 "inputSchema": {
@@ -233,6 +266,52 @@ def run() -> None:
                                         }
                                     },
                                     "required": ["skill_id"],
+=======
+                                "name": "plate_features",
+                                "description": "Return optional PLATE capability detection for a repository.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_bootstrap",
+                                "description": "Plan or apply baseline PLATE bootstrap actions for a repository.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "When true, apply supported actions; default false (dry-run).",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_plan_epic",
+                                "description": "Return the interactive epic planning schema for a repository session. Phase 1 stub.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "session_state": {
+                                            "type": "object",
+                                            "description": "Optional resumption state from a prior planning session.",
+                                        },
+                                    },
+>>>>>>> origin/main
                                 },
                             },
                         ]

@@ -3,7 +3,9 @@ import io
 import unittest
 from unittest.mock import patch
 
+from plate_core.bootstrap import BootstrapAction, BootstrapReport
 from plate_core.epics import EpicStatusReport, EpicSummary
+from plate_core.features import FeatureFlag, FeatureReport
 from plate_core.health import HealthReport
 from plate_core.mcp_server import _handle_tools_call, run
 
@@ -66,6 +68,7 @@ class McpTests(unittest.TestCase):
         self.assertEqual(payload["epics"][0]["epic_label"], "Epic: plate-core-v1")
 
     @patch("plate_core.mcp_server._write")
+<<<<<<< HEAD
     def test_tools_call_plate_agents(self, mock_write):
         _handle_tools_call(11, {"name": "plate_agents", "arguments": {}})
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
@@ -90,6 +93,66 @@ class McpTests(unittest.TestCase):
         _handle_tools_call(14, {"name": "plate_skill", "arguments": {"skill_id": "crud-projects"}})
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
         self.assertEqual(payload["id"], "crud-projects")
+=======
+    @patch("plate_core.mcp_server.get_features")
+    def test_tools_call_plate_features(self, mock_get_features, mock_write):
+        mock_get_features.return_value = FeatureReport(
+            repo="akasper/plate_core",
+            features=[FeatureFlag(name="autonomous-mode", enabled=False, evidence=".github/AUTONOMOUS_MODE")],
+        )
+        _handle_tools_call(10, {"name": "plate_features", "arguments": {"repo": "akasper/plate_core"}})
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload["repo"], "akasper/plate_core")
+        self.assertEqual(payload["features"][0]["name"], "autonomous-mode")
+
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.run_bootstrap")
+    def test_tools_call_plate_bootstrap(self, mock_run_bootstrap, mock_write):
+        mock_run_bootstrap.return_value = BootstrapReport(
+            repo="akasper/plate_core",
+            apply_mode=False,
+            actions=[BootstrapAction(name="enable-wiki", state="planned", detail="Set has_wiki=true")],
+        )
+        _handle_tools_call(11, {"name": "plate_bootstrap", "arguments": {"repo": "akasper/plate_core"}})
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload["repo"], "akasper/plate_core")
+        self.assertEqual(payload["actions"][0]["name"], "enable-wiki")
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_plan_epic(self, mock_write):
+        _handle_tools_call(12, {"name": "plate_plan_epic", "arguments": {}})
+        self.assertTrue(mock_write.called)
+        result = mock_write.call_args[0][0]["result"]
+        self.assertFalse(result["isError"])
+        payload = json.loads(result["content"][0]["text"])
+        self.assertEqual(payload["tool"], "plate_plan_epic")
+        self.assertEqual(payload["status"], "stub")
+
+    @patch("plate_core.mcp_server._write")
+    @patch(
+        "plate_core.mcp_server.sys.stdin",
+        new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":5,"method":"tools/list"}\n'),
+    )
+    def test_tools_list_includes_features_and_bootstrap(self, _mock_stdin, mock_write):
+        run()
+        tools = mock_write.call_args[0][0]["result"]["tools"]
+        names = {tool["name"] for tool in tools}
+        self.assertIn("plate_features", names)
+        self.assertIn("plate_bootstrap", names)
+
+
+    @patch("plate_core.mcp_server._write")
+    @patch(
+        "plate_core.mcp_server.sys.stdin",
+        new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":6,"method":"tools/list"}\n'),
+    )
+    def test_tools_list_includes_plan_epic(self, _mock_stdin, mock_write):
+        run()
+        tools = mock_write.call_args[0][0]["result"]["tools"]
+        names = {tool["name"] for tool in tools}
+        self.assertIn("plate_plan_epic", names)
+
+>>>>>>> origin/main
 
 if __name__ == "__main__":
     unittest.main()

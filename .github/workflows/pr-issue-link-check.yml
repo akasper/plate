@@ -33,9 +33,9 @@ jobs:
               return;
             }
 
-            // Warn but do not fail — some PRs (process, chore) may not track a specific issue.
             // Feature and Bug PRs are expected to always link an issue; fail for those.
-            const requiresIssue = labels.some((l) => ['Feature', 'Bug', 'Feedback Response'].includes(l));
+            // Feedback Response PRs are auto-generated and exempt from closing keyword requirement.
+            const requiresIssue = labels.some((l) => ['Feature', 'Bug'].includes(l));
 
             const message = [
               '## ⚠️ No issue closing keyword detected',
@@ -49,7 +49,7 @@ jobs:
               'Supported keywords: `Closes`, `Fixes`, `Resolves` (case-insensitive).',
               '',
               requiresIssue
-                ? '**This PR is labeled `Feature`, `Bug`, or `Feedback Response` and must link a closing issue. Please add `Closes #N` to the PR body.**'
+                ? '**This PR is labeled `Feature` or `Bug` and must link a closing issue. Please add `Closes #N` to the PR body.**'
                 : 'If this PR does not resolve a tracked issue, add the `no-issue` label to silence this warning.',
             ].join('\n');
 
