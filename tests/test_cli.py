@@ -84,6 +84,33 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["repo"], "akasper/plate_core")
         self.assertEqual(payload["actions"][0]["name"], "enable-wiki")
 
+    def test_agents_json_output(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["agents", "list", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(len(payload["agents"]), 12)
+        self.assertEqual(payload["agents"][0]["id"], "project-manager")
+
+    def test_agent_show_json_output(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["agents", "show", "research-agent", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(payload["id"], "research-agent")
+        self.assertIn("research-synthesis", payload["primary_skill_ids"])
+
+    def test_skills_json_output(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["skills", "list", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertGreaterEqual(len(payload["skills"]), 18)
+        self.assertEqual(payload["skills"][0]["id"], "crud-projects")
+
 
 if __name__ == "__main__":
     unittest.main()

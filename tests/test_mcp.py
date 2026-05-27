@@ -65,6 +65,31 @@ class McpTests(unittest.TestCase):
         self.assertEqual(payload["open_epic_count"], 1)
         self.assertEqual(payload["epics"][0]["epic_label"], "Epic: plate-core-v1")
 
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_agents(self, mock_write):
+        _handle_tools_call(11, {"name": "plate_agents", "arguments": {}})
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(len(payload["agents"]), 12)
+        self.assertEqual(payload["agents"][0]["id"], "project-manager")
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_agent(self, mock_write):
+        _handle_tools_call(12, {"name": "plate_agent", "arguments": {"agent_id": "research-agent"}})
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload["id"], "research-agent")
+        self.assertIn("research-synthesis", payload["primary_skill_ids"])
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_skills(self, mock_write):
+        _handle_tools_call(13, {"name": "plate_skills", "arguments": {}})
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertGreaterEqual(len(payload["skills"]), 18)
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_skill(self, mock_write):
+        _handle_tools_call(14, {"name": "plate_skill", "arguments": {"skill_id": "crud-projects"}})
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload["id"], "crud-projects")
 
 if __name__ == "__main__":
     unittest.main()

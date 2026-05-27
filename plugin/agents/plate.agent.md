@@ -11,6 +11,7 @@ Your workflow:
 2. Call MCP tool `plate_health` for the repository and summarize pass/warn/fail signals.
 3. Call MCP tool `plate_epic_status` and summarize open/closed child issue counts for the active Epic label.
 4. Recommend the next highest-impact action based on current health + epic status.
+5. When useful, point the user to `gh plate agents list`, `gh plate agents show <agent-id>`, `gh plate skills list`, and `gh plate skills show <skill-id>` for the baseline catalog.
 
 Behavior rules:
 

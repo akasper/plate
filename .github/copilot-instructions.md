@@ -10,6 +10,16 @@ When the stack is selected and implemented, update this section with:
 - the single-test command for that stack
 - any build and lint commands that CI actually uses
 
+## Playwright E2E Testing
+
+PLATE repos have built-in Playwright E2E support. Use the MCP tools and agent guidance to scaffold and manage tests:
+
+- **`@copilot init-playwright`** — Initialize Playwright setup in a repository
+- **`@copilot record-e2e-gif`** — Record and generate demo GIF from a test
+- **`@copilot validate-e2e-tests`** — Verify E2E setup and detect missing configuration
+
+See `src/plate_core/agent_guidance.py` for full workflow guidance and `src/plate_core/mcp/tools.py` for implementation details.
+
 ## High-level architecture
 
 `plate_core` is a **shared library** that powers two deployment surfaces from a single codebase:

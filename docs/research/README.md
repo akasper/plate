@@ -19,6 +19,8 @@ Use the kebab-case issue slug or a short descriptive name:
 docs/research/culturebot-api-availability.md
 docs/research/llm-provider-comparison.md
 docs/research/slack-bot-permission-scopes.md
+docs/research/baseline-agent-skill-registry-format.md
+docs/research/copilot-cli-verification-harness.md
 ```
 
 ## File format

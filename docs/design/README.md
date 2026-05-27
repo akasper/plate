@@ -19,6 +19,8 @@ Use the kebab-case feature or system slug:
 docs/design/onboarding-wizard.md
 docs/design/culture-index-api-contract.md
 docs/design/chat-room-ux.md
+docs/design/baseline-agents-schema.md
+docs/design/baseline-agents-surfaces.md
 ```
 
 ## File format

@@ -16,6 +16,7 @@ The current implementation baseline delivers:
 - `gh plate health` via `gh-plate`
 - MCP tool `plate_health` via `plate-mcp`
 - installable Copilot CLI plugin scaffold (`/agent plate`)
+- baseline agent and skill catalog discovery via `gh plate agents` / `gh plate skills` and matching MCP tools
 
 Other v1-planned capabilities in this specification (epic status, feature detection breadth, bootstrap automation) remain planned until implemented and verified in `CURRENT.md`.
 

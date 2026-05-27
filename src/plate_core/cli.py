@@ -6,6 +6,7 @@ import argparse
 import json
 
 from .bootstrap import run_bootstrap
+from .baseline_catalog import get_agent, get_skill, list_agents, list_skills
 from .epics import get_epic_status
 from .features import get_features
 from .health import get_health
@@ -55,9 +56,24 @@ def cmd_features(args: argparse.Namespace) -> int:
         print(json.dumps(report.to_dict()))
         return 0
 
-    print(f"Repo: {report.repo}")
+    print(f"Repo: {report.repo}\n")
+    feature_names = {
+        "autonomous-mode": "Autonomous Mode",
+        "platform-monitor-workflow": "Platform Monitor Workflow",
+        "copilot-plugin-root": "Copilot Plugin (.plugin)",
+        "copilot-plugin-source": "Copilot Plugin (plugin)",
+        "mcp-manifest-root": "MCP Manifest (.plugin)",
+        "mcp-manifest-source": "MCP Manifest (plugin)",
+        "baseline-agents-catalog": "Baseline Agents Catalog",
+        "current-md": "CURRENT.md",
+        "playwright-e2e": "Playwright E2E Testing",
+    }
+    
     for feature in report.features:
-        print(f"- {feature.name}: {'ENABLED' if feature.enabled else 'DISABLED'} ({feature.evidence})")
+        display_name = feature_names.get(feature.name, feature.name)
+        status = "✅ ENABLED" if feature.enabled else "⏹️  NOT CONFIGURED"
+        print(f"{display_name:.<35} {status}")
+    
     return 0
 
 
@@ -71,6 +87,67 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     print(f"Mode: {'APPLY' if report.apply_mode else 'DRY-RUN'}")
     for action in report.actions:
         print(f"- {action.name}: {action.state} ({action.detail})")
+    return 0
+
+
+def cmd_agents_list(args: argparse.Namespace) -> int:
+    agents = [agent.to_dict() for agent in list_agents()]
+    if args.json:
+        print(json.dumps({"agents": agents}))
+        return 0
+
+    for agent in agents:
+        print(f"{agent['id']}: {agent['name']}")
+        print(f"  {agent['description']}")
+        print(f"  Skills: {', '.join(agent['primary_skill_ids'])}")
+    return 0
+
+
+def cmd_agent_show(args: argparse.Namespace) -> int:
+    agent = get_agent(args.agent_id)
+    if args.json:
+        print(json.dumps(agent.to_dict()))
+        return 0
+
+    print(f"Agent: {agent.name} ({agent.id})")
+    print(agent.description)
+    print(f"Primary skills: {', '.join(agent.primary_skill_ids)}")
+    print(f"Surfaces: {', '.join(agent.surfaces)}")
+    if agent.constraints:
+        print("Constraints:")
+        for constraint in agent.constraints:
+            print(f"- {constraint}")
+    return 0
+
+
+def cmd_skills_list(args: argparse.Namespace) -> int:
+    skills = [skill.to_dict() for skill in list_skills()]
+    if args.json:
+        print(json.dumps({"skills": skills}))
+        return 0
+
+    for skill in skills:
+        print(f"{skill['id']}: {skill['name']}")
+        print(f"  {skill['description']}")
+        print(f"  Owning agents: {', '.join(skill['owning_agent_ids'])}")
+    return 0
+
+
+def cmd_skill_show(args: argparse.Namespace) -> int:
+    skill = get_skill(args.skill_id)
+    if args.json:
+        print(json.dumps(skill.to_dict()))
+        return 0
+
+    print(f"Skill: {skill.name} ({skill.id})")
+    print(skill.description)
+    print(f"Inputs: {', '.join(skill.inputs)}")
+    print(f"Outputs: {', '.join(skill.outputs)}")
+    print(f"Owning agents: {', '.join(skill.owning_agent_ids)}")
+    if skill.examples:
+        print("Examples:")
+        for example in skill.examples:
+            print(f"- {example}")
     return 0
 
 
@@ -94,6 +171,26 @@ def build_parser() -> argparse.ArgumentParser:
     features.add_argument("--repo", help="owner/name; defaults to git remote origin")
     features.add_argument("--json", action="store_true", help="Output JSON")
     features.set_defaults(func=cmd_features)
+
+    agents = sub.add_parser("agents", help="Show baseline agent catalog")
+    agents_sub = agents.add_subparsers(dest="agents_command", required=True)
+    agents_list = agents_sub.add_parser("list", help="List baseline agents")
+    agents_list.add_argument("--json", action="store_true", help="Output JSON")
+    agents_list.set_defaults(func=cmd_agents_list)
+    agent_show = agents_sub.add_parser("show", help="Show baseline agent details")
+    agent_show.add_argument("agent_id", help="Baseline agent id")
+    agent_show.add_argument("--json", action="store_true", help="Output JSON")
+    agent_show.set_defaults(func=cmd_agent_show)
+
+    skills = sub.add_parser("skills", help="Show baseline skill catalog")
+    skills_sub = skills.add_subparsers(dest="skills_command", required=True)
+    skills_list = skills_sub.add_parser("list", help="List baseline skills")
+    skills_list.add_argument("--json", action="store_true", help="Output JSON")
+    skills_list.set_defaults(func=cmd_skills_list)
+    skill_show = skills_sub.add_parser("show", help="Show baseline skill details")
+    skill_show.add_argument("skill_id", help="Baseline skill id")
+    skill_show.add_argument("--json", action="store_true", help="Output JSON")
+    skill_show.set_defaults(func=cmd_skill_show)
 
     bootstrap = sub.add_parser("bootstrap", help="Plan/apply baseline PLATE bootstrap actions")
     bootstrap.add_argument("--repo", help="owner/name; defaults to git remote origin")
