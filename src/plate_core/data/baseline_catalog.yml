@@ -1,0 +1,437 @@
+schema_version: 1
+agents:
+  - id: project-manager
+    name: Project Manager
+    description: Coordinates project CRUD, backlog grooming, epic framing, and release definition.
+    primary_skill_ids:
+      - crud-projects
+      - groom-backlog
+      - define-epic
+      - define-release
+    constraints:
+      - Keep planning outputs concise and actionable.
+      - Prefer clear scope boundaries over speculative implementation detail.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: market-researcher
+    name: Market Researcher
+    description: Identifies market gaps, opportunities, and user-facing demand signals.
+    primary_skill_ids:
+      - identify-market-gaps-and-opportunities
+      - review-discussions
+      - research-synthesis
+    constraints:
+      - Ground recommendations in observed signals or linked artifacts.
+      - Distinguish evidence from inference.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: designer
+    name: Designer
+    description: Unifies design themes and turns product intent into concrete feature requirements.
+    primary_skill_ids:
+      - define-unify-design-theme
+      - define-feature-requirements
+    constraints:
+      - Keep requirements aligned with user intent.
+      - Avoid implementation-specific lock-in unless required.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: user-experience-engineer
+    name: User Experience Engineer
+    description: Shapes flows, wireframes, and mockups that make the product easy to use.
+    primary_skill_ids:
+      - create-wireframe-demo
+      - mockup-ui
+      - define-feature-requirements
+    constraints:
+      - Optimize for clarity, task completion, and discoverability.
+      - Keep the interaction model lightweight.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: user-interface-designer
+    name: User Interface Designer
+    description: Designs visual presentation, layout, and consistent UI patterns.
+    primary_skill_ids:
+      - mockup-ui
+      - create-wireframe-demo
+      - define-unify-design-theme
+    constraints:
+      - Preserve visual consistency with existing product conventions.
+      - Favor reusable patterns over one-off decoration.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: software-engineer
+    name: Software Engineer
+    description: Implements product changes, reviews test coverage, and fixes broken builds.
+    primary_skill_ids:
+      - review-test-coverage
+      - fix-broken-build
+      - audit-spec-current
+    constraints:
+      - Make small, test-driven changes.
+      - Preserve behavior unless a change is explicitly intended.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: ci-engineer
+    name: CI Engineer
+    description: Hardens CI pipelines, test execution, and reliability of automated checks.
+    primary_skill_ids:
+      - review-test-coverage
+      - fix-broken-build
+      - define-release
+    constraints:
+      - Prefer reproducible pipeline changes over ad hoc fixes.
+      - Keep failure signals explicit.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: wiki-editor
+    name: Wiki Editor
+    description: Writes and synchronizes wiki content so project state stays documented.
+    primary_skill_ids:
+      - document-new-feature-in-wiki
+      - update-wiki-to-match-project-state
+    constraints:
+      - Preserve traceability back to source artifacts.
+      - Avoid inventing undocumented claims.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: dev-relations-expert
+    name: DevRel Expert
+    description: Turns project progress into readable updates for contributors and external audiences.
+    primary_skill_ids:
+      - review-discussions
+      - document-new-feature-in-wiki
+      - deploy-project-marketing-site-docs-site
+    constraints:
+      - Keep messaging factual and source-backed.
+      - Avoid overpromising features or timelines.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: devops-engineer
+    name: DevOps Engineer
+    description: Handles delivery, deployment, and release-oriented automation.
+    primary_skill_ids:
+      - deploy-project-marketing-site-docs-site
+      - define-release
+      - fix-broken-build
+    constraints:
+      - Prefer safe, reversible automation.
+      - Keep deployment changes observable and minimal.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: accountant
+    name: Accountant
+    description: Estimates and tracks the cost impact of features, CI, projects, and agents.
+    primary_skill_ids:
+      - calculate-costs
+    constraints:
+      - Show assumptions explicitly.
+      - Keep estimates simple and auditable.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+  - id: research-agent
+    name: Research Agent
+    description: Synthesizes open questions, discussion threads, and evidence into decision-ready findings.
+    primary_skill_ids:
+      - research-synthesis
+      - identify-market-gaps-and-opportunities
+      - review-discussions
+      - audit-spec-current
+    constraints:
+      - Separate source facts from recommendations.
+      - Prefer committed artifacts over ephemeral notes.
+    surfaces:
+      - copilot-plugin
+      - gh-plate
+      - mcp
+skills:
+  - id: crud-projects
+    name: CRUD Projects
+    description: Create, update, and summarize PLATE projects and their metadata.
+    inputs:
+      - Project state
+      - Issue list
+      - Repo health summary
+    outputs:
+      - Project updates
+      - Next actions
+    examples:
+      - "List active projects and highlight the ones missing an owner."
+    owning_agent_ids:
+      - project-manager
+  - id: groom-backlog
+    name: Groom Backlog
+    description: Review backlog items, identify gaps, and keep work ordered by value and readiness.
+    inputs:
+      - Open issues
+      - Epic state
+      - Current blockers
+    outputs:
+      - Prioritized backlog notes
+      - Follow-up questions
+    examples:
+      - "Identify the next three backlog items ready for refinement."
+    owning_agent_ids:
+      - project-manager
+  - id: define-epic
+    name: Define Epic
+    description: Frame a coherent epic with scope, outcomes, and child issue boundaries.
+    inputs:
+      - Problem statement
+      - Known constraints
+      - Desired outcome
+    outputs:
+      - Epic summary
+      - Child issue sketch
+    examples:
+      - "Draft an epic for adding baseline agents and skills to plate_core."
+    owning_agent_ids:
+      - project-manager
+  - id: define-release
+    name: Define Release
+    description: Turn project progress into a release-ready plan with clear scope and constraints.
+    inputs:
+      - Completed features
+      - Open risks
+      - Deployment target
+    outputs:
+      - Release checklist
+      - Release notes outline
+    examples:
+      - "Summarize what needs to be true before the next release can ship."
+    owning_agent_ids:
+      - project-manager
+      - ci-engineer
+      - devops-engineer
+  - id: identify-market-gaps-and-opportunities
+    name: Identify Market Gaps and Opportunities
+    description: Gather evidence about user needs, gaps, and product opportunities.
+    inputs:
+      - User feedback
+      - Issue trends
+      - Competitive signals
+    outputs:
+      - Opportunity summary
+      - Research notes
+    examples:
+      - "Highlight the largest missing workflow in the current PLATE experience."
+    owning_agent_ids:
+      - market-researcher
+      - research-agent
+  - id: research-synthesis
+    name: Research Synthesis
+    description: Consolidate findings from multiple sources into a decision-ready summary.
+    inputs:
+      - Research artifacts
+      - Discussion threads
+      - Existing design notes
+    outputs:
+      - Synthesis memo
+      - Decision options
+    examples:
+      - "Summarize the evidence for choosing YAML as the baseline catalog source."
+    owning_agent_ids:
+      - market-researcher
+      - research-agent
+  - id: review-discussions
+    name: Review Discussions
+    description: Read issue and PR discussions to extract actionable signals and concerns.
+    inputs:
+      - Issue comments
+      - PR reviews
+      - Thread context
+    outputs:
+      - Concern summary
+      - Action items
+    examples:
+      - "Summarize the unresolved concerns in the latest design discussion."
+    owning_agent_ids:
+      - market-researcher
+      - dev-relations-expert
+      - research-agent
+  - id: define-unify-design-theme
+    name: Define or Unify Design Theme
+    description: Align product visuals and interaction patterns around one consistent design theme.
+    inputs:
+      - Product goals
+      - Existing UI patterns
+      - Brand guidance
+    outputs:
+      - Theme decisions
+      - Design constraints
+    examples:
+      - "Recommend a consistent theme for the PLATE terminal and wiki surfaces."
+    owning_agent_ids:
+      - designer
+      - user-interface-designer
+  - id: define-feature-requirements
+    name: Define Feature Requirements
+    description: Convert a product goal into implementation-ready requirements.
+    inputs:
+      - Problem statement
+      - Acceptance expectations
+      - Constraints
+    outputs:
+      - Requirement list
+      - Out-of-scope items
+    examples:
+      - "Turn the baseline agents epic into a concise set of delivery requirements."
+    owning_agent_ids:
+      - designer
+      - user-experience-engineer
+  - id: mockup-ui
+    name: Mockup UI
+    description: Produce lightweight UI mockups or interaction sketches for a feature.
+    inputs:
+      - Feature intent
+      - Target user
+      - Existing layout patterns
+    outputs:
+      - Mockup sketch
+      - UI notes
+    examples:
+      - "Sketch the UI for a terminal list view of the baseline agents."
+    owning_agent_ids:
+      - user-experience-engineer
+      - user-interface-designer
+  - id: create-wireframe-demo
+    name: Create Wireframe Demo
+    description: Produce a wireframe-style demonstration for a proposed interaction flow.
+    inputs:
+      - Flow description
+      - Required actions
+      - Constraints
+    outputs:
+      - Wireframe steps
+      - Demo notes
+    examples:
+      - "Lay out the wireframe for showing agent details and skills in gh plate."
+    owning_agent_ids:
+      - user-experience-engineer
+      - user-interface-designer
+  - id: review-test-coverage
+    name: Review Test Coverage
+    description: Assess whether a change has sufficient automated test coverage.
+    inputs:
+      - Change diff
+      - Existing tests
+      - Risk areas
+    outputs:
+      - Coverage gaps
+      - Test recommendations
+    examples:
+      - "Identify missing tests before adding the baseline catalog loader."
+    owning_agent_ids:
+      - software-engineer
+      - ci-engineer
+  - id: fix-broken-build
+    name: Fix Broken Build
+    description: Diagnose and repair failing builds or test runs.
+    inputs:
+      - Build logs
+      - Failing test output
+      - Recent changes
+    outputs:
+      - Fix plan
+      - Validation steps
+    examples:
+      - "Explain why the current CI pipeline is failing and how to repair it."
+    owning_agent_ids:
+      - software-engineer
+      - ci-engineer
+      - devops-engineer
+  - id: document-new-feature-in-wiki
+    name: Document New Feature in Wiki
+    description: Write wiki content for a newly shipped feature.
+    inputs:
+      - Feature summary
+      - Implementation notes
+      - Source links
+    outputs:
+      - Wiki draft
+      - Traceability notes
+    examples:
+      - "Draft the wiki page for the baseline agents catalog."
+    owning_agent_ids:
+      - wiki-editor
+      - dev-relations-expert
+  - id: update-wiki-to-match-project-state
+    name: Update Wiki to Match Project State
+    description: Sync the wiki with the current repository state and ongoing work.
+    inputs:
+      - Current docs
+      - Current issue state
+      - Recent merges
+    outputs:
+      - Wiki update plan
+      - Drift summary
+    examples:
+      - "List the wiki pages that need refresh after a feature merge."
+    owning_agent_ids:
+      - wiki-editor
+  - id: audit-spec-current
+    name: Audit SPEC.md and CURRENT.md
+    description: Compare intended product state with implemented state and flag drift.
+    inputs:
+      - SPEC.md
+      - CURRENT.md
+      - Implementation evidence
+    outputs:
+      - Drift findings
+      - Follow-up corrections
+    examples:
+      - "Audit whether CURRENT.md reflects the baseline agents catalog."
+    owning_agent_ids:
+      - software-engineer
+      - research-agent
+  - id: deploy-project-marketing-site-docs-site
+    name: Deploy Project, Marketing Site, or Docs Site
+    description: Prepare or execute delivery of project-facing sites and docs assets.
+    inputs:
+      - Deployment target
+      - Build status
+      - Environment constraints
+    outputs:
+      - Deployment checklist
+      - Release confirmation
+    examples:
+      - "Outline what is required to deploy the docs site safely."
+    owning_agent_ids:
+      - dev-relations-expert
+      - devops-engineer
+  - id: calculate-costs
+    name: Calculate Costs
+    description: Estimate the cost impact of feature work, CI runs, projects, or agent activity.
+    inputs:
+      - Scope estimate
+      - Build frequency
+      - Resource assumptions
+    outputs:
+      - Cost estimate
+      - Assumptions list
+    examples:
+      - "Estimate the cost of running the baseline agents suite in CI."
+    owning_agent_ids:
+      - accountant
