@@ -220,7 +220,7 @@ When opening pull requests through GitHub CLI, prefer an atomic command such as 
 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
-For **every new pull request**, add exactly one required PR type label (`Bug`, `Feature`, or `Documentation`) at creation time. Unlabeled or multiply-labeled PRs fail CI immediately, and a repair comment will be posted on the PR with the exact `gh pr edit` command to fix it.
+For **every new pull request**, add exactly one required PR type label (`Bug`, `Feature`, `Documentation`, or `Feedback Response`) at creation time. Unlabeled or multiply-labeled PRs fail CI immediately.
 
 ## Upstream PLATE Template Synchronization
 

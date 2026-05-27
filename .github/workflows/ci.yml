@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 jobs:
   labels:
@@ -42,62 +40,6 @@ jobs:
             }
 
             if (failureMessage) {
-              const prNumber = target.number;
-              const MARKER = '<!-- plate-label-check-v1 -->';
-              const repairBody = [
-                MARKER,
-                '## \u26a0\ufe0f PLATE Label Check Failed',
-                '',
-                `**${failureMessage}**`,
-                '',
-                '### How to fix',
-                '',
-                '> **Important:** The checkboxes in the PR template body do **not** apply GitHub labels.',
-                '> Labels must be set explicitly via the CLI or GitHub API.',
-                '',
-                'Apply exactly one PR type label:',
-                '',
-                '```bash',
-                '# Pick the label that matches this PR — then run exactly one of:',
-                `gh pr edit ${prNumber} --add-label "Feature"`,
-                `gh pr edit ${prNumber} --add-label "Bug"`,
-                `gh pr edit ${prNumber} --add-label "Documentation"`,
-                `gh pr edit ${prNumber} --add-label "Feedback Response"`,
-                '```',
-                '',
-                'For future PRs, set the label at creation time to avoid this failure:',
-                '',
-                '```bash',
-                'gh pr create --label "Feature" ...',
-                '```',
-                '',
-                '_After adding the label, this CI check will re-run automatically._',
-              ].join('\n');
-
-              const comments = await github.paginate(github.rest.issues.listComments, {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-              });
-              const existing = comments.find(
-                (c) => c.user.type === 'Bot' && c.body.includes(MARKER)
-              );
-              if (existing) {
-                await github.rest.issues.updateComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  comment_id: existing.id,
-                  body: repairBody,
-                });
-              } else {
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: prNumber,
-                  body: repairBody,
-                });
-              }
-
               core.setFailed(failureMessage);
               return;
             }
