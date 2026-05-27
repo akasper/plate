@@ -47,6 +47,8 @@ jobs:
             core.info('PR label rules passed.');
 
   test:
+    needs: labels
+    if: always() && (github.event_name != 'pull_request' || needs.labels.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
