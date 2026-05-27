@@ -53,9 +53,12 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 args.get("template_repo"),
             )
         elif name == "record_e2e_gif":
+            test_name = args.get("test_name")
+            if not test_name:
+                raise ValueError("test_name is required")
             payload = RecordE2eGifTool.execute(
                 args.get("repo_path", "."),
-                args.get("test_name"),
+                test_name,
                 args.get("quality", "medium"),
             )
         elif name == "validate_e2e_tests":

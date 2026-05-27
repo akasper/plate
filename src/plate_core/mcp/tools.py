@@ -137,6 +137,9 @@ class RecordE2eGifTool:
         if not repo.exists():
             return {"status": "error", "message": f"Repository not found: {repo_path}"}
 
+        if not test_name:
+            return {"status": "error", "message": "test_name is required"}
+
         try:
             # Validate test_name to prevent injection
             if not test_name.replace("-", "").replace("_", "").isalnum():
