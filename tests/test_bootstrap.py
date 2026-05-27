@@ -23,6 +23,33 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(states["enable-wiki"], "planned")
         self.assertEqual(states["branch-protection"], "manual-required")
 
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_wiki_passes_bool_not_string(self, mock_get_health):
+        """has_wiki must be sent as Python bool True so GhClient uses -F and gh
+        interprets it as a JSON boolean, not the string 'true'."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/test-repo",
+            label_coverage_ok=True,
+            missing_labels=[],
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="pass",
+        )
+        client = Mock()
+        client.api.return_value = {"has_wiki": False}
+
+        run_bootstrap("akasper/test-repo", apply_mode=True, client=client)
+
+        # Find the PATCH call for has_wiki
+        patch_calls = [
+            call for call in client.api.call_args_list
+            if call.args and "repos/akasper/test-repo" in str(call.args[0])
+            and call.kwargs.get("method") == "PATCH"
+        ]
+        self.assertTrue(patch_calls, "Expected a PATCH call for has_wiki")
+        fields = patch_calls[0].kwargs.get("fields", {})
+        self.assertIs(fields.get("has_wiki"), True, "has_wiki must be Python bool True, not a string")
+
 
 if __name__ == "__main__":
     unittest.main()

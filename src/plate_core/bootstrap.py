@@ -52,7 +52,7 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
 
     if not repo_obj.get("has_wiki", False):
         if apply_mode:
-            gh.api(f"repos/{target}", method="PATCH", fields={"has_wiki": "true"})
+            gh.api(f"repos/{target}", method="PATCH", fields={"has_wiki": True})
             state = "applied"
         else:
             state = "planned"

@@ -19,8 +19,7 @@ jobs:
             const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Research', 'Design', 'Question', 'Audit', 'Migration', 'Feedback Response'];
             // Labels that require an Epic: short-name companion label
             const requiresEpic = ['Feature', 'Epic'];
-            // Labels that are PLATES-auto-generated and exempt from the Epic requirement
-            // (they are ephemeral process artifacts, not tracked planning items)
+            // Feedback Response issues (when used) are exempt from the Epic requirement.
             const issue = context.payload.issue;
 
             if (!issue) {
@@ -49,7 +48,6 @@ jobs:
               return;
             }
 
-            // Feedback Response issues are PLATES-auto-generated process artifacts.
-            // They are exempt from the Epic requirement and close automatically when addressed.
+            // Feedback Response issues are exempt from the Epic requirement.
 
             core.info('PLATE issue label rules passed.');

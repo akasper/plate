@@ -86,7 +86,7 @@ skills:
       - "agent file with valid frontmatter"
       - "extension registry entry"
   - id: "pr-feedback-response"
-    description: "Address actionable PR feedback from known third-party agents (Devin, OpenHands, etc.) without human intervention. Triggered by plates-address-pr-feedback.yml."
+    description: "Address actionable PR feedback from known third-party agents (Devin, OpenHands, etc.) on non-`Feedback Response` PRs inline on the existing PR branch (no new issue, no follow-up PR). Triggered by plates-address-pr-feedback.yml."
     allowed_artifacts:
       - "src/**"
       - "app/**"

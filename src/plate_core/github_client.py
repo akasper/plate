@@ -20,7 +20,14 @@ class GhClient:
         if method != "GET":
             cmd.extend(["-X", method])
         for key, value in (fields or {}).items():
-            cmd.extend(["-F", f"{key}={value}"])
+            # Use -F (typed inference) only for native Python types that gh can safely coerce.
+            # Strings use -f to prevent mis-parsing (e.g. "5319e7" as scientific notation).
+            if isinstance(value, bool):
+                cmd.extend(["-F", f"{key}={'true' if value else 'false'}"])
+            elif isinstance(value, (int, float)):
+                cmd.extend(["-F", f"{key}={value}"])
+            else:
+                cmd.extend(["-f", f"{key}={value}"])
         proc = subprocess.run(
             cmd,
             capture_output=True,
