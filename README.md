@@ -18,13 +18,9 @@ All surfaces are backed by the same `plate_core` library, ensuring consistent be
 - **Epic status** — per-epic child issue summary via `gh plate epic status`
 - **Feature detection** — optional PLATE capability detection (Playwright E2E, plugin setup, etc.) via `gh plate features`
 - **Bootstrap planning** — new-project setup planning/apply baseline via `gh plate bootstrap`
-<<<<<<< HEAD
 - **Baseline agents and skills** — discoverable catalog via `gh plate agents` and `gh plate skills`
 - **E2E Playwright tooling** — scaffolding, recording, and validation tools via MCP
-- **MCP tools** — `plate_health`, `plate_epic_status`, `plate_agents`, `plate_agent`, `plate_skills`, `plate_skill`, `init_playwright`, `record_e2e_gif`, `validate_e2e_tests` return structured payloads
-=======
-- **MCP tools** — `plate_health`, `plate_epic_status`, `plate_features`, and `plate_bootstrap` return structured payloads via MCP content
->>>>>>> origin/main
+- **MCP tools** — `plate_health`, `plate_epic_status`, `plate_features`, `plate_bootstrap`, `plate_plan_epic`, `plate_agents`, `plate_agent`, `plate_skills`, `plate_skill`, `init_playwright`, `record_e2e_gif`, `validate_e2e_tests` return structured payloads
 - **Copilot plugin** — installable agent surface (`/agent plate`) with bundled MCP server configuration
 
 ## Quick Start
@@ -50,11 +46,7 @@ gh plate bootstrap --repo akasper/plate_core --apply    # apply supported steps
 ```sh
 # In your Copilot CLI session:
 /mcp connect /absolute/path/to/plate_core/plate-mcp
-<<<<<<< HEAD
-# Then call tools: plate_health, plate_epic_status, plate_agents, plate_skills
-=======
-# Then call tools: plate_health, plate_epic_status, plate_features, plate_bootstrap
->>>>>>> origin/main
+# Then call tools: plate_health, plate_epic_status, plate_agents, plate_agent, plate_skills, plate_skill, plate_features, plate_bootstrap, plate_plan_epic
 ```
 
 ### As a Copilot CLI plugin

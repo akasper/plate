@@ -68,7 +68,6 @@ class McpTests(unittest.TestCase):
         self.assertEqual(payload["epics"][0]["epic_label"], "Epic: plate-core-v1")
 
     @patch("plate_core.mcp_server._write")
-<<<<<<< HEAD
     def test_tools_call_plate_agents(self, mock_write):
         _handle_tools_call(11, {"name": "plate_agents", "arguments": {}})
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
@@ -93,7 +92,8 @@ class McpTests(unittest.TestCase):
         _handle_tools_call(14, {"name": "plate_skill", "arguments": {"skill_id": "crud-projects"}})
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
         self.assertEqual(payload["id"], "crud-projects")
-=======
+
+    @patch("plate_core.mcp_server._write")
     @patch("plate_core.mcp_server.get_features")
     def test_tools_call_plate_features(self, mock_get_features, mock_write):
         mock_get_features.return_value = FeatureReport(
@@ -140,7 +140,6 @@ class McpTests(unittest.TestCase):
         self.assertIn("plate_features", names)
         self.assertIn("plate_bootstrap", names)
 
-
     @patch("plate_core.mcp_server._write")
     @patch(
         "plate_core.mcp_server.sys.stdin",
@@ -151,8 +150,6 @@ class McpTests(unittest.TestCase):
         tools = mock_write.call_args[0][0]["result"]["tools"]
         names = {tool["name"] for tool in tools}
         self.assertIn("plate_plan_epic", names)
-
->>>>>>> origin/main
 
 if __name__ == "__main__":
     unittest.main()

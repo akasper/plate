@@ -5,11 +5,8 @@ from __future__ import annotations
 import json
 import sys
 
-<<<<<<< HEAD
 from .baseline_catalog import get_agent, get_skill, list_agents, list_skills
-=======
 from .bootstrap import run_bootstrap
->>>>>>> origin/main
 from .epics import get_epic_status
 from .features import get_features
 from .health import get_health
@@ -49,7 +46,6 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = report.to_dict()
         elif name == "plate_epic_status":
             report = get_epic_status(args.get("repo"))
-<<<<<<< HEAD
             payload = report.to_dict()
         elif name == "init_playwright":
             payload = InitPlaywrightTool.execute(
@@ -72,14 +68,12 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = {"skills": [skill.to_dict() for skill in list_skills()]}
         elif name == "plate_skill":
             payload = get_skill(args.get("skill_id")).to_dict()
-=======
         elif name == "plate_features":
-            report = get_features(args.get("repo"))
+            payload = get_features(args.get("repo")).to_dict()
         elif name == "plate_bootstrap":
-            report = run_bootstrap(args.get("repo"), apply_mode=bool(args.get("apply", False)))
+            payload = run_bootstrap(args.get("repo"), apply_mode=bool(args.get("apply", False))).to_dict()
         elif name == "plate_plan_epic":
-            report = _plan_epic_stub(args)
->>>>>>> origin/main
+            payload = _plan_epic_stub(args).to_dict()
         else:
             _write(
                 {
@@ -168,7 +162,6 @@ def run() -> None:
                                 },
                             },
                             {
-<<<<<<< HEAD
                                 "name": "init_playwright",
                                 "description": "Initialize Playwright E2E testing in a repository.",
                                 "inputSchema": {
@@ -266,7 +259,9 @@ def run() -> None:
                                         }
                                     },
                                     "required": ["skill_id"],
-=======
+                                },
+                            },
+                            {
                                 "name": "plate_features",
                                 "description": "Return optional PLATE capability detection for a repository.",
                                 "inputSchema": {
@@ -311,7 +306,6 @@ def run() -> None:
                                             "description": "Optional resumption state from a prior planning session.",
                                         },
                                     },
->>>>>>> origin/main
                                 },
                             },
                         ]
