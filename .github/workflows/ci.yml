@@ -13,6 +13,14 @@ jobs:
     name: Labels
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    # Fast feedback on label correctness is critical for PLATE's rapid small-PR iteration.
+    # Cancel any in-flight stale run the moment a newer labeled/synchronize event arrives
+    # for the same PR. Combined with a tight timeout this eliminates the "hanging check"
+    # symptom even though the underlying Actions runner still has cold-start latency.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    timeout-minutes: 2
     steps:
       - name: Validate PR type label
         uses: actions/github-script@v7

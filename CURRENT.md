@@ -27,6 +27,7 @@ last_verified_commit: "0dcdda0"
 | MCP tool parity for features/bootstrap | Implemented | — | Pending | MCP server now exposes `plate_features` and `plate_bootstrap` with tool schemas and dispatch wiring in `src/plate_core/mcp_server.py`; coverage added in `tests/test_mcp.py` | `README.md`, `src/plate_core/mcp_server.py`, `tests/test_mcp.py` | Unreleased | 2026-05-26 |
 | Feedback resolution merge gate | Implemented | — | #63 | `feedback-resolution-check.yml` fails PRs with unresolved active review threads or `reviewDecision=CHANGES_REQUESTED`, enabling auto-merge only after review commentary is addressed | `AGENTS.md §Third-Party Agent Feedback`, `.github/copilot-instructions.md`, `.github/workflows/feedback-resolution-check.yml` | Unreleased | 2026-05-26 |
 | Repository hygiene: binary artifact removal (.pyc) | Implemented | #91 | TBD | `git rm --cached` on all 8 committed .pyc files (src/plate_core/__pycache__/* and tests/__pycache__/*) + hardened .gitignore with full Python + common ancillary patterns; `git ls-files` confirms zero binaries tracked | `.gitignore`, `CURRENT.md` | Unreleased | 2026-05-27 |
+| CI: Labels check no longer appears to hang | Implemented | #95 | TBD | Added `concurrency` (cancel-in-progress) + tight `timeout-minutes: 2` to the `labels` job in `ci.yml`. Stale runs are cancelled the moment a newer label or synchronize event arrives for the same PR, eliminating the perception of hanging checks during rapid iteration. | `.github/workflows/ci.yml`, `CURRENT.md` | Unreleased | 2026-05-27 |
 
 ## Operational Behavior
 
