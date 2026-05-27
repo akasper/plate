@@ -51,6 +51,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = InitPlaywrightTool.execute(
                 args.get("repo_path", "."),
                 args.get("template_repo"),
+                bool(args.get("force", False)),
             )
         elif name == "record_e2e_gif":
             test_name = args.get("test_name")
@@ -177,6 +178,10 @@ def run() -> None:
                                         "template_repo": {
                                             "type": "string",
                                             "description": "Path to template repository. Defaults to plate_template.",
+                                        },
+                                        "force": {
+                                            "type": "boolean",
+                                            "description": "Overwrite existing tests/e2e/ directory. Defaults to false.",
                                         },
                                     },
                                     "required": [],

@@ -20,17 +20,22 @@ def _get_template_repo() -> Path:
     )
 
 
+# Maximum time (seconds) to wait for an E2E recording script before timing out.
+_E2E_RECORDING_TIMEOUT = 120
+
+
 class InitPlaywrightTool:
     """Initialize Playwright E2E testing in a repo."""
 
     @staticmethod
-    def execute(repo_path: str, template_repo: str | None = None) -> dict:
+    def execute(repo_path: str, template_repo: str | None = None, force: bool = False) -> dict:
         """
         Copy Playwright config, example specs, and GIF scripts from template.
 
         Args:
             repo_path: Path to target repo
             template_repo: Source template path (optional; uses plate_template if not provided)
+            force: If True, overwrite existing tests/e2e/ directory. Defaults to False.
 
         Returns:
             {
@@ -66,6 +71,15 @@ class InitPlaywrightTool:
             dst_e2e = repo / "tests" / "e2e"
             if src_e2e.exists():
                 if dst_e2e.exists():
+                    if not force:
+                        return {
+                            "status": "error",
+                            "message": (
+                                "tests/e2e/ already exists. Backup your existing tests "
+                                "first, then pass force=True to overwrite and replace "
+                                "existing E2E test content."
+                            ),
+                        }
                     shutil.rmtree(dst_e2e)
                 shutil.copytree(src_e2e, dst_e2e)
                 files_created.append("tests/e2e/")
@@ -168,6 +182,7 @@ class RecordE2eGifTool:
                     cwd=str(repo),
                     capture_output=True,
                     text=True,
+                    timeout=_E2E_RECORDING_TIMEOUT,
                 )
             else:
                 result = subprocess.run(
@@ -175,6 +190,7 @@ class RecordE2eGifTool:
                     cwd=str(repo),
                     capture_output=True,
                     text=True,
+                    timeout=_E2E_RECORDING_TIMEOUT,
                 )
 
             if result.returncode != 0:
