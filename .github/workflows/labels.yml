@@ -1,0 +1,53 @@
+name: labels
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  labels:
+    name: labels
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    # This is a fast, critical gate. Cancel stale runs immediately on new label
+    # or synchronize events and fail fast if the runner takes too long.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    timeout-minutes: 1
+    steps:
+      - name: Validate PR type label
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const prTypeLabels = ['Bug', 'Feature', 'Documentation', 'Feedback Response'];
+            const target = context.payload.pull_request;
+
+            if (!target) {
+              core.setFailed('No pull request payload found.');
+              return;
+            }
+
+            const labels = (target.labels || []).map((label) => typeof label === 'string' ? label : label.name);
+            const matches = labels.filter((label) => prTypeLabels.includes(label));
+            const forbidden = labels.filter((label) => /^status:|^priority:/.test(label));
+            core.info(`Labels: ${labels.join(', ') || '(none)'}`);
+
+            let failureMessage = null;
+
+            if (forbidden.length > 0) {
+              failureMessage = `Pull requests must not use planning state labels (${forbidden.join(', ')}). Use GitHub Projects fields instead.`;
+            } else if (matches.length !== 1) {
+              failureMessage = `Pull requests must have exactly one PR type label (${prTypeLabels.join(', ')}). Found: ${matches.join(', ') || '(none)'}.`;
+            }
+
+            if (failureMessage) {
+              core.setFailed(failureMessage);
+              return;
+            }
+
+            core.info('PR label rules passed.');
