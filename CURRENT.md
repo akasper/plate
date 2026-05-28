@@ -47,6 +47,7 @@ last_verified_commit: "0dcdda0"
 
 | Gap | Tracking Issue | Notes |
 |---|---|---|
+| Baseline agent/skill plugin install verification | #83 | Delegation feature is implemented; the full Copilot CLI install-and-delegate smoke path still needs broader CI coverage. |
 | Final production stack decision pending | #5 (research complete) | v1 baseline is implemented in Python for rapid validation; long-term language/distribution decision still open. |
 | Release automation not project-specific | TBD | Release policy depends on distribution format (binary, npm package, etc.). |
 | Wiki not initialized | TBD | Opt-in; enable once content is ready. |

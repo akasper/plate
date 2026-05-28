@@ -102,7 +102,10 @@ def cmd_agent_delegate(args: argparse.Namespace) -> int:
     try:
         result = delegate_to_agent(args.agent_id, args.task)
     except BaselineCatalogError as exc:
-        print(f"Error: {exc}")
+        if args.json:
+            print(json.dumps({"error": str(exc)}))
+        else:
+            print(f"Error: {exc}")
         return 1
 
     if args.json:

@@ -179,6 +179,8 @@ class CliDelegationTests(unittest.TestCase):
         with redirect_stdout(out):
             code = main(["agents", "delegate", "does-not-exist", "--task", "something", "--json"])
         self.assertNotEqual(code, 0, "Unknown agent id must return non-zero exit code")
+        payload = json.loads(out.getvalue().strip())
+        self.assertIn("error", payload)
 
     def test_agents_delegate_human_readable_output_mentions_agent(self):
         out = io.StringIO()

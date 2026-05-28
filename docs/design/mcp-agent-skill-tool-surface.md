@@ -3,7 +3,7 @@
 - **Issue:** #74
 - **Designed by:** @copilot (agent session)
 - **Date:** 2026-05-27
-- **Status:** Approved (implemented in PR #85; delegation tool to be added in #83)
+- **Status:** Approved (implemented in PR #85; delegation tool implemented in #83)
 
 ## Problem
 

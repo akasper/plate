@@ -3,7 +3,7 @@
 - **Issue:** #76
 - **Designed by:** @copilot (agent session)
 - **Date:** 2026-05-27
-- **Status:** Draft (to be implemented in Issue #83)
+- **Status:** Implemented (Issue #83)
 
 ## Problem
 
