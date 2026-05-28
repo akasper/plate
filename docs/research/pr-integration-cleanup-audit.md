@@ -3,7 +3,7 @@
 - **Issue:** #101 (child of Epic #100)
 - **Researched by:** Autonomous agent (Grok)
 - **Date:** 2026-05-28
-- **Status:** Complete
+- **Status:** Completed
 
 ## Research Question
 
@@ -50,4 +50,3 @@ Phased adoption:
 4. Follow-on Design child issue to detail the migration and any workflow/AGENTS changes.
 
 This research artifact (plus any follow-on Design work) provides the required traceable commit for closing #101 and advances Epic #100.
-
