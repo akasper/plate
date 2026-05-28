@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Promote unblocked Feature issues to ready
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           ORCHESTRATOR_WORKFLOW: ${{ vars.PLATE_MAIN_ORCHESTRATOR_WORKFLOW }}
         with:

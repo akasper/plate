@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Determine whether this is a Feature PR
         id: labels
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const labels = context.payload.pull_request.labels.map((label) => label.name);
@@ -23,7 +23,7 @@ jobs:
             core.info(`Feature PR: ${isFeature}`);
       - name: Check whether CURRENT.md changed
         if: steps.labels.outputs.is_feature == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const files = await github.paginate(github.rest.pulls.listFiles, {

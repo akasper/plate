@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Determine whether wiki sync should run
         id: gate
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const labels = context.payload.pull_request.labels.map((label) => label.name);
