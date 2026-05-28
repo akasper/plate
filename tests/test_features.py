@@ -64,7 +64,11 @@ class FeatureDetectionTests(unittest.TestCase):
 
     def test_get_features_playwright_e2e_not_enabled_by_e2e_dir_alone_on_gh(self):
         client = Mock()
-        package_json = {"content": base64.b64encode(json.dumps({"dependencies": {}}).encode("utf-8")).decode("ascii")}
+        package_json = {
+            "content": base64.b64encode(
+                json.dumps({"dependencies": {}, "devDependencies": {}, "peerDependencies": {}}).encode("utf-8")
+            ).decode("ascii")
+        }
 
         def api_side_effect(endpoint: str):
             if endpoint.endswith("/contents/tests/e2e"):

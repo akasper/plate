@@ -60,7 +60,7 @@ def _has_playwright_config_gh(client: GhClient, repo: str) -> tuple[bool, str]:
 
 
 def _has_playwright_dep_gh(client: GhClient, repo: str) -> bool:
-    """Check for playwright/@playwright/test dependency in package.json via GitHub API."""
+    """Check for playwright or @playwright/test dependency in package.json via GitHub API."""
     try:
         package_json = client.api(f"repos/{repo}/contents/package.json")
     except GhApiError:
