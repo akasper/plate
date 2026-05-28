@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -72,7 +73,7 @@ def _has_playwright_dep_gh(client: GhClient, repo: str) -> bool:
     try:
         decoded = base64.b64decode(content).decode("utf-8-sig")
         data = json.loads(decoded)
-    except Exception:
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error):
         return False
     deps: set[str] = set()
     for section in ("dependencies", "devDependencies", "peerDependencies"):

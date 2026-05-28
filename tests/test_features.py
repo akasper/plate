@@ -64,12 +64,13 @@ class FeatureDetectionTests(unittest.TestCase):
 
     def test_get_features_playwright_e2e_not_enabled_by_e2e_dir_alone_on_gh(self):
         client = Mock()
+        package_json = {"content": base64.b64encode(json.dumps({"dependencies": {}}).encode("utf-8")).decode("ascii")}
 
         def api_side_effect(endpoint: str):
             if endpoint.endswith("/contents/tests/e2e"):
                 return {"name": "e2e"}
             if endpoint.endswith("/contents/package.json"):
-                return {"content": base64.b64encode(json.dumps({"dependencies": {}}).encode("utf-8")).decode("ascii")}
+                return package_json
             raise GhApiError("not found")
 
         client.api.side_effect = api_side_effect
