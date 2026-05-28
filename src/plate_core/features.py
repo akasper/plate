@@ -71,9 +71,9 @@ def _has_playwright_dep_gh(client: GhClient, repo: str) -> bool:
     if not isinstance(content, str):
         return False
     try:
-        decoded = base64.b64decode(content).decode("utf-8-sig")
+        decoded = base64.b64decode(content).decode("utf-8")
         data = json.loads(decoded)
-    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error):
+    except (ValueError, TypeError, UnicodeDecodeError, binascii.Error):
         return False
     deps: set[str] = set()
     for section in ("dependencies", "devDependencies", "peerDependencies"):
