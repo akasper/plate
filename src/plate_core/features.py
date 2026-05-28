@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -51,10 +52,34 @@ def _has_playwright_config_gh(client: GhClient, repo: str) -> tuple[bool, str]:
     for name in PLAYWRIGHT_CONFIG_CANDIDATES:
         if _path_exists(client, repo, name):
             return True, name
-    # Fallback: also accept tests/e2e presence as weak signal (config may be .ts in subdir or JS variant not listed)
-    if _path_exists(client, repo, "tests/e2e"):
-        return True, "tests/e2e/"
-    return False, "playwright.config.* or tests/e2e/"
+    # Fallback per issue #64 heuristic: tests/e2e + playwright dependency.
+    if _path_exists(client, repo, "tests/e2e") and _has_playwright_dep_gh(client, repo):
+        return True, "tests/e2e/ + package.json playwright dependency"
+    return False, "playwright.config.* or (tests/e2e/ + package.json playwright dependency)"
+
+
+def _has_playwright_dep_gh(client: GhClient, repo: str) -> bool:
+    """Check for playwright/@playwright/test dependency in package.json via GitHub API."""
+    try:
+        package_json = client.api(f"repos/{repo}/contents/package.json")
+    except GhApiError:
+        return False
+    if not isinstance(package_json, dict):
+        return False
+    content = package_json.get("content")
+    if not isinstance(content, str):
+        return False
+    try:
+        decoded = base64.b64decode(content).decode("utf-8-sig")
+        data = json.loads(decoded)
+    except Exception:
+        return False
+    deps: set[str] = set()
+    for section in ("dependencies", "devDependencies", "peerDependencies"):
+        section_deps = data.get(section, {})
+        if isinstance(section_deps, dict):
+            deps.update(section_deps.keys())
+    return bool(deps & {"playwright", "@playwright/test"})
 
 
 def get_features(repo: str | None = None, client: GhClient | None = None) -> FeatureReport:
