@@ -19,6 +19,7 @@ class HealthReport:
     missing_labels: list[str]
     branch_protection_enabled: bool
     open_epic_count: int
+    binary_artifacts_tracked: int
     status: str
 
     def to_dict(self) -> dict:
@@ -65,10 +66,33 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
     search = gh.api(f"search/issues?q=repo:{target}+is:issue+is:open+label:Epic")
     open_epics = int(search.get("total_count", 0))
 
+    # Binary artifact hygiene check (addresses Bug #90 / #91 regression guard)
+    # Uses git ls-files to detect any tracked .pyc, __pycache__, or common binaries
+    binary_artifacts_tracked = 0
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files", "--cached"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        if proc.returncode == 0:
+            tracked_files = proc.stdout.splitlines()
+            forbidden_suffixes = (".pyc", ".pyo", ".pyd", ".so", ".dll", ".dylib")
+            binary_artifacts_tracked = sum(
+                1
+                for f in tracked_files
+                if f.endswith(forbidden_suffixes) or "__pycache__" in f or "/__pycache__/" in f
+            )
+    except Exception:
+        binary_artifacts_tracked = -1  # unknown in this environment
+
     label_ok = len(missing) == 0
-    if label_ok and protected:
+    hygiene_ok = binary_artifacts_tracked == 0
+    if label_ok and protected and hygiene_ok:
         status = "pass"
-    elif label_ok or protected:
+    elif label_ok or protected or hygiene_ok:
         status = "warn"
     else:
         status = "fail"
@@ -79,6 +103,7 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         missing_labels=missing,
         branch_protection_enabled=protected,
         open_epic_count=open_epics,
+        binary_artifacts_tracked=binary_artifacts_tracked,
         status=status,
     )
 
