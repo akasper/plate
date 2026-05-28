@@ -1,0 +1,15 @@
+{
+  "name": "plate-core-e2e",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Playwright end-to-end tests for the plate_core Copilot CLI plugin.",
+  "scripts": {
+    "test": "playwright test",
+    "test:report": "playwright test --reporter=html"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}

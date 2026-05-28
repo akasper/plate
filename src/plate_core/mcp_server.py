@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 
-from .baseline_catalog import get_agent, get_skill, list_agents, list_skills
+from .baseline_catalog import BaselineCatalogError, delegate_to_agent, get_agent, get_skill, list_agents, list_skills
 from .bootstrap import run_bootstrap
 from .epics import get_epic_status
 from .features import get_features
@@ -72,6 +72,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = {"skills": [skill.to_dict() for skill in list_skills()]}
         elif name == "plate_skill":
             payload = get_skill(args.get("skill_id")).to_dict()
+        elif name == "plate_delegate_to_agent":
+            agent_id = args.get("agent_id")
+            task_description = args.get("task_description")
+            if not agent_id:
+                raise ValueError("agent_id is required")
+            if not task_description:
+                raise ValueError("task_description is required")
+            payload = delegate_to_agent(agent_id, task_description).to_dict()
         elif name == "plate_features":
             payload = get_features(args.get("repo")).to_dict()
         elif name == "plate_bootstrap":
@@ -314,6 +322,30 @@ def run() -> None:
                                             "description": "Optional resumption state from a prior planning session.",
                                         },
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_delegate_to_agent",
+                                "description": (
+                                    "Route a task to a specific baseline plate agent and return a delegation "
+                                    "instruction with the agent's details, skills, constraints, and a ready-to-use "
+                                    "delegation prompt. Call this when the user asks to delegate work to a specific "
+                                    "agent, wants to know how to use an agent for a task, or an orchestrator needs "
+                                    "to route a task to the right agent."
+                                ),
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "agent_id": {
+                                            "type": "string",
+                                            "description": "Baseline agent id to delegate the task to.",
+                                        },
+                                        "task_description": {
+                                            "type": "string",
+                                            "description": "Free-text description of the task to delegate.",
+                                        },
+                                    },
+                                    "required": ["agent_id", "task_description"],
                                 },
                             },
                         ]

@@ -12,9 +12,11 @@ Your workflow:
 3. Call MCP tool `plate_epic_status` and summarize open/closed child issue counts for the active Epic label.
 4. Recommend the next highest-impact action based on current health + epic status.
 5. When useful, point the user to `gh plate agents list`, `gh plate agents show <agent-id>`, `gh plate skills list`, and `gh plate skills show <skill-id>` for the baseline catalog.
+6. To delegate a task to a specific baseline agent, call MCP tool `plate_delegate_to_agent` with the `agent_id` and a `task_description`. Present the returned `delegation_prompt` to the user and explain how to invoke the target agent.
 
 Behavior rules:
 
 1. Do not claim live state unless you called an MCP tool in this session.
 2. If MCP calls fail, explain the failure and ask the user to provide a repo or reconnect MCP.
 3. Keep responses concise and action-oriented.
+4. For delegation requests (e.g. "delegate this to the research agent"), always call `plate_delegate_to_agent` rather than guessing the workflow.

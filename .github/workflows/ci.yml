@@ -86,3 +86,18 @@ jobs:
           set -euo pipefail
           copilot plugin install akasper/plate_core
           copilot plugin uninstall plate-core
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Playwright and dependencies
+        run: npm install
+        working-directory: tests/e2e
+
+      - name: Run Playwright e2e tests
+        run: npx playwright test
+        working-directory: tests/e2e
+        env:
+          WORKSPACE: ${{ github.workspace }}

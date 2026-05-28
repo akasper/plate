@@ -29,6 +29,8 @@ last_verified_commit: "0dcdda0"
 | PowerShell-safe multiline PR/issue bodies guidance | Implemented | #62 | #93 | Added "CLI Body Patterns (PowerShell safety)" section to `AGENTS.md` with --body-file + here-string examples; prevents literal \n in gh commands from PowerShell | `AGENTS.md` | Unreleased | 2026-05-27 |
 | Repository hygiene: binary artifact removal (.pyc) | Implemented | #91 | TBD | `git rm --cached` on all 8 committed .pyc files (src/plate_core/__pycache__/* and tests/__pycache__/*) + hardened .gitignore with full Python + common ancillary patterns; `git ls-files` confirms zero binaries tracked | `.gitignore`, `CURRENT.md` | Unreleased | 2026-05-27 |
 | CI: Labels check no longer appears to hang | Implemented | #95 | TBD | Added `concurrency` (cancel-in-progress) + tight `timeout-minutes: 2` to the `labels` job in `ci.yml`. Stale runs are cancelled the moment a newer label or synchronize event arrives for the same PR, eliminating the perception of hanging checks during rapid iteration. | `.github/workflows/ci.yml`, `CURRENT.md` | Unreleased | 2026-05-27 |
+| Playwright e2e test harness for Copilot CLI plugin | Implemented | #81 | Pending | `tests/e2e/` contains `@playwright/test` specs for plugin structure, catalog discovery (all 12 agents + 18 skills via `gh plate agents/skills list --json`), and Copilot plugin install/uninstall; CI runs the suite after plugin install | `tests/e2e/*.spec.ts`, `tests/e2e/playwright.config.ts`, `.github/workflows/ci.yml` | Unreleased | 2026-05-27 |
+| Single-agent delegation | Implemented | #83 | Pending | `delegate_to_agent()` in `src/plate_core/baseline_catalog.py`, `gh plate agents delegate <agent-id> --task <desc>` CLI command, MCP `plate_delegate_to_agent` tool, plugin `.agent.md` delegation workflow step; 28 tests all pass | `docs/design/single-agent-delegation-flow.md`, `src/plate_core/baseline_catalog.py`, `src/plate_core/cli.py`, `src/plate_core/mcp_server.py`, `plugin/agents/plate.agent.md`, `tests/test_delegation.py` | Unreleased | 2026-05-27 |
 
 ## Operational Behavior
 
@@ -46,6 +48,5 @@ last_verified_commit: "0dcdda0"
 | Gap | Tracking Issue | Notes |
 |---|---|---|
 | Final production stack decision pending | #5 (research complete) | v1 baseline is implemented in Python for rapid validation; long-term language/distribution decision still open. |
-| Baseline agent/skill plugin install verification | #65, #82 | Catalog discovery is implemented, but the full Copilot CLI install-and-delegate smoke path still needs broader CI coverage. |
 | Release automation not project-specific | TBD | Release policy depends on distribution format (binary, npm package, etc.). |
 | Wiki not initialized | TBD | Opt-in; enable once content is ready. |

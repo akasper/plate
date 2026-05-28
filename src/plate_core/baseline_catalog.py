@@ -180,6 +180,85 @@ def load_baseline_catalog() -> BaselineCatalog:
     return BaselineCatalog(schema_version=1, agents=agents, skills=skills)
 
 
+@dataclass(frozen=True)
+class DelegationResult:
+    """Result of delegating a task to a baseline agent."""
+
+    agent_id: str
+    agent_name: str
+    agent_description: str
+    task_description: str
+    delegation_prompt: str
+    relevant_skills: tuple[BaselineSkill, ...]
+    surfaces: tuple[str, ...]
+    invocation_hints: dict[str, str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent_id": self.agent_id,
+            "agent_name": self.agent_name,
+            "agent_description": self.agent_description,
+            "task_description": self.task_description,
+            "delegation_prompt": self.delegation_prompt,
+            "relevant_skills": [s.to_dict() for s in self.relevant_skills],
+            "surfaces": list(self.surfaces),
+            "invocation_hints": dict(self.invocation_hints),
+        }
+
+
+def build_delegation_prompt(
+    agent: BaselineAgent,
+    task: str,
+    skills: list[BaselineSkill],
+) -> str:
+    """Build a deterministic delegation prompt from catalog data. No LLM call needed."""
+    skill_names = ", ".join(s.name for s in skills) if skills else "(none)"
+    constraints_block = (
+        "\n".join(f"- {c}" for c in agent.constraints)
+        if agent.constraints
+        else "(none)"
+    )
+    return (
+        f"You are acting as the {agent.name} for this task:\n\n"
+        f"{task}\n\n"
+        f"Relevant skills: {skill_names}\n"
+        f"Constraints:\n{constraints_block}\n\n"
+        "Proceed with the task."
+    )
+
+
+def delegate_to_agent(agent_id: str, task_description: str) -> DelegationResult:
+    """Look up an agent by id and assemble a DelegationResult for routing the task."""
+    catalog = load_baseline_catalog()
+    agent = catalog.agent_by_id(agent_id)  # raises BaselineCatalogError if unknown
+
+    skill_map = {s.id: s for s in catalog.skills}
+    relevant_skills = tuple(
+        skill_map[sid] for sid in agent.primary_skill_ids if sid in skill_map
+    )
+
+    prompt = build_delegation_prompt(agent, task_description, list(relevant_skills))
+
+    hints: dict[str, str] = {
+        "copilot_plugin": (
+            f"Select the '{agent_id}' agent in the Copilot agent picker and paste the delegation prompt."
+        ),
+        "gh_plate": f"gh plate agents show {agent_id}",
+        "mcp": f"Call plate_delegate_to_agent with agent_id={agent_id} and your task.",
+    }
+
+    return DelegationResult(
+        agent_id=agent.id,
+        agent_name=agent.name,
+        agent_description=agent.description,
+        task_description=task_description,
+        delegation_prompt=prompt,
+        relevant_skills=relevant_skills,
+        surfaces=agent.surfaces,
+        invocation_hints=hints,
+    )
+
+
 def list_agents() -> tuple[BaselineAgent, ...]:
     return load_baseline_catalog().agents
 
