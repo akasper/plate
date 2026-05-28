@@ -10,6 +10,15 @@ from .github_client import GhApiError, GhClient
 from .health import resolve_repo
 
 
+# Playwright E2E config file candidates (support .ts/.js/.mjs/.cjs per common usage)
+PLAYWRIGHT_CONFIG_CANDIDATES: list[str] = [
+    "playwright.config.ts",
+    "playwright.config.js",
+    "playwright.config.mjs",
+    "playwright.config.cjs",
+]
+
+
 @dataclass
 class FeatureFlag:
     name: str
@@ -37,6 +46,17 @@ def _path_exists(client: GhClient, repo: str, path: str) -> bool:
         return False
 
 
+def _has_playwright_config_gh(client: GhClient, repo: str) -> tuple[bool, str]:
+    """Check for any playwright.config.* via GitHub API. Returns (enabled, evidence)."""
+    for name in PLAYWRIGHT_CONFIG_CANDIDATES:
+        if _path_exists(client, repo, name):
+            return True, name
+    # Fallback: also accept tests/e2e presence as weak signal (config may be .ts in subdir or JS variant not listed)
+    if _path_exists(client, repo, "tests/e2e"):
+        return True, "tests/e2e/"
+    return False, "playwright.config.* or tests/e2e/"
+
+
 def get_features(repo: str | None = None, client: GhClient | None = None) -> FeatureReport:
     gh = client or GhClient()
     target = resolve_repo(repo)
@@ -49,9 +69,13 @@ def get_features(repo: str | None = None, client: GhClient | None = None) -> Fea
         ("mcp-manifest-source", "plugin/.mcp.json"),
         ("baseline-agents-catalog", "src/plate_core/data/baseline_catalog.yml"),
         ("current-md", "CURRENT.md"),
-        ("playwright-e2e", "playwright.config.ts"),
     ]
     detected = [FeatureFlag(name=name, enabled=_path_exists(gh, target, path), evidence=path) for name, path in checks]
+
+    # Playwright uses flexible heuristic per issue #64 (config.* + optional dir/dep signals)
+    pw_enabled, pw_evidence = _has_playwright_config_gh(gh, target)
+    detected.append(FeatureFlag(name="playwright-e2e", enabled=pw_enabled, evidence=pw_evidence))
+
     return FeatureReport(repo=target, features=detected)
 
 
@@ -72,10 +96,13 @@ def _get_package_json_deps(repo_path: Path) -> set[str]:
 
 
 def detect_playwright_e2e_local(repo_path: Path) -> bool:
-    """Check if repo has Playwright E2E setup (local file check)."""
-    checks = [
-        (repo_path / "playwright.config.ts").exists(),
-        (repo_path / "tests" / "e2e").is_dir(),
-        "playwright" in _get_package_json_deps(repo_path) or "@playwright/test" in _get_package_json_deps(repo_path),
-    ]
-    return all(checks)
+    """Check if repo has Playwright E2E setup (local file check).
+
+    Per issue #64 heuristic: playwright.config.* presence (any variant) OR
+    (tests/e2e/ directory + playwright package dep).
+    """
+    has_config = any((repo_path / name).exists() for name in PLAYWRIGHT_CONFIG_CANDIDATES)
+    has_e2e_dir = (repo_path / "tests" / "e2e").is_dir()
+    deps = _get_package_json_deps(repo_path)
+    has_dep = bool(deps & {"playwright", "@playwright/test"})
+    return has_config or (has_e2e_dir and has_dep)
