@@ -16,7 +16,7 @@ from .baseline_catalog import (
     list_skills,
 )
 from .epics import get_epic_status
-from .features import get_features
+from .features import detect_playwright_e2e_local, get_features
 from .health import get_health
 
 
@@ -59,7 +59,22 @@ def cmd_epic_status(args: argparse.Namespace) -> int:
 
 
 def cmd_features(args: argparse.Namespace) -> int:
-    report = get_features(args.repo)
+    if getattr(args, "local", False):
+        # Use local FS for playwright-e2e detection (per #64 heuristic); other flags via GitHub
+        from pathlib import Path
+
+        repo_path = Path.cwd()
+        report = get_features(args.repo)  # still need repo name + most flags from GH
+        pw_enabled = detect_playwright_e2e_local(repo_path)
+        for f in report.features:
+            if f.name == "playwright-e2e":
+                f.enabled = pw_enabled
+                f.evidence = "local-fs (playwright.config.* or tests/e2e + dep)"
+                break
+        report.repo = f"{report.repo} (local)"
+    else:
+        report = get_features(args.repo)
+
     if args.json:
         print(json.dumps(report.to_dict()))
         return 0
@@ -81,6 +96,9 @@ def cmd_features(args: argparse.Namespace) -> int:
         display_name = feature_names.get(feature.name, feature.name)
         status = "✅ ENABLED" if feature.enabled else "⏹️  NOT CONFIGURED"
         print(f"{display_name:.<35} {status}")
+    
+    if getattr(args, "local", False):
+        print("\n(Note: Playwright E2E flag used local filesystem heuristic; run without --local for pure GitHub view.)")
     
     return 0
 
@@ -204,6 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     features = sub.add_parser("features", help="Show optional PLATE feature detection")
     features.add_argument("--repo", help="owner/name; defaults to git remote origin")
     features.add_argument("--json", action="store_true", help="Output JSON")
+    features.add_argument("--local", action="store_true", help="Use local filesystem checks for Playwright E2E (config.* + tests/e2e + package.json) per #64 heuristic")
     features.set_defaults(func=cmd_features)
 
     agents = sub.add_parser("agents", help="Show baseline agent catalog")
