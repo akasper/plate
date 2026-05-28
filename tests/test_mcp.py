@@ -18,6 +18,7 @@ class McpTests(unittest.TestCase):
             repo="akasper/plate_core",
             label_coverage_ok=True,
             missing_labels=[],
+            binary_artifacts_tracked=0,
             branch_protection_enabled=True,
             open_epic_count=1,
             status="pass",

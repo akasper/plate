@@ -37,6 +37,7 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.missing_labels, [])
         self.assertTrue(report.branch_protection_enabled)
         self.assertEqual(report.open_epic_count, 3)
+        self.assertEqual(report.binary_artifacts_tracked, 0)  # hygiene regression guard for #90
         self.assertEqual(report.status, "pass")
 
 

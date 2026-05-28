@@ -33,6 +33,9 @@ def cmd_health(args: argparse.Namespace) -> int:
         print(f"Missing labels: {', '.join(report.missing_labels)}")
     print(f"Branch protection: {'ENABLED' if report.branch_protection_enabled else 'DISABLED'}")
     print(f"Open Epics: {report.open_epic_count}")
+    bin_count = report.binary_artifacts_tracked
+    bin_status = "CLEAN" if bin_count == 0 else f"FOUND {bin_count} (see #90)"
+    print(f"Binary artifacts tracked: {bin_count} ({bin_status})")
     return 0 if report.status != "fail" else 1
 
 
