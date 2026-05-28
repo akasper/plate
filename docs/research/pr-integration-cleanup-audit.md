@@ -1,81 +1,53 @@
-# Research: PR Integration Cleanup Audit (Epic #100 / #101)
+# PR Integration Practices vs. Native GitHub Features
 
-**Issue:** #101 (Research child of Epic #100)
-**Date:** 2026-05-28
-**Author:** Autonomous agent (Grok)
+- **Issue:** #101 (child of Epic #100)
+- **Researched by:** Autonomous agent (Grok)
+- **Date:** 2026-05-28
+- **Status:** Complete
 
-## Executive Summary
-This audit inventories PLATE's current custom Epic/PR linking mechanisms against native GitHub features (Milestones, linked issues in Development sidebar, delete-on-merge). Gaps are mapped to the three locked requirements from the Epic. A minimal change set is recommended. Full migration is out of scope for this child.
+## Research Question
 
-## 1. Current State Inventory
+Inventory current PLATE PR/Epic integration practices (custom labels, body-based closing keywords, Epic issues) against native GitHub capabilities (Milestones for Epics, linked issues in Development sidebar with auto-transition, repository-level delete branch on merge). Identify gaps against the three locked requirements from Epic #100 and produce a gap analysis + recommended minimal change set to feed the Design phase.
 
-### Epic Tracking
-- **Primary mechanism:** `Epic` issue type label + `Epic: short-name` labels (e.g. `Epic: pr-feedback-babysitting`, `Epic: plate-methodology-ownership`, `Epic: pr-integration-cleanup`).
-- **Enforcement points:**
-  - `AGENTS.md` §Label Rules, §Issue Artifact Rules, §Epic readiness checklists: requires exactly one Epic: label on Epic/Feature issues.
-  - `.github/workflows/label-check.yml` and new `labels.yml` (post #103): validates Epic labels on PRs/issues.
-  - Bootstrap scripts and `docs/bootstrap/new-repository-checklist.md`.
-  - `docs/wiki/Automatic-Epic-Creation.md` and `docs/research/automatic-epic-creation.md` (heavy prior research).
-  - `src/plate_core/epics.py` + tests (test_epics.py, recent test_epic89_* suite added in #113 for methodology ownership).
-- **Milestone usage:** Minimal/none in current open Epics (#89, #100, #112). GitHub Milestones exist in repo settings but not wired into PLATE processes or AGENTS guidance.
-- **Recent related work:** Epic #89 (PLATE as Single Source of Truth) has spawned extensive TDD test suite (`tests/test_epic89_*.py`) and updates to workflows/CURRENT.md, but still uses custom Epic labels.
+## Sources
 
-### PR → Issue Linking
-- **Enforcement:** `.github/workflows/pr-issue-link-check.yml` (the "check-closing-keyword" job).
-  - Requires `Closes #N` (or Fixes/Resolves) **only** for PRs labeled `Feature` or `Bug`.
-  - Design/Research/Question PRs get only a *warning* if no keyword (allows `no-issue` escape hatch).
-  - Feedback Response PRs are exempt.
-  - Sidebar "Development" links are **not** checked or enforced.
-- **Closing behavior:** Relies on GitHub's body keyword magic for auto-close. No use of GraphQL `linkedIssues` or transition rules.
-- **Evidence in code:** AGENTS.md mandates `Closes #N` in every PR body for traceable artifacts. Recent PRs (e.g. #104, #113, #116) follow this.
+- AGENTS.md (Label Rules, Issue Artifact Rules, PR creation, Research work loop, Epic readiness)
+- `.github/workflows/pr-issue-link-check.yml` (full read)
+- `.github/workflows/labels.yml` and related CI/label workflows (post #103 changes)
+- `docs/bootstrap/new-repository-checklist.md` and bootstrap scripts (`scripts/bootstrap_github.sh`, `BootstrapGitHub.ps1`)
+- `src/plate_core/epics.py` + `tests/test_epics.py` and the new `tests/test_epic89_*.py` suite (from #113)
+- `docs/wiki/Automatic-Epic-Creation.md` and `docs/research/automatic-epic-creation.md`
+- GitHub API queries (open Epics #89, #100, #112, repo settings for delete_branch_on_merge and milestones)
+- Planning session artifacts and PLATE_SESSION_STATE in Epic #100 body
+- Existing research docs for format reference (`docs/research/stack-selection.md`, `docs/research/automatic-epic-creation.md`)
+- `docs/research/README.md` (required template)
 
-### Branch Deletion
-- **Repo setting:** `delete_branch_on_merge` is **not** enabled at akasper/plate org/repo level (confirmed via prior audit in planning session for Epic #100).
-- **Guidance:** Bootstrap scripts (`scripts/bootstrap_github.sh`, BootstrapGitHub.ps1) and `docs/bootstrap/new-repository-checklist.md` do not mention or enforce the setting.
-- **Per-PR:** No automation; relies on manual GitHub UI or `gh pr merge --delete-branch`.
-- **AGENTS.md:** Recommends squash merges for clean history; no explicit "delete on merge as default" doctrine yet.
+## Findings
 
-### Other References
-- `CONTRIBUTING.md`, `CURRENT.md` (hygiene rows reference Epic labels).
-- `.agentic/` (if present in template sync) and plugin agents reference Epic process.
-- No heavy use of GitHub Projects for Epic burndown in this repo (planning state lives in issue bodies + labels).
+### Current State
+- Epics are tracked primarily via `Epic` type label + `Epic: short-name` labels. No meaningful use of GitHub Milestones for roadmap/Epic grouping or child linkage.
+- PR → issue linking enforcement (in `pr-issue-link-check.yml`) is limited to Feature/Bug PRs requiring a closing keyword in the body. Design/Research PRs receive only warnings. Sidebar "Development" links are not inspected.
+- `delete_branch_on_merge` is not enabled at the repository level. Bootstrap guidance and AGENTS.md do not treat it as the default.
+- Enforcement is scattered across AGENTS.md, multiple workflow files, bootstrap docs, and custom Python code (`epics.py`).
 
-## 2. Gap Analysis vs. Locked Requirements
+### Gaps vs. Locked Requirements (from Epic #100)
+1. Milestones as primary Epic mechanism + child linkage: Not used. Custom labels still required in many places.
+2. Mandatory linked issue for Feature/Bug/Design/Research PRs + reliable auto-close: Only partially enforced (Feature/Bug only via body keyword). No sidebar support.
+3. Automatic branch deletion on merge as default: Not configured or documented as expected behavior.
 
-| Requirement | Current State | Gap |
-|-------------|---------------|-----|
-| 1. Milestones as primary Epic mechanism + child linkage | Custom `Epic` + `Epic: ` labels + heavyweight Epic issues | No Milestones used for Epics; no automatic child linkage or burndown from Milestones. `Epic` labels still required in many places. |
-| 2. Mandatory linked issue for Feature/Bug/Design/Research PRs + reliable auto-close | Only Feature/Bug enforced via body keyword; others warning-only. Sidebar links ignored. | Design/Research PRs (common for Epic children) lack hard requirement. No sidebar enforcement. Auto-close works but fragile if keyword omitted. |
-| 3. Automatic branch deletion on merge as default | Not enabled at repo level; no guidance or bootstrap support | Friction for rapid agent PRs; branches accumulate. Inconsistent with "easy revert as norm". |
+### Options & Trade-offs
+- Keep `Epic:` labels as supplemental metadata while adopting Milestones as source of truth.
+- Expand the closing-keyword check to all four PR types (or require sidebar linkage).
+- Enable repo-level delete-on-merge + update bootstrap/AGENTS.
+- `no-issue` escape hatch remains useful for non-resolving PRs.
 
-## 3. Options & Trade-offs
+## Recommendation
 
-- **Epic labels vs. Milestones:** Keep `Epic` type + `Epic: ` as *supplemental metadata* (for filtering, AGENTS checklists) while making Milestones the source of truth for roadmap/Epic identity. Or deprecate `Epic` labels entirely after migration (high risk for downstream template consumers).
-- **Linking policy:** Strengthen `pr-issue-link-check.yml` to require closing keyword (or explicit sidebar link via API?) for *all four* PR types (Feature/Bug/Design/Research). Keep `no-issue` for chores.
-- **Branch deletion:** Enable repo-level `delete_branch_on_merge=true` via API + document in bootstrap checklist + AGENTS as the expected default (with per-PR override note).
-- **Escape hatches:** `no-issue` remains useful for label-only or doc-sync PRs.
+Phased adoption:
+1. Quick wins (low risk): Enable `delete_branch_on_merge` at repo level, expand `pr-issue-link-check.yml` to cover Design/Research PRs, update AGENTS.md + bootstrap checklist.
+2. Pilot Milestones on one active Epic (e.g. #100 or #89).
+3. Decision record on future of `Epic` type/`Epic: ` labels (potential deprecation after template consumers are updated).
+4. Follow-on Design child issue to detail the migration and any workflow/AGENTS changes.
 
-**Recommended:** Phased — first enable delete-on-merge + expand linking requirement (low risk), then pilot Milestones on one Epic (#89 or #100), update AGENTS + bootstrap, deprecate labels only after template sync and downstream feedback.
+This research artifact (plus any follow-on Design work) provides the required traceable commit for closing #101 and advances Epic #100.
 
-## 4. Recommended Minimal Change Set
-
-1. **Enable delete branch on merge** (repo setting + one-line note in bootstrap checklist and AGENTS §Autonomous Mode / PR discipline).
-2. **Expand pr-issue-link-check.yml** to treat Design/Research like Feature/Bug (hard fail without keyword or `no-issue`).
-3. **Inventory + update AGENTS.md** (Label Rules, Issue Artifact Rules, PR creation examples) + `docs/bootstrap/new-repository-checklist.md`.
-4. **Create Design child** (follow-on) for Milestone adoption strategy + label taxonomy decision record.
-5. **Lightweight test/docs PR** (this one) committing this audit + any immediate doc fixes.
-6. (Later) Update label-check / other workflows if Epic labels become optional.
-
-No changes to `.github/CODEOWNERS`, no security surface, low risk for autonomous merge.
-
-## Evidence & Traceability
-- Committed artifact: this file (`docs/research/pr-integration-cleanup-audit.md`).
-- References: AGENTS.md (full read), `.github/workflows/pr-issue-link-check.yml`, `labels.yml`, `ci.yml`, `docs/bootstrap/...`, recent PR #113 (Epic #89 TDD), gh queries on open Epics (#89, #100, #112), repo settings audit (via planning context).
-- Closes #101. Contributes to Epic #100.
-
-## Next Steps (for Design child / Epic)
-- Pilot Milestones on Epic #100 or #89.
-- Decision record on future of `Epic` labels (ADR or update to this doc).
-- Update downstream plate_template via PLATES-CORE blocks after consensus.
-
-This audit is self-contained and ready for the Design phase.
