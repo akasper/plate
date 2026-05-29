@@ -8,7 +8,7 @@ Every issue must carry exactly one issue type label: `Bug`, `Feature`, `Epic`, `
 
 ## Branch and Pull Request Rules
 
-Use short descriptive branch names such as `feature/onboarding-copy`, `bug/login-regression`, or `docs/current-state-audit`. Every pull request must carry exactly one PR type label: `Bug`, `Feature`, or `Documentation`. Feature PRs must update `CURRENT.md`.
+Use short descriptive branch names such as `feature/onboarding-copy`, `bug/login-regression`, or `docs/current-state-audit`. Never prefix PR titles with `[WIP]`, `[DRAFT]`, or similar legacy markers — use GitHub's native draft PR status instead (see AGENTS.md). Every pull request must carry exactly one PR type label: `Bug`, `Feature`, or `Documentation`. Feature PRs must update `CURRENT.md`.
 
 If a pull request is opened with GitHub CLI, include the type label in the create command itself, for example `gh pr create --label "Feature"`, instead of treating labeling as a separate best-effort follow-up step.
 

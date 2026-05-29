@@ -24,6 +24,8 @@ PLATE defaults to an **autopilot posture**: agents should proceed autonomously t
 
 **Easy revert as the norm.** Prefer squash merges (keeps history clean). Never push directly to `main`. Name branches `type/short-description`. Each squash commit on `main` should read as a complete, stand-alone unit of work.
 
+**PR title hygiene.** Never include `[WIP]`, `WIP:`, `[DRAFT]`, or similar legacy markers in pull request titles. These make the PR list, notifications, and history harder to scan. Use GitHub's native draft PR status (`gh pr create --draft ...` or the repository UI toggle) instead. The draft state is the official, filterable signal for work-in-progress. See #135 (child of Epic #100).
+
 **Resource consciousness.** Prefer targeted tool calls over exhaustive scans. Batch parallel reads. Stop investigating after sufficient evidence — do not read every file if you already know the answer. Avoid repeatedly regenerating content that has not changed.
 
 **Human checkpoints.** Post a summary comment on the Epic issue when all child issues are resolved. At that point, stop and let the human review before starting the next epic. Do not start a new epic autonomously without instruction.
@@ -203,7 +205,7 @@ Preferred flow is now **local babysitting** driven by `gh plate pr babysit <numb
 Use labels as stable process metadata. Do not create ad hoc labels unless they change routing, enforcement, reporting, auditing, review burden, or agent behavior. Use GitHub Projects fields for frequently changing planning state such as priority, owner, rank, iteration, target date, or release target. The `status:blocked` and `status:ready-to-work` labels are the explicit exception used by PLATES native trigger workflows.
 
 | Label Family | Usage |
-|---|---|
+|---|---|---|
 | `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
 | `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
 | `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by the deprecated legacy workflow; no `Epic:` label required. |

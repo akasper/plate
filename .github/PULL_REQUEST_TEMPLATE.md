@@ -16,6 +16,8 @@
 
   Missing or multiple labels cause immediate CI failure (PLATE Label Check).
   When CI fails, a repair comment will be posted on this PR with the exact command.
+
+  PR titles must be clean and descriptive. Do not include `[WIP]`, `[DRAFT]`, or similar prefixes. Use the native GitHub draft PR status for work-in-progress (see AGENTS.md §Autopilot Doctrine).
 -->
 
 # PLATE Pull Request
@@ -65,7 +67,7 @@ Select exactly one PR type label and apply it to this pull request.
 ## Risk and Rollback
 
 | Question | Answer |
-|---|---|
+|---|---|---
 | Risk label applied, if any | TBD |
 | User, data, security, or public-claim risk | TBD |
 | Rollback plan | TBD |
