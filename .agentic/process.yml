@@ -42,7 +42,6 @@ labels:
     area: "area:"
     risk: "risk:"
     need: "need:"
-    epic: "Epic:"
   disallowed_default_prefixes:
     - "priority:"
     - "status:"
@@ -63,15 +62,16 @@ labels:
       - "Feature"
       - "Documentation"
   epic_rules:
-    every_epic_issue_has_dedicated_label: true
-    epic_label_pattern: "^Epic: .+"
-    every_feature_issue_has_exactly_one_epic_label: true
+    milestones_are_canonical_epics: true
+    every_feature_issue_has_epic_milestone: true
+    epic_issue_requires_milestone_when_used: true
+    create_new_epic_labels: false
   stable_metadata_rule: "Create labels only when they change routing, enforcement, reporting, auditing, review burden, or agent behavior."
 
 issues:
   required_for_feature:
     - "Feature label"
-    - "exactly one Epic: short-name label"
+    - "epic milestone"
     - "problem statement"
     - "desired behavior"
     - "acceptance criteria"
@@ -85,7 +85,7 @@ issues:
     - "regression test plan"
   required_for_epic:
     - "Epic label"
-    - "dedicated Epic: short-name label"
+    - "matching epic milestone"
     - "outcome"
     - "scope boundaries"
     - "success criteria"
@@ -112,6 +112,14 @@ pull_requests:
     - "Feature"
     - "Documentation"
   feature_pr_requires_current_md: true
+  issue_link_required_for:
+    - "Bug"
+    - "Feature"
+    - "Documentation"
+  accepted_issue_link_methods:
+    - "closing keyword in PR body"
+    - "Development sidebar link"
+  milestone_expected_when_part_of_epic: true
   required_sections:
     - "Summary"
     - "Linked work"

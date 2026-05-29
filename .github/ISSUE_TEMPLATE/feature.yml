@@ -7,13 +7,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        Feature issues must carry exactly one `Epic: short-name` label. Planning state such as priority, owner, target date, and status belongs in GitHub Projects fields.
+        Feature issues must be assigned to the GitHub milestone that represents their Epic. Planning state such as priority, owner, target date, and status belongs in GitHub Projects fields.
   - type: input
-    id: epic_label
+    id: epic_milestone
     attributes:
-      label: Epic traceability label
-      description: "Name the existing or proposed `Epic: short-name` label that owns this feature."
-      placeholder: "Epic: onboarding"
+      label: Epic milestone
+      description: "Name the GitHub milestone that owns this feature. Create it first from the repository Milestones tab or with `gh api repos/OWNER/REPO/milestones -f title='Q3 onboarding'` if needed."
+      placeholder: "Q3 onboarding"
     validations:
       required: true
   - type: textarea
@@ -64,7 +64,7 @@ body:
     attributes:
       label: PLATE readiness checklist
       options:
-        - label: "This feature has or will receive exactly one `Epic: short-name` label."
+        - label: This feature has or will be assigned to the correct epic milestone.
           required: true
         - label: Acceptance criteria are testable.
           required: true

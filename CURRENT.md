@@ -1,8 +1,8 @@
 ---
 current_state_version: "0.2"
 process_version: "PLATE 0.6"
-last_verified_at: "2026-05-27"
-last_verified_commit: "0dcdda0"
+last_verified_at: "2026-05-28"
+last_verified_commit: "39b5a3b"
 ---
 
 # Current Project State
@@ -34,6 +34,7 @@ last_verified_commit: "0dcdda0"
 | Single-agent delegation | Implemented | #83 | Pending | `delegate_to_agent()` in `src/plate_core/baseline_catalog.py`, `gh plate agents delegate <agent-id> --task <desc>` CLI command, MCP `plate_delegate_to_agent` tool, plugin `.agent.md` delegation workflow step; 28 tests all pass | `docs/design/single-agent-delegation-flow.md`, `src/plate_core/baseline_catalog.py`, `src/plate_core/cli.py`, `src/plate_core/mcp_server.py`, `plugin/agents/plate.agent.md`, `tests/test_delegation.py` | Unreleased | 2026-05-27 |
 | Research: PR integration vs native GitHub (milestones, linking, delete-on-merge) | Research complete | #101 (child of #100) | This PR | Full inventory + gap analysis committed to `docs/research/pr-integration-cleanup-audit.md`; covers AGENTS, all workflows (pr-issue-link-check, labels, etc.), bootstrap, recent Epic #89 TDD work. Ready for Design child. | `docs/research/pr-integration-cleanup-audit.md`, `CURRENT.md` | Unreleased | 2026-05-28 |
 | Epic #89 research/design foundation artifacts | Research/Design complete | #89, #106, #107, #108, #109, #110 | This PR | Epic #89 TDD documentation artifacts committed for inventory/ownership, extension model evolution, `.plate` schema lifecycle, PLATES-CORE marker contract, and phased cutover design; validated by `tests/test_epic89_*.py`. | `docs/research/plate-methodology-inventory-ownership.md`, `docs/research/plate-extension-model-evolution.md`, `docs/design/plate-root-config-schema-lifecycle.md`, `docs/design/plates-core-marker-contract-upstream-sync.md`, `docs/design/plate-template-cutover-plan.md` | Unreleased | 2026-05-28 |
+| Native GitHub PR integration defaults | Implemented | #100 | this PR | Milestones now replace `Epic: short-name` labels in active guidance and issue checks; PR issue-link enforcement accepts closing keywords or Development sidebar links; bootstrap scripts default to delete-branch-on-merge with explicit skip flags; regression coverage in `tests/test_native_github_pr_integration.py` | `AGENTS.md`, `.agentic/process.yml`, `.github/workflows/label-check.yml`, `.github/workflows/pr-issue-link-check.yml`, `docs/design/native-github-pr-integration.md`, `docs/bootstrap/new-repository-checklist.md`, `scripts/*` | Unreleased | 2026-05-28 |
 
 ## Operational Behavior
 
@@ -44,6 +45,7 @@ last_verified_commit: "0dcdda0"
 | Runtime capability | `gh-plate` and `plate-mcp` share health/Epic logic; `gh-plate` additionally exposes feature detection, baseline agent/skill discovery, and bootstrap planning/apply commands. | `gh-plate`, `plate-mcp`, `src/plate_core/*` | Branch protection application remains manual because protection rules are repo-policy-specific. |
 | Branch protection | `main` branch requires PR, status checks (bare `labels`, `test`), no force-push, no deletion. Post-merge, the required check name must be updated from bare `labels` to `labels / labels` to match the dedicated workflow (see Known Gaps). | GitHub branch protection API response | Required status check name still points to legacy bare `labels`; must be updated post-merge to `labels / labels`. |
 | PR feedback resolution check | PRs fail `feedback-resolution` when any active review thread remains unresolved or when `reviewDecision` is `CHANGES_REQUESTED`. | `.github/workflows/feedback-resolution-check.yml` | Must be configured as a required branch-protection check to fully gate merges. |
+| Epic and PR traceability | Epic planning now uses GitHub Milestones as the source of truth; Feature and optional Epic issues require milestones, and Feature/Bug/Documentation PRs must link at least one issue via closing keyword or Development sidebar. | `AGENTS.md`, `.agentic/process.yml`, `.github/workflows/label-check.yml`, `.github/workflows/pr-issue-link-check.yml`, `.github/PULL_REQUEST_TEMPLATE.md` | Existing legacy `Epic:` labels may remain on older items until manually cleaned up. |
 | Label coverage | All PLATE standard labels plus `Epic: plate-core-v1` created and verified. | `gh label list --repo akasper/plate_core` | — |
 
 ## Known Gaps

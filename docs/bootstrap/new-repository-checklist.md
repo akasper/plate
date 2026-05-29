@@ -8,14 +8,16 @@ From the generated repository root, choose the script for your operating system:
 
 **macOS / Linux / WSL (bash):**
 ```bash
-bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle @your-handle --remove-default-labels --set-delete-branch-on-merge --protect-branch main
+bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle @your-handle --remove-default-labels --protect-branch main
 # Add --init-wiki only if you plan to enable wiki sync.
+# Add --skip-delete-branch-on-merge only if this repository intentionally keeps merged branches.
 ```
 
 **Windows (PowerShell):**
 ```powershell
-.\scripts\BootstrapGitHub.ps1 -Repo OWNER/REPO -LocalRepo . -OwnerHandle @your-handle -RemoveDefaultLabels -SetDeleteBranchOnMerge -ProtectBranch main
+.\scripts\BootstrapGitHub.ps1 -Repo OWNER/REPO -LocalRepo . -OwnerHandle @your-handle -RemoveDefaultLabels -ProtectBranch main
 # Add -InitWiki only if you plan to enable wiki sync.
+# Add -SkipDeleteBranchOnMerge only if this repository intentionally keeps merged branches.
 ```
 
 Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable GitHub bootstrap work that otherwise gets missed in brand-new repositories.
@@ -27,7 +29,7 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 | Sync canonical PLATE labels from `.github/labels.yml` | The label taxonomy drives routing, enforcement, and review semantics. | Yes |
 | Remove conflicting default GitHub labels | Default labels such as `documentation` and `enhancement` create drift from the canonical PLATE taxonomy. | Yes |
 | Replace `@PLATE_REPO_OWNER` in `.github/CODEOWNERS` | Placeholder owners break review routing and code-owner protection. | Yes |
-| Enable delete-branch-on-merge | Keeps the repository clean after reviewed work lands. | Yes |
+| Enable delete-branch-on-merge (default; configurable off) | Keeps the repository clean after reviewed work lands while still allowing explicit opt-out for repositories that need to preserve merged branches. | Yes |
 | Initialize the wiki from `docs/wiki/Home.md` | Prevents the GitHub wiki from starting empty when the repository-managed source already exists. | Yes, when `--init-wiki` / `-InitWiki` is passed |
 | Apply conservative baseline branch protection | Provides immediate protection against force-pushes and branch deletion while requiring conversation resolution. | Yes, when `--protect-branch BRANCH` / `-ProtectBranch BRANCH` is passed |
 
@@ -38,7 +40,7 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 | Decide the final branch protection policy | Approval counts, code-owner review, required checks, and linear history depend on team size and merge model. |
 | Configure GitHub Projects fields | Project field names and lifecycle shape should match the team’s planning model. |
 | Replace placeholder product language in docs | Only a human product owner can define the initial repository’s real intent and public claims. |
-| Create the first real `Epic: short-name` labels | Epics should reflect the project’s actual roadmap, not the template example. |
+| Create the first real GitHub milestone for Epic work | Milestones are the canonical Epic container and should reflect the project’s actual roadmap. |
 | Tune CI, release, pages, and audit workflows | The template ships scaffolds, but real commands and release policy depend on the project stack. |
 | Decide whether to enable wiki sync | Write automation, token scope, and wiki publication policy require explicit approval. |
 
@@ -52,4 +54,4 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 
 ## Recommended First Follow-Up Issue
 
-Open a `Research` or `Epic` issue to capture the repository’s first real roadmap slice, then create the matching `Epic: short-name` label so Feature work can remain traceable from the first implementation PR.
+Create the repository’s first real Epic milestone, then open a `Research`, `Design`, `Feature`, or optional companion `Epic` issue that points at that milestone so implementation PRs can stay traceable from the start.

@@ -40,7 +40,7 @@ Follow the loop that matches the issue type.
 
 | Step | Required Behavior |
 |---|---|
-| 1 | Confirm the issue is labeled `Feature` and has exactly one `Epic: short-name` label. |
+| 1 | Confirm the issue is labeled `Feature` and assigned to the correct Epic milestone. |
 | 2 | Identify acceptance criteria, expected tests, documentation impact, and risk. |
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
@@ -103,9 +103,11 @@ Every issue must close with a traceable git artifact — either a code change in
 | `Question` | Answer artifact committed to `docs/research/<slug>.md` and process updates when guidance changes (`AGENTS.md`, `.agentic/skills.yml`) | `Documentation` |
 | `Audit` | Report committed to `docs/audits/<slug>.md` | `Documentation` |
 | `Migration` | Update committed to `docs/migration/` | `Documentation` |
-| `Epic` | Wiki summary in `docs/wiki/` or epic comment summarizing child outcomes | `Documentation` |
+| `Epic` | Milestone-backed wiki summary in `docs/wiki/` or epic comment/design artifact summarizing child outcomes | `Documentation` |
 
-When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. **Always include a closing keyword in the PR body.** This is enforced by `.github/workflows/pr-issue-link-check.yml` (warning gate).
+GitHub Milestones are the canonical Epic container. Assign the matching milestone to every issue and pull request that belongs to an Epic. Do not create new `Epic: short-name` labels; existing `Epic:` labels are legacy metadata only.
+
+When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. Use a closing keyword whenever the PR should close the issue on merge. If the work should stay open after the PR lands, link the issue from the PR's Development sidebar instead. `.github/workflows/pr-issue-link-check.yml` enforces that `Feature`, `Bug`, and issue-driven `Documentation` PRs link at least one issue.
 
 Before closing any issue (manually or via linked PR), post a final comment that includes a structured usage block:
 
@@ -205,10 +207,10 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 | `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
 | `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
 | `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by `plates-address-pr-feedback.yml` in the inline response flow. No `Epic:` label required. |
-| `Epic: short-name` | Epic identity and feature grouping. Required on Epic and Feature issues. |
 | `area:*` | Stable subsystem or ownership area. |
 | `risk:*` | Review burden and release caution. |
 | `need:*` | Missing input or required follow-up. |
+| `no-issue` | Explicit exemption for PRs that intentionally do not resolve tracked work. |
 
 ## Documentation Rules
 
@@ -221,6 +223,8 @@ When opening pull requests through GitHub CLI, prefer an atomic command such as 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
 For **every new pull request**, add exactly one required PR type label (`Bug`, `Feature`, `Documentation`, or `Feedback Response`) at creation time. Unlabeled or multiply-labeled PRs fail CI immediately.
+
+When the PR belongs to an Epic, set the pull request milestone to the matching Epic milestone. For `Feature`, `Bug`, `Design`, and `Research` work, link at least one issue using a closing keyword or the Development sidebar. Reserve `no-issue` for true chores, dependency bumps, or maintenance work that intentionally does not resolve a tracked issue.
 
 ## CLI Body Patterns (PowerShell safety)
 
@@ -293,4 +297,4 @@ Escalate to a human when product intent is ambiguous, acceptance criteria confli
 
 ## Prohibited Actions
 
-Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without a corresponding PR that carries a `Closes #N` reference in its body. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body.
+Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without a corresponding PR that carries a `Closes #N` reference in its body. Agents must not open a PR that should close a specific issue on merge without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body. When a PR contributes to but should not close an issue, a Development sidebar link satisfies the linking requirement.

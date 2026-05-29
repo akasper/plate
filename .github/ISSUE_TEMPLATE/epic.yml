@@ -1,5 +1,5 @@
 name: Epic
-description: Define a parent planning object and its stable traceability label.
+description: Capture optional narrative or decision support for a GitHub milestone-backed epic.
 title: "[Epic]: "
 labels:
   - Epic
@@ -7,13 +7,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        Every Epic issue must define and carry a dedicated `Epic: short-name` label. Child Feature issues must carry the same label.
+        GitHub Milestones are the canonical Epic container. Create or select the milestone first, then use this issue only when the Epic needs a durable narrative, design, or decision artifact in addition to the milestone itself.
   - type: input
-    id: epic_label
+    id: epic_milestone
     attributes:
-      label: Dedicated epic label
-      description: Name the stable label this epic owns.
-      placeholder: "Epic: onboarding"
+      label: Epic milestone
+      description: Name the GitHub milestone that represents this epic.
+      placeholder: "Q3 onboarding"
     validations:
       required: true
   - type: textarea
@@ -57,7 +57,7 @@ body:
     attributes:
       label: PLATE epic readiness
       options:
-        - label: "This issue has or will receive its dedicated `Epic: short-name` label."
+        - label: This issue has or will be assigned to its GitHub milestone.
           required: true
         - label: Child features can be decomposed into testable issues.
           required: true

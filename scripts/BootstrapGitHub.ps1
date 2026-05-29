@@ -4,8 +4,9 @@
 
 .DESCRIPTION
     Syncs canonical labels, removes conflicting default GitHub labels, replaces
-    the CODEOWNERS placeholder, enables delete-branch-on-merge, applies
-    conservative baseline branch protection, and optionally initializes the wiki.
+    the CODEOWNERS placeholder, enables delete-branch-on-merge by default,
+    applies conservative baseline branch protection, and optionally initializes
+    the wiki.
 
     Requirements: gh (GitHub CLI) >= 2.x, git
     Works on Windows PowerShell 5.1+ and PowerShell Core (macOS, Linux).
@@ -23,7 +24,10 @@
     Delete conflicting default GitHub labels.
 
 .PARAMETER SetDeleteBranchOnMerge
-    Enable delete-branch-on-merge.
+    Backward-compatible no-op because delete-branch-on-merge is enabled by default.
+
+.PARAMETER SkipDeleteBranchOnMerge
+    Leave merged branches in place.
 
 .PARAMETER ProtectBranch
     Apply conservative baseline protection to the named branch.
@@ -33,7 +37,7 @@
 
 .EXAMPLE
     .\BootstrapGitHub.ps1 -Repo owner/repo -OwnerHandle @your-handle `
-        -RemoveDefaultLabels -SetDeleteBranchOnMerge -ProtectBranch main -InitWiki
+        -RemoveDefaultLabels -ProtectBranch main -InitWiki
 #>
 
 [CmdletBinding()]
@@ -49,6 +53,8 @@ param(
 
     [switch]$SetDeleteBranchOnMerge,
 
+    [switch]$SkipDeleteBranchOnMerge,
+
     [string]$ProtectBranch = "",
 
     [switch]$InitWiki
@@ -56,6 +62,10 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if ($SetDeleteBranchOnMerge -and $SkipDeleteBranchOnMerge) {
+    throw "Use either -SetDeleteBranchOnMerge or -SkipDeleteBranchOnMerge, not both."
+}
 
 $DefaultLabelsToRemove = @(
     "bug", "documentation", "duplicate", "enhancement",
@@ -165,9 +175,12 @@ if ($OwnerHandle -ne "") {
 
 # Enable delete-branch-on-merge --------------------------------------------------
 
-if ($SetDeleteBranchOnMerge) {
+if (-not $SkipDeleteBranchOnMerge) {
     & gh repo edit $Repo --delete-branch-on-merge
     Write-Host "Enabled delete-branch-on-merge."
+}
+else {
+    Write-Host "Skipped delete-branch-on-merge per flag."
 }
 
 # Apply baseline branch protection -----------------------------------------------
@@ -264,6 +277,6 @@ Write-Host "Manual follow-up still required:"
 Write-Host "1. Replace placeholder product language in SPEC.md, CURRENT.md, and public-facing docs."
 Write-Host "2. Decide whether branch protection should also require approvals, code-owner review, status checks, or linear history."
 Write-Host "3. Configure GitHub Projects fields for planning state such as status, priority, owner, iteration, target date, and release target."
-Write-Host "4. Create real Epic: short-name labels and the first Epic issue."
+Write-Host "4. Create the first real Epic milestone and, if needed, an optional companion Epic issue."
 Write-Host "5. Tune CI, release, pages, and audit workflows for the project stack."
 Write-Host "6. Decide whether to enable wiki sync and, if so, create PLATE_WIKI_SYNC_ENABLED and WIKI_TOKEN."

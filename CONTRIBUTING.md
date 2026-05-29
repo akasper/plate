@@ -4,13 +4,15 @@ This repository uses PLATE to keep human judgment, agent execution, and durable 
 
 ## Issue Rules
 
-Every issue must carry exactly one issue type label: `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, or `Migration`. Feature and Epic issues must also carry exactly one `Epic: short-name` label. Question issues are information goals and are not tied to an Epic label. Mutable planning state such as status, priority, target date, owner, iteration, and release target belongs in GitHub Projects fields.
+Every issue must carry exactly one issue type label: `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, or `Migration`. Feature issues, and optional Epic issues when used, must also be assigned to the GitHub milestone that represents the Epic. Question issues are information goals and are not tied to an Epic milestone by default. Mutable planning state such as status, priority, target date, owner, iteration, and release target belongs in GitHub Projects fields.
 
 ## Branch and Pull Request Rules
 
 Use short descriptive branch names such as `feature/onboarding-copy`, `bug/login-regression`, or `docs/current-state-audit`. Every pull request must carry exactly one PR type label: `Bug`, `Feature`, or `Documentation`. Feature PRs must update `CURRENT.md`.
 
 If a pull request is opened with GitHub CLI, include the type label in the create command itself, for example `gh pr create --label "Feature"`, instead of treating labeling as a separate best-effort follow-up step.
+
+When a pull request belongs to an Epic, set its milestone to match the Epic milestone. `Feature`, `Bug`, and issue-driven `Documentation` PRs must also link at least one tracked issue using either a closing keyword in the PR body or the Development sidebar. Use `no-issue` only for true chores or maintenance PRs that intentionally do not resolve tracked work.
 
 For batched Question triage through GitHub CLI, use `scripts/question_batch.sh` (or `scripts/QuestionBatch.ps1` on Windows) to list open Question issues quickly.
 

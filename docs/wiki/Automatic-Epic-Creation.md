@@ -1,41 +1,35 @@
 # Automatic Epic Creation
 
-> **Status:** Research complete — awaiting human decision.  
+> **Status:** Superseded by milestone-based Epic planning.  
 > **Issue:** #28  
-> **Full analysis:** [`docs/research/automatic-epic-creation.md`](../research/automatic-epic-creation.md)
+> **Superseded by:** [`docs/design/native-github-pr-integration.md`](../design/native-github-pr-integration.md)  
+> **Historical analysis:** [`docs/research/automatic-epic-creation.md`](../research/automatic-epic-creation.md)
 
 ## Summary
 
-When a Feature issue references an `Epic: short-name` label that doesn't yet exist, the system should automatically create both the label and a stub Epic issue. This eliminates the friction of requiring manual Epic administration before Feature work can begin.
+This page documents a now-superseded idea: automatically creating `Epic: short-name` labels and stub Epic issues. PLATE now treats GitHub Milestones as the canonical Epic container, so the preferred path is to create the milestone directly and assign the related issues and pull requests to it.
 
 ## Recommended Approach
 
-**Option B — Free-form field with workflow-driven auto-creation.**
+**Superseded recommendation:** do not build label auto-creation.
 
-A GitHub Actions workflow fires on `issues: [opened]` and:
-
-1. Parses the `Epic traceability label` field from the issue body.
-2. Validates the label slug against the naming convention (`/^[a-z0-9][a-z0-9-]{1,38}$/`).
-3. Creates the `Epic: short-name` label if it doesn't exist.
-4. Applies the label to the triggering issue.
-5. If the issue is a Feature and no matching open Epic issue exists, creates a stub Epic with `need:decision` label.
+A GitHub milestone should be created directly when a new Epic is opened. Optional Epic issues may still exist for narrative/design artifacts, but they no longer own a dedicated `Epic:` label.
 
 ## Options Considered
 
 | Option | Description | Verdict |
 |---|---|---|
-| A — Dropdown | Static YAML list of existing Epics in the template | Rejected: GitHub forms don't support dynamic dropdowns; requires manual maintenance |
-| B — Auto-Create | Free-form input + workflow that creates label/Epic on demand | **Recommended**: lowest friction, agent-compatible, moderate complexity |
-| C — Hybrid | Free-form with suggestion hints + naming guard + auto-create | Future enhancement if sprawl becomes an issue |
-| D — Status Quo | Fully manual label and Epic management | Rejected: high friction, blocks autonomous workflows |
+| A — Milestones as Epics | Use GitHub milestones directly for Epic identity and grouping | **Adopted** |
+| B — Auto-create `Epic:` labels | Free-form input + workflow that creates label/Epic on demand | Rejected: duplicates milestone behavior |
+| C — Status quo | Continue manual label and Epic issue management | Rejected: keeps unnecessary custom metadata alive |
 
-## Key Design Decisions (Pending Human Input)
+## Current Design Decisions
 
-1. Naming convention: lowercase-hyphenated slugs only (e.g., `Epic: my-area`)
-2. Trigger scope: `opened` events only, or also `edited`?
-3. Stub Epic sign-off: Require `need:decision` label clearance before Features proceed?
-4. Permission boundary: Limit auto-creation to collaborators?
+1. Milestones, not `Epic:` labels, are the source of truth for new Epic planning.
+2. Feature and optional Epic issues should be milestoned directly.
+3. Issue-driven PRs may satisfy traceability with closing keywords or Development sidebar links.
+4. Delete branch on merge remains configurable but should default to on for PLATE repositories.
 
 ## Implementation Artifact
 
-The workflow implementation sketch is included in the full research document. Estimated effort: ~50 lines of `actions/github-script` in a new `.github/workflows/epic-auto-create.yml` file.
+The historical workflow sketch remains in the research document for reference only. New implementation work should follow the milestone-based design in `docs/design/native-github-pr-integration.md`.

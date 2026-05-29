@@ -13,7 +13,7 @@
   description: "Issue or PR type: user-visible or operational capability change."
 - name: "Epic"
   color: "5319e7"
-  description: "Issue type: parent planning object that owns a stable Epic: short-name label."
+  description: "Issue type: optional narrative or decision artifact for a GitHub milestone-backed epic."
 - name: "Documentation"
   color: "0075ca"
   description: "PR type: documentation-only change."
@@ -117,7 +117,3 @@
 - name: "no-guidance-update"
   color: "ededed"
   description: "PR closes a Question issue whose answer does not change operating guidance. Skips the AGENTS.md/skills.yml update check."
-
-- name: "Epic: example"
-  color: "5319e7"
-  description: "Example epic traceability label; replace with project-specific Epic: short-name labels."

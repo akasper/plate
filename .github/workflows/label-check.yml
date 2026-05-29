@@ -2,7 +2,7 @@ name: PLATE Issue Label Check
 
 on:
   issues:
-    types: [opened, edited, labeled, unlabeled, reopened]
+    types: [opened, edited, labeled, unlabeled, reopened, milestoned, demilestoned]
 
 permissions:
   contents: read
@@ -17,9 +17,7 @@ jobs:
         with:
           script: |
             const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Research', 'Design', 'Question', 'Audit', 'Migration', 'Feedback Response'];
-            // Labels that require an Epic: short-name companion label
-            const requiresEpic = ['Feature', 'Epic'];
-            // Feedback Response issues (when used) are exempt from the Epic requirement.
+            const requiresMilestone = ['Feature', 'Epic'];
             const issue = context.payload.issue;
 
             if (!issue) {
@@ -28,9 +26,10 @@ jobs:
             }
 
             const labels = (issue.labels || []).map((label) => typeof label === 'string' ? label : label.name);
-            const epicLabels = labels.filter((label) => /^Epic: .+/.test(label));
             const forbiddenPlanningLabels = labels.filter((label) => /^status:|^priority:/.test(label));
+            const milestoneTitle = issue.milestone?.title || '(none)';
             core.info(`Labels: ${labels.join(', ') || '(none)'}`);
+            core.info(`Milestone: ${milestoneTitle}`);
 
             if (forbiddenPlanningLabels.length > 0) {
               core.setFailed(`PLATE repositories should use GitHub Projects fields for planning state, not labels: ${forbiddenPlanningLabels.join(', ')}.`);
@@ -43,11 +42,9 @@ jobs:
               return;
             }
 
-            if (requiresEpic.includes(matches[0]) && epicLabels.length !== 1) {
-              core.setFailed(`${matches[0]} issues must carry exactly one Epic: short-name label. Found: ${epicLabels.join(', ') || '(none)'}.`);
+            if (requiresMilestone.includes(matches[0]) && !issue.milestone) {
+              core.setFailed(`${matches[0]} issues must be assigned to a GitHub milestone representing the Epic.`);
               return;
             }
-
-            // Feedback Response issues are exempt from the Epic requirement.
 
             core.info('PLATE issue label rules passed.');
