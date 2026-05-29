@@ -5,6 +5,7 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from plate_core.cli import main
+from plate_core.pr_babysit import BabysitReport
 from plate_core.bootstrap import BootstrapAction, BootstrapReport
 from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.features import FeatureFlag, FeatureReport
@@ -111,6 +112,24 @@ class CliTests(unittest.TestCase):
         payload = json.loads(out.getvalue().strip())
         self.assertGreaterEqual(len(payload["skills"]), 18)
         self.assertEqual(payload["skills"][0]["id"], "crud-projects")
+
+    @patch("plate_core.cli.babysit_pr")
+    def test_pr_babysit_json_output(self, mock_babysit):
+        mock_babysit.return_value = BabysitReport(
+            repo="akasper/plate",
+            pr_number=112,
+            detected_threads=2,
+            actionable_threads=1,
+            trigger_comment_posted=True,
+            trigger_comment_url="https://github.com/akasper/plate/pull/112#issuecomment-1",
+        )
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["pr", "babysit", "112", "--repo", "akasper/plate", "--json", "--act"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(payload["pr_number"], 112)
+        self.assertTrue(payload["trigger_comment_posted"])
 
 
 if __name__ == "__main__":

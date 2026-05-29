@@ -8,6 +8,7 @@ from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.features import FeatureFlag, FeatureReport
 from plate_core.health import HealthReport
 from plate_core.mcp_server import _handle_tools_call, run
+from plate_core.pr_babysit import BabysitReport
 
 
 class McpTests(unittest.TestCase):
@@ -130,6 +131,35 @@ class McpTests(unittest.TestCase):
         self.assertEqual(payload["status"], "stub")
 
     @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.babysit_pr")
+    def test_tools_call_plate_pr_babysit(self, mock_babysit_pr, mock_write):
+        mock_babysit_pr.return_value = BabysitReport(
+            repo="akasper/plate",
+            pr_number=112,
+            detected_threads=3,
+            actionable_threads=2,
+            trigger_comment_posted=False,
+        )
+        _handle_tools_call(
+            13,
+            {"name": "plate_pr_babysit", "arguments": {"repo": "akasper/plate", "pr_number": 112}},
+        )
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload["pr_number"], 112)
+        self.assertEqual(payload["actionable_threads"], 2)
+
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.resolve_review_thread")
+    def test_tools_call_plate_resolve_review_thread(self, mock_resolve_review_thread, mock_write):
+        mock_resolve_review_thread.return_value = {"repo": "akasper/plate", "thread_id": "T1", "resolved": True}
+        _handle_tools_call(
+            14,
+            {"name": "plate_resolve_review_thread", "arguments": {"repo": "akasper/plate", "thread_id": "T1"}},
+        )
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertTrue(payload["resolved"])
+
+    @patch("plate_core.mcp_server._write")
     @patch(
         "plate_core.mcp_server.sys.stdin",
         new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":5,"method":"tools/list"}\n'),
@@ -151,6 +181,18 @@ class McpTests(unittest.TestCase):
         tools = mock_write.call_args[0][0]["result"]["tools"]
         names = {tool["name"] for tool in tools}
         self.assertIn("plate_plan_epic", names)
+
+    @patch("plate_core.mcp_server._write")
+    @patch(
+        "plate_core.mcp_server.sys.stdin",
+        new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":7,"method":"tools/list"}\n'),
+    )
+    def test_tools_list_includes_plate_pr_babysit(self, _mock_stdin, mock_write):
+        run()
+        tools = mock_write.call_args[0][0]["result"]["tools"]
+        names = {tool["name"] for tool in tools}
+        self.assertIn("plate_pr_babysit", names)
+        self.assertIn("plate_resolve_review_thread", names)
 
 if __name__ == "__main__":
     unittest.main()

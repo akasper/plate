@@ -40,7 +40,7 @@ Follow the loop that matches the issue type.
 
 | Step | Required Behavior |
 |---|---|
-| 1 | Confirm the issue is labeled `Feature` and assigned to the correct Epic milestone. |
+| 1 | Confirm the issue is labeled `Feature` and has exactly one `Epic: short-name` label. |
 | 2 | Identify acceptance criteria, expected tests, documentation impact, and risk. |
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
@@ -103,11 +103,9 @@ Every issue must close with a traceable git artifact — either a code change in
 | `Question` | Answer artifact committed to `docs/research/<slug>.md` and process updates when guidance changes (`AGENTS.md`, `.agentic/skills.yml`) | `Documentation` |
 | `Audit` | Report committed to `docs/audits/<slug>.md` | `Documentation` |
 | `Migration` | Update committed to `docs/migration/` | `Documentation` |
-| `Epic` | Milestone-backed wiki summary in `docs/wiki/` or epic comment/design artifact summarizing child outcomes | `Documentation` |
+| `Epic` | Wiki summary in `docs/wiki/` or epic comment summarizing child outcomes | `Documentation` |
 
-GitHub Milestones are the canonical Epic container. Assign the matching milestone to every issue and pull request that belongs to an Epic. Do not create new `Epic: short-name` labels; existing `Epic:` labels are legacy metadata only.
-
-When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. Use a closing keyword whenever the PR should close the issue on merge. If the work should stay open after the PR lands, link the issue from the PR's Development sidebar instead. `.github/workflows/pr-issue-link-check.yml` enforces that `Feature`, `Bug`, and issue-driven `Documentation` PRs link at least one issue.
+When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. **Always include a closing keyword in the PR body.** This is enforced by `.github/workflows/pr-issue-link-check.yml` (warning gate).
 
 Before closing any issue (manually or via linked PR), post a final comment that includes a structured usage block:
 
@@ -168,35 +166,37 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
 
 ## Third-Party Agent Feedback
 
-When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that is **not** already labeled `Feedback Response`, the `.github/workflows/plates-address-pr-feedback.yml` workflow posts a structured `@copilot` trigger comment directly on that same PR. The automation uses `COPILOT_TRIGGER_PAT` (preferred) with fallback to `GITHUB_TOKEN`, applies a dedupe marker, and intentionally avoids creating a new issue or opening a separate PR. `Feedback Response` PRs are already in the dedicated response lane and are skipped by that workflow. The Copilot Coding Agent should:
+Preferred flow is now **local babysitting** driven by `gh plate pr babysit <number>`. CI is intentionally narrowed to enforcement-only (`feedback-resolution` check). Use this loop:
 
-1. Review all open inline comments and the overall review body from the named reviewer on the linked PR
-2. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
-3. For all other actionable comments: push a code change or reply explaining why no change is needed
-4. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the GitHub GraphQL `resolveReviewThread` mutation:
+1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch]`) or via `/agent plate` ("babysit PR <number>") using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread`
+2. Query unresolved review threads and identify actionable third-party agent feedback
+3. Review all open inline comments and the overall review body from the named reviewer on the linked PR
+4. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
+5. For all other actionable comments: push a code change or reply explaining why no change is needed
+6. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the GitHub GraphQL `resolveReviewThread` mutation:
    ```graphql
    mutation { resolveReviewThread(input: { threadId: "THREAD_NODE_ID" }) { thread { isResolved } } }
    ```
    To find `THREAD_NODE_ID` for a given comment, query `repository.pullRequest.reviewThreads` and match on `comments.nodes.databaseId`.
-5. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
-6. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
+7. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
+8. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
 
-**Lifecycle contract for `Feedback Response` items:**
+**Lifecycle contract:**
 
 | Stage | Expected artifact |
 |---|---|
-| Workflow fires | Trigger comment posted on the existing PR (`<!-- plates-feedback-trigger:<agent> -->` + `@copilot` instructions) |
+| Babysitter cycle runs | Local `gh plate pr babysit` (or MCP `plate_pr_babysit`) detects actionable third-party feedback and can post a babysit trigger comment |
 | Copilot addresses feedback | Commits pushed to the same PR branch; review threads resolved |
 | Escalation | `need:human-review` label + blocking comment when human judgment is required |
 | Completion | `feedback-resolution` check is green (no unresolved review threads, no `CHANGES_REQUESTED` decision), then original PR merges through normal checks |
 
-`Feedback Response` labels remain available process metadata, but this workflow no longer creates feedback-task issues or follow-up response PRs. Feedback is addressed inline on the original PR branch.
+`Feedback Response` labels remain available process metadata. Feedback is addressed inline on the original PR branch.
 
-**Deduplication:** The workflow posts a tracking comment containing the marker `<!-- plates-feedback-trigger:<agent> -->` on the PR after each trigger. A 10-minute cooldown prevents duplicate Copilot trigger comments when a single review fires multiple parallel events.
+**Legacy workflow:** `.github/workflows/plates-address-pr-feedback.yml` is deprecated and manual-only (`workflow_dispatch`) for fallback troubleshooting. Do not rely on it for normal operations.
 
-**Configuration:** Set the `PLATE_PR_FEEDBACK_AGENTS` repository variable to a comma-separated list of GitHub logins whose feedback should be auto-addressed (e.g., `devin-ai-integration[bot],openhands-agent`). Set `COPILOT_TRIGGER_PAT` (classic PAT with `repo` scope) for reliable `@copilot` routing from Actions. When the variable is absent, the workflow matches common agent login patterns automatically.
+**Configuration:** Set the `PLATE_PR_FEEDBACK_AGENTS` repository variable to a comma-separated list of GitHub logins whose feedback should be babysat by default (e.g., `devin-ai-integration[bot],openhands-agent`).
 
-**Merge safety gate:** Require `.github/workflows/feedback-resolution-check.yml` (`feedback-resolution`) in branch protection for `main` so auto-merge waits until all active review threads are resolved.
+**Merge safety gate:** Require `.github/workflows/feedback-resolution-check.yml` (`feedback-resolution`) in branch protection for `main` so merge/auto-merge waits until all active review threads are resolved.
 
 ## Label Rules
 
@@ -206,11 +206,11 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 |---|---|
 | `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
 | `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
-| `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by `plates-address-pr-feedback.yml` in the inline response flow. No `Epic:` label required. |
+| `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by the deprecated legacy workflow; no `Epic:` label required. |
+| `Epic: short-name` | Epic identity and feature grouping. Required on Epic and Feature issues. |
 | `area:*` | Stable subsystem or ownership area. |
 | `risk:*` | Review burden and release caution. |
 | `need:*` | Missing input or required follow-up. |
-| `no-issue` | Explicit exemption for PRs that intentionally do not resolve tracked work. |
 
 ## Documentation Rules
 
@@ -223,8 +223,6 @@ When opening pull requests through GitHub CLI, prefer an atomic command such as 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
 For **every new pull request**, add exactly one required PR type label (`Bug`, `Feature`, `Documentation`, or `Feedback Response`) at creation time. Unlabeled or multiply-labeled PRs fail CI immediately.
-
-When the PR belongs to an Epic, set the pull request milestone to the matching Epic milestone. For `Feature`, `Bug`, `Design`, and `Research` work, link at least one issue using a closing keyword or the Development sidebar. Reserve `no-issue` for true chores, dependency bumps, or maintenance work that intentionally does not resolve a tracked issue.
 
 ## CLI Body Patterns (PowerShell safety)
 
@@ -297,4 +295,4 @@ Escalate to a human when product intent is ambiguous, acceptance criteria confli
 
 ## Prohibited Actions
 
-Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without a corresponding PR that carries a `Closes #N` reference in its body. Agents must not open a PR that should close a specific issue on merge without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body. When a PR contributes to but should not close an issue, a Development sidebar link satisfies the linking requirement.
+Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without a corresponding PR that carries a `Closes #N` reference in its body. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body.

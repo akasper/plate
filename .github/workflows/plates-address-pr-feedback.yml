@@ -1,4 +1,4 @@
-name: PLATES Auto-Address PR Feedback
+name: Legacy PR Feedback Auto-Address (manual only)
 
 # Fires when a third-party agent submits a PR review or leaves an inline
 # comment. If the sender matches a known agent list, post a deduplicated
@@ -7,10 +7,11 @@ name: PLATES Auto-Address PR Feedback
 # opening a separate "Feedback Response" PR.
 
 on:
-  pull_request_review:
-    types: [submitted]
-  pull_request_review_comment:
-    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to process (legacy/manual fallback only)"
+        required: true
 
 permissions:
   contents: read
@@ -21,7 +22,7 @@ jobs:
   address-feedback:
     runs-on: ubuntu-latest
     concurrency:
-      group: plates-feedback-${{ github.event.pull_request.number }}
+      group: plates-feedback-${{ github.event.inputs.pr_number }}
       cancel-in-progress: false
     steps:
       - name: Detect third-party agent feedback
@@ -29,11 +30,14 @@ jobs:
         uses: actions/github-script@v8
         env:
           AGENT_LOGINS: ${{ vars.PLATE_PR_FEEDBACK_AGENTS }}
+          MANUAL_PR_NUMBER: ${{ github.event.inputs.pr_number }}
         with:
           script: |
             // PLATE_PR_FEEDBACK_AGENTS repo variable: comma-separated GitHub logins
             // of third-party agents whose feedback should trigger auto-addressing.
             // Falls back to well-known default patterns when the variable is not set.
+            // NOTE: This workflow is legacy/manual-only. Preferred path is:
+            // `gh plate pr babysit <number>` from a local plate session.
             const configuredLogins = (process.env.AGENT_LOGINS || '')
               .split(',')
               .map((s) => s.trim().toLowerCase())
@@ -64,34 +68,37 @@ jobs:
             let prBranch = null;
             let prTitle = null;
 
-            if (context.eventName === 'pull_request_review') {
-              const review = context.payload.review;
-              const pr = context.payload.pull_request;
-              reviewer = review.user?.login;
-              reviewState = (review.state || '').toLowerCase();
-              feedbackUrl = review.html_url;
-              prNumber = pr.number;
-              prBranch = pr.head.ref;
-              prTitle = pr.title;
-              isBatchReview = true;
-
-              // An "approved" review with no body is a rubber stamp — nothing to act on.
-              if (reviewState === 'approved' && !review.body?.trim()) {
-                core.info(`Skipping approved review with no body from @${reviewer}.`);
-                core.setOutput('should_act', 'false');
-                return;
-              }
-            } else if (context.eventName === 'pull_request_review_comment') {
-              const comment = context.payload.comment;
-              const pr = context.payload.pull_request;
-              reviewer = comment.user?.login;
-              feedbackUrl = comment.html_url;
-              prNumber = pr.number;
-              prBranch = pr.head.ref;
-              prTitle = pr.title;
-              reviewState = 'commented';
-              isBatchReview = false;
+            const manualPrNumber = Number.parseInt(process.env.MANUAL_PR_NUMBER || '', 10);
+            if (Number.isNaN(manualPrNumber) || manualPrNumber <= 0) {
+              core.info('Invalid or missing workflow_dispatch input pr_number; skipping.');
+              core.setOutput('should_act', 'false');
+              return;
             }
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: manualPrNumber,
+            });
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: manualPrNumber,
+              per_page: 100,
+            });
+            const latestReview = [...reviews].reverse().find((r) => r.user?.login && isKnownAgent(r.user.login));
+            if (!latestReview) {
+              core.info(`No known third-party agent review found on PR #${manualPrNumber}; skipping.`);
+              core.setOutput('should_act', 'false');
+              return;
+            }
+            reviewer = latestReview.user?.login;
+            reviewState = (latestReview.state || 'commented').toLowerCase();
+            feedbackUrl = latestReview.html_url;
+            prNumber = pr.number;
+            prBranch = pr.head.ref;
+            prTitle = pr.title;
+            isBatchReview = true;
 
             if (!reviewer || !prNumber) {
               core.info('Unable to determine reviewer or PR number; skipping.');
