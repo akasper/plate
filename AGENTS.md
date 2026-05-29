@@ -24,7 +24,15 @@ PLATE defaults to an **autopilot posture**: agents should proceed autonomously t
 
 **Easy revert as the norm.** Prefer squash merges (keeps history clean). Never push directly to `main`. Name branches `type/short-description`. Each squash commit on `main` should read as a complete, stand-alone unit of work.
 
-**PR title hygiene.** Never include `[WIP]`, `WIP:`, `[DRAFT]`, or similar legacy markers in pull request titles. These make the PR list, notifications, and history harder to scan. Use GitHub's native draft PR status (`gh pr create --draft ...` or the repository UI toggle) instead. The draft state is the official, filterable signal for work-in-progress. See #135 (child of Epic #100).
+**PR titles are for humans.** Pull request titles must be clean, concise, and written exclusively for human readers. Do not include any bracketed label-style prefixes (for example `[Feature]`, `[Bug]`, `[Documentation]`, `[WIP]`, `[DRAFT]`, or any similar convention). Do not include issue references, closing keywords, or other metadata such as `(Closes #N)`, `Fixes #123`, or equivalent in the title.
+
+All metadata belongs in GitHub's native fields instead:
+- PR type via labels (`Bug`, `Feature`, or `Documentation`)
+- Linked issues via the Development sidebar or a closing keyword placed only in the PR *body*
+- Work-in-progress state via the native Draft PR status
+- Epic grouping via milestones
+
+This keeps titles short, scannable, and focused on the actual change. See #135 (and the follow-up generalization) plus Epic #100.
 
 **Resource consciousness.** Prefer targeted tool calls over exhaustive scans. Batch parallel reads. Stop investigating after sufficient evidence — do not read every file if you already know the answer. Avoid repeatedly regenerating content that has not changed.
 

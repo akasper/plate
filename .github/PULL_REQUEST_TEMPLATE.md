@@ -17,7 +17,7 @@
   Missing or multiple labels cause immediate CI failure (PLATE Label Check).
   When CI fails, a repair comment will be posted on this PR with the exact command.
 
-  PR titles must be clean and descriptive. Do not include `[WIP]`, `[DRAFT]`, or similar prefixes. Use the native GitHub draft PR status for work-in-progress (see AGENTS.md §Autopilot Doctrine).
+  PR titles are for humans. Keep them clean and descriptive. Never use bracketed prefixes of any kind ([Feature], [WIP], etc.) and never put (Closes #N) or similar metadata in the title. Use GitHub labels, the Development sidebar or body closing keywords, draft status, and milestones instead (see AGENTS.md).
 -->
 
 # PLATE Pull Request

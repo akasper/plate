@@ -13,7 +13,7 @@ last_verified_commit: "a67234e"
 
 | Feature | Status | Issue | Pull Request | Tests / Evidence | Wiki / Docs | Release | Last Verified |
 |---|---|---|---|---|---|---|---|
-| PR title hygiene: no [WIP] prefixes (use native draft status) | Implemented | #135 | This PR | Documentation-only; manual review of guidance clarity and new PR examples | `AGENTS.md`, `CONTRIBUTING.md`, `.github/PULL_REQUEST_TEMPLATE.md` | Unreleased | 2026-05-29 |
+| PR titles are for humans only (no bracketed prefixes or metadata in titles) | Implemented | #135 | This PR | Documentation-only; guidance updated for the generalized rule | `AGENTS.md`, `CONTRIBUTING.md`, `.github/PULL_REQUEST_TEMPLATE.md` | Unreleased | 2026-05-29 |
 | PLATE process baseline and project initialization | Implemented | — | #1 | Repository scaffolding, labels, workflows, `SPEC.md`, `README.md`, `AGENTS.md` | `README.md`, `SPEC.md`, `AGENTS.md` | Unreleased | 2026-05-26 |
 | Stack selection research | Research complete | #5 | #6 | `docs/research/stack-selection.md`, official GitHub CLI / Copilot plugin / MCP SDK docs review | `docs/research/stack-selection.md` | Unreleased | 2026-05-26 |
 | label-check.yml requiresEpic fix | Implemented | — | #7 | `.github/workflows/label-check.yml`: requiresEpic variable now used in Epic/Feature check | `AGENTS.md §Label Rules` | Unreleased | 2026-05-26 |
