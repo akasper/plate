@@ -2,7 +2,7 @@
 spec_version: "0.1"
 process_version: "PLATE 0.6"
 owner: "akasper"
-updated_at: "2026-05-26"
+updated_at: "2026-05-29"
 ---
 
 # Project Specification
@@ -18,7 +18,7 @@ The current implementation baseline delivers:
 - installable Copilot CLI plugin scaffold (`/agent plate`)
 - baseline agent and skill catalog discovery via `gh plate agents` / `gh plate skills` and matching MCP tools
 
-Other v1-planned capabilities in this specification (epic status, feature detection breadth, bootstrap automation) remain planned until implemented and verified in `CURRENT.md`.
+The v1 baseline now also includes implemented epic status queries, optional feature detection, bootstrap planning/apply, single-agent delegation, and Playwright E2E support surfaces. `CURRENT.md` remains the source of truth for exact implementation/verification status by feature row and PR.
 
 ## Vision
 
@@ -95,9 +95,9 @@ All three surfaces share the same `pkg/` core library. Future surfaces (VS Code 
 | Claim | Status | Evidence |
 |---|---|---|
 | `gh plate health` runs in under 2 seconds | Planned | Performance test once core is implemented |
-| Single codebase powers `gh` extension, MCP server, and Copilot CLI plugin | Planned | Architecture verified in Research #5 |
+| Single codebase powers `gh` extension, MCP server, and Copilot CLI plugin | Implemented | `CURRENT.md` feature rows for v1 runtime baseline (#29), plugin context-first agent (#21), and MCP/CLI parity surfaces |
 | Zero runtime dependencies | Planned | Depends on stack selection — Research #5 |
-| Plugin agent proactively surfaces PLATE project state through conversation | Planned | Verified in Copilot CLI session once plugin is implemented |
+| Plugin agent proactively surfaces PLATE project state through conversation | Implemented | `CURRENT.md` plugin context-first agent row (#21) and Playwright plugin E2E harness coverage (#102, #104) |
 
 ## Open Questions
 
