@@ -18,6 +18,7 @@ from .baseline_catalog import (
 from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .health import get_health
+from .pr_babysit import babysit_pr
 
 
 def cmd_health(args: argparse.Namespace) -> int:
@@ -116,6 +117,56 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     print(f"Mode: {'APPLY' if report.apply_mode else 'DRY-RUN'}")
     for action in report.actions:
         print(f"- {action.name}: {action.state} ({action.detail})")
+    return 0
+
+
+def cmd_pr_babysit(args: argparse.Namespace) -> int:
+    if args.watch:
+        import time
+
+        try:
+            while True:
+                report = babysit_pr(
+                    pr_number=args.pr_number,
+                    repo=args.repo,
+                    agent_logins=args.agents,
+                    act=args.act,
+                )
+                if args.json:
+                    print(json.dumps(report.to_dict()))
+                else:
+                    print(f"Repo: {report.repo} | PR #{report.pr_number}")
+                    print(
+                        f"Detected threads: {report.detected_threads}, actionable: {report.actionable_threads}, "
+                        f"trigger posted: {'yes' if report.trigger_comment_posted else 'no'}"
+                    )
+                    if report.trigger_comment_url:
+                        print(f"Trigger comment: {report.trigger_comment_url}")
+                    print(f"Sleeping {args.interval}s...\n")
+                time.sleep(args.interval)
+        except KeyboardInterrupt:
+            return 0
+
+    report = babysit_pr(
+        pr_number=args.pr_number,
+        repo=args.repo,
+        agent_logins=args.agents,
+        act=args.act,
+    )
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Repo: {report.repo}")
+    print(f"PR: #{report.pr_number}")
+    print(f"Detected threads: {report.detected_threads}")
+    print(f"Actionable third-party threads: {report.actionable_threads}")
+    if report.trigger_comment_posted:
+        print("Babysit trigger posted.")
+        if report.trigger_comment_url:
+            print(f"Trigger comment: {report.trigger_comment_url}")
+    else:
+        print("No new babysit trigger posted.")
     return 0
 
 
@@ -258,6 +309,24 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--apply", action="store_true", help="Apply supported actions instead of dry-run planning")
     bootstrap.add_argument("--json", action="store_true", help="Output JSON")
     bootstrap.set_defaults(func=cmd_bootstrap)
+
+    pr = sub.add_parser("pr", help="PR feedback operations")
+    pr_sub = pr.add_subparsers(dest="pr_command", required=True)
+    babysit = pr_sub.add_parser(
+        "babysit",
+        help="Monitor a PR for actionable third-party feedback and optionally post a local babysit trigger",
+    )
+    babysit.add_argument("pr_number", type=int, help="Pull request number")
+    babysit.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    babysit.add_argument(
+        "--agents",
+        help="Comma-separated GitHub logins to treat as third-party agents. Defaults to known patterns.",
+    )
+    babysit.add_argument("--act", action="store_true", help="Post a babysit trigger comment when actionable feedback exists")
+    babysit.add_argument("--watch", action="store_true", help="Continuously monitor the PR")
+    babysit.add_argument("--interval", type=int, default=60, help="Polling interval in seconds for --watch mode")
+    babysit.add_argument("--json", action="store_true", help="Output JSON")
+    babysit.set_defaults(func=cmd_pr_babysit)
     return parser
 
 

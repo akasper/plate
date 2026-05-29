@@ -11,6 +11,7 @@ from .epics import get_epic_status
 from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
+from .pr_babysit import babysit_pr, resolve_review_thread
 
 
 def _write(obj: dict) -> None:
@@ -86,6 +87,27 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = run_bootstrap(args.get("repo"), apply_mode=bool(args.get("apply", False))).to_dict()
         elif name == "plate_plan_epic":
             payload = _plan_epic_stub(args).to_dict()
+        elif name == "plate_pr_babysit":
+            pr_number = args.get("pr_number")
+            if pr_number is None:
+                raise ValueError("pr_number is required")
+            pr_number = int(pr_number)
+            if pr_number <= 0:
+                raise ValueError("pr_number must be > 0")
+            payload = babysit_pr(
+                pr_number=pr_number,
+                repo=args.get("repo"),
+                agent_logins=args.get("agents"),
+                act=bool(args.get("act", False)),
+            ).to_dict()
+        elif name == "plate_resolve_review_thread":
+            thread_id = args.get("thread_id")
+            if not thread_id:
+                raise ValueError("thread_id is required")
+            payload = resolve_review_thread(
+                thread_id=thread_id,
+                repo=args.get("repo"),
+            )
         else:
             _write(
                 {
@@ -322,6 +344,53 @@ def run() -> None:
                                             "description": "Optional resumption state from a prior planning session.",
                                         },
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_pr_babysit",
+                                "description": (
+                                    "Inspect a pull request for unresolved third-party agent feedback and optionally "
+                                    "post a babysitting trigger comment for the plate agent."
+                                ),
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "pr_number": {
+                                            "type": "integer",
+                                            "description": "Pull request number.",
+                                        },
+                                        "agents": {
+                                            "type": "string",
+                                            "description": "Optional comma-separated GitHub logins treated as third-party agents.",
+                                        },
+                                        "act": {
+                                            "type": "boolean",
+                                            "description": "When true, post a babysit trigger comment if actionable threads exist.",
+                                        },
+                                    },
+                                    "required": ["pr_number"],
+                                },
+                            },
+                            {
+                                "name": "plate_resolve_review_thread",
+                                "description": "Resolve a pull request review thread via GitHub GraphQL resolveReviewThread.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "thread_id": {
+                                            "type": "string",
+                                            "description": "GraphQL node ID of the review thread to resolve.",
+                                        },
+                                    },
+                                    "required": ["thread_id"],
                                 },
                             },
                             {

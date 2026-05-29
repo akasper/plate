@@ -19,8 +19,9 @@ All surfaces are backed by the same `plate_core` library, ensuring consistent be
 - **Feature detection** — optional PLATE capability detection (Playwright E2E, plugin setup, etc.) via `gh plate features`
 - **Bootstrap planning** — new-project setup planning/apply baseline via `gh plate bootstrap`
 - **Baseline agents and skills** — discoverable catalog via `gh plate agents` and `gh plate skills`
+- **PR feedback babysitting** — local monitoring/trigger flow via `gh plate pr babysit <number>`
 - **E2E Playwright tooling** — scaffolding, recording, and validation tools via MCP
-- **MCP tools** — `plate_health`, `plate_epic_status`, `plate_features`, `plate_bootstrap`, `plate_plan_epic`, `plate_agents`, `plate_agent`, `plate_skills`, `plate_skill`, `init_playwright`, `record_e2e_gif`, `validate_e2e_tests` return structured payloads
+- **MCP tools** — `plate_health`, `plate_epic_status`, `plate_features`, `plate_bootstrap`, `plate_plan_epic`, `plate_pr_babysit`, `plate_resolve_review_thread`, `plate_agents`, `plate_agent`, `plate_skills`, `plate_skill`, `init_playwright`, `record_e2e_gif`, `validate_e2e_tests` return structured payloads
 - **Copilot plugin** — installable agent surface (`/agent plate`) with bundled MCP server configuration
 
 ## Quick Start
@@ -39,6 +40,7 @@ gh plate skills list --json
 gh plate skills show crud-projects --json
 gh plate bootstrap --repo akasper/plate_core --json     # dry-run plan
 gh plate bootstrap --repo akasper/plate_core --apply    # apply supported steps
+gh plate pr babysit 112 --repo akasper/plate --json
 ```
 
 ### As an MCP server in Copilot CLI (v1 baseline)
@@ -46,7 +48,7 @@ gh plate bootstrap --repo akasper/plate_core --apply    # apply supported steps
 ```sh
 # In your Copilot CLI session:
 /mcp connect /absolute/path/to/plate_core/plate-mcp
-# Then call tools: plate_health, plate_epic_status, plate_agents, plate_agent, plate_skills, plate_skill, plate_features, plate_bootstrap, plate_plan_epic
+# Then call tools: plate_health, plate_epic_status, plate_features, plate_bootstrap, plate_plan_epic, plate_pr_babysit, plate_resolve_review_thread, plate_agents, plate_agent, plate_skills, plate_skill
 ```
 
 ### As a Copilot CLI plugin
