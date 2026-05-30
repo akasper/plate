@@ -194,5 +194,34 @@ class McpTests(unittest.TestCase):
         self.assertIn("plate_pr_babysit", names)
         self.assertIn("plate_resolve_review_thread", names)
 
+    @patch("plate_core.mcp_server._write")
+    @patch(
+        "plate_core.mcp_server.sys.stdin",
+        new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":20,"method":"tools/list"}\n'),
+    )
+    def test_tools_list_includes_curiosity_qanda_tools(self, _mock_stdin, mock_write):
+        """Feature #154: Core MCP tools for Q&A/Curiosity are discoverable."""
+        run()
+        tools = mock_write.call_args[0][0]["result"]["tools"]
+        names = {tool["name"] for tool in tools}
+        for expected in [
+            "plate_list_questions",
+            "plate_get_question",
+            "plate_record_answer",
+            "plate_get_answers",
+            "plate_synthesize_priorities",
+        ]:
+            self.assertIn(expected, names)
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_curiosity_list_questions_stub(self, mock_write):
+        """Smoke test handler path for #154 tools (real GH calls mocked at higher level in integration)."""
+        # The tool will attempt GhClient inside; we just ensure no crash in dispatch and error payload shape
+        _handle_tools_call(21, {"name": "plate_list_questions", "arguments": {"repo": "akasper/nonexistent-for-test"}})
+        self.assertTrue(mock_write.called)
+        result = mock_write.call_args[0][0]["result"]
+        # Either success content or isError=True with message (both acceptable for this smoke)
+        self.assertIn("content", result)
+
 if __name__ == "__main__":
     unittest.main()

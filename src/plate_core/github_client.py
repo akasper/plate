@@ -26,6 +26,18 @@ class GhClient:
                 cmd.extend(["-F", f"{key}={'true' if value else 'false'}"])
             elif isinstance(value, (int, float)):
                 cmd.extend(["-F", f"{key}={value}"])
+            elif isinstance(value, (list, tuple)):
+                # Support array fields (e.g. labels) by emitting repeated bracket notation.
+                # Apply the same typed-vs-string logic *per item* to respect the
+                # defensive contract: strings must use -f (avoids gh mis-parsing
+                # e.g. "5319e7" as scientific notation, "true"/"null" coercion).
+                for item in value:
+                    if isinstance(item, bool):
+                        cmd.extend(["-F", f"{key}[]={'true' if item else 'false'}"])
+                    elif isinstance(item, (int, float)):
+                        cmd.extend(["-F", f"{key}[]={item}"])
+                    else:
+                        cmd.extend(["-f", f"{key}[]={item}"])
             else:
                 cmd.extend(["-f", f"{key}={value}"])
         proc = subprocess.run(
