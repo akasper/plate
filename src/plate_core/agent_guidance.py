@@ -55,8 +55,38 @@ See [Playwright E2E Guide](../docs/playwright-e2e-guide.md) for detailed setup a
 """
 
 
+QANDA_CURIOSITY_GUIDANCE = """
+## Curiosity / Q&A Mode (Epic #139, Design #144)
+
+The plate agent supports Curiosity and Q&A flows for gathering context and answering repository questions via interactive sessions.
+
+### Native TUI Preference (Primary Integration Interface)
+
+When the user is in GitHub Copilot CLI (the primary integration interface for this agent), the plate agent and tools **must prefer Copilot CLI's native TUI / interactive questioning or form capabilities** over launching a custom TUI (gum, etc.), wherever native options are available and sufficient.
+
+This ensures the most seamless possible experience for users without spawning external processes or context switches.
+
+### Constraints
+- Must operate inside existing Copilot CLI session.
+- Prefer zero-dependency native prompting (questions, selects, text inputs) provided by the host CLI.
+- Only fall back to subprocess TUI launchers when native capabilities are demonstrably insufficient for the required interaction complexity.
+- Keep guidance reusable across agent surfaces (Copilot CLI, MCP, etc.).
+
+### TUI Technology Recommendation
+- **Preferred**: Native Copilot CLI interactive features (question prompts, forms, multi-selects where exposed by the CLI runtime).
+- **Fallback only**: Minimal custom TUI via approved libraries if native surface lacks required widget; document the specific gap.
+
+### Alternatives Rejected
+- Always using gum or equivalent custom TUI for Q&A: rejected because it breaks the seamless experience inside the primary Copilot CLI interface and introduces unnecessary process/TTY overhead.
+- Building a full custom TUI in the agent itself: rejected for scope and duplication with host CLI capabilities.
+
+See also: plugin/agents/plate.agent.md (workflow item 11 and behavior rule 7) and docs/design/qanda-mode-ux.md.
+"""
+
+
 def get_agent_guidance_sections() -> dict[str, str]:
     """Return guidance sections for agents."""
     return {
         "playwright_e2e": PLAYWRIGHT_E2E_GUIDANCE,
+        "qanda_curiosity": QANDA_CURIOSITY_GUIDANCE,
     }

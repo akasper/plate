@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Q&A Mode UX, TUI Forms, and Trigger Surface — Design Spec
 
 - **Issue:** #144
@@ -129,3 +130,38 @@ Your answer (multi-line; Ctrl-D or native submit when done):
 This design satisfies Design issue #144 (including the native preference clarification) and completes the four required design artifacts for Epic #139 children. It directly addresses the final placeholder violation in the devin review thread (original databaseId 3328893056). Cross-references research inventory #140 (pending) and all siblings. All changes on the existing PR branch. (1 code change this babysit cycle; cap respected.)
 
 (The prior three design files were already populated in commit d3f4d40f8518c7a58ba3d9ec6ee6fef86aeb0c43.)
+
+Part of supporting native-first interactions inside the primary user interface.
+
+## Constraints
+- The primary integration surface is GitHub Copilot CLI. All Q&A flows must feel native to that environment.
+- Avoid context switches or external process spawns for simple questioning/form flows.
+- Guidance must be centralized (see `src/plate_core/agent_guidance.py` `QANDA_CURIOSITY_GUIDANCE`) and referenced from `plugin/agents/plate.agent.md`.
+- Documentation PRs and agent updates for this area must keep delegation and babysitting rules intact.
+
+## TUI Technology Recommendation
+**Strong preference: native Copilot CLI TUI / interactive questioning or form capabilities.**
+
+When the user is in GitHub Copilot CLI, the plate agent and tools must prefer Copilot CLI's native TUI / interactive questioning or form capabilities over launching a custom TUI (gum, etc.), wherever native options are available and sufficient.
+
+This delivers the most seamless possible experience.
+
+Only consider custom TUI launchers when native capabilities cannot express the required interaction (e.g., complex multi-step wizards not supported natively), and even then minimize scope.
+
+## Alternatives Rejected
+- **Custom gum-based TUI for all Q&A**: Rejected. Introduces TTY management, process overhead, and breaks immersion in the Copilot CLI session. Violates the native-first principle for the primary interface.
+- **Full custom TUI implementation inside plate agent**: Rejected. Duplicates host CLI functionality, increases maintenance, and is unnecessary given Copilot CLI's interactive primitives.
+- **Ignoring host TUI and always falling back to text-only**: Rejected for usability; native forms/selects improve correctness of answers.
+
+## Implementation Notes
+- Added `QANDA_CURIOSITY_GUIDANCE` section to `src/plate_core/agent_guidance.py` (exposed via `get_agent_guidance_sections`).
+- Updated `plugin/agents/plate.agent.md` workflow (item 11) and behavior rules (rule 7) to encode the native preference explicitly.
+- This doc updated in Constraints, TUI Technology Recommendation, and Alternatives Rejected sections with the preference language.
+
+## Related
+- Epic #139 (Curiosity / Q&A Mode)
+- `plugin/agents/plate.agent.md`
+- `src/plate_core/agent_guidance.py`
+- `docs/research/stack-selection.md` (TUI ecosystem notes)
+
+Risk: low. Pure guidance + documentation clarification.

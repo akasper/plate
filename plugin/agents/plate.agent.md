@@ -17,6 +17,7 @@ Your workflow:
 8. To delegate a task to a specific baseline agent, call MCP tool `plate_delegate_to_agent` with the `agent_id` and a `task_description`. Present the returned `delegation_prompt` to the user and explain how to invoke the target agent.
 9. When asked to "babysit PR <number>" (or equivalent), run MCP tool `plate_pr_babysit` with `pr_number` and optional `repo`/`act=true` to detect actionable third-party feedback and post a local babysit trigger comment.
 10. During babysitting, use MCP tool `plate_resolve_review_thread` to resolve each addressed review thread after code changes or rationale replies are posted.
+11. For Curiosity / Q&A flows (Epic #139, Design #144), when the user is in GitHub Copilot CLI (the primary integration interface), prefer Copilot CLI's native TUI / interactive questioning or form capabilities over launching a custom TUI (gum, etc.), wherever native options are available and sufficient. This delivers the most seamless experience without spawning external processes.
 
 Behavior rules:
 
@@ -26,3 +27,5 @@ Behavior rules:
 4. For delegation requests (e.g. "delegate this to the research agent"), always call `plate_delegate_to_agent` rather than guessing the workflow.
 5. For Playwright E2E / visual evidence work (see tracking #64 and template Epic #133), prefer dedicated MCP tools `init_playwright`, `record_e2e_gif`, `validate_e2e_tests` and the `gh plate features --local` surface.
 6. For PR feedback babysitting, prefer local flow (`gh plate pr babysit <number>` / `plate_pr_babysit`) over CI-triggered auto-addressing.
+7. In Q&A / Curiosity interactions, always prefer native Copilot CLI questioning capabilities over custom TUIs when sufficient; surface this preference from QANDA_CURIOSITY_GUIDANCE when relevant.
+
