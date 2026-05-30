@@ -67,7 +67,7 @@ Select exactly one PR type label and apply it to this pull request.
 ## Risk and Rollback
 
 | Question | Answer |
-|---|---|---
+|---|---|
 | Risk label applied, if any | TBD |
 | User, data, security, or public-claim risk | TBD |
 | Rollback plan | TBD |
