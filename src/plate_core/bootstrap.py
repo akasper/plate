@@ -76,6 +76,62 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
             BootstrapAction(name="create-initial-epic", state="already-configured", detail="At least one open Epic exists")
         )
 
+    # Feature #153: Seed initial Curiosity / informational goal Questions (per Epic #139)
+    # These give new PLATE projects immediate value from the Q&A / Curiosity mode.
+    starter_questions = [
+        {
+            "title": "[Question]: What is the primary purpose or value proposition of this software?",
+            "body": "What problem does this project solve? Who benefits and how?\n\n**Answer signal:** A clear, one-paragraph statement that can guide all future work and prioritization.",
+        },
+        {
+            "title": "[Question]: Who are the primary users or customers of this software?",
+            "body": "Describe the main personas or organizations that will use or pay for this.",
+            "answer_signal": "A concise description of the target users that can be used for roadmap and design decisions.",
+        },
+        {
+            "title": "[Question]: What are the biggest risks or unknowns for this project right now?",
+            "body": "Technical, market, team, or other uncertainties that could derail success.",
+            "answer_signal": "A short prioritized list that the team can actively de-risk.",
+        },
+    ]
+
+    # Check if any starter Questions already exist (simple heuristic for now)
+    existing_questions = gh.paginate(
+        gh.api,
+        f"repos/{target}/issues",
+        params={"labels": "Question", "state": "open", "per_page": 100},
+    )
+    has_starter_questions = any(
+        q.get("title", "").startswith("[Question]:") for q in existing_questions
+    )
+
+    if not has_starter_questions:
+        if apply_mode:
+            for q in starter_questions:
+                gh.api(
+                    f"repos/{target}/issues",
+                    method="POST",
+                    fields={
+                        "title": q["title"],
+                        "body": q["body"],
+                        "labels": ["Question"],
+                    },
+                )
+            state = "applied"
+            detail = f"Seeded {len(starter_questions)} initial Curiosity Questions"
+        else:
+            state = "planned"
+            detail = f"Seed {len(starter_questions)} initial Curiosity Questions (project purpose, users, risks)"
+        actions.append(BootstrapAction(name="seed-initial-questions", state=state, detail=detail))
+    else:
+        actions.append(
+            BootstrapAction(
+                name="seed-initial-questions",
+                state="already-configured",
+                detail="Initial Curiosity Questions already present",
+            )
+        )
+
     if health.branch_protection_enabled:
         actions.append(
             BootstrapAction(name="branch-protection", state="already-configured", detail="Default branch protection enabled")
@@ -90,4 +146,3 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
         )
 
     return BootstrapReport(repo=target, apply_mode=apply_mode, actions=actions)
-
