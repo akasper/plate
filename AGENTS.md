@@ -55,7 +55,7 @@ Follow the loop that matches the issue type.
 
 | Step | Required Behavior |
 |---|---|
-| 1 | Confirm the issue is labeled `Feature` and has exactly one `Epic: short-name` label. |
+| 1 | Confirm the issue is labeled `Feature` and is assigned to the GitHub milestone representing its Epic (enforced by label-check workflow). |
 | 2 | Identify acceptance criteria, expected tests, documentation impact, and risk. |
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
@@ -224,8 +224,8 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 |---|---|
 | `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
 | `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
-| `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by the deprecated legacy workflow; no `Epic:` label required. |
-| `Epic: short-name` | Epic identity and feature grouping. Required on Epic and Feature issues. |
+| `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by the deprecated legacy workflow; no Epic milestone required. |
+| `Epic: short-name` | Legacy/supplemental Epic identity label (optional). GitHub Milestones are the canonical Epic container (see Epic #100 / native GitHub PR integration). Feature and Epic issues require a milestone assignment instead. |
 | `area:*` | Stable subsystem or ownership area. |
 | `risk:*` | Review burden and release caution. |
 | `need:*` | Missing input or required follow-up. |

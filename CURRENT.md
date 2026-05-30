@@ -2,7 +2,7 @@
 current_state_version: "0.2"
 process_version: "PLATE 0.6"
 last_verified_at: "2026-05-30"
-last_verified_commit: "a6ef273"
+last_verified_commit: "5091f79"
 ---
 
 # Current Project State
@@ -62,6 +62,7 @@ last_verified_commit: "a6ef273"
 | Label type check | `label-check.yml` validates that Feature/Epic issues have a milestone; runs on `issues` events and `milestone` events. | `.github/workflows/label-check.yml` | Milestone requirement enforced post-PR #118. |
 | PR feedback resolution check | PRs fail `feedback-resolution` when any active review thread remains unresolved or when `reviewDecision` is `CHANGES_REQUESTED`. | `.github/workflows/feedback-resolution-check.yml` | Must be configured as a required branch-protection check to fully gate merges. |
 | PR feedback babysitting | Primary feedback loop is local (`gh plate pr babysit <number>` / MCP `plate_pr_babysit`) with optional trigger-comment posting; legacy CI auto-address workflow remains manual-only fallback. | `src/plate_core/pr_babysit.py`, `src/plate_core/cli.py`, `src/plate_core/mcp_server.py`, `.github/workflows/plates-address-pr-feedback.yml` | Babysitting runs only while a local session is active. |
+| Epic and PR traceability (native GitHub) | Epic planning uses GitHub Milestones as source of truth; Feature/Epic issues require milestone assignment; Feature/Bug/Documentation PRs must link >=1 issue via closing keyword or Development sidebar; delete-branch-on-merge is bootstrap default (repo-level enabled for akasper/plate). | `AGENTS.md`, `.agentic/process.yml`, `.github/workflows/label-check.yml`, `.github/workflows/pr-issue-link-check.yml`, `.github/PULL_REQUEST_TEMPLATE.md`, bootstrap scripts, design doc | Legacy `Epic:` labels may linger on pre-#100 items; full downstream template sync deferred per Epic scope. |
 | Auto-merge workflow | `auto-merge.yml` enables squash-merge for PRs labeled `auto-merge` when autonomous mode is active (`.github/AUTONOMOUS_MODE` present) and eligibility criteria are met. | `.github/workflows/auto-merge.yml`, `AGENTS.md §Autonomous Mode` | Requires repository setting `allow_auto_merge=true` and autonomous mode marker file. |
 | PLATES orchestrator | `plates-agentic-orchestrator.yml` triggers agentic workflows for Feature/Epic issue creation and Epic readiness. | `.github/workflows/plates-agentic-orchestrator.yml` | — |
 | PLATES on issue closed | `plates-on-issue-closed.yml` harvests usage reports from Feature/Question issue closures and appends to `.agentic/COSTS.md`. | `.github/workflows/plates-on-issue-closed.yml` | — |
