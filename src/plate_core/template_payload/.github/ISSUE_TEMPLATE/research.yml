@@ -1,0 +1,61 @@
+name: Research
+description: Structure investigation, comparison, or decision-preparation work.
+title: "[Research]: "
+labels:
+  - Research
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Research question
+      description: What question must be answered?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and affected artifacts
+      description: Link related SPEC sections, issues, PRs, ADRs, docs, workflows, or public claims.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options to compare
+      description: Identify alternatives, constraints, sources, or prototypes to evaluate.
+    validations:
+      required: true
+  - type: textarea
+    id: decision_criteria
+    attributes:
+      label: Decision criteria
+      description: What evidence or tradeoffs will determine the recommendation?
+    validations:
+      required: true
+  - type: textarea
+    id: expected_output
+    attributes:
+      label: Expected output
+      description: Specify whether this should produce an ADR, SPEC update, implementation issue, prototype, or recommendation.
+    validations:
+      required: true
+  - type: textarea
+    id: git_artifact
+    attributes:
+      label: Required git artifact
+      description: |
+        Research issues must close with a committed finding. Where will the research output be committed?
+        Examples:
+        - `docs/research/<issue-slug>.md` — findings and recommendation
+        - Update to `SPEC.md §Open Questions` or `SPEC.md §External Integrations`
+        - `docs/adr/NNNN-<slug>.md` — architecture decision record
+      placeholder: "docs/research/culturebot-api-availability.md"
+    validations:
+      required: true
+  - type: checkboxes
+    id: closing
+    attributes:
+      label: Closing requirements
+      options:
+        - label: "This issue will be closed via a Documentation PR with `Closes #N` in the body."
+          required: true

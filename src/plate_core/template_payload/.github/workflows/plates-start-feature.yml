@@ -1,0 +1,80 @@
+name: PLATES Start Feature
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  actions: write
+  issues: write
+
+jobs:
+  start-ready-feature:
+    if: github.event.label.name == 'status:ready-to-work'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger feature implementation kickoff
+        uses: actions/github-script@v7
+        env:
+          ORCHESTRATOR_WORKFLOW: ${{ vars.PLATE_MAIN_ORCHESTRATOR_WORKFLOW }}
+        with:
+          script: |
+            const issue = context.payload.issue;
+            if (!issue || issue.pull_request) {
+              core.info('Event is not an issue; skipping.');
+              return;
+            }
+
+            const labels = (issue.labels || []).map((label) => (typeof label === 'string' ? label : label.name || '').toLowerCase());
+            if (!labels.includes('feature')) {
+              core.info(`Issue #${issue.number} is not labeled Feature; skipping kickoff.`);
+              return;
+            }
+
+            const workflowId = String(process.env.ORCHESTRATOR_WORKFLOW || '').trim();
+            let dispatched = false;
+
+            if (workflowId) {
+              try {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: workflowId,
+                  ref: context.payload.repository.default_branch,
+                  inputs: {
+                    issue_number: String(issue.number),
+                    issue_url: issue.html_url,
+                    trigger: 'status:ready-to-work'
+                  }
+                });
+                dispatched = true;
+              } catch (error) {
+                core.warning(`Failed to dispatch ${workflowId}: ${error.message}`);
+              }
+            }
+
+            const body = dispatched
+              ? [
+                  'PLATES kickoff: dispatched the main orchestrator workflow for this ready Feature issue.',
+                  '',
+                  `- Workflow: \`${workflowId}\``,
+                  `- Trigger: \`status:ready-to-work\``
+                ].join('\n')
+              : [
+                  'PLATES kickoff: this Feature issue is ready to work.',
+                  '',
+                  'No orchestrator workflow is configured, so this comment acts as the GitHub-native start trigger.',
+                  '',
+                  '```text',
+                  '@copilot start',
+                  `issue: #${issue.number}`,
+                  'mode: feature-implementation',
+                  '```'
+                ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body
+            });

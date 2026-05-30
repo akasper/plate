@@ -1,0 +1,295 @@
+# E2E Test Workflow for PLATE Template
+# Runs Playwright tests on push, PR, and manual trigger
+# Captures artifacts (videos, traces, screenshots) on failure
+# Posts test results to PRs with links to HTML report
+#
+# Documentation: docs/design/playwright-ci-design.md
+
+name: E2E Tests
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Nightly runs at 2 AM UTC for continuous verification
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+  pull-requests: write    # For PR comments with test results
+  checks: write           # For check runs and status reporting
+
+concurrency:
+  group: e2e-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-e2e:
+    name: Playwright E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # Checkout repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Install ffmpeg for video/GIF processing (Phase 2 enhancement)
+      - name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
+
+      # Install npm dependencies
+      - name: Install dependencies
+        run: npm install --no-fund --no-audit
+        env:
+          CI: true
+
+      # Install Playwright browsers and system dependencies (Chromium, Firefox, WebKit)
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      # Run Playwright tests with CI-optimized settings
+      # Base URL can be overridden via PLAYWRIGHT_TEST_BASE_URL env var if needed
+      - name: Run Playwright tests
+        run: npx playwright test
+        env:
+          BASE_URL: 'http://localhost:3000'
+          CI: true
+          PLAYWRIGHT_JUNIT_OUTPUT_FILE: test-results/junit.xml
+
+      # Upload HTML report (always, even on success for trend tracking)
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Upload test results JSON for parsing in comments and dashboards
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Upload videos recorded on test failure for debugging
+      # See playwright.config.ts: video: 'retain-on-failure'
+      - name: Upload failure videos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-videos
+          path: test-results/**/*.webm
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Upload execution traces on failure for detailed replay
+      # Traces include DOM snapshots, network events, console logs
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/**/*.zip
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Post test summary to GitHub Step Summary for visibility in Actions logs
+      - name: Generate test summary
+        if: always()
+        run: |
+          if [ -f test-results/junit.xml ]; then
+            echo "## ✅ E2E Test Run Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Artifacts available:**" >> $GITHUB_STEP_SUMMARY
+            echo "- 📊 HTML Report (playwright-report)" >> $GITHUB_STEP_SUMMARY
+            echo "- 🎥 Test Videos (on failure)" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔍 Playwright Traces (on failure)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Parse test counts from junit.xml if available
+            if command -v xmllint &> /dev/null; then
+              TOTAL=$(xmllint --xpath "count(//testcase)" test-results/junit.xml 2>/dev/null || echo "?")
+              FAILURES=$(xmllint --xpath "count(//testcase/failure)" test-results/junit.xml 2>/dev/null || echo "?")
+              echo "**Results:** $TOTAL total, $FAILURES failures" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+      # Post detailed results comment to PR
+      # Only runs on pull_request events; includes links to artifacts
+      - name: Comment PR with test results
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Try to read test results JSON for statistics
+            let testStats = { passed: '?', failed: '?', skipped: '?' };
+            const resultsPath = 'test-results/junit.xml';
+            
+            if (fs.existsSync(resultsPath)) {
+              try {
+                // Parse junit.xml to extract test counts
+                const content = fs.readFileSync(resultsPath, 'utf8');
+                // Simple regex extraction (can be enhanced with XML parser)
+                const testsMatch = content.match(/tests="(\d+)"/);
+                const failuresMatch = content.match(/failures="(\d+)"/);
+                
+                if (testsMatch) testStats.passed = parseInt(testsMatch[1]);
+                if (failuresMatch) testStats.failed = parseInt(failuresMatch[1]);
+              } catch (e) {
+                console.log('Could not parse test results:', e.message);
+              }
+            }
+            
+            const status = testStats.failed === 0 || testStats.failed === '?' ? '✅' : '❌';
+            const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const reportUrl = `${runUrl}#artifacts`;
+            
+            const comment = `${status} **E2E Test Results**
+            
+            | Metric | Value |
+            |--------|-------|
+            | Passed | ${testStats.passed} |
+            | Failed | ${testStats.failed} |
+            
+            📊 **View Results:**
+            - [GitHub Action Run](${runUrl})
+            - [Test Artifacts](${reportUrl}) — HTML report, videos, traces
+            
+            See [Playwright CI Design](../blob/${{ github.ref }}:docs/design/playwright-ci-design.md) for test architecture.`;
+            
+            try {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment,
+              });
+            } catch (error) {
+              console.log('Comment creation skipped:', error.message);
+            }
+
+  # Optional: Generate demo GIFs from test videos (Phase 2)
+  # Disabled by default; enable with 'demo' label on PR
+  process-gifs:
+    name: Generate Demo GIFs
+    needs: test-e2e
+    if: success() && github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'demo')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download test videos
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-videos
+
+      - name: Convert videos to GIFs
+        id: gif-generation
+        run: |
+          mkdir -p tests/spike-videos
+          gif_count=0
+          failed_gifs=""
+          
+          for video in test-results/**/*.webm; do
+            if [ -f "$video" ]; then
+              gif_name="tests/spike-videos/$(basename "$video" .webm).gif"
+              echo "Converting $video to $gif_name"
+              ./scripts/gif-from-video.sh "$video" "$gif_name" --quality medium || true
+              
+              # Check file size if GIF was created
+              if [ -f "$gif_name" ]; then
+                size_bytes=$(stat -c%s "$gif_name")
+                size_mb=$(echo "scale=2; $size_bytes / 1048576" | bc)
+                
+                # Size validation: warn at 3MB, fail at 5MB
+                if (( $(echo "$size_mb > 5" | bc -l) )); then
+                  echo "❌ GIF too large: $gif_name ($size_mb MB, max 5 MB)"
+                  failed_gifs="$failed_gifs\n- $gif_name ($size_mb MB)"
+                  rm "$gif_name"
+                elif (( $(echo "$size_mb > 3" | bc -l) )); then
+                  echo "⚠️ GIF size warning: $gif_name ($size_mb MB, recommended <3 MB)"
+                else
+                  echo "✅ GIF OK: $gif_name ($size_mb MB)"
+                  gif_count=$((gif_count + 1))
+                fi
+              fi
+            fi
+          done
+          
+          echo "gif_count=$gif_count" >> $GITHUB_OUTPUT
+          if [ -n "$failed_gifs" ]; then
+            echo "failed_gifs<<EOF$failed_gifs" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload generated GIFs
+        if: steps.gif-generation.outputs.gif_count > 0
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-gifs
+          path: tests/spike-videos/**/*.gif
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Post GIF summary to PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const gifCount = '${{ steps.gif-generation.outputs.gif_count }}';
+            const failedGifs = `${{ steps.gif-generation.outputs.failed_gifs }}`;
+            const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            
+            let comment = '🎬 **Demo GIF Generation Summary**\n\n';
+            
+            if (gifCount > 0) {
+              comment += `✅ **Generated ${gifCount} GIF(s)** from test videos\n\n`;
+              comment += `📦 **Artifacts:** [Download GIFs](${runUrl}#artifacts)\n\n`;
+              comment += 'GIFs can be embedded in documentation using:\n';
+              comment += '```markdown\n';
+              comment += '![Test Demo](tests/spike-videos/test-name.gif)\n';
+              comment += '```\n';
+            }
+            
+            if (failedGifs) {
+              comment += '\n❌ **Failed to generate (size > 5MB):**\n' + failedGifs + '\n\n';
+              comment += 'Consider using `--quality low` or trimming the video.\n';
+            }
+            
+            if (gifCount === 0 && !failedGifs) {
+              comment += 'No test videos found to convert.\n';
+            }
+            
+            try {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment,
+              });
+            } catch (error) {
+              console.log('Comment creation skipped:', error.message);
+            }

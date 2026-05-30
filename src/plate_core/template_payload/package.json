@@ -1,0 +1,16 @@
+{
+  "name": "plate-template",
+  "version": "0.1.0",
+  "description": "PLATE template for new repositories",
+  "scripts": {
+    "dev": "node scripts/dev-server.js",
+    "test:e2e": "playwright test",
+    "test:e2e:watch": "playwright test --watch",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:headed": "playwright test --headed",
+    "record:e2e": "bash scripts/e2e-record.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

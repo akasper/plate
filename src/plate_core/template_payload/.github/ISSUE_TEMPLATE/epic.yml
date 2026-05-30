@@ -1,0 +1,65 @@
+name: Epic
+description: Define a parent planning object and its stable traceability label.
+title: "[Epic]: "
+labels:
+  - Epic
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every Epic issue must define and carry a dedicated `Epic: short-name` label. Child Feature issues must carry the same label.
+  - type: input
+    id: epic_label
+    attributes:
+      label: Dedicated epic label
+      description: Name the stable label this epic owns.
+      placeholder: "Epic: onboarding"
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What durable product, operational, or business outcome should this epic produce?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and boundaries
+      description: What is included, excluded, deferred, or explicitly out of scope?
+    validations:
+      required: true
+  - type: textarea
+    id: success
+    attributes:
+      label: Success criteria
+      description: What will prove this epic is complete?
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: child_features
+    attributes:
+      label: Expected child features
+      description: Link existing child issues or list expected features to create.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks, assumptions, and dependencies
+      description: Identify significant risks, decisions, research, dependencies, or migration concerns.
+    validations:
+      required: false
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: PLATE epic readiness
+      options:
+        - label: "This issue has or will receive its dedicated `Epic: short-name` label."
+          required: true
+        - label: Child features can be decomposed into testable issues.
+          required: true
+        - label: Success criteria are observable or auditable.
+          required: true

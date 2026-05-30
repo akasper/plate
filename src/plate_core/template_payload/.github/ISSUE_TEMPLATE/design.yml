@@ -1,0 +1,62 @@
+name: Design
+description: Plan UX design, architecture design, API contracts, data models, or information design work.
+title: "[Design]: "
+labels:
+  - Design
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Design issues must produce a committed artifact before closing. See `AGENTS.md §Issue Artifact Rules`.
+  - type: textarea
+    id: design_goal
+    attributes:
+      label: Design goal
+      description: What experience, system, or structure is being designed? What user need or technical requirement is it serving?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and constraints
+      description: What is in scope? What constraints (brand, tech stack, accessibility, security) apply?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Identify alternative approaches, patterns, or prior art to evaluate.
+    validations:
+      required: true
+  - type: textarea
+    id: decision_criteria
+    attributes:
+      label: Decision criteria
+      description: What evidence or tradeoffs will drive the design decision?
+    validations:
+      required: true
+  - type: textarea
+    id: expected_artifact
+    attributes:
+      label: Expected git artifact
+      description: |
+        Where will the design output be committed? Examples:
+        - `docs/design/<feature-slug>.md` — written design spec
+        - `docs/wiki/Features/<feature>.md` — wiki Feature page update
+        - `docs/adr/NNNN-<slug>.md` — architecture decision record
+        - `docs/features/<feature>/wireframes/` — mockup files or ASCII wireframes
+      placeholder: "docs/design/onboarding-wizard.md"
+    validations:
+      required: true
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: PLATE readiness checklist
+      options:
+        - label: "Design goal and constraints are clear enough to begin."
+          required: true
+        - label: "Expected git artifact location is identified."
+          required: true
+        - label: "This issue will be closed via a PR with `Closes #N` in the body."
+          required: true

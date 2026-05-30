@@ -1,0 +1,176 @@
+process:
+  name: "Process Lifecycle Agentic Task Engine"
+  short_name: "PLATE"
+  version: "0.6"
+  template_repository: "akasper/plate_template"
+  authority_model:
+    doctrine_source: "PLATE book or governing methodology document"
+    template_artifact_source: "this repository"
+    conflict_resolution: "Open a corrective issue or pull request; avoid duplicating fast-changing artifacts in long-form prose."
+
+principles:
+  - "Humans keep judgment."
+  - "Agents do the toil."
+  - "GitHub preserves truth."
+  - "Labels are stable metadata, not decoration."
+  - "GitHub Projects fields carry frequently changing planning state."
+  - "Template artifacts should live in the repository rather than duplicated book appendices."
+
+artifacts:
+  spec: "SPEC.md"
+  current_state: "CURRENT.md"
+  agent_rules: "AGENTS.md"
+  process_config: ".agentic/process.yml"
+  skills_registry: ".agentic/skills.yml"
+  extensions_registry: ".agentic/extensions.yml"
+  audit_config: ".agentic/audit.yml"
+  traceability_config: ".agentic/traceability.yml"
+  marketing_config: ".agentic/marketing.yml"
+  migration_config: ".agentic/migration.yml"
+
+  labels: ".github/labels.yml"
+  issue_templates: ".github/ISSUE_TEMPLATE"
+  pull_request_template: ".github/PULL_REQUEST_TEMPLATE.md"
+  tests: "tests"
+  wiki_source_candidates:
+    - "docs/wiki"
+    - "CURRENT.md"
+    - "docs/features"
+
+labels:
+  prefix_convention:
+    area: "area:"
+    risk: "risk:"
+    need: "need:"
+    epic: "Epic:"
+  disallowed_default_prefixes:
+    - "priority:"
+    - "status:"
+  planning_state_rule: "Use GitHub Projects fields for priority, status, owner, target date, iteration, rank, and release target."
+  issue_type_labels:
+    required_exactly_one:
+      - "Bug"
+      - "Feature"
+      - "Epic"
+      - "Research"
+      - "Design"
+      - "Question"
+      - "Audit"
+      - "Migration"
+  pull_request_type_labels:
+    required_exactly_one:
+      - "Bug"
+      - "Feature"
+      - "Documentation"
+      - "Feedback Response"
+  epic_rules:
+    every_epic_issue_has_dedicated_label: true
+    epic_label_pattern: "^Epic: .+"
+    every_feature_issue_has_exactly_one_epic_label: true
+  stable_metadata_rule: "Create labels only when they change routing, enforcement, reporting, auditing, review burden, or agent behavior."
+
+issues:
+  required_for_feature:
+    - "Feature label"
+    - "exactly one Epic: short-name label"
+    - "problem statement"
+    - "desired behavior"
+    - "acceptance criteria"
+    - "test expectations"
+    - "documentation impact"
+  required_for_bug:
+    - "Bug label"
+    - "reproduction or need:reproduction label"
+    - "expected behavior"
+    - "actual behavior"
+    - "regression test plan"
+  required_for_epic:
+    - "Epic label"
+    - "dedicated Epic: short-name label"
+    - "outcome"
+    - "scope boundaries"
+    - "success criteria"
+  required_for_research:
+    - "Research label"
+    - "research question"
+    - "decision criteria"
+    - "expected output"
+  required_for_question:
+    - "Question label"
+    - "information goal"
+    - "answer signal"
+    - "required git artifact"
+  required_for_audit:
+    - "Audit label"
+    - "source audit"
+    - "expected state"
+    - "actual drift"
+    - "proposed correction"
+
+pull_requests:
+  required_type_labels:
+    - "Bug"
+    - "Feature"
+    - "Documentation"
+    - "Feedback Response"
+  feature_pr_requires_current_md: true
+  required_sections:
+    - "Summary"
+    - "Linked work"
+    - "Change type label"
+    - "Tests and evidence"
+    - "Documentation and traceability"
+    - "Risk and rollback"
+    - "Agent self-review"
+  human_merge_required: true
+
+workflows:
+  label_check:
+    name: "PLATE Label Check"
+    path: ".github/workflows/label-check.yml"
+    required: true
+  question_handling:
+    name: "Question Handling"
+    path: ".github/workflows/question-handling.yml"
+    required: true
+  pr_documentation_check:
+    name: "PR Documentation Check"
+    path: ".github/workflows/pr-documentation-check.yml"
+    required_for_feature_prs: true
+  sync_wiki_on_merge:
+    name: "Sync to Wiki on Merge"
+    path: ".github/workflows/sync-wiki-on-merge.yml"
+    trigger: "merged Feature pull request"
+    default_enabled: false
+    enablement_variable: "PLATE_WIKI_SYNC_ENABLED"
+    required_secret_when_enabled: "WIKI_TOKEN"
+    safety_model_status: "conservative_scoped_opt_in"
+  ci:
+    name: "CI"
+    path: ".github/workflows/ci.yml"
+    baseline_validation: "scripts/validate_plate_repo.sh"
+  audit:
+    name: "PLATE Audit"
+    path: ".github/workflows/audit.yml"
+  release:
+    name: "Release"
+    path: ".github/workflows/release.yml"
+
+audit:
+  cadence: "weekly_or_pre_release"
+  drift_targets:
+    - "SPEC.md"
+    - "CURRENT.md"
+    - "issues"
+    - "pull requests"
+    - "tests"
+    - "wiki"
+    - "labels"
+    - "workflows"
+    - "marketing claims"
+  output_directory: "docs/audits"
+
+open_design_items:
+  - "Replace generated-project placeholder CI commands with stack-specific build/lint/test commands when runtime manifests are added."
+  - "Define project-specific wiki page map before enabling broad wiki synchronization."
+  - "Create running example projects outside the book appendices and keep them versioned in repositories."

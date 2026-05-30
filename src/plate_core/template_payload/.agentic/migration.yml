@@ -1,0 +1,17 @@
+migration:
+  version: "0.1"
+  enabled: false
+  purpose: "Use only when adopting PLATE in an existing repository with legacy state."
+  stage: "not_started"
+  enforcement_level: "new_work_only"
+  artifacts:
+    charter: "docs/migration/charter.md"
+    inventory: "docs/migration/inventory.md"
+    baseline: "docs/migration/baseline.md"
+    enforcement_plan: "docs/migration/enforcement-plan.md"
+    exceptions: "docs/migration/exceptions.md"
+    completion_report: "docs/migration/completion-report.md"
+  completion_criteria:
+    - "New work follows PLATE issue, PR, test, and documentation rules."
+    - "Legacy exceptions are documented with owners and review dates."
+    - "Required checks are enabled without blocking necessary maintenance."

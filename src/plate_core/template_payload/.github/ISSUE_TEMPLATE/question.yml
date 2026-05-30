@@ -1,0 +1,51 @@
+name: Question
+description: Track an information goal that should produce a committed answer artifact.
+title: "[Question]: "
+labels:
+  - Question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Question issues are information goals. They are not tied to an epic label and must close with a committed answer artifact.
+  - type: textarea
+    id: question
+    attributes:
+      label: Information goal
+      description: What unknown must be answered?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and affected artifacts
+      description: Link related issues, docs, workflows, or repository artifacts.
+    validations:
+      required: true
+  - type: textarea
+    id: answer_signal
+    attributes:
+      label: Answer signal
+      description: How will we know this question is answered?
+      placeholder: "A documented recommendation in docs/research/question-agent-packaging.md and follow-up implementation issue(s)."
+    validations:
+      required: true
+  - type: textarea
+    id: required_artifact
+    attributes:
+      label: Required git artifact
+      description: |
+        Question issues must close with committed evidence. Examples:
+        - `docs/research/<issue-slug>.md` with findings and recommendation
+        - update to `AGENTS.md` and `.agentic/skills.yml` when operating behavior changes
+        - follow-up implementation issue(s) linked in the closing PR
+      placeholder: "docs/research/question-handling-capability.md"
+    validations:
+      required: true
+  - type: checkboxes
+    id: closing
+    attributes:
+      label: Closing requirements
+      options:
+        - label: "This issue will be closed via a PR with `Closes #N` in the body."
+          required: true

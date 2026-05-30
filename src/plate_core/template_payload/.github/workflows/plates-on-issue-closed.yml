@@ -1,0 +1,138 @@
+name: PLATES Usage Report on Issue Closed
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  capture-usage-report:
+    if: contains(join(github.event.issue.labels.*.name, ','), 'Feature') || contains(join(github.event.issue.labels.*.name, ','), 'Question') || contains(join(github.event.issue.labels.*.name, ','), 'feature') || contains(join(github.event.issue.labels.*.name, ','), 'question')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Extract structured usage report from closing comment
+        id: usage
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const labels = (issue.labels || []).map((label) => (typeof label === 'string' ? label : label.name || '').toLowerCase());
+            const issueType = labels.includes('feature') ? 'Feature' : (labels.includes('question') ? 'Question' : 'Unknown');
+            const esc = (value) => String(value || '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim();
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              per_page: 100
+            });
+
+            const reportComment = [...comments].reverse().find((comment) => /===\s*USAGE REPORT\s*===/i.test(comment.body || ''));
+            if (!reportComment) {
+              core.warning(`No structured usage report block found for issue #${issue.number}.`);
+              core.setOutput('has_report', 'false');
+              return;
+            }
+
+            const body = reportComment.body || '';
+            const blockMatch = body.match(/===\s*USAGE REPORT\s*===([\s\S]*?)(?:\n===\s*END USAGE REPORT\s*===|$)/i);
+            const block = blockMatch ? blockMatch[1] : body;
+
+            const readField = (pattern) => {
+              const match = block.match(pattern);
+              return match ? esc(match[1]) : 'n/a';
+            };
+
+            const tokens = readField(/tokens?\s*:\s*([^\n\r]+)/i);
+            const cost = readField(/cost\s*:\s*([^\n\r]+)/i);
+            const duration = readField(/duration\s*:\s*([^\n\r]+)/i);
+            const closedAt = new Date(issue.closed_at || Date.now()).toISOString();
+            const issueCell = `[#${issue.number}](${issue.html_url}) ${esc(issue.title)}`;
+            const sourceCell = `[comment](${reportComment.html_url})`;
+            const row = `| ${closedAt} | ${issueCell} | ${issueType} | ${tokens} | ${cost} | ${duration} | ${sourceCell} |`;
+
+            core.setOutput('has_report', 'true');
+            core.setOutput('tokens', tokens);
+            core.setOutput('cost', cost);
+            core.setOutput('duration', duration);
+            core.setOutput('comment_url', reportComment.html_url);
+            core.setOutput('row', row);
+
+      - name: Ensure cost log exists and append usage row
+        if: steps.usage.outputs.has_report == 'true'
+        env:
+          COMMENT_URL: ${{ steps.usage.outputs.comment_url }}
+          ROW: ${{ steps.usage.outputs.row }}
+        run: |
+          set -euo pipefail
+          mkdir -p .agentic
+          if [ ! -f .agentic/COSTS.md ]; then
+            cat <<'EOF' > .agentic/COSTS.md
+          # PLATES Agentic Cost Log
+          
+          Structured usage reports captured from closing comments on `Feature` and `Question` issues.
+          
+          | Date (UTC) | Issue | Type | Tokens | Cost | Duration | Source |
+          |---|---|---|---|---|---|---|
+          EOF
+          fi
+
+          if grep -Fq "$COMMENT_URL" .agentic/COSTS.md; then
+            echo "Usage report already recorded for $COMMENT_URL"
+            exit 0
+          fi
+
+          printf '%s\n' "$ROW" >> .agentic/COSTS.md
+
+      - name: Commit updated cost log
+        if: steps.usage.outputs.has_report == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .agentic/COSTS.md
+          if git diff --cached --quiet; then
+            echo "No cost log changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(costs): append usage report for issue #${{ github.event.issue.number }}"
+          git push
+
+      - name: Optionally post to dashboard issue
+        if: steps.usage.outputs.has_report == 'true' && vars.PLATE_COST_DASHBOARD_ISSUE != ''
+        uses: actions/github-script@v7
+        env:
+          DASHBOARD_ISSUE: ${{ vars.PLATE_COST_DASHBOARD_ISSUE }}
+          TOKENS: ${{ steps.usage.outputs.tokens }}
+          COST: ${{ steps.usage.outputs.cost }}
+          DURATION: ${{ steps.usage.outputs.duration }}
+          COMMENT_URL: ${{ steps.usage.outputs.comment_url }}
+        with:
+          script: |
+            const dashboardIssue = Number(process.env.DASHBOARD_ISSUE);
+            if (!Number.isInteger(dashboardIssue) || dashboardIssue <= 0) {
+              core.warning('PLATE_COST_DASHBOARD_ISSUE is set but not a valid issue number.');
+              return;
+            }
+
+            const body = [
+              `Usage recorded from issue #${context.payload.issue.number}:`,
+              '',
+              `- Tokens: ${process.env.TOKENS}`,
+              `- Cost: ${process.env.COST}`,
+              `- Duration: ${process.env.DURATION}`,
+              `- Source: ${process.env.COMMENT_URL}`
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: dashboardIssue,
+              body
+            });

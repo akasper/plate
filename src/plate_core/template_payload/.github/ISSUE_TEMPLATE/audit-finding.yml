@@ -1,0 +1,53 @@
+name: Audit finding
+description: Convert PLATE drift or process evidence gaps into visible work.
+title: "[Audit]: "
+labels:
+  - Audit
+body:
+  - type: input
+    id: audit_source
+    attributes:
+      label: Audit run or source
+      description: Link the audit report, workflow run, manual review, or drift source.
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Select the closest risk label.
+      options:
+        - risk:low
+        - risk:medium
+        - risk:high
+        - risk:critical
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected PLATE state
+      description: What should be true under the process contract?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual observed drift
+      description: What is stale, missing, unsupported, unverified, or contradictory?
+    validations:
+      required: true
+  - type: textarea
+    id: affected_artifacts
+    attributes:
+      label: Affected artifacts
+      description: List files, issues, PRs, wiki pages, releases, tests, labels, workflows, or public claims.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_correction
+    attributes:
+      label: Proposed correction
+      description: Describe the preferred fix, owner, rollback consideration, and follow-up evidence.
+    validations:
+      required: true

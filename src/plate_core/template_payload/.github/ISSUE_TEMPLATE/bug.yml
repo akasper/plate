@@ -1,0 +1,67 @@
+name: Bug
+description: Report incorrect behavior, a regression, or a broken process gate.
+title: "[Bug]: "
+labels:
+  - Bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Bug fixes should begin with reproduction or a clear `need:reproduction` label, then add regression coverage before or alongside the fix.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is wrong, and who or what is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide deterministic steps, fixtures, recordings, logs, or explain why reproduction is not yet possible.
+      placeholder: "1. ...
+2. ...
+3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happens instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk level
+      description: Select the closest `risk:*` label to apply.
+      options:
+        - risk:low
+        - risk:medium
+        - risk:high
+        - risk:critical
+    validations:
+      required: true
+  - type: textarea
+    id: regression_plan
+    attributes:
+      label: Regression test plan
+      description: What automated or manual evidence will prevent this bug from returning?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Attach or link logs, screenshots, recordings, failing tests, affected versions, or related PRs.
+    validations:
+      required: false

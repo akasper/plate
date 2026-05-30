@@ -75,7 +75,7 @@ copilot plugin install akasper/plate_core:plugin
 
 - **`init_playwright`** — Initialize Playwright E2E setup in a repository
   ```sh
-  # Copy config, test specs, and recording scripts from plate_template
+  # Copy config, test specs, and recording scripts from plate's template payload
   @copilot init-playwright repo_path="/path/to/repo"
   ```
 

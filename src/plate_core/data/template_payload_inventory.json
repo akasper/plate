@@ -1,0 +1,459 @@
+{
+  "schema_version": 1,
+  "source_repository": "akasper/plate_template",
+  "selection_manifest": "src/plate_core/data/template_payload_manifest.yml",
+  "files": [
+    {
+      "path": ".agentic/audit.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/extensions.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/marketing.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/migration.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/process.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/skills.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/traceability.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/AUTONOMOUS_MODE",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/CODEOWNERS",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/audit-finding.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/design.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/epic.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/migration-task.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/question.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/research.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/agents/plate-configurator.agent.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/copilot-instructions.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/labels.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/audit.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/auto-label-feedback-responses.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/auto-merge.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/cost-tracking.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/feedback-resolution-check.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/label-check.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/pages.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plates-address-pr-feedback.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plates-agentic-orchestrator.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plates-on-issue-closed.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plates-start-feature.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plates-unblock-features.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/platform-monitor.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/pr-documentation-check.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/pr-issue-link-check.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/question-handling.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/sync-wiki-on-merge.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/test-e2e.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "AGENTS.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "CURRENT.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "SPEC.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/adr/0000-template.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/audits/audit-report-template.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/bootstrap/new-repository-checklist.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/design/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/design/conversation-to-issue-graph.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/design/default-questions.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/design/epic-planning-dialogue-flow.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/design/extension-repository.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/design/onboarding-questions.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/design/playwright-ci-design.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/marketing/experiments.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/marketing/launch-checklist.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/marketing/marketing-site-brief.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/baseline.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/charter.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/completion-report.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/enforcement-plan.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/exceptions.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/inventory.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/playwright-e2e-guide.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/automatic-epic-creation.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/custom-agent-packaging.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/epic-intent-detection.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/gif-generation-spike.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/information-goals.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/interactive-planning-ux.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/openspec-evaluation.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/playwright-asset-strategy.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/research/playwright-gif-generation.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/wiki/Automatic-Epic-Creation.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/wiki/Home.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "package.json",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "playwright.config.ts",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/BootstrapGitHub.ps1",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/CheckToolchain.ps1",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/QuestionBatch.ps1",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/ValidatePlateRepo.ps1",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/bootstrap_github.sh",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/check_toolchain.sh",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/dev-server.js",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/e2e-record.ps1",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/e2e-record.sh",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/gif-from-video.ps1",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/gif-from-video.sh",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/question_batch.sh",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/validate_plate_repo.sh",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/e2e/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/e2e/fixtures/.gitkeep",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/e2e/fixtures/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/e2e/fixtures/gifs/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/e2e/fixtures/gifs/homepage-demo.gif",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/e2e/pages/base-page.ts",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/e2e/pages/login-page.ts",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/e2e/specs/example.spec.ts",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/e2e/specs/failing-example.spec.ts",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/spike-videos/TEST_RESULTS.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/spike-videos/test-10s.webm",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/spike-videos/test-high.gif",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/spike-videos/test-low.gif",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/spike-videos/test-medium.gif",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/spike-videos/test-trimmed-5s-low.gif",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "tests/spike-videos/test-trimmed-5s.gif",
+      "classification": "copy_to_downstream"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+name: Deploy Wiki / Docs
+on: [push]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
