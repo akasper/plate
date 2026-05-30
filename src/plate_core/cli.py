@@ -131,6 +131,7 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                     repo=args.repo,
                     agent_logins=args.agents,
                     act=args.act,
+                    branch_update_strategy=args.branch_update_strategy,
                 )
                 if args.json:
                     print(json.dumps(report.to_dict()))
@@ -142,6 +143,10 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                     )
                     if report.trigger_comment_url:
                         print(f"Trigger comment: {report.trigger_comment_url}")
+                    if report.out_of_sync:
+                        print(f"Base branch sync: OUT OF SYNC ({report.merge_state})")
+                        if report.merge_trigger_posted:
+                            print(f"Merge trigger posted: {report.merge_trigger_url}")
                     print(f"Sleeping {args.interval}s...\n")
                 time.sleep(args.interval)
         except KeyboardInterrupt:
@@ -152,6 +157,7 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
         repo=args.repo,
         agent_logins=args.agents,
         act=args.act,
+        branch_update_strategy=args.branch_update_strategy,
     )
     if args.json:
         print(json.dumps(report.to_dict()))
@@ -167,6 +173,19 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
             print(f"Trigger comment: {report.trigger_comment_url}")
     else:
         print("No new babysit trigger posted.")
+
+    # Base branch sync status
+    if report.out_of_sync:
+        print(f"\nBase branch sync: OUT OF SYNC ({report.merge_state})")
+        if report.merge_trigger_posted:
+            print("Merge trigger posted.")
+            if report.merge_trigger_url:
+                print(f"Merge trigger comment: {report.merge_trigger_url}")
+        else:
+            print("No merge trigger posted (strategy or duplicate).")
+    else:
+        print(f"\nBase branch sync: UP TO DATE ({report.merge_state})")
+
     return 0
 
 
@@ -410,6 +429,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated GitHub logins to treat as third-party agents. Defaults to known patterns.",
     )
     babysit.add_argument("--act", action="store_true", help="Post a babysit trigger comment when actionable feedback exists")
+    babysit.add_argument(
+        "--branch-update-strategy",
+        choices=["copilot-request", "local-rebase", "none"],
+        default="copilot-request",
+        help="How to handle out-of-sync base branch: copilot-request (default), local-rebase, or none",
+    )
     babysit.add_argument("--watch", action="store_true", help="Continuously monitor the PR")
     babysit.add_argument("--interval", type=int, default=60, help="Polling interval in seconds for --watch mode")
     babysit.add_argument("--json", action="store_true", help="Output JSON")
