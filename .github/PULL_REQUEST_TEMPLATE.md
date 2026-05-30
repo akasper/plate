@@ -58,7 +58,7 @@ Select exactly one PR type label and apply it to this pull request.
 | Artifact | Required for This PR? | Updated or Explanation |
 |---|---|---|
 | `SPEC.md` | TBD | TBD |
-| `CURRENT.md` | Required for `Feature` PRs | TBD |
+| `.agentic/releases/` per-feature change files | Required for `Feature` PRs | TBD |
 | Wiki or docs source | TBD | TBD |
 | Release notes / `CHANGELOG.md` | TBD | TBD |
 | Public claims / marketing | TBD | TBD |
@@ -78,7 +78,7 @@ Select exactly one PR type label and apply it to this pull request.
 - [ ] I followed `AGENTS.md` and did not change product intent without human approval.
 - [ ] I used GitHub Projects fields, not labels, for mutable planning state.
 - [ ] I did not weaken tests, remove required gates, or bypass review.
-- [ ] I updated `CURRENT.md` for a Feature PR or explained why this PR is not a Feature.
+- [ ] I updated per-feature change files in `.agentic/releases/` for a Feature PR or explained why this PR is not a Feature.
 - [ ] I linked every required issue using either a closing keyword in the PR body or the Development sidebar, and I used a closing keyword whenever merge should close the issue.
 - [ ] I committed a git artifact to the appropriate `docs/` directory for every Research, Design, Audit, or Migration issue this PR closes.
 - [ ] I left enough evidence for a human reviewer to verify the change without relying on chat history.
