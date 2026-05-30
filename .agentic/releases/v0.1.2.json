@@ -1,0 +1,100 @@
+{
+  "version": "0.1.2",
+  "summary": "Backfill structured release notes from CURRENT.md implemented-state records.",
+  "entries": [
+    {
+      "change_type": "docs",
+      "surface": "PR title policy and process guidance",
+      "migration_impact": "Backfilled CURRENT.md feature state from #135 so downstream repos preserve human-readable PR titles without metadata prefixes.",
+      "agent_notes": "Keep closing keywords in PR bodies and preserve title hygiene checks during migration.",
+      "breaking": false,
+      "links": [
+        "#135"
+      ],
+      "requires": [
+        "0.1.1"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "Copilot plugin context-first agent workflow",
+      "migration_impact": "Captured legacy CURRENT.md records for plugin install surfaces and context-first agent wiring from #20 and #37.",
+      "agent_notes": "Ensure plugin and .plugin manifests stay aligned for `/agent plate` install paths when porting.",
+      "breaking": false,
+      "links": [
+        "#20",
+        "#37"
+      ],
+      "requires": [
+        "0.1.1"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "CLI + MCP epic status parity",
+      "migration_impact": "Preserved state evidence that `gh plate epic status` and MCP `plate_epic_status` ship from the v1 runtime baseline.",
+      "agent_notes": "Downstream migration checks should verify both CLI and MCP epic status surfaces remain in parity.",
+      "breaking": false,
+      "links": [
+        "#33",
+        "#36"
+      ],
+      "requires": [
+        "0.1.1"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "PR feedback babysitting",
+      "migration_impact": "Backfilled process behavior for local review-thread handling with `gh plate pr babysit` and MCP review-thread tools.",
+      "agent_notes": "Use local babysitting as the primary response flow for review comments in autonomous PR loops.",
+      "breaking": false,
+      "links": [
+        "#112"
+      ],
+      "requires": [
+        "0.1.1"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "Template payload cutover scaffolding",
+      "migration_impact": "Carried over CURRENT.md implementation evidence for manifest-driven template payload sync and parity checks.",
+      "agent_notes": "Keep runtime authority in `src/` while template scaffolding remains under `src/plate_core/template_payload/`.",
+      "breaking": false,
+      "links": [
+        "#127"
+      ],
+      "requires": [
+        "0.1.1"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "Curiosity and Q&A mode guidance",
+      "migration_impact": "Captured committed guidance updates from #152 and #150, including answer model indexing and contemplation flow.",
+      "agent_notes": "Retain the blocking Question fallback behavior and answer artifact provenance when upgrading downstream repos.",
+      "breaking": false,
+      "links": [
+        "#152",
+        "#150"
+      ],
+      "requires": [
+        "0.1.1"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": ".agentic/releases release-note system",
+      "migration_impact": "Backfilled release-note adoption evidence from #167 so CURRENT.md state now has a matching machine-readable release entry.",
+      "agent_notes": "Use this release as the translation bridge from CURRENT.md-only state into versioned release-note memory.",
+      "breaking": false,
+      "links": [
+        "#167"
+      ],
+      "requires": [
+        "0.1.1"
+      ]
+    }
+  ]
+}
