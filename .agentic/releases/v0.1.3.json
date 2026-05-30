@@ -1,0 +1,58 @@
+{
+  "version": "0.1.3",
+  "summary": "Deprecate CURRENT.md and complete release-note-first process migration.",
+  "entries": [
+    {
+      "change_type": "docs",
+      "surface": "Repository and wiki guidance",
+      "migration_impact": "Human and agent instructions now point to per-feature change files in `.agentic/releases/` instead of requiring CURRENT.md updates.",
+      "agent_notes": "When migrating downstream repos, replace CURRENT.md workflow language in docs and wiki pages with release-note change-file guidance.",
+      "breaking": false,
+      "links": [
+        "#182"
+      ],
+      "requires": [
+        "0.1.2"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": ".github/workflows/pr-documentation-check.yml",
+      "migration_impact": "Feature PR documentation checks now require changed files under `.agentic/releases/`.",
+      "agent_notes": "Feature PRs in downstream repos should modify release-note change files or they will fail documentation gates.",
+      "breaking": false,
+      "links": [
+        "#183"
+      ],
+      "requires": [
+        "0.1.2"
+      ]
+    },
+    {
+      "change_type": "migration",
+      "surface": "Template payload process artifacts",
+      "migration_impact": "Template payload no longer ships `CURRENT.md`; templates now guide repos through release-note change-file workflows.",
+      "agent_notes": "When refreshing from template payload, remove CURRENT.md assumptions and keep `.agentic/releases/` as the canonical state artifact.",
+      "breaking": false,
+      "links": [
+        "#184"
+      ],
+      "requires": [
+        "0.1.2"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "CURRENT.md compatibility file",
+      "migration_impact": "Root `CURRENT.md` is now a deprecation stub that redirects to `.agentic/releases/`.",
+      "agent_notes": "Treat CURRENT.md as compatibility-only and store all new implemented-state evidence in release-note files.",
+      "breaking": false,
+      "links": [
+        "#185"
+      ],
+      "requires": [
+        "0.1.2"
+      ]
+    }
+  ]
+}
