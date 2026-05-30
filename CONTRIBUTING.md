@@ -8,7 +8,9 @@ Every issue must carry exactly one issue type label: `Bug`, `Feature`, `Epic`, `
 
 ## Branch and Pull Request Rules
 
-Use short descriptive branch names such as `feature/onboarding-copy`, `bug/login-regression`, or `docs/current-state-audit`. PR titles must be clean and written for human readers — do not use any bracketed prefixes (e.g. `[Feature]`, `[Bug]`, `[Documentation]`, `[WIP]`) and do not put issue references such as `(Closes #N)` in the title. All metadata lives in GitHub's native fields (labels, Development sidebar or body closing keywords, draft status, milestones). See AGENTS.md for details. Every pull request must carry exactly one PR type label: `Bug`, `Feature`, or `Documentation`. Feature PRs must update `CURRENT.md`.
+Use short descriptive branch names such as `feature/onboarding-copy`, `bug/login-regression`, or `docs/current-state-audit`. PR titles must be clean and written for human readers — do not use any bracketed prefixes (e.g. `[Feature]`, `[Bug]`, `[Documentation]`, `[WIP]`, `WIP:`, `[DRAFT]`, `DRAFT:`, or similar) and do not put issue references such as `(Closes #N)` in the title. All metadata lives in GitHub's native fields (labels, Development sidebar or body closing keywords, draft status, milestones). See AGENTS.md for details. Every pull request must carry exactly one PR type label: `Bug`, `Feature`, or `Documentation`. Feature PRs must update `CURRENT.md`.
+
+Use clean, descriptive PR titles that summarize the change without legacy status prefixes. Do not use `[WIP]`, `WIP:`, `[DRAFT]`, `DRAFT:`, or similar prefixes in titles. Use GitHub's native Draft PR status instead (`gh pr create --draft` or the "Create draft pull request" option in the UI) to signal work-in-progress. Draft status is reversible and keeps titles readable in PR lists, search results, notifications, and commit history.
 
 If a pull request is opened with GitHub CLI, include the type label in the create command itself, for example `gh pr create --label "Feature"`, instead of treating labeling as a separate best-effort follow-up step.
 

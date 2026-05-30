@@ -17,7 +17,7 @@
   Missing or multiple labels cause immediate CI failure (PLATE Label Check).
   When CI fails, a repair comment will be posted on this PR with the exact command.
 
-  PR titles are for humans. Keep them clean and descriptive. Never use bracketed prefixes of any kind ([Feature], [WIP], etc.) and never put (Closes #N) or similar metadata in the title. Use GitHub labels, the Development sidebar or body closing keywords, draft status, and milestones instead (see AGENTS.md).
+  Copilot and Grok Build: PR titles are for humans. Keep titles clean and descriptive. Never use bracketed prefixes of any kind ([Feature], [WIP], [DRAFT], etc.) or colon-style status prefixes like WIP:, DRAFT:, and never put (Closes #N) or similar metadata in the title. Use GitHub labels, the Development sidebar or body closing keywords, native draft status, and milestones instead (see AGENTS.md).
 -->
 
 # PLATE Pull Request

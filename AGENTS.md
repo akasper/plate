@@ -13,7 +13,7 @@ The PLATE book explains doctrine and the reasons behind the method. This reposit
 | Product intent | Draft proposals, clarify ambiguities, identify conflicts, and map work to issues. | Final scope, priority, product tradeoffs, public commitments, and roadmap direction. |
 | Implementation | Modify code, tests, docs, and configuration inside an approved task. | Acceptance of risk, merge approval, release approval, and irreversible operational changes. |
 | Process | Follow PLATE rules, detect drift, and suggest process improvements. | Changing required gates, weakening checks, changing merge policy, or adopting new required automation. |
-| Documentation | Update `CURRENT.md`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
+| Documentation | Update `CURRENT.md`, wiki source pages, release notes under `.agentic/releases/`, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
 | Stack selection | Prototype and benchmark candidate stacks per the Research issue. | Final language/runtime choice and distribution format. |
 
 ## Autopilot Doctrine
@@ -24,7 +24,7 @@ PLATE defaults to an **autopilot posture**: agents should proceed autonomously t
 
 **Easy revert as the norm.** Prefer squash merges (keeps history clean). Never push directly to `main`. Name branches `type/short-description`. Each squash commit on `main` should read as a complete, stand-alone unit of work.
 
-**PR titles are for humans.** Pull request titles must be clean, concise, and written exclusively for human readers. Do not include any bracketed label-style prefixes (for example `[Feature]`, `[Bug]`, `[Documentation]`, `[WIP]`, `[DRAFT]`, or any similar convention). Do not include issue references, closing keywords, or other metadata such as `(Closes #N)`, `Fixes #123`, or equivalent in the title.
+**PR titles are for humans.** Pull request titles must be clean, concise, and written exclusively for human readers. Do not include any bracketed label-style prefixes (for example `[Feature]`, `[Bug]`, `[Documentation]`, `[WIP]`, `WIP:`, `[DRAFT]`, `DRAFT:`, or any similar convention). Do not include issue references, closing keywords, or other metadata such as `(Closes #N)`, `Fixes #123`, or equivalent in the title.
 
 All metadata belongs in GitHub's native fields instead:
 - PR type via labels (`Bug`, `Feature`, `Documentation`, or `Feedback Response`)
@@ -32,6 +32,8 @@ All metadata belongs in GitHub's native fields instead:
 - Linked issues via the Development sidebar or a closing keyword placed only in the PR *body*
 - Work-in-progress state via the native Draft PR status
 - Epic grouping via milestones
+
+**Agent-specific naming guardrail (Copilot + Grok Build).** GitHub Copilot and Grok Build must both follow the same PR-title rule above. When opening PRs via CLI/API, set a clean human title and put closing keywords only in the PR body. The `PLATE PR Title Check` workflow enforces this.
 
 This keeps titles short, scannable, and focused on the actual change. See #135 (and the follow-up generalization) plus Epic #100.
 
@@ -42,6 +44,8 @@ This keeps titles short, scannable, and focused on the actual change. See #135 (
 **Pacing.** Do not create more than five open PRs simultaneously unless they are all marked `auto-merge` and eligible. Sequence work to minimize merge conflicts; prefer additive-first ordering.
 
 **Autonomous mode** (see §Autonomous Mode below) is the formal toggle for the self-merge aspect of this doctrine. The pacing and PR-discipline rules apply in both modes.
+
+**PR Title Conventions.** Use clean, descriptive titles that summarize the change without legacy status prefixes. Do not use `[WIP]`, `WIP:`, `[DRAFT]`, `DRAFT:`, or similar prefixes in PR titles. GitHub provides native first-class Draft PR status for work-in-progress signaling. Create PRs with `gh pr create --draft` or toggle Draft status in the GitHub UI. Draft status is reversible, keeps the title clean, and integrates properly with search, notifications, and commit history. Prefix-based conventions pollute PR lists and weaken readability at a glance.
 
 ## Required Work Loop
 
@@ -56,8 +60,9 @@ Follow the loop that matches the issue type.
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
 | 5 | Update `CURRENT.md` to describe the implemented behavior and verification evidence. |
-| 6 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
-| 7 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
+| 6 | Add or update `.agentic/releases/` when the change affects PLATE process or templates. |
+| 7 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
+| 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
 **Bug**
 
@@ -177,9 +182,11 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
 
 ## Third-Party Agent Feedback
 
-Preferred flow is now **local babysitting** driven by `gh plate pr babysit <number>`. CI is intentionally narrowed to enforcement-only (`feedback-resolution` check). Use this loop:
+Preferred flow is now **local babysitting** driven by `gh plate pr babysit <number>`. CI is intentionally narrowed to enforcement-only (`feedback-resolution` check). The `plate` agent persona (plugin/agents/plate.agent.md and mirror) no longer includes babysitting steps (deprecated in favor of the dedicated local CLI/MCP flow; see PR #120 and this PR's Q&A/Curiosity updates).
 
-1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch]`) or via `/agent plate` ("babysit PR <number>") using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread`
+Use this loop:
+
+1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance).
 2. Query unresolved review threads and identify actionable third-party agent feedback
 3. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 4. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
@@ -225,7 +232,7 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 ## Documentation Rules
 
-Every Feature pull request must modify `CURRENT.md`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. If a change affects feature behavior, update both implementation evidence and documentation evidence.
+Every Feature pull request must modify `CURRENT.md`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. Changes that alter PLATE behavior or process should also update `.agentic/releases/`. If a change affects feature behavior, update both implementation evidence and documentation evidence.
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 

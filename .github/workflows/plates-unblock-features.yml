@@ -154,6 +154,7 @@ jobs:
                     '@copilot start',
                     `issue: #${feature.number}`,
                     'mode: feature-implementation',
+                    'pr_title_rule: no bracketed prefixes; no Closes/Fixes/Resolves in title; closing keywords belong in PR body only',
                     '```'
                   ].join('\n');
 

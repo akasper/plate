@@ -19,6 +19,7 @@ principles:
 artifacts:
   spec: "SPEC.md"
   current_state: "CURRENT.md"
+  release_notes: ".agentic/releases/"
   agent_rules: "AGENTS.md"
   process_config: ".agentic/process.yml"
   skills_registry: ".agentic/skills.yml"
@@ -135,6 +136,10 @@ workflows:
     name: "PLATE Label Check"
     path: ".github/workflows/label-check.yml"
     required: true
+  pr_title_check:
+    name: "PLATE PR Title Check"
+    path: ".github/workflows/pr-title-check.yml"
+    required: true
   question_handling:
     name: "Question Handling"
     path: ".github/workflows/question-handling.yml"
@@ -160,6 +165,7 @@ workflows:
   release:
     name: "Release"
     path: ".github/workflows/release.yml"
+    notes_source: ".agentic/releases/"
 
 audit:
   cadence: "weekly_or_pre_release"

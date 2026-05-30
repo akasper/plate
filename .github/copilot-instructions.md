@@ -49,6 +49,8 @@ Read those pieces together when making process changes. A change in one usually 
 ## Key conventions
 
 - Treat repository artifacts as the source of durable truth. If behavior, process, or evidence changes, update the relevant artifact instead of relying on chat history.
+- `.agentic/releases/` is the upgrade memory for PLATE process/template changes. When the methodology changes, add or update the relevant release-note file and use `scripts/render_release_migrations.py` to generate agent-friendly upgrade steps.
+- Keep `CURRENT.md` and release-note files in sync for any PR that changes PLATE behavior; upgrade guidance should come from the release-note directory, not from chat history.
 - If `AGENTS.md`, `.agentic\process.yml`, and implementation files disagree, preserve the PLATE intent and keep them aligned.
 - Labels are stable process metadata, not casual tags. Use type labels (`Bug`, `Feature`, `Epic`, `Documentation`, `Research`, `Design`, `Question`, `Audit`, `Migration`) and prefixed labels (`Epic:`, `area:`, `risk:`, `need:`) according to the existing taxonomy. Do not introduce `priority:` or `status:` labels; those belong in GitHub Projects fields.
 - `Feature` issues must carry both the `Feature` label and a matching `Epic: short-name` label. Their issue template expects acceptance criteria, test expectations, and documentation impact.
@@ -57,6 +59,8 @@ Read those pieces together when making process changes. A change in one usually 
 - `Design` issues must close with a committed artifact in `docs/design/` or `docs/wiki/Features/`. See `docs/design/README.md`.
 - Every PR must carry a type label (`Bug`, `Feature`, or `Documentation`). **Critical:** The checkboxes in the PR template body do **not** apply GitHub labels — labels must be set explicitly via the CLI or GitHub API. Preferred approach: include `--label "<type>"` in `gh pr create` so the label is applied atomically at PR creation. `Feature` PRs must update `CURRENT.md`; documentation-only changes should use the `Documentation` label.
 - When a PR is opened without a type label, the `label-check.yml` CI workflow fails immediately **and posts a repair comment on the PR** with the exact `gh pr edit` command to fix it.
+- **Copilot PR title rule:** Use clean, human-readable PR titles with no bracketed prefixes (`[Feature]`, `[Documentation]`, `[WIP]`, `WIP:`, `[DRAFT]`, `DRAFT:`, etc.) and no issue-closing metadata in the title (`Closes #N`, `Fixes #N`, `Resolves #N`). Put closing keywords in the PR body only. This is enforced by `.github/workflows/pr-title-check.yml`.
+- **Grok Build parity rule:** If work is delegated to or mirrored by Grok Build, preserve the exact same PR-title rule and body-only closing-keyword placement.
 - **Every PR that resolves a specific issue must include `Closes #N` (or `Fixes #N` / `Resolves #N`) in the PR body.**
 - Use local babysitting for third-party PR feedback: `gh plate pr babysit <number>` (or `/agent plate` with "babysit PR <number>"). This is the primary flow for addressing agent feedback inline on the same branch.
 - `.github\workflows\feedback-resolution-check.yml` fails when a PR has unresolved active review threads or `reviewDecision=CHANGES_REQUESTED`. Make this check required in branch protection so auto-merge waits until commentary is actually addressed.

@@ -1,0 +1,45 @@
+{
+  "version": "0.1.1",
+  "summary": "Seed additional release-note records for the current PLATE migration surface.",
+  "entries": [
+    {
+      "change_type": "docs",
+      "surface": "README.md / AGENTS.md / .agentic/process.yml",
+      "migration_impact": "Migration guidance now points agents at `.agentic/releases/` instead of relying on chat history as the upgrade record.",
+      "agent_notes": "Read the release-note directory first when planning a PLATE upgrade and keep the docs/workflow references in the same PR.",
+      "breaking": false,
+      "links": [
+        "#173"
+      ],
+      "requires": [
+        "0.1.0"
+      ]
+    },
+    {
+      "change_type": "tooling",
+      "surface": "scripts/render_release_notes.py",
+      "migration_impact": "Release-note JSON can now be rendered into Markdown for review and upgrade planning.",
+      "agent_notes": "Use the renderer before drafting downstream migration steps so the note contents are easy to inspect.",
+      "breaking": false,
+      "links": [
+        "#173"
+      ],
+      "requires": [
+        "0.1.0"
+      ]
+    },
+    {
+      "change_type": "state",
+      "surface": "CURRENT.md",
+      "migration_impact": "The repo now records the release-note system as part of the verified current state.",
+      "agent_notes": "Keep CURRENT.md in sync whenever release-note-driven process behavior changes.",
+      "breaking": false,
+      "links": [
+        "#173"
+      ],
+      "requires": [
+        "0.1.0"
+      ]
+    }
+  ]
+}
