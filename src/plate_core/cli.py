@@ -170,6 +170,88 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_qanda(args: argparse.Namespace) -> int:
+    """Thin CLI surface for Q&A / Curiosity Mode (Epic #139, Features #151/#154).
+
+    For the primary interface (GitHub Copilot CLI) prefer native TUI primitives.
+    This gh plate qanda entrypoint is for direct terminal use or scripting.
+    """
+    from plate_core.mcp.curiosity_tools import (
+        ListQuestionsTool,
+        GetQuestionTool,
+        RecordAnswerTool,
+        SynthesizePrioritiesTool,
+    )
+
+    repo = getattr(args, "repo", None)
+    json_out = getattr(args, "json", False)
+
+    if getattr(args, "list", False) or args.command == "qanda" and not any(
+        [getattr(args, "question", None), getattr(args, "synthesize", False), getattr(args, "record", False)]
+    ):
+        # Default: list + synthesize top priorities
+        result = SynthesizePrioritiesTool.execute(repo=repo)
+        if json_out:
+            print(json.dumps(result))
+            return 0
+        print(f"Repo: {result.get('repo')}")
+        print("Prioritized open Questions (Curiosity mode):")
+        for i, q in enumerate(result.get("prioritized_questions", []), 1):
+            print(f"  {i}. #{q.get('number')}: {q.get('title')}")
+            print(f"     {q.get('html_url')}")
+        print(f"\n{result.get('rationale', '')}")
+        print("Tip: gh plate qanda --question N  |  --record N --answer 'text'")
+        return 0
+
+    if getattr(args, "synthesize", False):
+        result = SynthesizePrioritiesTool.execute(repo=repo, max_results=getattr(args, "limit", 5))
+        if json_out:
+            print(json.dumps(result))
+            return 0
+        print(json.dumps(result, indent=2) if not json_out else "")
+        return 0
+
+    if getattr(args, "question", None):
+        qnum = args.question
+        result = GetQuestionTool.execute(question_number=qnum, repo=repo)
+        if json_out:
+            print(json.dumps(result))
+            return 0
+        print(f"Question #{result.get('number')}: {result.get('title')}")
+        print(result.get("html_url", ""))
+        if "plate_answer_comments" in result:
+            print(f"Detected PLATE-ANSWER blocks: {result.get('answer_count', 0)}")
+        print("\n(Use --record to append an answer and trigger contemplation.)")
+        return 0
+
+    if getattr(args, "record", None) and getattr(args, "answer", None):
+        qnum = args.record
+        result = RecordAnswerTool.execute(
+            question_number=qnum,
+            answer_text=args.answer,
+            answered_by=getattr(args, "by", "cli-user"),
+            repo=repo,
+            source="manual",
+        )
+        if json_out:
+            print(json.dumps(result))
+            return 0
+        print(f"Answer recorded for #{qnum}: {result.get('status')}")
+        if result.get("comment_url"):
+            print(f"Comment: {result['comment_url']}")
+        print("Next: invoke Contemplation Engine to create follow-ups (see #149).")
+        return 0
+
+    # Fallback help
+    print("gh plate qanda usage:")
+    print("  gh plate qanda --list          # list + prioritize open Questions")
+    print("  gh plate qanda --question 140  # details for one")
+    print("  gh plate qanda --record 140 --answer 'The answer text here'")
+    print("  gh plate qanda --synthesize --json")
+    print("\nFor rich interactive sessions in Copilot CLI, the agent uses native TUI + these MCP tools.")
+    return 0
+
+
 def cmd_agent_delegate(args: argparse.Namespace) -> int:
     try:
         result = delegate_to_agent(args.agent_id, args.task)
@@ -227,12 +309,7 @@ def cmd_agent_show(args: argparse.Namespace) -> int:
 
 
 def cmd_skills_list(args: argparse.Namespace) -> int:
-    skills = [skill.to_dict() for skill in list_skills()]
-    if args.json:
-        print(json.dumps({"skills": skills}))
-        return 0
-
-    for skill in skills:
+    skills = [skill.to_dict() for agent in list_skills()]:
         print(f"{skill['id']}: {skill['name']}")
         print(f"  {skill['description']}")
         print(f"  Owning agents: {', '.join(skill['owning_agent_ids'])}")
@@ -327,6 +404,18 @@ def build_parser() -> argparse.ArgumentParser:
     babysit.add_argument("--interval", type=int, default=60, help="Polling interval in seconds for --watch mode")
     babysit.add_argument("--json", action="store_true", help="Output JSON")
     babysit.set_defaults(func=cmd_pr_babysit)
+
+    qanda = sub.add_parser("qanda", help="Curiosity / Q&A Mode (list, view, record answers on Question issues; Epic #139)")
+    qanda.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    qanda.add_argument("--json", action="store_true", help="Output JSON")
+    qanda.add_argument("--list", action="store_true", help="List + synthesize priorities for open Questions (default)")
+    qanda.add_argument("--synthesize", action="store_true", help="Just return prioritized list")
+    qanda.add_argument("--question", type=int, help="Show full details for a specific Question number")
+    qanda.add_argument("--record", type=int, help="Record an answer to this Question number")
+    qanda.add_argument("--answer", help="Answer text when using --record")
+    qanda.add_argument("--by", help="Who is answering (for provenance)", default="cli-user")
+    qanda.add_argument("--limit", type=int, default=5, help="Max results for synthesize")
+    qanda.set_defaults(func=cmd_qanda)
     return parser
 
 
