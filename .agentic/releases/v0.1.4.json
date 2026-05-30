@@ -1,0 +1,73 @@
+{
+  "version": "0.1.4",
+  "summary": "Base branch sync detection and Copilot merge-request trigger in PR babysitter.",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "plate pr babysit CLI and plate_pr_babysit MCP tool",
+      "migration_impact": "The babysitter now detects when a PR branch is out of sync with its base branch (BEHIND, CONFLICTING, DIRTY states) and can automatically post a Copilot merge-request trigger comment to resolve the issue. Default behavior: copilot-request strategy.",
+      "agent_notes": "When babysitting PRs, the tool will now detect and optionally trigger resolution for out-of-sync base branches. Use --branch-update-strategy to control behavior: copilot-request (default), local-rebase (not yet implemented), or none (detect only).",
+      "breaking": false,
+      "links": [
+        "#197",
+        "#112"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "api",
+      "surface": "babysit_pr() function signature",
+      "migration_impact": "Added optional branch_update_strategy parameter to babysit_pr(). BabysitReport dataclass extended with out_of_sync, merge_state, merge_trigger_posted, and merge_trigger_url fields.",
+      "agent_notes": "Existing calls to babysit_pr() continue to work unchanged. New fields in BabysitReport provide merge state information for downstream processing.",
+      "breaking": false,
+      "links": [
+        "#197"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "test",
+      "surface": "tests/test_pr_babysit.py",
+      "migration_impact": "Added 6 new unit and integration tests for base branch sync detection. All 207 repository tests pass.",
+      "agent_notes": "TDD approach followed: tests written first, implementation followed. Detection logic and integration are comprehensively covered.",
+      "breaking": false,
+      "links": [
+        "#197"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "AGENTS.md §Third-Party Agent Feedback",
+      "migration_impact": "Documented base branch sync handling behavior and configuration options in agent operating rules.",
+      "agent_notes": "Agents should be aware that the babysitter now handles two types of issues: unresolved review threads and base branch sync state. See AGENTS.md for full workflow.",
+      "breaking": false,
+      "links": [
+        "#197"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "research",
+      "surface": "docs/research/babysit-base-branch-out-of-sync-merge-resolution.md",
+      "migration_impact": "Research artifact documents implementation decisions, detection approach, default action rationale, and configurability design.",
+      "agent_notes": "Consult this research doc for context on why copilot-request is the default strategy and architectural decisions made during implementation.",
+      "breaking": false,
+      "links": [
+        "#197",
+        "#112"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    }
+  ]
+}
