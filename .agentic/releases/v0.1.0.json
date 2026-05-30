@@ -1,0 +1,14 @@
+{
+  "version": "0.1.0",
+  "summary": "Initial structured release-note schema for PLATE migrations.",
+  "entries": [
+    {
+      "change_type": "process",
+      "surface": ".agentic/releases",
+      "migration_impact": "Downstream repos can read structured release notes for versioned PLATE upgrades.",
+      "agent_notes": "Use semantic version tags to group note files. Render this file with scripts/render_release_notes.py.",
+      "breaking": false,
+      "links": []
+    }
+  ]
+}

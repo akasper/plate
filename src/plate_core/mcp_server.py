@@ -12,7 +12,18 @@ from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
+<<<<<<< HEAD
 from .contemplation import ContemplationEngine, trigger_contemplation
+=======
+from .mcp.curiosity_tools import (
+    CURIOSITY_TOOLS,
+    GetAnswersTool,
+    GetQuestionTool,
+    ListQuestionsTool,
+    RecordAnswerTool,
+    SynthesizePrioritiesTool,
+)
+>>>>>>> origin/main
 
 
 def _write(obj: dict) -> None:
@@ -109,6 +120,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 thread_id=thread_id,
                 repo=args.get("repo"),
             )
+<<<<<<< HEAD
         elif name == "plate_contemplate":
             # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
             qn = args.get("question_number")
@@ -122,6 +134,13 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 source=args.get("source", "contemplation"),
                 answered_by=args.get("answered_by", "engine"),
             )
+=======
+        elif name in CURIOSITY_TOOLS:
+            # Curiosity / Q&A Mode tools (Epic #139 / Feature #154)
+            tool_cls = CURIOSITY_TOOLS[name]
+            # Pass through common args + any tool-specific ones
+            payload = tool_cls.execute(**args)
+>>>>>>> origin/main
         else:
             _write(
                 {
@@ -445,6 +464,98 @@ def run() -> None:
                                         },
                                     },
                                     "required": ["agent_id", "task_description"],
+                                },
+                            },
+                            # === Curiosity / Q&A Mode tools (Epic #139, Feature #154) ===
+                            # See docs/design/qanda-mcp-cli-surfaces.md and docs/design/curiosity-answer-model.md
+                            {
+                                "name": "plate_list_questions",
+                                "description": "List open Question issues (informational goals) for Curiosity / Q&A Mode. Returns summaries with answer_signal hints. Use with plate_synthesize_priorities for agent-driven prioritization.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "state": {
+                                            "type": "string",
+                                            "description": "open or closed. Defaults to open.",
+                                            "default": "open",
+                                        },
+                                        "limit": {
+                                            "type": "integer",
+                                            "description": "Max results (default 20).",
+                                            "default": 20,
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_get_question",
+                                "description": "Fetch full details + recent comments + detected PLATE-ANSWER blocks for one Question issue. Powers answer lookup and blocking Question resumption flows.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "question_number": {
+                                            "type": "integer",
+                                            "description": "The GitHub issue number of the Question.",
+                                        },
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional.",
+                                        },
+                                        "include_comments": {
+                                            "type": "boolean",
+                                            "description": "Include recent comments and answer block detection (default true).",
+                                            "default": True,
+                                        },
+                                    },
+                                    "required": ["question_number"],
+                                },
+                            },
+                            {
+                                "name": "plate_record_answer",
+                                "description": "Persist an answer to a Question as a structured PLATE-ANSWER comment block (per Answer Model). This is the primary ingestion hook for Contemplation Engine (#149) and blocking Question resumption (#148). Returns the posted comment + block for logging.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "question_number": {"type": "integer", "description": "Target Question issue number."},
+                                        "answer_text": {"type": "string", "description": "The user's or agent's answer text (never lost)."},
+                                        "answered_by": {"type": "string", "description": "Username or agent id. Defaults to 'agent'."},
+                                        "session": {"type": "string", "description": "Optional session/turn id for provenance."},
+                                        "source": {"type": "string", "description": "qanda | agent-contemplation | manual | blocking", "default": "qanda"},
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "agent_actions": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "E.g. ['Created: #147', 'Updated wiki'] for Contemplation log.",
+                                        },
+                                    },
+                                    "required": ["question_number", "answer_text"],
+                                },
+                            },
+                            {
+                                "name": "plate_get_answers",
+                                "description": "Return answers for a Question. Prefers the fast committed docs/curiosity/answers.yml index (Answer Model #150); falls back to scanning PLATE-ANSWER comment blocks on the issue.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "question_number": {"type": "integer", "description": "The Question issue number."},
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                    "required": ["question_number"],
+                                },
+                            },
+                            {
+                                "name": "plate_synthesize_priorities",
+                                "description": "Return a ranked list of open Questions with rationale. Initial heuristic implementation; agents and future plate_plan_epic evolution provide richer LLM synthesis. Use before presenting via native Copilot TUI or gh plate qanda.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "max_results": {"type": "integer", "description": "Top N to return (default 5).", "default": 5},
+                                    },
                                 },
                             },
                         ]
