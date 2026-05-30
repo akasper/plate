@@ -49,6 +49,8 @@ Read those pieces together when making process changes. A change in one usually 
 ## Key conventions
 
 - Treat repository artifacts as the source of durable truth. If behavior, process, or evidence changes, update the relevant artifact instead of relying on chat history.
+- `.agentic/releases/` is the upgrade memory for PLATE process/template changes. When the methodology changes, add or update the relevant release-note file and use `scripts/render_release_migrations.py` to generate agent-friendly upgrade steps.
+- Keep `CURRENT.md` and release-note files in sync for any PR that changes PLATE behavior; upgrade guidance should come from the release-note directory, not from chat history.
 - If `AGENTS.md`, `.agentic\process.yml`, and implementation files disagree, preserve the PLATE intent and keep them aligned.
 - Labels are stable process metadata, not casual tags. Use type labels (`Bug`, `Feature`, `Epic`, `Documentation`, `Research`, `Design`, `Question`, `Audit`, `Migration`) and prefixed labels (`Epic:`, `area:`, `risk:`, `need:`) according to the existing taxonomy. Do not introduce `priority:` or `status:` labels; those belong in GitHub Projects fields.
 - `Feature` issues must carry both the `Feature` label and a matching `Epic: short-name` label. Their issue template expects acceptance criteria, test expectations, and documentation impact.
