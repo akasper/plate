@@ -6,7 +6,7 @@ PLATE is a GitHub-first delivery model where:
 
 - **Humans keep judgment** (scope, risk, approvals, releases).
 - **Agents do the toil** (implementation, docs, triage, repetitive operations).
-- **GitHub holds truth** (issues, labels, PRs, checks, `SPEC.md`, `CURRENT.md`, wiki artifacts).
+- **GitHub holds truth** (issues, labels, PRs, checks, `SPEC.md`, per-feature change files in `.agentic/releases/`, wiki artifacts).
 
 ## What a PLATE project is
 
@@ -17,7 +17,7 @@ Core characteristics:
 - Typed issue taxonomy (`Feature`, `Bug`, `Research`, `Design`, `Question`, etc.).
 - Epic traceability via `Epic: short-name` labels.
 - PR type labels (`Feature`, `Bug`, `Documentation`, `Feedback Response`).
-- Required evidence updates (`CURRENT.md`, docs, tests) aligned to issue type.
+- Required evidence updates (per-feature change files in `.agentic/releases/`, docs, tests) aligned to issue type.
 - Guardrails in workflows for label validity, issue linkage, and documentation quality.
 
 See `AGENTS.md` for the full operating doctrine and authority model.
@@ -27,9 +27,9 @@ See `AGENTS.md` for the full operating doctrine and authority model.
 PLATE separates future intent from present reality:
 
 - **`SPEC.md`** describes desired future state (vision, users, goals, constraints).
-- **`CURRENT.md`** describes what is actually implemented and verified today.
+- **per-feature change files in `.agentic/releases/`** describes what is actually implemented and verified today.
 
-If a claim is not supported by `CURRENT.md`, it should be treated as planned work.
+If a claim is not supported by per-feature change files in `.agentic/releases/`, it should be treated as planned work.
 
 ## Getting started: PLATE onboarding
 
@@ -80,7 +80,7 @@ Open a small PR with:
 
 - one PR type label,
 - closing keyword (`Closes #N`),
-- updated evidence (`CURRENT.md` and/or docs/tests as required by issue type).
+- updated evidence (per-feature change files in `.agentic/releases/` and/or docs/tests as required by issue type).
 
 ## Testing with Playwright E2E
 
@@ -98,7 +98,7 @@ See [`docs/README.md`](docs/README.md) for complete documentation index.
 
 - `AGENTS.md` - operating rules and authority boundaries
 - `SPEC.md` - future-state product intent
-- `CURRENT.md` - implemented-state record
+- per-feature change files in `.agentic/releases/` - implemented-state record
 - `CONTRIBUTING.md` - contributor expectations and traceability rules
 - `.agentic/` - machine-readable process and skill metadata
 - `docs/` - documentation index and guides
@@ -113,12 +113,13 @@ If your repository started from an older `plate_template` release and has local 
 <!-- PLATES-CORE:BEGIN keeping-your-fork-current -->
 Use this sync flow:
 
-1. Fetch upstream template updates (`git fetch upstream`) and review diffs for `AGENTS.md`, `.agentic/skills.yml`, `CURRENT.md`, and workflows in `.github/workflows/` that contain `PLATES-CORE` markers.
+1. Fetch upstream template updates (`git fetch upstream`) and review diffs for `AGENTS.md`, `.agentic/skills.yml`, per-feature change files in `.agentic/releases/`, and workflows in `.github/workflows/` that contain `PLATES-CORE` markers.
 2. Import only upstream-owned `PLATES-CORE` sections into your customized files.
 3. Preserve local sections outside those markers.
 4. Open an atomic PR with the correct PR type label and issue linkage (`Closes #N` when applicable).
-5. Update your `CURRENT.md` entry with imported behavior and evidence.
+5. Update your per-feature change files in `.agentic/releases/` entry with imported behavior and evidence.
 6. Run required checks before merge.
 
 This keeps downstream repos aligned with new core PLATE behavior without erasing project-specific policy.
 <!-- PLATES-CORE:END keeping-your-fork-current -->
+

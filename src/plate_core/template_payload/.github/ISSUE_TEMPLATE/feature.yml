@@ -49,7 +49,7 @@ body:
     id: documentation
     attributes:
       label: Documentation and traceability impact
-      description: Identify expected updates to CURRENT.md, wiki/docs, release notes, public claims, or ADRs.
+      description: Identify expected updates to per-feature change files in `.agentic/releases/`, wiki/docs, release notes, public claims, or ADRs.
     validations:
       required: true
   - type: textarea
