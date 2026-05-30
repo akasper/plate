@@ -12,6 +12,7 @@ from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
+from .contemplation import ContemplationEngine, trigger_contemplation
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
     GetAnswersTool,
@@ -115,6 +116,19 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = resolve_review_thread(
                 thread_id=thread_id,
                 repo=args.get("repo"),
+            )
+        elif name == "plate_contemplate":
+            # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
+            qn = args.get("question_number")
+            if not qn:
+                raise ValueError("question_number is required")
+            payload = trigger_contemplation(
+                question_number=qn,
+                answer_text=args.get("answer_text", ""),
+                repo=args.get("repo"),
+                session=args.get("session"),
+                source=args.get("source", "contemplation"),
+                answered_by=args.get("answered_by", "engine"),
             )
         elif name in CURIOSITY_TOOLS:
             # Curiosity / Q&A Mode tools (Epic #139 / Feature #154)
@@ -404,6 +418,22 @@ def run() -> None:
                                         },
                                     },
                                     "required": ["thread_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_contemplate",
+                                "description": "Run the Contemplation Engine on an answer to a Question (Epic #139 / #149). Creates follow-up issues, posts structured log, detects close signals. Core driver of autonomous progress from Q&A.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "question_number": {"type": "integer", "description": "The Question being answered."},
+                                        "answer_text": {"type": "string", "description": "The answer text (full transcript captured)."},
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "session": {"type": "string", "description": "Session/turn for provenance."},
+                                        "source": {"type": "string", "description": "qanda | agent-contemplation | blocking", "default": "contemplation"},
+                                        "answered_by": {"type": "string", "description": "Actor. Defaults to 'engine'."},
+                                    },
+                                    "required": ["question_number", "answer_text"],
                                 },
                             },
                             {
