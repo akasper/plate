@@ -86,7 +86,7 @@
   description: "Needs test plan, regression coverage, or verification evidence."
 - name: "need:docs"
   color: "ededed"
-  description: "Needs documentation, CURRENT.md, wiki, release note, or claim update."
+  description: "Needs documentation, per-feature change files, wiki, release note, or claim update."
 - name: "need:design"
   color: "ededed"
   description: "Needs UX, architecture, information design, or product design input."
