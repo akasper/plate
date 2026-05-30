@@ -27,7 +27,8 @@ PLATE defaults to an **autopilot posture**: agents should proceed autonomously t
 **PR titles are for humans.** Pull request titles must be clean, concise, and written exclusively for human readers. Do not include any bracketed label-style prefixes (for example `[Feature]`, `[Bug]`, `[Documentation]`, `[WIP]`, `[DRAFT]`, or any similar convention). Do not include issue references, closing keywords, or other metadata such as `(Closes #N)`, `Fixes #123`, or equivalent in the title.
 
 All metadata belongs in GitHub's native fields instead:
-- PR type via labels (`Bug`, `Feature`, or `Documentation`)
+- PR type via labels (`Bug`, `Feature`, `Documentation`, or `Feedback Response`)
+
 - Linked issues via the Development sidebar or a closing keyword placed only in the PR *body*
 - Work-in-progress state via the native Draft PR status
 - Epic grouping via milestones
