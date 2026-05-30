@@ -128,4 +128,4 @@ Your answer (multi-line; Ctrl-D or native submit when done):
 
 This design satisfies Design issue #144 (including the native preference clarification) and completes the four required design artifacts for Epic #139 children. It directly addresses the final placeholder violation in the devin review thread (original databaseId 3328893056). Cross-references research inventory #140 (pending) and all siblings. All changes on the existing PR branch. (1 code change this babysit cycle; cap respected.)
 
-(The prior three design files were already populated in commit 77c37226a1de85b886662ce640bab97abecbcd95.)
+(The prior three design files were already populated in commit d3f4d40f8518c7a58ba3d9ec6ee6fef86aeb0c43.)
