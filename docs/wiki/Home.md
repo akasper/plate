@@ -2,9 +2,9 @@
 
 This page is a repository-managed wiki source file. When PLATE wiki sync is enabled, scoped files under `docs/wiki/` may be copied into the GitHub wiki after merged Feature pull requests.
 
-## Current State
+## Release Notes and Change Files
 
-Link to `CURRENT.md` or the synchronized `Current-State` wiki page.
+Link to versioned per-feature change files under `.agentic/releases/` and any generated migration guidance pages.
 
 ## Feature Documentation
 
