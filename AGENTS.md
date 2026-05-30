@@ -13,7 +13,7 @@ The PLATE book explains doctrine and the reasons behind the method. This reposit
 | Product intent | Draft proposals, clarify ambiguities, identify conflicts, and map work to issues. | Final scope, priority, product tradeoffs, public commitments, and roadmap direction. |
 | Implementation | Modify code, tests, docs, and configuration inside an approved task. | Acceptance of risk, merge approval, release approval, and irreversible operational changes. |
 | Process | Follow PLATE rules, detect drift, and suggest process improvements. | Changing required gates, weakening checks, changing merge policy, or adopting new required automation. |
-| Documentation | Update `CURRENT.md`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
+| Documentation | Update `CURRENT.md`, wiki source pages, release notes under `.agentic/releases/`, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
 | Stack selection | Prototype and benchmark candidate stacks per the Research issue. | Final language/runtime choice and distribution format. |
 
 ## Autopilot Doctrine
@@ -60,8 +60,9 @@ Follow the loop that matches the issue type.
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
 | 5 | Update `CURRENT.md` to describe the implemented behavior and verification evidence. |
-| 6 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
-| 7 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
+| 6 | Add or update `.agentic/releases/` when the change affects PLATE process or templates. |
+| 7 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
+| 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
 **Bug**
 
@@ -231,7 +232,7 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 ## Documentation Rules
 
-Every Feature pull request must modify `CURRENT.md`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. If a change affects feature behavior, update both implementation evidence and documentation evidence.
+Every Feature pull request must modify `CURRENT.md`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. Changes that alter PLATE behavior or process should also update `.agentic/releases/`. If a change affects feature behavior, update both implementation evidence and documentation evidence.
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 

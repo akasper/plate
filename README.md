@@ -108,6 +108,7 @@ Copilot Plugin (plugin)............ ✅ ENABLED
 MCP Manifest (.plugin)............. ✅ ENABLED
 MCP Manifest (plugin).............. ✅ ENABLED
 CURRENT.md......................... ✅ ENABLED
+Release notes..................... ✅ ENABLED
 Baseline Agents Catalog........... ✅ ENABLED
 Playwright E2E Testing............. ✅ ENABLED
 ```
@@ -146,11 +147,11 @@ If your repository started from an older `plate_template` release and has local 
 <!-- PLATES-CORE:BEGIN keeping-your-fork-current -->
 Use this sync flow:
 
-1. Fetch upstream template updates (`git fetch upstream`) and review diffs for `AGENTS.md`, `.agentic/skills.yml`, `CURRENT.md`, and workflows in `.github/workflows/` that contain `PLATES-CORE` markers.
+1. Fetch upstream template updates (`git fetch upstream`) and review diffs for `AGENTS.md`, `.agentic/skills.yml`, `.agentic/releases/`, `CURRENT.md`, and workflows in `.github/workflows/` that contain `PLATES-CORE` markers.
 2. Import only upstream-owned `PLATES-CORE` sections into your customized files.
 3. Preserve local sections outside those markers.
 4. Open an atomic PR with the correct PR type label and issue linkage (`Closes #N` when applicable).
-5. Update your `CURRENT.md` entry with imported behavior and evidence.
+5. Update your `CURRENT.md` entry with imported behavior and evidence, and add a release-note record if the change affects PLATE itself.
 6. Run required checks before merge.
 
 This keeps downstream repos aligned with new core PLATE behavior without erasing project-specific policy.
