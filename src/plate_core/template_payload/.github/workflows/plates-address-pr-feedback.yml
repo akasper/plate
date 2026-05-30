@@ -1,0 +1,213 @@
+name: PLATES Auto-Address PR Feedback
+
+# Fires when a third-party agent submits a PR review or leaves an inline
+# comment. If the sender matches a known agent list, post a deduplicated
+# @copilot trigger comment directly on the same PR so Copilot addresses the
+# feedback inline. This flow intentionally avoids creating a new Issue or
+# opening a separate "Feedback Response" PR.
+
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  address-feedback:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: plates-feedback-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Detect third-party agent feedback
+        id: detect
+        uses: actions/github-script@v7
+        env:
+          AGENT_LOGINS: ${{ vars.PLATE_PR_FEEDBACK_AGENTS }}
+        with:
+          script: |
+            // PLATE_PR_FEEDBACK_AGENTS repo variable: comma-separated GitHub logins
+            // of third-party agents whose feedback should trigger auto-addressing.
+            // Falls back to well-known default patterns when the variable is not set.
+            const configuredLogins = (process.env.AGENT_LOGINS || '')
+              .split(',')
+              .map((s) => s.trim().toLowerCase())
+              .filter(Boolean);
+
+            const DEFAULT_AGENT_PATTERNS = [
+              /^devin/i,
+              /^openhands/i,
+              /^codegen/i,
+              /^swe-agent/i,
+              /^aide-agent/i,
+              /^mentat-bot/i,
+            ];
+
+            const isKnownAgent = (login) => {
+              const lower = login.toLowerCase();
+              if (configuredLogins.length > 0) {
+                return configuredLogins.includes(lower);
+              }
+              return DEFAULT_AGENT_PATTERNS.some((pattern) => pattern.test(login));
+            };
+
+            let reviewer = null;
+            let prNumber = null;
+            let reviewState = null;
+            let feedbackUrl = null;
+            let isBatchReview = false;
+            let prBranch = null;
+            let prTitle = null;
+
+            if (context.eventName === 'pull_request_review') {
+              const review = context.payload.review;
+              const pr = context.payload.pull_request;
+              reviewer = review.user?.login;
+              reviewState = (review.state || '').toLowerCase();
+              feedbackUrl = review.html_url;
+              prNumber = pr.number;
+              prBranch = pr.head.ref;
+              prTitle = pr.title;
+              isBatchReview = true;
+
+              // An "approved" review with no body is a rubber stamp — nothing to act on.
+              if (reviewState === 'approved' && !review.body?.trim()) {
+                core.info(`Skipping approved review with no body from @${reviewer}.`);
+                core.setOutput('should_act', 'false');
+                return;
+              }
+            } else if (context.eventName === 'pull_request_review_comment') {
+              const comment = context.payload.comment;
+              const pr = context.payload.pull_request;
+              reviewer = comment.user?.login;
+              feedbackUrl = comment.html_url;
+              prNumber = pr.number;
+              prBranch = pr.head.ref;
+              prTitle = pr.title;
+              reviewState = 'commented';
+              isBatchReview = false;
+            }
+
+            if (!reviewer || !prNumber) {
+              core.info('Unable to determine reviewer or PR number; skipping.');
+              core.setOutput('should_act', 'false');
+              return;
+            }
+
+            const { data: prIssue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const prLabels = (prIssue.labels || []).map((label) =>
+              typeof label === 'string' ? label : label.name
+            );
+
+            if (prLabels.includes('Feedback Response')) {
+              core.info(`PR #${prNumber} is labeled Feedback Response; skipping third-party feedback auto-addressing.`);
+              core.setOutput('should_act', 'false');
+              return;
+            }
+
+            if (!isKnownAgent(reviewer)) {
+              core.info(`@${reviewer} is not a known third-party agent; skipping.`);
+              core.setOutput('should_act', 'false');
+              return;
+            }
+
+            core.info(`Detected feedback from known agent @${reviewer} on PR #${prNumber} (state: ${reviewState}, batch: ${isBatchReview}).`);
+
+            // Deduplication: avoid posting multiple trigger comments within a short
+            // window when a single review fires several parallel events.
+            const MARKER = `<!-- plates-feedback-trigger:${reviewer} -->`;
+            const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+
+            const allComments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            const recentTriggers = allComments.filter(
+              (c) => c.body?.includes(MARKER)
+            );
+            const latestTriggerAt = recentTriggers.length > 0
+              ? new Date(recentTriggers[recentTriggers.length - 1].created_at).getTime()
+              : 0;
+
+            if (Date.now() - latestTriggerAt < COOLDOWN_MS) {
+              core.info(`Copilot session already triggered within cooldown window for @${reviewer} on PR #${prNumber}; skipping.`);
+              core.setOutput('should_act', 'false');
+              return;
+            }
+
+            const stateLabel = {
+              changes_requested: 'changes requested',
+              commented: 'feedback',
+              approved: 'approved with notes',
+            }[reviewState] || reviewState;
+
+            core.setOutput('should_act', 'true');
+            core.setOutput('reviewer', reviewer);
+            core.setOutput('pr_number', String(prNumber));
+            core.setOutput('pr_branch', prBranch);
+            core.setOutput('pr_title', prTitle || `PR #${prNumber}`);
+            core.setOutput('feedback_url', feedbackUrl);
+            core.setOutput('state_label', stateLabel);
+            core.setOutput('marker', MARKER);
+
+      - name: Trigger Copilot inline on PR
+        if: steps.detect.outputs.should_act == 'true'
+        uses: actions/github-script@v7
+        env:
+          REVIEWER: ${{ steps.detect.outputs.reviewer }}
+          PR_NUMBER: ${{ steps.detect.outputs.pr_number }}
+          PR_BRANCH: ${{ steps.detect.outputs.pr_branch }}
+          PR_TITLE: ${{ steps.detect.outputs.pr_title }}
+          FEEDBACK_URL: ${{ steps.detect.outputs.feedback_url }}
+          STATE_LABEL: ${{ steps.detect.outputs.state_label }}
+          TRIGGER_MARKER: ${{ steps.detect.outputs.marker }}
+        with:
+          # COPILOT_TRIGGER_PAT is preferred because @copilot routing often requires a
+          # user token. If absent, fallback to GITHUB_TOKEN (best effort).
+          github-token: ${{ secrets.COPILOT_TRIGGER_PAT || github.token }}
+          script: |
+            const reviewer = process.env.REVIEWER;
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            const prBranch = process.env.PR_BRANCH;
+            const prTitle = process.env.PR_TITLE;
+            const feedbackUrl = process.env.FEEDBACK_URL;
+            const stateLabel = process.env.STATE_LABEL;
+            const MARKER = process.env.TRIGGER_MARKER;
+
+            const triggerBody = [
+              MARKER,
+              `@copilot Please address @${reviewer}'s ${stateLabel} feedback on this PR (**#${prNumber}: ${prTitle}**).`,
+              '',
+              `Feedback thread: ${feedbackUrl}`,
+              '',
+              'Requirements:',
+              `1. Review all open inline comments and the overall review body from @${reviewer}.`,
+              '2. For GitHub code suggestions (` ```suggestion ` blocks), apply them unless they introduce a bug or rely on a false assumption; if skipped, reply with a brief explanation.',
+              '3. For all other actionable comments, make the necessary code change or reply explaining why no change is needed.',
+              '4. Resolve each addressed review thread (via GraphQL `resolveReviewThread`).',
+              `5. Push all changes to the existing branch \`${prBranch}\` and update this PR.`,
+              '6. Do not open a new issue and do not open a new pull request for this feedback response.',
+              '7. If any item requires human judgment (credentials, architecture, security-sensitive decisions), add `need:human-review` to this PR and leave a blocking comment with specifics.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: triggerBody,
+            });
+
+            core.info(`Copilot inline trigger comment posted on PR #${prNumber}.`);

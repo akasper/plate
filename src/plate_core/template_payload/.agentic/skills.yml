@@ -1,0 +1,151 @@
+skills_registry:
+  version: "0.1"
+  purpose: "Describe controlled agent capability profiles that may operate in a PLATE repository."
+  default_policy:
+    human_approval_required_for:
+      - "merge"
+      - "release"
+      - "public claim changes"
+      - "secret or permission changes"
+      - "workflow gate weakening"
+    evidence_required: true
+    issue_closure_usage_report_required: true
+
+skills:
+  - id: "implementation"
+    description: "Implement approved issues with tests and documentation updates."
+    allowed_artifacts:
+      - "src/**"
+      - "app/**"
+      - "tests/**"
+      - "CURRENT.md"
+      - "docs/**"
+    required_evidence:
+      - "linked issue"
+      - "tests run"
+      - "CURRENT.md update for Feature PRs"
+      - "closing issue comment includes structured === USAGE REPORT === block"
+    prohibited_actions:
+      - "merge own pull request"
+      - "weaken tests to pass CI"
+  - id: "documentation"
+    description: "Maintain product documentation, wiki source material, release notes, and traceability summaries."
+    allowed_artifacts:
+      - "README.md"
+      - "CURRENT.md"
+      - "docs/**"
+      - "CHANGELOG.md"
+    required_evidence:
+      - "source artifact links"
+      - "claim status"
+  - id: "question-handling"
+    description: "Batch triage open Question issues, capture answers, and convert decisions into durable process artifacts."
+    allowed_artifacts:
+      - "AGENTS.md"
+      - ".agentic/skills.yml"
+      - ".agentic/extensions.yml"
+      - "docs/research/**"
+      - ".github/workflows/question-handling.yml"
+      - "scripts/question_batch.sh"
+      - "scripts/QuestionBatch.ps1"
+    required_evidence:
+      - "linked Question issue(s)"
+      - "answer summary"
+      - "artifact updates"
+      - "workflow trigger evidence"
+      - "closing issue comment includes structured === USAGE REPORT === block"
+  - id: "audit"
+    description: "Detect drift among SPEC, CURRENT, tests, issues, wiki, workflows, labels, and public claims."
+    allowed_artifacts:
+      - "docs/audits/**"
+      - ".agentic/audit.yml"
+    required_evidence:
+      - "audit scope"
+      - "findings with severity"
+      - "corrective issues or PRs"
+  - id: "wiki-sync"
+    description: "Prepare or execute scoped wiki updates after merged Feature PRs."
+    allowed_artifacts:
+      - "docs/wiki/**"
+      - "docs/features/**"
+      - "CURRENT.md"
+    required_evidence:
+      - "merged Feature PR"
+      - "provenance summary"
+      - "scoped file list"
+    requires_human_enablement: true
+  - id: "custom-agents"
+    description: "Author and maintain custom Copilot agents (.agent.md files) for domain-specific AI assistance."
+    allowed_artifacts:
+      - ".github/agents/*.agent.md"
+      - ".agentic/extensions.yml"
+      - ".agentic/skills.yml"
+      - "docs/research/**"
+    required_evidence:
+      - "linked issue or extension request"
+      - "agent file with valid frontmatter"
+      - "extension registry entry"
+  - id: "pr-feedback-response"
+    description: "Address actionable PR feedback from known third-party agents (Devin, OpenHands, etc.) on non-`Feedback Response` PRs inline on the existing PR branch (no new issue, no follow-up PR). Triggered by plates-address-pr-feedback.yml."
+    allowed_artifacts:
+      - "src/**"
+      - "app/**"
+      - "tests/**"
+      - "docs/**"
+      - "CURRENT.md"
+    required_evidence:
+      - "PLATES feedback trigger comment on the PR"
+      - "response to each actionable review comment"
+      - "need:human-review label if any item requires human judgment"
+    prohibited_actions:
+      - "merge own pull request"
+      - "modify AGENTS.md, SPEC.md, or workflow files without explicit approval"
+      - "change credentials, secrets, or authentication configuration"
+  - id: "interactive-epic-planning"
+    description: "Conduct a guided Q&A session to extract epic requirements and progressively create the Epic issue and child stubs on GitHub."
+    allowed_artifacts:
+      - "docs/research/**"
+      - "docs/design/**"
+    required_evidence:
+      - "Epic issue number"
+      - "Q&A turn log or summary comment on the Epic issue"
+      - "child issue numbers created"
+      - "PLATE_SESSION_STATE persisted in Epic body"
+    prohibited_actions:
+      - "create Epic without name and problem statement"
+      - "merge own pull request"
+      - "skip duplicate detection before creating"
+      - "create more than 3 child stubs per type without user confirmation"
+  - id: "playwright-e2e"
+    description: "Write, debug, and record Playwright E2E tests for UI features; generate demo GIFs."
+    allowed_artifacts:
+      - "tests/e2e/specs/**"
+      - "tests/e2e/pages/**"
+      - "tests/e2e/fixtures/gifs/**"
+      - "CURRENT.md"
+      - "docs/playwright-e2e-guide.md"
+      - "tests/e2e/README.md"
+    required_evidence:
+      - "new E2E test spec for UI features"
+      - "tests pass locally: `npm run test:e2e`"
+      - "demo GIF recorded (2–5 sec) and committed for user-visible features"
+      - "GIF size within limits (warn <3MB, fail >5MB)"
+      - "GIF embedding in PR description or CURRENT.md"
+    prohibited_actions:
+      - "merge PR without E2E tests passing"
+      - "test internal logic or non-browser services with Playwright (use unit tests instead)"
+  # PLATES-CORE:BEGIN template-sync-skill
+  - id: "template-sync"
+    description: "Import upstream PLATE template behavior changes while preserving downstream customizations."
+    allowed_artifacts:
+      - "AGENTS.md"
+      - ".agentic/skills.yml"
+      - "README.md"
+      - "CURRENT.md"
+      - ".github/workflows/**"
+    required_evidence:
+      - "upstream comparison reference"
+      - "PLATES-CORE block list"
+      - "downstream customization preservation summary"
+      - "checks run"
+  # PLATES-CORE:END template-sync-skill

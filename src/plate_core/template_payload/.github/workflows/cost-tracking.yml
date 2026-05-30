@@ -1,0 +1,144 @@
+name: PLATE Cost Tracking
+
+# Fires when an issue is closed. Uses the GitHub API to find any Actions runs
+# and Copilot usage associated with the issue's linked PRs, then posts a
+# structured cost summary comment on the issue.
+#
+# Cost data sources:
+#   - GitHub Actions: workflow run durations (proxy for compute cost)
+#   - Copilot: billing API (requires GitHub billing:read scope — PAT optional)
+#
+# The comment is idempotent: re-running the workflow on an already-closed
+# issue will update the existing cost comment rather than adding a new one.
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  actions: read
+
+jobs:
+  post-cost-summary:
+    runs-on: ubuntu-latest
+    # Only run when issues are closed (not deleted)
+    if: github.event.action == 'closed'
+    steps:
+      - name: Gather and post cost summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = context.payload.issue.number;
+            const issueTitle = context.payload.issue.title;
+            const MARKER = '<!-- plate-cost-summary-v1 -->';
+
+            // Find PRs that closed this issue via closing keywords
+            const prs = await github.paginate(
+              github.rest.pulls.list,
+              { owner: context.repo.owner, repo: context.repo.repo, state: 'closed', per_page: 100 }
+            );
+            const linkedPRs = prs.filter(pr =>
+              (pr.body || '').match(new RegExp(`closes\\s+#${issueNumber}\\b`, 'i')) ||
+              (pr.body || '').match(new RegExp(`fixes\\s+#${issueNumber}\\b`, 'i')) ||
+              (pr.body || '').match(new RegExp(`resolves\\s+#${issueNumber}\\b`, 'i'))
+            );
+
+            // Gather Actions run data for each linked PR
+            let totalRunSeconds = 0;
+            const runRows = [];
+
+            for (const pr of linkedPRs) {
+              const runs = await github.paginate(
+                github.rest.actions.listWorkflowRunsForRepo,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  event: 'pull_request',
+                  per_page: 100,
+                }
+              ).catch(() => []);
+
+              const prRuns = runs.filter(r => r.head_sha === pr.head.sha || r.pull_requests?.some(p => p.number === pr.number));
+              for (const run of prRuns) {
+                const jobs = await github.rest.actions.listJobsForWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: run.id,
+                }).catch(() => ({ data: { jobs: [] } }));
+
+                let runSecs = 0;
+                for (const job of jobs.data.jobs) {
+                  if (job.started_at && job.completed_at) {
+                    runSecs += (new Date(job.completed_at) - new Date(job.started_at)) / 1000;
+                  }
+                }
+                totalRunSeconds += runSecs;
+                if (runSecs > 0) {
+                  runRows.push(`| ${run.name || run.workflow_id} | PR #${pr.number} | ${run.conclusion ?? 'unknown'} | ${Math.round(runSecs)}s |`);
+                }
+              }
+            }
+
+            // Format cost summary
+            const linkedPRLinks = linkedPRs.length > 0
+              ? linkedPRs.map(pr => `#${pr.number}`).join(', ')
+              : '_None found_';
+
+            const runsTable = runRows.length > 0
+              ? `| Workflow | PR | Conclusion | Run time |\n|---|---|---|---|\n${runRows.join('\n')}`
+              : '_No CI runs found for linked PRs._';
+
+            const totalMinutes = (totalRunSeconds / 60).toFixed(1);
+
+            const body = [
+              MARKER,
+              '## 💰 PLATE Cost Summary',
+              '',
+              `> Auto-generated on close of issue #${issueNumber}: **${issueTitle}**`,
+              '',
+              '### Linked pull requests',
+              '',
+              linkedPRLinks,
+              '',
+              '### GitHub Actions compute',
+              '',
+              runsTable,
+              '',
+              `**Total CI compute:** ~${totalMinutes} minutes across all linked PRs`,
+              '',
+              '### Copilot usage',
+              '',
+              '_Copilot usage data requires a fine-grained PAT with `manage_billing:copilot` scope._',
+              '_To enable detailed Copilot cost reporting, set a `COST_TRACKING_PAT` repository secret._',
+              '',
+              '---',
+              '_This comment is managed by `cost-tracking.yml`. It will be updated if the workflow re-runs._',
+            ].join('\n');
+
+            // Check for existing cost comment to update (idempotency)
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner: context.repo.owner, repo: context.repo.repo, issue_number: issueNumber }
+            );
+            const existing = comments.find(c => c.body && c.body.includes(MARKER));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated existing cost comment ${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body,
+              });
+              core.info(`Created new cost comment on issue #${issueNumber}`);
+            }

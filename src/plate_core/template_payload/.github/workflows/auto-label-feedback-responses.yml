@@ -1,0 +1,55 @@
+name: Auto-label Feedback Response PRs
+
+# Automatically apply risk:low and auto-merge labels to Feedback Response PRs.
+# These labels mark a PR as eligible for autonomous auto-merge when AUTONOMOUS_MODE is active.
+#
+# Feedback Response PRs are low-risk by design:
+# - They address third-party agent review feedback (no new feature scope)
+# - They preserve the original PR's intent and implementation approach
+# - They are typically small, focused, localized changes
+# - They are created by automated workflows with audit trails
+#
+# Therefore, risk:low and auto-merge are safe to apply automatically without human review.
+# If a PR genuinely requires elevated risk consideration, the Feedback Response label
+# should not have been applied in the first place — or it should be removed manually
+# before merge is allowed.
+
+on:
+  pull_request:
+    types: [labeled, opened]
+
+jobs:
+  auto-label-feedback:
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'Feedback Response') ||
+      (github.event.action == 'opened' && contains(github.event.pull_request.labels.*.name, 'Feedback Response'))
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Apply risk:low and auto-merge labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const currentLabels = pr.labels.map(l => l.name);
+            
+            const labelsToAdd = [];
+            if (!currentLabels.includes('risk:low')) {
+              labelsToAdd.push('risk:low');
+            }
+            if (!currentLabels.includes('auto-merge')) {
+              labelsToAdd.push('auto-merge');
+            }
+            
+            if (labelsToAdd.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: labelsToAdd,
+              });
+              core.info(`Added labels to PR #${pr.number}: ${labelsToAdd.join(', ')}`);
+            } else {
+              core.info(`PR #${pr.number} already has risk:low and auto-merge labels.`);
+            }

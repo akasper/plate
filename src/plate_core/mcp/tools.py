@@ -7,17 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-
-def _get_template_repo() -> Path:
-    """Get path to plate_template repository."""
-    cwd = Path.cwd()
-    template = cwd.parent / "plate_template"
-    if template.exists():
-        return template
-    raise RuntimeError(
-        f"Could not find plate_template repository. "
-        f"Expected at: {template}"
-    )
+from ..template_payload import resolve_template_source_root
 
 
 # Maximum time (seconds) to wait for an E2E recording script before timing out.
@@ -30,11 +20,11 @@ class InitPlaywrightTool:
     @staticmethod
     def execute(repo_path: str, template_repo: str | None = None, force: bool = False) -> dict:
         """
-        Copy Playwright config, example specs, and GIF scripts from template.
+        Copy Playwright config, example specs, and GIF scripts from template payload.
 
         Args:
             repo_path: Path to target repo
-            template_repo: Source template path (optional; uses plate_template if not provided)
+            template_repo: Source template path override (optional)
             force: If True, overwrite existing tests/e2e/ directory. Defaults to False.
 
         Returns:
@@ -49,10 +39,7 @@ class InitPlaywrightTool:
             return {"status": "error", "message": f"Repository not found: {repo_path}"}
 
         try:
-            if template_repo:
-                template = Path(template_repo).resolve()
-            else:
-                template = _get_template_repo()
+            template = resolve_template_source_root(template_repo)
 
             if not template.exists():
                 return {"status": "error", "message": f"Template not found: {template}"}
@@ -292,9 +279,9 @@ class ValidateE2eTestsTool:
 
         # Check for recording scripts
         if not (repo / "scripts" / "e2e-record.sh").exists():
-            recommendations.append("Copy e2e-record.sh from plate_template/scripts/")
+            recommendations.append("Copy e2e-record.sh from template payload scripts/")
         if not (repo / "scripts" / "e2e-record.ps1").exists():
-            recommendations.append("Copy e2e-record.ps1 from plate_template/scripts/")
+            recommendations.append("Copy e2e-record.ps1 from template payload scripts/")
 
         # Check .env.local
         if not (repo / ".env.local").exists():

@@ -1,0 +1,166 @@
+name: PLATES Unblock Features
+
+on:
+  issues:
+    types: [closed, labeled]
+
+permissions:
+  actions: write
+  issues: write
+
+jobs:
+  unblock-ready-features:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote unblocked Feature issues to ready
+        uses: actions/github-script@v7
+        env:
+          ORCHESTRATOR_WORKFLOW: ${{ vars.PLATE_MAIN_ORCHESTRATOR_WORKFLOW }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const triggerIssue = context.payload.issue;
+
+            if (!triggerIssue || triggerIssue.pull_request) {
+              core.info('Event is not a repository issue; skipping.');
+              return;
+            }
+
+            const listDependencyIssues = async (route, issueNumber) => {
+              const all = [];
+              for (let page = 1; page <= 10; page += 1) {
+                const response = await github.request(route, {
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  per_page: 100,
+                  page
+                });
+                const batch = Array.isArray(response.data)
+                  ? response.data
+                  : (Array.isArray(response.data?.issues) ? response.data.issues : []);
+                all.push(...batch);
+                if (batch.length < 100) break;
+              }
+              return all;
+            };
+
+            let dependentIssues = [];
+            try {
+              dependentIssues = await listDependencyIssues(
+                'GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocking',
+                triggerIssue.number
+              );
+            } catch (error) {
+              core.warning(`Could not read dependency graph for issue #${triggerIssue.number}: ${error.message}`);
+              return;
+            }
+
+            if (dependentIssues.length === 0) {
+              core.info(`No dependent issues blocked by #${triggerIssue.number}.`);
+              return;
+            }
+
+            const featureDependents = dependentIssues.filter((issue) => {
+              if (!issue || issue.pull_request) return false;
+              const labels = (issue.labels || []).map((label) => (typeof label === 'string' ? label : label.name || '').toLowerCase());
+              return labels.includes('feature');
+            });
+
+            if (featureDependents.length === 0) {
+              core.info('Dependent issues exist, but none are labeled Feature.');
+              return;
+            }
+
+            for (const feature of featureDependents) {
+              let blockers = [];
+              try {
+                blockers = await listDependencyIssues(
+                  'GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by',
+                  feature.number
+                );
+              } catch (error) {
+                core.warning(`Unable to list blockers for feature #${feature.number}: ${error.message}`);
+                continue;
+              }
+
+              const openBlockers = blockers.filter((issue) => issue && issue.state !== 'closed');
+              if (openBlockers.length > 0) {
+                core.info(`Feature #${feature.number} still has ${openBlockers.length} open blocker(s).`);
+                continue;
+              }
+
+              const existingLabels = (feature.labels || []).map((label) => (typeof label === 'string' ? label : label.name || ''));
+              const nextLabels = [...new Set(existingLabels.filter((name) => name !== 'status:blocked').concat('status:ready-to-work'))];
+
+              const changed =
+                nextLabels.length !== existingLabels.length ||
+                nextLabels.some((label) => !existingLabels.includes(label));
+
+              if (!changed) {
+                core.info(`Feature #${feature.number} already has ready labels.`);
+                continue;
+              }
+
+              await github.rest.issues.setLabels({
+                owner,
+                repo,
+                issue_number: feature.number,
+                labels: nextLabels
+              });
+
+              core.info(`Feature #${feature.number} moved to status:ready-to-work.`);
+
+              // GitHub suppresses workflow runs for events created by GITHUB_TOKEN,
+              // so applying status:ready-to-work above will not trigger
+              // plates-start-feature.yml. Inline the kickoff here so the
+              // unblock -> ready -> start chain remains intact.
+              const workflowId = String(process.env.ORCHESTRATOR_WORKFLOW || '').trim();
+              let dispatched = false;
+
+              if (workflowId) {
+                try {
+                  await github.rest.actions.createWorkflowDispatch({
+                    owner,
+                    repo,
+                    workflow_id: workflowId,
+                    ref: context.payload.repository.default_branch,
+                    inputs: {
+                      issue_number: String(feature.number),
+                      issue_url: feature.html_url,
+                      trigger: 'status:ready-to-work'
+                    }
+                  });
+                  dispatched = true;
+                } catch (error) {
+                  core.warning(`Failed to dispatch ${workflowId} for feature #${feature.number}: ${error.message}`);
+                }
+              }
+
+              const kickoffBody = dispatched
+                ? [
+                    'PLATES kickoff: dispatched the main orchestrator workflow for this ready Feature issue.',
+                    '',
+                    `- Workflow: \`${workflowId}\``,
+                    `- Trigger: \`status:ready-to-work\` (auto-promoted by plates-unblock-features)`
+                  ].join('\n')
+                : [
+                    'PLATES kickoff: this Feature issue is ready to work.',
+                    '',
+                    'No orchestrator workflow is configured, so this comment acts as the GitHub-native start trigger.',
+                    '',
+                    '```text',
+                    '@copilot start',
+                    `issue: #${feature.number}`,
+                    'mode: feature-implementation',
+                    '```'
+                  ].join('\n');
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: feature.number,
+                body: kickoffBody
+              });
+            }

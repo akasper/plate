@@ -207,7 +207,7 @@ def run() -> None:
                                         },
                                         "template_repo": {
                                             "type": "string",
-                                            "description": "Path to template repository. Defaults to plate_template.",
+                                            "description": "Path to template source override. Defaults to plate payload in this repository.",
                                         },
                                         "force": {
                                             "type": "boolean",

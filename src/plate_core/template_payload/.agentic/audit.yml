@@ -1,0 +1,49 @@
+audit:
+  version: "0.1"
+  cadence:
+    scheduled: "weekly"
+    pre_release: true
+    manual_dispatch: true
+  output_directory: "docs/audits"
+  issue_template: ".github/ISSUE_TEMPLATE/audit-finding.yml"
+
+severity:
+  critical: "Unsupported public claim, security-sensitive drift, broken required gate, or release-blocking evidence gap."
+  high: "Implemented behavior lacks tests, CURRENT entry, or linked issue."
+  medium: "Wiki, release note, or traceability record is stale but product truth remains recoverable."
+  low: "Cosmetic or wording drift that does not affect routing, evidence, or public claims."
+
+checks:
+  - id: "feature-current-state"
+    description: "Every merged Feature PR should have a corresponding CURRENT.md update."
+    targets:
+      - "pull requests"
+      - "CURRENT.md"
+  - id: "label-taxonomy"
+    description: "Labels should match .github/labels.yml and avoid status/priority defaults."
+    targets:
+      - ".github/labels.yml"
+      - "issues"
+      - "pull requests"
+  - id: "traceability-chain"
+    description: "Implemented features should link intent, issue, tests, PR, CURRENT, wiki/docs, and release where applicable."
+    targets:
+      - "SPEC.md"
+      - "CURRENT.md"
+      - "tests"
+      - "docs"
+  - id: "public-claims"
+    description: "Marketing or README claims should be supported by CURRENT.md or clearly marked as planned."
+    targets:
+      - "README.md"
+      - "docs/marketing"
+      - "site"
+
+escalation:
+  create_issue_for_severity:
+    - "critical"
+    - "high"
+  require_human_review_for:
+    - "public claim drift"
+    - "security-sensitive drift"
+    - "workflow gate weakening"

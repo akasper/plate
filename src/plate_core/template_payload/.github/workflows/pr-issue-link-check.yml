@@ -1,0 +1,64 @@
+name: PLATE PR Issue Link Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-closing-keyword:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for issue closing keyword
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const labels = (context.payload.pull_request.labels || []).map((l) => l.name);
+
+            // PRs explicitly labeled no-issue are exempt (dependency bumps, hotfixes, etc.)
+            if (labels.includes('no-issue')) {
+              core.info('PR labeled no-issue — closing keyword check skipped.');
+              return;
+            }
+
+            // GitHub's native closing keywords (case-insensitive), optionally followed by a URL or #number
+            const closingPattern = /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(#\d+|https?:\/\/github\.com\/[^\s]+\/issues\/\d+)/i;
+
+            if (closingPattern.test(body)) {
+              core.info('Closing keyword found — linked issue will auto-close on merge.');
+              return;
+            }
+
+            // Feature and Bug PRs are expected to always link an issue; fail for those.
+            // Feedback Response PRs are auto-generated and exempt from closing keyword requirement.
+            if (labels.includes('Feedback Response')) {
+              core.info('PR labeled Feedback Response — closing keyword check skipped.');
+              return;
+            }
+            const requiresIssue = labels.some((l) => ['Feature', 'Bug'].includes(l));
+
+            const message = [
+              '## ⚠️ No issue closing keyword detected',
+              '',
+              'PLATE requires every PR that resolves an issue to include a closing keyword in the PR body:',
+              '',
+              '```',
+              'Closes #N',
+              '```',
+              '',
+              'Supported keywords: `Closes`, `Fixes`, `Resolves` (case-insensitive).',
+              '',
+              requiresIssue
+                ? '**This PR is labeled `Feature` or `Bug` and must link a closing issue. Please add `Closes #N` to the PR body.**'
+                : 'If this PR does not resolve a tracked issue, add the `no-issue` label to silence this warning.',
+            ].join('\n');
+
+            if (requiresIssue) {
+              core.setFailed(message);
+            } else {
+              core.warning(message);
+            }

@@ -1,0 +1,30 @@
+schema_version: 1
+
+# Files selected into the canonical template payload used for downstream scaffolding.
+include_globs:
+  - ".agentic/**"
+  - ".github/**"
+  - "docs/**"
+  - "scripts/**"
+  - "tests/e2e/**"
+  - "tests/spike-videos/**"
+  - "tests/README.md"
+  - "AGENTS.md"
+  - "CHANGELOG.md"
+  - "CONTRIBUTING.md"
+  - "CURRENT.md"
+  - "README.md"
+  - "SPEC.md"
+  - "package.json"
+  - "playwright.config.ts"
+
+# Telemetry and workspace-specific runtime artifacts are intentionally excluded.
+exclude_globs:
+  - ".agentic/COSTS.md"
+
+# Payload files are scaffolding assets to be copied into adopting repositories.
+copy_to_downstream_globs:
+  - "**"
+
+# No files in this payload should be consumed as plate runtime-only config.
+tool_runtime_only_globs: []

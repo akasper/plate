@@ -1,0 +1,102 @@
+name: PLATE Platform Monitor
+
+# Runs weekly to check GitHub's changelog and release notes for new features,
+# workflow improvements, or Copilot capabilities that could improve the PLATE
+# template. When relevant changes are found, a new Issue is opened with the
+# Feature or Research label for triage.
+#
+# Trigger: scheduled (weekly on Monday 09:00 UTC) + manual dispatch
+# Output: GitHub issues with `area:agent` and `need:decision` labels for each
+#         identified opportunity.
+#
+# This workflow uses the GitHub Copilot agent (via issue assignment) to do
+# the actual research. It creates a Research issue and assigns it to
+# copilot-swe-agent so the research is performed autonomously.
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Monday 09:00 UTC
+  workflow_dispatch:
+    inputs:
+      force_check:
+        description: 'Force a new monitoring check regardless of last run date'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub platform research issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const today = new Date().toISOString().split('T')[0];
+            const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+            const forceCheck = String(context.payload.inputs?.force_check) === 'true';
+
+            // Check if a monitor issue was already created this week (deduplication)
+            const recentIssues = await github.paginate(
+              github.rest.issues.listForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: 'area:agent',
+                state: 'open',
+                since: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+                per_page: 50,
+              }
+            );
+            const alreadyCreated = recentIssues.some(i =>
+              i.title.includes('GitHub platform monitor') && !forceCheck
+            );
+            if (alreadyCreated) {
+              core.info('Platform monitor issue already created this week — skipping.');
+              return;
+            }
+
+            const body = [
+              '## Research Goal',
+              '',
+              `Scan GitHub changelog and release notes from **${weekAgo}** to **${today}** for:`,
+              '',
+              '1. New GitHub Actions features, actions, or runner capabilities',
+              '2. New Copilot coding agent features (assignment, skills, context)',
+              '3. New GitHub CLI features or extension APIs',
+              '4. New MCP server support or tool protocol changes',
+              '5. Any deprecated features PLATE workflows currently rely on',
+              '',
+              '## Expected Output',
+              '',
+              'For each relevant finding, open a separate `Research` or `Feature` issue in this repository with:',
+              '- Title: `[Monitor] <finding title>`',
+              '- Body: description, link to GitHub changelog/announcement, and recommended action for PLATE',
+              '- Labels: `area:agent` + `need:decision` (+ `Feature` or `Research` as appropriate)',
+              '',
+              'If no relevant changes are found, add a comment to this issue confirming the negative result and close it.',
+              '',
+              '## Sources to check',
+              '',
+              '- https://github.blog/changelog/',
+              '- https://github.com/github/roadmap',
+              '- https://docs.github.com/en/copilot/release-notes',
+              '- https://docs.github.com/en/actions/release-notes',
+              '',
+              `_Triggered automatically by \`platform-monitor.yml\` on ${today}._`,
+            ].join('\n');
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Research] GitHub platform monitor — week of ${today}`,
+              body,
+              labels: ['Research', 'area:agent', 'need:decision', 'Epic: plate-platform'],
+            });
+
+            core.info(`Created monitoring issue #${issue.data.number}: ${issue.data.html_url}`);
+            core.setOutput('issue_number', issue.data.number);

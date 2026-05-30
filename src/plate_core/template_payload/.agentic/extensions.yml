@@ -1,0 +1,61 @@
+extensions_registry:
+  version: "0.1"
+  purpose: "Track optional PLATE extensions without making every project carry every advanced artifact."
+  compatibility:
+    minimum_process_version: "0.6"
+    migration_required_when_incompatible: true
+
+extensions:
+  - id: "marketing-site"
+    status: "available"
+    description: "Adds public-facing site configuration, claim review, analytics policy, and launch checklists."
+    artifacts:
+      - ".agentic/marketing.yml"
+      - "docs/marketing/**"
+      - "site/**"
+      - ".github/workflows/pages.yml"
+    default_enabled: false
+    human_approval_required: true
+  - id: "migration"
+    status: "available"
+    description: "Adds adoption artifacts for existing projects moving into PLATE."
+    artifacts:
+      - ".agentic/migration.yml"
+      - "docs/migration/**"
+      - ".github/ISSUE_TEMPLATE/migration-task.yml"
+    default_enabled: false
+    human_approval_required: true
+  - id: "wiki-sync"
+    status: "available"
+    description: "Synchronizes scoped repository documentation into the GitHub wiki after merged Feature PRs."
+    artifacts:
+      - ".github/workflows/sync-wiki-on-merge.yml"
+      - "docs/wiki/**"
+    default_enabled: false
+    human_approval_required: true
+    enablement_variable: "PLATE_WIKI_SYNC_ENABLED"
+    required_secret: "WIKI_TOKEN"
+    rollback: "Disable the repository variable and revert the wiki sync commit if needed."
+  - id: "question-handling"
+    status: "available"
+    description: "Packages question-specific automation: issue template, slash-command batching, and answer-sync checks."
+    artifacts:
+      - ".github/ISSUE_TEMPLATE/question.yml"
+      - ".github/workflows/question-handling.yml"
+      - "scripts/question_batch.sh"
+      - "scripts/QuestionBatch.ps1"
+      - "AGENTS.md"
+      - ".agentic/skills.yml"
+    default_enabled: true
+    human_approval_required: false
+    rollback: "Revert the question-handling workflow/template/scripts and remove the Question label from active use."
+  - id: "custom-agents"
+    status: "available"
+    description: "Packages custom Copilot agents as .agent.md files in .github/agents/ for team-wide AI assistants."
+    artifacts:
+      - ".github/agents/*.agent.md"
+      - ".agentic/skills.yml"
+      - "docs/research/custom-agent-packaging.md"
+    default_enabled: true
+    human_approval_required: false
+    rollback: "Remove agent files added by this extension from .github/agents/ and their extension registry entry. Other custom agents added independently are unaffected."

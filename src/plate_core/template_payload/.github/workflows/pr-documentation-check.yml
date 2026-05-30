@@ -1,0 +1,42 @@
+name: PR Documentation Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  feature-current-md:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine whether this is a Feature PR
+        id: labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map((label) => label.name);
+            const isFeature = labels.includes('Feature');
+            core.setOutput('is_feature', String(isFeature));
+            core.info(`Feature PR: ${isFeature}`);
+      - name: Check whether CURRENT.md changed
+        if: steps.labels.outputs.is_feature == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const changed = files.map((file) => file.filename);
+            core.info(`Changed files:\n${changed.join('\n')}`);
+            if (!changed.includes('CURRENT.md')) {
+              core.setFailed('Feature pull requests must modify CURRENT.md so durable project state stays current. If this PR is not a Feature, remove the Feature label.');
+            }
+      - name: Skip non-Feature PR
+        if: steps.labels.outputs.is_feature != 'true'
+        run: echo "Not a Feature PR; CURRENT.md update is not required by this check."

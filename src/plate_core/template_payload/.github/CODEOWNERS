@@ -1,0 +1,21 @@
+# PLATE_REPO_OWNER: Replace with the GitHub username or team responsible for this repository.
+# Example: @your-username or @your-org/team-name
+# This file uses GitHub CODEOWNERS syntax to define review requirements.
+
+# Default human owner for all paths.
+* @PLATE_REPO_OWNER
+
+# PLATE process and automation artifacts require explicit owner review.
+/.agentic/ @PLATE_REPO_OWNER
+/.github/workflows/ @PLATE_REPO_OWNER
+/.github/ISSUE_TEMPLATE/ @PLATE_REPO_OWNER
+/.github/PULL_REQUEST_TEMPLATE.md @PLATE_REPO_OWNER
+/AGENTS.md @PLATE_REPO_OWNER
+/SPEC.md @PLATE_REPO_OWNER
+/CURRENT.md @PLATE_REPO_OWNER
+
+# Public claims and release posture require human review.
+/README.md @PLATE_REPO_OWNER
+/CHANGELOG.md @PLATE_REPO_OWNER
+/docs/marketing/ @PLATE_REPO_OWNER
+/site/ @PLATE_REPO_OWNER
