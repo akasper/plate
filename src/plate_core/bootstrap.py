@@ -85,22 +85,19 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
         },
         {
             "title": "[Question]: Who are the primary users or customers of this software?",
-            "body": "Describe the main personas or organizations that will use or pay for this.",
-            "answer_signal": "A concise description of the target users that can be used for roadmap and design decisions.",
+            "body": "Describe the main personas or organizations that will use or pay for this.\n\n**Answer signal:** A concise description of the target users that can be used for roadmap and design decisions.",
         },
         {
             "title": "[Question]: What are the biggest risks or unknowns for this project right now?",
-            "body": "Technical, market, team, or other uncertainties that could derail success.",
-            "answer_signal": "A short prioritized list that the team can actively de-risk.",
+            "body": "Technical, market, team, or other uncertainties that could derail success.\n\n**Answer signal:** A short prioritized list that the team can actively de-risk.",
         },
     ]
 
     # Check if any starter Questions already exist (simple heuristic for now)
-    existing_questions = gh.paginate(
-        gh.api,
-        f"repos/{target}/issues",
-        params={"labels": "Question", "state": "open", "per_page": 100},
-    )
+    # Use direct API call (per_page=100 sufficient; matches labels/epics patterns in health.py)
+    existing_questions = gh.api(
+        f"repos/{target}/issues?labels=Question&state=open&per_page=100"
+    ) or []
     has_starter_questions = any(
         q.get("title", "").startswith("[Question]:") for q in existing_questions
     )
