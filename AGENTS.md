@@ -2,7 +2,7 @@
 
 This repository follows the **Process Lifecycle Agentic Task Engine (PLATE)** methodology. The local operating doctrine is simple: **humans keep judgment, agents do the toil, and GitHub preserves truth**.
 
-Agents working here should treat repository artifacts as durable project memory, not as optional narrative. Issues, labels, tests, pull requests, `CURRENT.md`, wiki pages, release notes, audit outputs, and traceability records are the inspectable record of the project.
+Agents working here should treat repository artifacts as durable project memory, not as optional narrative. Issues, labels, tests, pull requests, per-feature change files in `.agentic/releases/`, wiki pages, release notes, audit outputs, and traceability records are the inspectable record of the project.
 
 ## Authority Model
 
@@ -13,7 +13,7 @@ The PLATE book explains doctrine and the reasons behind the method. This reposit
 | Product intent | Draft proposals, clarify ambiguities, identify conflicts, and map work to issues. | Final scope, priority, product tradeoffs, public commitments, and roadmap direction. |
 | Implementation | Modify code, tests, docs, and configuration inside an approved task. | Acceptance of risk, merge approval, release approval, and irreversible operational changes. |
 | Process | Follow PLATE rules, detect drift, and suggest process improvements. | Changing required gates, weakening checks, changing merge policy, or adopting new required automation. |
-| Documentation | Update `CURRENT.md`, wiki source pages, release notes under `.agentic/releases/`, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
+| Documentation | Update per-feature change files under `.agentic/releases/`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
 | Stack selection | Prototype and benchmark candidate stacks per the Research issue. | Final language/runtime choice and distribution format. |
 
 ## Autopilot Doctrine
@@ -59,7 +59,7 @@ Follow the loop that matches the issue type.
 | 2 | Identify acceptance criteria, expected tests, documentation impact, and risk. |
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
-| 5 | Update `CURRENT.md` to describe the implemented behavior and verification evidence. |
+| 5 | Update per-feature change files in `.agentic/releases/` to describe implemented behavior and verification evidence. |
 | 6 | Add or update `.agentic/releases/` when the change affects PLATE process or templates. |
 | 7 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
 | 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
@@ -112,7 +112,7 @@ Every issue must close with a traceable git artifact — either a code change in
 
 | Issue Type | Required Git Artifact | Typical PR Type Label |
 |---|---|---|
-| `Feature` | Code change + `CURRENT.md` update | `Feature` |
+| `Feature` | Code change + per-feature change file update in `.agentic/releases/` | `Feature` |
 | `Bug` | Bug fix + regression test | `Bug` |
 | `Research` | Findings committed to `docs/research/<slug>.md` or `SPEC.md` update | `Documentation` |
 | `Design` | Artifact committed to `docs/design/<slug>.md` or `docs/wiki/Features/<feature>.md` | `Documentation` |
@@ -232,7 +232,7 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 ## Documentation Rules
 
-Every Feature pull request must modify `CURRENT.md`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. Changes that alter PLATE behavior or process should also update `.agentic/releases/`. If a change affects feature behavior, update both implementation evidence and documentation evidence.
+Every Feature pull request must update per-feature change files in `.agentic/releases/`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. Changes that alter PLATE behavior or process should also update `.agentic/releases/`. If a change affects feature behavior, update both implementation evidence and documentation evidence.
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
@@ -289,7 +289,7 @@ Use **sectional synchronization** for core behavior updates:
 1. Compare upstream and downstream files to identify changed `PLATES-CORE` blocks.
 2. Copy only the relevant core blocks into downstream files, preserving local sections outside those markers.
 3. Open an atomic PR labeled `Feature` (or `Documentation` for doc-only syncs) and include `Closes #N` when tied to an issue.
-4. Update `CURRENT.md` with the imported behavior and evidence links.
+4. Update per-feature change files in `.agentic/releases/` with imported behavior and evidence links.
 5. Run the repository's required checks before requesting review.
 
 Marker format for sync-safe blocks:
