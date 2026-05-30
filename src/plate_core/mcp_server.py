@@ -12,9 +12,7 @@ from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
-<<<<<<< HEAD
 from .contemplation import ContemplationEngine, trigger_contemplation
-=======
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
     GetAnswersTool,
@@ -23,7 +21,6 @@ from .mcp.curiosity_tools import (
     RecordAnswerTool,
     SynthesizePrioritiesTool,
 )
->>>>>>> origin/main
 
 
 def _write(obj: dict) -> None:
@@ -120,7 +117,6 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 thread_id=thread_id,
                 repo=args.get("repo"),
             )
-<<<<<<< HEAD
         elif name == "plate_contemplate":
             # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
             qn = args.get("question_number")
@@ -134,13 +130,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 source=args.get("source", "contemplation"),
                 answered_by=args.get("answered_by", "engine"),
             )
-=======
         elif name in CURIOSITY_TOOLS:
             # Curiosity / Q&A Mode tools (Epic #139 / Feature #154)
             tool_cls = CURIOSITY_TOOLS[name]
             # Pass through common args + any tool-specific ones
             payload = tool_cls.execute(**args)
->>>>>>> origin/main
         else:
             _write(
                 {
