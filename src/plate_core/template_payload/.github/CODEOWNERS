@@ -12,7 +12,7 @@
 /.github/PULL_REQUEST_TEMPLATE.md @PLATE_REPO_OWNER
 /AGENTS.md @PLATE_REPO_OWNER
 /SPEC.md @PLATE_REPO_OWNER
-/CURRENT.md @PLATE_REPO_OWNER
+/.agentic/releases/ @PLATE_REPO_OWNER
 
 # Public claims and release posture require human review.
 /README.md @PLATE_REPO_OWNER

@@ -85,8 +85,9 @@ jobs:
             mkdir -p tmp_wiki/Features
             rsync -av docs/features/ tmp_wiki/Features/
           fi
-          if [ -f CURRENT.md ]; then
-            cp CURRENT.md tmp_wiki/Current-State.md
+          if [ -d .agentic/releases ]; then
+            mkdir -p tmp_wiki/Release-Notes
+            rsync -av .agentic/releases/ tmp_wiki/Release-Notes/
           fi
           cp tmp_wiki_context/Last-Feature-Merge.md tmp_wiki/Last-Feature-Merge.md
       - name: Commit and push wiki updates

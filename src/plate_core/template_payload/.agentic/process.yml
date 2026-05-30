@@ -18,7 +18,7 @@ principles:
 
 artifacts:
   spec: "SPEC.md"
-  current_state: "CURRENT.md"
+  current_state: ".agentic/releases/"
   agent_rules: "AGENTS.md"
   process_config: ".agentic/process.yml"
   skills_registry: ".agentic/skills.yml"
@@ -34,7 +34,7 @@ artifacts:
   tests: "tests"
   wiki_source_candidates:
     - "docs/wiki"
-    - "CURRENT.md"
+    - ".agentic/releases/"
     - "docs/features"
 
 labels:
@@ -113,7 +113,8 @@ pull_requests:
     - "Feature"
     - "Documentation"
     - "Feedback Response"
-  feature_pr_requires_current_md: true
+  feature_pr_requires_current_md: false
+  feature_pr_requires_release_change_file: true
   required_sections:
     - "Summary"
     - "Linked work"
@@ -164,7 +165,7 @@ audit:
   cadence: "weekly_or_pre_release"
   drift_targets:
     - "SPEC.md"
-    - "CURRENT.md"
+    - ".agentic/releases/"
     - "issues"
     - "pull requests"
     - "tests"

@@ -9,7 +9,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  feature-current-md:
+  feature-change-files:
     runs-on: ubuntu-latest
     steps:
       - name: Determine whether this is a Feature PR
@@ -21,7 +21,7 @@ jobs:
             const isFeature = labels.includes('Feature');
             core.setOutput('is_feature', String(isFeature));
             core.info(`Feature PR: ${isFeature}`);
-      - name: Check whether CURRENT.md changed
+      - name: Check whether per-feature change files changed
         if: steps.labels.outputs.is_feature == 'true'
         uses: actions/github-script@v7
         with:
@@ -34,9 +34,10 @@ jobs:
             });
             const changed = files.map((file) => file.filename);
             core.info(`Changed files:\n${changed.join('\n')}`);
-            if (!changed.includes('CURRENT.md')) {
-              core.setFailed('Feature pull requests must modify CURRENT.md so durable project state stays current. If this PR is not a Feature, remove the Feature label.');
+            const hasReleaseChangeFile = changed.some((file) => file.startsWith('.agentic/releases/'));
+            if (!hasReleaseChangeFile) {
+              core.setFailed('Feature pull requests must update per-feature change files in .agentic/releases/ so durable migration state stays current. If this PR is not a Feature, remove the Feature label.');
             }
       - name: Skip non-Feature PR
         if: steps.labels.outputs.is_feature != 'true'
-        run: echo "Not a Feature PR; CURRENT.md update is not required by this check."
+        run: echo "Not a Feature PR; release-note change-file updates are not required by this check."
