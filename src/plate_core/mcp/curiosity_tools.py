@@ -19,8 +19,6 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Any
 
-from .tools import _get_template_repo  # reuse pattern if needed; not directly here
-
 from ..github_client import GhClient, GhApiError
 from ..health import resolve_repo
 

@@ -309,7 +309,12 @@ def cmd_agent_show(args: argparse.Namespace) -> int:
 
 
 def cmd_skills_list(args: argparse.Namespace) -> int:
-    skills = [skill.to_dict() for agent in list_skills()]:
+    skills = [skill.to_dict() for skill in list_skills()]
+    if args.json:
+        print(json.dumps({"skills": skills}))
+        return 0
+
+    for skill in skills:
         print(f"{skill['id']}: {skill['name']}")
         print(f"  {skill['description']}")
         print(f"  Owning agents: {', '.join(skill['owning_agent_ids'])}")
