@@ -190,7 +190,7 @@ def cmd_qanda(args: argparse.Namespace) -> int:
         [getattr(args, "question", None), getattr(args, "synthesize", False), getattr(args, "record", False)]
     ):
         # Default: list + synthesize top priorities
-        result = SynthesizePrioritiesTool.execute(repo=repo)
+        result = SynthesizePrioritiesTool.execute(repo=repo, max_results=getattr(args, "limit", 5))
         if json_out:
             print(json.dumps(result))
             return 0
