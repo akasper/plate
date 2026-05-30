@@ -52,7 +52,11 @@ class ContemplationEngine:
         close_signal_met = False
 
         # 1. Simple heuristics from answer + known patterns (expand with #149 full rules)
-        text_lower = (answer_text or "").lower()
+        # Normalize answer_text early for safety (defensive against None from direct callers
+        # or RecordAnswerTool paths); matches established guard intent and prevents
+        # TypeError on slicing/len in log construction and heuristic.
+        answer_text = answer_text or ""
+        text_lower = answer_text.lower()
 
         # Always log the contemplation
         log_lines = [
