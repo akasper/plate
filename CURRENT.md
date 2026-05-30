@@ -13,6 +13,7 @@ last_verified_commit: "d80b8ff"
 
 | Feature | Status | Issue | Pull Request | Tests / Evidence | Wiki / Docs | Release | Last Verified |
 |---|---|---|---|---|---|---|---|
+| CURRENT.md implemented-state backfill in release notes | Implemented | #181 | #188 | `.agentic/releases/v0.1.2.json` backfills key CURRENT.md capability records into structured entries; validated by `tests/test_release_notes_current_translation.py` | `.agentic/releases/v0.1.2.json`, `.agentic/releases/README.md` | Unreleased | 2026-05-30 |
 | PR titles are for humans only (no bracketed prefixes or metadata in titles) | Implemented | #135 | This PR | Documentation-only; guidance updated for the generalized rule | `AGENTS.md`, `CONTRIBUTING.md`, `.github/PULL_REQUEST_TEMPLATE.md` | Unreleased | 2026-05-29 |
 | PLATE process baseline and project initialization | Implemented | — | #1 | Repository scaffolding, labels, workflows, `SPEC.md`, `README.md`, `AGENTS.md` | `README.md`, `SPEC.md`, `AGENTS.md` | Unreleased | 2026-05-26 |
 | Stack selection research | Research complete | #5 | #6 | `docs/research/stack-selection.md`, official GitHub CLI / Copilot plugin / MCP SDK docs review | `docs/research/stack-selection.md` | Unreleased | 2026-05-26 |
