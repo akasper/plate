@@ -152,6 +152,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".github/workflows/pr-title-check.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".github/workflows/question-handling.yml",
       "classification": "copy_to_downstream"
     },

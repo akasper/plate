@@ -33,6 +33,8 @@ All metadata belongs in GitHub's native fields instead:
 - Work-in-progress state via the native Draft PR status
 - Epic grouping via milestones
 
+**Agent-specific naming guardrail (Copilot + Grok Build).** GitHub Copilot and Grok Build must both follow the same PR-title rule above. When opening PRs via CLI/API, set a clean human title and put closing keywords only in the PR body. The `PLATE PR Title Check` workflow enforces this.
+
 This keeps titles short, scannable, and focused on the actual change. See #135 (and the follow-up generalization) plus Epic #100.
 
 **Resource consciousness.** Prefer targeted tool calls over exhaustive scans. Batch parallel reads. Stop investigating after sufficient evidence — do not read every file if you already know the answer. Avoid repeatedly regenerating content that has not changed.
