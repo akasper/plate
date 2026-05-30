@@ -208,7 +208,12 @@ def cmd_qanda(args: argparse.Namespace) -> int:
         if json_out:
             print(json.dumps(result))
             return 0
-        print(json.dumps(result, indent=2) if not json_out else "")
+        # Human-readable output for non-JSON path (consistent with --list and other commands)
+        print(f"Repo: {result.get('repo')}")
+        print("Prioritized open Questions (Curiosity mode):")
+        for i, q in enumerate(result.get("prioritized_questions", []), 1):
+            print(f"  {i}. #{q.get('number')}: {q.get('title')}")
+        print(f"\n{result.get('rationale', '')}")
         return 0
 
     if getattr(args, "question", None):
