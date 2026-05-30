@@ -32,6 +32,14 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn("Development sidebar", workflow)
         self.assertIn("['Feature', 'Bug', 'Documentation']", workflow)
 
+    def test_pr_title_check_enforces_human_readable_titles(self):
+        workflow = read_text(".github/workflows/pr-title-check.yml")
+
+        self.assertIn("hasBracketPrefix", workflow)
+        self.assertIn("hasClosingKeyword", workflow)
+        self.assertIn("PR titles must be human-readable summaries only.", workflow)
+        self.assertIn("closing keywords from the title", workflow)
+
     def test_bootstrap_scripts_default_branch_deletion_can_be_skipped(self):
         bash_script = read_text("scripts/bootstrap_github.sh")
         powershell_script = read_text("scripts/BootstrapGitHub.ps1")

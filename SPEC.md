@@ -13,7 +13,7 @@ updated_at: "2026-05-29"
 
 **PLATE** (Project Lifecycle Agentic Task Ecosystem) is the operating system for reliable, high-velocity agentic software development on GitHub. It empowers AI agents to own as much of the end-to-end software development lifecycle (SDLC) as possible — planning, implementation, testing, documentation, triage, and deployment — while enforcing **test-first discipline** (TDD/BDD), continuous verifiable progress, atomic PRs, and human judgment on architecture, risk, and releases.
 
-GitHub is the default single source of truth: Issues for planning, Projects/Milestones for tracking, Workflows for gates, Copilot agents + MCP for execution, Pages/Wiki for docs/marketing. PLATE makes this ecosystem inspectable, actionable, and autonomously operable via shared runtime surfaces (`gh plate`, `plate-mcp`, Copilot CLI plugin).
+GitHub is the default single source of truth: Issues for planning, Milestones for Epic tracking, Projects for roadmap visualization, Workflows for gates, Copilot agents + MCP for execution, Pages/Wiki for docs/marketing. PLATE makes this ecosystem inspectable, actionable, and autonomously operable via shared runtime surfaces (`gh plate`, `plate-mcp`, Copilot CLI plugin).
 
 **North Star**: Any repository (new or existing) can adopt PLATE in <15 minutes and achieve **70-90% agent-driven SDLC** with minimal human toil, while remaining lightweight, GitHub-native, and evolvable. Success metric: Widespread adoption as the de facto standard for agentic teams.
 
@@ -101,7 +101,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 - GitHub API only (REST + GraphQL); stateless beyond minimal config.
 - Zero runtime dependencies for binaries.
 - Rate-limit aware and secret-safe.
-- PLATE label taxonomy assumed (degraded gracefully otherwise).
+- GitHub Milestones for Epic tracking; PLATE label taxonomy assumed (degraded gracefully otherwise).
 
 ---
 

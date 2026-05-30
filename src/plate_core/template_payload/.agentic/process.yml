@@ -129,6 +129,10 @@ workflows:
     name: "PLATE Label Check"
     path: ".github/workflows/label-check.yml"
     required: true
+  pr_title_check:
+    name: "PLATE PR Title Check"
+    path: ".github/workflows/pr-title-check.yml"
+    required: true
   question_handling:
     name: "Question Handling"
     path: ".github/workflows/question-handling.yml"

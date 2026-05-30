@@ -1,0 +1,55 @@
+name: PLATE PR Title Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check-pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title format
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pullRequest = context.payload.pull_request;
+            const title = (pullRequest?.title || '').trim();
+
+            if (!pullRequest) {
+              core.info('No pull request payload found.');
+              return;
+            }
+
+            // Bracketed label-style prefixes are disallowed in PR titles.
+            const hasBracketPrefix = /^\[[^\]]+\]/.test(title);
+
+            // Legacy non-bracket prefixes are also disallowed (use draft state instead).
+            const hasLegacyPrefix = /^(WIP|DRAFT)\s*:/i.test(title);
+
+            // Closing keywords belong in the PR body or Development sidebar link, not title.
+            const hasClosingKeyword = /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(#\d+|https?:\/\/github\.com\/[^\s]+\/issues\/\d+)/i.test(title);
+
+            if (!hasBracketPrefix && !hasLegacyPrefix && !hasClosingKeyword) {
+              core.info('PR title format is valid.');
+              return;
+            }
+
+            const failures = [];
+            if (hasBracketPrefix) failures.push('- Remove bracketed prefixes (for example `[Feature]`, `[Bug]`, `[Documentation]`).');
+            if (hasLegacyPrefix) failures.push('- Remove legacy prefixes like `WIP:` or `DRAFT:`; use native Draft PR status instead.');
+            if (hasClosingKeyword) failures.push('- Remove closing keywords from the title; put `Closes #N` / `Fixes #N` / `Resolves #N` in the PR body.');
+
+            core.setFailed(
+              [
+                '## ⚠️ Invalid PR title format',
+                '',
+                'PR titles must be human-readable summaries only.',
+                '',
+                ...failures,
+                '',
+                `Current title: \`${title}\``,
+              ].join('\n')
+            );
