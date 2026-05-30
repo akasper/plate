@@ -12,7 +12,6 @@ include_globs:
   - "AGENTS.md"
   - "CHANGELOG.md"
   - "CONTRIBUTING.md"
-  - "CURRENT.md"
   - "README.md"
   - "SPEC.md"
   - "package.json"

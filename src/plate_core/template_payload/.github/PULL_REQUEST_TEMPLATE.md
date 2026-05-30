@@ -63,7 +63,7 @@ Select exactly one PR type label and apply it to this pull request.
   - [ ] Test spec created: `tests/e2e/specs/feature-name.spec.ts`
   - [ ] Demo recorded: `npm run record:e2e feature-name --headed`
   - [ ] GIF generated and committed: `tests/e2e/fixtures/gifs/feature-name.gif`
-  - [ ] GIF embedded in this PR or `CURRENT.md`
+  - [ ] GIF embedded in this PR or release-note artifacts under `.agentic/releases/`
   - [ ] GIF size verified (warn <3MB, fail >5MB)
 
 📹 **Recording a demo?** See [Playwright E2E Guide](../../docs/playwright-e2e-guide.md) and `AGENTS.md §Demo GIF Recording for UI Features`
@@ -73,7 +73,7 @@ Select exactly one PR type label and apply it to this pull request.
 | Artifact | Required for This PR? | Updated or Explanation |
 |---|---|---|
 | `SPEC.md` | TBD | TBD |
-| `CURRENT.md` | Required for `Feature` PRs | TBD |
+| `.agentic/releases/` per-feature change files | Required for `Feature` PRs | TBD |
 | Wiki or docs source | TBD | TBD |
 | Release notes / `CHANGELOG.md` | TBD | TBD |
 | Public claims / marketing | TBD | TBD |
@@ -93,7 +93,7 @@ Select exactly one PR type label and apply it to this pull request.
 - [ ] I followed `AGENTS.md` and did not change product intent without human approval.
 - [ ] I used GitHub Projects fields, not labels, for mutable planning state.
 - [ ] I did not weaken tests, remove required gates, or bypass review.
-- [ ] I updated `CURRENT.md` for a Feature PR or explained why this PR is not a Feature.
+- [ ] I updated per-feature change files in `.agentic/releases/` for a Feature PR or explained why this PR is not a Feature.
 - [ ] I included `Closes #N` (or `Fixes #N` / `Resolves #N`) in the Linked Work section above for every issue this PR resolves.
 - [ ] I committed a git artifact to the appropriate `docs/` directory for every Research, Design, Audit, or Migration issue this PR closes.
 - [ ] I left enough evidence for a human reviewer to verify the change without relying on chat history.

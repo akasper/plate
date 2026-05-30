@@ -2,7 +2,7 @@
 
 This repository follows the **Process Lifecycle Agentic Task Engine (PLATE)** methodology. The local operating doctrine is simple: **humans keep judgment, agents do the toil, and GitHub preserves truth**.
 
-Agents working here should treat repository artifacts as durable project memory, not as optional narrative. Issues, labels, tests, pull requests, `CURRENT.md`, wiki pages, release notes, audit outputs, and traceability records are the inspectable record of the project.
+Agents working here should treat repository artifacts as durable project memory, not as optional narrative. Issues, labels, tests, pull requests, per-feature change files in `.agentic/releases/`, wiki pages, release notes, audit outputs, and traceability records are the inspectable record of the project.
 
 ## Authority Model
 
@@ -13,7 +13,7 @@ The PLATE book explains doctrine and the reasons behind the method. This reposit
 | Product intent | Draft proposals, clarify ambiguities, identify conflicts, and map work to issues. | Final scope, priority, product tradeoffs, public commitments, and roadmap direction. |
 | Implementation | Modify code, tests, docs, and configuration inside an approved task. | Acceptance of risk, merge approval, release approval, and irreversible operational changes. |
 | Process | Follow PLATE rules, detect drift, and suggest process improvements. | Changing required gates, weakening checks, changing merge policy, or adopting new required automation. |
-| Documentation | Update `CURRENT.md`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
+| Documentation | Update per-feature change files in `.agentic/releases/`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
 
 ## Autopilot Doctrine
 
@@ -54,7 +54,7 @@ Follow the loop that matches the issue type.
 | 2 | Identify acceptance criteria, expected tests, documentation impact, and risk. |
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
-| 5 | Update `CURRENT.md` to describe the implemented behavior and verification evidence. |
+| 5 | Update per-feature change files in `.agentic/releases/` to describe the implemented behavior and verification evidence. |
 | 6 | If the feature includes UI changes, record a demo GIF (see Demo GIF Recording guidance below). |
 | 7 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
 | 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
@@ -115,7 +115,7 @@ Playwright E2E tests provide reproducible test coverage and visual evidence for 
   - Record 2–5 seconds of key user interaction (feature demo, not the entire test)
   - Show the success state or primary feature behavior
   - Commit GIF to `tests/e2e/fixtures/gifs/feature-name.gif`
-  - Embed in CURRENT.md, PR description, or wiki: `![Feature demo](tests/e2e/fixtures/gifs/feature-name.gif)`
+  - Embed in .agentic/releases/, PR description, or wiki: `![Feature demo](tests/e2e/fixtures/gifs/feature-name.gif)`
 
 - **Local testing:**
   - Run tests: `npm run test:e2e` or `npm run test:e2e:watch`
@@ -181,7 +181,7 @@ Every issue must close with a traceable git artifact — either a code change in
 
 | Issue Type | Required Git Artifact | Typical PR Type Label |
 |---|---|---|
-| `Feature` | Code change + `CURRENT.md` update | `Feature` |
+| `Feature` | Code change + per-feature change files in `.agentic/releases/` update | `Feature` |
 | `Bug` | Bug fix + regression test | `Bug` |
 | `Research` | Findings committed to `docs/research/<slug>.md` or `SPEC.md` update | `Documentation` |
 | `Design` | Artifact committed to `docs/design/<slug>.md` or `docs/wiki/Features/<feature>.md` | `Documentation` |
@@ -201,10 +201,10 @@ This table documents the responsibilities and tooling for each core PLATE proces
 |---|---|---|---|---|
 | Unit & Integration Tests | Developer + Copilot | Project-specific stack (Jest, pytest, cargo test, etc.) | Required for all PRs | `.github/workflows/ci.yml` runs project commands |
 | E2E Specs | Developer + Copilot | Playwright (`npm run test:e2e`) | Required for UI features | `.github/workflows/test-e2e.yml`, `tests/e2e/specs/*.spec.ts` |
-| Demo GIFs | Developer + Copilot | `npm run record:e2e` + GIF generation scripts | Required for user-visible features | `tests/e2e/fixtures/gifs/`, PR description/CURRENT.md |
+| Demo GIFs | Developer + Copilot | `npm run record:e2e` + GIF generation scripts | Required for user-visible features | `tests/e2e/fixtures/gifs/`, PR description/.agentic/releases/ |
 | E2E CI Validation | Copilot + Actions | `.github/workflows/test-e2e.yml` | All PRs (videos retained on failure) | Test report, artifact links |
 | GIF Processing (CI) | Actions + ffmpeg | `.github/workflows/test-e2e.yml` `process-gifs` job | Triggered by `demo` label | Artifacts with 90-day retention, PR comment with GIF links |
-| Feature Documentation | Developer + Copilot | `CURRENT.md` update | Required for `Feature` PRs | CI gate: `.github/workflows/pr-documentation-check.yml` |
+| Feature Documentation | Developer + Copilot | per-feature change files in `.agentic/releases/` update | Required for `Feature` PRs | CI gate: `.github/workflows/pr-documentation-check.yml` |
 | Release Notes | Human + Copilot | `CHANGELOG.md` | Recommended for `Feature` PRs | Links and evidence in CHANGELOG entry |
 | Issue Closure Traceability | Developer + Copilot | Closing keywords + linked PR | Required for all issues | GitHub auto-close on PR merge |
 | Process Drift Audit | Copilot | Custom audit skills | Per-epic or quarterly | `docs/audits/` committed artifacts |
@@ -221,7 +221,7 @@ This table documents the responsibilities and tooling for each core PLATE proces
 - Help write or review Playwright specs and Page Objects
 - Execute `npm run record:e2e` and GIF generation locally when needed
 - Verify all tests pass in CI before PR merge
-- Update `CURRENT.md` with evidence links to test files and demo GIFs
+- Update per-feature change files in `.agentic/releases/` with evidence links to test files and demo GIFs
 
 **CI/Actions responsibilities:**
 - Run `npm run test:e2e` on every PR (`.github/workflows/test-e2e.yml`)
@@ -264,7 +264,7 @@ The `need:refinement` label is applied to issue stubs created during interactive
 
 **Gates deferred by `need:refinement`:**
 - Acceptance criteria completeness check
-- `CURRENT.md` update requirement (the stub has no implementation yet)
+- per-feature change files in `.agentic/releases/` update requirement (the stub has no implementation yet)
 
 **Gates that are NEVER deferred, even for `need:refinement` stubs:**
 - Exactly one PLATE issue type label must be present
@@ -310,7 +310,7 @@ The `risk:*` label family communicates review burden and operational caution to 
 - Database migrations that lose data or cannot be rolled back
 - Infrastructure or deployment changes with unknown rollback procedure
 - Changes affecting multiple subsystems or cross-cutting concerns
-- Changes that modify `SPEC.md`, `CURRENT.md`, or public product claims
+- Changes that modify `SPEC.md`, per-feature change files in `.agentic/releases/`, or public product claims
 
 **risk:critical** - Release, security, compliance, or data risk:
 - Security vulnerabilities (auth bypass, data exposure, injection flaws)
@@ -524,7 +524,7 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 ## Documentation Rules
 
-Every Feature pull request must modify `CURRENT.md`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. If a change affects feature behavior, update both implementation evidence and documentation evidence.
+Every Feature pull request must modify per-feature change files in `.agentic/releases/`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. If a change affects feature behavior, update both implementation evidence and documentation evidence.
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
@@ -552,7 +552,7 @@ Use **sectional synchronization** for core behavior updates:
 1. Compare upstream and downstream files to identify changed `PLATES-CORE` blocks.
 2. Copy only the relevant core blocks into downstream files, preserving local sections outside those markers.
 3. Open an atomic PR labeled `Feature` (or `Documentation` for doc-only syncs) and include `Closes #N` when tied to an issue.
-4. Update `CURRENT.md` with the imported behavior and evidence links.
+4. Update per-feature change files in `.agentic/releases/` with the imported behavior and evidence links.
 5. Run the repository's required checks before requesting review.
 
 Marker format for sync-safe blocks:
@@ -584,3 +584,4 @@ Escalate to a human when product intent is ambiguous, acceptance criteria confli
 ## Prohibited Actions
 
 Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without a corresponding PR that carries a `Closes #N` reference in its body, except for `Feedback Response` PRs. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body, except for `Feedback Response` PRs.
+

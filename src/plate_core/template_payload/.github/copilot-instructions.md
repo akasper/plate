@@ -30,12 +30,12 @@ Playwright guidance defaults:
 This repository is a **PLATE template**, not an application codebase. The important architecture is the process wiring between durable project artifacts, machine-readable rules, and GitHub enforcement:
 
 - `SPEC.md` defines the intended goal state.
-- `CURRENT.md` records the implemented state and verification evidence.
+- per-feature change files in `.agentic/releases/` records the implemented state and verification evidence.
 - `AGENTS.md` defines local agent operating rules and escalation boundaries.
 - `.agentic\process.yml` mirrors the same process in machine-readable form for automation and audits.
 - `.github\labels.yml`, `.github\ISSUE_TEMPLATE\`, and `.github\PULL_REQUEST_TEMPLATE.md` define the work intake and review metadata.
 - `.github\workflows\label-check.yml` enforces required issue and PR type labels.
-- `.github\workflows\pr-documentation-check.yml` enforces that `Feature` PRs update `CURRENT.md`.
+- `.github\workflows\pr-documentation-check.yml` enforces that `Feature` PRs update per-feature change files in `.agentic/releases/`.
 - `.github\workflows\pr-issue-link-check.yml` warns (and fails for `Feature`/`Bug` PRs) if the PR body contains no closing keyword (`Closes #N`).
 - `.github\workflows\question-handling.yml` supports the `/question-batch` issue-comment slash command for triaging open Question issues.
 - `.github\workflows\auto-merge.yml` enables autonomous PR merging when `.github/AUTONOMOUS_MODE` is present and the PR carries the `auto-merge` label.
@@ -58,7 +58,7 @@ Read those pieces together when making process changes. A change in one of them 
 - `Research` issues must close with a committed artifact in `docs/research/` or a `SPEC.md` update — not just an issue comment. See `docs/research/README.md`.
 - `Design` issues must close with a committed artifact in `docs/design/` or `docs/wiki/Features/`. See `docs/design/README.md`.
 - `Question` issues are information goals. Batch triage with `/question-batch` or `scripts/question_batch.sh`, and when an answer changes agent guidance, update both `AGENTS.md` and `.agentic/skills.yml` in the closing PR.
-- Every PR must carry a type label (`Bug`, `Feature`, or `Documentation`). **Critical:** The checkboxes in the PR template body do **not** apply GitHub labels — labels must be set explicitly via the CLI or GitHub API. Preferred approach: include `--label "<type>"` in `gh pr create` so the label is applied atomically at PR creation. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before doing anything else. `Feature` PRs must update `CURRENT.md`; documentation-only changes should use the `Documentation` label.
+- Every PR must carry a type label (`Bug`, `Feature`, or `Documentation`). **Critical:** The checkboxes in the PR template body do **not** apply GitHub labels — labels must be set explicitly via the CLI or GitHub API. Preferred approach: include `--label "<type>"` in `gh pr create` so the label is applied atomically at PR creation. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before doing anything else. `Feature` PRs must update per-feature change files in `.agentic/releases/`; documentation-only changes should use the `Documentation` label.
 - When a PR is opened without a type label, the `label-check.yml` CI workflow fails immediately **and posts a repair comment on the PR** with the exact `gh pr edit` command to fix it. Look for the ⚠️ bot comment on the PR — it contains the precise repair command for that PR number.
 - **Copilot PR title rule:** Use clean, human-readable PR titles with no bracketed prefixes (`[Feature]`, `[Documentation]`, `[WIP]`, etc.) and no issue-closing metadata in the title (`Closes #N`, `Fixes #N`, `Resolves #N`). Put closing keywords in the PR body only. This is enforced by `.github/workflows/pr-title-check.yml`.
 - **Grok Build parity rule:** If work is delegated to or mirrored by Grok Build, preserve the exact same PR-title rule and body-only closing-keyword placement.
@@ -67,7 +67,7 @@ Read those pieces together when making process changes. A change in one of them 
 - **Autopilot doctrine:** Prefer many small PRs (≤ 10 files each) over one large PR. Each PR should have a single clear purpose and be independently revertable. Prefer squash merges. Post an epic summary comment when all child issues are resolved, then pause for human review before starting the next epic.
 - **Autonomous mode** is enabled when `.github/AUTONOMOUS_MODE` exists on the default branch. When active, agents may label eligible `risk:low` PRs `auto-merge` and call `gh pr merge --auto --squash` after `gh pr create`. Full eligibility rules in `AGENTS.md §Autonomous Mode`. Never use `auto-merge` on PRs touching `AGENTS.md`, `SPEC.md`, workflows, credentials, auth, payments, or public claims. Agents may never create or delete the `AUTONOMOUS_MODE` marker file themselves.
 - `.github\workflows\auto-merge.yml` enforces the marker file check as a second gate.
-- Prefer small, scoped documentation and wiki updates. The wiki sync workflow is intentionally conservative and currently treats `CURRENT.md`, `docs\wiki`, and `docs\features` as the sync inputs.
+- Prefer small, scoped documentation and wiki updates. The wiki sync workflow is intentionally conservative and currently treats per-feature change files in `.agentic/releases/`, `docs\wiki`, and `docs\features` as the sync inputs.
 - For newly generated repositories, start with `docs/bootstrap/new-repository-checklist.md` and run `scripts/bootstrap_github.sh` (macOS/Linux/WSL) or `scripts\BootstrapGitHub.ps1` (Windows) before making project-specific changes.
 - Do not weaken tests, documentation gates, or workflow checks to make a change pass. Human review and merge authority remain outside agent authority except as defined in `AGENTS.md §Autonomous Mode`.
 - **Before opening any Feature issue that depends on an external API**, verify that `SPEC.md §External Integrations` contains an entry for that API and confirm it is reachable. If API availability is uncertain, open a Research issue first.
@@ -155,7 +155,7 @@ For user-visible features, record a 2–5 second demo GIF:
 5. **Verify GIF size:**
    - Aim for <1MB (warn >3MB, fail >5MB)
    - Use `low` quality for large interactions; `medium` for typical demos
-6. **Embed in PR description or CURRENT.md:**
+6. **Embed in PR description or .agentic/releases/:**
    ```markdown
    ![Feature demo](tests/e2e/fixtures/gifs/feature-name.gif)
    ```
@@ -200,3 +200,4 @@ Quick reference:
 - Before creating, check for duplicate epics (Jaccard ≥ 0.5 on title tokens).
 - Store session state in `<!-- PLATE_SESSION_STATE: {...} -->` at the end of the Epic body.
 - Post a planning summary comment when the session ends.
+

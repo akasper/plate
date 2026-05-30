@@ -184,10 +184,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": "CURRENT.md",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": "README.md",
       "classification": "copy_to_downstream"
     },
