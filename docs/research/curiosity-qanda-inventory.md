@@ -1,12 +1,9 @@
 # Research: Inventory of Informational Goals / Questions for Curiosity-Driven Development (Q&A Mode)
 
-**Issue:** #140 (Research child of Epic #139 "Curiosity-Driven Development: Q&A Mode for Informational Goals")
-
-**Researched by:** Grok (xAI), following AGENTS.md Research work loop
-
-**Date:** 2026-05-30
-
-**Status:** Complete
+- **Issue:** #140 (Research child of Epic #139 "Curiosity-Driven Development: Q&A Mode for Informational Goals")
+- **Researched by:** Grok (xAI), following AGENTS.md Research work loop
+- **Date:** 2026-05-30
+- **Status:** Complete
 
 ## Research Question
 
