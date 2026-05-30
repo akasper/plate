@@ -181,9 +181,11 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
 
 ## Third-Party Agent Feedback
 
-Preferred flow is now **local babysitting** driven by `gh plate pr babysit <number>`. CI is intentionally narrowed to enforcement-only (`feedback-resolution` check). Use this loop:
+Preferred flow is now **local babysitting** driven by `gh plate pr babysit <number>`. CI is intentionally narrowed to enforcement-only (`feedback-resolution` check). The `plate` agent persona (plugin/agents/plate.agent.md and mirror) no longer includes babysitting steps (deprecated in favor of the dedicated local CLI/MCP flow; see PR #120 and this PR's Q&A/Curiosity updates).
 
-1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch]`) or via `/agent plate` ("babysit PR <number>") using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread`
+Use this loop:
+
+1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance).
 2. Query unresolved review threads and identify actionable third-party agent feedback
 3. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 4. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation

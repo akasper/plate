@@ -47,7 +47,7 @@ Use these MCP tools when implementing E2E tests:
 
 - `@copilot init-playwright` — Scaffold Playwright setup if missing
 - `@copilot record-e2e-gif` — Record and generate demo GIF for a test
-- `@copilot validate-e2e-tests` — Verify Playwright setup is correct
+- `@copilot validate_e2e_tests` — Verify Playwright setup is correct
 
 ### Documentation
 
@@ -56,31 +56,45 @@ See [Playwright E2E Guide](../docs/playwright-e2e-guide.md) for detailed setup a
 
 
 QANDA_CURIOSITY_GUIDANCE = """
-## Curiosity / Q&A Mode (Epic #139, Design #144)
+## Curiosity / Q&A Mode and Informational Goals
 
-The plate agent supports Curiosity and Q&A flows for gathering context and answering repository questions via interactive sessions.
+PLATE supports a Curiosity-driven workflow where informational goals are tracked as `Question` issues and surfaced through Q&A mode.
 
-### Native TUI Preference (Primary Integration Interface)
+### When to use Q&A mode
+- The user explicitly invokes `/qanda`, "answer open questions", or similar.
+- You detect multiple open `Question` issues relevant to the current Epic or task.
+- You need structured user input to unblock work or seed new work.
 
-When the user is in GitHub Copilot CLI (the primary integration interface for this agent), the plate agent and tools **must prefer Copilot CLI's native TUI / interactive questioning or form capabilities** over launching a custom TUI (gum, etc.), wherever native options are available and sufficient.
+### How to present questions (critical preference)
+- **Inside GitHub Copilot CLI (primary interface):** Strongly prefer using any *native* TUI, form, or interactive questioning primitives provided directly by the Copilot CLI itself. Only fall back to a custom terminal TUI if native capabilities are unavailable or insufficient for the question.
+- **Direct `gh plate qanda` usage or fallback:** Use lightweight custom TUI tools (e.g. gum/huh) or simple prompts.
+- The goal is the most seamless possible experience for the user in their primary interface.
 
-This ensures the most seamless possible experience for users without spawning external processes or context switches.
+### Question handling flow
+1. Use available MCP tools (or future equivalents such as `plate_list_questions`, `plate_get_question`) to discover and prioritize open Questions.
+2. Present the question using the native preference above.
+3. When the user provides an answer, capture it with full provenance (see Answer Model).
+4. Trigger contemplation logic (via MCP tools or rules) and produce a Contemplation Log.
+5. Create forward progress (new issues, artifact updates) as defined in the Contemplation contract.
+6. For hard informational obstacles during other work, create a blocking `Question` issue (with a clear structured information dump) as a deliberate last resort, post a status on the original Issue, and pause work on it.
+7. When a blocking Question is later answered, offer to merge the new information back into the original Issue and resume the blocked work.
 
-### Constraints
-- Must operate inside existing Copilot CLI session.
-- Prefer zero-dependency native prompting (questions, selects, text inputs) provided by the host CLI.
-- Only fall back to subprocess TUI launchers when native capabilities are demonstrably insufficient for the required interaction complexity.
-- Keep guidance reusable across agent surfaces (Copilot CLI, MCP, etc.).
+### Blocking / informational obstacle pattern
+When you cannot safely proceed on a task (Research, Design, Feature, etc.) without additional human clarity:
+- Create a linked `Question` issue.
+- Include a thorough but concise information dump (current understanding, exact blocker, what input would unblock you).
+- Update the original Issue with a clear "paused pending answer to Question #N" comment.
+- Do not continue significant work on the original Issue in the same session.
 
-### TUI Technology Recommendation
-- **Preferred**: Native Copilot CLI interactive features (question prompts, forms, multi-selects where exposed by the CLI runtime).
-- **Fallback only**: Minimal custom TUI via approved libraries if native surface lacks required widget; document the specific gap.
+### Resumption pattern
+When you (or a future session) see that a previously blocking Question has been answered:
+- Retrieve the answer + provenance.
+- Merge the key information into the original Issue (via comment and/or targeted updates).
+- Resume or unblock the original work, producing a clear "unblocked by answer to Question #N" record.
 
-### Alternatives Rejected
-- Always using gum or equivalent custom TUI for Q&A: rejected because it breaks the seamless experience inside the primary Copilot CLI interface and introduces unnecessary process/TTY overhead.
-- Building a full custom TUI in the agent itself: rejected for scope and duplication with host CLI capabilities.
-
-See also: plugin/agents/plate.agent.md (workflow item 11 and behavior rule 7) and docs/design/qanda-mode-ux.md.
+### Related MCP tools (examples)
+- Future tools for listing/synthesizing Questions, recording answers, triggering contemplation, and managing blocking/resumption flows.
+- Always prefer the most native user experience the host environment (Copilot CLI) can provide.
 """
 
 
