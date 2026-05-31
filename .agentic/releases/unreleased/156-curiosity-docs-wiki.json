@@ -1,0 +1,23 @@
+{
+  "version": "unreleased",
+  "summary": "Documentation, wiki, and examples for Curiosity / Q&A Mode (Epic #139 / Feature #156)",
+  "entries": [
+    {
+      "change_type": "docs",
+      "surface": "Wiki + guidance",
+      "migration_impact": "New `docs/wiki/Curiosity-QA-Mode.md` provides the canonical living reference for the full vision, blocking/resumption flows, invariants, and usage. All prior Epic slices linked. Guidance/persona already updated in impl PRs.",
+      "agent_notes": "Read the wiki for the complete picture (creation via #147 tool, resumption via #148 engine, native TUI preference, etc.). Update as the mode evolves. Examples live in the akasper/plate issue history under the Epic label.",
+      "breaking": false,
+      "links": [
+        "#156",
+        "#139"
+      ],
+      "requires": [
+        "unreleased/147-blocking-question-last-resort",
+        "unreleased/148-merge-resume-blocking",
+        "unreleased/151-qanda-tui-fallback-interactive",
+        "unreleased/155-curiosity-tests"
+      ]
+    }
+  ]
+}
