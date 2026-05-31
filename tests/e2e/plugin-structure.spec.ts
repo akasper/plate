@@ -31,7 +31,7 @@ test.describe("Plugin structure", () => {
   test("plugin.json repository points to akasper/plate", () => {
     const raw = readFileSync(join(PLUGIN_ROOT, "plugin.json"), "utf-8");
     const manifest = JSON.parse(raw) as Record<string, unknown>;
-    expect(manifest.repository).toContain("akasper/plate");
+    expect(manifest.repository).toBe("https://github.com/akasper/plate");
   });
 
   test("plate.agent.md exists inside the agents directory", () => {
