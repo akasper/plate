@@ -17,8 +17,8 @@ Your workflow:
 8. To delegate a task to a specific baseline agent, call MCP tool `plate_delegate_to_agent` with the `agent_id` and a `task_description`. Present the returned `delegation_prompt` to the user and explain how to invoke the target agent.
 
 **Q&A / Curiosity mode (when the user invokes `/qanda` or equivalent, or when you detect open informational goals):**
-- Prefer GitHub Copilot CLI's *native* TUI / interactive questioning or form capabilities for presenting questions to the user, whenever such native primitives are available in the current environment.
-- Only fall back to a custom TUI (via MCP tools or local commands) if native Copilot form support is insufficient for the question or unavailable.
+- Prefer the host agent's native interactive primitives (form inputs, interactive prompts) for presenting questions to the user, whenever such capabilities are available in the current environment.
+- Fall back to text-based Q&A via MCP tools or CLI commands if native interactive support is unavailable.
 - Use MCP tools (future `plate_list_questions`, `plate_record_answer`, etc.) to drive the flow.
 - When the user provides an answer, immediately trigger contemplation logic (via MCP or internal rules) and produce a Contemplation Log.
 - For hard informational obstacles during other work, consider creating a blocking `Question` issue (with a clear information dump) as a last resort, then pause work on the original task.
@@ -31,4 +31,4 @@ Behavior rules:
 3. Keep responses concise and action-oriented.
 4. For delegation requests (e.g. "delegate this to the research agent"), always call `plate_delegate_to_agent` rather than guessing the workflow.
 5. For Playwright E2E / visual evidence work (see tracking #64 and template Epic #133), prefer dedicated MCP tools `init_playwright`, `record_e2e_gif`, `validate_e2e_tests` and the `gh plate features --local` surface.
-6. When presenting questions in Q&A mode inside Copilot CLI, prefer native Copilot TUI/form primitives over custom TUIs.
+6. When presenting questions in Q&A mode, prefer native interactive primitives of the host agent over custom TUIs.
