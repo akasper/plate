@@ -1,0 +1,22 @@
+{
+  "version": "unreleased",
+  "summary": "Baseline agent catalog and research-agent updates for Curiosity / Q&A (Epic #139 / Feature #157)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "baseline_catalog.yml + research-agent",
+      "migration_impact": "New skills (run-qanda-session, create-blocking-question-on-obstacle, resume-from-answered-question) added to the catalog. research-agent now lists them as primary. Agents and the catalog remain the single source of truth.",
+      "agent_notes": "Use the new skills via the catalog or directly (they map to the MCP tools delivered in #147/#148). research-agent can now opportunistically drive Q&A, blocking, and resumption flows.",
+      "breaking": false,
+      "links": [
+        "#157",
+        "#139"
+      ],
+      "requires": [
+        "unreleased/147-blocking-question-last-resort",
+        "unreleased/148-merge-resume-blocking",
+        "unreleased/151-qanda-tui-fallback-interactive"
+      ]
+    }
+  ]
+}
