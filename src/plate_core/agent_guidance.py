@@ -79,18 +79,42 @@ PLATE supports a Curiosity-driven workflow where informational goals are tracked
 6. For hard informational obstacles during other work, create a blocking `Question` issue (with a clear structured information dump) as a deliberate last resort, post a status on the original Issue, and pause work on it.
 7. When a blocking Question is later answered, offer to merge the new information back into the original Issue and resume the blocked work.
 
-### Blocking / informational obstacle pattern
-When you cannot safely proceed on a task (Research, Design, Feature, etc.) without additional human clarity:
-- Create a linked `Question` issue.
-- Include a thorough but concise information dump (current understanding, exact blocker, what input would unblock you).
-- Update the original Issue with a clear "paused pending answer to Question #N" comment.
-- Do not continue significant work on the original Issue in the same session.
+### Blocking / informational obstacle pattern (Feature #147 / Epic #139)
+**Decision procedure (invoke ONLY as deliberate last resort):**
+1. You have performed internal reasoning + used available tools/MCP calls (reads, searches, contemplation on prior answers, etc.) and still cannot safely proceed without risking incorrect work or violating requirements/scope.
+2. The blocker is informational (ambiguity, missing context, human judgment needed on tradeoffs/risks/users, conflicting signals) — not a simple implementation detail you can experiment on.
+3. Continuing would violate "never lose information" or "create forward progress" invariants, or risk significant rework.
+4. No open Question already covers this exact need.
 
-### Resumption pattern
-When you (or a future session) see that a previously blocking Question has been answered:
-- Retrieve the answer + provenance.
-- Merge the key information into the original Issue (via comment and/or targeted updates).
-- Resume or unblock the original work, producing a clear "unblocked by answer to Question #N" record.
+When criteria met:
+- Call `plate_create_blocking_question` (MCP) with:
+  - original_issue_number (the blocked task)
+  - blockage_point (exact sentence/requirement/step where stuck)
+  - missing_info (what human must clarify)
+  - suggested_questions (2-5 crisp questions for the human; this becomes the Question title/body focus)
+  - partial_work (what you have done/understood so far — never lose this)
+  - extra_context (links to artifacts, prior answers, etc.)
+- The tool creates the Question (with structured PLATE-BLOCKING-DUMP per Answer Model style), posts a standardized pause status on the original Issue with bidirectional link, and returns the new Question #.
+- Surface the new Question # to the user (mention in chat, or use Q&A mode).
+- **Discontinue** further work on the original Issue in this session. Hand off cleanly.
+- Later (after human answers): see Resumption pattern below + #148.
+
+This is the concrete last-resort escape hatch. Over-use is a risk — prefer reasoning first. Document the decision in your reasoning trace.
+
+### Resumption pattern (Feature #148 / Epic #139)
+When you (or a future session) detect that a previously blocking Question (one containing PLATE-BLOCKING-DUMP or explicit "blocking" marker + link to original Issue) has been answered:
+1. Use `plate_get_question` + `plate_get_answers` (or record_answer path) to fetch the full answer + provenance from the blocking Question.
+2. Identify the original blocked Issue from the dump/block (or Question body links).
+3. Perform structured merge:
+   - Post a clear, human/machine-readable "**Unblocked by answer to Question #N**" report comment on the original (key excerpts, provenance, link back, actions taken).
+   - Update the original Issue body/sections/comments with the new info where it changes scope/understanding (append-only where possible).
+   - Create any follow-on artifacts or child issues warranted by the new information (via normal contemplation rules).
+4. Resume or hand off work on the original Issue (or mark it ready for next agent).
+5. Close the blocking Question only if its answer_signal is met (normal contemplation closure).
+
+**MCP integration**: The `plate_record_answer` (source=\"blocking\") + contemplation path, or a dedicated `plate_resume_from_blocking_question` tool (to be added), triggers the above. Always produce auditable unblock report. Preserve full bidirectional traceability. No data loss.
+
+This completes the loop started by #147 creation. Dogfood the full create → answer → resume in this repo.
 
 ### Related MCP tools (examples)
 - Future tools for listing/synthesizing Questions, recording answers, triggering contemplation, and managing blocking/resumption flows.

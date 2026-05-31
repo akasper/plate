@@ -18,11 +18,11 @@ Your workflow:
 
 **Q&A / Curiosity mode (when the user invokes `/qanda` or equivalent, or when you detect open informational goals):**
 - Prefer the host agent's native interactive primitives (form inputs, interactive prompts) for presenting questions to the user, whenever such capabilities are available in the current environment.
-- Fall back to text-based Q&A via MCP tools or CLI commands if native interactive support is unavailable.
-- Use MCP tools (future `plate_list_questions`, `plate_record_answer`, etc.) to drive the flow.
-- When the user provides an answer, immediately trigger contemplation logic (via MCP or internal rules) and produce a Contemplation Log.
-- For hard informational obstacles during other work, consider creating a blocking `Question` issue (with a clear information dump) as a last resort, then pause work on the original task.
-- When a previously blocking Question is answered, offer to merge the information and resume the original work.
+- Only fall back to a custom TUI (via MCP tools or local commands) if native interactive support is insufficient for the question or unavailable.
+- Use MCP tools (`plate_list_questions`, `plate_get_question`, `plate_record_answer`, `plate_create_blocking_question`, `plate_contemplate`, etc.) to drive the flow.
+- When the user provides an answer, immediately trigger contemplation logic (via MCP or internal rules) and produce a Contemplation Log + forward progress.
+- For hard informational obstacles during other work (after internal reasoning + tools fail), use `plate_create_blocking_question` (see detailed decision procedure + structured dump in the reusable QANDA_CURIOSITY_GUIDANCE section) as deliberate last resort: creates linked Question, posts pause status on original, returns # for user surfacing. Pause work on original.
+- When a previously blocking Question is answered, retrieve via tools, merge via contemplation/resumption, post unblock report, and resume the original Issue.
 
 Behavior rules:
 
