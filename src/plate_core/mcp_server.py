@@ -108,6 +108,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 repo=args.get("repo"),
                 agent_logins=args.get("agents"),
                 act=bool(args.get("act", False)),
+                branch_update_strategy=args.get("branch_update_strategy"),
             ).to_dict()
         elif name == "plate_resolve_review_thread":
             thread_id = args.get("thread_id")
@@ -376,8 +377,8 @@ def run() -> None:
                             {
                                 "name": "plate_pr_babysit",
                                 "description": (
-                                    "Inspect a pull request for unresolved third-party agent feedback and optionally "
-                                    "post a babysitting trigger comment for the plate agent."
+                                    "Inspect a pull request for unresolved third-party agent feedback and base branch sync state. "
+                                    "Optionally post trigger comments for the plate agent to address issues."
                                 ),
                                 "inputSchema": {
                                     "type": "object",
@@ -396,7 +397,15 @@ def run() -> None:
                                         },
                                         "act": {
                                             "type": "boolean",
-                                            "description": "When true, post a babysit trigger comment if actionable threads exist.",
+                                            "description": "When true, post trigger comments if issues detected.",
+                                        },
+                                        "branch_update_strategy": {
+                                            "type": "string",
+                                            "enum": ["copilot-request", "local-rebase", "none"],
+                                            "description": (
+                                                "How to handle out-of-sync base branch: copilot-request (default, triggers Copilot merge assist), "
+                                                "local-rebase (not yet implemented), or none (detect only)."
+                                            ),
                                         },
                                     },
                                     "required": ["pr_number"],
