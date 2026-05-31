@@ -128,5 +128,3 @@ This design satisfies the platform-level requirements of Epic #218 and provides 
 ---
 
 *Related: #219 (Goals page structure), #220 (concept modeling), #222 (defaults catalog), #224 (convention adoption), Epic #139 (Curiosity foundation).*
-
-Closes #223
