@@ -186,8 +186,10 @@ Preferred flow is now **local babysitting** driven by `gh plate pr babysit <numb
 
 Use this loop:
 
-1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance).
-2. Query unresolved review threads and identify actionable third-party agent feedback
+1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance).
+2. The babysitter automatically detects two types of issues:
+   - **Unresolved review threads** from third-party agents (actionable feedback)
+   - **Base branch out-of-sync** state (PR branch behind, conflicting, or dirty relative to base branch)
 3. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 4. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
 5. For all other actionable comments: push a code change or reply explaining why no change is needed
@@ -198,6 +200,16 @@ Use this loop:
    To find `THREAD_NODE_ID` for a given comment, query `repository.pullRequest.reviewThreads` and match on `comments.nodes.databaseId`.
 7. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
 8. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
+
+**Base Branch Sync Handling:**
+
+The babysitter detects when a PR branch is out of sync with its base branch (via `mergeStateStatus`: BEHIND, CONFLICTING, or DIRTY). The default behavior is controlled by `--branch-update-strategy`:
+
+- **copilot-request** (default): Post a `@copilot` trigger comment requesting native GitHub/Copilot branch update assistance. This is safe, auditable, and reversible.
+- **local-rebase**: Local worktree rebase and push (not yet implemented, will raise `NotImplementedError`)
+- **none**: Detect and report only, take no action
+
+When `--act` is specified and the PR is out of sync, the babysitter posts a merge trigger comment (deduplicated by marker) to prompt resolution. This ensures the babysitting loop can continue without manual branch update intervention.
 
 **Lifecycle contract:**
 
