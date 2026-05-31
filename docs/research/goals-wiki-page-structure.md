@@ -42,14 +42,14 @@ What is the optimal structure for a project Wiki `Goals` page that serves as the
 
 ### Recommended Convention
 
-The structure and guidance in the draft convention document (created as part of this spike):
+The structure and guidance in the draft convention document:
 
 - Location: docs/wiki/Goals.md in repo (for source control and wiki sync participation).
 - Content: Broad directional mission statements + light rationale/evidence sections.
 - Agent use: Read as key strategic input for gap detection during audits; propose updates via Documentation PRs.
 - Adoption: Bootstrap can seed it; template docs explain it; wiki sync compatible.
 
-See the created artifact `docs/design/goals-wiki-page-convention.md` in the template_payload for the full recommended convention text (ready for adoption by downstream projects).
+The full recommended convention text (ready for adoption by downstream projects) will be integrated into the PLATE template_payload as part of #224. (A draft was prepared alongside this research.)
 
 ### Options Considered
 - Heavy machine-readable (YAML frontmatter): Rejected for v1 (per user preference for flat/light; adds complexity without clear agent win yet).
