@@ -1,0 +1,22 @@
+{
+  "version": "unreleased",
+  "summary": "Resumption and merge from answered blocking Questions (Epic #139 / Feature #148 slice)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "Contemplation Engine + agent guidance (resumption path)",
+      "migration_impact": "When an answer is recorded for a Question that was created as a blocking last-resort (#147), the engine now automatically detects the marker, posts a structured 'Unblocked by answer to Question #N' report on the original Issue (with excerpt + provenance + link), and records the merge action. Enables clean resume of previously paused work. No breaking changes.",
+      "agent_notes": "Resumption procedure is now detailed in QANDA_CURIOSITY_GUIDANCE. The contemplate() path (triggered from record_answer source=blocking or normal) handles detection + unblock report. Full body mutations and follow-on creation expandable. Use after human answers a blocking Question created via plate_create_blocking_question. Completes the create-pause-answer-resume loop.",
+      "breaking": false,
+      "links": [
+        "#148",
+        "#139",
+        "#147"
+      ],
+      "requires": [
+        "0.1.4",
+        "unreleased/147-blocking-question-last-resort"
+      ]
+    }
+  ]
+}

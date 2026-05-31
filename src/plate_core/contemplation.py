@@ -1,13 +1,14 @@
-"""Minimal Contemplation Engine runtime (Epic #139, Feature #149 slice).
+"""Minimal Contemplation Engine runtime (Epic #139, Feature #149 slice + #148 resumption).
 
 This is the core driver that turns every recorded answer into forward progress:
 - Appends structured Contemplation Log to the Question
 - Creates new actionable child issues (Features/Tasks) based on answer content + answer_signal
 - Updates related resources (stub for wiki/docs)
 - Only signals close when answer_signal is verifiably addressed (heuristic v1)
+- Special path for answers to blocking Questions (#147 creation): parse dump, post unblock report on original, merge info, resume (#148)
 
 Invoked from plate_record_answer (via optional trigger) and directly via MCP.
-Follows the contract in Design #143 and supports blocking Question resumption (#148).
+Follows the contract in Design #143.
 """
 
 from __future__ import annotations
@@ -115,6 +116,38 @@ class ContemplationEngine:
             actions.append(f"Log failed: {e}")
 
         # 3. (Future) direct resource updates (wiki, docs, CURRENT.md, PR descriptions) per rules in #143
+
+        # #148: Resumption / merge for answers to blocking Questions (created via #147 last-resort tool)
+        # Detect via marker written by CreateBlockingQuestionTool (in Question body).
+        # Posts auditable unblock report on the original Issue and records the merge action.
+        # Full structured body updates + child creation can be expanded in later slices.
+        try:
+            q = self.gh.api(f"repos/{target}/issues/{question_number}")
+            q_body = (q.get("body") or "") if isinstance(q, dict) else ""
+            if "PLATE-BLOCKING-DUMP" in q_body or "last-resort" in q_body.lower() or "blocking info needed" in q_body.lower():
+                import re
+                m = re.search(r"original[=_](\d+)", q_body)
+                if m:
+                    orig = int(m.group(1))
+                    excerpt = (answer_text or "")[:250]
+                    unblock_body = (
+                        f"**Unblocked by answer to Question #{question_number} (blocking resumption)**\n\n"
+                        f"Human answer to the blocking Question has been recorded. Key information merged into context.\n\n"
+                        f"**Answer excerpt:**\n\n> {excerpt}{'...' if len(answer_text or '') > 250 else ''}\n\n"
+                        "**Next steps:** Resume or hand off work on this Issue using the new information. "
+                        "Full provenance and dump live in the Question (follows Answer Model #150).\n\n"
+                        f"**Blocking Question:** #{question_number}\n"
+                        f"<!-- plate-unblock: q{question_number} orig={orig} @{timestamp} -->"
+                    )
+                    self.gh.api(
+                        f"repos/{target}/issues/{orig}/comments",
+                        method="POST",
+                        fields={"body": unblock_body},
+                    )
+                    actions.append(f"Unblock report posted on original #{orig} (resumption from blocking Question)")
+                    # Optional: could update orig body or spawn children here per full #148 contract
+        except Exception as e:
+            actions.append(f"Blocking resumption/merge check failed (non-fatal): {e}")
 
         result = {
             "status": "contemplated",

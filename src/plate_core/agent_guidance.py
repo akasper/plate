@@ -101,11 +101,20 @@ When criteria met:
 
 This is the concrete last-resort escape hatch. Over-use is a risk — prefer reasoning first. Document the decision in your reasoning trace.
 
-### Resumption pattern
-When you (or a future session) see that a previously blocking Question has been answered:
-- Retrieve the answer + provenance.
-- Merge the key information into the original Issue (via comment and/or targeted updates).
-- Resume or unblock the original work, producing a clear "unblocked by answer to Question #N" record.
+### Resumption pattern (Feature #148 / Epic #139)
+When you (or a future session) detect that a previously blocking Question (one containing PLATE-BLOCKING-DUMP or explicit "blocking" marker + link to original Issue) has been answered:
+1. Use `plate_get_question` + `plate_get_answers` (or record_answer path) to fetch the full answer + provenance from the blocking Question.
+2. Identify the original blocked Issue from the dump/block (or Question body links).
+3. Perform structured merge:
+   - Post a clear, human/machine-readable "**Unblocked by answer to Question #N**" report comment on the original (key excerpts, provenance, link back, actions taken).
+   - Update the original Issue body/sections/comments with the new info where it changes scope/understanding (append-only where possible).
+   - Create any follow-on artifacts or child issues warranted by the new information (via normal contemplation rules).
+4. Resume or hand off work on the original Issue (or mark it ready for next agent).
+5. Close the blocking Question only if its answer_signal is met (normal contemplation closure).
+
+**MCP integration**: The `plate_record_answer` (source=\"blocking\") + contemplation path, or a dedicated `plate_resume_from_blocking_question` tool (to be added), triggers the above. Always produce auditable unblock report. Preserve full bidirectional traceability. No data loss.
+
+This completes the loop started by #147 creation. Dogfood the full create → answer → resume in this repo.
 
 ### Related MCP tools (examples)
 - Future tools for listing/synthesizing Questions, recording answers, triggering contemplation, and managing blocking/resumption flows.
