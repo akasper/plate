@@ -79,12 +79,27 @@ PLATE supports a Curiosity-driven workflow where informational goals are tracked
 6. For hard informational obstacles during other work, create a blocking `Question` issue (with a clear structured information dump) as a deliberate last resort, post a status on the original Issue, and pause work on it.
 7. When a blocking Question is later answered, offer to merge the new information back into the original Issue and resume the blocked work.
 
-### Blocking / informational obstacle pattern
-When you cannot safely proceed on a task (Research, Design, Feature, etc.) without additional human clarity:
-- Create a linked `Question` issue.
-- Include a thorough but concise information dump (current understanding, exact blocker, what input would unblock you).
-- Update the original Issue with a clear "paused pending answer to Question #N" comment.
-- Do not continue significant work on the original Issue in the same session.
+### Blocking / informational obstacle pattern (Feature #147 / Epic #139)
+**Decision procedure (invoke ONLY as deliberate last resort):**
+1. You have performed internal reasoning + used available tools/MCP calls (reads, searches, contemplation on prior answers, etc.) and still cannot safely proceed without risking incorrect work or violating requirements/scope.
+2. The blocker is informational (ambiguity, missing context, human judgment needed on tradeoffs/risks/users, conflicting signals) — not a simple implementation detail you can experiment on.
+3. Continuing would violate "never lose information" or "create forward progress" invariants, or risk significant rework.
+4. No open Question already covers this exact need.
+
+When criteria met:
+- Call `plate_create_blocking_question` (MCP) with:
+  - original_issue_number (the blocked task)
+  - blockage_point (exact sentence/requirement/step where stuck)
+  - missing_info (what human must clarify)
+  - suggested_questions (2-5 crisp questions for the human; this becomes the Question title/body focus)
+  - partial_work (what you have done/understood so far — never lose this)
+  - extra_context (links to artifacts, prior answers, etc.)
+- The tool creates the Question (with structured PLATE-BLOCKING-DUMP per Answer Model style), posts a standardized pause status on the original Issue with bidirectional link, and returns the new Question #.
+- Surface the new Question # to the user (mention in chat, or use Q&A mode).
+- **Discontinue** further work on the original Issue in this session. Hand off cleanly.
+- Later (after human answers): see Resumption pattern below + #148.
+
+This is the concrete last-resort escape hatch. Over-use is a risk — prefer reasoning first. Document the decision in your reasoning trace.
 
 ### Resumption pattern
 When you (or a future session) see that a previously blocking Question has been answered:

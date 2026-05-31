@@ -1,0 +1,20 @@
+{
+  "version": "unreleased",
+  "summary": "Agent last-resort blocking Question creation for informational obstacles (Epic #139 / Feature #147 slice)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "MCP tool plate_create_blocking_question + agent guidance",
+      "migration_impact": "Agents (plate and future Curiosity-aware) now have a concrete, tool-backed last-resort path when hitting hard informational obstacles on any open Issue type. Creates properly linked Question with structured dump (Answer Model provenance style), posts standardized pause status on original, returns new # for user surfacing. No breaking changes to existing flows.",
+      "agent_notes": "Decision procedure (exhaust reasoning + tools first, then call only for true info blockers) is now explicit in QANDA_CURIOSITY_GUIDANCE and plate.agent.md. Call plate_create_blocking_question with original_issue_number + blockage details + suggested_questions. Tool handles dump, linking, and pause comment. Later resumption covered in #148. Prefer native Copilot experience for surfacing the new Question to the human.",
+      "breaking": false,
+      "links": [
+        "#147",
+        "#139"
+      ],
+      "requires": [
+        "0.1.4"
+      ]
+    }
+  ]
+}

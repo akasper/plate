@@ -15,6 +15,7 @@ from .pr_babysit import babysit_pr, resolve_review_thread
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
+    CreateBlockingQuestionTool,
     GetAnswersTool,
     GetQuestionTool,
     ListQuestionsTool,
@@ -559,6 +560,23 @@ def run() -> None:
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "max_results": {"type": "integer", "description": "Top N to return (default 5).", "default": 5},
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_create_blocking_question",
+                                "description": "Create a blocking Question issue as last resort when the agent hits a hard informational obstacle on another open Issue (Research/Design/Feature/etc.). Per Feature #147 / Epic #139. Performs structured information dump (Answer Model provenance style), bidirectional linking, and posts standardized 'paused' status on the original Issue. Agent should call this only after other reasoning/tools fail, then surface the new Question # to the user and pause work on the original.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "original_issue_number": {"type": "integer", "description": "The Issue (any type) that is blocked."},
+                                        "blockage_point": {"type": "string", "description": "Exact point where safe progress stopped."},
+                                        "missing_info": {"type": "string", "description": "What information is missing or ambiguous."},
+                                        "suggested_questions": {"type": "array", "items": {"type": "string"}, "description": "Specific questions to ask the human (recommended)."},
+                                        "partial_work": {"type": "string", "description": "What the agent has done/understood so far (to avoid loss)."},
+                                        "extra_context": {"type": "string", "description": "Any additional artifacts or context."},
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                    "required": ["original_issue_number", "blockage_point", "missing_info"],
                                 },
                             },
                         ]
