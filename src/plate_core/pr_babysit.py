@@ -294,7 +294,7 @@ def babysit_pr(
         if not _has_existing_merge_trigger_comment(gh, target, pr_number):
             merge_trigger_url = _post_merge_trigger(gh, target, pr_number, sync_info)
             merge_trigger_posted = True
-    elif sync_info["out_of_sync"] and strategy == "local-rebase":
+    elif act and sync_info["out_of_sync"] and strategy == "local-rebase":
         # Stub for future implementation
         raise NotImplementedError("local-rebase strategy is not yet implemented")
 
