@@ -14,6 +14,7 @@ Strongly prefers native Copilot CLI primitives for the primary interface (per De
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -25,6 +26,10 @@ from ..health import resolve_repo
 
 PLATE_ANSWER_BEGIN = "<!-- PLATE-ANSWER:BEGIN -->"
 PLATE_ANSWER_END = "<!-- PLATE-ANSWER:END -->"
+
+# For #147 blocking Question creation (last-resort info dump). Follows Answer Model provenance spirit.
+PLATE_BLOCKING_DUMP_BEGIN = "<!-- PLATE-BLOCKING-DUMP:BEGIN -->"
+PLATE_BLOCKING_DUMP_END = "<!-- PLATE-BLOCKING-DUMP:END -->"
 
 
 def _get_gh_client(client: GhClient | None = None) -> GhClient:
@@ -322,6 +327,123 @@ class SynthesizePrioritiesTool:
             return {"repo": target, "error": str(exc), "prioritized_questions": []}
 
 
+class CreateBlockingQuestionTool:
+    """Create a blocking `Question` issue as deliberate last resort (Epic #139 / Feature #147).
+
+    Agent invokes this when it has exhausted internal reasoning + tool use on an open Issue
+    (Research/Design/Feature/etc.) and cannot proceed safely without human input.
+
+    - Creates new Question with structured information dump (provenance style per Answer Model #142).
+    - Bidirectional link: Question body references original; posts clear "paused" status comment on original.
+    - Returns new Question number for agent to surface to user (via Q&A or direct link).
+    - Does not continue work on original in same session (per guidance).
+
+    This provides the concrete mechanism behind the decision procedure documented in agent_guidance.py
+    and AGENTS.md updates for this Feature.
+    """
+
+    @staticmethod
+    def execute(
+        original_issue_number: int,
+        blockage_point: str,
+        missing_info: str,
+        suggested_questions: list[str] | None = None,
+        partial_work: str = "",
+        extra_context: str = "",
+        repo: str | None = None,
+        client: GhClient | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        gh = _get_gh_client(client)
+        target = _resolve_target_repo(repo)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        suggested = suggested_questions or []
+
+        # Structured dump body for the new Question (human + machine readable, Answer Model compatible spirit)
+        dump_lines = [
+            PLATE_BLOCKING_DUMP_BEGIN,
+            "{",
+            f'  "original_issue": {original_issue_number},',
+            f'  "timestamp": "{timestamp}",',
+            '  "source": "agent-last-resort-blocking",',
+            f'  "blockage_point": {json.dumps(blockage_point)},',
+            f'  "missing_info": {json.dumps(missing_info)},',
+            f'  "suggested_questions": {json.dumps(suggested)},',
+            f'  "partial_work": {json.dumps(partial_work[:2000])},',
+            f'  "extra_context": {json.dumps(extra_context[:1000])},',
+            "}",
+            PLATE_BLOCKING_DUMP_END,
+        ]
+        dump_block = "\n".join(dump_lines)
+
+        title = f"[Question]: Blocking info needed for #{original_issue_number} - {blockage_point[:60]}"
+        body = (
+            f"**Blocking Question** created as last resort during work on Issue #{original_issue_number}.\n\n"
+            f"**Blocked Issue:** #{original_issue_number}\n\n"
+            f"**Exact point of blockage:**\n\n{blockage_point}\n\n"
+            f"**Information missing or ambiguous:**\n\n{missing_info}\n\n"
+            f"**Suggested questions for human:**\n\n" + "\n".join(f"- {q}" for q in suggested) + "\n\n"
+            f"**Agent's partial work / current understanding:**\n\n{partial_work or '(none recorded beyond this dump)'}\n\n"
+            f"**Additional context:**\n\n{extra_context or '(see linked Issue and agent session)'}\n\n"
+            "---\n\n"
+            f"This Question was created per the #147 last-resort pattern (Epic #139). "
+            "When answered, a future agent session will merge the response and resume work on the original Issue.\n\n"
+            f"**Original Issue link:** #{original_issue_number}\n"
+            f"**Contemplation / resumption:** Use `plate_record_answer` (source=\"blocking\") + contemplation after human reply.\n\n"
+            f"<!-- plate-blocking-ref: original={original_issue_number} @{timestamp} -->\n"
+        ) + "\n\n" + dump_block
+
+        try:
+            new_q = gh.api(
+                f"repos/{target}/issues",
+                method="POST",
+                fields={
+                    "title": title,
+                    "body": body,
+                    "labels": ["Question"],
+                },
+            )
+            new_number = new_q.get("number")
+            new_url = new_q.get("html_url")
+
+            # Bidirectional: post clear pause status on the *original* Issue
+            pause_body = (
+                f"**Paused for human input (informational obstacle — last resort)**\n\n"
+                f"Agent hit a hard blocker while working on this Issue and created blocking Question #{new_number} with full structured information dump.\n\n"
+                f"**Blockage:** {blockage_point}\n\n"
+                f"**Link to Question:** #{new_number} ({new_url})\n\n"
+                "Work on this Issue is paused in the current session. A future agent session (triggered after human answer) will retrieve the answer, merge key information, post an unblock report, and resume.\n\n"
+                f"<!-- plate-blocking-pause: question={new_number} @{timestamp} -->\n"
+            )
+            try:
+                pause_comment = gh.api(
+                    f"repos/{target}/issues/{original_issue_number}/comments",
+                    method="POST",
+                    fields={"body": pause_body},
+                )
+                pause_url = pause_comment.get("html_url")
+            except GhApiError as e:
+                pause_url = None
+                pause_body = f"(Failed to post pause status: {e})"
+
+            return {
+                "status": "blocking_question_created",
+                "blocking_question_number": new_number,
+                "blocking_question_url": new_url,
+                "original_issue_number": original_issue_number,
+                "pause_status_url": pause_url,
+                "title": title,
+                "dump_block": dump_block,
+                "note": "Per Feature #147 / Epic #139. Agent should surface the new Question # to user (via Q&A mode or direct mention) and discontinue work on original until answered. Follows Answer Model provenance style for dump.",
+            }
+        except GhApiError as exc:
+            return {
+                "status": "error",
+                "error": str(exc),
+                "original_issue_number": original_issue_number,
+            }
+
+
 # Convenience re-exports for server wiring
 CURIOSITY_TOOLS = {
     "plate_list_questions": ListQuestionsTool,
@@ -329,4 +451,5 @@ CURIOSITY_TOOLS = {
     "plate_record_answer": RecordAnswerTool,
     "plate_get_answers": GetAnswersTool,
     "plate_synthesize_priorities": SynthesizePrioritiesTool,
+    "plate_create_blocking_question": CreateBlockingQuestionTool,
 }

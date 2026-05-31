@@ -210,6 +210,7 @@ class McpTests(unittest.TestCase):
             "plate_record_answer",
             "plate_get_answers",
             "plate_synthesize_priorities",
+            "plate_create_blocking_question",  # Feature #147 last-resort creation
         ]:
             self.assertIn(expected, names)
 
