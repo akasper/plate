@@ -159,6 +159,9 @@ agents:
       - identify-market-gaps-and-opportunities
       - review-discussions
       - audit-spec-current
+      - run-qanda-session
+      - create-blocking-question-on-obstacle
+      - resume-from-answered-question
     constraints:
       - Separate source facts from recommendations.
       - Prefer committed artifacts over ephemeral notes.
@@ -435,3 +438,44 @@ skills:
       - "Estimate the cost of running the baseline agents suite in CI."
     owning_agent_ids:
       - accountant
+  # Curiosity / Q&A skills (Epic #139 / Features #147/#148/#151)
+  - id: run-qanda-session
+    name: Run Q&A Session
+    description: Discover, prioritize, present (via native or fallback), and record answers to open Question issues, triggering contemplation.
+    inputs:
+      - Repo / Epic context
+      - Open Questions (via MCP or gh plate qanda)
+    outputs:
+      - Recorded answers + Contemplation logs
+      - New forward-progress issues/artifacts
+    examples:
+      - "Run Q&A on the top 3 open informational goals for the current Epic and summarize outcomes."
+    owning_agent_ids:
+      - research-agent
+      - project-manager
+  - id: create-blocking-question-on-obstacle
+    name: Create Blocking Question on Obstacle
+    description: As deliberate last resort, create a linked blocking Question with structured information dump when hitting a hard informational obstacle on another Issue. Pause the original work.
+    inputs:
+      - Original blocked Issue
+      - Blockage details + partial work (never lost)
+    outputs:
+      - New blocking Question # + pause status posted on original
+    examples:
+      - "We are blocked on scope ambiguity for the dashboard Epic. Create blocking Question and pause."
+    owning_agent_ids:
+      - research-agent
+      - software-engineer
+  - id: resume-from-answered-question
+    name: Resume from Answered (Blocking) Question
+    description: After a blocking Question is answered, retrieve the full answer + provenance, merge into the original Issue via unblock report + context updates, and resume the paused work.
+    inputs:
+      - Answered blocking Question (with dump marker)
+    outputs:
+      - Unblock report on original Issue
+      - Merged context + resumed work items
+    examples:
+      - "The blocking Question on user personas was answered. Merge the findings and resume the onboarding Feature."
+    owning_agent_ids:
+      - research-agent
+      - project-manager
