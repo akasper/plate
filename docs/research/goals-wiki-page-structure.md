@@ -7,11 +7,10 @@ status: complete
 
 # Research: Wiki Goals Page Structure for Agent and Human Consumption
 
-**Issue:** #219 (Research child of Epic #218 "Information Audit & Goal-Driven Question Generation")
-
-**Researched by:** Grok (xAI), following AGENTS.md Research work loop
-
-**Date:** 2026-05-31
+- **Issue:** #219 (Research child of Epic #218 "Information Audit & Goal-Driven Question Generation")
+- **Researched by:** Grok (xAI), following AGENTS.md Research work loop
+- **Date:** 2026-05-31
+- **Status:** Complete
 
 ## Research Question
 
