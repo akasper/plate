@@ -1,0 +1,24 @@
+{
+  "version": "unreleased",
+  "summary": "Q&A Mode TUI/CLI surfaces progress - interactive fallback + native preference (Epic #139 / Feature #151 slice)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "gh plate qanda CLI (fallback TUI path)",
+      "migration_impact": "Direct `gh plate qanda --record N` now supports interactive prompting (basic multi-line TUI fallback) when no --answer provided. Primary Copilot CLI path continues to prefer native host forms (enforced in guidance/persona per Design #144). No breaking changes to JSON or existing flags.",
+      "agent_notes": "In Copilot CLI (primary): always prefer native interactive primitives (forms, prompts) - never launch custom TUI unless native insufficient. Fallback `gh plate qanda` provides the interactive path for direct use + scripting. Blocking creation (#147) and resumption (#148) fully wired. See QANDA_CURIOSITY_GUIDANCE for decision tree. GIF evidence and richer widgets in follow-ups.",
+      "breaking": false,
+      "links": [
+        "#151",
+        "#139",
+        "#144",
+        "#147",
+        "#148"
+      ],
+      "requires": [
+        "unreleased/147-blocking-question-last-resort",
+        "unreleased/148-merge-resume-blocking"
+      ]
+    }
+  ]
+}

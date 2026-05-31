@@ -200,6 +200,7 @@ def cmd_qanda(args: argparse.Namespace) -> int:
         GetQuestionTool,
         RecordAnswerTool,
         SynthesizePrioritiesTool,
+        CreateBlockingQuestionTool,  # #147 / #151 integration
     )
 
     repo = getattr(args, "repo", None)
@@ -219,7 +220,7 @@ def cmd_qanda(args: argparse.Namespace) -> int:
             print(f"  {i}. #{q.get('number')}: {q.get('title')}")
             print(f"     {q.get('html_url')}")
         print(f"\n{result.get('rationale', '')}")
-        print("Tip: gh plate qanda --question N  |  --record N --answer 'text'")
+        print("Tip: gh plate qanda --question N  |  --record N  (interactive) or --record N --answer 'text'")
         return 0
 
     if getattr(args, "synthesize", False):
@@ -248,14 +249,38 @@ def cmd_qanda(args: argparse.Namespace) -> int:
         print("\n(Use --record to append an answer and trigger contemplation.)")
         return 0
 
-    if getattr(args, "record", None) and getattr(args, "answer", None):
+    if getattr(args, "record", None):
         qnum = args.record
+        answer_text = getattr(args, "answer", None)
+        if not answer_text:
+            # Basic interactive fallback TUI for direct gh plate use (#151)
+            # (In Copilot CLI primary path, native forms are preferred per Design #144 + guidance)
+            print(f"Interactive answer for Question #{qnum} (fallback TUI path).")
+            try:
+                answer_text = input("Enter your answer (multi-line supported via paste; end with blank line or Ctrl-D):\n").strip()
+                if not answer_text:
+                    # Simple multi-line read
+                    lines = []
+                    while True:
+                        try:
+                            line = input()
+                            if not line.strip():
+                                break
+                            lines.append(line)
+                        except EOFError:
+                            break
+                    answer_text = "\n".join(lines).strip()
+            except Exception:
+                answer_text = None
+            if not answer_text:
+                print("No answer provided; aborting record.")
+                return 1
         result = RecordAnswerTool.execute(
             question_number=qnum,
-            answer_text=args.answer,
+            answer_text=answer_text,
             answered_by=getattr(args, "by", "cli-user"),
             repo=repo,
-            source="manual",
+            source="cli-interactive",
         )
         if json_out:
             print(json.dumps(result))
@@ -263,16 +288,18 @@ def cmd_qanda(args: argparse.Namespace) -> int:
         print(f"Answer recorded for #{qnum}: {result.get('status')}")
         if result.get("comment_url"):
             print(f"Comment: {result['comment_url']}")
-        print("Next: invoke Contemplation Engine to create follow-ups (see #149).")
+        print("Next: Contemplation will create follow-ups / unblock if this was a blocking Question (#147/#148).")
         return 0
 
     # Fallback help
-    print("gh plate qanda usage:")
-    print("  gh plate qanda --list          # list + prioritize open Questions")
-    print("  gh plate qanda --question 140  # details for one")
-    print("  gh plate qanda --record 140 --answer 'The answer text here'")
+    print("gh plate qanda usage (fallback for direct CLI; prefer native Copilot TUI inside Copilot CLI per Design #144):")
+    print("  gh plate qanda --list                    # list + prioritize open Questions")
+    print("  gh plate qanda --question 140            # details for one")
+    print("  gh plate qanda --record 140              # interactive prompt for answer (basic TUI fallback)")
+    print("  gh plate qanda --record 140 --answer 'text'")
     print("  gh plate qanda --synthesize --json")
-    print("\nFor rich interactive sessions in Copilot CLI, the agent uses native TUI + these MCP tools.")
+    print("\nNative Copilot CLI sessions: agent uses host native forms + MCP tools (plate_create_blocking_question for #147 obstacles, record + contemplate for #148 resumption).")
+    print("See QANDA_CURIOSITY_GUIDANCE and #151 for full TUI + GIF evidence.")
     return 0
 
 
