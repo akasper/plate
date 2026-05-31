@@ -224,5 +224,27 @@ class McpTests(unittest.TestCase):
         # Either success content or isError=True with message (both acceptable for this smoke)
         self.assertIn("content", result)
 
+    def test_create_blocking_question_tool_exists_and_schema(self):
+        """Feature #147/#151: Blocking creation tool is registered (Epic #139)."""
+        from plate_core.mcp.curiosity_tools import CreateBlockingQuestionTool, CURIOSITY_TOOLS
+        self.assertIn("plate_create_blocking_question", CURIOSITY_TOOLS)
+        # Basic instantiation / method presence (full integration tested via MCP dispatch + GH in higher suites)
+        tool = CreateBlockingQuestionTool
+        self.assertTrue(hasattr(tool, "execute"))
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_create_blocking_stub(self, mock_write):
+        """Smoke for #147 tool dispatch (real creation mocked at GH layer)."""
+        _handle_tools_call(22, {
+            "name": "plate_create_blocking_question",
+            "arguments": {
+                "original_issue_number": 999,
+                "blockage_point": "Missing clarity on scope",
+                "missing_info": "Confirm primary user persona",
+                "repo": "akasper/nonexistent-for-test"
+            }
+        })
+        self.assertTrue(mock_write.called)
+
 if __name__ == "__main__":
     unittest.main()

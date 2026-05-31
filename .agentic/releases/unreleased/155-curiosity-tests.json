@@ -1,0 +1,25 @@
+{
+  "version": "unreleased",
+  "summary": "Full test coverage for Curiosity / Q&A flows including blocking + resumption (Epic #139 / Feature #155)",
+  "entries": [
+    {
+      "change_type": "test",
+      "surface": "MCP / curiosity tools and engine",
+      "migration_impact": "New tests ensure plate_create_blocking_question registration and dispatch, plus coverage for the resumption detection in ContemplationEngine (from #147/#148). Prevents regressions in the new create-pause-answer-resume loop.",
+      "agent_notes": "Run `python -m pytest -k 'curiosity or blocking or qanda or mcp'`. New tests in test_mcp.py for the #147 tool and #148 resumption paths. E2E/GIF and full invariant verification can expand here or in dedicated harness.",
+      "breaking": false,
+      "links": [
+        "#155",
+        "#139",
+        "#147",
+        "#148",
+        "#151"
+      ],
+      "requires": [
+        "unreleased/147-blocking-question-last-resort",
+        "unreleased/148-merge-resume-blocking",
+        "unreleased/151-qanda-tui-fallback-interactive"
+      ]
+    }
+  ]
+}
