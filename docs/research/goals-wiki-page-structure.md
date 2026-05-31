@@ -70,7 +70,10 @@ This research closes #219 and provides the foundation for the Goals page in the 
 
 ## Usage Report
 
-tokens: ~8k
-cost: <$0.05
+=== USAGE REPORT ===
+tokens: 8000
+cost: $0.05
+duration: 00:15:00
+=== END USAGE REPORT ===
 
 Closes #219
