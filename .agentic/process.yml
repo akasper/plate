@@ -52,6 +52,7 @@ labels:
       - "Bug"
       - "Feature"
       - "Epic"
+      - "Release"
       - "Research"
       - "Design"
       - "Question"
@@ -62,6 +63,33 @@ labels:
       - "Bug"
       - "Feature"
       - "Documentation"
+  release_rules:
+    branch_model:
+      epic_branch_pattern: "epic/<short-name>"
+      release_branch: "release"
+      main_branch: "main"
+      flow: "feature/bug → epic branch PR → epic/<name> → release branch PR → release → main + tag"
+    epic_close_ceremony:
+      - "All child Feature/Bug issues closed."
+      - "Open PR from epic/<name> into release branch."
+      - "PR reviewed and squash-merged."
+    release_ceremony:
+      - "Open Release issue with target version."
+      - "Open PR from release into main."
+      - "PR reviewed and approved."
+      - "Squash-merge PR into main."
+      - "Apply git tag vX.Y.Z to the merge commit."
+      - "Create GitHub Release from the tag (auto-populated from notes)."
+      - "Hard-reset release branch to tag: git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease"
+    fragment_contract:
+      source_dir: ".agentic/releases/unreleased/"
+      versioned_dir: ".agentic/releases/vX.Y.Z/"
+      required_for: "Feature PRs that change PLATE process, templates, or agent surfaces"
+      aggregated_by: "gh plate release cut vX.Y.Z"
+    extension_hook_surface:
+      field: "release_checks"
+      location: ".agentic/extensions.yml"
+      surfaced_by: "gh plate release status"
   epic_rules:
     milestones_are_canonical_epics: true
     every_feature_issue_has_epic_milestone: true

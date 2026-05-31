@@ -26,6 +26,14 @@ def render_release(data: dict) -> str:
                 f"- **Agent notes:** {entry['agent_notes']}",
             ]
         )
+        migration_guidance = entry.get("migration_guidance")
+        if migration_guidance:
+            if isinstance(migration_guidance, list):
+                lines.append("- **Migration steps:**")
+                for step in migration_guidance:
+                    lines.append(f"  - {step}")
+            else:
+                lines.append(f"- **Migration steps:** {migration_guidance}")
         if entry.get("breaking"):
             lines.append("- **Breaking:** yes")
         if entry.get("links"):
@@ -40,7 +48,33 @@ def iter_release_files(path: Path) -> Iterable[Path]:
         yield path
         return
 
-    yield from sorted(path.glob("v*.json"))
+    # Legacy flat files at root
+    root_files = sorted(path.glob("v*.json"))
+
+    # New versioned dirs: vX.Y.Z/ containing release.json
+    def _ver_key(p: Path) -> tuple[int, ...]:
+        stem = p.stem.lstrip("v") if p.is_file() else p.name.lstrip("v")
+        try:
+            return tuple(int(x) for x in stem.split("."))
+        except ValueError:
+            return (0,)
+
+    versioned_dirs = sorted(
+        [d for d in path.iterdir() if d.is_dir() and d.name.startswith("v")],
+        key=_ver_key,
+    )
+    dir_releases = []
+    for vdir in versioned_dirs:
+        release_file = vdir / "release.json"
+        if release_file.exists():
+            dir_releases.append(release_file)
+
+    # Combine: prefer dir releases, fall back to flat files for versions not present as dirs
+    dir_versions = {f.parent.name for f in dir_releases}
+    flat_only = [f for f in root_files if f.stem not in dir_versions]
+
+    all_files = sorted(flat_only + dir_releases, key=_ver_key)
+    yield from all_files
 
 
 def main() -> int:

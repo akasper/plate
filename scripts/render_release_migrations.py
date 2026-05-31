@@ -15,8 +15,34 @@ def version_key(version: str) -> tuple[int, int, int]:
     return int(major), int(minor), int(patch)
 
 
+def _ver_key(p: Path) -> tuple[int, ...]:
+    stem = p.stem.lstrip("v") if p.is_file() else p.name.lstrip("v")
+    try:
+        return tuple(int(x) for x in stem.split("."))
+    except ValueError:
+        return (0,)
+
+
 def load_release_files(path: Path) -> list[dict]:
-    files = [path] if path.is_file() else sorted(path.glob("v*.json"), key=lambda p: version_key(p.stem.lstrip("v")))
+    if path.is_file():
+        files = [path]
+    else:
+        # Legacy flat files
+        root_files = sorted(path.glob("v*.json"), key=_ver_key)
+        # New versioned dirs
+        versioned_dirs = sorted(
+            [d for d in path.iterdir() if d.is_dir() and d.name.startswith("v")],
+            key=_ver_key,
+        )
+        dir_releases = []
+        for vdir in versioned_dirs:
+            release_file = vdir / "release.json"
+            if release_file.exists():
+                dir_releases.append(release_file)
+        dir_versions = {f.parent.name for f in dir_releases}
+        flat_only = [f for f in root_files if f.stem not in dir_versions]
+        files = sorted(flat_only + dir_releases, key=_ver_key)
+
     releases = []
     for file in files:
         with file.open("r", encoding="utf-8") as fh:
@@ -89,6 +115,14 @@ def render_guidance(releases: list[dict], from_version: str | None, to_version: 
             lines.append(f"{index}. **{entry['change_type']}** — {entry['surface']}")
             lines.append(f"   - What changed: {entry['migration_impact']}")
             lines.append(f"   - Why: {entry['agent_notes']}")
+            migration_guidance = entry.get("migration_guidance")
+            if migration_guidance:
+                if isinstance(migration_guidance, list):
+                    lines.append("   - **Migration steps:**")
+                    for step in migration_guidance:
+                        lines.append(f"     - {step}")
+                else:
+                    lines.append(f"   - **Migration steps:** {migration_guidance}")
             if entry.get("requires"):
                 lines.append(f"   - Requires: {', '.join(entry['requires'])}")
             if entry.get("links"):

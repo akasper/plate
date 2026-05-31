@@ -26,6 +26,9 @@
 - name: "Migration"
   color: "c5def5"
   description: "Issue type: existing-project PLATE adoption task."
+- name: "Release"
+  color: "0052cc"
+  description: "Issue type: planned PLATE release with pre-release checklist, extension hooks, and semver traceability."
 
 - name: "Design"
   color: "f9d0c4"

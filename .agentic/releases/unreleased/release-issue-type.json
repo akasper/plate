@@ -1,0 +1,18 @@
+{
+  "slug": "release-issue-type",
+  "change_type": "process",
+  "surface": "Issue types, label registry, label-check workflow, process.yml",
+  "summary": "Introduces Release as a first-class PLATE issue type with label, template, and enforcement.",
+  "migration_impact": "Add 'Release' to issueTypeLabels in your label-check.yml workflow and to issue_type_labels in process.yml. Run `gh label sync .github/labels.yml` to create the Release label. The new .github/ISSUE_TEMPLATE/release.yml template is available for tracking release ceremonies.",
+  "migration_guidance": [
+    "1. Pull the latest .github/labels.yml and run: gh label sync .github/labels.yml (or gh api repos/{owner}/{repo}/labels --method POST --field name='Release' --field color='0052cc' --field description='...').",
+    "2. Copy .github/ISSUE_TEMPLATE/release.yml from the plate template into your repo.",
+    "3. In .github/workflows/label-check.yml, add 'Release' to the issueTypeLabels array.",
+    "4. In .agentic/process.yml, add 'Release' under labels.issue_type_labels.required_exactly_one.",
+    "5. Add the release_rules block from process.yml to document branch model and ceremonies."
+  ],
+  "agent_notes": "Release issues are now valid PLATE issue types. The label-check workflow accepts them without requiring a milestone. Use Release issues to track pre-release checklists, extension hooks, and semver tag traceability.",
+  "breaking": false,
+  "links": ["#195", "#194"],
+  "requires": ["0.1.3"]
+}
