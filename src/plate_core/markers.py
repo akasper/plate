@@ -15,8 +15,17 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 
-START_PATTERN = re.compile(r"<!--\s*PLATES-CORE:\s*([a-zA-Z0-9_-]+)\s*-->")
-END_PATTERN = re.compile(r"<!--\s*/PLATES-CORE\s*-->")
+# Support both syntax forms used in practice:
+# 1. Simple: <!-- PLATES-CORE: section-name --> ... <!-- /PLATES-CORE -->
+# 2. Block (documented in AGENTS.md): <!-- PLATES-CORE:BEGIN section-name --> ... <!-- PLATES-CORE:END section-name -->
+START_PATTERN = re.compile(
+    r"<!--\s*PLATES-CORE:(?:\s*BEGIN)?\s*([a-zA-Z0-9_-]+)\s*-->",
+    re.IGNORECASE
+)
+END_PATTERN = re.compile(
+    r"<!--\s*(?:/PLATES-CORE|PLATES-CORE:\s*END\s*[a-zA-Z0-9_-]*)\s*-->",
+    re.IGNORECASE
+)
 
 @dataclass
 class MarkerSection:
@@ -42,9 +51,16 @@ class MarkerParser:
     """Parser and validator for PLATES-CORE markers."""
 
     def is_start_marker(self, line: str) -> bool:
+        stripped = line.lstrip()
+        if stripped.startswith("<!--") and line != stripped:
+            # Indented marker-like text (examples in docs, code fences) — ignore for structural scanning
+            return False
         return bool(START_PATTERN.search(line))
 
     def is_end_marker(self, line: str) -> bool:
+        stripped = line.lstrip()
+        if stripped.startswith("<!--") and line != stripped:
+            return False
         return bool(END_PATTERN.search(line))
 
     def extract_section_name(self, line: str) -> Optional[str]:
@@ -54,6 +70,9 @@ class MarkerParser:
     def find_marked_sections(self, content: str) -> List[MarkerSection]:
         """Return list of non-overlapping marked sections found in the content.
         Strictly forbids nesting.
+        Supports both simple (PLATES-CORE: name / /PLATES-CORE) and
+        block (PLATES-CORE:BEGIN name ... PLATES-CORE:END name) syntax.
+        For block style, end name must match start name (if present on end).
         """
         lines = content.splitlines(keepends=True)
         sections: List[MarkerSection] = []
@@ -63,10 +82,36 @@ class MarkerParser:
         current_name = None
         start_line = 0
 
+        # End name extractor for block style
+        END_NAME_RE = re.compile(r"PLATES-CORE:\s*END\s*([a-zA-Z0-9_-]+)", re.IGNORECASE)
+
         while i < n:
             line = lines[i]
             if self.is_start_marker(line):
                 if in_marker:
+                    # Tolerant handling for self-contained example pairs inside doc blocks
+                    # (e.g. literal <!-- PLATES-CORE:BEGIN block-id --> examples in AGENTS.md teaching text)
+                    inner_name = self.extract_section_name(line)
+                    k = i + 1
+                    found_inner_end = False
+                    END_NAME_RE2 = re.compile(r"PLATES-CORE:\s*END\s*([a-zA-Z0-9_-]+)", re.IGNORECASE)
+                    while k < n:
+                        if self.is_end_marker(lines[k]):
+                            m = END_NAME_RE2.search(lines[k])
+                            # Only treat as closer for the peeked named inner if it has a *matching name*
+                            # (simple / ends or mismatched do not close a named example pair)
+                            if m and m.group(1).lower() == (inner_name or "").lower():
+                                found_inner_end = True
+                                break
+                        if self.is_start_marker(lines[k]):
+                            # another deeper, not self-contained example
+                            break
+                        k += 1
+                    if found_inner_end:
+                        # skip the entire example pair as literal content; stay in outer marker
+                        # advance past the inner end so it is not processed as structural end for outer
+                        i = k + 1
+                        continue
                     raise MarkerParseError("Nested PLATES-CORE markers are not allowed")
                 name = self.extract_section_name(line)
                 in_marker = True
@@ -75,6 +120,13 @@ class MarkerParser:
             elif self.is_end_marker(line):
                 if not in_marker:
                     raise MarkerParseError(f"Orphan end marker at line {i}")
+                # Optional name on END for block style
+                m = END_NAME_RE.search(line)
+                end_name = m.group(1) if m else None
+                if end_name and current_name and end_name.lower() != current_name.lower():
+                    raise MarkerParseError(
+                        f"End marker name mismatch at line {i}: expected '{current_name}', got '{end_name}'"
+                    )
                 # content inside
                 inner = "".join(lines[start_line+1 : i])
                 sections.append(MarkerSection(name=current_name or "", start_line=start_line, end_line=i, content=inner))
@@ -206,6 +258,71 @@ def _merge_with_local_preservation(base: str, local: str, upstream: str) -> str:
     return _parser.merge_with_local_preservation(base, local, upstream)
 
 
+def merge_with_diagnostics(
+    base: str, local: str, upstream: str
+) -> MergeResult:
+    """
+    Marker-aware 3-way merge with explicit conflict diagnostics.
+
+    Returns MergeResult with:
+    - text: the merged content
+    - preserved_local_sections: names of sections where local edits were kept
+    - warnings: human-readable notes for review (e.g. "local edit preserved for 'foo'")
+    """
+    preserved: List[str] = []
+    warnings: List[str] = []
+
+    try:
+        base_sections = {s.name: s for s in _parser.find_marked_sections(base)}
+        local_sections = {s.name: s for s in _parser.find_marked_sections(local)}
+        upstream_sections = {s.name: s for s in _parser.find_marked_sections(upstream)}
+    except MarkerParseError:
+        return MergeResult(text=local, preserved_local_sections=[], warnings=["Parse error in one of the versions; fell back to local"])
+
+    # Use the existing conservative logic but capture decisions
+    result_lines: List[str] = []
+    local_lines = local.splitlines(keepends=True)
+    i = 0
+    n = len(local_lines)
+
+    while i < n:
+        line = local_lines[i]
+        if _parser.is_start_marker(line):
+            name = _parser.extract_section_name(line)
+            j = i + 1
+            while j < n and not _parser.is_end_marker(local_lines[j]):
+                j += 1
+            if j < n:
+                j += 1  # include end marker
+
+            if name in base_sections and name in local_sections:
+                base_sec = base_sections[name]
+                local_sec = local_sections[name]
+                if local_sec.content != base_sec.content:
+                    # local edited -> preserve
+                    result_lines.extend(local_lines[i:j])
+                    preserved.append(name)
+                    warnings.append(f"Local edit preserved for section '{name}' (conflicts with upstream)")
+                else:
+                    if name in upstream_sections:
+                        up = upstream_sections[name]
+                        result_lines.append(line)
+                        result_lines.append(up.content)
+                        result_lines.append(local_lines[j-1] if j > i else "<!-- /PLATES-CORE -->\n")
+                    else:
+                        result_lines.extend(local_lines[i:j])
+            else:
+                result_lines.extend(local_lines[i:j])
+            i = j
+            continue
+
+        result_lines.append(line)
+        i += 1
+
+    text = "".join(result_lines)
+    return MergeResult(text=text, preserved_local_sections=preserved, warnings=warnings)
+
+
 # Public API (preferred for new callers; _ wrappers retained for test compat)
 find_marked_sections = _find_marked_sections
 validate_marker_nesting = _validate_marker_nesting
@@ -215,9 +332,11 @@ __all__ = [
     "MarkerSection",
     "MarkerParseError",
     "MarkerParser",
+    "MergeResult",
     "find_marked_sections",
     "validate_marker_nesting",
     "merge_with_local_preservation",
+    "merge_with_diagnostics",
     "_is_start_marker",
     "_is_end_marker",
     "_extract_section_name",
