@@ -13,6 +13,7 @@ from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
 from .release import get_release_notes_diff, get_release_status
+from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
@@ -153,6 +154,13 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 to_version=args.get("to_version"),
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
             ).to_dict()
+        elif name == "plate_migrate_plan":
+            payload = generate_migration_plan().to_dict() if hasattr(generate_migration_plan(), 'to_dict') else {"plan": str(generate_migration_plan())}
+        elif name == "plate_migrate_apply":
+            dry = bool(args.get("dry_run", True))
+            plan = generate_migration_plan()
+            results = apply_migration_plan(plan, dry_run=dry)
+            payload = {"results": results, "dry_run": dry}
         else:
             _write(
                 {
@@ -630,6 +638,27 @@ def run() -> None:
                                             "type": "string",
                                             "description": "Path to the releases directory. Defaults to .agentic/releases.",
                                         },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_migrate_plan",
+                                "description": "Generate dry-run migration plan for template-to-plate cutover using current inventory and .plate state.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_migrate_apply",
+                                "description": "Apply migration steps (with checkpoint/rollback support). Use after reviewing plan.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "dry_run": {"type": "boolean", "description": "Simulate only (default true for safety)."},
                                     },
                                 },
                             },
