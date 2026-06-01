@@ -155,7 +155,13 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
             ).to_dict()
         elif name == "plate_migrate_plan":
-            payload = generate_migration_plan().to_dict() if hasattr(generate_migration_plan(), 'to_dict') else {"plan": str(generate_migration_plan())}
+            plan = generate_migration_plan()
+            if hasattr(plan, "to_dict"):
+                payload = plan.to_dict()
+            elif hasattr(plan, "__dict__"):
+                payload = plan.__dict__
+            else:
+                payload = {"plan": str(plan)}
         elif name == "plate_migrate_apply":
             dry = bool(args.get("dry_run", True))
             plan = generate_migration_plan()
