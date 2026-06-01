@@ -1,0 +1,14 @@
+{
+  "slug": "128-rollout-playbook",
+  "change_type": "Documentation",
+  "surface": "docs",
+  "summary": "Publish the complete PLATE Methodology Ownership Rollout Playbook and Adoption Guide (docs/migration/rollout-playbook.md). Incorporates phased model, compatibility matrix, rollback guidance, pilot checklist, risks/guardrails, and traceability to all prior Epic #126 children (#127–#132). Fulfills the Documentation deliverable for Issue #128 (final open child of closed Epic #126).",
+  "links": [
+    "https://github.com/akasper/plate/issues/128",
+    "https://github.com/akasper/plate/issues/126",
+    "docs/design/plate-template-cutover-plan.md",
+    "docs/migration/rollout-playbook.md",
+    "PRs for #127–#132 (inventory, schema, markers, migration, CLI/MCP surfaces)"
+  ],
+  "migration_guidance": "This playbook is the canonical reference for all future template-to-plate adoptions. Existing users should review Phase 1–2 guidance before running gh plate migrate commands."
+}
