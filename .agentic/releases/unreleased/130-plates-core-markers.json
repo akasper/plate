@@ -1,0 +1,13 @@
+{
+  "slug": "130-plates-core-markers",
+  "change_type": "Feature",
+  "surface": "backend",
+  "summary": "Implement core PLATES-CORE marker parser, strict validator (no nesting, unclosed/orphan detection), section finder, and conservative merge-with-local-preservation strategy. Local edits inside markers are preserved; outside markers remain fork-owned. Delivers the scanner/parser/sync contract for Issue #130 / Epic #89 / Epic #126. All aligned tests now pass.",
+  "links": [
+    "https://github.com/akasper/plate/issues/130",
+    "https://github.com/akasper/plate/issues/126",
+    "docs/design/plates-core-marker-contract-upstream-sync.md",
+    "tests/test_epic89_markers.py"
+  ],
+  "migration_guidance": "No user migration required. The runtime is new; existing PLATES-CORE comments in AGENTS.md and template files continue to work as before."
+}
