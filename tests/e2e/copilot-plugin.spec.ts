@@ -3,8 +3,8 @@
  *
  * These tests require the `copilot` binary to be on PATH (installed by CI or
  * the developer). They verify that the plugin can be installed from the local
- * workspace and cleanly removed — the minimum bar for "discovery works through
- * the Copilot CLI plugin".
+ * workspace and cleanly removed — validating the Copilot CLI integration,
+ * which is the default first-class agentic CLI surface for PLATE.
  *
  * Tests are skipped when the `copilot` binary is not available so that
  * developers without the CLI can still run the rest of the suite locally.

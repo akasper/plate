@@ -1,0 +1,18 @@
+{
+  "version": "unreleased",
+  "summary": "Make plugin manifest and agent instructions CLI-agnostic (Epic #202 / Feature #205)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "plugin manifest + plate.agent guidance",
+      "migration_impact": "Plugin metadata now points to akasper/plate and removes CLI-vendor-specific wording so standards-compatible CLI agents can install and use PLATE guidance consistently.",
+      "agent_notes": "Use /plugin install akasper/plate. Q&A guidance now refers to host-agent native interactive primitives and avoids vendor-specific wording.",
+      "breaking": false,
+      "links": [
+        "#205",
+        "#202"
+      ],
+      "requires": []
+    }
+  ]
+}
