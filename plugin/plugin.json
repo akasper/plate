@@ -1,11 +1,11 @@
 {
   "name": "plate-core",
-  "description": "PLATE core Copilot CLI plugin with context-first agent + MCP wiring.",
+  "description": "PLATE core plugin — context-first agent + MCP wiring for any compatible CLI agent.",
   "version": "0.1.0",
   "author": {
     "name": "PLATE / akasper"
   },
-  "repository": "https://github.com/akasper/plate_core",
+  "repository": "https://github.com/akasper/plate",
   "license": "MIT",
   "agents": "agents/",
   "mcpServers": ".mcp.json"
