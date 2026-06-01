@@ -1,0 +1,16 @@
+{
+  "slug": "207-cli-agnostic-e2e-tests",
+  "change_type": "feature",
+  "surface": "tests/e2e/copilot-plugin.spec.ts (and structure verification)",
+  "summary": "Update E2E plugin tests to validate CLI-agnostic requirements and remove vendor-specific language assumptions in comments/descriptions.",
+  "migration_impact": "No runtime changes; test updates ensure ongoing verification that the plugin remains free of CLI-vendor lock-in (Copilot, Grok, etc.).",
+  "migration_guidance": [
+    "1. Existing tests continue to pass for the Copilot binary path (one supported CLI).",
+    "2. The structure tests already assert no vendor-specific language in key files.",
+    "3. When adding new CLI-specific tests in future, follow the agnostic pattern (test the binary path separately, verify manifests are clean)."
+  ],
+  "agent_notes": "The plugin E2E suite now better reflects the CLI-agnostic design from the grok-build epic research/design. Use this as model for other agent surfaces.",
+  "breaking": false,
+  "links": ["#207", "#202", "#204"],
+  "requires": []
+}
