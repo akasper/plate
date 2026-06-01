@@ -1,0 +1,12 @@
+{
+  "slug": "129-plate-config-schema",
+  "change_type": "Feature",
+  "surface": "backend + agent",
+  "summary": "Add initial .plate root config schema parser, validator, and precedence resolver (defaults < local for MVP). Introduces PlateConfig dataclass, load_plate_config(), validate, and save helpers in plate_core.plate_config. Real runtime tests added to test_epic89_plate_config.py. Foundation for extension merging, gh plate configure/init, and full Epic #126 methodology ownership.",
+  "links": [
+    "https://github.com/akasper/plate/issues/129",
+    "https://github.com/akasper/plate/issues/126",
+    "docs/design/plate-root-config-schema-lifecycle.md"
+  ],
+  "migration_guidance": "No migration required for this slice; .plate files are new opt-in artifacts."
+}
