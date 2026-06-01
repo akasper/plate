@@ -216,18 +216,6 @@ class PlateConfigSchema(unittest.TestCase):
     ) -> Dict[str, Any]:
         """Resolve config with cascading precedence: defaults < extension < local."""
         result = {}
-        self._deep_merge(result, defaults)
-        self._deep_merge(result, extension)
-        self._deep_merge(result, local)
-        return result
-
-    def _deep_merge(self, target: Dict[str, Any], source: Dict[str, Any]) -> None:
-        """Deep merge source into target (for legacy sketch tests)."""
-        for key, value in source.items():
-            if isinstance(value, dict) and key in target and isinstance(target[key], dict):
-                self._deep_merge(target[key], value)
-            else:
-                target[key] = value
 
 
 # --- Real runtime integration tests for Issue #129 implementation ---
