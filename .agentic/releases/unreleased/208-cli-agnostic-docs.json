@@ -1,0 +1,16 @@
+{
+  "slug": "208-cli-agnostic-docs",
+  "change_type": "feature",
+  "surface": "README.md (primary; other docs like AGENTS.md/.agentic/extensions.yml already generic)",
+  "summary": "Broaden plugin descriptions in README from Copilot CLI–specific to CLI-agnostic (e.g., 'CLI agent plugin for standards-compliant CLIs like Copilot, Grok Build'). Added cross-reference to grok-build epic. Fulfills #208 scope.",
+  "migration_impact": "No breaking changes. Documentation now accurately reflects the CLI-agnostic design for any compatible agent (install/usage examples updated with generic notes).",
+  "migration_guidance": [
+    "1. README install and feature sections now use inclusive language; Copilot examples retained as one supported path.",
+    "2. Existing users unaffected; new generic CLI agents can follow the updated guidance.",
+    "3. See grok-build epic artifacts (#203 research, #204 design, #206/207 verification) for full context and verification that plugin files contain no vendor-specific language."
+  ],
+  "agent_notes": "Plugin is now documented as CLI-agnostic. Use with any standards-compliant agent supporting the common manifest + agents/ + MCP pattern.",
+  "breaking": false,
+  "links": ["#208", "#202"],
+  "requires": []
+}
