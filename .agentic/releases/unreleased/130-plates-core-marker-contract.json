@@ -1,0 +1,16 @@
+{
+  "slug": "130-plates-core-marker-contract",
+  "change_type": "feature",
+  "surface": "plate_core/markers.py + tests",
+  "summary": "Implement PLATES-CORE marker parser, validator, conservative local-preservation merge, and diagnostics in plate_core for safe upstream sync of tool-owned sections.",
+  "migration_impact": "Repos using PLATES-CORE:BEGIN/END (or simple) markers in AGENTS.md, configs, or code can now leverage plate_core runtime (and future gh plate / MCP surfaces) for deterministic syncs that preserve local edits outside markers while incorporating upstream updates inside them.",
+  "migration_guidance": [
+    "1. No immediate action for most downstream repos; the runtime enables future `plate` sync commands.",
+    "2. When authoring new PLATES-CORE blocks, follow the documented BEGIN/END syntax and uniqueness rules.",
+    "3. Existing marked blocks in forks continue to work; the conservative merge prefers local on conflict."
+  ],
+  "agent_notes": "Use markers.find_marked_sections / validate_marker_nesting / merge_with_diagnostics (or the _compat) for any tooling that needs to reason about or perform marker-aware merges. Duplicate names and true nesting are now rejected at validation time. Real AGENTS.md and similar self-describing docs with literal examples are tolerated.",
+  "breaking": false,
+  "links": ["#130", "#109", "#89", "#126"],
+  "requires": []
+}
