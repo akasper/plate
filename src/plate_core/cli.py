@@ -398,6 +398,7 @@ def cmd_agent_delegate(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Delegating to: {result.agent_name} ({result.agent_id})")
+    return 0
 
 
 def cmd_migrate_plan(args: argparse.Namespace) -> int:
