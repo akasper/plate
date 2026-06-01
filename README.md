@@ -6,7 +6,7 @@
 |---|---|---|
 | `gh plate` extension | Humans and scripts — terminal PLATE health checks | `gh extension install akasper/plate_core` |
 | `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in Copilot CLI | `./plate-mcp` (repo clone) |
-| Copilot CLI plugin | Interactive Copilot CLI sessions — `/agent plate` + MCP wiring | `copilot plugin install akasper/plate_core` |
+| CLI agent plugin (e.g. Copilot CLI, Grok Build, other standards-compliant CLIs) | Interactive sessions — `/agent plate` + MCP wiring (see grok-build epic for CLI-agnostic details) | `copilot plugin install akasper/plate_core` (or equivalent for your CLI) |
 
 All surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
 
@@ -22,7 +22,7 @@ All surfaces are backed by the same `plate_core` library, ensuring consistent be
 - **PR feedback babysitting** — local monitoring/trigger flow via `gh plate pr babysit <number>`
 - **E2E Playwright tooling** — scaffolding, recording, and validation tools via MCP
 - **MCP tools** — `plate_health`, `plate_epic_status`, `plate_features`, `plate_bootstrap`, `plate_plan_epic`, `plate_pr_babysit`, `plate_resolve_review_thread`, `plate_agents`, `plate_agent`, `plate_skills`, `plate_skill`, `init_playwright`, `record_e2e_gif`, `validate_e2e_tests` return structured payloads
-- **Copilot plugin** — installable agent surface (`/agent plate`) with bundled MCP server configuration
+- **CLI agent plugin** — installable agent surface (`/agent plate` or equivalent) with bundled MCP server configuration (CLI-agnostic per grok-build epic)
 
 ## Quick Start
 
@@ -43,29 +43,31 @@ gh plate bootstrap --repo akasper/plate_core --apply    # apply supported steps
 gh plate pr babysit 112 --repo akasper/plate --json
 ```
 
-### As an MCP server in Copilot CLI (v1 baseline)
+### As an MCP server (v1 baseline; works in Copilot CLI, Grok Build, and other compatible agents)
 
 ```sh
-# In your Copilot CLI session:
+# In a supported CLI agent session (e.g. Copilot CLI):
 /mcp connect /absolute/path/to/plate_core/plate-mcp
 # Then call tools: plate_health, plate_epic_status, plate_features, plate_bootstrap, plate_plan_epic, plate_pr_babysit, plate_resolve_review_thread, plate_agents, plate_agent, plate_skills, plate_skill
 ```
 
-### As a Copilot CLI plugin
+### As a CLI agent plugin (Copilot CLI, Grok Build, and other standards-compliant CLIs)
 
 ```sh
-# Install plugin from this repository
+# Install plugin from this repository (example for Copilot CLI; use equivalent for your agent)
 copilot plugin install akasper/plate_core
 
-# In a new Copilot CLI session, invoke the plate agent
-/agent plate
+# In a new session with your CLI agent, invoke the plate agent (see your agent's docs for the exact command, e.g. /agent plate)
 ```
 
-If you specifically want the dedicated plugin surface directory, this equivalent command also works:
+If you specifically want the dedicated plugin surface directory, this equivalent command also works (adjust for your CLI):
 
 ```sh
 copilot plugin install akasper/plate_core:plugin
 ```
+
+See the grok-build epic for full CLI-agnostic details and verification that no vendor-specific language remains in the plugin files.
+
 
 ## Playwright E2E Testing
 
