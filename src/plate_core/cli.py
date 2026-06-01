@@ -20,6 +20,7 @@ from .features import detect_playwright_e2e_local, get_features
 from .health import get_health
 from .pr_babysit import babysit_pr
 from .release import get_release_notes_diff, get_release_status
+from .migration import generate_migration_plan, apply_migration_plan
 
 
 def cmd_health(args: argparse.Namespace) -> int:
@@ -397,6 +398,31 @@ def cmd_agent_delegate(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Delegating to: {result.agent_name} ({result.agent_id})")
+
+
+def cmd_migrate_plan(args: argparse.Namespace) -> int:
+    plan = generate_migration_plan()
+    if args.json:
+        print(json.dumps(plan.__dict__ if hasattr(plan, '__dict__') else str(plan)))
+        return 0
+    print("Migration Plan (dry-run):")
+    print(f"  Risk: {getattr(plan, 'estimated_risk', 'unknown')}")
+    for step in getattr(plan, 'steps', []):
+        print(f"  - [{step.phase}] {step.id}: {step.description}")
+    return 0
+
+
+def cmd_migrate_apply(args: argparse.Namespace) -> int:
+    plan = generate_migration_plan()
+    results = apply_migration_plan(plan, dry_run=False)
+    if args.json:
+        print(json.dumps(results))
+        return 0
+    print("Migration APPLY results:")
+    for r in results:
+        print(f"  {r}")
+    print("Checkpoint/rollback available via MigrationApplier.")
+    return 0
     print(f"Task: {result.task_description}")
     print()
     print("Delegation prompt:")
@@ -559,6 +585,17 @@ def build_parser() -> argparse.ArgumentParser:
     rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_notes.add_argument("--json", action="store_true", help="Output JSON")
     rel_notes.set_defaults(func=cmd_release_notes)
+
+    migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")
+    migrate_sub = migrate.add_subparsers(dest="migrate_command", required=True)
+    m_plan = migrate_sub.add_parser("plan", help="Dry-run migration plan")
+    m_plan.add_argument("--repo", help="owner/name")
+    m_plan.add_argument("--json", action="store_true")
+    m_plan.set_defaults(func=cmd_migrate_plan)
+    m_apply = migrate_sub.add_parser("apply", help="Apply migration (with checkpoints)")
+    m_apply.add_argument("--repo", help="owner/name")
+    m_apply.add_argument("--json", action="store_true")
+    m_apply.set_defaults(func=cmd_migrate_apply)
 
     qanda = sub.add_parser("qanda", help="Curiosity / Q&A Mode (list, view, record answers on Question issues; Epic #139)")
     qanda.add_argument("--repo", help="owner/name; defaults to git remote origin")
