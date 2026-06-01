@@ -1,10 +1,14 @@
 /**
- * Copilot CLI plugin install / uninstall verification.
+ * Plugin install verification using the Copilot CLI binary (one supported path).
  *
  * These tests require the `copilot` binary to be on PATH (installed by CI or
  * the developer). They verify that the plugin can be installed from the local
- * workspace and cleanly removed — validating the Copilot CLI integration,
- * which is the default first-class agentic CLI surface for PLATE.
+ * workspace and cleanly removed using the Copilot CLI — exercising one
+ * standards-compliant agentic CLI surface.
+ *
+ * The plugin itself is designed to be CLI-agnostic (see plugin-structure.spec.ts
+ * for verification that no vendor-specific language remains in manifests/agent
+ * files, and the research/design artifacts in the grok-build epic).
  *
  * Tests are skipped when the `copilot` binary is not available so that
  * developers without the CLI can still run the rest of the suite locally.
