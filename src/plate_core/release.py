@@ -130,43 +130,107 @@ def _load_pending_fragments(releases_dir: Path) -> list[FragmentSummary]:
 
 
 def _load_extension_release_checks(agentic_dir: Path) -> list[dict]:
-    """Read release_checks from .agentic/extensions.yml if present."""
+    """Read release_checks from .agentic/extensions.yml if present.
+
+    Uses indent-aware state machine (not regex-only) to correctly distinguish
+    extension-level '- id:' from nested release_checks '- id:' items.
+    """
     extensions_file = agentic_dir / "extensions.yml"
     if not extensions_file.exists():
         return []
     try:
         import re
         text = extensions_file.read_text(encoding="utf-8")
-        # Simple YAML parsing for release_checks arrays — avoids PyYAML dependency
         checks = []
         current_ext: str | None = None
         in_release_checks = False
-        for line in text.splitlines():
-            # Extension id detection
+        release_checks_indent: int | None = None
+        current_check: dict | None = None
+
+        def _finish_check():
+            nonlocal current_check
+            if current_check is not None:
+                checks.append(current_check)
+            current_check = None
+
+        for raw_line in text.splitlines():
+            line = raw_line
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+
+            leading = len(line) - len(line.lstrip(" "))
+            if "\t" in line[:leading]:
+                leading = len(line) - len(line.lstrip())
+
+            # Extension id at shallow level (not inside a release_checks block)
             id_match = re.match(r'^\s+-\s+id:\s+"?([^"]+)"?', line)
-            if id_match:
+            if id_match and (release_checks_indent is None or leading < (release_checks_indent or 999)):
+                _finish_check()
                 current_ext = id_match.group(1)
                 in_release_checks = False
-            # release_checks array start
+                release_checks_indent = None
+                continue
+
+            # Start of release_checks array under current ext
             if re.match(r'^\s+release_checks:', line):
+                _finish_check()
                 in_release_checks = True
-            # Item in release_checks
-            elif in_release_checks and re.match(r'^\s+-', line):
-                check_id_match = re.search(r'id:\s+"?([^"]+)"?', line)
-                desc_match = re.search(r'description:\s+"?([^"]+)"?', line)
-                req_match = re.search(r'required:\s+(true|false)', line)
-                human_match = re.search(r'human_approval:\s+(true|false)', line)
-                checks.append({
-                    "extension_id": current_ext,
-                    "id": check_id_match.group(1) if check_id_match else "",
-                    "description": desc_match.group(1) if desc_match else line.strip(),
-                    "required": req_match.group(1) == "true" if req_match else True,
-                    "human_approval": human_match.group(1) == "true" if human_match else False,
-                    "satisfied": None,  # unknown without runtime verification
-                })
-            elif in_release_checks and not line.strip().startswith("-") and line.strip() and not line.strip().startswith("#"):
-                # Exited the array
+                release_checks_indent = leading + 2
+                continue
+
+            # Deep in release_checks block - collect fields leniently
+            if in_release_checks:
+                # New check item (look for - id: at reasonable depth)
+                if (stripped.startswith("- id:") or (stripped.startswith("-") and re.search(r"id:\s", stripped))) and (release_checks_indent is None or leading >= release_checks_indent - 2):
+                    _finish_check()
+                    check_id_match = re.search(r'id:\s+"?([^"]+)"?', line)
+                    current_check = {
+                        "extension_id": current_ext,
+                        "id": check_id_match.group(1) if check_id_match else "",
+                        "description": "",
+                        "required": True,
+                        "human_approval_required": False,
+                        "satisfied": None,
+                    }
+                    # Parse any fields on the starter line
+                    dm = re.search(r'description:\s+"?([^"]+)"?', line)
+                    if dm: current_check["description"] = dm.group(1)
+                    rm = re.search(r'^\s*required:\s+(true|false)', line)
+                    if rm: current_check["required"] = rm.group(1) == "true"
+                    hm = re.search(r'human_approval_required:\s+(true|false)', line)
+                    if hm: current_check["human_approval_required"] = hm.group(1) == "true"
+                    hml = re.search(r'human_approval:\s+(true|false)', line)
+                    if hml and not hm: current_check["human_approval_required"] = hml.group(1) == "true"
+                    continue
+
+                # Field lines for the open current check (lenient, as long as we are in block)
+                if current_check is not None:
+                    dm = re.search(r'description:\s+"?([^"]+)"?', line)
+                    if dm and not current_check.get("description"):
+                        current_check["description"] = dm.group(1)
+                    rm = re.search(r'^\s*required:\s+(true|false)', line)
+                    if rm:
+                        current_check["required"] = rm.group(1) == "true"
+                    hm = re.search(r'human_approval_required:\s+(true|false)', line)
+                    if hm:
+                        current_check["human_approval_required"] = hm.group(1) == "true"
+                    hml = re.search(r'human_approval:\s+(true|false)', line)
+                    if hml and not hm:
+                        current_check["human_approval_required"] = hml.group(1) == "true"
+                    continue
+
+            # Exiting the block
+            if in_release_checks and release_checks_indent is not None and leading < release_checks_indent and stripped.startswith(("-", "extensions", "  - id:")):
+                _finish_check()
                 in_release_checks = False
+                release_checks_indent = None
+                # allow reprocessing id if it was an ext id
+                if id_match:
+                    current_ext = id_match.group(1)
+                continue
+
+        _finish_check()
         return checks
     except Exception:
         return []

@@ -69,29 +69,29 @@ extensions:
     human_approval_required: false
     rollback: "Remove agent files added by this extension from .github/agents/ and their extension registry entry. Other custom agents added independently are unaffected."
   - id: "release-ceremony"
-   status: "available"
-   description: "Formalises the PLATE release cycle with Release issues, fragment-based release notes, a dedicated 'release' branch, and extension-level release checks."
-   artifacts:
-     - ".github/ISSUE_TEMPLATE/release.yml"
-     - ".agentic/releases/unreleased/"
-     - "scripts/cut_release.py"
-   default_enabled: true
-   human_approval_required: false
-   rollback: "Delete the release branch, remove the Release issue template, and revert process.yml release_rules."
-   release_checks:
-     - id: "release-notes-complete"
-       description: "All pending release note fragments in .agentic/releases/unreleased/ must be aggregated (cut_release.py run) before tagging."
-       required: true
-       human_approval_required: false
-     - id: "release-branch-rebased"
-       description: "The 'release' branch must be rebased on the latest main tip (or the release tag) before merging release PRs."
-       required: true
-       human_approval_required: false
-     - id: "release-issue-open"
-       description: "An open Release issue must exist that tracks the release intent, acceptance criteria, and sign-off."
-       required: true
-       human_approval_required: true
-     - id: "extension-extension-sign-off"
-       description: "Any extension with its own release_checks must have all required checks satisfied and human approval if required."
-       required: true
-       human_approval_required: true
+    status: "available"
+    description: "Formalises the PLATE release cycle with Release issues, fragment-based release notes, a dedicated 'release' branch, and extension-level release checks."
+    artifacts:
+      - ".github/ISSUE_TEMPLATE/release.yml"
+      - ".agentic/releases/unreleased/"
+      - "scripts/cut_release.py"
+    default_enabled: true
+    human_approval_required: false
+    rollback: "Delete the release branch, remove the Release issue template, and revert process.yml release_rules."
+    release_checks:
+      - id: "release-notes-complete"
+        description: "All pending release note fragments in .agentic/releases/unreleased/ must be aggregated (cut_release.py run) before tagging."
+        required: true
+        human_approval_required: false
+      - id: "release-branch-rebased"
+        description: "The 'release' branch must be rebased on the latest main tip (or the release tag) before merging release PRs."
+        required: true
+        human_approval_required: false
+      - id: "release-issue-open"
+        description: "An open Release issue must exist that tracks the release intent, acceptance criteria, and sign-off."
+        required: true
+        human_approval_required: true
+      - id: "extension-extension-sign-off"
+        description: "Any extension with its own release_checks must have all required checks satisfied and human approval if required."
+        required: true
+        human_approval_required: true

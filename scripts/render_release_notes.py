@@ -53,7 +53,12 @@ def iter_release_files(path: Path) -> Iterable[Path]:
 
     # New versioned dirs: vX.Y.Z/ containing release.json
     def _ver_key(p: Path) -> tuple[int, ...]:
-        stem = p.stem.lstrip("v") if p.is_file() else p.name.lstrip("v")
+        if p.is_file() and p.name == "release.json":
+            stem = p.parent.name.lstrip("v")
+        elif p.is_file():
+            stem = p.stem.lstrip("v")
+        else:
+            stem = p.name.lstrip("v")
         try:
             return tuple(int(x) for x in stem.split("."))
         except ValueError:
