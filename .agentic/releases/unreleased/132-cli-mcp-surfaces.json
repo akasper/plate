@@ -1,0 +1,15 @@
+{
+  "slug": "132-cli-mcp-surfaces",
+  "change_type": "Feature",
+  "surface": "agent",
+  "summary": "Wire migration (and prior engines: plate_config, markers, inventory) into CLI and MCP surfaces for plan/integrate/configure flows. Added 'gh plate migrate plan/apply' subcommands and plate_migrate_* MCP tools. Tests extended. Delivers the CLI/MCP integration surfaces for Issue #132 / Epic #126.",
+  "links": [
+    "https://github.com/akasper/plate/issues/132",
+    "https://github.com/akasper/plate/issues/126",
+    "src/plate_core/cli.py",
+    "src/plate_core/mcp_server.py",
+    "tests/test_cli.py",
+    "tests/test_mcp.py"
+  ],
+  "migration_guidance": "New commands/tools; existing users see no breakage. Use after #131 migration primitives."
+}
