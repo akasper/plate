@@ -2,8 +2,8 @@
  * Plugin structure verification.
  *
  * These tests inspect the declarative plugin manifests and agent files on disk,
- * confirming that the Copilot CLI plugin has the expected structure before any
- * CLI tool is invoked.
+ * confirming that the plugin has the expected structure and is free of
+ * CLI-vendor-specific language before any CLI tool is invoked.
  */
 
 import { test, expect } from "@playwright/test";
@@ -14,7 +14,7 @@ import { join } from "path";
 const WORKSPACE = process.env.WORKSPACE ?? join(__dirname, "..", "..");
 const PLUGIN_ROOT = join(WORKSPACE, ".plugin");
 
-test.describe("Copilot plugin structure", () => {
+test.describe("Plugin structure", () => {
   test("plugin.json exists in the .plugin directory", () => {
     expect(existsSync(join(PLUGIN_ROOT, "plugin.json"))).toBe(true);
   });
@@ -26,6 +26,12 @@ test.describe("Copilot plugin structure", () => {
     expect(typeof manifest.version).toBe("string");
     expect(manifest.agents).toBeTruthy();
     expect(manifest.mcpServers).toBeTruthy();
+  });
+
+  test("plugin.json repository points to akasper/plate", () => {
+    const raw = readFileSync(join(PLUGIN_ROOT, "plugin.json"), "utf-8");
+    const manifest = JSON.parse(raw) as Record<string, unknown>;
+    expect(manifest.repository).toBe("https://github.com/akasper/plate");
   });
 
   test("plate.agent.md exists inside the agents directory", () => {
@@ -52,6 +58,27 @@ test.describe("Copilot plugin structure", () => {
     // The agent must mention the catalog surface commands so users can discover agents/skills.
     expect(content).toContain("gh plate agents");
     expect(content).toContain("gh plate skills");
+  });
+
+  test("plate.agent.md contains no CLI-vendor-specific language", () => {
+    const content = readFileSync(
+      join(PLUGIN_ROOT, "agents", "plate.agent.md"),
+      "utf-8"
+    );
+    const vendorTerms = ["Copilot CLI", "Copilot TUI", "Copilot form", "native Copilot"];
+    for (const term of vendorTerms) {
+      expect(content, `agent.md must not reference "${term}"`).not.toContain(term);
+    }
+  });
+
+  test("plugin.json description contains no CLI-vendor-specific language", () => {
+    const raw = readFileSync(join(PLUGIN_ROOT, "plugin.json"), "utf-8");
+    const manifest = JSON.parse(raw) as Record<string, unknown>;
+    const description = String(manifest.description ?? "");
+    const vendorTerms = ["Copilot CLI", "Copilot plugin", "Grok Build"];
+    for (const term of vendorTerms) {
+      expect(description, `plugin.json description must not reference "${term}"`).not.toContain(term);
+    }
   });
 
   test(".mcp.json wires up the plate-core MCP server", () => {
