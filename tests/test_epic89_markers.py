@@ -189,6 +189,56 @@ Footer updated
         ]
         self.assertGreater(len(steps), 0)
 
+    def test_begin_end_syntax_supported(self):
+        """Parser accepts the documented BEGIN/END block syntax from AGENTS.md."""
+        content = """Intro
+<!-- PLATES-CORE:BEGIN upstream-template-sync -->
+Core block content here
+<!-- PLATES-CORE:END upstream-template-sync -->
+Outro
+"""
+        sections = marker_module._find_marked_sections(content)
+        self.assertEqual(len(sections), 1)
+        self.assertEqual(sections[0]["name"], "upstream-template-sync")
+        self.assertIn("Core block content here", sections[0]["content"])
+
+    def test_begin_end_name_mismatch_rejected(self):
+        """BEGIN/END name mismatch is a parse error."""
+        content = """<!-- PLATES-CORE:BEGIN foo -->
+bar
+<!-- PLATES-CORE:END bar -->
+"""
+        result = marker_module._validate_marker_nesting(content)
+        self.assertFalse(result["valid"])
+        self.assertTrue(any("mismatch" in e.lower() for e in result.get("errors", [])))
+
+    def test_duplicate_section_names_invalid(self):
+        """Duplicate section names within a file are rejected by validation."""
+        content = """<!-- PLATES-CORE: foo -->
+one
+<!-- /PLATES-CORE -->
+<!-- PLATES-CORE: foo -->
+two
+<!-- /PLATES-CORE -->
+"""
+        result = marker_module._validate_marker_nesting(content)
+        self.assertFalse(result["valid"])
+        self.assertTrue(any("duplicate" in e.lower() for e in result.get("errors", [])))
+
+    def test_real_agents_md_markers_are_parsable(self):
+        """Integration: the real AGENTS.md uses BEGIN/END blocks and must parse cleanly."""
+        import os
+        agents_path = os.path.join(os.path.dirname(__file__), "..", "AGENTS.md")
+        with open(agents_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        result = marker_module._validate_marker_nesting(content)
+        self.assertTrue(result["valid"], f"AGENTS.md markers invalid: {result.get('errors')}")
+        sections = marker_module._find_marked_sections(content)
+        names = [s["name"] for s in sections]
+        self.assertIn("upstream-template-sync", names)
+        # Should find at least the documented sync block
+        self.assertGreaterEqual(len(sections), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
