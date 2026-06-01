@@ -1,0 +1,13 @@
+{
+  "slug": "131-migration-primitives",
+  "change_type": "Feature",
+  "surface": "infra",
+  "summary": "Add migration dry-run planner and apply primitives with checkpoint/rollback (MVP). DryRunPlanner produces phased MigrationPlan from inventory + .plate state. MigrationApplier supports dry-run and apply with simulated checkpoints. Real tests added to test_epic89_cutover.py. Delivers core of Issue #131 for template-to-plate cutover.",
+  "links": [
+    "https://github.com/akasper/plate/issues/131",
+    "https://github.com/akasper/plate/issues/126",
+    "docs/design/plate-template-cutover-plan.md",
+    "tests/test_epic89_cutover.py"
+  ],
+  "migration_guidance": "New opt-in tooling. Existing users can continue using manual processes until full CLI surfaces (#132) land."
+}
