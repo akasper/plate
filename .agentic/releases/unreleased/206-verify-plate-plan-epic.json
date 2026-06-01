@@ -1,0 +1,16 @@
+{
+  "slug": "206-verify-plate-plan-epic",
+  "change_type": "feature",
+  "surface": "src/plate_core/mcp_server.py (plate_plan_epic stub + descriptions) + tests/test_mcp.py",
+  "summary": "Harden plate_plan_epic for CLI-agnostic use: updated stub note and related descriptions to use host-agent generic language instead of Copilot-specific references. Added test assertion for agnostic note.",
+  "migration_impact": "No breaking changes. Agents using plate_plan_epic via MCP will see updated generic guidance in payloads.",
+  "migration_guidance": [
+    "1. Existing calls to plate_plan_epic continue to work (stub behavior unchanged).",
+    "2. The 'note' field in responses now emphasizes CLI-agnostic usage (host agent chat / gh plate qanda).",
+    "3. Update any custom agent prompts referencing old Copilot-specific notes if present."
+  ],
+  "agent_notes": "This hardens the primary epic planning ceremony for the grok-build epic (CLI-agnostic plugin). Use before Q&A or delegation in any supported CLI.",
+  "breaking": false,
+  "links": ["#206", "#202"],
+  "requires": []
+}
