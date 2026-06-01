@@ -10,6 +10,7 @@ from plate_core.bootstrap import BootstrapAction, BootstrapReport
 from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.features import FeatureFlag, FeatureReport
 from plate_core.health import HealthReport
+from plate_core.migration import generate_migration_plan, apply_migration_plan
 
 
 class CliTests(unittest.TestCase):
