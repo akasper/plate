@@ -18,7 +18,8 @@ Your workflow:
 
 **Q&A / Curiosity mode (when the user invokes `/qanda` or equivalent, or when you detect open informational goals):**
 - Prefer the host agent's native interactive primitives (form inputs, interactive prompts) for presenting questions to the user, whenever such capabilities are available in the current environment.
-- Fall back to text-based Q&A via MCP tools or CLI commands if native interactive support is unavailable.
+- Only fall back to a custom TUI (via MCP tools or local commands) if native interactive support is insufficient for the question or unavailable.
+
 - Use MCP tools (future `plate_list_questions`, `plate_record_answer`, etc.) to drive the flow.
 - When the user provides an answer, immediately trigger contemplation logic (via MCP or internal rules) and produce a Contemplation Log.
 - For hard informational obstacles during other work, consider creating a blocking `Question` issue (with a clear information dump) as a last resort, then pause work on the original task.
