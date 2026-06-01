@@ -106,6 +106,19 @@ Commit findings to `docs/audits/`. If drift is found, open a follow-up `Bug` or 
 
 Commit progress to `docs/migration/`. Update completion status in `docs/migration/completion-report.md`. Open a Documentation PR with `Closes #N` in the body.
 
+**Release**
+
+| Step | Required Behavior |
+|---|---|
+| 1 | Confirm a Release issue exists with the target version, linked epics, and a completed pre-release checklist. |
+| 2 | Ensure all epic branches for this release have been merged into the `release` branch (Epic close ceremony). |
+| 3 | Run `gh plate release status` to confirm no unexpected pending fragments remain. |
+| 4 | Run `python scripts/cut_release.py vX.Y.Z` (or `gh plate release cut vX.Y.Z`) to aggregate unreleased fragments into `.agentic/releases/vX.Y.Z/`. |
+| 5 | Commit the versioned directory, then open a PR from `release` → `main` with the Release issue in the body (`Closes #N`). |
+| 6 | After human approval and merge, apply the tag: `git tag vX.Y.Z && git push --tags`. |
+| 7 | Create the GitHub Release from the tag (populated from `.agentic/releases/vX.Y.Z/release.json`). |
+| 8 | Hard-reset the `release` branch to the tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`. |
+
 ## Issue Artifact Rules
 
 Every issue must close with a traceable git artifact — either a code change in a PR or a documentation commit. Closing an issue without a corresponding PR is not permitted.
@@ -120,6 +133,7 @@ Every issue must close with a traceable git artifact — either a code change in
 | `Audit` | Report committed to `docs/audits/<slug>.md` | `Documentation` |
 | `Migration` | Update committed to `docs/migration/` | `Documentation` |
 | `Epic` | Wiki summary in `docs/wiki/` or epic comment summarizing child outcomes | `Documentation` |
+| `Release` | Aggregated `.agentic/releases/vX.Y.Z/` directory + tag + GitHub Release | `Documentation` |
 
 When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. **Always include a closing keyword in the PR body.** This is enforced by `.github/workflows/pr-issue-link-check.yml` (warning gate).
 
@@ -180,7 +194,50 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
 
 **Security posture:** Autonomous mode intentionally cannot self-escalate. An agent operating in autonomous mode may not create, modify, or delete `.github/AUTONOMOUS_MODE` itself, and may not relax branch protection rules or modify the eligibility criteria in this file.
 
-## Third-Party Agent Feedback
+## Branch Model and Ceremonies
+
+PLATE uses a **three-tier branch model** to keep parallel epic work isolated from integration and release artifacts.
+
+### Branch tiers
+
+| Branch | Purpose | Who merges into it |
+|---|---|---|
+| `epic/<short-name>` | Owned by one Epic. All Feature/Bug PRs for that Epic target this branch. | Feature/Bug PRs (squash) |
+| `release` | Persistent integration branch. Always points to the commit that will become (or most recently became) a tag. | Epic-close PRs (squash) |
+| `main` | Stable, tagged history. Every commit on `main` is a semver release. | Release PRs only (squash) |
+
+### Epic-close ceremony
+
+When all child issues for an Epic are resolved:
+1. Confirm all Feature/Bug PRs for the Epic are merged into `epic/<name>`.
+2. Post a summary comment on the Epic issue with outcomes and any migration notes.
+3. Open a PR from `epic/<name>` → `release`. Label it `Feature` or `Documentation` as appropriate.
+4. Human reviews and squash-merges. The Epic issue closes via `Closes #N` in the PR body.
+
+### Release ceremony
+
+1. Open a Release issue (`[Release]: vX.Y.Z`) with target version, linked epics, and pre-release checklist.
+2. Verify `gh plate release status` shows the expected pending fragments.
+3. Run `python scripts/cut_release.py vX.Y.Z` to aggregate fragments into `.agentic/releases/vX.Y.Z/`.
+4. Commit the versioned directory on the `release` branch.
+5. Open a PR from `release` → `main` labeled `Documentation`. Include `Closes #N` for the Release issue.
+6. Human reviews, approves, and squash-merges.
+7. Apply tag: `git tag vX.Y.Z && git push --tags`.
+8. Create GitHub Release from the tag.
+9. Hard-reset `release` to the tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`.
+
+### Release branch protection guidance
+
+The `release` branch should be protected with:
+- PRs required (no direct push).
+- Only `epic/*` branches or release-prep commits (step 4 above) may merge in.
+- Status checks: same as `main`.
+
+### Fragment authoring
+
+Every Feature PR that changes PLATE process, templates, or agent surfaces must include a fragment under `.agentic/releases/unreleased/<slug>.json`. See `.agentic/releases/unreleased/README.md` for the schema and field guide. Fragments accumulate across the Epic's lifetime and are swept into the versioned directory at release-cut time.
+
+
 
 Preferred flow is now **local babysitting** driven by `gh plate pr babysit <number>`. CI is intentionally narrowed to enforcement-only (`feedback-resolution` check). The `plate` agent persona (plugin/agents/plate.agent.md and mirror) no longer includes babysitting steps (deprecated in favor of the dedicated local CLI/MCP flow; see PR #120 and this PR's Q&A/Curiosity updates).
 
@@ -234,7 +291,7 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 | Label Family | Usage |
 |---|---|
-| `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
+| `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
 | `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
 | `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by the deprecated legacy workflow; no Epic milestone required. |
 | `Epic: short-name` | Legacy/supplemental Epic identity label (optional). GitHub Milestones are the canonical Epic container (see Epic #100 / native GitHub PR integration). Feature and Epic issues require a milestone assignment instead. |
@@ -244,7 +301,9 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 ## Documentation Rules
 
-Every Feature pull request must update per-feature change files in `.agentic/releases/`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. Changes that alter PLATE behavior or process should also update `.agentic/releases/`. If a change affects feature behavior, update both implementation evidence and documentation evidence.
+Every Feature pull request that changes PLATE process, templates, or agent surfaces must author a fragment under `.agentic/releases/unreleased/<slug>.json`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. Changes that alter PLATE behavior or process should also add or update a fragment. If a change affects feature behavior, update both implementation evidence and documentation evidence.
+
+**Fragment-first authoring:** The canonical documentation path for PLATE changes is `.agentic/releases/unreleased/<slug>.json`. These fragments accumulate across the Epic and are aggregated at release-cut time into `.agentic/releases/vX.Y.Z/`. Use `scripts/render_release_notes.py .agentic/releases/` to preview the rendered notes at any time.
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 

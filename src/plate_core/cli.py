@@ -19,6 +19,7 @@ from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .health import get_health
 from .pr_babysit import babysit_pr
+from .release import get_release_notes_diff, get_release_status
 
 
 def cmd_health(args: argparse.Namespace) -> int:
@@ -186,6 +187,84 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
     else:
         print(f"\nBase branch sync: UP TO DATE ({report.merge_state})")
 
+    return 0
+
+
+def cmd_release_status(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    releases_dir = Path(args.releases_dir) if getattr(args, "releases_dir", None) else None
+    report = get_release_status(args.repo, releases_dir=releases_dir)
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Repo: {report.repo}")
+    print(f"Release branch: {'EXISTS' if report.release_branch_exists else 'MISSING'}")
+    print(f"Current version: {report.current_version or '(none)'}")
+    print(f"Latest version:  {report.latest_version or '(none)'}")
+    print(f"Open Release issues: {len(report.open_release_issues)}")
+    for ri in report.open_release_issues:
+        print(f"  - #{ri['number']}: {ri['title']}")
+    print(f"Pending unreleased fragments: {report.pending_fragment_count}")
+    for frag in report.pending_fragments:
+        print(f"  - {frag.slug} [{frag.change_type}]: {frag.summary}")
+    if report.extension_release_checks:
+        print("Extension release checks:")
+        for chk in report.extension_release_checks:
+            status = "satisfied" if chk.get("satisfied") else "pending" if chk.get("satisfied") is None else "open"
+            req = "REQUIRED" if chk.get("required") else "optional"
+            print(f"  [{req}] {chk.get('extension_id')}/{chk.get('id')}: {chk.get('description')} ({status})")
+    return 0
+
+
+def cmd_release_notes(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    releases_dir = Path(args.releases_dir) if getattr(args, "releases_dir", None) else None
+    report = get_release_notes_diff(
+        from_version=getattr(args, "from_version", None),
+        to_version=getattr(args, "to_version", None),
+        releases_dir=releases_dir,
+    )
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    from_label = report.from_version or "earliest"
+    to_label = report.to_version or "latest"
+    print(f"PLATE release notes diff: {from_label} → {to_label}")
+    print(f"Versions in range: {', '.join(report.releases_found) or '(none)'}")
+    print()
+    if not report.entries:
+        print("No entries found in the specified range.")
+        return 0
+
+    current_version = None
+    for entry in report.entries:
+        v = entry.get("version", "")
+        if v != current_version:
+            current_version = v
+            print(f"## v{v}")
+            print()
+        ct = entry.get("change_type", "")
+        surface = entry.get("surface", "")
+        mi = entry.get("migration_impact", "")
+        print(f"  [{ct}] {surface}")
+        if mi:
+            print(f"    Migration impact: {mi}")
+        mg = entry.get("migration_guidance")
+        if mg:
+            steps = mg if isinstance(mg, list) else [mg]
+            print("    Migration steps:")
+            for step in steps:
+                print(f"      - {step}")
+        print()
+
+    if report.migration_steps:
+        print("=== Aggregated migration steps ===")
+        for step in report.migration_steps:
+            print(f"  - {step}")
     return 0
 
 
@@ -466,6 +545,20 @@ def build_parser() -> argparse.ArgumentParser:
     babysit.add_argument("--interval", type=int, default=60, help="Polling interval in seconds for --watch mode")
     babysit.add_argument("--json", action="store_true", help="Output JSON")
     babysit.set_defaults(func=cmd_pr_babysit)
+
+    release = sub.add_parser("release", help="Release status and notes diff (read-only MVP)")
+    release_sub = release.add_subparsers(dest="release_command", required=True)
+    rel_status = release_sub.add_parser("status", help="Show current release status")
+    rel_status.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    rel_status.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
+    rel_status.add_argument("--json", action="store_true", help="Output JSON")
+    rel_status.set_defaults(func=cmd_release_status)
+    rel_notes = release_sub.add_parser("notes", help="Show release notes diff between versions")
+    rel_notes.add_argument("--from", dest="from_version", help="Start version (exclusive)")
+    rel_notes.add_argument("--to", dest="to_version", help="End version (inclusive)")
+    rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
+    rel_notes.add_argument("--json", action="store_true", help="Output JSON")
+    rel_notes.set_defaults(func=cmd_release_notes)
 
     qanda = sub.add_parser("qanda", help="Curiosity / Q&A Mode (list, view, record answers on Question issues; Epic #139)")
     qanda.add_argument("--repo", help="owner/name; defaults to git remote origin")

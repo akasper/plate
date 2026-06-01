@@ -1,0 +1,19 @@
+{
+  "slug": "plate-core-release-module",
+  "change_type": "feature",
+  "surface": "src/plate_core/release.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, src/plate_core/features.py",
+  "summary": "Adds plate_core/release.py with get_release_status and get_release_notes_diff, plus CLI (gh plate release status/notes) and MCP (plate_release_status/plate_release_notes) surfaces.",
+  "migration_impact": "New gh plate release status and gh plate release notes subcommands are available. Two new MCP tools (plate_release_status, plate_release_notes) are registered. Feature detection gains release-branch and release-notes-layout flags.",
+  "migration_guidance": [
+    "1. Pull the updated src/plate_core/release.py, cli.py, mcp_server.py, and features.py into your repo.",
+    "2. The new CLI subcommand is: gh plate release status [--repo ...] [--json]",
+    "3. The new CLI subcommand is: gh plate release notes [--from X] [--to Y] [--json]",
+    "4. Two new MCP tools are registered: plate_release_status and plate_release_notes.",
+    "5. gh plate features now reports release-branch and release-notes-layout flags.",
+    "6. No migration needed for existing functionality — all additions are additive."
+  ],
+  "agent_notes": "Use gh plate release status to inspect the current release state before opening a Release PR. Use gh plate release notes --from X --to Y to understand what changed between PLATE versions. Both commands support --json for machine-readable output.",
+  "breaking": false,
+  "links": ["#198", "#194"],
+  "requires": ["0.1.3"]
+}

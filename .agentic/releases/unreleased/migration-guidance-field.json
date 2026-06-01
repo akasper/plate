@@ -1,0 +1,17 @@
+{
+  "slug": "migration-guidance-field",
+  "change_type": "process",
+  "surface": "Release note fragment schema, render_release_notes.py, render_release_migrations.py, .agentic/releases/README.md",
+  "summary": "Adds first-class migration_guidance field to release-note fragments for unambiguous upgrade recipes.",
+  "migration_impact": "Fragment schema gains an optional migration_guidance field (string or ordered-steps array). Renderers now display a prominent 'Migration steps' section when the field is present.",
+  "migration_guidance": [
+    "1. Add 'migration_guidance' (string or array of strings) to any new release-note fragment where upgrade steps are discrete.",
+    "2. Pull updated scripts/render_release_notes.py and scripts/render_release_migrations.py — both now render the field.",
+    "3. Update .agentic/releases/README.md to the new version that documents both fields and both layouts.",
+    "4. Existing fragments without the field continue to render correctly (field is optional)."
+  ],
+  "agent_notes": "Prefer migration_guidance (array) for step-by-step recipes, and keep migration_impact as the prose summary. Both can coexist. Renderers surface migration_guidance as a numbered/bulleted 'Migration steps' block.",
+  "breaking": false,
+  "links": ["#201", "#197", "#194"],
+  "requires": ["0.1.3"]
+}

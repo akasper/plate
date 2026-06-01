@@ -142,4 +142,37 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
             )
         )
 
+    # Release branch — create if absent
+    try:
+        gh.api(f"repos/{target}/branches/release")
+        actions.append(
+            BootstrapAction(
+                name="create-release-branch",
+                state="already-configured",
+                detail="Release branch already exists",
+            )
+        )
+    except Exception:
+        if apply_mode:
+            repo_obj_fresh = gh.api(f"repos/{target}")
+            default_branch = repo_obj_fresh.get("default_branch", "main")
+            # Get the SHA of the default branch tip
+            branch_data = gh.api(f"repos/{target}/branches/{default_branch}")
+            sha = branch_data["commit"]["sha"]
+            gh.api(
+                f"repos/{target}/git/refs",
+                method="POST",
+                fields={"ref": "refs/heads/release", "sha": sha},
+            )
+            state = "applied"
+            detail = f"Created release branch from {default_branch} at {sha[:7]}"
+        else:
+            state = "planned"
+            detail = (
+                "Create 'release' branch from main. "
+                "After creation, protect it: require PRs from epic/* branches only, no direct push. "
+                "Release ceremony hard-reset: git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease"
+            )
+        actions.append(BootstrapAction(name="create-release-branch", state=state, detail=detail))
+
     return BootstrapReport(repo=target, apply_mode=apply_mode, actions=actions)
