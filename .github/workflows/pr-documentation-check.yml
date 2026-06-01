@@ -34,10 +34,27 @@ jobs:
             });
             const changed = files.map((file) => file.filename);
             core.info(`Changed files:\n${changed.join('\n')}`);
-            const hasReleaseChangeFile = changed.some((file) => file.startsWith('.agentic/releases/'));
+            // Fragment-first: require a fragment in .agentic/releases/unreleased/
+            const hasFragment = changed.some(
+              (file) =>
+                file.startsWith('.agentic/releases/unreleased/') &&
+                file.endsWith('.json')
+            );
+            // Also accept legacy flat files for backward compat
+            const hasLegacyFile = changed.some(
+              (file) =>
+                file.startsWith('.agentic/releases/') &&
+                !file.startsWith('.agentic/releases/unreleased/') &&
+                file.endsWith('.json')
+            );
+            const hasReleaseChangeFile = hasFragment || hasLegacyFile;
             if (!hasReleaseChangeFile) {
-              core.setFailed('Feature pull requests must update per-feature change files in .agentic/releases/ so durable migration state stays current. If this PR is not a Feature, remove the Feature label.');
+              core.setFailed(
+                'Feature pull requests must include a release fragment in .agentic/releases/unreleased/<slug>.json. ' +
+                'See .agentic/releases/unreleased/README.md for the required schema. ' +
+                'If this PR is not a Feature, remove the Feature label.'
+              );
             }
       - name: Skip non-Feature PR
         if: steps.labels.outputs.is_feature != 'true'
-        run: echo "Not a Feature PR; release-note change-file updates are not required by this check."
+        run: echo "Not a Feature PR; release fragment in .agentic/releases/unreleased/ is not required by this check."

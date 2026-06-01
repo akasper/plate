@@ -1,0 +1,17 @@
+{
+  "slug": "bootstrap-release-branch",
+  "change_type": "feature",
+  "surface": "src/plate_core/bootstrap.py, .github/workflows/pr-documentation-check.yml",
+  "summary": "Bootstrap now creates a 'release' branch from main when absent. PR documentation check now enforces a fragment in .agentic/releases/unreleased/<slug>.json for Feature PRs (fragment-first).",
+  "migration_impact": "gh plate bootstrap --apply now creates the 'release' branch if it does not exist. The pr-documentation-check.yml now requires .agentic/releases/unreleased/<slug>.json instead of any .agentic/releases/ file.",
+  "migration_guidance": [
+    "1. Run `gh plate bootstrap --apply` in your repo to create the 'release' branch from main.",
+    "2. Protect the 'release' branch: enable 'Require a pull request before merging', no direct push.",
+    "3. Feature PRs must now include a fragment at .agentic/releases/unreleased/<slug>.json — legacy flat .agentic/releases/vX.Y.Z.json files are still accepted but deprecated.",
+    "4. Release ceremony: git checkout release && git reset --hard <tag> && git push --force-with-lease"
+  ],
+  "agent_notes": "Always author a fragment in .agentic/releases/unreleased/ before opening a Feature PR. Run gh plate bootstrap --apply once per new repo to set up the release branch.",
+  "breaking": false,
+  "links": ["#199", "#194"],
+  "requires": ["0.1.3"]
+}
