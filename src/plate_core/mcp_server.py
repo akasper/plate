@@ -44,7 +44,7 @@ def _plan_epic_stub(args: dict) -> object:
                     "session_state": {"turn": 0, "phase": "detection"},
                     "child_issues": {"research": [], "design": [], "feature": []},
                 },
-                "note": "Phase 1 stub. Full interactive planning is handled in Copilot chat via the interactive-epic-planning skill.",
+                "note": "Phase 1 stub. Full interactive planning is handled via the host agent's chat or gh plate qanda (CLI-agnostic). See grok-build epic for agent integration.",
             }
     return _Stub()
 
@@ -583,7 +583,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_synthesize_priorities",
-                                "description": "Return a ranked list of open Questions with rationale. Initial heuristic implementation; agents and future plate_plan_epic evolution provide richer LLM synthesis. Use before presenting via native Copilot TUI or gh plate qanda.",
+                                "description": "Return a ranked list of open Questions with rationale. Initial heuristic implementation; agents and future plate_plan_epic evolution provide richer LLM synthesis. Use before presenting via the host agent's native UI or gh plate qanda (CLI-agnostic).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
