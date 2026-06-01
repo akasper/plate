@@ -26,6 +26,14 @@ class MarkerSection:
     content: str  # content *inside* the markers (excluding the marker lines themselves)
 
 
+@dataclass
+class MergeResult:
+    """Result of marker-aware merge with diagnostics for conflict reporting."""
+    text: str
+    preserved_local_sections: List[str]
+    warnings: List[str]
+
+
 class MarkerParseError(ValueError):
     """Raised for invalid marker structure (nesting, unclosed, orphan end, etc.)."""
 
@@ -83,7 +91,11 @@ class MarkerParser:
         """Return {'valid': bool, 'errors': list}."""
         errors = []
         try:
-            self.find_marked_sections(content)
+            sections = self.find_marked_sections(content)
+            # Enforce unique section names per file (design requirement)
+            names = [s.name for s in sections]
+            if len(names) != len(set(names)):
+                errors.append("Duplicate section names are not allowed within a file")
         except MarkerParseError as e:
             errors.append(str(e))
         # Additional simple checks
@@ -192,3 +204,24 @@ def _validate_marker_nesting(content: str) -> Dict[str, Any]:
 
 def _merge_with_local_preservation(base: str, local: str, upstream: str) -> str:
     return _parser.merge_with_local_preservation(base, local, upstream)
+
+
+# Public API (preferred for new callers; _ wrappers retained for test compat)
+find_marked_sections = _find_marked_sections
+validate_marker_nesting = _validate_marker_nesting
+merge_with_local_preservation = _merge_with_local_preservation
+
+__all__ = [
+    "MarkerSection",
+    "MarkerParseError",
+    "MarkerParser",
+    "find_marked_sections",
+    "validate_marker_nesting",
+    "merge_with_local_preservation",
+    "_is_start_marker",
+    "_is_end_marker",
+    "_extract_section_name",
+    "_find_marked_sections",
+    "_validate_marker_nesting",
+    "_merge_with_local_preservation",
+]
