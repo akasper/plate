@@ -95,8 +95,21 @@ def get_features(repo: str | None = None, client: GhClient | None = None) -> Fea
         ("mcp-manifest-source", "plugin/.mcp.json"),
         ("baseline-agents-catalog", "src/plate_core/data/baseline_catalog.yml"),
         ("current-md", "CURRENT.md"),
+        ("release-branch", None),  # Checked separately via branches API
+        ("release-notes-layout", ".agentic/releases/unreleased"),
     ]
-    detected = [FeatureFlag(name=name, enabled=_path_exists(gh, target, path), evidence=path) for name, path in checks]
+
+    detected = []
+    for name, path in checks:
+        if name == "release-branch":
+            # Check for a branch named 'release' via the branches API
+            try:
+                gh.api(f"repos/{target}/branches/release")
+                detected.append(FeatureFlag(name=name, enabled=True, evidence="branches/release"))
+            except GhApiError:
+                detected.append(FeatureFlag(name=name, enabled=False, evidence="branches/release"))
+        elif path:
+            detected.append(FeatureFlag(name=name, enabled=_path_exists(gh, target, path), evidence=path))
 
     # Playwright uses flexible heuristic per issue #64 (config.* + optional dir/dep signals)
     pw_enabled, pw_evidence = _has_playwright_config_gh(gh, target)

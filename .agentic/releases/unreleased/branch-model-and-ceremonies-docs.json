@@ -1,0 +1,18 @@
+{
+  "slug": "branch-model-and-ceremonies-docs",
+  "change_type": "docs",
+  "surface": "AGENTS.md, CONTRIBUTING.md, .github/copilot-instructions.md",
+  "summary": "Documents the three-tier branch model (epic/release/main), epic-close ceremony, and release ceremony across all agent-facing doc surfaces.",
+  "migration_impact": "AGENTS.md, CONTRIBUTING.md, and copilot-instructions.md now document the epic/release/main branch model, fragment-first authoring, and both ceremonies. Downstream repos should sync these sections when upgrading.",
+  "migration_guidance": [
+    "1. Add a 'Branch Model and Ceremonies' section to AGENTS.md following the pattern in akasper/plate AGENTS.md §Branch Model and Ceremonies.",
+    "2. Update CONTRIBUTING.md §Branch and Pull Request Rules to describe the three-tier model and reference the ceremonies.",
+    "3. Update copilot-instructions.md to reference 'gh plate release status', 'gh plate release notes', and fragment-first authoring.",
+    "4. Add 'Release' to the issue type label enumeration in all three docs.",
+    "5. Update Documentation Rules to say 'author a fragment under .agentic/releases/unreleased/<slug>.json' rather than 'update a change file'."
+  ],
+  "agent_notes": "When working in a PLATE repo, always check AGENTS.md §Branch Model and Ceremonies to understand which branch to target for a Feature PR (the Epic branch, not main). Use gh plate release status before opening a Release PR.",
+  "breaking": false,
+  "links": ["#196", "#194"],
+  "requires": ["0.1.3"]
+}

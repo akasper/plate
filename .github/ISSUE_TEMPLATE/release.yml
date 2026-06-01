@@ -1,0 +1,80 @@
+name: Release
+description: Track a formal PLATE release — pre-release checklist, extension hooks, and semver tag traceability.
+title: "[Release]: v"
+labels:
+  - Release
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this issue to own a PLATE release ceremony. It links the candidate version, the release branch PR,
+        all extension release checks, and the semver tag. One Release issue per tag.
+  - type: input
+    id: version
+    attributes:
+      label: Target version
+      description: "Semantic version being released (e.g. `v0.2.0`)."
+      placeholder: "v0.2.0"
+    validations:
+      required: true
+  - type: textarea
+    id: linked_epics
+    attributes:
+      label: Linked epics
+      description: "List the Epics (milestones or Epic issues) included in this release."
+      placeholder: "- Epic: plate-release-ceremony (#194)"
+    validations:
+      required: false
+  - type: textarea
+    id: release_notes_preview
+    attributes:
+      label: Release notes preview
+      description: "Paste a summary of unreleased fragments or key changes. Full notes will be aggregated by `gh plate release cut`."
+    validations:
+      required: false
+  - type: textarea
+    id: pre_release_checklist
+    attributes:
+      label: Pre-release checklist
+      description: "Steps that must be completed before tagging. Extend with extension release_checks when applicable."
+      value: |
+        - [ ] All linked Epic branches merged into `release` branch.
+        - [ ] `gh plate release status` shows no pending fragments that should be excluded.
+        - [ ] Extension release_checks satisfied (see extensions.yml).
+        - [ ] `release` branch PR to `main` reviewed and approved.
+        - [ ] `git tag vX.Y.Z` applied and pushed.
+        - [ ] GitHub Release created (auto-populated from release notes).
+        - [ ] `release` branch hard-reset to tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`.
+    validations:
+      required: true
+  - type: textarea
+    id: extension_release_checks
+    attributes:
+      label: Extension release checks
+      description: "List any extension-declared release checks (from .agentic/extensions.yml) and their status."
+      placeholder: |
+        - [ ] marketing-site: Review and update product listing for new capabilities
+    validations:
+      required: false
+  - type: textarea
+    id: success_criteria
+    attributes:
+      label: Success criteria
+      description: "What must be true for this release to be considered complete?"
+      placeholder: |
+        - [ ] Tag vX.Y.Z exists and points to `main`.
+        - [ ] GitHub Release is published with accurate notes.
+        - [ ] `release` branch hard-reset to tag.
+    validations:
+      required: true
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: PLATE release readiness
+      options:
+        - label: Target version follows semver and is higher than the previous tag.
+          required: true
+        - label: All pre-release checklist items are actionable and owned.
+          required: true
+        - label: Extension release checks have been reviewed.
+          required: true

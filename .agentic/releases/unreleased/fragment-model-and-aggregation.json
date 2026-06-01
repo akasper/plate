@@ -1,0 +1,20 @@
+{
+  "slug": "fragment-model-and-aggregation",
+  "change_type": "feature",
+  "surface": ".agentic/releases/unreleased/, scripts/cut_release.py, render_release_notes.py, render_release_migrations.py",
+  "summary": "Introduces fragment-first release notes: unreleased/ fragments aggregated into vX.Y.Z/ directories on cut.",
+  "migration_impact": "Release notes now follow a fragment-first model. Authors commit .json fragments to .agentic/releases/unreleased/ during feature work. At release time, scripts/cut_release.py (or gh plate release cut) aggregates them into .agentic/releases/vX.Y.Z/. Legacy flat vX.Y.Z.json files remain supported.",
+  "migration_guidance": [
+    "1. Create .agentic/releases/unreleased/ in your repo (mkdir -p).",
+    "2. Copy scripts/cut_release.py from plate into your repo's scripts/ directory.",
+    "3. Copy .agentic/releases/unreleased/README.md to document the contract for contributors.",
+    "4. Update .agentic/releases/README.md to document both layouts.",
+    "5. Update scripts/render_release_notes.py and render_release_migrations.py to use the new iter_release_files/load_release_files that handles vX.Y.Z/ dirs.",
+    "6. For new Feature PRs: author a fragment in unreleased/ instead of editing a flat version file.",
+    "7. Legacy flat files (v0.1.x.json) continue to render correctly — no migration needed for existing records."
+  ],
+  "agent_notes": "Always create a fragment in .agentic/releases/unreleased/ when implementing a Feature that changes PLATE process, templates, or agent surfaces. Name the file <slug>.json. Run scripts/cut_release.py --dry-run to preview the next release cut.",
+  "breaking": false,
+  "links": ["#197", "#194"],
+  "requires": ["0.1.3"]
+}

@@ -12,6 +12,7 @@ from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
+from .release import get_release_notes_diff, get_release_status
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
@@ -137,6 +138,21 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             tool_cls = CURIOSITY_TOOLS[name]
             # Pass through common args + any tool-specific ones
             payload = tool_cls.execute(**args)
+        elif name == "plate_release_status":
+            from pathlib import Path
+            releases_dir_arg = args.get("releases_dir")
+            payload = get_release_status(
+                repo=args.get("repo"),
+                releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
+            ).to_dict()
+        elif name == "plate_release_notes":
+            from pathlib import Path
+            releases_dir_arg = args.get("releases_dir")
+            payload = get_release_notes_diff(
+                from_version=args.get("from_version"),
+                to_version=args.get("to_version"),
+                releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
+            ).to_dict()
         else:
             _write(
                 {
@@ -577,6 +593,44 @@ def run() -> None:
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                     },
                                     "required": ["original_issue_number", "blockage_point", "missing_info"],
+                                },
+                            },
+                            {
+                                "name": "plate_release_status",
+                                "description": "Return the current PLATE release status: release branch existence, open Release issues, latest version, pending unreleased fragments, and extension release checks.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "releases_dir": {
+                                            "type": "string",
+                                            "description": "Path to the releases directory. Defaults to .agentic/releases.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_release_notes",
+                                "description": "Return a structured diff of PLATE release notes between two versions, including migration steps. Use to understand what changed between your current PLATE version and the latest.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "from_version": {
+                                            "type": "string",
+                                            "description": "Start version (exclusive, e.g. '0.1.2'). Omit for all versions from beginning.",
+                                        },
+                                        "to_version": {
+                                            "type": "string",
+                                            "description": "End version (inclusive, e.g. '0.2.0'). Omit for latest.",
+                                        },
+                                        "releases_dir": {
+                                            "type": "string",
+                                            "description": "Path to the releases directory. Defaults to .agentic/releases.",
+                                        },
+                                    },
                                 },
                             },
                         ]

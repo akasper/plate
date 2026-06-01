@@ -1,0 +1,17 @@
+{
+  "slug": "extensions-release-checks",
+  "change_type": "feature",
+  "surface": ".agentic/extensions.yml, src/plate_core/release.py",
+  "summary": "Adds release_checks arrays to extensions.yml: the new release-ceremony extension defines four release checks (notes complete, branch rebased, release issue open, extension sign-off). The marketing-site extension gains two release checks (copy reviewed, analytics consent). get_release_status() already reads release_checks via _load_extension_release_checks().",
+  "migration_impact": "gh plate release status will now report outstanding extension release checks. No migration required — all additions are additive.",
+  "migration_guidance": [
+    "1. Pull the updated .agentic/extensions.yml.",
+    "2. Run `gh plate release status --repo owner/repo` to see extension release checks in the output.",
+    "3. To add your own extension's release checks, follow the schema in .agentic/extensions.yml: release_checks is an array of {id, description, required, human_approval_required}.",
+    "4. Checks marked required: true will block release by convention; human_approval_required: true means a human must sign off."
+  ],
+  "agent_notes": "Check gh plate release status before starting a release PR — it lists all outstanding extension release checks. Complete all required ones before merging release into main.",
+  "breaking": false,
+  "links": ["#200", "#194"],
+  "requires": ["0.1.3"]
+}
