@@ -216,20 +216,13 @@ class PlateConfigSchema(unittest.TestCase):
     ) -> Dict[str, Any]:
         """Resolve config with cascading precedence: defaults < extension < local."""
         result = {}
-        
-        # Start with defaults
         self._deep_merge(result, defaults)
-        
-        # Apply extension
         self._deep_merge(result, extension)
-        
-        # Apply local
         self._deep_merge(result, local)
-        
         return result
 
-    def _deep_merge(self, target: Dict, source: Dict) -> None:
-        """Deep merge source into target."""
+    def _deep_merge(self, target: Dict[str, Any], source: Dict[str, Any]) -> None:
+        """Deep merge source into target (for legacy sketch tests)."""
         for key, value in source.items():
             if isinstance(value, dict) and key in target and isinstance(target[key], dict):
                 self._deep_merge(target[key], value)
@@ -237,31 +230,49 @@ class PlateConfigSchema(unittest.TestCase):
                 target[key] = value
 
 
-class PlateConfigValidationTests(unittest.TestCase):
-    """Tests for .plate config validation."""
+# --- Real runtime integration tests for Issue #129 implementation ---
+from plate_core.plate_config import (
+    load_plate_config,
+    PlateConfig,
+    PlateConfigError,
+    validate_plate_config,
+    DEFAULT_CONFIG,
+)
 
-    def test_reject_unknown_top_level_fields(self):
-        """Test that unknown top-level fields are rejected or warned."""
-        config = {
-            "version": "1.0",
-            "methodology": {},
-            "unknown_field": "value",  # Unknown
-        }
-        # Strict validation should reject
-        validator = ConfigValidator()
-        result = validator.validate(config, strict=True)
-        self.assertFalse(result.valid)
 
-    def test_allow_unknown_fields_in_lenient_mode(self):
-        """Test that unknown fields are allowed in lenient mode."""
-        config = {
-            "version": "1.0",
-            "methodology": {},
-            "future_field": "value",  # Unknown but allowed
-        }
-        validator = ConfigValidator()
-        result = validator.validate(config, strict=False)
-        self.assertTrue(result.valid)
+class PlateConfigRuntimeTests(unittest.TestCase):
+    """Tests exercising the actual plate_config module (Issue #129)."""
+
+    def test_load_defaults_when_no_file(self):
+        cfg = load_plate_config(Path("/tmp/nonexistent-plate-root-xyz"))
+        self.assertEqual(cfg.version, "1.0")
+        self.assertEqual(cfg.methodology.get("marker_prefix"), "PLATES-CORE")
+
+    def test_load_and_validate_local_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(json.dumps({
+                "version": "1.0",
+                "methodology": {"marker_prefix": "CUSTOM"},
+                "extensions": {"enabled": False},
+                "overrides": {"ci": "fast"},
+            }))
+            cfg = load_plate_config(root)
+            self.assertEqual(cfg.methodology["marker_prefix"], "CUSTOM")
+            self.assertFalse(cfg.extensions["enabled"])
+
+    def test_validation_rejects_missing_version(self):
+        bad = {"methodology": {}, "extensions": {}, "overrides": {}}
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config(bad)
+
+    def test_validation_accepts_valid(self):
+        good = {"version": "1.0", "methodology": {}, "extensions": {}, "overrides": {}}
+        validate_plate_config(good)  # no raise
+
+    def test_module_exports_defaults(self):
+        self.assertIn("version", DEFAULT_CONFIG)
+        self.assertIn("marker_prefix", DEFAULT_CONFIG["methodology"])
 
     def test_deeply_nested_resolution(self):
         """Test resolution with deeply nested configs."""
