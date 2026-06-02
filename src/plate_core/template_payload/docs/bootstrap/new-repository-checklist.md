@@ -59,3 +59,11 @@ After syncing labels, two labels deserve attention:
 ## Recommended First Follow-Up Issue
 
 Open a `Research` or `Epic` issue to capture the repository’s first real roadmap slice, then create the matching `Epic: short-name` label so Feature work can remain traceable from the first implementation PR.
+
+## Goals Page (Information Audit Convention, #224 / #228)
+
+- **Automatable:** Bootstrap can initialize a placeholder `docs/wiki/Goals.md` and link from Home.
+- **Human decision:** Populate the Mission, principles, and initial open questions with project-specific intent.
+- **Agent impact:** Information Audits (#221) and agents will read this page as a primary signal; missing page surfaces as high-value Question.
+
+Add to the wiki sync scope if enabled.
