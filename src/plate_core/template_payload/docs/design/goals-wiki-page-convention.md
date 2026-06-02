@@ -84,3 +84,20 @@ Agents performing Information Audits are expected to:
 ---
 
 *This document defines the recommended PLATE convention. Refined and adopted as part of Epic #218.*
+## Migration and Rollout (Feature #228)
+
+**For existing PLATE projects:**
+- Create `docs/wiki/Goals.md` (or the wiki page) using the structure above.
+- Link it from wiki Home and other high-level docs.
+- Run an Information Audit (#221) with the new convention to populate "Open Strategic Questions" with linked Questions.
+- Enable or configure wiki sync so the page is published.
+
+**For new projects (via template/bootstrap):**
+- The bootstrap/onboarding now includes light guidance or auto-initialization of a basic `Goals` page when wiki features are detected or user indicates interest in agentic/strategic planning.
+- New projects inherit the convention by default or with prompts.
+
+**Extension authors:**
+- Contribute default informational goals that audits will surface (see extension-repository.md for manifest/catalog integration, #226).
+- Examples can be domain-specific (e.g., marketing GTM goals, tech architecture risks).
+
+See Epic #218 for full documentation, migration guide, and examples in the template and wiki.
