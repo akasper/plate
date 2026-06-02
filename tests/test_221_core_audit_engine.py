@@ -61,6 +61,31 @@ class TestPerformInformationAuditTool(unittest.TestCase):
         )
         self.assertLessEqual(len(res["proposed_questions"]), 1)
 
+    def test_baseline_catalog_loads_informational_goals(self):
+        from plate_core.baseline_catalog import load_baseline_catalog
+        catalog = load_baseline_catalog()
+        goals = catalog.informational_goals
+        self.assertGreater(len(goals), 0)
+        ids = {g.id for g in goals}
+        self.assertIn("primary-purpose", ids)
+        self.assertIn("primary-users", ids)
+        self.assertTrue(all(g.title and g.body for g in goals))
+
+    def test_audit_includes_defaults_from_catalog(self):
+        # With include_defaults, proposals should come from the catalog (post #222)
+        res = PerformInformationAuditTool.execute(
+            repo="akasper/plate",
+            dry_run=True,
+            max_questions=10,
+            include_defaults=True,
+        )
+        titles = [p["title"] for p in res["proposed_questions"]]
+        # Should include at least the catalog ones (not just Goals-derived)
+        self.assertTrue(
+            any("primary-purpose" in t.lower() or "purpose or value" in t.lower() for t in titles),
+            "Expected catalog defaults in audit proposals",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
