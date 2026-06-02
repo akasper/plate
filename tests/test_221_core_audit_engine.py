@@ -39,18 +39,19 @@ class TestPerformInformationAuditTool(unittest.TestCase):
 
     def test_goals_page_signal_affects_output(self):
         # When Goals present (as on this branch), we expect a refinement-style proposal
-        # (the stub detects Mission etc.). This exercises the Goals-driven path from #220/#223.
+        # (the stub detects Mission etc.). This exercises the Goals-driven path from #220/#223
+        # (isolated by disabling defaults from catalog #222).
         res = PerformInformationAuditTool.execute(
             repo="akasper/plate",
             dry_run=True,
-            max_questions=2,
+            max_questions=5,
             include_defaults=True,
         )
         titles = [p["title"] for p in res["proposed_questions"]]
-        # At least the default or a Goals-derived one should appear
+        # At least a Goals-derived refinement should appear
         self.assertTrue(
             any("Mission" in t or "Goals" in t or "risks" in t.lower() for t in titles),
-            "Expected proposals grounded in Goals page or defaults per design",
+            "Expected proposals grounded in Goals page per design",
         )
 
     def test_respects_max_questions(self):
