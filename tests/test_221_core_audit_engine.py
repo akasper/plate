@@ -87,6 +87,14 @@ class TestPerformInformationAuditTool(unittest.TestCase):
             "Expected catalog defaults in audit proposals",
         )
 
+    def test_agent_guidance_includes_audit_section(self):
+        # For #225: guidance exercised; new section present for Information Audits/Goals.
+        from plate_core.agent_guidance import get_agent_guidance_sections
+        sections = get_agent_guidance_sections()
+        self.assertIn("information_audit", sections)
+        self.assertIn("Information Audits and Goals Page", sections["information_audit"])
+        self.assertIn("plate_perform_information_audit", sections["information_audit"])
+
 
 if __name__ == "__main__":
     unittest.main()
