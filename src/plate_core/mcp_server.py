@@ -598,8 +598,8 @@ def run() -> None:
                                         "scope": {"type": "string", "description": "repo | epic:<n> | label:<name> | surface:... (default: repo)"},
                                         "agent_type": {"type": "string", "description": "general | marketing | engineering (default: general) for specialized scoping/heuristics"},
                                         "max_questions": {"type": "integer", "description": "Cap on proposals (default 5)", "default": 5},
-                                        "dry_run": {"type": "boolean", "description": "Propose only; do not create Issues (default false)", "default": false},
-                                        "include_defaults": {"type": "boolean", "description": "Include platform + extension default informational goals (default true)", "default": true}
+                                        "dry_run": {"type": "boolean", "description": "Propose only; do not create Issues (default false)", "default": False},
+                                        "include_defaults": {"type": "boolean", "description": "Include platform + extension default informational goals (default true)", "default": True}
                                     }
                                 },
                             },
