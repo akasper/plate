@@ -106,6 +106,33 @@ class TestPerformInformationAuditTool(unittest.TestCase):
         self.assertIn("Information Audits and Goals Page", sections["information_audit"])
         self.assertIn("plate_perform_information_audit", sections["information_audit"])
 
+    def test_audit_produces_extension_goals(self):
+        # For #227 harness/tests: verify audit includes extension-provided goals (#226).
+        res = PerformInformationAuditTool.execute(
+            repo="akasper/plate",
+            dry_run=True,
+            max_questions=20,
+            include_defaults=True,
+        )
+        titles = [p["title"] for p in res["proposed_questions"]]
+        self.assertTrue(
+            any("value prop" in t.lower() or "positioning" in t.lower() or "gtm" in t.lower() or "marketing" in t.lower() for t in titles),
+            "Expected extension goals from catalog in audit proposals",
+        )
+        self.assertTrue(
+            any("architectural" in t.lower() or "tech debt" in t.lower() or "architecture" in t.lower() for t in titles),
+            "Expected extension goals from catalog in audit proposals",
+        )
+
+    def test_catalog_has_platform_and_extension(self):
+        # #227 coverage: distinguish platform vs extension goals.
+        from plate_core.baseline_catalog import load_baseline_catalog
+        catalog = load_baseline_catalog()
+        platform = [g for g in catalog.informational_goals if g.provided_by == "platform"]
+        ext = [g for g in catalog.informational_goals if g.provided_by != "platform"]
+        self.assertGreater(len(platform), 0)
+        self.assertGreater(len(ext), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
