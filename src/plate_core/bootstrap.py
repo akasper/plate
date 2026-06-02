@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 
 from .github_client import GhClient
 from .health import REQUIRED_LABELS, get_health, resolve_repo
+from .baseline_catalog import load_baseline_catalog
 
 
 DEFAULT_LABEL_COLOR = "5319e7"
@@ -76,22 +77,23 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
             BootstrapAction(name="create-initial-epic", state="already-configured", detail="At least one open Epic exists")
         )
 
-    # Feature #153: Seed initial Curiosity / informational goal Questions (per Epic #139)
-    # These give new PLATE projects immediate value from the Q&A / Curiosity mode.
-    starter_questions = [
-        {
-            "title": "[Question]: What is the primary purpose or value proposition of this software?",
-            "body": "What problem does this project solve? Who benefits and how?\n\n**Answer signal:** A clear, one-paragraph statement that can guide all future work and prioritization.",
-        },
-        {
-            "title": "[Question]: Who are the primary users or customers of this software?",
-            "body": "Describe the main personas or organizations that will use or pay for this.\n\n**Answer signal:** A concise description of the target users that can be used for roadmap and design decisions.",
-        },
-        {
-            "title": "[Question]: What are the biggest risks or unknowns for this project right now?",
-            "body": "Technical, market, team, or other uncertainties that could derail success.\n\n**Answer signal:** A short prioritized list that the team can actively de-risk.",
-        },
-    ]
+    # Feature #153 / #222: Seed initial Curiosity / informational goal Questions from the baseline catalog.
+    # These give new PLATE projects immediate value from the Q&A / Curiosity mode (and are usable by the Information Audit #221).
+    catalog = load_baseline_catalog()
+    starter_questions = []
+    for g in catalog.informational_goals:
+        starter_questions.append({
+            "title": g.title,
+            "body": g.body + "\n\n**Answer signal:** " + (g.refinement_note or "Documented evidence linked from the Question."),
+        })
+    if not starter_questions:
+        # Fallback (should not happen post #222)
+        starter_questions = [
+            {
+                "title": "[Question]: What is the primary purpose or value proposition of this software?",
+                "body": "What problem does this project solve? Who benefits and how?\n\n**Answer signal:** A clear, one-paragraph statement that can guide all future work and prioritization.",
+            },
+        ]
 
     # Check if any starter Questions already exist (simple heuristic for now)
     # Use direct API call (per_page=100 sufficient; matches labels/epics patterns in health.py)
