@@ -120,7 +120,7 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
             detail = f"Seeded {len(starter_questions)} initial Curiosity Questions"
         else:
             state = "planned"
-            detail = f"Seed {len(starter_questions)} initial Curiosity Questions (project purpose, users, risks)"
+            detail = f"Seed {len(starter_questions)} initial Curiosity Questions (project purpose, users, risks, marketing, tech)"
         actions.append(BootstrapAction(name="seed-initial-questions", state=state, detail=detail))
     else:
         actions.append(
