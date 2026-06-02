@@ -72,6 +72,17 @@ class TestPerformInformationAuditTool(unittest.TestCase):
         self.assertIn("primary-users", ids)
         self.assertTrue(all(g.title and g.body for g in goals))
 
+    def test_catalog_supports_extension_goals(self):
+        from plate_core.baseline_catalog import load_baseline_catalog
+        catalog = load_baseline_catalog()
+        goals = catalog.informational_goals
+        ext_goals = [g for g in goals if g.provided_by != "platform"]
+        self.assertGreater(len(ext_goals), 0)
+        self.assertTrue(all(g.provided_by for g in ext_goals))
+        ids = {g.id for g in ext_goals}
+        self.assertIn("marketing-gtm-positioning", ids)
+        self.assertIn("technical-architecture-risks", ids)
+
     def test_audit_includes_defaults_from_catalog(self):
         # With include_defaults, proposals should come from the catalog (post #222)
         res = PerformInformationAuditTool.execute(
