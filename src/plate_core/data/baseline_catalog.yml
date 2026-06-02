@@ -524,3 +524,22 @@ informational_goals:
     provenance_hint: "Default platform informational goal (#222)."
     priority_rationale: "Closes the loop between Goals and observable reality; feeds refinement."
     refinement_note: "Leads to targeted Questions when gaps are identified."
+
+  # Example extension-provided (for #226 extensibility demo; in real would come from extension manifest)
+  - id: marketing-gtm-positioning
+    title: "[Question]: What is our core value prop and positioning for the target market?"
+    body: "Define the unique value, key messages, and differentiation vs competitors.\n\n**Answer signal:** Documented positioning statement + 3-5 key messages usable in marketing and product."
+    related_goals: ["Mission", "Users"]
+    provenance_hint: "Provided by example 'marketing-extension' (per #226)."
+    priority_rationale: "Critical for GTM success; extends platform defaults for marketing-focused audits."
+    refinement_note: "Can be scoped by market segment."
+    provided_by: "marketing-extension"
+
+  - id: technical-architecture-risks
+    title: "[Question]: What are the key architectural risks and tech debt items?"
+    body: "List high-impact tech decisions, risks, and debt that could slow velocity or cause outages.\n\n**Answer signal:** Prioritized list with mitigation plans or links to issues."
+    related_goals: ["Mission", "Risks"]
+    provenance_hint: "Provided by example 'tech-extension' (per #226)."
+    priority_rationale: "Helps engineering agents focus audits on sustainability."
+    refinement_note: "Pair with code scans for evidence."
+    provided_by: "tech-extension"

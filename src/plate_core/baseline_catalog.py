@@ -47,6 +47,7 @@ class BaselineInformationalGoal:
     provenance_hint: str = ""
     priority_rationale: str = ""
     refinement_note: str = ""
+    provided_by: str = "platform"  # "platform" or extension id for #226 extensibility
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -57,6 +58,7 @@ class BaselineInformationalGoal:
             "provenance_hint": self.provenance_hint,
             "priority_rationale": self.priority_rationale,
             "refinement_note": self.refinement_note,
+            "provided_by": self.provided_by,
         }
 
 
@@ -212,6 +214,7 @@ def _load_informational_goals(raw_goals: Any) -> tuple[BaselineInformationalGoal
                 provenance_hint=item.get("provenance_hint", ""),
                 priority_rationale=item.get("priority_rationale", ""),
                 refinement_note=item.get("refinement_note", ""),
+                provided_by=item.get("provided_by", "platform"),
             )
         )
     return tuple(goals)
