@@ -31,7 +31,7 @@ class BootstrapTests(unittest.TestCase):
         seed_action = next((a for a in report.actions if a.name == "seed-initial-questions"), None)
         self.assertIsNotNone(seed_action, "seed-initial-questions action must be present")
         self.assertEqual(seed_action.state, "planned")
-        self.assertIn("Seed 3 initial Curiosity Questions", seed_action.detail)
+        self.assertIn("Seed 5 initial Curiosity Questions", seed_action.detail)
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_wiki_passes_bool_not_string(self, mock_get_health):
@@ -72,7 +72,7 @@ class BootstrapTests(unittest.TestCase):
             and call.kwargs.get("method") == "POST"
             and "Question" in str(call.kwargs.get("fields", {}).get("labels", []))
         ]
-        self.assertEqual(len(question_posts), 3, "Expected exactly 3 POSTs to seed starter Questions on apply when none exist")
+        self.assertEqual(len(question_posts), 5, "Expected exactly 5 POSTs to seed starter Questions on apply when none exist")
 
 
 if __name__ == "__main__":

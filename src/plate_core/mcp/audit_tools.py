@@ -22,6 +22,7 @@ from typing import Any
 
 from ..github_client import GhClient, GhApiError
 from ..health import resolve_repo
+from ..baseline_catalog import load_baseline_catalog
 
 
 def _get_gh_client(client: GhClient | None = None) -> GhClient:
@@ -83,32 +84,30 @@ class PerformInformationAuditTool:
 
         proposed = []
 
-        # Always include a platform default if requested (per #222 / #223)
+        # Include platform + extension defaults from catalog (#222) when requested (#223 / audit contract)
         if include_defaults:
-            proposed.append({
-                "title": "[Question]: Clarify project Mission and success criteria (Goals page)",
-                "body": (
-                    "## Informational Goal\n"
-                    "We need to know the project's explicit Mission and 'How We Intend to Succeed' "
-                    "so agents and contributors can ground Information Audits and day-to-day work.\n\n"
-                    "## Sample Questions\n"
-                    "- What is the one-sentence Mission for this project?\n"
-                    "- What are the 3-5 Core Principles that will guide decisions?\n\n"
-                    "## Provenance\n"
-                    "Discovered via Information Audit (stub engine, scope=repo, agent_type=general). "
-                    "Primary signal: absence or staleness of docs/wiki/Goals.md (per convention #219/#224).\n\n"
-                    "## Related Goals\n"
-                    "- Wiki Goals § Mission\n"
-                    "- Wiki Goals § How We Intend to Succeed\n\n"
-                    "## Refinement\n"
-                    "This is a broad starter; narrow to specific GTM/revenue/ technical goals once Mission exists.\n\n"
-                    "(Full template + PLATE-INFORMATIONAL-GOAL markers will be populated by the engine in follow-ups.)"
-                ),
-                "related_goals": ["Mission", "How We Intend to Succeed"],
-                "provenance": "Information Audit stub (no Goals page or empty Mission section)",
-                "priority_rationale": "Foundational for all downstream audits and Question generation (#218).",
-                "refinement_note": "Once answered, follow-ups for users, risks, revenue model etc. become actionable.",
-            })
+            try:
+                catalog = load_baseline_catalog()
+                for g in catalog.informational_goals:
+                    proposed.append({
+                        "title": g.title,
+                        "body": g.body,
+                        "related_goals": list(g.related_goals),
+                        "provenance": g.provenance_hint or "Information Audit (catalog default)",
+                        "priority_rationale": g.priority_rationale or "Default informational goal from platform catalog (#222).",
+                        "refinement_note": g.refinement_note or "",
+                    })
+            except Exception:
+                # Fallback (defensive; catalog should be present post #222)
+                if not any("Mission" in p.get("title", "") for p in proposed):
+                    proposed.append({
+                        "title": "[Question]: Clarify project Mission and success criteria (Goals page)",
+                        "body": "## Informational Goal\nWe need to know the project's explicit Mission...\n(Full details via catalog.)",
+                        "related_goals": ["Mission"],
+                        "provenance": "Information Audit (fallback)",
+                        "priority_rationale": "Foundational.",
+                        "refinement_note": "",
+                    })
 
         # Goals-page driven proposal (per #220 model + #223 rules 1,2,9)
         if goals:

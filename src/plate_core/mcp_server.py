@@ -5,7 +5,17 @@ from __future__ import annotations
 import json
 import sys
 
-from .baseline_catalog import BaselineCatalogError, delegate_to_agent, get_agent, get_skill, list_agents, list_skills
+from .baseline_catalog import (
+    BaselineCatalogError,
+    BaselineInformationalGoal,
+    delegate_to_agent,
+    get_agent,
+    get_informational_goal,
+    get_skill,
+    list_agents,
+    list_informational_goals,
+    list_skills,
+)
 from .bootstrap import run_bootstrap
 from .epics import get_epic_status
 from .features import get_features
@@ -89,6 +99,10 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = {"skills": [skill.to_dict() for skill in list_skills()]}
         elif name == "plate_skill":
             payload = get_skill(args.get("skill_id")).to_dict()
+        elif name == "plate_informational_goals":
+            payload = {"informational_goals": [g.to_dict() for g in list_informational_goals()]}
+        elif name == "plate_informational_goal":
+            payload = get_informational_goal(args.get("goal_id")).to_dict()
         elif name == "plate_delegate_to_agent":
             agent_id = args.get("agent_id")
             task_description = args.get("task_description")
@@ -368,6 +382,29 @@ def run() -> None:
                                         }
                                     },
                                     "required": ["skill_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_informational_goals",
+                                "description": "Return the baseline informational goals catalog (for #222 / #221 audit defaults).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {},
+                                    "required": [],
+                                },
+                            },
+                            {
+                                "name": "plate_informational_goal",
+                                "description": "Return one baseline informational goal by id.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "goal_id": {
+                                            "type": "string",
+                                            "description": "Baseline informational goal id.",
+                                        }
+                                    },
+                                    "required": ["goal_id"],
                                 },
                             },
                             {
