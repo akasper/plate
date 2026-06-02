@@ -22,6 +22,10 @@ from .mcp.curiosity_tools import (
     RecordAnswerTool,
     SynthesizePrioritiesTool,
 )
+from .mcp.audit_tools import (
+    AUDIT_TOOLS,
+    PerformInformationAuditTool,
+)
 
 
 def _write(obj: dict) -> None:
@@ -136,6 +140,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             # Curiosity / Q&A Mode tools (Epic #139 / Feature #154)
             tool_cls = CURIOSITY_TOOLS[name]
             # Pass through common args + any tool-specific ones
+            payload = tool_cls.execute(**args)
+        elif name in AUDIT_TOOLS:
+            # Information Audit tools (Epic #218 / Feature #221)
+            # Contract per Design #223; model per #220. Stub for v1; full engine in follow-ups.
+            tool_cls = AUDIT_TOOLS[name]
             payload = tool_cls.execute(**args)
         else:
             _write(
@@ -577,6 +586,21 @@ def run() -> None:
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                     },
                                     "required": ["original_issue_number", "blockage_point", "missing_info"],
+                                },
+                            },
+                            {
+                                "name": "plate_perform_information_audit",
+                                "description": "Perform an Information Audit (Epic #218). Scans the Wiki Goals page + code/issues/PRs/discussions to surface Informational Goals and propose well-formed Question issues (per model in #220 and 10-rule contract in #223). Supports dry_run, scope, agent_type (general/marketing/engineering), max_questions, and include_defaults. Output feeds Curiosity/Q&A and Contemplation. v1 uses Goals signals + heuristics; full open-ended + refinement in follow-ups for #221.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "scope": {"type": "string", "description": "repo | epic:<n> | label:<name> | surface:... (default: repo)"},
+                                        "agent_type": {"type": "string", "description": "general | marketing | engineering (default: general) for specialized scoping/heuristics"},
+                                        "max_questions": {"type": "integer", "description": "Cap on proposals (default 5)", "default": 5},
+                                        "dry_run": {"type": "boolean", "description": "Propose only; do not create Issues (default false)", "default": False},
+                                        "include_defaults": {"type": "boolean", "description": "Include platform + extension default informational goals (default true)", "default": True}
+                                    }
                                 },
                             },
                         ]
