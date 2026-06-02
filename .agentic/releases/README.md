@@ -2,57 +2,114 @@
 
 This directory is the machine-readable source of truth for PLATE release notes.
 
-## Layout
+## Directory layout
 
-Two layouts are supported and coexist for backward compatibility:
+```
+.agentic/releases/
+  v0.1.0.json                  # legacy flat-file records (backward-compat)
+  v0.1.4.json
+  v0.2.0/                      # versioned release directory (current layout)
+    release.json               #   consolidated release record
+    fragments/                 #   contributing fragments (moved at release time)
+  unreleased/                  # fragments not yet associated with an epic
+    <slug>.json
+  epic-<NNN>-<slug>/           # per-epic fragment directory (optional)
+    <slug>.json
+```
 
-**Flat files (legacy):** One JSON file per semantic version at the root level:
-- `.agentic/releases/v0.1.0.json`
-- `.agentic/releases/v0.1.3.json`
+### Fragment sources
 
-**Fragment-first layout (current, from v0.2.0+):**
-- Feature authors commit fragments to `.agentic/releases/unreleased/<slug>.json` on their feature/epic branch.
-- At release time, `gh plate release cut vX.Y.Z` aggregates all fragments into `.agentic/releases/vX.Y.Z/` (a directory containing the consolidated record and the original fragments for traceability).
+When cutting a release, `scripts/cut_release.py` collects fragments from two places (in order):
 
-## Fragment schema (unreleased/<slug>.json)
+1. **`unreleased/`** — fragments for changes that do not belong to a specific epic.
+2. **`epic-<NNN>-<slug>/`** — per-epic directories. Name the directory after the GitHub issue
+   number and a short slug (e.g. `epic-123-delete-boondoggles/`). After the release is cut,
+   empty epic directories are removed automatically.
 
-Every unreleased fragment must include:
+## Cutting a release
 
-- `slug` — kebab-case identifier, unique within unreleased/ (e.g. `release-issue-type`)
-- `change_type` — e.g. `feature`, `fix`, `docs`, `process`, `breaking`
-- `surface` — affected template / workflow / docs surface
-- `summary` — one-line description of the change
-- `migration_impact` — what a downstream repo must do (required)
-- `migration_guidance` — ordered list of concrete steps for upgrading (string or array of strings; preferred over prose-only migration_impact when steps are discrete)
-- `agent_notes` — agent-friendly upgrade guidance
+### Auto-detected version (recommended)
 
-Optional fields:
+```sh
+# Let the tool infer the next version from the current baseline + fragment types:
+python scripts/cut_release.py
 
-- `breaking` — boolean
-- `links` — related issue / PR references
-- `requires` — dependency version(s) or prior note identifiers
+# Override the bump type (patch / minor / major):
+python scripts/cut_release.py --version-type minor
 
-## When to use migration_guidance
+# Preview without writing anything:
+python scripts/cut_release.py --dry-run
+```
 
-Use `migration_guidance` (array of steps) when the migration requires discrete, ordered actions.
-Use `migration_impact` (prose) for a plain-English description of what changed.
-Both fields serve different audiences: `migration_impact` for quick scanning, `migration_guidance` for unambiguous recipe execution by agents.
+The tool determines the next version by:
+1. Finding the highest semver in this directory (flat files, versioned dirs) and in git tags.
+2. Inferring the bump type from the pending fragments:
+   - Any `breaking: true` → **major**
+   - Any `change_type: "feature"` → **minor** (when no breaking changes)
+   - Otherwise → **patch**
 
-## Versioned release directories (vX.Y.Z/)
+### Explicit version
 
-After `gh plate release cut vX.Y.Z`:
-- `.agentic/releases/vX.Y.Z/` contains the aggregated release notes JSON + all contributing fragments.
-- Agents can answer "what changed between my version and latest?" by diffing these directories.
+```sh
+python scripts/cut_release.py v0.3.0
+# or via the gh plugin:
+gh plate release cut v0.3.0
+```
 
-## Rendering
+### User override
 
-Use `scripts/render_release_notes.py` to render a file or the entire directory into human-readable Markdown.
-Use `scripts/render_release_migrations.py` to render an ordered migration guide between versions.
+When the auto-detected version is wrong, pass an explicit version on the command line.
+The tool will use it verbatim and note when it differs from the inferred version.
 
-Both renderers support the `migration_guidance` field. When present, a **Migration steps** section is shown
-prominently in the output so agents have an unambiguous action recipe.
+### After cutting
 
-## Example
+1. Review `vX.Y.Z/release.json` and adjust the `summary` field if needed.
+2. Commit the new `vX.Y.Z/` directory (fragments have already been moved).
+3. Open a PR: `release` → `main`.
+4. After merge: `git tag vX.Y.Z && git push --tags`
+5. Hard-reset the release branch:
+   `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`
+
+## Fragment schema
+
+Every fragment file must include:
+
+| Field | Required | Description |
+|---|---|---|
+| `slug` | ✅ | Kebab-case identifier, unique within its source directory |
+| `change_type` | ✅ | `feature`, `fix`, `docs`, `process`, or `breaking` |
+| `surface` | ✅ | Affected template / workflow / docs surface |
+| `summary` | ✅ | One-line description of the change |
+| `migration_impact` | ✅ | Prose: what a downstream repo must do |
+| `agent_notes` | ✅ | Agent-friendly upgrade guidance |
+| `migration_guidance` | — | Array of ordered steps for unambiguous upgrade recipe |
+| `breaking` | — | `true` if downstream repos break without migration |
+| `links` | — | Related issue / PR references |
+| `requires` | — | Dependency version(s) or prior note identifiers |
+
+Use `migration_guidance` (array) when the migration requires numbered, ordered actions.
+Use `migration_impact` (prose) for a quick human-readable summary.
+Both fields serve different readers: `migration_impact` for scanning, `migration_guidance`
+for precise agent execution.
+
+## Rendering migration guidance
+
+```sh
+# All versions:
+python scripts/render_release_migrations.py .agentic/releases
+
+# Specific range:
+python scripts/render_release_migrations.py .agentic/releases --from-version 0.1.3 --to-version 0.2.0
+
+# Auto-detect the from-version from a downstream repo:
+python scripts/render_release_migrations.py .agentic/releases \
+    --auto-from ../my-downstream-repo/.agentic/releases
+```
+
+The `--auto-from` flag reads the downstream repo's own releases directory to determine
+its current PLATE baseline, so you no longer need to know the exact version manually.
+
+## Examples
 
 See `v0.1.0.json` for a legacy flat-file record.
-See `unreleased/release-issue-type.json` for a current fragment example with `migration_guidance`.
+See `unreleased/release-issue-type.json` for a fragment with `migration_guidance`.
