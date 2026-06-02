@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
-"""Render PLATE release notes into ordered migration guidance."""
+"""Render PLATE release notes into ordered migration guidance.
+
+When --from-version is omitted you can pass --auto-from to infer the
+current PLATE baseline of the *downstream* repo by scanning its own
+releases directory for the highest versioned record.  This removes the
+need to know the exact from-version manually:
+
+    python scripts/render_release_migrations.py .agentic/releases \\
+        --auto-from ../my-downstream-repo/.agentic/releases
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Iterable
 
 
 def version_key(version: str) -> tuple[int, int, int]:
@@ -137,21 +146,89 @@ def render_guidance(releases: list[dict], from_version: str | None, to_version: 
     return "\n".join(lines).rstrip() + "\n"
 
 
+_SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+
+
+def _parse_ver(v: str) -> tuple[int, ...] | None:
+    m = _SEMVER_RE.match(v.strip())
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def detect_downstream_baseline(releases_dir: Path) -> str | None:
+    """Return the highest semver found in *releases_dir* (flat files + versioned dirs).
+
+    Used with --auto-from to determine which PLATE version a downstream repo
+    is already on, so the caller doesn't need to supply --from-version manually.
+    """
+    candidates: list[tuple[int, ...]] = []
+
+    for f in releases_dir.glob("v*.json"):
+        t = _parse_ver(f.stem)
+        if t:
+            candidates.append(t)
+
+    for d in releases_dir.iterdir():
+        if d.is_dir() and _SEMVER_RE.match(d.name) and (d / "release.json").exists():
+            t = _parse_ver(d.name)
+            if t:
+                candidates.append(t)
+
+    if not candidates:
+        return None
+    best = max(candidates)
+    return ".".join(str(x) for x in best)
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("path", help="Release JSON file or directory")
-    parser.add_argument("--from-version", dest="from_version", help="Skip releases at or below this version")
-    parser.add_argument("--to-version", dest="to_version", help="Stop at this version")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("path", help="Release JSON file or directory (PLATE source)")
+    parser.add_argument(
+        "--from-version",
+        dest="from_version",
+        help="Skip releases at or below this version",
+    )
+    parser.add_argument(
+        "--to-version",
+        dest="to_version",
+        help="Stop at this version (inclusive)",
+    )
+    parser.add_argument(
+        "--auto-from",
+        dest="auto_from",
+        metavar="DOWNSTREAM_RELEASES_DIR",
+        help=(
+            "Auto-detect the from-version by scanning this directory for the highest "
+            "versioned release record. Useful when you know the downstream repo path "
+            "but not its exact PLATE version. Ignored if --from-version is also given."
+        ),
+    )
     args = parser.parse_args()
 
     path = Path(args.path)
     if not path.exists():
         raise SystemExit(f"Path not found: {path}")
 
+    from_version = args.from_version
+    if not from_version and args.auto_from:
+        downstream_dir = Path(args.auto_from)
+        if not downstream_dir.exists():
+            raise SystemExit(f"--auto-from path not found: {downstream_dir}")
+        from_version = detect_downstream_baseline(downstream_dir)
+        if from_version:
+            print(f"# Detected downstream baseline: v{from_version}", flush=True)
+        else:
+            print(
+                "# WARNING: could not detect downstream baseline from "
+                f"{downstream_dir} -- showing all releases",
+                flush=True,
+            )
+
     releases = load_release_files(path)
-    releases = select_releases(releases, args.from_version, args.to_version)
+    releases = select_releases(releases, from_version, args.to_version)
     releases = topo_sort(releases)
-    print(render_guidance(releases, args.from_version, args.to_version), end="")
+    print(render_guidance(releases, from_version, args.to_version), end="")
     return 0
 
 

@@ -1,0 +1,18 @@
+{
+  "slug": "auto-version-detection",
+  "change_type": "feature",
+  "surface": "scripts/cut_release.py, scripts/render_release_migrations.py",
+  "summary": "Auto-detect next release version and downstream PLATE baseline; add epic-dir fragment support.",
+  "migration_impact": "cut_release.py no longer requires a version argument -- it infers the next semver from the current baseline (flat files, versioned dirs, git tags) and from fragment metadata (breaking -> major, feature -> minor, else patch). render_release_migrations.py gains --auto-from to detect the from-version from a downstream repo. Fragments may now be placed in epic-NNN-slug/ directories in addition to unreleased/.",
+  "migration_guidance": [
+    "1. Pull the updated scripts/cut_release.py and scripts/render_release_migrations.py.",
+    "2. To cut a release without specifying a version, run: python scripts/cut_release.py",
+    "3. To override the bump type, run: python scripts/cut_release.py --version-type minor",
+    "4. To auto-detect the from-version for migration guidance, run: python scripts/render_release_migrations.py .agentic/releases --auto-from ../downstream-repo/.agentic/releases",
+    "5. Optionally organise epic-specific fragments in epic-NNN-slug/ directories alongside unreleased/."
+  ],
+  "agent_notes": "When cutting a release, omit the version argument to let cut_release.py compute it automatically. The tool reads existing release files and git tags to find the latest baseline, then bumps based on fragment types. Supply --version-type or an explicit version if the inference is wrong. Use --auto-from in render_release_migrations.py to avoid hardcoding from-version values.",
+  "breaking": false,
+  "links": ["#178"],
+  "requires": ["0.1.4"]
+}
