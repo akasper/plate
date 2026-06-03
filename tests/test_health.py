@@ -35,6 +35,8 @@ class FakeClient:
             import base64
             content = json.dumps({"version": "1.0"}).encode()
             return {"name": ".plate", "type": "file", "encoding": "base64", "content": base64.b64encode(content).decode()}
+        if "contents/docs/curiosity/answers.yml" in endpoint or "contents/docs/curiosity/answers.json" in endpoint:
+            return {"name": "answers.yml", "type": "file"}
         raise AssertionError(f"unexpected endpoint: {endpoint}")
 
 
@@ -78,8 +80,10 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.open_question_count, 2)
         self.assertTrue(report.plate_config_present)
         self.assertTrue(report.plate_config_valid)
+        self.assertTrue(report.curiosity_answers_present)
         self.assertTrue(report.plate_config_present)
         self.assertTrue(report.plate_config_valid)
+        self.assertTrue(report.curiosity_answers_present)
 
 
 if __name__ == "__main__":

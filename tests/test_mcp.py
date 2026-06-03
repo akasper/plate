@@ -27,6 +27,7 @@ class McpTests(unittest.TestCase):
             open_question_count=0,
             plate_config_present=False,
             plate_config_valid=False,
+            curiosity_answers_present=False,
         )
         _handle_tools_call(1, {"name": "plate_health", "arguments": {"repo": "akasper/plate_core"}})
         self.assertTrue(mock_write.called)

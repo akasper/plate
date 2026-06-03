@@ -28,6 +28,7 @@ class CliTests(unittest.TestCase):
             open_question_count=1,
             plate_config_present=False,
             plate_config_valid=False,
+            curiosity_answers_present=False,
         )
         out = io.StringIO()
         with redirect_stdout(out):

@@ -20,6 +20,7 @@ class BootstrapTests(unittest.TestCase):
             open_question_count=0,
             plate_config_present=False,
             plate_config_valid=False,
+            curiosity_answers_present=False,
         )
         client = Mock()
         # api side effect: repo_obj dict for /repos/* (no ?), [] for questions list endpoint
@@ -53,6 +54,7 @@ class BootstrapTests(unittest.TestCase):
             open_question_count=0,
             plate_config_present=False,
             plate_config_valid=False,
+            curiosity_answers_present=False,
         )
         client = Mock()
         def api_side(endpoint, *a, **k):

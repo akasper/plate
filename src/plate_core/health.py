@@ -26,6 +26,7 @@ class HealthReport:
     open_question_count: int = 0
     plate_config_present: bool = False
     plate_config_valid: bool = False
+    curiosity_answers_present: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -108,6 +109,18 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         plate_config_present = False
         plate_config_valid = False
 
+    # Curiosity adoption signal (for #262: Curiosity adoption signals, answers index)
+    curiosity_answers_present = False
+    try:
+        gh.api(f"repos/{target}/contents/docs/curiosity/answers.yml")
+        curiosity_answers_present = True
+    except GhApiError:
+        try:
+            gh.api(f"repos/{target}/contents/docs/curiosity/answers.json")
+            curiosity_answers_present = True
+        except GhApiError:
+            curiosity_answers_present = False
+
     # Binary artifact hygiene check (addresses Bug #90 / #91 regression guard)
     # Uses git ls-files to detect any tracked .pyc, __pycache__, or common binaries
     binary_artifacts_tracked = 0
@@ -151,5 +164,6 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         open_question_count=open_question_count,
         plate_config_present=plate_config_present,
         plate_config_valid=plate_config_valid,
+        curiosity_answers_present=curiosity_answers_present,
     )
 
