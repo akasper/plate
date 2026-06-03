@@ -57,7 +57,7 @@ The `plugin-structure.spec.ts` + `catalog-discovery.spec.ts` provide a **host-in
 When adding MCP tools, agents, or surfaces:
 - Update the expectations in `plugin-structure.spec.ts` (e.g. new `plate_*` tool mentions).
 - Add or extend a catalog test.
-- Update this README.
+- Update this README and the matching copy under `template_payload/tests/e2e/`.
 - Author a fragment if the change affects the plugin surface story.
 
 See also: `.plugin/`, `plugin/`, `src/plate_core/mcp_server.py`, baseline catalog, and docs on the CLI-agnostic / plugin model.
