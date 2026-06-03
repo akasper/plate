@@ -162,9 +162,9 @@ query($owner: String!, $repo: String!, $number: Int!) {
         method="POST",
         fields={
             "query": query,
-            "variables[owner]": owner,
-            "variables[repo]": name,
-            "variables[number]": pr_number,
+            "owner": owner,
+            "repo": name,
+            "number": pr_number,
         },
     )
     pr = (
@@ -431,7 +431,7 @@ mutation($threadId: ID!) {
     payload = gh.api(
         "graphql",
         method="POST",
-        fields={"query": query, "variables[threadId]": thread_id},
+        fields={"query": query, "threadId": thread_id},
     )
     thread = (
         ((payload or {}).get("data") or {})

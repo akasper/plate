@@ -101,9 +101,9 @@ class PrBabysitTests(unittest.TestCase):
         graphql_call = fake.calls[0]
         self.assertEqual(graphql_call[0], "graphql")
         self.assertEqual(graphql_call[1], "POST")
-        self.assertIn("variables[owner]", graphql_call[2])
-        self.assertIn("variables[repo]", graphql_call[2])
-        self.assertIn("variables[number]", graphql_call[2])
+        self.assertIn("owner", graphql_call[2])
+        self.assertIn("repo", graphql_call[2])
+        self.assertIn("number", graphql_call[2])
 
     def test_resolve_review_thread_uses_graphql_variables(self):
         fake = _FakeClient(
@@ -114,7 +114,7 @@ class PrBabysitTests(unittest.TestCase):
         payload = resolve_review_thread(thread_id="T1", repo="akasper/plate", client=fake)
         self.assertTrue(payload["resolved"])
         graphql_call = fake.calls[0]
-        self.assertIn("variables[threadId]", graphql_call[2])
+        self.assertIn("threadId", graphql_call[2])
 
     def test_babysit_uses_desc_sort_on_comments_api_to_find_recent_markers(self):
         """Regression test for the pagination/sort bug reported by Devin in thread PRRT_kwDOSn5ouc6Fic4A.
