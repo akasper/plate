@@ -16,6 +16,7 @@ class CliTests(unittest.TestCase):
     @patch("plate_core.cli.get_health")
     def test_health_json_output(self, mock_get_health):
         mock_get_health.return_value = HealthReport(
+            goals_page_present=True,
             repo="akasper/plate_core",
             label_coverage_ok=True,
             missing_labels=[],
