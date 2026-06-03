@@ -98,7 +98,7 @@ class CliTests(unittest.TestCase):
             code = main(["agents", "list", "--json"])
         self.assertEqual(code, 0)
         payload = json.loads(out.getvalue().strip())
-        self.assertEqual(len(payload["agents"]), 12)
+        self.assertEqual(len(payload["agents"]), 15)
         self.assertEqual(payload["agents"][0]["id"], "project-manager")
 
     def test_agent_show_json_output(self):
@@ -136,6 +136,17 @@ class CliTests(unittest.TestCase):
         payload = json.loads(out.getvalue().strip())
         self.assertEqual(payload["pr_number"], 112)
         self.assertTrue(payload["trigger_comment_posted"])
+
+    @patch("plate_core.cli.core_cut_release")
+    def test_release_cut_json_output(self, mock_core_cut):
+        """First-class release cut using core (for #261)."""
+        mock_core_cut.return_value = 0
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["release", "cut", "v0.1.5", "--dry-run", "--json"])
+        self.assertEqual(code, 0)
+        self.assertTrue(mock_core_cut.called)
+        # Note: full output from core in real run; here stub verifies wiring.
 
 
 if __name__ == "__main__":
