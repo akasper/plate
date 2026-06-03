@@ -6,7 +6,7 @@ from plate_core.baseline_catalog import BaselineCatalogError, load_baseline_cata
 
 
 class BaselineCatalogTests(unittest.TestCase):
-    def test_load_baseline_catalog_returns_twelve_agents(self):
+    def test_load_baseline_catalog_returns_fifteen_agents(self):
         catalog = load_baseline_catalog()
         self.assertEqual(15, len(catalog.agents))
         agent_ids = {agent.id for agent in catalog.agents}
