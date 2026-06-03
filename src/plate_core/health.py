@@ -52,8 +52,8 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
     target = resolve_repo(repo)
 
     labels = gh.api(f"repos/{target}/labels?per_page=100")
-    label_names = {l["name"] for l in labels}
-    missing = [x for x in REQUIRED_LABELS if x not in label_names]
+    label_names = {l["name"].lower() for l in labels}
+    missing = [x for x in REQUIRED_LABELS if x.lower() not in label_names]
 
     try:
         repo_obj = gh.api(f"repos/{target}")

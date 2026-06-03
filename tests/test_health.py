@@ -40,6 +40,29 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.binary_artifacts_tracked, 0)  # hygiene regression guard for #90
         self.assertEqual(report.status, "pass")
 
+    def test_health_label_coverage_case_insensitive(self):
+        """Health tolerates GH canonical casing (e.g. 'question' vs 'Question' in REQUIRED)."""
+        class LowerQuestionClient(FakeClient):
+            def api(self, endpoint):
+                self.calls.append(endpoint)
+                if endpoint.startswith("repos/akasper/plate_core/labels"):
+                    return [
+                        {"name": "Bug"},
+                        {"name": "Feature"},
+                        {"name": "Epic"},
+                        {"name": "Documentation"},
+                        {"name": "Research"},
+                        {"name": "Design"},
+                        {"name": "question"},  # GH often returns lowercase
+                    ]
+                # delegate others to super via instance
+                return super().api(endpoint) if hasattr(super(), 'api') else FakeClient.api(self, endpoint)
+
+        report = get_health(repo="akasper/plate_core", client=LowerQuestionClient())
+        self.assertTrue(report.label_coverage_ok)
+        self.assertEqual(report.missing_labels, [])
+        self.assertEqual(report.status, "pass")
+
 
 if __name__ == "__main__":
     unittest.main()
