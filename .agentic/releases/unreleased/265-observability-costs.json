@@ -1,0 +1,19 @@
+{
+  "version": "unreleased",
+  "summary": "Observability, Cost Aggregation, and Velocity Surfaces (Epic #265)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "costs.py (harvester/parser/aggregator + MD/JSON), mcp_server.py (plate_costs tool + schema), cli.py (gh plate costs cmd), baseline_catalog.yml (accountant skill update), tests/test_costs.py, fragment",
+      "summary": "Implemented dedicated surfaces per Epic #265 ACs: harvest USAGE REPORT blocks from closed issues (live via GH search/comments, parse tokens/cost/duration), aggregate (total + per issue), emit JSON + wiki MD. MCP plate_costs + gh plate costs (with --epic-label filter). Integrates with accountant agent. Tests with mocks. Updated catalog skill to reference new tool. Dogfood ready.",
+      "migration_impact": "New `gh plate costs` and `plate_costs` MCP tool available for agents/leads to query usage without manual parsing. .agentic/COSTS.md remains the log; tools provide on-demand aggregates. No breaking for existing reports.",
+      "agent_notes": "Call plate_costs (MCP) or gh plate costs [--epic-label 'Epic: foo'] to get aggregates + MD for wiki. Use in accountant delegations for real data. Prefer live GH over static log for freshness. Update .agentic/COSTS.md via workflow as before.",
+      "breaking": false,
+      "links": [
+        "#265",
+        "Epic: beta-roadmap",
+        "#139"
+      ]
+    }
+  ]
+}
