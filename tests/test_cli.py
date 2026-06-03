@@ -93,7 +93,7 @@ class CliTests(unittest.TestCase):
             code = main(["agents", "list", "--json"])
         self.assertEqual(code, 0)
         payload = json.loads(out.getvalue().strip())
-        self.assertEqual(len(payload["agents"]), 12)
+        self.assertEqual(len(payload["agents"]), 15)
         self.assertEqual(payload["agents"][0]["id"], "project-manager")
 
     def test_agent_show_json_output(self):
