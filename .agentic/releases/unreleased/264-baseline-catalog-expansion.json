@@ -1,0 +1,18 @@
+{
+  "version": "unreleased",
+  "summary": "Baseline Catalog Expansion + Extensibility Foundations (Epic #264)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "baseline_catalog.yml (added security-auditor, performance-engineer, data-engineer agents + their skills), tests/test_baseline_catalog.py (updated to 15 agents + asserts)",
+      "summary": "Expanded baseline catalog with 3 new high-value agents (Security Auditor, Performance Engineer, Data Engineer) and supporting skills as part of #264 ACs for catalog expansion. Updated unit test expectations and assertions. Agents are surfaced via existing plate_agents / delegation. Fragment for agent surface change.",
+      "migration_impact": "New agents/skills available in gh plate agents/skills and MCP delegation. Existing catalog consumers (plate.agent.md, guidance) will see them on next load. No breaking changes.",
+      "agent_notes": "Use plate_delegate_to_agent with 'security-auditor', 'performance-engineer', or 'data-engineer' for specialized tasks. Update plate.agent.md or guidance in follow-ups if needed. Supports extension contrib per AC (via provided_by in future).",
+      "breaking": false,
+      "links": [
+        "#264",
+        "Epic: beta-roadmap"
+      ]
+    }
+  ]
+}
