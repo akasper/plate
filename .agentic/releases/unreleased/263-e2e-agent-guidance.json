@@ -1,0 +1,13 @@
+{
+  "slug": "263-e2e-agent-guidance",
+  "change_type": "feature",
+  "surface": "plugin/agents/plate.agent.md (E2E recommendation language + Epic ref update)",
+  "summary": "Strengthen E2E visual evidence recommendation in plate agent guidance for UI Features (Epic #263).",
+  "migration_impact": "Agents using plate persona will more strongly surface init_playwright + record for UI work; no action for existing repos.",
+  "agent_notes": "When a project has UI changes, explicitly call for Playwright E2E + GIF evidence in Feature work. Update any custom agent prompts that reference e2e to match stronger language.",
+  "breaking": false,
+  "links": [
+    "#263",
+    "Epic: beta-roadmap"
+  ]
+}
