@@ -31,6 +31,7 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 | Replace `@PLATE_REPO_OWNER` in `.github/CODEOWNERS` | Placeholder owners break review routing and code-owner protection. | Yes |
 | Enable delete-branch-on-merge (default; configurable off) | Keeps the repository clean after reviewed work lands while still allowing explicit opt-out for repositories that need to preserve merged branches. | Yes |
 | Initialize the wiki from `docs/wiki/Home.md` | Prevents the GitHub wiki from starting empty when the repository-managed source already exists. | Yes, when `--init-wiki` / `-InitWiki` is passed |
+| Seed the Goals wiki page (docs/wiki/Goals.md) from convention template | Provides the canonical high-level mission/intent page for agents (Information Audits, #218) and humans. | Yes (via bootstrap goals init; flag/interactive support added for #266) |
 | Apply conservative baseline branch protection | Provides immediate protection against force-pushes and branch deletion while requiring conversation resolution. | Yes, when `--protect-branch BRANCH` / `-ProtectBranch BRANCH` is passed |
 
 ## Human Decisions Still Required
@@ -43,6 +44,7 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 | Create the first real GitHub milestone for Epic work | Milestones are the canonical Epic container and should reflect the project’s actual roadmap. |
 | Tune CI, release, pages, and audit workflows | The template ships scaffolds, but real commands and release policy depend on the project stack. |
 | Decide whether to enable wiki sync | Write automation, token scope, and wiki publication policy require explicit approval. |
+| Customize the Goals page content | The bootstrap seeds a placeholder; replace with project-specific mission, principles, etc. |
 
 ## Common Bootstrap Failure Modes
 

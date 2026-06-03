@@ -19,6 +19,8 @@ class McpTests(unittest.TestCase):
     @patch("plate_core.mcp_server.get_health")
     def test_tools_call_plate_health(self, mock_get_health, mock_write):
         mock_get_health.return_value = HealthReport(
+            plate_config_present=True,
+            goals_page_present=True,
             repo="akasper/plate_core",
             label_coverage_ok=True,
             missing_labels=[],

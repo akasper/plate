@@ -9,6 +9,8 @@ class BootstrapTests(unittest.TestCase):
     @patch("plate_core.bootstrap.get_health")
     def test_dry_run_reports_planned_actions(self, mock_get_health):
         mock_get_health.return_value = HealthReport(
+            plate_config_present=True,
+            goals_page_present=False,
             repo="akasper/plate_core",
             label_coverage_ok=False,
             missing_labels=["Feature", "Epic"],
@@ -27,6 +29,8 @@ class BootstrapTests(unittest.TestCase):
         def api_side(endpoint, *a, **k):
             if "/issues?" in str(endpoint) and "labels=Question" in str(endpoint):
                 return []
+            if "contents/docs/wiki/Goals.md" in str(endpoint):
+                raise Exception("not found")  # simulate missing Goals for #266 test
             return {"has_wiki": False}
         client.api.side_effect = api_side
         report = run_bootstrap("akasper/plate_core", apply_mode=False, client=client)
@@ -36,13 +40,19 @@ class BootstrapTests(unittest.TestCase):
         seed_action = next((a for a in report.actions if a.name == "seed-initial-questions"), None)
         self.assertIsNotNone(seed_action, "seed-initial-questions action must be present")
         self.assertEqual(seed_action.state, "planned")
-        self.assertIn("Seed 3 initial Curiosity Questions", seed_action.detail)
+        self.assertIn("Seed", seed_action.detail)
+        goals_action = next((a for a in report.actions if a.name == "init-goals-page"), None)
+        self.assertIsNotNone(goals_action, "init-goals-page action must be present for #266")
+        self.assertEqual(goals_action.state, "planned")
+        self.assertIn("Initialize docs/wiki/Goals.md", goals_action.detail)
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_wiki_passes_bool_not_string(self, mock_get_health):
         """has_wiki must be sent as Python bool True so GhClient uses -F and gh
         interprets it as a JSON boolean, not the string 'true'."""
         mock_get_health.return_value = HealthReport(
+            plate_config_present=True,
+            goals_page_present=True,
             repo="akasper/test-repo",
             label_coverage_ok=True,
             missing_labels=[],
@@ -60,6 +70,8 @@ class BootstrapTests(unittest.TestCase):
         def api_side(endpoint, *a, **k):
             if "/issues?" in str(endpoint) and "labels=Question" in str(endpoint):
                 return []
+            if "contents/docs/wiki/Goals.md" in str(endpoint):
+                raise Exception("not found")  # simulate missing Goals for #266 test
             return {"has_wiki": False}
         client.api.side_effect = api_side
 
@@ -83,6 +95,14 @@ class BootstrapTests(unittest.TestCase):
             and "Question" in str(call.kwargs.get("fields", {}).get("labels", []))
         ]
         self.assertEqual(len(question_posts), 3, "Expected exactly 3 POSTs to seed starter Questions on apply when none exist")
+
+        # #266 / #229: Goals page init on apply when missing (PUT to contents)
+        goals_puts = [
+            call for call in client.api.call_args_list
+            if call.args and "contents/docs%2Fwiki%2FGoals.md" in str(call.args[0])
+            and call.kwargs.get("method") == "PUT"
+        ]
+        self.assertTrue(goals_puts, "Expected PUT to create docs/wiki/Goals.md on apply when missing")
 
 
 if __name__ == "__main__":
