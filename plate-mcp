@@ -3,13 +3,17 @@
 
 from __future__ import annotations
 
-import os
 import sys
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(ROOT, "src"))
-
-from plate_core.mcp_server import run
+try:
+    # Prefer installed package (pip install plate-core or -e .)
+    from plate_core.mcp_server import run
+except ImportError:
+    # Dev / source tree (repo clone before packaging)
+    import os
+    ROOT = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(ROOT, "src"))
+    from plate_core.mcp_server import run
 
 
 if __name__ == "__main__":
