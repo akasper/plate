@@ -2,7 +2,7 @@
   "slug": "261-release-cut",
   "change_type": "feature",
   "surface": "gh plate release cut (cli + mcp future)",
-  "summary": "Add first-class `gh plate release cut` (MVP delegating to scripts/cut_release.py) per #261 Epic and AGENTS.md Release ceremony.",
+  "summary": "Add first-class `gh plate release cut` (core-integrated port from scripts) per #261 Epic and AGENTS.md Release ceremony.",
   "migration_impact": "Users can now use gh plate release cut instead of python scripts/cut_release.py directly. Behavior identical for MVP.",
   "agent_notes": "Use gh plate release cut [vX.Y.Z] [--dry-run] to aggregate fragments. Aligns with release branch model.",
   "breaking": false,

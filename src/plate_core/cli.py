@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -22,7 +21,11 @@ from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .health import get_health
 from .pr_babysit import babysit_pr
-from .release import get_release_notes_diff, get_release_status
+from .release import (
+    cut_release as core_cut_release,
+    get_release_notes_diff,
+    get_release_status,
+)
 from .migration import generate_migration_plan, apply_migration_plan
 
 
@@ -273,29 +276,27 @@ def cmd_release_notes(args: argparse.Namespace) -> int:
 
 
 def cmd_release_cut(args: argparse.Namespace) -> int:
-    """First-class gh plate release cut (MVP wrapper; see #261 Epic and AGENTS.md Release ceremony).
+    """First-class gh plate release cut (see #261 Epic and AGENTS.md Release ceremony).
 
-    Delegates to scripts/cut_release.py for aggregation logic (unreleased/ + epic-*/ -> vX.Y.Z/).
-    Later can be inlined to plate_core/release.py for full first-class without external script.
+    Uses core implementation (ported from scripts/cut_release.py) for full first-class
+    without relying on external script at runtime.
     """
     releases_dir = Path(args.releases_dir) if getattr(args, "releases_dir", None) else None
     version = getattr(args, "version", None)
     version_type = getattr(args, "version_type", None)
     dry_run = getattr(args, "dry_run", False)
 
-    cmd = [sys.executable, str(Path(__file__).parent.parent / "scripts" / "cut_release.py")]
-    if version:
-        cmd.append(str(version))
-    if version_type:
-        cmd.extend(["--version-type", version_type])
-    if dry_run:
-        cmd.append("--dry-run")
-    if releases_dir:
-        cmd.extend(["--releases-dir", str(releases_dir)])
+    if releases_dir is None:
+        releases_dir = Path(".agentic/releases")
 
-    print(f"Running release cut: {' '.join(cmd)}")
+    print("Running release cut via plate_core...")
     try:
-        rc = subprocess.call(cmd)
+        rc = core_cut_release(
+            version=version,
+            releases_dir=releases_dir,
+            version_type=version_type,
+            dry_run=dry_run,
+        )
         return rc
     except Exception as e:
         print(f"Error running cut: {e}")
