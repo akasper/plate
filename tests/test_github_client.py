@@ -1,9 +1,9 @@
-"""Tests for GhClient field serialization."""
+"""Tests for GhClient field serialization and resilience (#270 error/rate/secret)."""
 
 import unittest
 from unittest.mock import MagicMock, patch
 
-from plate_core.github_client import GhClient
+from plate_core.github_client import GhClient, GhApiError, _sanitize_error
 
 
 class GhClientFieldSerializationTests(unittest.TestCase):
@@ -53,6 +53,39 @@ class GhClientFieldSerializationTests(unittest.TestCase):
         # has_wiki must use -F
         wiki_idx = cmd.index("has_wiki=true") - 1
         self.assertEqual(cmd[wiki_idx], "-F")
+
+
+class GhClientResilienceTests(unittest.TestCase):
+    """Retry/backoff, rate limit tolerance, secret redaction (#270)."""
+
+    def test_sanitize_redacts_tokens(self):
+        msg = "Bad credentials for token ghp_ABC123def456 or Bearer xyz"
+        safe = _sanitize_error(msg)
+        self.assertNotIn("ghp_ABC123def456", safe)
+        self.assertNotIn("xyz", safe)
+        self.assertIn("[REDACTED]", safe)
+
+    def test_api_retries_on_transient_and_succeeds(self):
+        with patch("plate_core.github_client.subprocess.run") as mock_run:
+            # First two fail (rate), third succeeds
+            mock_run.side_effect = [
+                MagicMock(returncode=1, stdout="", stderr="API rate limit exceeded"),
+                MagicMock(returncode=1, stdout="", stderr="temporary error"),
+                MagicMock(returncode=0, stdout='{"ok":true}', stderr=""),
+            ]
+            client = GhClient()
+            result = client.api("repos/o/r", retries=3, base_backoff=0.01)
+            self.assertEqual(result, {"ok": True})
+            self.assertEqual(mock_run.call_count, 3)
+
+    def test_api_raises_after_retries_exhausted(self):
+        with patch("plate_core.github_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="rate limit")
+            client = GhClient()
+            with self.assertRaises(GhApiError) as ctx:
+                client.api("repos/o/r", retries=2, base_backoff=0.01)
+            self.assertIn("rate limit", str(ctx.exception))
+            self.assertEqual(mock_run.call_count, 2)
 
 
 if __name__ == "__main__":

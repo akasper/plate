@@ -1,0 +1,19 @@
+{
+  "version": "unreleased",
+  "summary": "Error resilience, rate-limit handling, partial-failure recovery, and secret-safety hardening (Issue #270 / Epic: beta-roadmap)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "github_client (retry/backoff/jitter/rate awareness + _sanitize_error), health (HealthReport.errors + degraded/partial mode in get_health), tests (expanded resilience + partial)",
+      "summary": "github_client.api now retries transient (rate-limit, 5xx, temp) with exp backoff + jitter (default 3 attempts). Errors sanitized for secrets (redact tokens). Health surfaces explicit errors list for partial successes and to_dict omits when empty. Tests cover retry success/fail, sanitize, partial health degraded (labels ok but search/protection fail -> warn + errors).",
+      "migration_impact": "Health payloads may now include 'errors' array on partial (e.g. rate during autonomous run). Callers using to_dict() or MCP health get the info for better recovery. No breaking for pass cases (errors omitted).",
+      "agent_notes": "Tools now more resilient in babysit/watch/long autonomous loops. On partial health, check report.errors and status=warn. Use client.api(..., retries=5) for critical calls if needed. SPEC rate-limit/secret-safe now implemented in core client.",
+      "breaking": false,
+      "links": [
+        "#270",
+        "Epic: beta-roadmap",
+        "#260"
+      ]
+    }
+  ]
+}
