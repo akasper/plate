@@ -157,7 +157,6 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             tool_cls = CURIOSITY_TOOLS[name]
             # Pass through common args + any tool-specific ones
             payload = tool_cls.execute(**args)
-<<<<<<< HEAD
         elif name == "plate_release_status":
             from pathlib import Path
             releases_dir_arg = args.get("releases_dir")
@@ -186,13 +185,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
-=======
         elif name in AUDIT_TOOLS:
             # Information Audit tools (Epic #218 / Feature #221)
             # Contract per Design #223; model per #220. Stub for v1; full engine in follow-ups.
             tool_cls = AUDIT_TOOLS[name]
             payload = tool_cls.execute(**args)
->>>>>>> 8d283ab (core information audit engine and question generation (Issue #221) (#246))
         else:
             _write(
                 {
