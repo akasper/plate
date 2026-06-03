@@ -20,6 +20,7 @@ class HealthReport:
     branch_protection_enabled: bool
     open_epic_count: int
     binary_artifacts_tracked: int
+    goals_page_present: bool
     status: str
 
     def to_dict(self) -> dict:
@@ -88,6 +89,16 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
     except Exception:
         binary_artifacts_tracked = -1  # unknown in this environment
 
+    # Goals page convention discovery / nudge (Epic #218 / #229): agents + health surfaces can reliably detect adoption of docs/wiki/Goals.md
+    goals_page_present = False
+    try:
+        gh.api(f"repos/{target}/contents/docs/wiki/Goals.md")
+        goals_page_present = True
+    except GhApiError:
+        pass
+    except Exception:
+        pass  # defensive; presence is best-effort
+
     label_ok = len(missing) == 0
     hygiene_ok = binary_artifacts_tracked == 0
     if label_ok and protected and hygiene_ok:
@@ -104,6 +115,7 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         branch_protection_enabled=protected,
         open_epic_count=open_epics,
         binary_artifacts_tracked=binary_artifacts_tracked,
+        goals_page_present=goals_page_present,
         status=status,
     )
 

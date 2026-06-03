@@ -25,6 +25,8 @@ class FakeClient:
             return {"enabled": True}
         if endpoint.startswith("search/issues"):
             return {"total_count": 3}
+        if endpoint == "repos/akasper/plate_core/contents/docs/wiki/Goals.md":
+            return {"name": "Goals.md", "content": "base64placeholder"}  # simulate present for convention nudge test
         raise AssertionError(f"unexpected endpoint: {endpoint}")
 
 
@@ -38,6 +40,7 @@ class HealthTests(unittest.TestCase):
         self.assertTrue(report.branch_protection_enabled)
         self.assertEqual(report.open_epic_count, 3)
         self.assertEqual(report.binary_artifacts_tracked, 0)  # hygiene regression guard for #90
+        self.assertTrue(report.goals_page_present)  # convention discovery/nudge from #229 / Epic #218
         self.assertEqual(report.status, "pass")
 
 
