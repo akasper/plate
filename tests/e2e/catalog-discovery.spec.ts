@@ -7,7 +7,8 @@
  *
  * Updated as part of Epic #263 E2E polish: exercises the MCP E2E surfaces (validate_e2e_tests
  * now with clear pass/warn/fail + actionable next_steps; record_e2e_gif with trim/quality support)
- * for producing visual evidence in Feature PRs.
+ * for producing visual evidence in Feature PRs. Added GIF evidence (homepage-demo.gif) in
+ * tests/e2e/fixtures/gifs/ as dogfood of the harness + record tooling.
  */
 
 import { test, expect } from "@playwright/test";
