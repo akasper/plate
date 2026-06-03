@@ -15,6 +15,7 @@ from .pr_babysit import babysit_pr, resolve_review_thread
 from .release import get_release_notes_diff, get_release_status
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
+from .costs import get_cost_report
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
     CreateBlockingQuestionTool,
@@ -153,6 +154,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 from_version=args.get("from_version"),
                 to_version=args.get("to_version"),
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
+            ).to_dict()
+        elif name == "plate_costs":
+            payload = get_cost_report(
+                repo=args.get("repo"),
+                epic_label=args.get("epic_label"),
             ).to_dict()
         elif name == "plate_migrate_plan":
             plan = generate_migration_plan()
@@ -645,6 +651,24 @@ def run() -> None:
                                             "description": "Path to the releases directory. Defaults to .agentic/releases.",
                                         },
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_costs",
+                                "description": "Harvest USAGE REPORT blocks from closed issues (per AGENTS.md), aggregate tokens/cost/duration for observability (Epic #265). Supports epic_label filter. Emits JSON + MD.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "epic_label": {
+                                            "type": "string",
+                                            "description": "Optional 'Epic: foo' label to scope aggregation.",
+                                        },
+                                    },
+                                    "required": [],
                                 },
                             },
                             {

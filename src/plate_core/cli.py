@@ -21,6 +21,7 @@ from .health import get_health
 from .pr_babysit import babysit_pr
 from .release import get_release_notes_diff, get_release_status
 from .migration import generate_migration_plan, apply_migration_plan
+from .costs import get_cost_report
 
 
 def cmd_health(args: argparse.Namespace) -> int:
@@ -266,6 +267,22 @@ def cmd_release_notes(args: argparse.Namespace) -> int:
         print("=== Aggregated migration steps ===")
         for step in report.migration_steps:
             print(f"  - {step}")
+    return 0
+
+
+def cmd_costs(args: argparse.Namespace) -> int:
+    from .costs import format_cost_markdown, get_cost_report
+
+    report = get_cost_report(repo=args.repo, epic_label=getattr(args, "epic_label", None))
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Cost / usage report for {report.repo}")
+    print(f"Total tokens: {report.total_tokens}")
+    print(f"Total cost: {report.total_cost}")
+    print()
+    print(format_cost_markdown(report))
     return 0
 
 
@@ -586,6 +603,12 @@ def build_parser() -> argparse.ArgumentParser:
     rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_notes.add_argument("--json", action="store_true", help="Output JSON")
     rel_notes.set_defaults(func=cmd_release_notes)
+
+    costs = sub.add_parser("costs", help="Harvest and aggregate USAGE REPORTs for observability/cost tracking (Epic #265)")
+    costs.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    costs.add_argument("--epic-label", dest="epic_label", help="Filter to reports under a specific Epic: label (e.g. Epic: beta-roadmap)")
+    costs.add_argument("--json", action="store_true", help="Output JSON")
+    costs.set_defaults(func=cmd_costs)
 
     migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")
     migrate_sub = migrate.add_subparsers(dest="migrate_command", required=True)

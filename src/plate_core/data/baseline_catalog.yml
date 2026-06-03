@@ -426,7 +426,7 @@ skills:
       - devops-engineer
   - id: calculate-costs
     name: Calculate Costs
-    description: Estimate the cost impact of feature work, CI runs, projects, or agent activity.
+    description: Estimate the cost impact of feature work, CI runs, projects, or agent activity. Use plate_costs MCP / gh plate costs to harvest real USAGE REPORTs and aggregate (Epic #265).
     inputs:
       - Scope estimate
       - Build frequency
@@ -436,6 +436,7 @@ skills:
       - Assumptions list
     examples:
       - "Estimate the cost of running the baseline agents suite in CI."
+      - "Use plate_costs with epic_label to get Epic spend."
     owning_agent_ids:
       - accountant
   # Curiosity / Q&A skills (Epic #139 / Features #147/#148/#151)
