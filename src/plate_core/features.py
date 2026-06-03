@@ -55,7 +55,11 @@ def _has_playwright_config_gh(client: GhClient, repo: str) -> tuple[bool, str]:
             return True, name
     # Fallback per issue #64 heuristic: tests/e2e + playwright dependency.
     if _path_exists(client, repo, "tests/e2e") and _has_playwright_dep_gh(client, repo):
-        return True, "tests/e2e/ + package.json playwright dependency"
+        evidence = "tests/e2e/ + package.json playwright dependency"
+        # Per #263: enrich with evidence of visual/GIF artifacts if present (for "with evidence" vs basic)
+        if _path_exists(client, repo, "tests/e2e/fixtures/gifs") or _path_exists(client, repo, "tests/e2e/fixtures"):
+            evidence += " + GIF/visual evidence in fixtures/"
+        return True, evidence
     return False, "playwright.config.* or (tests/e2e/ + package.json playwright dependency)"
 
 
