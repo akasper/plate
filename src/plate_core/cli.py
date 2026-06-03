@@ -39,6 +39,8 @@ def cmd_health(args: argparse.Namespace) -> int:
     bin_count = report.binary_artifacts_tracked
     bin_status = "CLEAN" if bin_count == 0 else f"FOUND {bin_count} (see #90)"
     print(f"Binary artifacts tracked: {bin_count} ({bin_status})")
+    print(f"Goals wiki page: {'PRESENT' if report.goals_page_present else 'MISSING'}")
+    print(f"Open Questions: {report.open_question_count}")
     return 0 if report.status != "fail" else 1
 
 

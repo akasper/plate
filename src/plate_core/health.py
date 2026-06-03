@@ -21,6 +21,8 @@ class HealthReport:
     open_epic_count: int
     binary_artifacts_tracked: int
     status: str
+    goals_page_present: bool = False
+    open_question_count: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -66,6 +68,21 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
     search = gh.api(f"search/issues?q=repo:{target}+is:issue+is:open+label:Epic")
     open_epics = int(search.get("total_count", 0))
 
+    # Goals page (from #229 bootstrap / #262 health expansion)
+    goals_page_present = False
+    try:
+        gh.api(f"repos/{target}/contents/docs/wiki/Goals.md")
+        goals_page_present = True
+    except GhApiError:
+        goals_page_present = False
+
+    # Open Questions count (for #262, curiosity health)
+    try:
+        qsearch = gh.api(f"search/issues?q=repo:{target}+is:issue+is:open+label:Question")
+        open_question_count = int(qsearch.get("total_count", 0))
+    except Exception:
+        open_question_count = 0
+
     # Binary artifact hygiene check (addresses Bug #90 / #91 regression guard)
     # Uses git ls-files to detect any tracked .pyc, __pycache__, or common binaries
     binary_artifacts_tracked = 0
@@ -105,5 +122,7 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         open_epic_count=open_epics,
         binary_artifacts_tracked=binary_artifacts_tracked,
         status=status,
+        goals_page_present=goals_page_present,
+        open_question_count=open_question_count,
     )
 

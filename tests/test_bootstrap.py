@@ -16,6 +16,8 @@ class BootstrapTests(unittest.TestCase):
             branch_protection_enabled=False,
             open_epic_count=0,
             status="warn",
+            goals_page_present=False,
+            open_question_count=0,
         )
         client = Mock()
         # api side effect: repo_obj dict for /repos/* (no ?), [] for questions list endpoint
@@ -45,6 +47,8 @@ class BootstrapTests(unittest.TestCase):
             branch_protection_enabled=True,
             open_epic_count=1,
             status="pass",
+            goals_page_present=True,
+            open_question_count=0,
         )
         client = Mock()
         def api_side(endpoint, *a, **k):

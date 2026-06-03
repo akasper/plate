@@ -24,7 +24,11 @@ class FakeClient:
         if endpoint == "repos/akasper/plate_core/branches/main/protection":
             return {"enabled": True}
         if endpoint.startswith("search/issues"):
+            if "label:Question" in endpoint:
+                return {"total_count": 2}
             return {"total_count": 3}
+        if "contents/docs/wiki/Goals.md" in endpoint:
+            return {"name": "Goals.md", "type": "file"}
         raise AssertionError(f"unexpected endpoint: {endpoint}")
 
 
@@ -39,6 +43,8 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.open_epic_count, 3)
         self.assertEqual(report.binary_artifacts_tracked, 0)  # hygiene regression guard for #90
         self.assertEqual(report.status, "pass")
+        self.assertTrue(report.goals_page_present)
+        self.assertEqual(report.open_question_count, 2)
 
     def test_health_label_coverage_case_insensitive(self):
         """Health tolerates GH canonical casing (e.g. 'question' vs 'Question' in REQUIRED)."""
@@ -62,6 +68,8 @@ class HealthTests(unittest.TestCase):
         self.assertTrue(report.label_coverage_ok)
         self.assertEqual(report.missing_labels, [])
         self.assertEqual(report.status, "pass")
+        self.assertTrue(report.goals_page_present)
+        self.assertEqual(report.open_question_count, 2)
 
 
 if __name__ == "__main__":
