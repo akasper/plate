@@ -1,10 +1,10 @@
 {
   "slug": "263-e2e-agent-guidance",
   "change_type": "feature",
-  "surface": "plugin/agents/plate.agent.md (E2E recommendation language + Epic ref update)",
-  "summary": "Strengthen E2E visual evidence recommendation in plate agent guidance for UI Features (Epic #263).",
-  "migration_impact": "Agents using plate persona will more strongly surface init_playwright + record for UI work; no action for existing repos.",
-  "agent_notes": "When a project has UI changes, explicitly call for Playwright E2E + GIF evidence in Feature work. Update any custom agent prompts that reference e2e to match stronger language.",
+  "surface": "plugin/agents/plate.agent.md (E2E recommendation language); src/plate_core/mcp/tools.py (ValidateE2eTestsTool status+CI+evidence checks)",
+  "summary": "Strengthen E2E visual evidence recommendation in plate agent guidance + improve ValidateE2eTestsTool for clear pass/warn/fail + actionable next-steps/CI/evidence checks (Epic #263).",
+  "migration_impact": "Validate now returns status + next_steps (pass/warn/fail); stronger agent guidance for E2E on UI Features. Downstream using plate tools get better signals; no breaking changes.",
+  "agent_notes": "When a project has UI changes, explicitly call for Playwright E2E + GIF evidence in Feature work. Use validate_e2e_tests for actionable diagnosis before/after recording. Update any custom prompts that reference e2e.",
   "breaking": false,
   "links": [
     "#263",

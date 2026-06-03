@@ -208,89 +208,140 @@ class RecordE2eGifTool:
 
 
 class ValidateE2eTestsTool:
-    """Validate Playwright E2E setup."""
+    """Validate Playwright E2E setup. Per #263: clearer status + actionable next-steps, CI/evidence checks."""
 
     @staticmethod
     def execute(repo_path: str) -> dict:
         """
-        Check playwright.config.ts, example specs, scripts, etc.
-
-        Args:
-            repo_path: Path to repo
+        Check playwright.config.ts, specs, deps, CI, evidence assets, scripts.
 
         Returns:
             {
+                'status': 'pass' | 'warn' | 'fail',
                 'valid': bool,
                 'issues': [...],
-                'recommendations': [...]
+                'recommendations': [...],
+                'next_steps': [...]
             }
         """
         repo = Path(repo_path).resolve()
         if not repo.exists():
             return {
+                "status": "fail",
                 "valid": False,
                 "issues": [f"Repository not found: {repo_path}"],
-                "recommendations": [],
+                "recommendations": ["Ensure repo_path points to a valid checkout."],
+                "next_steps": ["Provide a correct repo path or run from within the project."],
             }
 
         issues = []
         recommendations = []
+        next_steps = []
 
-        # Check playwright.config.ts
+        # Core config
         if not (repo / "playwright.config.ts").exists():
-            issues.append("Missing playwright.config.ts")
-            recommendations.append(
-                "Run: @copilot init-playwright"
-            )
+            issues.append("Missing playwright.config.ts (core config)")
+            recommendations.append("Run: @copilot init-playwright or copy from plate template")
+            next_steps.append("Add playwright.config.ts with projects for chromium (and firefox/webkit for multi-host)")
 
-        # Check tests/e2e directory
-        if not (repo / "tests" / "e2e").is_dir():
+        # tests/e2e structure
+        e2e_dir = repo / "tests" / "e2e"
+        if not e2e_dir.is_dir():
             issues.append("Missing tests/e2e directory")
-            recommendations.append(
-                "Run: @copilot init-playwright"
-            )
-
-        # Check for at least one spec file
-        specs_dir = repo / "tests" / "e2e" / "specs"
-        if specs_dir.is_dir():
-            spec_files = list(specs_dir.glob("*.spec.ts"))
-            if not spec_files:
-                issues.append("No test specs found in tests/e2e/specs/")
-                recommendations.append(
-                    "Create a test spec: tests/e2e/specs/example.spec.ts"
-                )
+            recommendations.append("Run: @copilot init-playwright")
+            next_steps.append("Scaffold tests/e2e/ with specs/ and fixtures/ for visual evidence")
         else:
-            issues.append("Missing tests/e2e/specs directory")
+            specs_dir = e2e_dir / "specs"
+            if specs_dir.is_dir():
+                spec_files = list(specs_dir.glob("*.spec.ts"))
+                if not spec_files:
+                    issues.append("No test specs found in tests/e2e/specs/")
+                    recommendations.append("Create at least one .spec.ts (see template examples)")
+                    next_steps.append("Write a spec exercising a key user flow; record GIF with record_e2e_gif")
+            else:
+                issues.append("Missing tests/e2e/specs directory")
+                next_steps.append("Create tests/e2e/specs/ and add *.spec.ts files")
 
-        # Check package.json for Playwright dependency
+            # Evidence / visual assets (per #263 AC for GIF evidence)
+            fixtures = e2e_dir / "fixtures"
+            if fixtures.is_dir():
+                gifs = list(fixtures.rglob("*.gif")) + list((fixtures / "gifs").glob("*.gif") if (fixtures / "gifs").is_dir() else [])
+                if not gifs:
+                    recommendations.append("Record GIF evidence for UI features using record_e2e_gif (retained on failure or for docs)")
+            else:
+                recommendations.append("Add tests/e2e/fixtures/ (and fixtures/gifs/) for recorded evidence artifacts")
+
+        # package.json deps + scripts
         package_json = repo / "package.json"
+        has_pw = False
         if package_json.exists():
             try:
                 with open(package_json, encoding='utf-8-sig') as f:
                     data = json.load(f)
-                dev_deps = data.get("devDependencies", {})
+                dev_deps = data.get("devDependencies", {}) or {}
+                scripts = data.get("scripts", {}) or {}
                 if "@playwright/test" not in dev_deps:
                     issues.append("@playwright/test not in devDependencies")
-                    recommendations.append("Run: npm install @playwright/test")
+                    recommendations.append("Run: npm install --save-dev @playwright/test")
+                    next_steps.append("npm install @playwright/test && npx playwright install --with-deps")
+                else:
+                    has_pw = True
+                if "test:e2e" not in scripts and "e2e" not in scripts:
+                    recommendations.append("Add 'test:e2e' script to package.json (e.g. 'playwright test')")
+                    next_steps.append("Update package.json scripts so 'npm run test:e2e' works in CI and locally")
             except Exception as e:
                 issues.append(f"Could not parse package.json: {e}")
         else:
             issues.append("Missing package.json")
 
-        # Check for recording scripts
+        # CI config (stricter check per #263)
+        ci_dir = repo / ".github" / "workflows"
+        has_e2e_ci = False
+        if ci_dir.is_dir():
+            for yml in list(ci_dir.glob("*.yml")) + list(ci_dir.glob("*.yaml")):
+                try:
+                    txt = yml.read_text(encoding="utf-8", errors="ignore").lower()
+                    if "playwright" in txt or "e2e" in txt or "npx playwright" in txt:
+                        has_e2e_ci = True
+                        break
+                except Exception:
+                    pass
+        if not has_e2e_ci:
+            recommendations.append("Add or update .github/workflows/ with E2E job (matrix for hosts, upload artifacts on failure)")
+            next_steps.append("Ensure CI runs npx playwright test on PRs; retain videos/GIFs only on failure for cost control")
+
+        # Recording scripts (from payload)
         if not (repo / "scripts" / "e2e-record.sh").exists():
-            recommendations.append("Copy e2e-record.sh from template payload scripts/")
+            recommendations.append("Copy e2e-record.sh (and .ps1) from plate template payload scripts/ for reliable GIF capture + trim")
         if not (repo / "scripts" / "e2e-record.ps1").exists():
-            recommendations.append("Copy e2e-record.ps1 from template payload scripts/")
+            recommendations.append("Copy e2e-record.ps1 from plate template payload scripts/")
 
-        # Check .env.local
+        # .env / host
         if not (repo / ".env.local").exists():
-            recommendations.append("Create .env.local with BASE_URL=http://localhost:3000")
+            recommendations.append("Create .env.local (or equiv) with BASE_URL for the target host")
 
-        valid = len(issues) == 0
+        # Determine status (clear pass/warn/fail per #263)
+        critical = [i for i in issues if "Missing playwright" in i or "Missing tests/e2e" in i or "@playwright/test not in" in i or "Missing package.json" in i]
+        if critical:
+            status = "fail"
+        elif issues:
+            status = "warn"
+        else:
+            status = "pass"
+
+        valid = status == "pass"
+
+        if status == "pass":
+            next_steps.append("Run: npm run test:e2e ; use record_e2e_gif for UI PR evidence; validate again after changes")
+        elif status == "warn":
+            next_steps.append("Address recommendations above, then re-run validate_e2e_tests")
+        else:
+            next_steps.append("Fix critical issues (core config/deps), then scaffold with init_playwright and re-validate")
 
         return {
+            "status": status,
             "valid": valid,
             "issues": issues,
             "recommendations": recommendations,
+            "next_steps": next_steps,
         }
