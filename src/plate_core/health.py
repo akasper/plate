@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 from .github_client import GhApiError, GhClient
 
@@ -21,9 +21,13 @@ class HealthReport:
     open_epic_count: int
     binary_artifacts_tracked: int
     status: str
+    errors: list[str] = field(default_factory=list)  # partial failure details for resilience (#270)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        if not d.get("errors"):
+            d.pop("errors", None)
+        return d
 
 
 def _repo_from_git_remote() -> str:
@@ -50,21 +54,32 @@ def resolve_repo(repo: str | None) -> str:
 def get_health(repo: str | None = None, client: GhClient | None = None) -> HealthReport:
     gh = client or GhClient()
     target = resolve_repo(repo)
+    errors: list[str] = []
 
-    labels = gh.api(f"repos/{target}/labels?per_page=100")
-    label_names = {l["name"] for l in labels}
-    missing = [x for x in REQUIRED_LABELS if x not in label_names]
+    try:
+        labels = gh.api(f"repos/{target}/labels?per_page=100")
+        label_names = {l["name"] for l in labels}
+        missing = [x for x in REQUIRED_LABELS if x not in label_names]
+    except GhApiError as e:
+        errors.append(f"labels: {e}")
+        label_names = set()
+        missing = list(REQUIRED_LABELS)  # assume all missing on failure
 
     try:
         repo_obj = gh.api(f"repos/{target}")
         default_branch = repo_obj["default_branch"]
         gh.api(f"repos/{target}/branches/{default_branch}/protection")
         protected = True
-    except GhApiError:
+    except GhApiError as e:
         protected = False
+        errors.append(f"branch_protection: {e}")
 
-    search = gh.api(f"search/issues?q=repo:{target}+is:issue+is:open+label:Epic")
-    open_epics = int(search.get("total_count", 0))
+    try:
+        search = gh.api(f"search/issues?q=repo:{target}+is:issue+is:open+label:Epic")
+        open_epics = int(search.get("total_count", 0))
+    except GhApiError as e:
+        open_epics = 0
+        errors.append(f"open_epics: {e}")
 
     # Binary artifact hygiene check (addresses Bug #90 / #91 regression guard)
     # Uses git ls-files to detect any tracked .pyc, __pycache__, or common binaries
@@ -85,8 +100,9 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
                 for f in tracked_files
                 if f.endswith(forbidden_suffixes) or "__pycache__" in f or "/__pycache__/" in f
             )
-    except Exception:
+    except Exception as e:
         binary_artifacts_tracked = -1  # unknown in this environment
+        errors.append(f"binary_artifacts: {e}")
 
     label_ok = len(missing) == 0
     hygiene_ok = binary_artifacts_tracked == 0
@@ -97,7 +113,7 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
     else:
         status = "fail"
 
-    return HealthReport(
+    report = HealthReport(
         repo=target,
         label_coverage_ok=label_ok,
         missing_labels=missing,
@@ -105,5 +121,6 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         open_epic_count=open_epics,
         binary_artifacts_tracked=binary_artifacts_tracked,
         status=status,
+        errors=errors,
     )
-
+    return report
