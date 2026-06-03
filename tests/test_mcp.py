@@ -1,12 +1,15 @@
 import json
 import io
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.bootstrap import BootstrapAction, BootstrapReport
 from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.features import FeatureFlag, FeatureReport
 from plate_core.health import HealthReport
+from plate_core.mcp.tools import ValidateE2eTestsTool
 from plate_core.mcp_server import _handle_tools_call, run
 from plate_core.pr_babysit import BabysitReport
 
@@ -252,6 +255,68 @@ class McpTests(unittest.TestCase):
             }
         })
         self.assertTrue(mock_write.called)
+
+    def test_validate_e2e_tests_tool_status_and_actionable(self):
+        """#263: ValidateE2eTestsTool produces clear pass/warn/fail + next_steps (stricter, CI/evidence aware)."""
+        # Non-existent -> fail
+        res = ValidateE2eTestsTool.execute("/non/existent/path/12345")
+        self.assertEqual(res["status"], "fail")
+        self.assertFalse(res["valid"])
+        self.assertIn("Repository not found", res["issues"][0])
+        self.assertTrue(any("next_steps" in k or "next" in str(v).lower() for k, v in res.items() if isinstance(v, (list, str))))
+
+        # Empty temp dir -> fail (missing core)
+        with tempfile.TemporaryDirectory() as tmp:
+            res = ValidateE2eTestsTool.execute(tmp)
+            self.assertIn(res["status"], ("fail", "warn"))
+            self.assertIn("Missing playwright.config.ts", " ".join(res["issues"]))
+            self.assertTrue(res.get("next_steps"))
+            # Has actionable recs
+            self.assertTrue(any("init-playwright" in r or "Copy" in r for r in res.get("recommendations", [])))
+
+        # Minimal good structure -> should reach warn or pass (no critical missing)
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "playwright.config.ts").touch()
+            (p / "tests" / "e2e" / "specs").mkdir(parents=True)
+            (p / "tests" / "e2e" / "specs" / "example.spec.ts").touch()
+            (p / "package.json").write_text('{"devDependencies": {"@playwright/test": "^1"}, "scripts": {"test:e2e": "playwright test"}}')
+            (p / ".github" / "workflows").mkdir(parents=True)
+            (p / ".github" / "workflows" / "test.yml").write_text("playwright: npx playwright test")
+            res = ValidateE2eTestsTool.execute(tmp)
+            self.assertIn(res["status"], ("pass", "warn"))
+            self.assertTrue(res.get("next_steps"))
+            # Evidence rec if no gifs yet (acceptable)
+            recs = " ".join(res.get("recommendations", []))
+            self.assertTrue("evidence" in recs.lower() or "GIF" in recs or "record" in recs.lower() or not recs)
+
+    @patch("plate_core.mcp.tools.subprocess.run")
+    def test_record_e2e_gif_tool_trimming_and_size_advice(self, mock_run):
+        """#263: RecordE2eGifTool accepts trim params, returns size/quality/recommendations, advises trim for large GIFs."""
+        from plate_core.mcp.tools import RecordE2eGifTool
+        # Success with GIF present (mock)
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "scripts").mkdir(parents=True)
+            (p / "scripts" / "e2e-record.sh").touch()
+            gif_dir = p / "tests" / "e2e" / "fixtures" / "gifs"
+            gif_dir.mkdir(parents=True)
+            gif = gif_dir / "demo.gif"
+            gif.write_bytes(b"0" * (6 * 1024 * 1024))  # >5MB to trigger advice
+            mock_run.return_value = type("R", (), {"returncode": 0, "stderr": ""})()
+            res = RecordE2eGifTool.execute(tmp, "demo", quality="low", start="00:00:02", duration=10)
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["quality"], "low")
+            self.assertIn("gif_path", res)
+            self.assertTrue(res.get("recommendations"))
+            self.assertIn("trim", res)  # trim params echoed
+            recs_str = " ".join(res.get("recommendations", []))
+            self.assertTrue("large" in recs_str.lower() or "trim" in recs_str.lower())
+
+        # Error on bad test name
+        res = RecordE2eGifTool.execute(".", "bad name with spaces!")
+        self.assertEqual(res["status"], "error")
+        self.assertIn("Invalid test name", res["message"])
 
 if __name__ == "__main__":
     unittest.main()
