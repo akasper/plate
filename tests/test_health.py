@@ -1,6 +1,7 @@
 import json
 import unittest
 
+from plate_core.github_client import GhApiError
 from plate_core.health import HealthReport, get_health
 
 
@@ -8,7 +9,7 @@ class FakeClient:
     def __init__(self):
         self.calls = []
 
-    def api(self, endpoint):
+    def api(self, endpoint, **kwargs):  # tolerate retries= etc from resilient client
         self.calls.append(endpoint)
         if endpoint.startswith("repos/akasper/plate_core/labels"):
             return [
@@ -40,6 +41,24 @@ class FakeClient:
         raise AssertionError(f"unexpected endpoint: {endpoint}")
 
 
+class FailingClient:
+    """Simulates partial failures for resilience tests (#270)."""
+    def __init__(self):
+        self.calls = 0
+
+    def api(self, endpoint, **kwargs):
+        self.calls += 1
+        if "labels" in endpoint:
+            return [{"name": "Bug"}, {"name": "Feature"}]  # partial labels
+        if "search/issues" in endpoint:
+            raise GhApiError("rate limit on search")
+        if "protection" in endpoint:
+            raise GhApiError("404 no protection")
+        if endpoint == "repos/akasper/plate_core" or endpoint.endswith("/akasper/plate_core"):
+            return {"default_branch": "main"}
+        return {}
+
+
 class HealthTests(unittest.TestCase):
     def test_health_pass(self):
         report = get_health(repo="akasper/plate_core", client=FakeClient())
@@ -51,13 +70,31 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.open_epic_count, 3)
         self.assertEqual(report.binary_artifacts_tracked, 0)  # hygiene regression guard for #90
         self.assertEqual(report.status, "pass")
+        self.assertEqual(report.errors, [])  # no partial errors
         self.assertTrue(report.goals_page_present)
         self.assertEqual(report.open_question_count, 2)
+
+    def test_health_partial_on_failures(self):
+        """Degraded mode with errors list when some calls fail (rate, 404 etc)."""
+        client = FailingClient()
+        report = get_health(repo="akasper/plate_core", client=client)
+        self.assertIsInstance(report, HealthReport)
+        self.assertFalse(report.label_coverage_ok)  # missing many
+        self.assertGreater(len(report.missing_labels), 0)
+        self.assertFalse(report.branch_protection_enabled)
+        self.assertEqual(report.open_epic_count, 0)  # failed search
+        self.assertTrue(len(report.errors) >= 2)  # at least protection + search
+        self.assertIn("rate limit", " ".join(report.errors))
+        self.assertEqual(report.status, "warn")  # some ok (labels partial succeeded)
+        # to_dict omits empty errors
+        d = report.to_dict()
+        self.assertIn("errors", d)
+        self.assertTrue(d["errors"])
 
     def test_health_label_coverage_case_insensitive(self):
         """Health tolerates GH canonical casing (e.g. 'question' vs 'Question' in REQUIRED)."""
         class LowerQuestionClient(FakeClient):
-            def api(self, endpoint):
+            def api(self, endpoint, **kwargs):
                 self.calls.append(endpoint)
                 if endpoint.startswith("repos/akasper/plate_core/labels"):
                     return [
@@ -69,8 +106,7 @@ class HealthTests(unittest.TestCase):
                         {"name": "Design"},
                         {"name": "question"},  # GH often returns lowercase
                     ]
-                # delegate others to super via instance
-                return super().api(endpoint) if hasattr(super(), 'api') else FakeClient.api(self, endpoint)
+                return FakeClient.api(self, endpoint, **kwargs)
 
         report = get_health(repo="akasper/plate_core", client=LowerQuestionClient())
         self.assertTrue(report.label_coverage_ok)
@@ -78,9 +114,6 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.status, "pass")
         self.assertTrue(report.goals_page_present)
         self.assertEqual(report.open_question_count, 2)
-        self.assertTrue(report.plate_config_present)
-        self.assertTrue(report.plate_config_valid)
-        self.assertTrue(report.curiosity_answers_present)
         self.assertTrue(report.plate_config_present)
         self.assertTrue(report.plate_config_valid)
         self.assertTrue(report.curiosity_answers_present)
