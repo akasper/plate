@@ -23,6 +23,11 @@ class McpTests(unittest.TestCase):
             branch_protection_enabled=True,
             open_epic_count=1,
             status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
         )
         _handle_tools_call(1, {"name": "plate_health", "arguments": {"repo": "akasper/plate_core"}})
         self.assertTrue(mock_write.called)
@@ -73,7 +78,7 @@ class McpTests(unittest.TestCase):
     def test_tools_call_plate_agents(self, mock_write):
         _handle_tools_call(11, {"name": "plate_agents", "arguments": {}})
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
-        self.assertEqual(len(payload["agents"]), 12)
+        self.assertEqual(len(payload["agents"]), 15)
         self.assertEqual(payload["agents"][0]["id"], "project-manager")
 
     @patch("plate_core.mcp_server._write")
