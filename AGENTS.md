@@ -270,7 +270,7 @@ Use this loop:
 The babysitter detects when a PR branch is out of sync with its base branch (via `mergeStateStatus`: BEHIND, CONFLICTING, or DIRTY). The default behavior is controlled by `--branch-update-strategy`:
 
 - **copilot-request** (default): Post a `@copilot` trigger comment requesting native GitHub/Copilot branch update assistance. This is safe, auditable, and reversible.
-- **local-rebase**: Local worktree rebase and push (not yet implemented, will raise `NotImplementedError`)
+- **local-rebase**: Local worktree rebase and push (implemented using isolated git worktree; reports success/conflict/error via BabysitReport fields; raises only on non-git env or fatal error).
 - **none**: Detect and report only, take no action
 
 When `--act` is specified and the PR is out of sync, the babysitter posts a merge trigger comment (deduplicated by marker) to prompt resolution. This ensures the babysitting loop can continue without manual branch update intervention.
