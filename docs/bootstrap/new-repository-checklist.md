@@ -38,7 +38,7 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 | Step | Why Human Review Is Still Needed |
 |---|---|
 | Decide the final branch protection policy | Approval counts, code-owner review, required checks, and linear history depend on team size and merge model. |
-| Configure GitHub Projects fields | Project field names and lifecycle shape should match the team’s planning model. |
+| Configure GitHub Projects fields | Project field names and lifecycle shape should match the team’s planning model. Now supported via `get_epic_status(..., project_number=N)` + `get_project_v2_items` / `add_issue_to_project_v2` (GraphQL, optional, graceful degrade; see #268). |
 | Replace placeholder product language in docs | Only a human product owner can define the initial repository’s real intent and public claims. |
 | Create the first real GitHub milestone for Epic work | Milestones are the canonical Epic container and should reflect the project’s actual roadmap. |
 | Tune CI, release, pages, and audit workflows | The template ships scaffolds, but real commands and release policy depend on the project stack. |
