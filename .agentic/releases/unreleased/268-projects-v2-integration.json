@@ -1,0 +1,19 @@
+{
+  "version": "unreleased",
+  "summary": "Deeper GitHub Projects v2 field integration and milestone enforcement signals (Issue #268 / Epic: beta-roadmap)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "epics.py (get_project_v2_items read + add_issue_to_project_v2 write + optional in get_epic_status), tests/test_epics.py, .agentic fragment",
+      "summary": "Added GraphQL-based helpers in epics for Projects v2: read items/fields (for health/epic_status/plan to consume), write add issue to project (one write path). Optional param in get_epic_status for integration. Graceful degrade on errors. Tests with mocks. Enables core surfaces and future MCP tools/guidance per ACs. Fragment for agent surface change.",
+      "migration_impact": "New optional project_number param in get_epic_status (back compat). Callers can use get_project_v2_items / add... for roadmap Projects. No changes if not using Projects v2.",
+      "agent_notes": "Use get_epic_status(..., project_number=N) or direct helpers for Project data (status, priority fields on epics). Write with add_issue_to_project_v2 to auto-add new Epics. See #268 for schema guidance; update baseline/project-manager agent if needed. Tests use mocks so no real token req.",
+      "breaking": false,
+      "links": [
+        "#268",
+        "Epic: beta-roadmap",
+        "#218"
+      ]
+    }
+  ]
+}
