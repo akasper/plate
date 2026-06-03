@@ -234,6 +234,25 @@ class McpTests(unittest.TestCase):
         # Either success content or isError=True with message (both acceptable for this smoke)
         self.assertIn("content", result)
 
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.get_health")
+    def test_tools_call_plate_what_next(self, mock_get_health, mock_write):
+        """Feature #285: plate_what_next MCP tool is registered and callable (v1 static)."""
+        mock_get_health.return_value = HealthReport(
+            plate_config_present=True,
+            repo="akasper/plate_core",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=0,
+            status="pass",
+        )
+        _handle_tools_call(30, {"name": "plate_what_next", "arguments": {"repo": "akasper/plate_core"}})
+        self.assertTrue(mock_write.called)
+        result = mock_write.call_args[0][0]["result"]
+        self.assertIn("content", result)
+
     def test_create_blocking_question_tool_exists_and_schema(self):
         """Feature #147/#151: Blocking creation tool is registered (Epic #139)."""
         from plate_core.mcp.curiosity_tools import CreateBlockingQuestionTool, CURIOSITY_TOOLS
