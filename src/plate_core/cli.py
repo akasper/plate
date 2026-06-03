@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 from .bootstrap import run_bootstrap
 from .baseline_catalog import (
@@ -267,6 +270,36 @@ def cmd_release_notes(args: argparse.Namespace) -> int:
         for step in report.migration_steps:
             print(f"  - {step}")
     return 0
+
+
+def cmd_release_cut(args: argparse.Namespace) -> int:
+    """First-class gh plate release cut (MVP wrapper; see #261 Epic and AGENTS.md Release ceremony).
+
+    Delegates to scripts/cut_release.py for aggregation logic (unreleased/ + epic-*/ -> vX.Y.Z/).
+    Later can be inlined to plate_core/release.py for full first-class without external script.
+    """
+    releases_dir = Path(args.releases_dir) if getattr(args, "releases_dir", None) else None
+    version = getattr(args, "version", None)
+    version_type = getattr(args, "version_type", None)
+    dry_run = getattr(args, "dry_run", False)
+
+    cmd = [sys.executable, str(Path(__file__).parent.parent / "scripts" / "cut_release.py")]
+    if version:
+        cmd.append(str(version))
+    if version_type:
+        cmd.extend(["--version-type", version_type])
+    if dry_run:
+        cmd.append("--dry-run")
+    if releases_dir:
+        cmd.extend(["--releases-dir", str(releases_dir)])
+
+    print(f"Running release cut: {' '.join(cmd)}")
+    try:
+        rc = subprocess.call(cmd)
+        return rc
+    except Exception as e:
+        print(f"Error running cut: {e}")
+        return 1
 
 
 def cmd_qanda(args: argparse.Namespace) -> int:
@@ -586,6 +619,14 @@ def build_parser() -> argparse.ArgumentParser:
     rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_notes.add_argument("--json", action="store_true", help="Output JSON")
     rel_notes.set_defaults(func=cmd_release_notes)
+
+    rel_cut = release_sub.add_parser("cut", help="Cut a release: aggregate fragments to versioned dir (first-class MVP per #261)")
+    rel_cut.add_argument("version", nargs="?", help="Explicit version e.g. vX.Y.Z (optional, auto-detect)")
+    rel_cut.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
+    rel_cut.add_argument("--version-type", dest="version_type", choices=["major", "minor", "patch"], help="Override bump type for auto-detect")
+    rel_cut.add_argument("--dry-run", action="store_true", help="Do not write files (dry-run)")
+    rel_cut.add_argument("--json", action="store_true", help="Output JSON (future)")
+    rel_cut.set_defaults(func=cmd_release_cut)
 
     migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")
     migrate_sub = migrate.add_subparsers(dest="migrate_command", required=True)

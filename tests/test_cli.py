@@ -132,6 +132,17 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["pr_number"], 112)
         self.assertTrue(payload["trigger_comment_posted"])
 
+    @patch("plate_core.cli.subprocess.call")
+    def test_release_cut_json_output(self, mock_call):
+        """MVP first-class release cut (delegates to script for #261)."""
+        mock_call.return_value = 0
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["release", "cut", "v0.1.5", "--dry-run", "--json"])
+        self.assertEqual(code, 0)
+        self.assertTrue(mock_call.called)
+        # Note: full output/JSON from script in real run; here stub verifies wiring.
+
 
 if __name__ == "__main__":
     unittest.main()
