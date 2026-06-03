@@ -342,6 +342,28 @@ def cmd_release_cut(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_release_finalize(args: argparse.Namespace) -> int:
+    """Finalize stub for refined ceremony (Epic #306 / #313).
+    In real impl: git tag, load .plate release.triggers, invoke common ones (e.g. docs render),
+    ensure/create next 'Next Release' issue via gh API, etc.
+    """
+    version = getattr(args, "version", None) or "vX.Y.Z"
+    dry_run = getattr(args, "dry_run", False)
+    print(f"Running release finalize for {version} (dry_run={dry_run})...")
+    print("Steps (MVP stub; full impl follows design):")
+    print("  1. git tag + push (if not dry)")
+    print("  2. Load .plate['release']['triggers'] (or defaults)")
+    print("  3. Invoke core triggers (e.g. render_release_notes)")
+    print("  4. Create/ensure next 'Next Release' issue (label Release)")
+    print("  5. Update status, post to Epic if linked")
+    if dry_run:
+        print("[DRY RUN] No side effects executed.")
+        return 0
+    # TODO: wire to core_finalize when implemented in release.py
+    print("Finalize guidance complete. (Hook for actual tag/triggers in next slice.)")
+    return 0
+
+
 def cmd_qanda(args: argparse.Namespace) -> int:
     """Thin CLI surface for Q&A / Curiosity Mode (Epic #139, Features #151/#154).
 
@@ -674,6 +696,15 @@ def build_parser() -> argparse.ArgumentParser:
     rel_cut.add_argument("--dry-run", action="store_true", help="Do not write files (dry-run)")
     rel_cut.add_argument("--json", action="store_true", help="Output JSON (future)")
     rel_cut.set_defaults(func=cmd_release_cut)
+
+    # Finalize stub (plan step 8 for #313 / Epic #306): performs tag + triggers from .plate + spawn next Next Release.
+    # MVP: prints guidance + invokes a couple core actions if configured; full in follow-ups.
+    rel_finalize = release_sub.add_parser("finalize", help="Finalize a release: tag, kick .plate-configured downstream triggers, ensure next 'Next Release' issue (per refined ceremony)")
+    rel_finalize.add_argument("version", nargs="?", help="The version being finalized (e.g. vX.Y.Z)")
+    rel_finalize.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
+    rel_finalize.add_argument("--dry-run", action="store_true", help="Do not execute side effects (dry-run)")
+    rel_finalize.add_argument("--json", action="store_true", help="Output JSON (future)")
+    rel_finalize.set_defaults(func=cmd_release_finalize)
 
     migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")
     migrate_sub = migrate.add_subparsers(dest="migrate_command", required=True)
