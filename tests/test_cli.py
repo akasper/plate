@@ -26,6 +26,8 @@ class CliTests(unittest.TestCase):
             status="pass",
             goals_page_present=True,
             open_question_count=1,
+            plate_config_present=False,
+            plate_config_valid=False,
         )
         out = io.StringIO()
         with redirect_stdout(out):

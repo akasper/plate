@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from plate_core.health import HealthReport, get_health
@@ -29,6 +30,11 @@ class FakeClient:
             return {"total_count": 3}
         if "contents/docs/wiki/Goals.md" in endpoint:
             return {"name": "Goals.md", "type": "file"}
+        if "contents/.plate" in endpoint:
+            # Simulate valid .plate
+            import base64
+            content = json.dumps({"version": "1.0"}).encode()
+            return {"name": ".plate", "type": "file", "encoding": "base64", "content": base64.b64encode(content).decode()}
         raise AssertionError(f"unexpected endpoint: {endpoint}")
 
 
@@ -70,6 +76,10 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.status, "pass")
         self.assertTrue(report.goals_page_present)
         self.assertEqual(report.open_question_count, 2)
+        self.assertTrue(report.plate_config_present)
+        self.assertTrue(report.plate_config_valid)
+        self.assertTrue(report.plate_config_present)
+        self.assertTrue(report.plate_config_valid)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,7 @@ def cmd_health(args: argparse.Namespace) -> int:
     print(f"Binary artifacts tracked: {bin_count} ({bin_status})")
     print(f"Goals wiki page: {'PRESENT' if report.goals_page_present else 'MISSING'}")
     print(f"Open Questions: {report.open_question_count}")
+    print(f".plate/config: {'PRESENT' if report.plate_config_present else 'MISSING'} (valid: {report.plate_config_valid})")
     return 0 if report.status != "fail" else 1
 
 

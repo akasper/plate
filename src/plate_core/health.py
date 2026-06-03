@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from dataclasses import asdict, dataclass
@@ -23,6 +24,8 @@ class HealthReport:
     status: str
     goals_page_present: bool = False
     open_question_count: int = 0
+    plate_config_present: bool = False
+    plate_config_valid: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -83,6 +86,28 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
     except Exception:
         open_question_count = 0
 
+    # .plate/config validity (for #262 health expansion, #259)
+    plate_config_present = False
+    plate_config_valid = False
+    try:
+        plate_content = gh.api(f"repos/{target}/contents/.plate")
+        if isinstance(plate_content, dict) and plate_content.get("type") == "file":
+            plate_config_present = True
+            try:
+                import base64
+                content = plate_content.get("content", "")
+                if plate_content.get("encoding") == "base64":
+                    content = base64.b64decode(content).decode("utf-8")
+                data = json.loads(content)
+                from .plate_config import validate_plate_config, PlateConfigError
+                validate_plate_config(data)
+                plate_config_valid = True
+            except Exception:
+                plate_config_valid = False
+    except GhApiError:
+        plate_config_present = False
+        plate_config_valid = False
+
     # Binary artifact hygiene check (addresses Bug #90 / #91 regression guard)
     # Uses git ls-files to detect any tracked .pyc, __pycache__, or common binaries
     binary_artifacts_tracked = 0
@@ -124,5 +149,7 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         status=status,
         goals_page_present=goals_page_present,
         open_question_count=open_question_count,
+        plate_config_present=plate_config_present,
+        plate_config_valid=plate_config_valid,
     )
 
