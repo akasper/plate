@@ -1,0 +1,16 @@
+{
+  "slug": "beta-roadmap-spec-update",
+  "change_type": "docs",
+  "surface": "SPEC.md",
+  "summary": "Add dedicated Beta Roadmap section to SPEC.md documenting the 10 prioritized epics and work items required for beta feature completeness, based on current-state analysis (stubs, design docs #142/#143/#145, recent PRs, active Epic #218, etc.).",
+  "migration_impact": "No migration required for downstream PLATE repositories or adopters. This is a pure documentation update to the product vision and roadmap guidance in SPEC.md; it does not change any runtime behavior, templates, CLI/MCP surfaces, or process rules.",
+  "migration_guidance": [
+    "1. Fetch the latest SPEC.md (or re-clone template) to see the new ## Beta Roadmap section.",
+    "2. Reference the listed items when creating follow-on Epics/Features (each will need its own milestone linkage, tests, fragments, and PRs per AGENTS.md).",
+    "3. Agents and humans should align new work proposals against this section in addition to the North Star and Goals."
+  ],
+  "agent_notes": "Consult the new Beta Roadmap section in SPEC.md before proposing or starting implementation work on the core loops (planning, Q&A/Contemplation, release, config, health enforcement, E2E, catalog, observability). Items directly address gaps such as the plate_plan_epic stub (mcp_server.py), v1 Contemplation heuristics (contemplation.py), missing .plate CLI surfaces, and incomplete release automation. This snapshot was synthesized post-Information Audit Epic #218 landing and should be revisited on future releases.",
+  "breaking": false,
+  "links": ["#254"],
+  "requires": []
+}
