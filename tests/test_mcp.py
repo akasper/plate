@@ -81,7 +81,7 @@ class McpTests(unittest.TestCase):
     def test_tools_call_plate_agents(self, mock_write):
         _handle_tools_call(11, {"name": "plate_agents", "arguments": {}})
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
-        self.assertEqual(len(payload["agents"]), 12)
+        self.assertEqual(len(payload["agents"]), 15)
         self.assertEqual(payload["agents"][0]["id"], "project-manager")
 
     @patch("plate_core.mcp_server._write")
