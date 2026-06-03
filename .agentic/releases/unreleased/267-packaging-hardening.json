@@ -1,0 +1,19 @@
+{
+  "version": "unreleased",
+  "summary": "Packaging, distribution, and install UX hardening for beta (Issue #267 / Epic: beta-roadmap)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "pyproject.toml (new packaging config), plate-mcp + gh-plate (dual installed/source support), src/plate_core/__init__.py (__version__), README.md (pip install + updated table)",
+      "summary": "Introduced pyproject.toml for plate-core package (build-system setuptools, project metadata, plate-mcp console script, package discovery + data for templates). Updated entrypoint scripts to prefer installed package (try import, fallback to src path insert for dev clones). Added __version__. Updated install docs in README for pip + mcp one-liner (gh extension and plugin paths clarified). Starts ACs for publishable package, consistent versioning, docs, smoke via import.",
+      "migration_impact": "Downstream can now `pip install plate-core` for the library and plate-mcp (no clone needed for MCP server). gh extension and plugin installs remain git/plugin based for now (future release cut will publish wheels). No breaking for existing gh extension users.",
+      "agent_notes": "Use `pip install -e .` for dev. `plate-mcp` works post-install. When cutting releases, ensure pyproject version or dynamic matches tag. Update CI/release for PyPI publish in follow-up. Test packaged form with `python -m pip wheel .` and import from venv.",
+      "breaking": false,
+      "links": [
+        "#267",
+        "Epic: beta-roadmap",
+        "#261"
+      ]
+    }
+  ]
+}
