@@ -1,0 +1,20 @@
+{
+  "version": "unreleased",
+  "summary": "Expanded multi-host verification harness + certification for CLI-agnostic claims (Issue #269 / Epic: beta-roadmap)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "tests/e2e/ (README + enhanced structure spec jsdoc), template_payload/tests/e2e/README.md (plate-specific harness doc)",
+      "summary": "Added dedicated tests/e2e/README.md documenting the verification harness purpose, how to run, what passing means for certification, and exact recipe for adapting to a new host CLI. Updated template_payload copy for downstream. Enhanced plugin-structure.spec.ts jsdoc to reference the harness. Covers ACs for docs + simulation (structure tests are host-independent cert).",
+      "migration_impact": "New plate adopters (or hosts) get the harness docs in their seeded tests/e2e/ or by inspecting the plate repo. Run `cd tests/e2e && npm install && npm test` to certify. Existing setups unaffected.",
+      "agent_notes": "When working on plugin/CLI-agnostic changes, run the e2e harness (structure tests always, host tests when binary available) and update expectations + this README + fragment. Use it to validate MCP/agent contract changes. See #269 for certification checklist.",
+      "breaking": false,
+      "links": [
+        "#269",
+        "Epic: beta-roadmap",
+        "#205",
+        "#266"
+      ]
+    }
+  ]
+}

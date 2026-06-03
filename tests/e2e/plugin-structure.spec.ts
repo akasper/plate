@@ -4,6 +4,10 @@
  * These tests inspect the declarative plugin manifests and agent files on disk,
  * confirming that the plugin has the expected structure and is free of
  * CLI-vendor-specific language before any CLI tool is invoked.
+ *
+ * Part of the expanded multi-host verification harness (see tests/e2e/README.md).
+ * These structure tests serve as the host-independent simulation/certification
+ * for CLI-agnostic claims.
  */
 
 import { test, expect } from "@playwright/test";

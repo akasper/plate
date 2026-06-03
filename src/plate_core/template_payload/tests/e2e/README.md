@@ -1,248 +1,63 @@
-# E2E Testing with Playwright
+# Plate Verification Harness
 
-This directory contains end-to-end tests using [Playwright](https://playwright.dev/). These tests validate real user workflows in the application.
+This is the end-to-end + structure verification harness for the plate-core plugin and CLI/MCP surfaces. It certifies **CLI-agnostic claims** (see Epic #205 / beta roadmap) so that plate works with Copilot, Grok Build, and future hosts without vendor lock-in in the manifests or guidance.
+
+The harness exercises:
+- Declarative plugin structure (`.plugin/`, `plugin.json`, agents, MCP wiring)
+- Agent persona (baseline catalog references, required MCP tools like `plate_health`, `plate_what_next`, no vendor-specific language)
+- CLI surfaces via `gh plate` (catalog discovery, health, etc.)
+- Host-specific plugin install flows (example: Copilot)
 
 ## Prerequisites
+- Node.js 18+ and npm
+- For full host tests: the target CLI binary on PATH (e.g. `copilot`)
+- Python 3 (for gh-plate driven catalog tests in some specs)
 
-- Node.js 18 or higher
-- npm 9 or higher
-
-## Setup
-
-Install dependencies (if not already done):
-
+## Running the Harness
 ```bash
+cd tests/e2e
 npm install
+npm test                 # runs all (host-specific tests auto-skip if binary absent)
+npx playwright test plugin-structure.spec.ts   # structure/agnostic cert only
 ```
 
-## Running Tests
+CI runs this as part of the full suite (see workflow for setup of copilot etc.).
 
-### Run all tests
+## What "Passing" Means for Certification
+- All structure tests pass (these are the core CLI-agnostic certification).
+- Host install tests pass for the hosts under test (or are correctly skipped).
+- Catalog and agent guidance surface the expected MCP tools and baseline entries.
+- No regressions: future changes to manifests, agent.md, or core surfaces must keep the harness green.
 
-```bash
-npm run test:e2e
-```
+## Running / Adapting for Your Own CLI Host
+To certify a new host (or run against a custom build):
 
-### Run tests in watch mode
+1. Ensure your CLI supports plugin installation from a local path, e.g.:
+   `your-cli plugin install /path/to/plate-repo`
+   (It should read `.plugin/plugin.json`, copy/symlink the agents/ and MCP config, and make `gh plate ...` (or equivalent) available.)
 
-Automatically reruns tests as files change:
+2. Copy/adapt `copilot-plugin.spec.ts` as a template:
+   - Replace `copilot` / `runCopilot` with your binary and command wrapper.
+   - Keep the install + uninstall + cleanup pattern.
+   - Skip when your binary is not available.
 
-```bash
-npm run test:e2e:watch
-```
+3. Run the structure tests (they require no host binary) + your adapted host test.
 
-### Run tests in headed mode
+4. Point the harness at a real or simulated plate install and confirm the agent can use plate MCP tools and guidance.
 
-Opens a visible browser window so you can see tests executing:
+The `plugin-structure.spec.ts` + `catalog-discovery.spec.ts` provide a **host-independent simulation** of the contract. They can be run in any environment that has the plate source + node + python.
 
-```bash
-npm run test:e2e:headed
-```
+## Files
+- `plugin-structure.spec.ts`: manifest + agent.md + MCP wiring + vendor-neutrality checks (the primary certification).
+- `copilot-plugin.spec.ts`: real Copilot CLI install/uninstall flow (skippable).
+- `catalog-discovery.spec.ts`: exercises `gh plate agents` / `skills` via the wrapper (baseline catalog).
+- `playwright.config.ts`, `tsconfig.json`: harness config.
 
-### Run tests with debugger
+## Updating the Harness
+When adding MCP tools, agents, or surfaces:
+- Update the expectations in `plugin-structure.spec.ts` (e.g. new `plate_*` tool mentions).
+- Add or extend a catalog test.
+- Update this README.
+- Author a fragment if the change affects the plugin surface story.
 
-Opens headed browser with the Inspector panel, allowing step-through debugging:
-
-```bash
-npm run test:e2e:debug
-```
-
-### Run a specific test file
-
-```bash
-npx playwright test tests/e2e/specs/example.spec.ts
-```
-
-### Run tests matching a pattern
-
-```bash
-npx playwright test --grep "login"
-```
-
-## Environment Variables
-
-Configure these environment variables to customize test behavior:
-
-- `BASE_URL` - Base URL for the application (default: `http://localhost:3000`)
-- `CI` - Set to `true` to enable CI mode (retry logic, parallelization)
-
-Example:
-
-```bash
-BASE_URL=https://staging.example.com npm run test:e2e
-```
-
-## Test Results
-
-After running tests, results are available in:
-
-- **HTML Report**: `playwright-report/index.html` - View with `npx playwright show-report`
-- **Test Videos**: `test-results/` - Videos are only retained on failure
-- **Test Traces**: `test-results/` - Traces are captured on first retry for debugging
-
-### Viewing test results
-
-```bash
-# View the HTML report
-npx playwright show-report
-
-# View a specific trace
-npx playwright show-trace test-results/example-should-load/trace.zip
-```
-
-## Debugging
-
-### Using the Inspector
-
-Run tests with the debugger to step through your test code:
-
-```bash
-npm run test:e2e:debug
-```
-
-The Inspector panel allows you to:
-- Step through test code
-- Inspect page elements
-- Execute commands in the console
-
-### Using traces
-
-Playwright traces capture:
-- DOM snapshot
-- Network log
-- Console messages
-- Test timeline
-
-Traces are automatically captured on first retry. View them with:
-
-```bash
-npx playwright show-trace test-results/your-test-name/trace.zip
-```
-
-## Recording & Sharing Demo GIFs
-
-### Recording a Test with Demo GIF
-
-Use the `e2e-record.sh` script to record tests and optionally generate GIFs for documentation:
-
-```bash
-# Record a test (headless mode)
-./scripts/e2e-record.sh homepage
-
-# Record with visible browser
-./scripts/e2e-record.sh "user login" --headed
-
-# Record with low-quality GIF (smaller file, ~1.5 MB for 5 sec)
-./scripts/e2e-record.sh checkout --quality low
-
-# Record and skip GIF prompt
-./scripts/e2e-record.sh "form submission" --skip-gif
-```
-
-**Output:**
-- Video: `test-results/videos/test-name.webm`
-- GIF (if generated): `tests/e2e/fixtures/gifs/test-name-demo.gif`
-
-See `./scripts/e2e-record.sh --help` for all options.
-
-### Converting Existing Videos to GIFs
-
-When a test fails, Playwright automatically records a video. Convert it to a GIF:
-
-```bash
-# Default (medium quality, ~3 MB)
-./scripts/gif-from-video.sh test-results/your-test-name/video.webm output.gif
-
-# Low quality for small files (~1.5 MB)
-./scripts/gif-from-video.sh test-results/your-test-name/video.webm output.gif --quality low
-
-# Trim to specific time range
-./scripts/gif-from-video.sh test-results/your-test-name/video.webm output.gif --start 00:00:02 --duration 5
-```
-
-See `./scripts/gif-from-video.sh --help` for all options.
-
-### Size Guidelines
-
-Choose quality based on your needs:
-
-| Quality | File Size (10s) | Recommended For | Command |
-|---------|-----------------|-----------------|---------|
-| Low | ~1.5 MB | Wiki, README, GitHub issues | `--quality low` |
-| Medium | ~3.0 MB | Feature announcements | `--quality medium` |
-| High | ~8 MB | ❌ Not recommended | `--quality high` |
-
-**Recommendation:** Use `low` for documentation (faster load, smaller repo).
-
-### CI/CD Integration
-
-Tests that run in CI can automatically generate and upload demo GIFs:
-
-1. **Add `demo` label to your PR** to enable GIF generation
-2. **Tests run and record videos on failure**
-3. **CI automatically converts videos to GIFs** (medium quality)
-4. **GIFs are uploaded as 90-day artifacts**
-5. **PR comment includes links** to download and embed GIFs
-
-See [`docs/playwright-e2e-guide.md`](../../docs/playwright-e2e-guide.md) for complete guide on GIF generation and embedding in documentation.
-
-## Page Object Model
-
-Tests use the Page Object Model pattern for maintainability. Page objects abstract selectors and actions:
-
-```typescript
-// pages/login-page.ts
-export class LoginPage extends BasePage {
-  emailInput = this.page.locator('input[type="email"]');
-  passwordInput = this.page.locator('input[type="password"]');
-  
-  async login(email: string, password: string) {
-    await this.emailInput.fill(email);
-    await this.passwordInput.fill(password);
-    // ...
-  }
-}
-
-// specs/login.spec.ts
-const loginPage = new LoginPage(page);
-await loginPage.login('user@example.com', 'password');
-```
-
-## Best Practices
-
-1. **Use Page Objects** - Encapsulate selectors and actions in page objects (under `pages/`)
-2. **Use Fixtures** - Create reusable test fixtures (under `fixtures/`) for setup/teardown
-3. **Meaningful Names** - Use descriptive test names that explain what is being tested
-4. **Single Responsibility** - Each test should verify one user workflow
-5. **Use Data Attributes** - Prefer `data-testid` attributes for reliable selector targeting
-6. **Async/Await** - Always use async/await for async operations
-7. **Assertions** - Use Playwright's built-in assertions with `expect()`
-
-## CI/CD Integration
-
-When tests run in CI (GitHub Actions):
-
-- 4 workers run tests in parallel
-- Failed tests retry twice
-- Videos are retained on failure for debugging
-- Traces are captured for analysis
-- Results are reported to the GitHub Actions workflow
-
-## Troubleshooting
-
-**Tests fail with "browser not found"**
-- Run `npx playwright install` to download browsers
-
-**Tests fail with "page.goto: net::ERR_CONNECTION_REFUSED"**
-- Ensure the dev server is running (`npm run dev`)
-- Check that `BASE_URL` is correct
-
-**Tests are slow**
-- Reduce parallelization: `npx playwright test --workers=1`
-- Check for missing waits or assertions that complete too quickly
-
-## Resources
-
-- [Playwright Documentation](https://playwright.dev/)
-- [Playwright Best Practices](https://playwright.dev/docs/best-practices)
-- [Debugging Tests](https://playwright.dev/docs/debug)
+See also: `.plugin/`, `plugin/`, `src/plate_core/mcp_server.py`, baseline catalog, and docs on the CLI-agnostic / plugin model.
