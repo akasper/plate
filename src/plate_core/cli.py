@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+from pathlib import Path
 
 from .bootstrap import run_bootstrap
 from .baseline_catalog import (
@@ -19,7 +21,11 @@ from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .health import get_health
 from .pr_babysit import babysit_pr
-from .release import get_release_notes_diff, get_release_status
+from .release import (
+    cut_release as core_cut_release,
+    get_release_notes_diff,
+    get_release_status,
+)
 from .migration import generate_migration_plan, apply_migration_plan
 from .costs import get_cost_report
 
@@ -40,6 +46,10 @@ def cmd_health(args: argparse.Namespace) -> int:
     bin_count = report.binary_artifacts_tracked
     bin_status = "CLEAN" if bin_count == 0 else f"FOUND {bin_count} (see #90)"
     print(f"Binary artifacts tracked: {bin_count} ({bin_status})")
+    print(f"Goals wiki page: {'PRESENT' if report.goals_page_present else 'MISSING'}")
+    print(f"Open Questions: {report.open_question_count}")
+    print(f".plate/config: {'PRESENT' if report.plate_config_present else 'MISSING'} (valid: {report.plate_config_valid})")
+    print(f"Curiosity answers index: {'PRESENT' if report.curiosity_answers_present else 'MISSING'}")
     return 0 if report.status != "fail" else 1
 
 
@@ -284,6 +294,34 @@ def cmd_costs(args: argparse.Namespace) -> int:
     print()
     print(format_cost_markdown(report))
     return 0
+
+
+def cmd_release_cut(args: argparse.Namespace) -> int:
+    """First-class gh plate release cut (see #261 Epic and AGENTS.md Release ceremony).
+
+    Uses core implementation (ported from scripts/cut_release.py) for full first-class
+    without relying on external script at runtime.
+    """
+    releases_dir = Path(args.releases_dir) if getattr(args, "releases_dir", None) else None
+    version = getattr(args, "version", None)
+    version_type = getattr(args, "version_type", None)
+    dry_run = getattr(args, "dry_run", False)
+
+    if releases_dir is None:
+        releases_dir = Path(".agentic/releases")
+
+    print("Running release cut via plate_core...")
+    try:
+        rc = core_cut_release(
+            version=version,
+            releases_dir=releases_dir,
+            version_type=version_type,
+            dry_run=dry_run,
+        )
+        return rc
+    except Exception as e:
+        print(f"Error running cut: {e}")
+        return 1
 
 
 def cmd_qanda(args: argparse.Namespace) -> int:
@@ -609,6 +647,14 @@ def build_parser() -> argparse.ArgumentParser:
     costs.add_argument("--epic-label", dest="epic_label", help="Filter to reports under a specific Epic: label (e.g. Epic: beta-roadmap)")
     costs.add_argument("--json", action="store_true", help="Output JSON")
     costs.set_defaults(func=cmd_costs)
+
+    rel_cut = release_sub.add_parser("cut", help="Cut a release: aggregate fragments to versioned dir (first-class MVP per #261)")
+    rel_cut.add_argument("version", nargs="?", help="Explicit version e.g. vX.Y.Z (optional, auto-detect)")
+    rel_cut.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
+    rel_cut.add_argument("--version-type", dest="version_type", choices=["major", "minor", "patch"], help="Override bump type for auto-detect")
+    rel_cut.add_argument("--dry-run", action="store_true", help="Do not write files (dry-run)")
+    rel_cut.add_argument("--json", action="store_true", help="Output JSON (future)")
+    rel_cut.set_defaults(func=cmd_release_cut)
 
     migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")
     migrate_sub = migrate.add_subparsers(dest="migrate_command", required=True)
