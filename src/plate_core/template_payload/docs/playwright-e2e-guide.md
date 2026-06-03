@@ -529,6 +529,9 @@ From GIF generation spike research (`docs/research/gif-generation-spike.md`):
 
 ---
 
-**Last updated:** 2026-05-27  
+**Last updated:** 2026-06-03 (MCP validate now reports clear pass/warn/fail + next_steps/CI/evidence checks; RecordE2eGifTool accepts trim start/duration + size-based advice per #263)
+
 **Maintainer:** PLATE Template  
 **Questions?** See [AGENTS.md](../../AGENTS.md) for support options.
+
+> MCP surfaces (via plate-mcp or gh plate): `validate_e2e_tests` for actionable status, `record_e2e_gif` with quality/trim support, `init_playwright` for scaffold. Use for UI Feature PR evidence.
