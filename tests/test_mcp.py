@@ -285,5 +285,33 @@ class McpTests(unittest.TestCase):
             recs = " ".join(res.get("recommendations", []))
             self.assertTrue("evidence" in recs.lower() or "GIF" in recs or "record" in recs.lower() or not recs)
 
+    @patch("plate_core.mcp.tools.subprocess.run")
+    def test_record_e2e_gif_tool_trimming_and_size_advice(self, mock_run):
+        """#263: RecordE2eGifTool accepts trim params, returns size/quality/recommendations, advises trim for large GIFs."""
+        from plate_core.mcp.tools import RecordE2eGifTool
+        # Success with GIF present (mock)
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "scripts").mkdir(parents=True)
+            (p / "scripts" / "e2e-record.sh").touch()
+            gif_dir = p / "tests" / "e2e" / "fixtures" / "gifs"
+            gif_dir.mkdir(parents=True)
+            gif = gif_dir / "demo.gif"
+            gif.write_bytes(b"0" * (6 * 1024 * 1024))  # >5MB to trigger advice
+            mock_run.return_value = type("R", (), {"returncode": 0, "stderr": ""})()
+            res = RecordE2eGifTool.execute(tmp, "demo", quality="low", start="00:00:02", duration=10)
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["quality"], "low")
+            self.assertIn("gif_path", res)
+            self.assertTrue(res.get("recommendations"))
+            self.assertIn("trim", res)  # trim params echoed
+            recs_str = " ".join(res.get("recommendations", []))
+            self.assertTrue("large" in recs_str.lower() or "trim" in recs_str.lower())
+
+        # Error on bad test name
+        res = RecordE2eGifTool.execute(".", "bad name with spaces!")
+        self.assertEqual(res["status"], "error")
+        self.assertIn("Invalid test name", res["message"])
+
 if __name__ == "__main__":
     unittest.main()

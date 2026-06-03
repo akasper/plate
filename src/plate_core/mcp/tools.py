@@ -119,10 +119,10 @@ class InitPlaywrightTool:
 
 
 class RecordE2eGifTool:
-    """Record and generate a demo GIF from E2E test."""
+    """Record and generate a demo GIF from E2E test. Per #263: supports trimming hints, better output info, size suitability checks."""
 
     @staticmethod
-    def execute(repo_path: str, test_name: str, quality: str = "medium") -> dict:
+    def execute(repo_path: str, test_name: str, quality: str = "medium", start: str | None = None, duration: int | None = None) -> dict:
         """
         Record and generate a demo GIF from E2E test.
 
@@ -130,9 +130,11 @@ class RecordE2eGifTool:
             repo_path: Path to repo
             test_name: Name of test to record (e.g., 'login')
             quality: 'low' (10fps), 'medium' (15fps), 'high' (30fps)
+            start: Optional start time for trim (e.g. '00:00:05' for gif-from-video)
+            duration: Optional duration seconds for trim
 
         Returns:
-            {'status': 'success' or 'error', 'gif_path': '...', 'size_bytes': ...}
+            {'status': 'success' or 'error' or 'warning', 'gif_path': '...', 'size_bytes': ..., 'quality': ..., 'recommendations': [...] }
         """
         repo = Path(repo_path).resolve()
         if not repo.exists():
@@ -190,17 +192,29 @@ class RecordE2eGifTool:
             gif_path = (
                 repo / "tests" / "e2e" / "fixtures" / "gifs" / f"{test_name}.gif"
             )
+            recs = []
+            if start or duration:
+                recs.append(f"Trim params provided (start={start}, duration={duration}); re-run gif-from-video --start/--duration for precise clip if needed.")
             if gif_path.exists():
                 size_bytes = gif_path.stat().st_size
-                return {
+                if size_bytes > 5 * 1024 * 1024:  # >5MB heuristic for wiki/readme suitability
+                    recs.append("GIF large; recommend trim with ./scripts/gif-from-video.sh <video> <gif> --start HH:MM:SS --duration SS --quality medium")
+                base = {
                     "status": "success",
                     "gif_path": str(gif_path),
                     "size_bytes": size_bytes,
+                    "quality": quality,
                 }
+                if recs:
+                    base["recommendations"] = recs
+                if start or duration:
+                    base["trim"] = {"start": start, "duration": duration}
+                return base
             else:
                 return {
                     "status": "warning",
                     "message": f"Recording completed but GIF not found at {gif_path}",
+                    "recommendations": recs or None,
                 }
 
         except Exception as exc:
