@@ -259,11 +259,19 @@ class GetReleaseStatusTests(unittest.TestCase):
             pending_fragment_count=0,
             pending_fragments=[],
             extension_release_checks=[],
+            active_next_release=None,
+            linked_epics=[],
+            on_hold_epics=[],
+            release_track_summary={},
         )
         d = report.to_dict()
         self.assertIn("release_branch_exists", d)
         self.assertIn("pending_fragments", d)
         self.assertIn("extension_release_checks", d)
+        self.assertIn("active_next_release", d)
+        self.assertIn("linked_epics", d)
+        self.assertIn("on_hold_epics", d)
+        self.assertIn("release_track_summary", d)
 
 
 if __name__ == "__main__":

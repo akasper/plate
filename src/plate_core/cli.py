@@ -223,6 +223,19 @@ def cmd_release_status(args: argparse.Namespace) -> int:
     print(f"Open Release issues: {len(report.open_release_issues)}")
     for ri in report.open_release_issues:
         print(f"  - #{ri['number']}: {ri['title']}")
+    if getattr(report, "active_next_release", None):
+        nr = report.active_next_release
+        print(f"Active Next Release: #{nr['number']}: {nr['title']} ({nr.get('html_url', '')})")
+    if getattr(report, "linked_epics", None):
+        print(f"Linked Epics (targeting Next Release): {len(report.linked_epics)}")
+        for e in report.linked_epics[:5]:
+            print(f"  - #{e['number']}: {e.get('title', '')}")
+    if getattr(report, "on_hold_epics", None):
+        print(f"On-hold Epics (track label but no target link): {len(report.on_hold_epics)}")
+        for e in report.on_hold_epics[:5]:
+            print(f"  - #{e['number']}: {e.get('title', '')} {e.get('labels', [])}")
+    if getattr(report, "release_track_summary", None):
+        print(f"Release track summary (open work with labels): {report.release_track_summary}")
     print(f"Pending unreleased fragments: {report.pending_fragment_count}")
     for frag in report.pending_fragments:
         print(f"  - {frag.slug} [{frag.change_type}]: {frag.summary}")
