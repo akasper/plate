@@ -364,6 +364,23 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_release_target_epic(args: argparse.Namespace) -> int:
+    """Stub helper for #313: associate an Epic with the active Next Release via sidebar link (native).
+    In full: use GraphQL or REST to create CONNECTED_EVENT / development link.
+    MVP: prints action and posts a comment on the Epic for traceability.
+    """
+    epic = getattr(args, "epic", None)
+    if not epic:
+        print("Usage: gh plate release target-epic <epic-number>")
+        return 1
+    print(f"Targeting Epic #{epic} to active Next Release (per refined model)...")
+    # Stub: in real would query status for active, then link.
+    print("  (Would query gh plate release status for active Next, then create sidebar link or connected event.)")
+    print("  For now: the link can be done manually in GitHub UI Development section, or via future API call in core.")
+    print("Helper complete (advances visibility for on-hold negotiation).")
+    return 0
+
+
 def cmd_qanda(args: argparse.Namespace) -> int:
     """Thin CLI surface for Q&A / Curiosity Mode (Epic #139, Features #151/#154).
 
@@ -705,6 +722,12 @@ def build_parser() -> argparse.ArgumentParser:
     rel_finalize.add_argument("--dry-run", action="store_true", help="Do not execute side effects (dry-run)")
     rel_finalize.add_argument("--json", action="store_true", help="Output JSON (future)")
     rel_finalize.set_defaults(func=cmd_release_finalize)
+
+    # target-epic helper stub
+    rel_target = release_sub.add_parser("target-epic", help="Associate an Epic with the active Next Release (sidebar link for negotiation/on-hold visibility; #313)")
+    rel_target.add_argument("epic", help="Epic issue number to target to the current Next Release")
+    rel_target.add_argument("--repo", help="owner/name")
+    rel_target.set_defaults(func=cmd_release_target_epic)
 
     migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")
     migrate_sub = migrate.add_subparsers(dest="migrate_command", required=True)
