@@ -52,11 +52,14 @@ labels:
       - "Bug"
       - "Feature"
       - "Epic"
+      - "Release"
       - "Research"
       - "Design"
       - "Question"
       - "Audit"
       - "Migration"
+    # Release + Major/Minor/Patch track labels are part of the refined ceremony (see design doc).
+    # The payload baseline is catching up; root .agentic/process.yml has the current rules.
   pull_request_type_labels:
     required_exactly_one:
       - "Bug"
@@ -160,6 +163,13 @@ workflows:
   release:
     name: "Release"
     path: ".github/workflows/release.yml"
+    # NOTE: This baseline payload is being brought up to the release-ceremony-refinement model
+    # (standing Next Release, Major/Minor/Patch tracks + release-major/minor/patch branches,
+    # packaging/finalization phases, milestone requirements, heavy CI, .plate triggers).
+    # See root .agentic/process.yml (the live self-hosting version) and
+    # docs/design/release-ceremony-refinement.md for the full updated release_rules.
+    # When adopting the refinement, downstreams should pull the updated process.yml block
+    # (or use sectional PLATES-CORE sync).
 
 audit:
   cadence: "weekly_or_pre_release"
