@@ -24,6 +24,11 @@ class CliTests(unittest.TestCase):
             branch_protection_enabled=True,
             open_epic_count=2,
             status="pass",
+            goals_page_present=True,
+            open_question_count=1,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
         )
         out = io.StringIO()
         with redirect_stdout(out):

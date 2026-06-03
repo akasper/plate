@@ -1,0 +1,12 @@
+{
+  "slug": "health-label-case",
+  "change_type": "fix",
+  "surface": "src/plate_core/health.py (label coverage check)",
+  "summary": "Make REQUIRED_LABELS check case-insensitive so 'question' (GH canonical) satisfies 'Question' (no more WARN in health).",
+  "migration_impact": "Health reports will now correctly show label_coverage_ok=true on repos where GH surfaces the label in lowercase. No action needed.",
+  "agent_notes": "plate_health and bootstrap will see complete label coverage even if GH returns 'question'. Improves signals for new repo setup and beta readiness.",
+  "breaking": false,
+  "links": [
+    "health"
+  ]
+}
