@@ -25,6 +25,8 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn("Release issues must be assigned to a GitHub milestone.", workflow)
         self.assertIn("must be assigned to a GitHub milestone", workflow)
         self.assertNotIn("must carry exactly one Epic: short-name label", workflow)
+        # Release ceremony refinement: Release issues now also require a milestone
+        self.assertIn("'Release'", workflow)  # or the array now includes Release in requiresMilestone
 
     def test_pr_issue_link_check_accepts_development_links(self):
         workflow = read_text(".github/workflows/pr-issue-link-check.yml")
