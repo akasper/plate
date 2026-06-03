@@ -1,0 +1,21 @@
+{
+  "version": "unreleased",
+  "summary": "Wiki sync and convention enforcement support for Goals page (Epic #218 / Feature #229)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "bootstrap, health (report + MCP), wiki sync guidance (template), tests",
+      "migration_impact": "Bootstrap (apply or dry) now initializes docs/wiki/Goals.md placeholder when missing (after enabling wiki). gh plate health and plate_health MCP now report goals_page_present (nudge for convention adoption). Wiki sync template workflow comments updated to call out Goals as recommended. New projects get it by default via bootstrap; existing via re-run or manual. Complements #224 convention + #228 migration docs.",
+      "agent_notes": "Agents: plate_health now surfaces goals_page_present for discovery/enforcement nudges; Information Audit (#221) already reads Goals page. Bootstrap via gh plate bootstrap --apply (or MCP) will create the page file on default branch if absent. See updated convention in template_payload and Epic #218 children for full rollout.",
+      "breaking": false,
+      "links": [
+        "#229",
+        "#218",
+        "#224",
+        "#228",
+        "#221",
+        "#222"
+      ]
+    }
+  ]
+}
