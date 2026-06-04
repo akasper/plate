@@ -128,6 +128,11 @@ issues:
     - "outcome"
     - "scope boundaries"
     - "success criteria"
+  required_for_release:
+    - "Release label"
+    - "release milestone"
+    - "target version or standing Next Release title"
+    - "pre-release checklist"
   required_for_research:
     - "Research label"
     - "research question"
@@ -160,6 +165,11 @@ pull_requests:
     - "closing keyword in PR body"
     - "Development sidebar link"
   milestone_expected_when_part_of_epic: true
+  milestone_enforcement_status: "warning_first"
+  milestone_warning_first_for:
+    - "Bug"
+    - "Feature"
+    - "Documentation"
   required_sections:
     - "Summary"
     - "Linked work"
