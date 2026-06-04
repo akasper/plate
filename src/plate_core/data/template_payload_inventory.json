@@ -68,6 +68,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".github/ISSUE_TEMPLATE/release.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".github/ISSUE_TEMPLATE/research.yml",
       "classification": "copy_to_downstream"
     },

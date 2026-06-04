@@ -4,13 +4,19 @@ This repository uses PLATE to keep human judgment, agent execution, and durable 
 
 ## Issue Rules
 
-Every issue must carry exactly one issue type label: `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, `Migration`, or `Feedback Response`. Feature and Epic issues must also carry exactly one `Epic: short-name` label. Question issues are information goals and are not tied to an Epic label. `Feedback Response` issues (when used) are exempt from the Epic requirement. Mutable planning state such as status, priority, target date, owner, iteration, and release target belongs in GitHub Projects fields.
+Every issue must carry exactly one issue type label: `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Audit`, or `Migration`. Feature issues, and optional Epic issues when used, must also be assigned to the GitHub milestone that represents the Epic. Question issues are information goals and are not tied to an Epic milestone by default. Mutable planning state such as status, priority, target date, owner, iteration, and release target belongs in GitHub Projects fields.
 
 ## Branch and Pull Request Rules
 
-Use short descriptive branch names such as `feature/onboarding-copy`, `bug/login-regression`, or `docs/current-state-audit`. Every pull request must carry exactly one PR type label: `Bug`, `Feature`, `Documentation`, or `Feedback Response`. Feature and Bug PRs must include a closing keyword (`Closes #N`) to link the issue they resolve. `Feedback Response` PRs do not require a closing keyword; if used, the `.github/workflows/auto-label-feedback-responses.yml` workflow automatically applies both `risk:low` and `auto-merge`, making them eligible for autonomous auto-merge when AUTONOMOUS_MODE is active.
+PLATE uses a three-tier branch model: `epic/<short-name>` branches for feature work within an Epic, a persistent `release` branch for Epic integration, and `main` for stable tagged releases. Feature and Bug PRs should target the epic branch for their Epic. When all child issues in an Epic are resolved, open a PR from `epic/<name>` → `release` (Epic-close ceremony). When a release is ready, open a PR from `release` → `main`, apply a semver tag, and hard-reset `release` to the tag (Release ceremony). See `AGENTS.md §Branch Model and Ceremonies` for the full step-by-step guide.
 
-If a pull request is opened with GitHub CLI, include the type label in the create command itself, for example `gh pr create --label "Feature"`, instead of treating labeling as a separate best-effort follow-up step. For non-Feedback-Response PRs, consider applying a `risk:*` label at creation time to clarify review burden for reviewers (see §Risk Assessment and Labeling in `AGENTS.md`).
+Use short descriptive branch names such as `feature/onboarding-copy`, `bug/login-regression`, or `docs/current-state-audit`. PR titles must be clean and written for human readers — do not use any bracketed prefixes (e.g. `[Feature]`, `[Bug]`, `[Documentation]`, `[WIP]`, `WIP:`, `[DRAFT]`, `DRAFT:`, or similar) and do not put issue references such as `(Closes #N)` in the title. All metadata lives in GitHub's native fields (labels, Development sidebar or body closing keywords, draft status, milestones). See AGENTS.md for details. Every pull request must carry exactly one PR type label: `Bug`, `Feature`, or `Documentation`. Feature PRs that change PLATE process, templates, or agent surfaces must author a fragment under `.agentic/releases/unreleased/<slug>.json`.
+
+Use clean, descriptive PR titles that summarize the change without legacy status prefixes. Do not use `[WIP]`, `WIP:`, `[DRAFT]`, `DRAFT:`, or similar prefixes in titles. Use GitHub's native Draft PR status instead (`gh pr create --draft` or the "Create draft pull request" option in the UI) to signal work-in-progress. Draft status is reversible and keeps titles readable in PR lists, search results, notifications, and commit history.
+
+If a pull request is opened with GitHub CLI, include the type label in the create command itself, for example `gh pr create --label "Feature"`, instead of treating labeling as a separate best-effort follow-up step.
+
+When a pull request belongs to an Epic, set its milestone to match the Epic milestone. `Feature`, `Bug`, and issue-driven `Documentation` PRs must also link at least one tracked issue using either a closing keyword in the PR body or the Development sidebar. Use `no-issue` only for true chores or maintenance PRs that intentionally do not resolve tracked work.
 
 For batched Question triage through GitHub CLI, use `scripts/question_batch.sh` (or `scripts/QuestionBatch.ps1` on Windows) to list open Question issues quickly.
 
@@ -61,4 +67,3 @@ New user-visible features should include Playwright E2E tests for reproducible c
    ```
 
 See `docs/playwright-e2e-guide.md`, `tests/e2e/README.md`, and `AGENTS.md §E2E Testing Expectations` for full guidance.
-
