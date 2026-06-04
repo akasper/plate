@@ -603,6 +603,7 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--apply", action="store_true", help="Apply supported actions instead of dry-run planning")
     bootstrap.add_argument("--json", action="store_true", help="Output JSON")
     bootstrap.set_defaults(func=cmd_bootstrap)
+    # Note: Goals page init (per #266) is included automatically when wiki enabled and page absent (plan in dry-run, apply with --apply). Flag/interactive refinement in future.
 
     pr = sub.add_parser("pr", help="PR feedback operations")
     pr_sub = pr.add_subparsers(dest="pr_command", required=True)

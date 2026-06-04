@@ -1,0 +1,20 @@
+{
+  "version": "unreleased",
+  "summary": "Wiki sync defaults, reliability, and Goals page bootstrap/enforcement (Issue #266 / Epic: beta-roadmap)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "bootstrap (Goals page init with planning/apply), health (goals_page_present detection + nudge), docs (checklist, AGENTS, agent guidance), tests",
+      "migration_impact": "Bootstrap now seeds the Goals wiki page convention (placeholder from template) when wiki is enabled and page absent. Dry-run plans it (interactive decision point); --apply creates the file via GH contents API. Health reports goals_page_present for nudges. Wiki sync guidance and new-repo checklist updated. Existing projects get nudge via health; new ones via bootstrap. Complements prior partial work in #229/#224.",
+      "agent_notes": "Use gh plate bootstrap (dry shows planned Goals init if applicable; --apply seeds it). Check plate_health or gh plate health for goals_page_present. Agents should reference the Goals page in audits and recommend customizing it. See convention doc and #266 for details. Update AGENTS/plate.agent.md guidance included.",
+      "breaking": false,
+      "links": [
+        "#266",
+        "#229",
+        "#224",
+        "Epic: beta-roadmap",
+        "#218"
+      ]
+    }
+  ]
+}

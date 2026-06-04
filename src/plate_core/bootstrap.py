@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from dataclasses import asdict, dataclass
 
 from .github_client import GhClient
@@ -9,6 +10,52 @@ from .health import REQUIRED_LABELS, get_health, resolve_repo
 
 
 DEFAULT_LABEL_COLOR = "5319e7"
+
+# Placeholder for bootstrap init of Goals wiki page (per convention).
+GOALS_PAGE_PLACEHOLDER = """# Goals
+
+**This page is part of the PLATE convention for managing high-level project intent.**
+
+Every PLATE project is encouraged to maintain a `Goals` page in its Wiki. This page serves as the canonical, agent-accessible source for the project's overall **mission** — why it exists and how it intends to succeed.
+
+This is distinct from `SPEC.md`, which focuses on product implementation details, architecture decisions, and engineering outcomes.
+
+## Purpose of This Page
+
+The `Goals` page answers high-level questions such as:
+- Why is this project being built?
+- Who is it for, and what outcomes matter most?
+- What does "winning" look like at a strategic level?
+- What are the key principles or constraints that should guide major decisions?
+
+Agents performing Information Audits are expected to read this page as one of their primary signals.
+
+## Mission
+
+> [Replace this with your project's broad directional mission. Keep it high-level — why you exist and how you intend to succeed (go-to-market, impact, revenue model, etc.).]
+
+## Core Principles
+
+- [Principle 1 with short rationale]
+- [Principle 2 with short rationale]
+
+## How We Intend to Succeed
+
+- [Broad strategic outcome 1]
+- [Broad strategic outcome 2]
+
+## Current State & Evidence
+
+[Light, high-level snapshot of where things stand today.]
+
+## Open Strategic Questions
+
+[Link to major `Question` issues that represent big unresolved informational goals against the mission above.]
+
+---
+
+*This is the recommended starting template for the PLATE Goals wiki page convention (see `docs/design/goals-wiki-page-convention.md` in the template payload for full guidance).*
+"""
 
 
 @dataclass
@@ -59,6 +106,44 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
         actions.append(BootstrapAction(name="enable-wiki", state=state, detail="Set has_wiki=true"))
     else:
         actions.append(BootstrapAction(name="enable-wiki", state="already-configured", detail="Wiki already enabled"))
+
+    # Bootstrap support for Goals page convention (for #266 / beta, building on #229 / #224).
+    # Seeds docs/wiki/Goals.md with placeholder if missing (after enabling wiki).
+    # Supports "flag or interactive" via always planning if wiki on and no page (interactive in future CLI).
+    # For apply, creates via contents API.
+    default_branch = repo_obj.get("default_branch", "main")
+    goals_present = False
+    try:
+        gh.api(f"repos/{target}/contents/docs/wiki/Goals.md")
+        goals_present = True
+    except Exception:
+        pass
+    if not goals_present:
+        if apply_mode:
+            content = base64.b64encode(GOALS_PAGE_PLACEHOLDER.encode("utf-8")).decode("ascii")
+            gh.api(
+                f"repos/{target}/contents/docs%2Fwiki%2FGoals.md",
+                method="PUT",
+                fields={
+                    "message": "Bootstrap: initialize docs/wiki/Goals.md per PLATE convention (Epic #218 / #266)",
+                    "content": content,
+                    "branch": default_branch,
+                },
+            )
+            state = "applied"
+            detail = "Initialized docs/wiki/Goals.md with PLATE convention placeholder"
+        else:
+            state = "planned"
+            detail = "Initialize docs/wiki/Goals.md (PLATE Goals wiki page convention for agent audits + health nudges; flag/interactive in CLI)"
+        actions.append(BootstrapAction(name="init-goals-page", state=state, detail=detail))
+    else:
+        actions.append(
+            BootstrapAction(
+                name="init-goals-page",
+                state="already-configured",
+                detail="docs/wiki/Goals.md already present (Goals convention adopted)",
+            )
+        )
 
     if health.open_epic_count == 0:
         if apply_mode:
