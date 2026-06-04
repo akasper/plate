@@ -9,7 +9,6 @@ class BootstrapTests(unittest.TestCase):
     @patch("plate_core.bootstrap.get_health")
     def test_dry_run_reports_planned_actions(self, mock_get_health):
         mock_get_health.return_value = HealthReport(
-            plate_config_present=True,
             repo="akasper/plate_core",
             label_coverage_ok=False,
             missing_labels=["Feature", "Epic"],
@@ -44,7 +43,6 @@ class BootstrapTests(unittest.TestCase):
         """has_wiki must be sent as Python bool True so GhClient uses -F and gh
         interprets it as a JSON boolean, not the string 'true'."""
         mock_get_health.return_value = HealthReport(
-            plate_config_present=True,
             repo="akasper/test-repo",
             label_coverage_ok=True,
             missing_labels=[],
@@ -89,4 +87,3 @@ class BootstrapTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
