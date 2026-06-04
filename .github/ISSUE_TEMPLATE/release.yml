@@ -1,28 +1,42 @@
 name: Release
-description: Track a formal PLATE release — pre-release checklist, extension hooks, and semver tag traceability.
-title: "[Release]: v"
+description: Track the standing Next Release target, packaging handoff, heavy-release validation, and final semver release traceability.
+title: "Next Release"
 labels:
   - Release
 body:
   - type: markdown
     attributes:
       value: |
-        Use this issue to own a PLATE release ceremony. It links the candidate version, the release branch PR,
-        all extension release checks, and the semver tag. One Release issue per tag.
+        Use this issue to own the PLATE release ceremony from active planning through packaging and finalization.
+
+        - Keep one standing open `Next Release` issue as the active target while epics negotiate scope into the next cut.
+        - When packaging begins, rename or replace this issue with the concrete versioned release issue.
+        - Immediately spawn a fresh `Next Release` issue after packaging so new work has a standing target.
   - type: input
     id: version
     attributes:
       label: Target version
-      description: "Semantic version being released (e.g. `v0.2.0`)."
-      placeholder: "v0.2.0"
+      description: "Optional until packaging locks the version. Use `Next Release` planning first, then fill in `vX.Y.Z` when the version is known."
+      placeholder: "v0.2.0 once packaging is locked"
     validations:
-      required: true
+      required: false
   - type: textarea
     id: linked_epics
     attributes:
       label: Linked epics
-      description: "List the Epics (milestones or Epic issues) included in this release."
+      description: "List the Epics (milestones or Epic issues) currently targeting this standing release."
       placeholder: "- Epic: plate-release-ceremony (#194)"
+    validations:
+      required: false
+  - type: textarea
+    id: track_summary
+    attributes:
+      label: Release track summary
+      description: "Summarize which Major/Minor/Patch work is expected to land in this release."
+      placeholder: |
+        - Major: none planned
+        - Minor: release ceremony refinement
+        - Patch: follow-up fixes only
     validations:
       required: false
   - type: textarea
@@ -36,15 +50,20 @@ body:
     id: pre_release_checklist
     attributes:
       label: Pre-release checklist
-      description: "Steps that must be completed before tagging. Extend with extension release_checks when applicable."
+      description: "Steps that must be completed as the standing Next Release moves into packaging and finalization. Extend with extension release_checks when applicable."
       value: |
-        - [ ] All linked Epic branches merged into `release` branch.
-        - [ ] `gh plate release status` shows no pending fragments that should be excluded.
-        - [ ] Extension release_checks satisfied (see extensions.yml).
-        - [ ] `release` branch PR to `main` reviewed and approved.
+        - [ ] Work items targeting this release carry `Major`, `Minor`, or `Patch` labels as appropriate.
+        - [ ] Epics included in this release are linked to the active `Next Release` target.
+        - [ ] Non-bug merges are frozen and packaging scope is locked.
+        - [ ] Concrete version `vX.Y.Z` is chosen and this issue has been renamed or replaced accordingly.
+        - [ ] Versioned packaging branch (`release-vX.Y.Z`) has been created from the selected integration state.
+        - [ ] `gh plate release status` shows the expected fragments, targeted epics, and no unexpected on-hold work.
+        - [ ] Heavy Release PR validation has run for the packaging PR to `main`.
+        - [ ] Extension release_checks / `.plate` release triggers are satisfied or explicitly waived.
         - [ ] `git tag vX.Y.Z` applied and pushed.
         - [ ] GitHub Release created (auto-populated from release notes).
-        - [ ] `release` branch hard-reset to tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`.
+        - [ ] Fresh standing `Next Release` issue created for subsequent work.
+        - [ ] `release` branch hard-reset to the shipped tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`.
     validations:
       required: true
   - type: textarea
@@ -60,10 +79,12 @@ body:
     id: success_criteria
     attributes:
       label: Success criteria
-      description: "What must be true for this release to be considered complete?"
+      description: "What must be true for this release to be considered complete from packaging through finalization?"
       placeholder: |
+        - [ ] Versioned release branch and Release PR were created from the intended packaged scope.
         - [ ] Tag vX.Y.Z exists and points to `main`.
         - [ ] GitHub Release is published with accurate notes.
+        - [ ] A fresh standing `Next Release` issue exists for future planning.
         - [ ] `release` branch hard-reset to tag.
     validations:
       required: true
@@ -72,9 +93,11 @@ body:
     attributes:
       label: PLATE release readiness
       options:
-        - label: Target version follows semver and is higher than the previous tag.
+        - label: This issue is being used as the single standing release target for current planning.
           required: true
-        - label: All pre-release checklist items are actionable and owned.
+        - label: Packaging ownership, scope, and linked epics are explicit.
           required: true
-        - label: Extension release checks have been reviewed.
+        - label: Release-track labels and target links have been reviewed.
+          required: true
+        - label: Extension release checks and finalization expectations have been reviewed.
           required: true
