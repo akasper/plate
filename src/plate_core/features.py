@@ -99,19 +99,21 @@ def get_features(repo: str | None = None, client: GhClient | None = None) -> Fea
         ("mcp-manifest-source", "plugin/.mcp.json"),
         ("baseline-agents-catalog", "src/plate_core/data/baseline_catalog.yml"),
         ("current-md", "CURRENT.md"),
-        ("release-branch", None),  # Checked separately via branches API
+        ("release-branch", None),  # Legacy single 'release' check (via branches API). Refined model uses release-major/minor/patch + versioned release-v* (see release-ceremony-refinement design).
         ("release-notes-layout", ".agentic/releases/unreleased"),
     ]
 
     detected = []
     for name, path in checks:
         if name == "release-branch":
-            # Check for a branch named 'release' via the branches API
+            # Legacy check for a branch named 'release'. The refined multi-track ceremony (release-ceremony-refinement)
+            # primarily uses release-major/minor/patch (permissive next-) and versioned release-v* branches.
+            # This flag remains for transition/compat reporting.
             try:
                 gh.api(f"repos/{target}/branches/release")
-                detected.append(FeatureFlag(name=name, enabled=True, evidence="branches/release"))
+                detected.append(FeatureFlag(name=name, enabled=True, evidence="branches/release (legacy)"))
             except GhApiError:
-                detected.append(FeatureFlag(name=name, enabled=False, evidence="branches/release"))
+                detected.append(FeatureFlag(name=name, enabled=False, evidence="branches/release (legacy)"))
         elif path:
             detected.append(FeatureFlag(name=name, enabled=_path_exists(gh, target, path), evidence=path))
 

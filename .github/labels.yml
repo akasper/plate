@@ -30,6 +30,19 @@
   color: "0052cc"
   description: "Issue type: planned PLATE release with pre-release checklist, extension hooks, and semver traceability."
 
+# Semver release track labels (refined ceremony). Every changing issue (Feature, Bug, Documentation, etc.)
+# carries exactly one to declare intent and target the matching release-major/minor/patch branch during
+# the "Next Release" / packaging flow. See docs/design/release-ceremony-refinement.md and AGENTS.md.
+- name: "Major"
+  color: "b60205"
+  description: "Release track: this change is part of the next major release (breaking or large scope)."
+- name: "Minor"
+  color: "0e8a16"
+  description: "Release track: this change is part of the next minor release (new capability, backward compatible)."
+- name: "Patch"
+  color: "0075ca"
+  description: "Release track: this change is part of the next patch release (fixes, small improvements)."
+
 - name: "Design"
   color: "f9d0c4"
   description: "Issue type: UX design, architecture design, API contract, data model, or information design."
