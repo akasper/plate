@@ -12,7 +12,7 @@ from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
-from .release import get_release_notes_diff, get_release_status
+from .release import get_release_notes_diff, get_release_status, get_release_target_epic_guidance
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
@@ -193,6 +193,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = get_release_status(
                 repo=args.get("repo"),
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
+            ).to_dict()
+        elif name == "plate_release_target_epic":
+            payload = get_release_target_epic_guidance(
+                epic_number=int(args.get("epic_number")),
+                repo=args.get("repo"),
             ).to_dict()
         elif name == "plate_release_notes":
             from pathlib import Path
@@ -681,7 +686,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_release_status",
-                                "description": "Return the current PLATE release status: release branch existence, open Release issues, latest version, pending unreleased fragments, and extension release checks.",
+                                "description": "Return the current PLATE release status: release branch existence, open Release issues, active Next Release visibility, linked/on-hold Epics, track summary, pending unreleased fragments, and extension release checks.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -694,6 +699,24 @@ def run() -> None:
                                             "description": "Path to the releases directory. Defaults to .agentic/releases.",
                                         },
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_release_target_epic",
+                                "description": "Validate an Epic against the active Next Release and return the manual issue-linking guidance required because GitHub does not expose a public API to create the issue-to-issue sidebar link directly.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "epic_number": {
+                                            "type": "integer",
+                                            "description": "Epic issue number to validate against the active Next Release.",
+                                        },
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                    },
+                                    "required": ["epic_number"],
                                 },
                             },
                             {

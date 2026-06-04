@@ -170,6 +170,32 @@ class McpTests(unittest.TestCase):
         self.assertTrue(payload["resolved"])
 
     @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.get_release_target_epic_guidance")
+    def test_tools_call_plate_release_target_epic(self, mock_guidance, mock_write):
+        mock_guidance.return_value = type(
+            "Guidance",
+            (),
+            {
+                "to_dict": lambda self: {
+                    "repo": "akasper/plate",
+                    "epic": {"number": 306},
+                    "active_next_release": {"number": 50},
+                    "can_target": True,
+                    "api_write_supported": False,
+                    "message": "manual step required",
+                    "manual_steps": ["1. Do the UI link"],
+                }
+            },
+        )()
+        _handle_tools_call(
+            15,
+            {"name": "plate_release_target_epic", "arguments": {"repo": "akasper/plate", "epic_number": 306}},
+        )
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertTrue(payload["can_target"])
+        self.assertFalse(payload["api_write_supported"])
+
+    @patch("plate_core.mcp_server._write")
     @patch(
         "plate_core.mcp_server.sys.stdin",
         new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":5,"method":"tools/list"}\n'),
@@ -180,6 +206,7 @@ class McpTests(unittest.TestCase):
         names = {tool["name"] for tool in tools}
         self.assertIn("plate_features", names)
         self.assertIn("plate_bootstrap", names)
+        self.assertIn("plate_release_target_epic", names)
 
     @patch("plate_core.mcp_server._write")
     @patch(

@@ -29,6 +29,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "installed": {},
     },
     "overrides": {},
+    # Release ceremony refinement (Epic #306): project-specific config for finalization triggers,
+    # default track policy, etc. Common triggers (e.g. docs) in core; others via extensions.
+    # Reconciles with user request for .plate/ area (here as sub-key for the existing .plate file convention).
+    "release": {
+        "triggers": [],  # list of {id, description, command_or_action, human_approval_required?}
+        "default_track": None,  # "Major" | "Minor" | "Patch"
+    },
 }
 
 
@@ -38,6 +45,7 @@ class PlateConfig:
     methodology: Dict[str, Any] = field(default_factory=dict)
     extensions: Dict[str, Any] = field(default_factory=dict)
     overrides: Dict[str, Any] = field(default_factory=dict)
+    release: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -49,6 +57,7 @@ class PlateConfig:
             methodology=data.get("methodology", {}),
             extensions=data.get("extensions", {}),
             overrides=data.get("overrides", {}),
+            release=data.get("release", {}),
         )
 
 
@@ -63,8 +72,8 @@ def validate_plate_config(config: Dict[str, Any]) -> None:
     version = config["version"]
     if not isinstance(version, str) or not _is_valid_semver_like(version):
         raise PlateConfigError(f"invalid version format: {version!r}")
-    # methodology, extensions, overrides are optional objects for forward compat
-    for key in ("methodology", "extensions", "overrides"):
+    # methodology, extensions, overrides, release are optional objects for forward compat
+    for key in ("methodology", "extensions", "overrides", "release"):
         if key in config and not isinstance(config[key], dict):
             raise PlateConfigError(f"'{key}' must be an object if present")
 
@@ -93,7 +102,7 @@ def load_plate_config(repo_root: Path | None = None) -> PlateConfig:
     # MVP: defaults overridden by local (extensions merge later)
     merged = {**DEFAULT_CONFIG, **local}
     # Deep merge for nested dicts (simple last-wins for now)
-    for k in ("methodology", "extensions", "overrides"):
+    for k in ("methodology", "extensions", "overrides", "release"):
         if k in local and isinstance(local[k], dict):
             merged[k] = {**DEFAULT_CONFIG.get(k, {}), **local[k]}
 

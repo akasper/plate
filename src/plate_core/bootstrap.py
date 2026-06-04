@@ -227,37 +227,47 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
             )
         )
 
-    # Release branch — create if absent
-    try:
-        gh.api(f"repos/{target}/branches/release")
-        actions.append(
-            BootstrapAction(
-                name="create-release-branch",
-                state="already-configured",
-                detail="Release branch already exists",
+    # Release track branches (refined multi-track model per release-ceremony-refinement Epic #306).
+    # Creates the permissive next-* branches for Major/Minor/Patch tracks (associated with standing "Next Release").
+    # Legacy single "release" is still created for transition/compat with old ceremony.
+    # Versioned release-vX.Y.Z branches are created later during packaging (not in bootstrap).
+    track_branches = ["release-major", "release-minor", "release-patch", "release"]
+    for branch_name in track_branches:
+        try:
+            gh.api(f"repos/{target}/branches/{branch_name}")
+            actions.append(
+                BootstrapAction(
+                    name=f"create-{branch_name}-branch",
+                    state="already-configured",
+                    detail=f"{branch_name} branch already exists",
+                )
             )
-        )
-    except Exception:
-        if apply_mode:
-            repo_obj_fresh = gh.api(f"repos/{target}")
-            default_branch = repo_obj_fresh.get("default_branch", "main")
-            # Get the SHA of the default branch tip
-            branch_data = gh.api(f"repos/{target}/branches/{default_branch}")
-            sha = branch_data["commit"]["sha"]
-            gh.api(
-                f"repos/{target}/git/refs",
-                method="POST",
-                fields={"ref": "refs/heads/release", "sha": sha},
-            )
-            state = "applied"
-            detail = f"Created release branch from {default_branch} at {sha[:7]}"
-        else:
-            state = "planned"
-            detail = (
-                "Create 'release' branch from main. "
-                "After creation, protect it: require PRs from epic/* branches only, no direct push. "
-                "Release ceremony hard-reset: git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease"
-            )
-        actions.append(BootstrapAction(name="create-release-branch", state=state, detail=detail))
+        except Exception:
+            if apply_mode:
+                repo_obj_fresh = gh.api(f"repos/{target}")
+                default_branch = repo_obj_fresh.get("default_branch", "main")
+                branch_data = gh.api(f"repos/{target}/branches/{default_branch}")
+                sha = branch_data["commit"]["sha"]
+                gh.api(
+                    f"repos/{target}/git/refs",
+                    method="POST",
+                    fields={"ref": f"refs/heads/{branch_name}", "sha": sha},
+                )
+                state = "applied"
+                detail = f"Created {branch_name} branch from {default_branch} at {sha[:7]}"
+            else:
+                state = "planned"
+                if branch_name == "release":
+                    detail = (
+                        f"Create legacy '{branch_name}' branch from main (for transition). "
+                        "Protect appropriately. See docs/design/release-ceremony-refinement.md and AGENTS.md for the refined 3-track model (release-major/minor/patch as permissive next- integrators; versioned release-v* created at packaging time)."
+                    )
+                else:
+                    detail = (
+                        f"Create '{branch_name}' branch from main. "
+                        "This is a permissive 'next' integration branch for the corresponding Major/Minor/Patch track during active development toward the standing Next Release. "
+                        "After creation, protect it (PRs required; status checks like main). Versioned branches and hard-resets happen at packaging/finalization."
+                    )
+            actions.append(BootstrapAction(name=f"create-{branch_name}-branch", state=state, detail=detail))
 
     return BootstrapReport(repo=target, apply_mode=apply_mode, actions=actions)
