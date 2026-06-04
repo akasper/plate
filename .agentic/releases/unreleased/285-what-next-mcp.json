@@ -1,0 +1,19 @@
+{
+  "version": "unreleased",
+  "summary": "plate_what_next MCP tool + registration, guidance/catalog updates (Issue #285 / Epic #282)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "mcp_server (tool + handler + schema), agent_guidance / plate.agent.md (both copies), baseline_catalog.yml, tests (mcp smoke), fragment",
+      "migration_impact": "Agents (via MCP or gh plate surfaces) can now call plate_what_next to receive a recommended next PLATE action + prompt segment based on live repo state. v1 covers bootstrap, Epic advancement, release prep, etc. Use to drive autonomous loops per the scheduled task prompt. Updates to baseline catalog and agent persona make the skill/orchestration available.",
+      "agent_notes": "Call plate_what_next (with optional agent_type) early in sessions or when stuck. It consults plate_health + heuristics over documented flows (epics, labels, fragments, Goals). Pair with plate_epic_status, plate_list_questions, etc. for full context. Future versions will be richer (full state, learned policies).",
+      "breaking": false,
+      "links": [
+        "#285",
+        "#282",
+        "#260",
+        "Epic: beta-roadmap"
+      ]
+    }
+  ]
+}

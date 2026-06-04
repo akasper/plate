@@ -50,6 +50,48 @@ def _plan_epic_stub(args: dict) -> object:
     return _Stub()
 
 
+def _what_next(repo: str | None, agent_type: str | None = None) -> dict:
+    """v1 static What Next? for PLATE process (Epic #282 / #285).
+
+    Uses live health + simple heuristics over documented flows (epics, labels, fragments, Goals).
+    Returns next recommended action + prompt segment for agent use.
+    """
+    try:
+        from .health import get_health
+        h = get_health(repo).to_dict() if repo or True else {}
+        labels_ok = h.get("label_coverage_ok", False)
+        open_epics = h.get("open_epic_count", 0)
+        # simplistic v1
+        if not labels_ok:
+            action = "run bootstrap to establish labels/wiki/epic/starters"
+            prompt = (
+                "Follow the PLATE bootstrap flow: create required labels, enable wiki, seed initial Epic, "
+                "seed starter Questions from catalog. Then create a Goals wiki page per convention and use it for audits."
+            )
+        elif open_epics > 0:
+            action = "advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement"
+            prompt = (
+                "Use plate_epic_status or gh plate epic status to list children. For a Feature: read full issue, "
+                "add/update tests first, implement smallest change, author fragment in .agentic/releases/unreleased/, "
+                "PR with clean title + labels (Feature + area + Epic:*) + Closes #N in body only, babysit with gh plate pr babysit."
+            )
+        else:
+            action = "check for pending release fragments or next beta item"
+            prompt = (
+                "Run gh plate release status. If unreleased fragments, prepare for cut_release. "
+                "Otherwise pick next beta-roadmap Feature (e.g. #260 local-rebase, #285 what-next, packaging, etc.)."
+            )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": "v1 heuristic on health (labels, open_epics); expand with full state (epics, fragments, Goals presence) in follow-ups",
+            "state_snapshot": {"label_coverage_ok": labels_ok, "open_epic_count": open_epics},
+            "agent_type": agent_type or "general",
+        }
+    except Exception as exc:
+        return {"next_action": "inspect with plate_health + plate_epic_status", "error": str(exc)}
+
+
 def _handle_tools_call(req_id: object, params: dict) -> None:
     name = params.get("name")
     args = params.get("arguments", {}) or {}
@@ -122,6 +164,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 thread_id=thread_id,
                 repo=args.get("repo"),
             )
+        elif name == "plate_what_next":
+            # What Next? (Epic #282 / #285 v1 static)
+            # Uses live state (health, epics, fragments, labels) to pick next PLATE step and prompt segment.
+            # For v1: simple decision tree over common paths; future data-driven.
+            payload = _what_next(args.get("repo"), args.get("agent_type"))
         elif name == "plate_contemplate":
             # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
             qn = args.get("question_number")
@@ -441,7 +488,7 @@ def run() -> None:
                                             "enum": ["copilot-request", "local-rebase", "none"],
                                             "description": (
                                                 "How to handle out-of-sync base branch: copilot-request (default, triggers Copilot merge assist), "
-                                                "local-rebase (not yet implemented), or none (detect only)."
+                                                "local-rebase (local worktree rebase+push), or none (detect only)."
                                             ),
                                         },
                                     },
@@ -464,6 +511,23 @@ def run() -> None:
                                         },
                                     },
                                     "required": ["thread_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_what_next",
+                                "description": "What Next? MCP tool (Epic #282 / Feature #285). Returns the next recommended PLATE process step + templatized prompt segment based on live repo state (health, epics, labels, fragments, etc.). v1 static flow covering primary paths; enables agents to drive autonomous progress.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "agent_type": {
+                                            "type": "string",
+                                            "description": "Optional hint for specialized guidance (general, coding, docs, etc.).",
+                                        },
+                                    },
                                 },
                             },
                             {
