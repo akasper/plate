@@ -19,6 +19,7 @@ principles:
 artifacts:
   spec: "SPEC.md"
   current_state: ".agentic/releases/"
+  release_notes: ".agentic/releases/"
   agent_rules: "AGENTS.md"
   process_config: ".agentic/process.yml"
   skills_registry: ".agentic/skills.yml"
@@ -42,7 +43,6 @@ labels:
     area: "area:"
     risk: "risk:"
     need: "need:"
-    epic: "Epic:"
   disallowed_default_prefixes:
     - "priority:"
     - "status:"
@@ -58,24 +58,59 @@ labels:
       - "Question"
       - "Audit"
       - "Migration"
-    # Release + Major/Minor/Patch track labels are part of the refined ceremony (see design doc).
-    # The payload baseline is catching up; root .agentic/process.yml has the current rules.
+  # Semver track labels (Major/Minor/Patch) are used on changing issues (Feature, Bug, Documentation, etc.) to declare target release track and drive landing on release-major/minor/patch branches. They are not a "type" but a stable planning signal for the release model (see release-ceremony-refinement design). They are registered in .github/labels.yml alongside area:/risk:/need: labels.
   pull_request_type_labels:
     required_exactly_one:
       - "Bug"
       - "Feature"
       - "Documentation"
       - "Feedback Response"
+  release_rules:
+    branch_model:
+      # Refined multi-track model (see docs/design/release-ceremony-refinement.md and AGENTS.md §Branch Model).
+      # Legacy single "release" supported during transition.
+      epic_branch_pattern: "epic/<short-name>"
+      next_release_branches:
+        - "release-major"
+        - "release-minor"
+        - "release-patch"
+      versioned_release_branch_pattern: "release-vX.Y.Z"
+      main_branch: "main"
+      flow: "work receives Major/Minor/Patch label + targets matching release-{major,minor,patch} (permissive next- integration) → packaging (freeze, version lock, versioned release-vX.Y.Z branch created by combining tracks as needed, standing Next Release issue renamed, fresh Next Release spawned) → Release PR (versioned branch → main, heavy CI) → finalization (tag + .plate triggers + next Next Release) → main + tag"
+    epic_close_ceremony:
+      - "All child Feature/Bug issues closed."
+      - "Work funneled via track label into the appropriate next- release branch (or legacy release branch)."
+      - "Open PR from epic/<name> (or track-equivalent) into the target release branch."
+      - "PR reviewed and squash-merged."
+    release_ceremony:
+      - "Standing 'Next Release' issue exists and is the target for Epics (sidebar links) and track-labeled work."
+      - "Packaging: determine semver, create versioned branch (combining tracks), rename Next Release issue to vX.Y.Z, immediately create fresh Next Release issue."
+      - "Open Release PR from versioned branch → main (labeled Documentation; carries Release context for heavy CI). Include Closes #N."
+      - "PR reviewed and approved."
+      - "Squash-merge PR into main."
+      - "Finalization: PLATE performs git tag vX.Y.Z; kicks configurable downstream triggers (from .plate/ + extensions/release_checks); ensures next Next Release issue exists."
+      - "Create GitHub Release from the tag (auto-populated from notes)."
+      - "Hard-reset the versioned (or originating next-/legacy release) branch to the tag as appropriate: git checkout <branch> && git reset --hard vX.Y.Z && git push --force-with-lease"
+    fragment_contract:
+      source_dir: ".agentic/releases/unreleased/"
+      versioned_dir: ".agentic/releases/vX.Y.Z/"
+      required_for: "Feature PRs that change PLATE process, templates, or agent surfaces"
+      aggregated_by: "gh plate release cut vX.Y.Z"
+    extension_hook_surface:
+      field: "release_checks"
+      location: ".agentic/extensions.yml"
+      surfaced_by: "gh plate release status"
   epic_rules:
-    every_epic_issue_has_dedicated_label: true
-    epic_label_pattern: "^Epic: .+"
-    every_feature_issue_has_exactly_one_epic_label: true
+    milestones_are_canonical_epics: true
+    every_feature_issue_has_epic_milestone: true
+    epic_issue_requires_milestone_when_used: true
+    create_new_epic_labels: false
   stable_metadata_rule: "Create labels only when they change routing, enforcement, reporting, auditing, review burden, or agent behavior."
 
 issues:
   required_for_feature:
     - "Feature label"
-    - "exactly one Epic: short-name label"
+    - "epic milestone"
     - "problem statement"
     - "desired behavior"
     - "acceptance criteria"
@@ -89,10 +124,15 @@ issues:
     - "regression test plan"
   required_for_epic:
     - "Epic label"
-    - "dedicated Epic: short-name label"
+    - "matching epic milestone"
     - "outcome"
     - "scope boundaries"
     - "success criteria"
+  required_for_release:
+    - "Release label"
+    - "release milestone"
+    - "target version or standing Next Release title"
+    - "pre-release checklist"
   required_for_research:
     - "Research label"
     - "research question"
@@ -118,6 +158,19 @@ pull_requests:
     - "Feedback Response"
   feature_pr_requires_current_md: false
   feature_pr_requires_release_change_file: true
+  issue_link_required_for:
+    - "Bug"
+    - "Feature"
+    - "Documentation"
+  accepted_issue_link_methods:
+    - "closing keyword in PR body"
+    - "Development sidebar link"
+  milestone_expected_when_part_of_epic: true
+  milestone_enforcement_status: "warning_first"
+  milestone_warning_first_for:
+    - "Bug"
+    - "Feature"
+    - "Documentation"
   required_sections:
     - "Summary"
     - "Linked work"
@@ -156,20 +209,14 @@ workflows:
   ci:
     name: "CI"
     path: ".github/workflows/ci.yml"
-    baseline_validation: "scripts/validate_plate_repo.sh"
   audit:
     name: "PLATE Audit"
     path: ".github/workflows/audit.yml"
   release:
     name: "Release"
     path: ".github/workflows/release.yml"
-    # NOTE: This baseline payload is being brought up to the release-ceremony-refinement model
-    # (standing Next Release, Major/Minor/Patch tracks + release-major/minor/patch branches,
-    # packaging/finalization phases, milestone requirements, heavy CI, .plate triggers).
-    # See root .agentic/process.yml (the live self-hosting version) and
-    # docs/design/release-ceremony-refinement.md for the full updated release_rules.
-    # When adopting the refinement, downstreams should pull the updated process.yml block
-    # (or use sectional PLATES-CORE sync).
+    notes_source: ".agentic/releases/"
+    # Refined model adds differentiated heavy CI jobs (in ci.yml or companion) gated on Release label or release-*/release-v* branch targets, plus label-check + PR milestone enforcement updates. See design doc.
 
 audit:
   cadence: "weekly_or_pre_release"

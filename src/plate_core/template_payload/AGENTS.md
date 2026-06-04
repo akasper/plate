@@ -50,7 +50,7 @@ Follow the loop that matches the issue type.
 
 | Step | Required Behavior |
 |---|---|
-| 1 | Confirm the issue is labeled `Feature` and has exactly one `Epic: short-name` label. |
+| 1 | Confirm the issue is labeled `Feature` and assigned to the GitHub milestone representing its Epic. |
 | 2 | Identify acceptance criteria, expected tests, documentation impact, and risk. |
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
@@ -175,6 +175,17 @@ Commit findings to `docs/audits/`. If drift is found, open a follow-up `Bug` or 
 
 Commit progress to `docs/migration/`. Update completion status in `docs/migration/completion-report.md`. Open a Documentation PR with `Closes #N` in the body.
 
+**Release**
+
+| Step | Required Behavior |
+|---|---|
+| 1 | Confirm a standing `Next Release` issue exists with linked epics and a completed pre-release checklist. |
+| 2 | Use `gh plate release status` to confirm the expected fragments, targeted epics, and release-track state. |
+| 3 | During packaging, lock the semver, create the versioned `release-vX.Y.Z` branch, and rename or replace the standing issue with the concrete release issue. |
+| 4 | Run `gh plate release cut vX.Y.Z` (or the equivalent script) to aggregate fragments into `.agentic/releases/vX.Y.Z/`. |
+| 5 | Open a Release PR from the versioned release branch to `main`, run the heavy release validation path, and include `Closes #N` in the PR body. |
+| 6 | After human approval and merge, tag the release, publish the GitHub Release, and create a fresh standing `Next Release` issue for subsequent work. |
+
 ## Issue Artifact Rules
 
 Every issue must close with a traceable git artifact — either a code change in a PR or a documentation commit. Closing an issue without a corresponding PR is not permitted.
@@ -189,9 +200,9 @@ Every issue must close with a traceable git artifact — either a code change in
 | `Audit` | Report committed to `docs/audits/<slug>.md` | `Documentation` |
 | `Migration` | Update committed to `docs/migration/` | `Documentation` |
 | `Epic` | Wiki summary in `docs/wiki/` or epic comment summarizing child outcomes | `Documentation` |
-| `Spike` | Short findings note in `docs/research/<slug>.md` or inline issue comment | `Documentation` |
+| `Release` | Aggregated `.agentic/releases/vX.Y.Z/` directory + tag + GitHub Release | `Documentation` |
 
-When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. **Always include a closing keyword in the PR body, except for `Feedback Response` PRs which are exempt.** This is enforced by `.github/workflows/pr-issue-link-check.yml` (warning gate).
+When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. Use a closing keyword when the PR should close the issue on merge, and use the Development sidebar when the issue should remain open after the PR lands. `Feedback Response` PRs remain exempt from the issue-link gate.
 
 ## PLATE Process Contract
 
@@ -268,7 +279,7 @@ The `need:refinement` label is applied to issue stubs created during interactive
 
 **Gates that are NEVER deferred, even for `need:refinement` stubs:**
 - Exactly one PLATE issue type label must be present
-- `Feature` stubs must carry exactly one `Epic: short-name` label
+- `Feature` stubs must carry the Epic milestone when one is already established
 - Any PR that closes the issue must include a closing keyword (`Closes #N`)
 
 Remove `need:refinement` from an issue when its AC and scope are sufficiently defined for implementation to begin. Agents may remove this label autonomously when adding full AC in a planning follow-up session.
@@ -514,17 +525,19 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 | Label Family | Usage |
 |---|---|
-| `Bug`, `Feature`, `Epic`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
+| `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
 | `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
-| `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by `plates-address-pr-feedback.yml` in the inline response flow. No `Epic:` label required. |
-| `Epic: short-name` | Epic identity and feature grouping. Required on Epic and Feature issues. |
+| `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by `plates-address-pr-feedback.yml` in the inline response flow. No Epic milestone required. |
+| `Epic: short-name` | Legacy or supplemental Epic identity label. GitHub milestones are the canonical Epic container for Feature, Epic, and Release issues. |
 | `area:*` | Stable subsystem or ownership area. |
 | `risk:*` | Review burden and release caution. |
 | `need:*` | Missing input or required follow-up. |
 
 ## Documentation Rules
 
-Every Feature pull request must modify per-feature change files in `.agentic/releases/`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. If a change affects feature behavior, update both implementation evidence and documentation evidence.
+Every Feature pull request that changes PLATE process, templates, or agent surfaces must author a fragment under `.agentic/releases/unreleased/<slug>.json`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. Changes that alter PLATE behavior or process should also add or update a fragment. If a change affects feature behavior, update both implementation evidence and documentation evidence.
+
+**Fragment-first authoring:** The canonical documentation path for PLATE changes is `.agentic/releases/unreleased/<slug>.json`. These fragments accumulate across the Epic and are aggregated at release-cut time into `.agentic/releases/vX.Y.Z/`.
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
@@ -533,6 +546,8 @@ When opening pull requests through GitHub CLI, prefer an atomic command such as 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
 For **every new pull request**, add exactly one required PR type label (`Bug`, `Feature`, `Documentation`, or `Feedback Response`) at creation time. Unlabeled or multiply-labeled PRs fail CI immediately, and a repair comment will be posted on the PR with the exact `gh pr edit` command to fix it.
+
+For `Feature`, `Bug`, and issue-driven `Documentation` PRs, add the relevant milestone as well. Current rollout is warning-first: the PR issue-link workflow warns when the milestone is missing rather than failing immediately.
 
 ## Upstream PLATE Template Synchronization
 
@@ -584,4 +599,3 @@ Escalate to a human when product intent is ambiguous, acceptance criteria confli
 ## Prohibited Actions
 
 Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without a corresponding PR that carries a `Closes #N` reference in its body, except for `Feedback Response` PRs. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body, except for `Feedback Response` PRs.
-
