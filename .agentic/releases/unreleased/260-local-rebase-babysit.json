@@ -1,0 +1,17 @@
+{
+  "version": "unreleased",
+  "summary": "Implement local-rebase Branch-Update Strategy in PR Babysit (Issue #260 / Epic beta-roadmap)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "pr_babysit (core, CLI, MCP), tests, AGENTS.md",
+      "migration_impact": "Users of `gh plate pr babysit --branch-update-strategy local-rebase --act` now get automatic local worktree rebase + push instead of NotImplementedError. Safe (isolated worktree, force-with-lease push, cleanup). Report includes local_rebase_* fields. AGENTS.md and CLI help already documented the option; now functional.",
+      "agent_notes": "Prefer --branch-update-strategy local-rebase when you want fully local, auditable rebase without @copilot comment (e.g. trusted local env or airgapped). Falls back gracefully on conflicts (sets local_rebase_conflict=True). Use with --act. Complements copilot-request (posts @copilot) and none.",
+      "breaking": false,
+      "links": [
+        "#260",
+        "Epic: beta-roadmap"
+      ]
+    }
+  ]
+}

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 from dataclasses import asdict, dataclass
 
 from .github_client import GhClient
@@ -38,6 +42,10 @@ class BabysitReport:
     merge_state: str | None = None
     merge_trigger_posted: bool = False
     merge_trigger_url: str | None = None
+    local_rebase_performed: bool = False
+    local_rebase_success: bool | None = None
+    local_rebase_conflict: bool = False
+    local_rebase_error: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -154,9 +162,9 @@ query($owner: String!, $repo: String!, $number: Int!) {
         method="POST",
         fields={
             "query": query,
-            "variables[owner]": owner,
-            "variables[repo]": name,
-            "variables[number]": pr_number,
+            "owner": owner,
+            "repo": name,
+            "number": pr_number,
         },
     )
     pr = (
@@ -241,6 +249,84 @@ def _post_merge_trigger(client: GhClient, repo: str, pr_number: int, sync_info: 
     return (response or {}).get("html_url")
 
 
+def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = None) -> dict:
+    """Perform a local rebase of head_ref onto base_ref using an isolated git worktree.
+
+    Returns a dict with:
+        success: bool
+        conflict: bool
+        error: str | None
+        output: str | None
+    Safe: does not modify current working tree; cleans up worktree on exit.
+    """
+    if not base_ref or not head_ref:
+        return {"success": False, "conflict": False, "error": "missing base or head ref", "output": None}
+
+    if repo_dir is None:
+        # detect from cwd
+        try:
+            repo_dir = subprocess.check_output(
+                ["git", "rev-parse", "--show-toplevel"], text=True, cwd="."
+            ).strip()
+        except Exception as e:
+            return {"success": False, "conflict": False, "error": f"not in git repo: {e}", "output": None}
+
+    worktree_path = None
+    try:
+        # fresh fetch
+        subprocess.check_call(["git", "-C", repo_dir, "fetch", "origin", base_ref, head_ref], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        worktree_path = tempfile.mkdtemp(prefix="plate-babysit-rebase-")
+        # add worktree at the head_ref tip
+        subprocess.check_call(
+            ["git", "-C", repo_dir, "worktree", "add", "--detach", worktree_path, f"origin/{head_ref}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+        # rebase in the worktree
+        rebase_res = subprocess.run(
+            ["git", "-C", worktree_path, "rebase", f"origin/{base_ref}"],
+            capture_output=True, text=True
+        )
+        if rebase_res.returncode != 0:
+            # abort to clean
+            subprocess.run(["git", "-C", worktree_path, "rebase", "--abort"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return {
+                "success": False,
+                "conflict": True,
+                "error": "rebase conflict or failure",
+                "output": (rebase_res.stdout or "") + (rebase_res.stderr or ""),
+            }
+
+        # push back (force-with-lease for safety)
+        push_res = subprocess.run(
+            ["git", "-C", worktree_path, "push", "origin", f"HEAD:{head_ref}", "--force-with-lease"],
+            capture_output=True, text=True
+        )
+        if push_res.returncode != 0:
+            return {
+                "success": False,
+                "conflict": False,
+                "error": "push after rebase failed",
+                "output": (push_res.stdout or "") + (push_res.stderr or ""),
+            }
+
+        return {"success": True, "conflict": False, "error": None, "output": None}
+
+    except Exception as e:
+        return {"success": False, "conflict": False, "error": str(e), "output": None}
+    finally:
+        if worktree_path:
+            try:
+                subprocess.run(
+                    ["git", "-C", repo_dir, "worktree", "remove", "--force", worktree_path],
+                    check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+            except Exception:
+                pass
+            shutil.rmtree(worktree_path, ignore_errors=True)
+
+
 def babysit_pr(
     pr_number: int,
     repo: str | None = None,
@@ -290,13 +376,21 @@ def babysit_pr(
     # Handle base branch sync
     merge_trigger_posted = False
     merge_trigger_url = None
+    local_rebase_performed = False
+    local_rebase_success = None
+    local_rebase_conflict = False
+    local_rebase_error = None
     if act and sync_info["out_of_sync"] and strategy == "copilot-request":
         if not _has_existing_merge_trigger_comment(gh, target, pr_number):
             merge_trigger_url = _post_merge_trigger(gh, target, pr_number, sync_info)
             merge_trigger_posted = True
     elif act and sync_info["out_of_sync"] and strategy == "local-rebase":
-        # Stub for future implementation
-        raise NotImplementedError("local-rebase strategy is not yet implemented")
+        rebase_res = _perform_local_rebase(sync_info.get("base_ref"), sync_info.get("head_ref"))
+        local_rebase_performed = True
+        local_rebase_success = rebase_res.get("success", False)
+        local_rebase_conflict = rebase_res.get("conflict", False)
+        local_rebase_error = rebase_res.get("error")
+        # Note: we do not post copilot trigger when local-rebase is chosen
 
     return BabysitReport(
         repo=target,
@@ -309,6 +403,10 @@ def babysit_pr(
         merge_state=sync_info["state"],
         merge_trigger_posted=merge_trigger_posted,
         merge_trigger_url=merge_trigger_url,
+        local_rebase_performed=local_rebase_performed,
+        local_rebase_success=local_rebase_success,
+        local_rebase_conflict=local_rebase_conflict,
+        local_rebase_error=local_rebase_error,
     )
 
 
@@ -333,7 +431,7 @@ mutation($threadId: ID!) {
     payload = gh.api(
         "graphql",
         method="POST",
-        fields={"query": query, "variables[threadId]": thread_id},
+        fields={"query": query, "threadId": thread_id},
     )
     thread = (
         ((payload or {}).get("data") or {})

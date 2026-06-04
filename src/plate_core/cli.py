@@ -194,6 +194,11 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
             print("Merge trigger posted.")
             if report.merge_trigger_url:
                 print(f"Merge trigger comment: {report.merge_trigger_url}")
+        elif report.local_rebase_performed:
+            status = "success" if report.local_rebase_success else ("conflict" if report.local_rebase_conflict else "error")
+            print(f"Local rebase performed: {status}")
+            if report.local_rebase_error:
+                print(f"  Error: {report.local_rebase_error}")
         else:
             print("No merge trigger posted (strategy or duplicate).")
     else:

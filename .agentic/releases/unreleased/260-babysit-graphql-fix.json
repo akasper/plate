@@ -1,0 +1,19 @@
+{
+  "version": "unreleased",
+  "summary": "Fix graphql variable binding in PR babysit (enables gh plate pr babysit + local-rebase strategy)",
+  "entries": [
+    {
+      "change_type": "fix",
+      "surface": "pr_babysit (github_client graphql calls for _load_pr_data + resolve_review_thread)",
+      "summary": "gh api graphql calls for babysit were using unsupported 'variables[foo]' field syntax, causing 'Variable $owner ... invalid value' and preventing load of review threads / mergeStateStatus. Switched to top-level fields (owner/repo/number, threadId) which gh CLI binds automatically to $vars for graphql queries/mutations.",
+      "migration_impact": "No action for downstream repos. This is a tool fix in plate-core / gh-plate extension. After upgrade, `gh plate pr babysit <n> --act --branch-update-strategy local-rebase` (and copilot-request) will work reliably for detecting out-of-sync and actionable agent review threads.",
+      "agent_notes": "Babysit loop (local or via gh plate) can now be used to keep PRs in sync and resolve third-party feedback without manual workarounds. The local-rebase impl (worktree + rebase + force-with-lease) is now exercisable end-to-end via the CLI. Update any docs referencing babysit if they noted 'broken'.",
+      "breaking": false,
+      "links": [
+        "#260",
+        "#266",
+        "PR #294"
+      ]
+    }
+  ]
+}

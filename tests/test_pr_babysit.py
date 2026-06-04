@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from plate_core.pr_babysit import (
     _default_agent_match,
@@ -100,9 +101,9 @@ class PrBabysitTests(unittest.TestCase):
         graphql_call = fake.calls[0]
         self.assertEqual(graphql_call[0], "graphql")
         self.assertEqual(graphql_call[1], "POST")
-        self.assertIn("variables[owner]", graphql_call[2])
-        self.assertIn("variables[repo]", graphql_call[2])
-        self.assertIn("variables[number]", graphql_call[2])
+        self.assertIn("owner", graphql_call[2])
+        self.assertIn("repo", graphql_call[2])
+        self.assertIn("number", graphql_call[2])
 
     def test_resolve_review_thread_uses_graphql_variables(self):
         fake = _FakeClient(
@@ -113,7 +114,7 @@ class PrBabysitTests(unittest.TestCase):
         payload = resolve_review_thread(thread_id="T1", repo="akasper/plate", client=fake)
         self.assertTrue(payload["resolved"])
         graphql_call = fake.calls[0]
-        self.assertIn("variables[threadId]", graphql_call[2])
+        self.assertIn("threadId", graphql_call[2])
 
     def test_babysit_uses_desc_sort_on_comments_api_to_find_recent_markers(self):
         """Regression test for the pagination/sort bug reported by Devin in thread PRRT_kwDOSn5ouc6Fic4A.
@@ -307,6 +308,95 @@ class PrBabysitTests(unittest.TestCase):
         # No POST calls to comments endpoint
         post_calls = [c for c in fake.calls if c[1] == "POST" and "/comments" in c[0] and "graphql" not in c[0]]
         self.assertEqual(len(post_calls), 0)
+
+    @patch("plate_core.pr_babysit.subprocess")
+    @patch("plate_core.pr_babysit.tempfile.mkdtemp")
+    @patch("plate_core.pr_babysit.shutil.rmtree")
+    def test_babysit_pr_local_rebase_success(self, mock_rmtree, mock_mkdtemp, mock_subprocess):
+        """Test local-rebase strategy performs rebase and push when out of sync."""
+        repo = "akasper/plate"
+        pr = 112
+        graphql_endpoint = "graphql"
+
+        pr_data_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "BEHIND",
+                        "baseRefName": "main",
+                        "headRefName": "feature-branch",
+                        "reviewThreads": {"nodes": []},
+                    }
+                }
+            }
+        }
+
+        fake = _FakeClient(
+            responses={
+                (graphql_endpoint, "POST"): pr_data_payload,
+                (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+            }
+        )
+
+        # mock worktree and git calls for success path
+        mock_mkdtemp.return_value = "/tmp/fake-worktree"
+        mock_subprocess.check_call.return_value = None  # fetch, worktree add, push
+        mock_subprocess.run.return_value = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        report = babysit_pr(
+            repo=repo, pr_number=pr, act=True, branch_update_strategy="local-rebase", client=fake
+        )
+
+        self.assertTrue(report.out_of_sync)
+        self.assertTrue(report.local_rebase_performed)
+        self.assertTrue(report.local_rebase_success)
+        self.assertFalse(report.local_rebase_conflict)
+        self.assertIsNone(report.local_rebase_error)
+        # no copilot trigger for local-rebase
+        self.assertFalse(report.merge_trigger_posted)
+
+    @patch("plate_core.pr_babysit.subprocess")
+    @patch("plate_core.pr_babysit.tempfile.mkdtemp")
+    @patch("plate_core.pr_babysit.shutil.rmtree")
+    def test_babysit_pr_local_rebase_conflict(self, mock_rmtree, mock_mkdtemp, mock_subprocess):
+        """Test local-rebase reports conflict without crashing."""
+        repo = "akasper/plate"
+        pr = 112
+        graphql_endpoint = "graphql"
+
+        pr_data_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "CONFLICTING",
+                        "baseRefName": "main",
+                        "headRefName": "feature-branch",
+                        "reviewThreads": {"nodes": []},
+                    }
+                }
+            }
+        }
+
+        fake = _FakeClient(
+            responses={
+                (graphql_endpoint, "POST"): pr_data_payload,
+                (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+            }
+        )
+
+        mock_mkdtemp.return_value = "/tmp/fake-worktree"
+        # first run for rebase fails (conflict)
+        mock_subprocess.run.return_value = type("R", (), {"returncode": 1, "stdout": "conflict!", "stderr": ""})()
+        mock_subprocess.check_call.side_effect = [None, None]  # fetch, worktree add; rebase aborts inside
+
+        report = babysit_pr(
+            repo=repo, pr_number=pr, act=True, branch_update_strategy="local-rebase", client=fake
+        )
+
+        self.assertTrue(report.out_of_sync)
+        self.assertTrue(report.local_rebase_performed)
+        self.assertFalse(report.local_rebase_success)
+        self.assertTrue(report.local_rebase_conflict)
 
 
 if __name__ == "__main__":
