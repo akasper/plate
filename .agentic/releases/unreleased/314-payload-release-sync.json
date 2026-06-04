@@ -1,0 +1,15 @@
+{
+  "slug": "314-payload-release-sync",
+  "change_type": "feature",
+  "surface": "src/plate_core/template_payload/.agentic/process.yml, src/plate_core/template_payload/.github/ISSUE_TEMPLATE/release.yml, src/plate_core/template_payload/.github/workflows/label-check.yml, src/plate_core/template_payload/.github/workflows/pr-issue-link-check.yml, src/plate_core/template_payload/.github/workflows/pr-documentation-check.yml, src/plate_core/template_payload/AGENTS.md, src/plate_core/template_payload/CONTRIBUTING.md",
+  "summary": "Sync the template payload to the refined release ceremony by adding the Next Release issue template, milestone-aware enforcement workflows, and fragment-first payload guidance.",
+  "migration_impact": "New PLATE repositories created from the template now inherit the standing Next Release template, milestone-based Epic/Release enforcement, Development-sidebar-compatible PR issue linking, and fragment-first release-note guidance.",
+  "migration_guidance": [
+    "1. Pull the updated template payload files together so release issue templates, enforcement workflows, and process docs all use the same milestone-based release ceremony.",
+    "2. Add the payload `.github/ISSUE_TEMPLATE/release.yml` alongside the updated inventory so downstream repositories bootstrap a standing `Next Release` issue instead of relying on manual reconstruction.",
+    "3. If you previously relied on `Epic: short-name` labels as the only Epic container, start assigning Epic milestones and keep PR milestones aligned during the warning-first rollout."
+  ],
+  "agent_notes": "Do not sync the root repository CI or Copilot instructions wholesale into the payload; those files are intentionally different because the payload is a downstream template, not the self-hosting `plate` repo.",
+  "breaking": false,
+  "links": ["#314", "#306"]
+}
