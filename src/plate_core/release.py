@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -36,9 +36,14 @@ class ReleaseStatusReport:
     pending_fragment_count: int
     pending_fragments: list[FragmentSummary]
     extension_release_checks: list[dict]
+    # Refined ceremony (Epic #306): standing Next Release + track visibility + on-hold Epics via native links.
+    active_next_release: dict | None = None
+    linked_epics: list[dict] = field(default_factory=list)
+    on_hold_epics: list[dict] = field(default_factory=list)
+    release_track_summary: dict = field(default_factory=dict)  # e.g. {"Major": 3, "Minor": 5, "Patch": 2}
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "repo": self.repo,
             "release_branch_exists": self.release_branch_exists,
             "open_release_issues": self.open_release_issues,
@@ -47,7 +52,26 @@ class ReleaseStatusReport:
             "pending_fragment_count": self.pending_fragment_count,
             "pending_fragments": [f.to_dict() for f in self.pending_fragments],
             "extension_release_checks": self.extension_release_checks,
+            "active_next_release": self.active_next_release,
+            "linked_epics": self.linked_epics,
+            "on_hold_epics": self.on_hold_epics,
+            "release_track_summary": self.release_track_summary,
         }
+        return d
+
+
+@dataclass
+class ReleaseTargetEpicGuidance:
+    repo: str
+    epic: dict | None
+    active_next_release: dict | None
+    can_target: bool
+    api_write_supported: bool
+    message: str
+    manual_steps: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 @dataclass
@@ -265,6 +289,81 @@ def get_release_status(
         for i in (search.get("items") or [])
     ]
 
+    # Refined ceremony support (Epic #306): detect standing "Next Release" and its linked Epics (via native sidebar/connected events).
+    # Also compute basic track summary from open Epics/Features with Major/Minor/Patch labels, and on-hold (track label but no link to active Next).
+    active_next_release = None
+    linked_epics: list[dict] = []
+    on_hold_epics: list[dict] = []
+    release_track_summary: dict = {"Major": 0, "Minor": 0, "Patch": 0}
+
+    active_next = next((i for i in open_release_issues if "next" in (i.get("title") or "").lower()), None)
+    if active_next:
+        active_next_release = active_next
+        # Use GraphQL to get connected Epics (adapted from pr-issue-link-check and epics.py patterns).
+        try:
+            owner, repo_name = target.split("/", 1) if "/" in target else (target, target)
+            gquery = """
+            query($owner: String!, $repo: String!, $number: Int!) {
+              repository(owner: $owner, name: $repo) {
+                issue(number: $number) {
+                  closingIssuesReferences(first: 20) {
+                    nodes { number title url labels(first:5){nodes{name}} }
+                  }
+                  timelineItems(first: 50, itemTypes: [CONNECTED_EVENT]) {
+                    nodes {
+                      ... on ConnectedEvent {
+                        subject { __typename ... on Issue { number title url labels(first:5){nodes{name}} } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """
+            # gh.api("graphql") via helper style
+            gfields = {"query": gquery, "owner": owner, "repo": repo_name, "number": active_next["number"]}
+            gdata = gh.api("graphql", method="POST", fields=gfields)
+            nodes = []
+            issue_data = (gdata.get("data") or {}).get("repository", {}).get("issue", {})
+            for n in (issue_data.get("closingIssuesReferences", {}) or {}).get("nodes", []) or []:
+                nodes.append(n)
+            for n in (issue_data.get("timelineItems", {}) or {}).get("nodes", []) or []:
+                subj = (n or {}).get("subject") or {}
+                if subj.get("__typename") == "Issue":
+                    nodes.append(subj)
+            seen = set()
+            for n in nodes:
+                num = n.get("number")
+                if num and num not in seen:
+                    seen.add(num)
+                    labels = [l["name"] for l in ((n.get("labels") or {}).get("nodes") or [])]
+                    if "Epic" in labels:
+                        linked_epics.append(
+                            {"number": num, "title": n.get("title"), "html_url": n.get("url"), "labels": labels}
+                        )
+        except Exception:
+            pass  # degrade gracefully
+
+    # Basic track summary + on-hold detection (search open Epics/Features with track labels).
+    try:
+        track_search = gh.api(
+            f"search/issues?q={quote_plus(f'repo:{target} is:issue is:open (label:Major OR label:Minor OR label:Patch) (label:Epic OR label:Feature)')}"
+        )
+        for item in (track_search.get("items") or []):
+            labels = [l["name"] for l in item.get("labels", [])]
+            for t in ["Major", "Minor", "Patch"]:
+                if t in labels:
+                    release_track_summary[t] += 1
+            # Simple on-hold heuristic: has track label but not linked to the active next (if we have it).
+            if active_next_release:
+                linked_nums = {e["number"] for e in linked_epics}
+                if item["number"] not in linked_nums and "Epic" in [l["name"] for l in item.get("labels", [])]:
+                    on_hold_epics.append(
+                        {"number": item["number"], "title": item["title"], "html_url": item["html_url"], "labels": labels}
+                    )
+    except Exception:
+        pass
+
     # Discover versions from local releases dir if available
     pending_fragments: list[FragmentSummary] = []
     current_version: str | None = None
@@ -291,6 +390,88 @@ def get_release_status(
         pending_fragment_count=len(pending_fragments),
         pending_fragments=pending_fragments,
         extension_release_checks=extension_release_checks,
+        active_next_release=active_next_release,
+        linked_epics=linked_epics,
+        on_hold_epics=on_hold_epics,
+        release_track_summary=release_track_summary,
+    )
+
+
+def get_release_target_epic_guidance(
+    epic_number: int,
+    repo: str | None = None,
+    client: GhClient | None = None,
+) -> ReleaseTargetEpicGuidance:
+    """Return validated guidance for targeting an Epic to the active Next Release.
+
+    GitHub exposes read APIs for connected issue events, but it does not expose a public
+    write API for creating the issue-to-issue sidebar link itself. This helper therefore
+    validates the target state and returns precise manual steps instead of pretending to
+    create an unsupported link.
+    """
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    issue = gh.api(f"repos/{target}/issues/{epic_number}")
+    labels = [label["name"] for label in issue.get("labels", [])]
+    epic = {
+        "number": issue["number"],
+        "title": issue["title"],
+        "html_url": issue["html_url"],
+        "labels": labels,
+    }
+    if issue.get("pull_request"):
+        return ReleaseTargetEpicGuidance(
+            repo=target,
+            epic=epic,
+            active_next_release=None,
+            can_target=False,
+            api_write_supported=False,
+            message=f"#{epic_number} is a pull request, not an Epic issue.",
+            manual_steps=[],
+        )
+    if "Epic" not in labels:
+        return ReleaseTargetEpicGuidance(
+            repo=target,
+            epic=epic,
+            active_next_release=None,
+            can_target=False,
+            api_write_supported=False,
+            message=f"Issue #{epic_number} is not labeled Epic, so it cannot be targeted as an Epic.",
+            manual_steps=[],
+        )
+
+    status = get_release_status(repo=target, client=gh)
+    next_release = status.active_next_release
+    if not next_release:
+        return ReleaseTargetEpicGuidance(
+            repo=target,
+            epic=epic,
+            active_next_release=None,
+            can_target=False,
+            api_write_supported=False,
+            message="No active 'Next Release' issue is open, so there is nothing to target yet.",
+            manual_steps=[
+                "1. Open or identify the standing Release issue whose title includes 'Next Release'.",
+                "2. Re-run `gh plate release target-epic <epic-number>` after that issue exists.",
+            ],
+        )
+
+    return ReleaseTargetEpicGuidance(
+        repo=target,
+        epic=epic,
+        active_next_release=next_release,
+        can_target=True,
+        api_write_supported=False,
+        message=(
+            "GitHub's public API does not support creating the issue-to-issue sidebar link directly, "
+            "so the final targeting action must still be completed in the GitHub UI."
+        ),
+        manual_steps=[
+            f"1. Open the Epic: {epic['html_url']}",
+            f"2. Open the active Next Release issue: {next_release['html_url']}",
+            "3. In the GitHub UI, create the issue-to-issue link between them.",
+            "4. Re-run `gh plate release status` to verify the Epic moves into Linked Epics instead of On-hold Epics.",
+        ],
     )
 
 

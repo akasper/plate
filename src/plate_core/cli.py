@@ -25,6 +25,7 @@ from .release import (
     cut_release as core_cut_release,
     get_release_notes_diff,
     get_release_status,
+    get_release_target_epic_guidance,
 )
 from .migration import generate_migration_plan, apply_migration_plan
 from .costs import get_cost_report
@@ -223,6 +224,19 @@ def cmd_release_status(args: argparse.Namespace) -> int:
     print(f"Open Release issues: {len(report.open_release_issues)}")
     for ri in report.open_release_issues:
         print(f"  - #{ri['number']}: {ri['title']}")
+    if getattr(report, "active_next_release", None):
+        nr = report.active_next_release
+        print(f"Active Next Release: #{nr['number']}: {nr['title']} ({nr.get('html_url', '')})")
+    if getattr(report, "linked_epics", None):
+        print(f"Linked Epics (targeting Next Release): {len(report.linked_epics)}")
+        for e in report.linked_epics[:5]:
+            print(f"  - #{e['number']}: {e.get('title', '')}")
+    if getattr(report, "on_hold_epics", None):
+        print(f"On-hold Epics (track label but no target link): {len(report.on_hold_epics)}")
+        for e in report.on_hold_epics[:5]:
+            print(f"  - #{e['number']}: {e.get('title', '')} {e.get('labels', [])}")
+    if getattr(report, "release_track_summary", None):
+        print(f"Release track summary (open work with labels): {report.release_track_summary}")
     print(f"Pending unreleased fragments: {report.pending_fragment_count}")
     for frag in report.pending_fragments:
         print(f"  - {frag.slug} [{frag.change_type}]: {frag.summary}")
@@ -327,6 +341,58 @@ def cmd_release_cut(args: argparse.Namespace) -> int:
     except Exception as e:
         print(f"Error running cut: {e}")
         return 1
+
+
+def cmd_release_finalize(args: argparse.Namespace) -> int:
+    """Finalize stub for refined ceremony (Epic #306 / #313).
+    In real impl: git tag, load .plate release.triggers, invoke common ones (e.g. docs render),
+    ensure/create next 'Next Release' issue via gh API, etc.
+    """
+    version = getattr(args, "version", None) or "vX.Y.Z"
+    dry_run = getattr(args, "dry_run", False)
+    print(f"Running release finalize for {version} (dry_run={dry_run})...")
+    print("Steps (MVP stub; full impl follows design):")
+    print("  1. git tag + push (if not dry)")
+    print("  2. Load .plate['release']['triggers'] (or defaults)")
+    print("  3. Invoke core triggers (e.g. render_release_notes)")
+    print("  4. Create/ensure next 'Next Release' issue (label Release)")
+    print("  5. Update status, post to Epic if linked")
+    if dry_run:
+        print("[DRY RUN] No side effects executed.")
+        return 0
+    # TODO: wire to core_finalize when implemented in release.py
+    print("Finalize guidance complete. (Hook for actual tag/triggers in next slice.)")
+    return 0
+
+
+def cmd_release_target_epic(args: argparse.Namespace) -> int:
+    """Validate targeting state and print the manual Next Release link steps for an Epic."""
+    epic = getattr(args, "epic", None)
+    if not epic:
+        print("Usage: gh plate release target-epic <epic-number>")
+        return 1
+    try:
+        epic_number = int(epic)
+    except ValueError:
+        print(f"Epic must be an integer issue number, got: {epic}")
+        return 1
+
+    guidance = get_release_target_epic_guidance(epic_number=epic_number, repo=getattr(args, "repo", None))
+    if getattr(args, "json", False):
+        print(json.dumps(guidance.to_dict()))
+        return 0 if guidance.can_target else 1
+
+    print(f"Repo: {guidance.repo}")
+    if guidance.epic:
+        epic_info = guidance.epic
+        print(f"Epic: #{epic_info['number']}: {epic_info['title']} ({epic_info['html_url']})")
+    if guidance.active_next_release:
+        next_info = guidance.active_next_release
+        print(f"Active Next Release: #{next_info['number']}: {next_info['title']} ({next_info['html_url']})")
+    print(guidance.message)
+    for step in guidance.manual_steps:
+        print(step)
+    return 0 if guidance.can_target else 1
 
 
 def cmd_qanda(args: argparse.Namespace) -> int:
@@ -661,6 +727,24 @@ def build_parser() -> argparse.ArgumentParser:
     rel_cut.add_argument("--dry-run", action="store_true", help="Do not write files (dry-run)")
     rel_cut.add_argument("--json", action="store_true", help="Output JSON (future)")
     rel_cut.set_defaults(func=cmd_release_cut)
+
+    # Finalize stub (plan step 8 for #313 / Epic #306): performs tag + triggers from .plate + spawn next Next Release.
+    # MVP: prints guidance + invokes a couple core actions if configured; full in follow-ups.
+    rel_finalize = release_sub.add_parser("finalize", help="Finalize a release: tag, kick .plate-configured downstream triggers, ensure next 'Next Release' issue (per refined ceremony)")
+    rel_finalize.add_argument("version", nargs="?", help="The version being finalized (e.g. vX.Y.Z)")
+    rel_finalize.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
+    rel_finalize.add_argument("--dry-run", action="store_true", help="Do not execute side effects (dry-run)")
+    rel_finalize.add_argument("--json", action="store_true", help="Output JSON (future)")
+    rel_finalize.set_defaults(func=cmd_release_finalize)
+
+    rel_target = release_sub.add_parser(
+        "target-epic",
+        help="Validate an Epic against the active Next Release and print the manual issue-link step required by GitHub UI (#313)",
+    )
+    rel_target.add_argument("epic", help="Epic issue number to target to the current Next Release")
+    rel_target.add_argument("--repo", help="owner/name")
+    rel_target.add_argument("--json", action="store_true", help="Output JSON guidance")
+    rel_target.set_defaults(func=cmd_release_target_epic)
 
     migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")
     migrate_sub = migrate.add_subparsers(dest="migrate_command", required=True)
