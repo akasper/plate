@@ -385,6 +385,8 @@ When introducing new reusable process guidance, wrap it in a `PLATES-CORE` block
 
 The **Sync to Wiki on Merge** workflow is opt-in. Agents should not enable broad wiki writes without human approval. Prefer scoped page updates, provenance comments, auditable commits, and reversible changes. If wiki synchronization is requested but not configured, add `need:wiki-sync` and escalate.
 
+The `docs/wiki/Goals.md` page (PLATE convention from #224/#229/#266) is a recommended default-scoped file for wiki sync when present. Bootstrap seeds it (with flag/interactive support) when wiki is enabled and the page is absent. Health surfaces report `goals_page_present` as a nudge for adoption. Agents should read it as primary signal for Information Audits (#218).
+
 ## Escalation Rules
 
 Escalate to a human when product intent is ambiguous, acceptance criteria conflict, a required label is missing and cannot be inferred, a workflow would need to be weakened, a secret or permission is required, a public claim might change, or the agent cannot produce the required evidence.
