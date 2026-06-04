@@ -226,6 +226,13 @@ When all child issues for an Epic are resolved:
 8. Create GitHub Release from the tag.
 9. Hard-reset `release` to the tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`.
 
+### Standing release-track state
+
+- `gh plate bootstrap --apply` is the canonical owner for initial standing release-track branches (`release-major`, `release-minor`, `release-patch`, and legacy `release`) and related bootstrap-time release metadata.
+- PLATE should maintain exactly one open `Release` issue titled `Next Release` as the standing target for release negotiation. Do not create separate default Major/Minor/Patch release issues; track intent belongs on work items via labels and the matching branches.
+- Treat a repository as never initialized only when release-track branches, Release issue history, and versioned release history are all absent. Partial standing state or missing artifacts after prior release activity is drift and should be repaired, not re-bootstrapped blindly.
+- Until dedicated init/repair automation exists, repair missing standing state by running bootstrap for branches/labels, creating exactly one `Next Release` issue manually, and verifying the result with `gh plate release status`.
+
 ### Release branch protection guidance
 
 The `release` branch should be protected with:
