@@ -127,3 +127,18 @@
 - name: "Epic: example"
   color: "5319e7"
   description: "Example epic traceability label; replace with project-specific Epic: short-name labels."
+
+# Release type and semver track labels (added in release-ceremony-refinement; see root labels.yml and design doc).
+# These may be newer than the baseline payload; downstreams adopting the refinement will sync them.
+- name: "Release"
+  color: "0052cc"
+  description: "Issue type: planned PLATE release with pre-release checklist, extension hooks, and semver traceability."
+- name: "Major"
+  color: "b60205"
+  description: "Release track: this change is part of the next major release (breaking or large scope)."
+- name: "Minor"
+  color: "0e8a16"
+  description: "Release track: this change is part of the next minor release (new capability, backward compatible)."
+- name: "Patch"
+  color: "0075ca"
+  description: "Release track: this change is part of the next patch release (fixes, small improvements)."
