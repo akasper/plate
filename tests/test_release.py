@@ -12,11 +12,13 @@ from plate_core.release import (
     FragmentSummary,
     ReleaseNotesDiffReport,
     ReleaseStatusReport,
+    ReleaseTargetEpicGuidance,
     _list_versions,
     _load_pending_fragments,
     _load_release,
     get_release_notes_diff,
     get_release_status,
+    get_release_target_epic_guidance,
 )
 from plate_core.github_client import GhApiError
 
@@ -272,6 +274,152 @@ class GetReleaseStatusTests(unittest.TestCase):
         self.assertIn("linked_epics", d)
         self.assertIn("on_hold_epics", d)
         self.assertIn("release_track_summary", d)
+
+    def test_status_populates_next_release_linked_epics_and_on_hold(self):
+        with TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "v0.1.3.json").write_text('{"version":"0.1.3","entries":[]}')
+
+            client = Mock()
+
+            def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+                if endpoint == "repos/owner/repo/branches/release":
+                    return {"name": "release"}
+                if endpoint.startswith("search/issues?q=") and "label%3ARelease" in endpoint:
+                    return {
+                        "items": [
+                            {
+                                "number": 50,
+                                "title": "Next Release",
+                                "html_url": "https://github.com/owner/repo/issues/50",
+                            }
+                        ],
+                        "total_count": 1,
+                    }
+                if endpoint == "graphql":
+                    return {
+                        "data": {
+                            "repository": {
+                                "issue": {
+                                    "closingIssuesReferences": {
+                                        "nodes": [
+                                            {
+                                                "number": 306,
+                                                "title": "Targeted epic",
+                                                "url": "https://github.com/owner/repo/issues/306",
+                                                "labels": {"nodes": [{"name": "Epic"}, {"name": "Minor"}]},
+                                            }
+                                        ]
+                                    },
+                                    "timelineItems": {
+                                        "nodes": [
+                                            {
+                                                "subject": {
+                                                    "__typename": "Issue",
+                                                    "number": 306,
+                                                    "title": "Targeted epic",
+                                                    "url": "https://github.com/owner/repo/issues/306",
+                                                    "labels": {"nodes": [{"name": "Epic"}, {"name": "Minor"}]},
+                                                }
+                                            }
+                                        ]
+                                    },
+                                }
+                            }
+                        }
+                    }
+                if endpoint.startswith("search/issues?q=") and "label%3AMajor" in endpoint:
+                    return {
+                        "items": [
+                            {
+                                "number": 306,
+                                "title": "Targeted epic",
+                                "html_url": "https://github.com/owner/repo/issues/306",
+                                "labels": [{"name": "Epic"}, {"name": "Minor"}],
+                            },
+                            {
+                                "number": 307,
+                                "title": "On-hold epic",
+                                "html_url": "https://github.com/owner/repo/issues/307",
+                                "labels": [{"name": "Epic"}, {"name": "Patch"}],
+                            },
+                            {
+                                "number": 308,
+                                "title": "Tracked feature",
+                                "html_url": "https://github.com/owner/repo/issues/308",
+                                "labels": [{"name": "Feature"}, {"name": "Major"}],
+                            },
+                        ],
+                        "total_count": 3,
+                    }
+                raise AssertionError(f"Unexpected endpoint: {endpoint}")
+
+            client.api.side_effect = api_side_effect
+
+            with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+                report = get_release_status(repo="owner/repo", releases_dir=d, client=client)
+
+            self.assertEqual(report.active_next_release["number"], 50)
+            self.assertEqual(report.active_next_release["html_url"], "https://github.com/owner/repo/issues/50")
+            self.assertEqual(
+                report.linked_epics,
+                [
+                    {
+                        "number": 306,
+                        "title": "Targeted epic",
+                        "html_url": "https://github.com/owner/repo/issues/306",
+                        "labels": ["Epic", "Minor"],
+                    }
+                ],
+            )
+            self.assertEqual(
+                report.on_hold_epics,
+                [
+                    {
+                        "number": 307,
+                        "title": "On-hold epic",
+                        "html_url": "https://github.com/owner/repo/issues/307",
+                        "labels": ["Epic", "Patch"],
+                    }
+                ],
+            )
+            self.assertEqual(report.release_track_summary, {"Major": 1, "Minor": 1, "Patch": 1})
+
+
+class ReleaseTargetEpicGuidanceTests(unittest.TestCase):
+    def test_guidance_returns_manual_steps_for_epic_and_next_release(self):
+        client = Mock()
+        client.api.return_value = {
+            "number": 306,
+            "title": "Release ceremony refinement",
+            "html_url": "https://github.com/owner/repo/issues/306",
+            "labels": [{"name": "Epic"}, {"name": "Minor"}],
+        }
+        status = ReleaseStatusReport(
+            repo="owner/repo",
+            release_branch_exists=True,
+            open_release_issues=[{"number": 50, "title": "Next Release", "html_url": "https://github.com/owner/repo/issues/50"}],
+            current_version="0.1.3",
+            latest_version="0.1.3",
+            pending_fragment_count=0,
+            pending_fragments=[],
+            extension_release_checks=[],
+            active_next_release={"number": 50, "title": "Next Release", "html_url": "https://github.com/owner/repo/issues/50"},
+            linked_epics=[],
+            on_hold_epics=[],
+            release_track_summary={"Major": 0, "Minor": 1, "Patch": 0},
+        )
+
+        with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+            with patch("plate_core.release.get_release_status", return_value=status):
+                guidance = get_release_target_epic_guidance(epic_number=306, repo="owner/repo", client=client)
+
+        self.assertTrue(guidance.can_target)
+        self.assertFalse(guidance.api_write_supported)
+        self.assertEqual(guidance.epic["number"], 306)
+        self.assertEqual(guidance.active_next_release["number"], 50)
+        self.assertIn("GitHub's public API does not support", guidance.message)
+        self.assertEqual(len(guidance.manual_steps), 4)
 
 
 if __name__ == "__main__":

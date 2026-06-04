@@ -25,6 +25,7 @@ from .release import (
     cut_release as core_cut_release,
     get_release_notes_diff,
     get_release_status,
+    get_release_target_epic_guidance,
 )
 from .migration import generate_migration_plan, apply_migration_plan
 from .costs import get_cost_report
@@ -365,20 +366,33 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
 
 
 def cmd_release_target_epic(args: argparse.Namespace) -> int:
-    """Stub helper for #313: associate an Epic with the active Next Release via sidebar link (native).
-    In full: use GraphQL or REST to create CONNECTED_EVENT / development link.
-    MVP: prints action and posts a comment on the Epic for traceability.
-    """
+    """Validate targeting state and print the manual Next Release link steps for an Epic."""
     epic = getattr(args, "epic", None)
     if not epic:
         print("Usage: gh plate release target-epic <epic-number>")
         return 1
-    print(f"Targeting Epic #{epic} to active Next Release (per refined model)...")
-    # Stub: in real would query status for active, then link.
-    print("  (Would query gh plate release status for active Next, then create sidebar link or connected event.)")
-    print("  For now: the link can be done manually in GitHub UI Development section, or via future API call in core.")
-    print("Helper complete (advances visibility for on-hold negotiation).")
-    return 0
+    try:
+        epic_number = int(epic)
+    except ValueError:
+        print(f"Epic must be an integer issue number, got: {epic}")
+        return 1
+
+    guidance = get_release_target_epic_guidance(epic_number=epic_number, repo=getattr(args, "repo", None))
+    if getattr(args, "json", False):
+        print(json.dumps(guidance.to_dict()))
+        return 0 if guidance.can_target else 1
+
+    print(f"Repo: {guidance.repo}")
+    if guidance.epic:
+        epic_info = guidance.epic
+        print(f"Epic: #{epic_info['number']}: {epic_info['title']} ({epic_info['html_url']})")
+    if guidance.active_next_release:
+        next_info = guidance.active_next_release
+        print(f"Active Next Release: #{next_info['number']}: {next_info['title']} ({next_info['html_url']})")
+    print(guidance.message)
+    for step in guidance.manual_steps:
+        print(step)
+    return 0 if guidance.can_target else 1
 
 
 def cmd_qanda(args: argparse.Namespace) -> int:
@@ -723,10 +737,13 @@ def build_parser() -> argparse.ArgumentParser:
     rel_finalize.add_argument("--json", action="store_true", help="Output JSON (future)")
     rel_finalize.set_defaults(func=cmd_release_finalize)
 
-    # target-epic helper stub
-    rel_target = release_sub.add_parser("target-epic", help="Associate an Epic with the active Next Release (sidebar link for negotiation/on-hold visibility; #313)")
+    rel_target = release_sub.add_parser(
+        "target-epic",
+        help="Validate an Epic against the active Next Release and print the manual issue-link step required by GitHub UI (#313)",
+    )
     rel_target.add_argument("epic", help="Epic issue number to target to the current Next Release")
     rel_target.add_argument("--repo", help="owner/name")
+    rel_target.add_argument("--json", action="store_true", help="Output JSON guidance")
     rel_target.set_defaults(func=cmd_release_target_epic)
 
     migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")

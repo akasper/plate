@@ -61,6 +61,20 @@ class ReleaseStatusReport:
 
 
 @dataclass
+class ReleaseTargetEpicGuidance:
+    repo: str
+    epic: dict | None
+    active_next_release: dict | None
+    can_target: bool
+    api_write_supported: bool
+    message: str
+    manual_steps: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
 class ReleaseNotesDiffReport:
     from_version: str | None
     to_version: str | None
@@ -287,7 +301,6 @@ def get_release_status(
         active_next_release = active_next
         # Use GraphQL to get connected Epics (adapted from pr-issue-link-check and epics.py patterns).
         try:
-            gh = client or GhClient()
             owner, repo_name = target.split("/", 1) if "/" in target else (target, target)
             gquery = """
             query($owner: String!, $repo: String!, $number: Int!) {
@@ -325,7 +338,9 @@ def get_release_status(
                     seen.add(num)
                     labels = [l["name"] for l in ((n.get("labels") or {}).get("nodes") or [])]
                     if "Epic" in labels:
-                        linked_epics.append({"number": num, "title": n.get("title"), "url": n.get("url"), "labels": labels})
+                        linked_epics.append(
+                            {"number": num, "title": n.get("title"), "html_url": n.get("url"), "labels": labels}
+                        )
         except Exception:
             pass  # degrade gracefully
 
@@ -343,7 +358,9 @@ def get_release_status(
             if active_next_release:
                 linked_nums = {e["number"] for e in linked_epics}
                 if item["number"] not in linked_nums and "Epic" in [l["name"] for l in item.get("labels", [])]:
-                    on_hold_epics.append({"number": item["number"], "title": item["title"], "url": item["html_url"], "labels": labels})
+                    on_hold_epics.append(
+                        {"number": item["number"], "title": item["title"], "html_url": item["html_url"], "labels": labels}
+                    )
     except Exception:
         pass
 
@@ -377,6 +394,84 @@ def get_release_status(
         linked_epics=linked_epics,
         on_hold_epics=on_hold_epics,
         release_track_summary=release_track_summary,
+    )
+
+
+def get_release_target_epic_guidance(
+    epic_number: int,
+    repo: str | None = None,
+    client: GhClient | None = None,
+) -> ReleaseTargetEpicGuidance:
+    """Return validated guidance for targeting an Epic to the active Next Release.
+
+    GitHub exposes read APIs for connected issue events, but it does not expose a public
+    write API for creating the issue-to-issue sidebar link itself. This helper therefore
+    validates the target state and returns precise manual steps instead of pretending to
+    create an unsupported link.
+    """
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    issue = gh.api(f"repos/{target}/issues/{epic_number}")
+    labels = [label["name"] for label in issue.get("labels", [])]
+    epic = {
+        "number": issue["number"],
+        "title": issue["title"],
+        "html_url": issue["html_url"],
+        "labels": labels,
+    }
+    if issue.get("pull_request"):
+        return ReleaseTargetEpicGuidance(
+            repo=target,
+            epic=epic,
+            active_next_release=None,
+            can_target=False,
+            api_write_supported=False,
+            message=f"#{epic_number} is a pull request, not an Epic issue.",
+            manual_steps=[],
+        )
+    if "Epic" not in labels:
+        return ReleaseTargetEpicGuidance(
+            repo=target,
+            epic=epic,
+            active_next_release=None,
+            can_target=False,
+            api_write_supported=False,
+            message=f"Issue #{epic_number} is not labeled Epic, so it cannot be targeted as an Epic.",
+            manual_steps=[],
+        )
+
+    status = get_release_status(repo=target, client=gh)
+    next_release = status.active_next_release
+    if not next_release:
+        return ReleaseTargetEpicGuidance(
+            repo=target,
+            epic=epic,
+            active_next_release=None,
+            can_target=False,
+            api_write_supported=False,
+            message="No active 'Next Release' issue is open, so there is nothing to target yet.",
+            manual_steps=[
+                "1. Open or identify the standing Release issue whose title includes 'Next Release'.",
+                "2. Re-run `gh plate release target-epic <epic-number>` after that issue exists.",
+            ],
+        )
+
+    return ReleaseTargetEpicGuidance(
+        repo=target,
+        epic=epic,
+        active_next_release=next_release,
+        can_target=True,
+        api_write_supported=False,
+        message=(
+            "GitHub's public API does not support creating the issue-to-issue sidebar link directly, "
+            "so the final targeting action must still be completed in the GitHub UI."
+        ),
+        manual_steps=[
+            f"1. Open the Epic: {epic['html_url']}",
+            f"2. Open the active Next Release issue: {next_release['html_url']}",
+            "3. In the GitHub UI, create the issue-to-issue link between them.",
+            "4. Re-run `gh plate release status` to verify the Epic moves into Linked Epics instead of On-hold Epics.",
+        ],
     )
 
 
