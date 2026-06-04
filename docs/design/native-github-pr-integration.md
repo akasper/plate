@@ -18,9 +18,11 @@ PLATE still relies on custom `Epic: short-name` labels and PR-body-only linking 
 
 ## Design Decision
 
-Milestones are the canonical Epic container. New Epic work should be represented by a GitHub milestone, and any issue or pull request that belongs to that Epic should use the same milestone.
+Milestones are the canonical Epic container. New Epic work should be represented by a GitHub milestone, and any issue or pull request that belongs to that Epic should use the same milestone. Release issues also require milestones so the release train itself is traceable in native GitHub metadata.
 
 `Feature`, `Bug`, and issue-driven `Documentation` PRs must link at least one issue. Closing keywords remain the preferred path when merge should close the issue; Development sidebar links are acceptable when the issue should stay open after the PR lands.
+
+PR milestone enforcement should roll out as a warning-first check for `Feature`, `Bug`, and issue-driven `Documentation` PRs. That keeps the direction visible without breaking active repositories until milestone hygiene is consistently adopted.
 
 Delete branch on merge is the PLATE bootstrap default. Repositories may opt out during bootstrap, but the default posture is on.
 
@@ -35,8 +37,9 @@ Delete branch on merge is the PLATE bootstrap default. Repositories may opt out 
 ## Artifact
 
 - `AGENTS.md` and `.agentic/process.yml` define milestones as the Epic source of truth.
-- `.github/workflows/label-check.yml` requires milestones for Feature and Epic issues.
+- `.github/workflows/label-check.yml` requires milestones for Feature, Epic, and Release issues.
 - `.github/workflows/pr-issue-link-check.yml` accepts Development sidebar links in addition to closing keywords.
+- `.github/workflows/pr-issue-link-check.yml` warns when `Feature`, `Bug`, or `Documentation` PRs are missing a milestone.
 - `scripts/bootstrap_github.sh` and `scripts/BootstrapGitHub.ps1` enable Delete branch on merge by default, with skip flags for exceptions.
 
 ## Open Questions
@@ -48,4 +51,5 @@ Delete branch on merge is the PLATE bootstrap default. Repositories may opt out 
 
 - Feature intake guidance asks for Epic milestones instead of `Epic:` labels.
 - PR guidance explains both closing-keyword and Development sidebar link paths.
+- Release and PR guidance explains the current milestone expectations and the warning-first rollout state.
 - Bootstrap docs and scripts default to Delete branch on merge while keeping a clear override.
