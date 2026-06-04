@@ -168,9 +168,12 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
     catalog = load_baseline_catalog()
     starter_questions = []
     for g in catalog.informational_goals:
+        body = g.body
+        if g.refinement_note:
+            body += "\n\n**Refinement note:** " + g.refinement_note
         starter_questions.append({
             "title": g.title,
-            "body": g.body + "\n\n**Answer signal:** " + (g.refinement_note or "Documented evidence linked from the Question."),
+            "body": body,
         })
     if not starter_questions:
         # Fallback (should not happen post #222)

@@ -10,6 +10,16 @@ import unittest
 from plate_core.mcp.audit_tools import PerformInformationAuditTool
 
 
+class _FakeGhClient:
+    def api(self, endpoint, *args, **kwargs):
+        endpoint = str(endpoint)
+        if "contents/docs/wiki/Goals.md" in endpoint:
+            return {
+                "content": "IyBHb2FscwoKIyMgTWlzc2lvbgoKLSBUZXN0IG1pc3Npb24K"
+            }
+        return {}
+
+
 class TestPerformInformationAuditTool(unittest.TestCase):
     def test_execute_basic_stub(self):
         res = PerformInformationAuditTool.execute(
@@ -17,6 +27,7 @@ class TestPerformInformationAuditTool(unittest.TestCase):
             dry_run=True,
             max_questions=3,
             include_defaults=True,
+            client=_FakeGhClient(),
         )
         self.assertIn("proposed_questions", res)
         self.assertIn("audit_log", res)
@@ -30,6 +41,7 @@ class TestPerformInformationAuditTool(unittest.TestCase):
             dry_run=True,
             max_questions=1,
             include_defaults=True,
+            client=_FakeGhClient(),
         )
         self.assertGreaterEqual(len(res["proposed_questions"]), 1)
         q = res["proposed_questions"][0]
@@ -46,6 +58,7 @@ class TestPerformInformationAuditTool(unittest.TestCase):
             dry_run=True,
             max_questions=5,
             include_defaults=True,
+            client=_FakeGhClient(),
         )
         titles = [p["title"] for p in res["proposed_questions"]]
         # At least a Goals-derived refinement should appear
@@ -59,6 +72,7 @@ class TestPerformInformationAuditTool(unittest.TestCase):
             repo="akasper/plate",
             dry_run=True,
             max_questions=1,
+            client=_FakeGhClient(),
         )
         self.assertLessEqual(len(res["proposed_questions"]), 1)
 
@@ -90,6 +104,7 @@ class TestPerformInformationAuditTool(unittest.TestCase):
             dry_run=True,
             max_questions=10,
             include_defaults=True,
+            client=_FakeGhClient(),
         )
         titles = [p["title"] for p in res["proposed_questions"]]
         # Should include at least the catalog ones (not just Goals-derived)
@@ -113,6 +128,7 @@ class TestPerformInformationAuditTool(unittest.TestCase):
             dry_run=True,
             max_questions=20,
             include_defaults=True,
+            client=_FakeGhClient(),
         )
         titles = [p["title"] for p in res["proposed_questions"]]
         self.assertTrue(

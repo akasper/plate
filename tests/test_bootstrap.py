@@ -97,7 +97,10 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("Bootstrap: initialize docs/wiki/Goals.md", gfields.get("message", ""))
         self.assertIn("content", gfields)
 
+        first_question_body = question_posts[0].kwargs.get("fields", {}).get("body", "")
+        self.assertEqual(first_question_body.count("**Answer signal:**"), 1)
+        self.assertIn("**Refinement note:**", first_question_body)
+
 
 if __name__ == "__main__":
     unittest.main()
-

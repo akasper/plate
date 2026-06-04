@@ -7,7 +7,6 @@ import sys
 
 from .baseline_catalog import (
     BaselineCatalogError,
-    BaselineInformationalGoal,
     delegate_to_agent,
     get_agent,
     get_informational_goal,
@@ -36,7 +35,6 @@ from .mcp.curiosity_tools import (
 )
 from .mcp.audit_tools import (
     AUDIT_TOOLS,
-    PerformInformationAuditTool,
 )
 
 
