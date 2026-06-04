@@ -39,7 +39,7 @@ skills:
       - "source artifact links"
       - "claim status"
   - id: "question-handling"
-    description: "Batch triage open Question issues, capture answers, and convert decisions into durable process artifacts."
+    description: "Batch triage open Question issues, capture answers, and convert decisions into durable process artifacts, updating AGENTS.md and other process guidance when operating rules change."
     allowed_artifacts:
       - "AGENTS.md"
       - ".agentic/skills.yml"
