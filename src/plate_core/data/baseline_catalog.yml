@@ -586,3 +586,16 @@ skills:
   - Design a pipeline to ingest GitHub events into a warehouse for analytics.
   owning_agent_ids:
   - data-engineer
+- id: what-next-plate-process
+  name: What Next? (PLATE Process Guidance)
+  description: Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment based on current repo state (health, open Epics, fragments, Goals page, etc.). Enables autonomous drive of the full process.
+  inputs:
+  - Current repo state (via plate_health, plate_epic_status, release status, labels)
+  outputs:
+  - next_action + prompt_segment + rationale
+  examples:
+  - "Call plate_what_next to decide whether to bootstrap, advance an Epic child, cut release, or babysit a PR."
+  owning_agent_ids:
+  - research-agent
+  - project-manager
+  - software-engineer
