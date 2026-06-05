@@ -73,6 +73,11 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.errors, [])  # no partial errors
         self.assertTrue(report.goals_page_present)
         self.assertEqual(report.open_question_count, 2)
+        self.assertTrue(report.plate_config_present)
+        self.assertTrue(report.plate_config_valid)
+        self.assertEqual(report.plate_config_file_version, "1.0")
+        self.assertEqual(report.plate_config_resolved_version, "1.1")
+        self.assertTrue(report.plate_config_upgrade_available)
 
     def test_health_partial_on_failures(self):
         """Degraded mode with errors list when some calls fail (rate, 404 etc)."""
@@ -116,6 +121,9 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.open_question_count, 2)
         self.assertTrue(report.plate_config_present)
         self.assertTrue(report.plate_config_valid)
+        self.assertEqual(report.plate_config_file_version, "1.0")
+        self.assertEqual(report.plate_config_resolved_version, "1.1")
+        self.assertTrue(report.plate_config_upgrade_available)
         self.assertTrue(report.curiosity_answers_present)
 
 

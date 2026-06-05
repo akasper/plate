@@ -12,10 +12,20 @@ from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
+from .plate_config import apply_plate_config_upgrade, get_plate_config_report, init_plate_config
 from .release import get_release_notes_diff, get_release_status, get_release_target_epic_guidance
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
+from .discussions import (
+    list_discussions,
+    get_discussion,
+    list_discussion_comments,
+    add_discussion_comment,
+    create_discussion,
+    list_discussion_categories,
+    list_open_ideas,
+)
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
     CreateBlockingQuestionTool,
@@ -140,6 +150,17 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = get_features(args.get("repo")).to_dict()
         elif name == "plate_bootstrap":
             payload = run_bootstrap(args.get("repo"), apply_mode=bool(args.get("apply", False))).to_dict()
+        elif name == "plate_config_get":
+            payload = get_plate_config_report(args.get("repo_root")).to_dict()
+        elif name == "plate_config_validate":
+            payload = get_plate_config_report(args.get("repo_root")).to_dict()
+        elif name == "plate_config_init":
+            payload = init_plate_config(args.get("repo_root"), force=bool(args.get("force", False))).to_dict()
+        elif name == "plate_config_upgrade":
+            payload = apply_plate_config_upgrade(
+                args.get("repo_root"),
+                apply=bool(args.get("apply", False)),
+            ).to_dict()
         elif name == "plate_plan_epic":
             payload = _plan_epic_stub(args).to_dict()
         elif name == "plate_pr_babysit":
@@ -225,6 +246,51 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
+        # GitHub Discussions surface (Feature #329): plate_discussions_* + conveniences.
+        # Enables Ideas capture, inter-agent comms, orchestration logs (see Ideas #287/#292/#293).
+        elif name == "plate_list_discussions":
+            payload = [
+                d.to_dict()
+                for d in list_discussions(
+                    repo=args.get("repo"),
+                    category=args.get("category"),
+                    state=args.get("state"),
+                    per_page=int(args.get("per_page", 30)),
+                    page=int(args.get("page", 1)),
+                )
+            ]
+        elif name == "plate_get_discussion":
+            num = args.get("number")
+            payload = get_discussion(
+                repo=args.get("repo"), number=int(num) if num is not None else None
+            ).to_dict()
+        elif name == "plate_list_discussion_comments":
+            num = args.get("number")
+            payload = [
+                c.to_dict()
+                for c in list_discussion_comments(
+                    repo=args.get("repo"), number=int(num) if num is not None else None
+                )
+            ]
+        elif name == "plate_add_discussion_comment":
+            num = args.get("number")
+            payload = add_discussion_comment(
+                repo=args.get("repo"),
+                number=int(num) if num is not None else None,
+                body=args.get("body"),
+            )
+        elif name == "plate_create_discussion":
+            payload = create_discussion(
+                repo=args.get("repo"),
+                category_slug=args.get("category_slug"),
+                category_id=args.get("category_id"),
+                title=args.get("title"),
+                body=args.get("body"),
+            )
+        elif name == "plate_list_discussion_categories":
+            payload = {"categories": list_discussion_categories(repo=args.get("repo"))}
+        elif name == "plate_list_open_ideas":
+            payload = [d.to_dict() for d in list_open_ideas(repo=args.get("repo"))]
         else:
             _write(
                 {
@@ -443,6 +509,66 @@ def run() -> None:
                                             "type": "boolean",
                                             "description": "When true, apply supported actions; default false (dry-run).",
                                         },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_get",
+                                "description": "Return effective local .plate configuration state for the current repository or repo_root.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_validate",
+                                "description": "Validate local .plate configuration and return the effective report shape.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_init",
+                                "description": "Create a baseline root .plate configuration file if missing (or overwrite with force).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        },
+                                        "force": {
+                                            "type": "boolean",
+                                            "description": "Overwrite an existing .plate file when true.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_upgrade",
+                                "description": "Upgrade an existing local .plate file to the current schema version, optionally writing it back to disk.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "When true, write the upgraded .plate file back to disk.",
+                                        }
                                     },
                                 },
                             },
@@ -776,6 +902,95 @@ def run() -> None:
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "dry_run": {"type": "boolean", "description": "Simulate only (default true for safety)."},
+                                    },
+                                },
+                            },
+                            # Discussions MCP surface (Feature #329). plate_* naming for consistency with other github/process tools.
+                            # Supports Ideas category use cases, inter-agent comms, logs (Ideas #287, #292, #293; enables #282 orchestrator vision).
+                            {
+                                "name": "plate_list_discussions",
+                                "description": "List discussions (filter by category e.g. 'ideas', state 'open'). Returns normalized records with number/title/url/body_preview.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional if inside clone."},
+                                        "category": {"type": "string", "description": "Filter by category slug or name (e.g. 'ideas')."},
+                                        "state": {"type": "string", "description": "open or closed (client filtered for reliability)."},
+                                        "per_page": {"type": "integer", "description": "Max results (default 30)."},
+                                        "page": {"type": "integer", "description": "Page (default 1)."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_get_discussion",
+                                "description": "Get full discussion by number (includes body, category, etc.).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "number": {"type": "integer", "description": "Discussion number."},
+                                    },
+                                    "required": ["number"],
+                                },
+                            },
+                            {
+                                "name": "plate_list_discussion_comments",
+                                "description": "List comments on a discussion.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "number": {"type": "integer", "description": "Discussion number."},
+                                        "per_page": {"type": "integer", "description": "Max comments (default 30)."},
+                                    },
+                                    "required": ["number"],
+                                },
+                            },
+                            {
+                                "name": "plate_add_discussion_comment",
+                                "description": "Add a comment to an existing discussion.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "number": {"type": "integer", "description": "Discussion number."},
+                                        "body": {"type": "string", "description": "Comment markdown content."},
+                                    },
+                                    "required": ["number", "body"],
+                                },
+                            },
+                            {
+                                "name": "plate_create_discussion",
+                                "description": "Create a new discussion. Provide category_slug (e.g. 'ideas') or category_id (node ID).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "category_slug": {"type": "string", "description": "Category slug or name (resolved via list)."},
+                                        "category_id": {"type": "string", "description": "Direct category node ID (from GraphQL)."},
+                                        "title": {"type": "string", "description": "Discussion title."},
+                                        "body": {"type": "string", "description": "Discussion body (markdown)."},
+                                    },
+                                    "required": ["title", "body"],
+                                },
+                            },
+                            {
+                                "name": "plate_list_discussion_categories",
+                                "description": "List available discussion categories (id, name, slug, description) for the repo.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_list_open_ideas",
+                                "description": "Convenience: list open discussions in the 'ideas' category (common for process/idea capture).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
                                     },
                                 },
                             },

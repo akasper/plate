@@ -98,3 +98,76 @@ class GhClient:
                 break
 
         raise last_err or GhApiError("gh api call failed after retries")
+
+    # --- Discussions support (Feature #329) ---
+    # Uses REST for list/get/comments (category/state filtering done caller-side for flexibility)
+    # Uses GraphQL for categories + createDiscussion (no direct REST create observed; requires repo ID + category ID)
+
+    def list_discussions(self, owner: str, repo: str, **params: object) -> list[dict]:
+        """List discussions for a repo. Pass per_page, page, state etc as kwargs (filtered client-side often)."""
+        endpoint = f"repos/{owner}/{repo}/discussions"
+        return self.api(endpoint, fields=params) or []
+
+    def get_discussion(self, owner: str, repo: str, number: int) -> dict:
+        endpoint = f"repos/{owner}/{repo}/discussions/{number}"
+        return self.api(endpoint) or {}
+
+    def list_discussion_comments(self, owner: str, repo: str, number: int, **params: object) -> list[dict]:
+        endpoint = f"repos/{owner}/{repo}/discussions/{number}/comments"
+        return self.api(endpoint, fields=params) or []
+
+    def add_discussion_comment(self, owner: str, repo: str, number: int, body: str) -> dict:
+        endpoint = f"repos/{owner}/{repo}/discussions/{number}/comments"
+        return self.api(endpoint, method="POST", fields={"body": body}) or {}
+
+    def list_discussion_categories(self, owner: str, repo: str) -> list[dict]:
+        """Return categories via GraphQL (name, slug, id, etc.)."""
+        query = """
+        query($owner: String!, $name: String!) {
+          repository(owner: $owner, name: $name) {
+            discussionCategories(first: 20) {
+              nodes { id name slug emoji description isAnswerable }
+            }
+          }
+        }
+        """
+        payload = self.api(
+            "graphql", method="POST", fields={"query": query, "owner": owner, "name": repo}
+        ) or {}
+        return (
+            (payload.get("data") or {})
+            .get("repository", {})
+            .get("discussionCategories", {})
+            .get("nodes", [])
+        )
+
+    def create_discussion(self, owner: str, repo: str, category_id: str, title: str, body: str) -> dict:
+        """Create via GraphQL mutation. Caller must provide valid category node ID (from list_discussion_categories)."""
+        # Resolve repo database ID
+        repo_q = """
+        query($owner: String!, $name: String!) { repository(owner:$owner, name:$name) { id } }
+        """
+        rdata = self.api("graphql", method="POST", fields={"query": repo_q, "owner": owner, "name": repo}) or {}
+        repo_id = (rdata.get("data") or {}).get("repository", {}).get("id")
+        if not repo_id:
+            raise GhApiError("Could not resolve repository database ID for createDiscussion")
+
+        mutation = """
+        mutation($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) {
+          createDiscussion(input: {repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body}) {
+            discussion { id number title url category { id name slug } }
+          }
+        }
+        """
+        payload = self.api(
+            "graphql",
+            method="POST",
+            fields={
+                "query": mutation,
+                "repositoryId": repo_id,
+                "categoryId": category_id,
+                "title": title,
+                "body": body,
+            },
+        ) or {}
+        return (payload.get("data") or {}).get("createDiscussion", {}).get("discussion", {}) or {}
