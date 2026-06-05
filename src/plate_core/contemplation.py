@@ -127,7 +127,7 @@ def _evaluate_signal(
                 met_count += 1
                 # Extract excerpt as evidence
                 for kw in matches[:1]:  # Just first match for brevity
-                    match = re.search(rf'.{{0,50}}{re.escape(kw)}.{{0,50}}', all_text, re.IGNORECASE)
+                    match = re.search(rf'.{{0,50}}{re.escape(kw)}.{{0,50}}', all_text, re.IGNORECASE | re.DOTALL)
                     if match:
                         evidence.append(f"'{match.group(0).strip()}' (addresses: {text[:60]}...)")
                         break
@@ -244,7 +244,7 @@ class ContemplationEngine:
             f"",
             f"**Answer (full transcript):**",
             f"",
-            f"> {answer_text[:500]}{'...' if len(answer_text) > 500 else ''}",
+            f"> {answer_text}",
             f"",
             f"**Answer Signal Evaluation:**",
             f"",
@@ -318,8 +318,13 @@ class ContemplationEngine:
                 log_lines.append(f"- {miss}")
             log_lines.append("")
 
-        # Decide on closure (strict: only if signal met with high confidence)
-        close_signal_met = evaluation["met"] and evaluation["confidence"] in ["high", "medium"]
+        # Decide on closure (strict per #143 contract + #326: evidence-based with citations;
+        # only high confidence AND at least one evidence excerpt)
+        close_signal_met = (
+            bool(evaluation.get("met"))
+            and evaluation.get("confidence") == "high"
+            and len(evaluation.get("evidence", [])) >= 1
+        )
 
         if close_signal_met:
             log_lines.append("**✓ Close signal MET** — Question may be closed with usage report.")
