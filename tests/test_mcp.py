@@ -403,5 +403,50 @@ class McpTests(unittest.TestCase):
         self.assertEqual(res["status"], "error")
         self.assertIn("Invalid test name", res["message"])
 
+    @patch("plate_core.mcp_server._write")
+    @patch(
+        "plate_core.mcp_server.sys.stdin",
+        new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":40,"method":"tools/list"}\n'),
+    )
+    def test_tools_list_includes_discussions_mcp_surface(self, _mock_stdin, mock_write):
+        """Feature #329: Discussions MCP tools (list/get/comments/add/create/categories + open_ideas convenience) are discoverable via tools/list."""
+        run()
+        tools = mock_write.call_args[0][0]["result"]["tools"]
+        names = {tool["name"] for tool in tools}
+        for expected in [
+            "plate_list_discussions",
+            "plate_get_discussion",
+            "plate_list_discussion_comments",
+            "plate_add_discussion_comment",
+            "plate_create_discussion",
+            "plate_list_discussion_categories",
+            "plate_list_open_ideas",
+        ]:
+            self.assertIn(expected, names)
+
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.list_open_ideas")
+    def test_tools_call_plate_list_open_ideas(self, mock_list_open_ideas, mock_write):
+        """Feature #329: plate_list_open_ideas MCP tool is registered and callable (uses discussions.py; GH calls mocked)."""
+        from plate_core.discussions import Discussion
+        mock_list_open_ideas.return_value = [
+            Discussion(
+                number=54,
+                title="Add CLI path for repo upgrade",
+                html_url="https://github.com/akasper/plate/discussions/54",
+                state="open",
+                created_at="2026-05-26T15:22:38Z",
+                updated_at="2026-05-26T15:22:38Z",
+            )
+        ]
+        _handle_tools_call(41, {"name": "plate_list_open_ideas", "arguments": {"repo": "akasper/plate"}})
+        self.assertTrue(mock_write.called)
+        result = mock_write.call_args[0][0]["result"]
+        self.assertIn("content", result)
+        # Ensure the handler produced json text payload (smoke for dispatch + to_dict path)
+        text = result["content"][0]["text"]
+        self.assertIn("54", text)
+        self.assertIn("Add CLI path for repo upgrade", text)
+
 if __name__ == "__main__":
     unittest.main()
