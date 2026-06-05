@@ -1,0 +1,18 @@
+{
+  "slug": "343-contemplation-engine-v21",
+  "change_type": "feature",
+  "surface": "src/plate_core/contemplation.py, src/plate_core/mcp_server.py, tests/test_contemplation.py, src/plate_core/agent_guidance.py, plugin/agents/plate.agent.md, .plugin/agents/plate.agent.md",
+  "summary": "Contemplation Engine v2.1: signal-driven Q&A with evidence evaluation, citations, strict closure + USAGE REPORT, typed child creation, blocking resumption.",
+  "migration_impact": "plate_contemplate MCP and trigger_contemplation now support all_previous_answers for accumulated context; emit full-transcript contemplation logs with evidence citations; close only on verifiable high-confidence signals that include usage report block. Question bodies should populate answer_signal (checklist per question.yml) for best results. Downstream agents must consume the new log format and respect strict close. Existing v1 calls continue to work (graceful fallback).",
+  "agent_notes": "Implementations must call _parse_answer_signal on Question body (supports checklist - [x]/ - [X], artifact, keyword). Use _evaluate_signal (now requires high confidence + >=1 evidence excerpt for close_signal_met). Always include === USAGE REPORT === (from _create_usage_report) when close met. Child issues created with back-refs to parent Question + Epic #257. Update any wrappers that call contemplation to pass prior answers list. Tests in test_contemplation.py validate parser/eval/close/child/resume paths.",
+  "migration_guidance": [
+    "1. Pull latest plate-core (or sync core files) to get v2.1 contemplation.py + mcp_server updates.",
+    "2. For Questions intending strict closure, ensure body includes '## Answer signal' section with - [ ] checklist items (see .github/ISSUE_TEMPLATE/question.yml).",
+    "3. When invoking plate_contemplate or RecordAnswerTool, prefer passing all_previous_answers=[...] for full context (optional but enables better eval).",
+    "4. Agent personas/guidance updated (agent_guidance.py + plate.agent.md); re-sync if customized.",
+    "5. Fragments for this change aggregated at next cut_release; no action for most repos."
+  ],
+  "breaking": false,
+  "links": ["#343", "#257", "#326", "#342", "#139", "#143"],
+  "requires": []
+}
