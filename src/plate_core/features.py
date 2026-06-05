@@ -55,7 +55,11 @@ def _has_playwright_config_gh(client: GhClient, repo: str) -> tuple[bool, str]:
             return True, name
     # Fallback per issue #64 heuristic: tests/e2e + playwright dependency.
     if _path_exists(client, repo, "tests/e2e") and _has_playwright_dep_gh(client, repo):
-        return True, "tests/e2e/ + package.json playwright dependency"
+        evidence = "tests/e2e/ + package.json playwright dependency"
+        # Per #263: enrich with evidence of visual/GIF artifacts if present (for "with evidence" vs basic)
+        if _path_exists(client, repo, "tests/e2e/fixtures/gifs") or _path_exists(client, repo, "tests/e2e/fixtures"):
+            evidence += " + GIF/visual evidence in fixtures/"
+        return True, evidence
     return False, "playwright.config.* or (tests/e2e/ + package.json playwright dependency)"
 
 
@@ -88,6 +92,7 @@ def get_features(repo: str | None = None, client: GhClient | None = None) -> Fea
     target = resolve_repo(repo)
     checks = [
         ("autonomous-mode", ".github/AUTONOMOUS_MODE"),
+        ("plate-config-root", ".plate"),
         ("platform-monitor-workflow", ".github/workflows/platform-monitor.yml"),
         ("copilot-plugin-root", ".plugin/plugin.json"),
         ("copilot-plugin-source", "plugin/plugin.json"),
@@ -95,19 +100,21 @@ def get_features(repo: str | None = None, client: GhClient | None = None) -> Fea
         ("mcp-manifest-source", "plugin/.mcp.json"),
         ("baseline-agents-catalog", "src/plate_core/data/baseline_catalog.yml"),
         ("current-md", "CURRENT.md"),
-        ("release-branch", None),  # Checked separately via branches API
+        ("release-branch", None),  # Legacy single 'release' check (via branches API). Refined model uses release-major/minor/patch + versioned release-v* (see release-ceremony-refinement design).
         ("release-notes-layout", ".agentic/releases/unreleased"),
     ]
 
     detected = []
     for name, path in checks:
         if name == "release-branch":
-            # Check for a branch named 'release' via the branches API
+            # Legacy check for a branch named 'release'. The refined multi-track ceremony (release-ceremony-refinement)
+            # primarily uses release-major/minor/patch (permissive next-) and versioned release-v* branches.
+            # This flag remains for transition/compat reporting.
             try:
                 gh.api(f"repos/{target}/branches/release")
-                detected.append(FeatureFlag(name=name, enabled=True, evidence="branches/release"))
+                detected.append(FeatureFlag(name=name, enabled=True, evidence="branches/release (legacy)"))
             except GhApiError:
-                detected.append(FeatureFlag(name=name, enabled=False, evidence="branches/release"))
+                detected.append(FeatureFlag(name=name, enabled=False, evidence="branches/release (legacy)"))
         elif path:
             detected.append(FeatureFlag(name=name, enabled=_path_exists(gh, target, path), evidence=path))
 

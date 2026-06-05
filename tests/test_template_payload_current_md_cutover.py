@@ -28,6 +28,32 @@ class TemplatePayloadCurrentMdCutoverTests(unittest.TestCase):
         self.assertIn(".agentic/releases/", workflow)
         self.assertNotIn("CURRENT.md", workflow)
 
+    def test_template_payload_includes_release_issue_template(self):
+        release_template = TEMPLATE_ROOT / ".github" / "ISSUE_TEMPLATE" / "release.yml"
+        self.assertTrue(release_template.exists())
+        content = release_template.read_text(encoding="utf-8")
+        self.assertIn('title: "Next Release"', content)
+        self.assertIn("pre_release_checklist", content)
+
+    def test_template_process_tracks_refined_release_ceremony(self):
+        process = read(".agentic/process.yml")
+        self.assertIn("release_notes:", process)
+        self.assertIn("milestones_are_canonical_epics: true", process)
+        self.assertIn("Standing 'Next Release' issue exists", process)
+        self.assertIn(".agentic/releases/unreleased/", process)
+
+    def test_template_payload_workflows_use_milestones_and_fragments(self):
+        label_check = read(".github/workflows/label-check.yml")
+        issue_link = read(".github/workflows/pr-issue-link-check.yml")
+        doc_check = read(".github/workflows/pr-documentation-check.yml")
+
+        self.assertIn("requiresMilestone", label_check)
+        self.assertIn("Release issues must be assigned to a GitHub milestone.", label_check)
+        self.assertIn("Development sidebar", issue_link)
+        self.assertIn("--milestone", issue_link)
+        self.assertIn(".agentic/releases/unreleased/", doc_check)
+        self.assertIn("release fragment", doc_check)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,15 @@
+{
+  "slug": "310-milestone-enforcement",
+  "change_type": "feature",
+  "surface": ".github/workflows/label-check.yml, .github/workflows/pr-issue-link-check.yml, AGENTS.md, .agentic/process.yml",
+  "summary": "Require milestones on Release issues and add a warning-first PR milestone check for Feature/Bug/Documentation pull requests.",
+  "migration_impact": "Release issues now fail CI when no milestone is assigned. Feature, Bug, and issue-driven Documentation PRs now emit a visible warning when the PR milestone is missing, but do not fail yet.",
+  "migration_guidance": [
+    "1. Ensure Release issues are created with a GitHub milestone.",
+    "2. Start assigning the owning Epic or release milestone to Feature, Bug, and issue-driven Documentation PRs.",
+    "3. Treat the PR milestone warning as a migration aid; future PLATE slices may tighten it from warning to failure."
+  ],
+  "agent_notes": "Use the PR warning phase to clean up active milestone hygiene before converting the check into a hard fail in a later slice.",
+  "breaking": false,
+  "links": ["#310", "#306"]
+}

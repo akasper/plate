@@ -110,14 +110,15 @@ Commit progress to `docs/migration/`. Update completion status in `docs/migratio
 
 | Step | Required Behavior |
 |---|---|
-| 1 | Confirm a Release issue exists with the target version, linked epics, and a completed pre-release checklist. |
-| 2 | Ensure all epic branches for this release have been merged into the `release` branch (Epic close ceremony). |
-| 3 | Run `gh plate release status` to confirm no unexpected pending fragments remain. |
-| 4 | Run `python scripts/cut_release.py vX.Y.Z` (or `gh plate release cut vX.Y.Z`) to aggregate unreleased fragments into `.agentic/releases/vX.Y.Z/`. |
-| 5 | Commit the versioned directory, then open a PR from `release` → `main` with the Release issue in the body (`Closes #N`). |
-| 6 | After human approval and merge, apply the tag: `git tag vX.Y.Z && git push --tags`. |
-| 7 | Create the GitHub Release from the tag (populated from `.agentic/releases/vX.Y.Z/release.json`). |
-| 8 | Hard-reset the `release` branch to the tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`. |
+| 1 | Confirm a standing "Next Release" issue exists (titled "Next Release" by default; created at the end of the prior release's finalization or explicitly). Epics and other work declare Major/Minor/Patch track via label and link to it via Development sidebar for negotiation / targeting. |
+| 2 | During active development, work lands on the permissive track-specific next- branch (`release-major` / `release-minor` / `release-patch`) matching its label (Epic-close PRs funnel through the track). Run `gh plate release status` regularly to see pending fragments, extension release_checks, linked/targeted Epics, and on-hold work (Epics with a semver label but no link to an active Next Release). |
+| 3 | When ready to commit to a release (packaging phase): freeze non-bug merges (ceremony + status + human gates), determine/lock the final semver (cut_release inference from fragments + track labels + Release issue signals), create the concrete versioned branch (`release-vX.Y.Z`, combining tracks as needed for minor/major), rename the standing issue title from "Next Release" to the specific version (e.g. "v0.1.1"), and *immediately create a fresh "Next Release" issue*. |
+| 4 | Commit any release notes directory (via `gh plate release cut` or equivalent), then open the Release PR from the versioned branch → `main` (labeled Documentation, body contains `Closes #N` for the now-versioned Release issue). This is a "Release PR" and receives differentiated heavy CI (e2e, security, architecture review, full packaging, etc. after fast-fail gates). |
+| 5 | After human approval and merge of the Release PR, enter finalization: PLATE (via `gh plate release finalize` or equivalent) performs the git tag (`git tag vX.Y.Z && git push --tags`), kicks configurable downstream triggers (declared under `.plate/` with common ones in core + others via extensions/release_checks), and ensures the next "Next Release" issue exists. |
+| 6 | Create the GitHub Release from the tag (populated from `.agentic/releases/vX.Y.Z/release.json`). |
+| 7 | Hard-reset the appropriate branch (the versioned one or the originating next- track) to the tag as needed for the next cycle: e.g. `git checkout release-vX.Y.Z && git reset --hard vX.Y.Z && git push --force-with-lease` (or the legacy single `release` equivalent). |
+
+See `docs/design/release-ceremony-refinement.md` for the full model, branch table, packaging vs. finalization distinction, negotiation/on-hold visibility, and migration notes. The legacy single-`release` + always-versioned-upfront ceremony remains supported during transition.
 
 ## Issue Artifact Rules
 
@@ -196,15 +197,18 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
 
 ## Branch Model and Ceremonies
 
-PLATE uses a **three-tier branch model** to keep parallel epic work isolated from integration and release artifacts.
+PLATE uses a **multi-track release-oriented branch model** (refined in the Release Ceremony Refinement design, see `docs/design/release-ceremony-refinement.md`) to keep parallel epic work isolated while providing always-available "Next" targets for scope negotiation and explicit Major/Minor/Patch release tracks.
 
-### Branch tiers
+### Branch tiers (current refined model)
 
 | Branch | Purpose | Who merges into it |
 |---|---|---|
-| `epic/<short-name>` | Owned by one Epic. All Feature/Bug PRs for that Epic target this branch. | Feature/Bug PRs (squash) |
-| `release` | Persistent integration branch. Always points to the commit that will become (or most recently became) a tag. | Epic-close PRs (squash) |
-| `main` | Stable, tagged history. Every commit on `main` is a semver release. | Release PRs only (squash) |
+| `epic/<short-name>` | Owned by one Epic. Feature/Bug PRs for that Epic typically target a track-specific next- branch (see below) after receiving a Major/Minor/Patch label. | Feature/Bug PRs (squash), funneled by track label |
+| `release-major`, `release-minor`, `release-patch` | Permissive "next" integration branches associated with the standing "Next Release" issue. Work labeled with the matching semver track targets the corresponding branch during active development / scope negotiation. These act as the "dumping ground" until packaging. | Work carrying the matching Major/Minor/Patch label (plus epic-close PRs for that track) |
+| `release-vX.Y.Z` (or equivalent versioned) | Concrete, tighter integration branch created during the packaging phase for a specific release. Receives the final stabilization work and is the source of the Release PR to main. | Final stabilization changes for that versioned release |
+| `main` | Stable, tagged history. Every commit on `main` is a semver release. | Release PRs only (squash) from a versioned release branch |
+
+**Legacy single `release` branch** remains supported during transition for repos not yet adopting the multi-track model. See the design doc and migration guidance in the release-ceremony-refinement fragment for adoption steps. The persistent `release` (when present) continues to point at the tip that will become (or most recently became) a tag.
 
 ### Epic-close ceremony
 
@@ -214,28 +218,40 @@ When all child issues for an Epic are resolved:
 3. Open a PR from `epic/<name>` → `release`. Label it `Feature` or `Documentation` as appropriate.
 4. Human reviews and squash-merges. The Epic issue closes via `Closes #N` in the PR body.
 
-### Release ceremony
+### Release ceremony (refined multi-track model)
 
-1. Open a Release issue (`[Release]: vX.Y.Z`) with target version, linked epics, and pre-release checklist.
-2. Verify `gh plate release status` shows the expected pending fragments.
-3. Run `python scripts/cut_release.py vX.Y.Z` to aggregate fragments into `.agentic/releases/vX.Y.Z/`.
-4. Commit the versioned directory on the `release` branch.
-5. Open a PR from `release` → `main` labeled `Documentation`. Include `Closes #N` for the Release issue.
-6. Human reviews, approves, and squash-merges.
-7. Apply tag: `git tag vX.Y.Z && git push --tags`.
-8. Create GitHub Release from the tag.
-9. Hard-reset `release` to the tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`.
+See the detailed steps in the **Release** work loop table above and the full model in `docs/design/release-ceremony-refinement.md`. High-level flow:
+
+1. Standing "Next Release" issue exists and is the target for Epics (via sidebar links) and track-labeled work (Major/Minor/Patch labels drive landing on the matching `release-major` / `release-minor` / `release-patch` permissive next- branches).
+2. Packaging (the decision + freeze + version lock point): determine semver, create versioned `release-vX.Y.Z` branch (combining tracks for minor/major as appropriate), rename the issue to the concrete version, immediately spawn a fresh "Next Release" issue.
+3. Release PR from the versioned branch → `main` (this PR carries the `Release` label/context and receives heavy CI).
+4. Human merge.
+5. Finalization: tag, configurable downstream triggers (`.plate/` + extensions), ensure next Next Release exists, hard-reset the relevant branch.
+6. GitHub Release created from the aggregated notes.
+
+Legacy single-`release` + upfront versioned Release issue flow remains valid for transition (see migration guidance in the release-ceremony-refinement fragment).
+
+### Standing release-track state
+
+- `gh plate bootstrap --apply` is the canonical owner for initial standing release-track branches (`release-major`, `release-minor`, `release-patch`, and legacy `release`) and related bootstrap-time release metadata.
+- PLATE should maintain exactly one open `Release` issue titled `Next Release` as the standing target for release negotiation. Do not create separate default Major/Minor/Patch release issues; track intent belongs on work items via labels and the matching branches.
+- Treat a repository as never initialized only when release-track branches, Release issue history, and versioned release history are all absent. Partial standing state or missing artifacts after prior release activity is drift and should be repaired, not re-bootstrapped blindly.
+- Until dedicated init/repair automation exists, repair missing standing state by running bootstrap for branches/labels, creating exactly one `Next Release` issue manually, and verifying the result with `gh plate release status`.
 
 ### Release branch protection guidance
 
-The `release` branch should be protected with:
+The next-* (permissive integration) and versioned `release-vX.Y.Z` branches (and the legacy single `release` during transition) should be protected with:
 - PRs required (no direct push).
-- Only `epic/*` branches or release-prep commits (step 4 above) may merge in.
-- Status checks: same as `main`.
+- Appropriate source restrictions (e.g. epic/* or track-consistent branches for next-*; limited stabilization changes for versioned branches).
+- Status checks: same as `main` (plus the differentiated heavy CI jobs for Release contexts).
+
+See the design doc and bootstrap output for current recommended protection details. The "only epic-close" restriction is relaxed for the multi-track model in favor of track labels + the final Release PR gate.
 
 ### Fragment authoring
 
-Every Feature PR that changes PLATE process, templates, or agent surfaces must include a fragment under `.agentic/releases/unreleased/<slug>.json`. See `.agentic/releases/unreleased/README.md` for the schema and field guide. Fragments accumulate across the Epic's lifetime and are swept into the versioned directory at release-cut time.
+Every Feature (or process-changing) PR that changes PLATE process, templates, or agent surfaces must include a fragment under `.agentic/releases/unreleased/<slug>.json`. See `.agentic/releases/unreleased/README.md` for the schema and field guide. This includes all changes in a Release ceremony refinement Epic (new labels, branch model updates, CI conditions, tooling enhancements, milestone rules, .plate config, etc.). Fragments accumulate across the Epic's lifetime and are swept into the versioned directory at release-cut time.
+
+The canonical design artifact for Release ceremony changes lives in `docs/design/release-ceremony-refinement.md`.
 
 
 
@@ -265,7 +281,7 @@ Information Audits (#218) are now part of the core capability: agents should use
 The babysitter detects when a PR branch is out of sync with its base branch (via `mergeStateStatus`: BEHIND, CONFLICTING, or DIRTY). The default behavior is controlled by `--branch-update-strategy`:
 
 - **copilot-request** (default): Post a `@copilot` trigger comment requesting native GitHub/Copilot branch update assistance. This is safe, auditable, and reversible.
-- **local-rebase**: Local worktree rebase and push (not yet implemented, will raise `NotImplementedError`)
+- **local-rebase**: Local worktree rebase and push (implemented using isolated git worktree; reports success/conflict/error via BabysitReport fields; raises only on non-git env or fatal error).
 - **none**: Detect and report only, take no action
 
 When `--act` is specified and the PR is out of sync, the babysitter posts a merge trigger comment (deduplicated by marker) to prompt resolution. This ensures the babysitting loop can continue without manual branch update intervention.
@@ -296,7 +312,7 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 | `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
 | `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
 | `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by the deprecated legacy workflow; no Epic milestone required. |
-| `Epic: short-name` | Legacy/supplemental Epic identity label (optional). GitHub Milestones are the canonical Epic container (see Epic #100 / native GitHub PR integration). Feature and Epic issues require a milestone assignment instead. |
+| `Epic: short-name` | Legacy/supplemental Epic identity label (optional). GitHub Milestones are the canonical Epic container (see Epic #100 / native GitHub PR integration). Feature, Epic, and Release issues require milestone assignment instead. |
 | `area:*` | Stable subsystem or ownership area. |
 | `risk:*` | Review burden and release caution. |
 | `need:*` | Missing input or required follow-up. |
@@ -314,6 +330,8 @@ When opening pull requests through GitHub CLI, prefer an atomic command such as 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
 For **every new pull request**, add exactly one required PR type label (`Bug`, `Feature`, `Documentation`, or `Feedback Response`) at creation time. Unlabeled or multiply-labeled PRs fail CI immediately.
+
+For `Feature`, `Bug`, and issue-driven `Documentation` PRs, add the relevant milestone as well. Current rollout is warning-first: the PR issue-link workflow warns when the milestone is missing rather than failing immediately.
 
 ## CLI Body Patterns (PowerShell safety)
 
@@ -379,6 +397,8 @@ When introducing new reusable process guidance, wrap it in a `PLATES-CORE` block
 ## Wiki Sync Rules
 
 The **Sync to Wiki on Merge** workflow is opt-in. Agents should not enable broad wiki writes without human approval. Prefer scoped page updates, provenance comments, auditable commits, and reversible changes. If wiki synchronization is requested but not configured, add `need:wiki-sync` and escalate.
+
+The `docs/wiki/Goals.md` page (PLATE convention from #224/#229/#266) is a recommended default-scoped file for wiki sync when present. Bootstrap seeds it (with flag/interactive support) when wiki is enabled and the page is absent. Health surfaces report `goals_page_present` as a nudge for adoption. Agents should read it as primary signal for Information Audits (#218).
 
 ## Escalation Rules
 

@@ -58,6 +58,7 @@ labels:
       - "Question"
       - "Audit"
       - "Migration"
+  # Semver track labels (Major/Minor/Patch) are used on changing issues (Feature, Bug, Documentation, etc.) to declare target release track and drive landing on release-major/minor/patch branches. They are not a "type" but a stable planning signal for the release model (see release-ceremony-refinement design). They are registered in .github/labels.yml alongside area:/risk:/need: labels.
   pull_request_type_labels:
     required_exactly_one:
       - "Bug"
@@ -65,22 +66,30 @@ labels:
       - "Documentation"
   release_rules:
     branch_model:
+      # Refined multi-track model (see docs/design/release-ceremony-refinement.md and AGENTS.md §Branch Model).
+      # Legacy single "release" supported during transition.
       epic_branch_pattern: "epic/<short-name>"
-      release_branch: "release"
+      next_release_branches:
+        - "release-major"
+        - "release-minor"
+        - "release-patch"
+      versioned_release_branch_pattern: "release-vX.Y.Z"
       main_branch: "main"
-      flow: "feature/bug → epic branch PR → epic/<name> → release branch PR → release → main + tag"
+      flow: "work receives Major/Minor/Patch label + targets matching release-{major,minor,patch} (permissive next- integration) → packaging (freeze, version lock, versioned release-vX.Y.Z branch created by combining tracks as needed, standing Next Release issue renamed, fresh Next Release spawned) → Release PR (versioned branch → main, heavy CI) → finalization (tag + .plate triggers + next Next Release) → main + tag"
     epic_close_ceremony:
       - "All child Feature/Bug issues closed."
-      - "Open PR from epic/<name> into release branch."
+      - "Work funneled via track label into the appropriate next- release branch (or legacy release branch)."
+      - "Open PR from epic/<name> (or track-equivalent) into the target release branch."
       - "PR reviewed and squash-merged."
     release_ceremony:
-      - "Open Release issue with target version."
-      - "Open PR from release into main."
+      - "Standing 'Next Release' issue exists and is the target for Epics (sidebar links) and track-labeled work."
+      - "Packaging: determine semver, create versioned branch (combining tracks), rename Next Release issue to vX.Y.Z, immediately create fresh Next Release issue."
+      - "Open Release PR from versioned branch → main (labeled Documentation; carries Release context for heavy CI). Include Closes #N."
       - "PR reviewed and approved."
       - "Squash-merge PR into main."
-      - "Apply git tag vX.Y.Z to the merge commit."
+      - "Finalization: PLATE performs git tag vX.Y.Z; kicks configurable downstream triggers (from .plate/ + extensions/release_checks); ensures next Next Release issue exists."
       - "Create GitHub Release from the tag (auto-populated from notes)."
-      - "Hard-reset release branch to tag: git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease"
+      - "Hard-reset the versioned (or originating next-/legacy release) branch to the tag as appropriate: git checkout <branch> && git reset --hard vX.Y.Z && git push --force-with-lease"
     fragment_contract:
       source_dir: ".agentic/releases/unreleased/"
       versioned_dir: ".agentic/releases/vX.Y.Z/"
@@ -90,6 +99,7 @@ labels:
       field: "release_checks"
       location: ".agentic/extensions.yml"
       surfaced_by: "gh plate release status"
+    # New in this refinement: semver track labels on changing work, milestone requirements for Releases + behavior PRs, .plate release config for triggers, standing Next Release + sidebar linking for on-hold/targeted visibility.
   epic_rules:
     milestones_are_canonical_epics: true
     every_feature_issue_has_epic_milestone: true
@@ -118,6 +128,11 @@ issues:
     - "outcome"
     - "scope boundaries"
     - "success criteria"
+  required_for_release:
+    - "Release label"
+    - "release milestone"
+    - "target version or standing Next Release title"
+    - "pre-release checklist"
   required_for_research:
     - "Research label"
     - "research question"
@@ -150,6 +165,11 @@ pull_requests:
     - "closing keyword in PR body"
     - "Development sidebar link"
   milestone_expected_when_part_of_epic: true
+  milestone_enforcement_status: "warning_first"
+  milestone_warning_first_for:
+    - "Bug"
+    - "Feature"
+    - "Documentation"
   required_sections:
     - "Summary"
     - "Linked work"
@@ -195,6 +215,7 @@ workflows:
     name: "Release"
     path: ".github/workflows/release.yml"
     notes_source: ".agentic/releases/"
+    # Refined model adds differentiated heavy CI jobs (in ci.yml or companion) gated on Release label or release-*/release-v* branch targets, plus label-check + PR milestone enforcement updates. See design doc.
 
 audit:
   cadence: "weekly_or_pre_release"

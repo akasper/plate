@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+from pathlib import Path
 
 from .bootstrap import run_bootstrap
 from .baseline_catalog import (
@@ -19,8 +21,20 @@ from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .health import get_health
 from .pr_babysit import babysit_pr
-from .release import get_release_notes_diff, get_release_status
+from .release import (
+    cut_release as core_cut_release,
+    get_release_notes_diff,
+    get_release_status,
+    get_release_target_epic_guidance,
+)
 from .migration import generate_migration_plan, apply_migration_plan
+from .costs import get_cost_report
+from .plate_config import (
+    PlateConfigError,
+    apply_plate_config_upgrade,
+    get_plate_config_report,
+    init_plate_config,
+)
 
 
 def cmd_health(args: argparse.Namespace) -> int:
@@ -39,6 +53,19 @@ def cmd_health(args: argparse.Namespace) -> int:
     bin_count = report.binary_artifacts_tracked
     bin_status = "CLEAN" if bin_count == 0 else f"FOUND {bin_count} (see #90)"
     print(f"Binary artifacts tracked: {bin_count} ({bin_status})")
+    print(f"Goals wiki page: {'PRESENT' if report.goals_page_present else 'MISSING'}")
+    print(f"Open Questions: {report.open_question_count}")
+    plate_line = f".plate/config: {'PRESENT' if report.plate_config_present else 'MISSING'} (valid: {report.plate_config_valid})"
+    if report.plate_config_present:
+        plate_line += (
+            f" file={report.plate_config_file_version or '(unknown)'}"
+            f" resolved={report.plate_config_resolved_version or '(unknown)'}"
+            f" upgrade={report.plate_config_upgrade_available}"
+        )
+        if report.plate_config_enabled_extensions:
+            plate_line += f" enabled_extensions={','.join(report.plate_config_enabled_extensions)}"
+    print(plate_line)
+    print(f"Curiosity answers index: {'PRESENT' if report.curiosity_answers_present else 'MISSING'}")
     return 0 if report.status != "fail" else 1
 
 
@@ -88,6 +115,7 @@ def cmd_features(args: argparse.Namespace) -> int:
     print(f"Repo: {report.repo}\n")
     feature_names = {
         "autonomous-mode": "Autonomous Mode",
+        "plate-config-root": ".plate Root Config",
         "platform-monitor-workflow": "Platform Monitor Workflow",
         "copilot-plugin-root": "Copilot Plugin (.plugin)",
         "copilot-plugin-source": "Copilot Plugin (plugin)",
@@ -119,6 +147,90 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     print(f"Mode: {'APPLY' if report.apply_mode else 'DRY-RUN'}")
     for action in report.actions:
         print(f"- {action.name}: {action.state} ({action.detail})")
+    return 0
+
+
+def cmd_config_show(args: argparse.Namespace) -> int:
+    report = get_plate_config_report(Path(args.repo_root))
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Repo root: {report.repo_root}")
+    print(f"Path: {report.path}")
+    print(f"Present: {report.present}")
+    print(f"Valid: {report.valid}")
+    print(f"Source: {report.source}")
+    if report.file_version:
+        print(f"File version: {report.file_version}")
+    print(f"Resolved version: {report.resolved_version}")
+    print(f"Upgrade available: {report.upgrade_available}")
+    if report.enabled_extensions:
+        print(f"Enabled extensions: {', '.join(report.enabled_extensions)}")
+    if report.errors:
+        print(f"Errors: {'; '.join(report.errors)}")
+    if report.migration_guidance:
+        print("Migration guidance:")
+        for step in report.migration_guidance:
+            print(f"- {step}")
+    print(json.dumps(report.config, indent=2))
+    return 0 if report.valid else 1
+
+
+def cmd_config_validate(args: argparse.Namespace) -> int:
+    report = get_plate_config_report(Path(args.repo_root))
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.valid else 1
+
+    if report.valid:
+        print(f".plate is valid ({report.source})")
+        return 0
+    print(f".plate is invalid: {'; '.join(report.errors)}")
+    return 1
+
+
+def cmd_config_init(args: argparse.Namespace) -> int:
+    try:
+        report = init_plate_config(Path(args.repo_root), force=bool(args.force))
+    except PlateConfigError as exc:
+        if args.json:
+            print(json.dumps({"path": str(Path(args.repo_root) / '.plate'), "error": str(exc)}))
+        else:
+            print(str(exc))
+        return 1
+
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Initialized {report.path}")
+    return 0
+
+
+def cmd_config_upgrade(args: argparse.Namespace) -> int:
+    try:
+        report = apply_plate_config_upgrade(Path(args.repo_root), apply=bool(args.apply))
+    except PlateConfigError as exc:
+        if args.json:
+            print(json.dumps({"path": str(Path(args.repo_root) / ".plate"), "error": str(exc)}))
+        else:
+            print(str(exc))
+        return 1
+
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Path: {report.path}")
+    print(f"Previous version: {report.previous_version}")
+    print(f"Current version: {report.current_version}")
+    print(f"Changed: {report.changed}")
+    print(f"Applied: {report.applied}")
+    if report.migration_guidance:
+        print("Migration guidance:")
+        for step in report.migration_guidance:
+            print(f"- {step}")
     return 0
 
 
@@ -183,6 +295,11 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
             print("Merge trigger posted.")
             if report.merge_trigger_url:
                 print(f"Merge trigger comment: {report.merge_trigger_url}")
+        elif report.local_rebase_performed:
+            status = "success" if report.local_rebase_success else ("conflict" if report.local_rebase_conflict else "error")
+            print(f"Local rebase performed: {status}")
+            if report.local_rebase_error:
+                print(f"  Error: {report.local_rebase_error}")
         else:
             print("No merge trigger posted (strategy or duplicate).")
     else:
@@ -207,6 +324,19 @@ def cmd_release_status(args: argparse.Namespace) -> int:
     print(f"Open Release issues: {len(report.open_release_issues)}")
     for ri in report.open_release_issues:
         print(f"  - #{ri['number']}: {ri['title']}")
+    if getattr(report, "active_next_release", None):
+        nr = report.active_next_release
+        print(f"Active Next Release: #{nr['number']}: {nr['title']} ({nr.get('html_url', '')})")
+    if getattr(report, "linked_epics", None):
+        print(f"Linked Epics (targeting Next Release): {len(report.linked_epics)}")
+        for e in report.linked_epics[:5]:
+            print(f"  - #{e['number']}: {e.get('title', '')}")
+    if getattr(report, "on_hold_epics", None):
+        print(f"On-hold Epics (track label but no target link): {len(report.on_hold_epics)}")
+        for e in report.on_hold_epics[:5]:
+            print(f"  - #{e['number']}: {e.get('title', '')} {e.get('labels', [])}")
+    if getattr(report, "release_track_summary", None):
+        print(f"Release track summary (open work with labels): {report.release_track_summary}")
     print(f"Pending unreleased fragments: {report.pending_fragment_count}")
     for frag in report.pending_fragments:
         print(f"  - {frag.slug} [{frag.change_type}]: {frag.summary}")
@@ -267,6 +397,102 @@ def cmd_release_notes(args: argparse.Namespace) -> int:
         for step in report.migration_steps:
             print(f"  - {step}")
     return 0
+
+
+def cmd_costs(args: argparse.Namespace) -> int:
+    from .costs import format_cost_markdown, get_cost_report
+
+    report = get_cost_report(repo=args.repo, epic_label=getattr(args, "epic_label", None))
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Cost / usage report for {report.repo}")
+    print(f"Total tokens: {report.total_tokens}")
+    print(f"Total cost: {report.total_cost}")
+    print()
+    print(format_cost_markdown(report))
+    return 0
+
+
+def cmd_release_cut(args: argparse.Namespace) -> int:
+    """First-class gh plate release cut (see #261 Epic and AGENTS.md Release ceremony).
+
+    Uses core implementation (ported from scripts/cut_release.py) for full first-class
+    without relying on external script at runtime.
+    """
+    releases_dir = Path(args.releases_dir) if getattr(args, "releases_dir", None) else None
+    version = getattr(args, "version", None)
+    version_type = getattr(args, "version_type", None)
+    dry_run = getattr(args, "dry_run", False)
+
+    if releases_dir is None:
+        releases_dir = Path(".agentic/releases")
+
+    print("Running release cut via plate_core...")
+    try:
+        rc = core_cut_release(
+            version=version,
+            releases_dir=releases_dir,
+            version_type=version_type,
+            dry_run=dry_run,
+        )
+        return rc
+    except Exception as e:
+        print(f"Error running cut: {e}")
+        return 1
+
+
+def cmd_release_finalize(args: argparse.Namespace) -> int:
+    """Finalize stub for refined ceremony (Epic #306 / #313).
+    In real impl: git tag, load .plate release.triggers, invoke common ones (e.g. docs render),
+    ensure/create next 'Next Release' issue via gh API, etc.
+    """
+    version = getattr(args, "version", None) or "vX.Y.Z"
+    dry_run = getattr(args, "dry_run", False)
+    print(f"Running release finalize for {version} (dry_run={dry_run})...")
+    print("Steps (MVP stub; full impl follows design):")
+    print("  1. git tag + push (if not dry)")
+    print("  2. Load .plate['release']['triggers'] (or defaults)")
+    print("  3. Invoke core triggers (e.g. render_release_notes)")
+    print("  4. Create/ensure next 'Next Release' issue (label Release)")
+    print("  5. Update status, post to Epic if linked")
+    if dry_run:
+        print("[DRY RUN] No side effects executed.")
+        return 0
+    # TODO: wire to core_finalize when implemented in release.py
+    print("Finalize guidance complete. (Hook for actual tag/triggers in next slice.)")
+    return 0
+
+
+def cmd_release_target_epic(args: argparse.Namespace) -> int:
+    """Validate targeting state and print the manual Next Release link steps for an Epic."""
+    epic = getattr(args, "epic", None)
+    if not epic:
+        print("Usage: gh plate release target-epic <epic-number>")
+        return 1
+    try:
+        epic_number = int(epic)
+    except ValueError:
+        print(f"Epic must be an integer issue number, got: {epic}")
+        return 1
+
+    guidance = get_release_target_epic_guidance(epic_number=epic_number, repo=getattr(args, "repo", None))
+    if getattr(args, "json", False):
+        print(json.dumps(guidance.to_dict()))
+        return 0 if guidance.can_target else 1
+
+    print(f"Repo: {guidance.repo}")
+    if guidance.epic:
+        epic_info = guidance.epic
+        print(f"Epic: #{epic_info['number']}: {epic_info['title']} ({epic_info['html_url']})")
+    if guidance.active_next_release:
+        next_info = guidance.active_next_release
+        print(f"Active Next Release: #{next_info['number']}: {next_info['title']} ({next_info['html_url']})")
+    print(guidance.message)
+    for step in guidance.manual_steps:
+        print(step)
+    return 0 if guidance.can_target else 1
 
 
 def cmd_qanda(args: argparse.Namespace) -> int:
@@ -581,6 +807,37 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--apply", action="store_true", help="Apply supported actions instead of dry-run planning")
     bootstrap.add_argument("--json", action="store_true", help="Output JSON")
     bootstrap.set_defaults(func=cmd_bootstrap)
+    # Note: Goals page init (per #266) is included automatically when wiki enabled and page absent (plan in dry-run, apply with --apply). Flag/interactive refinement in future.
+
+    config = sub.add_parser("config", help="Inspect and initialize local .plate configuration")
+    config_sub = config.add_subparsers(dest="config_command", required=True)
+    cfg_show = config_sub.add_parser("show", help="Show effective local .plate configuration")
+    cfg_show.add_argument("--repo-root", default=".", help="Repository root containing .plate (default: current directory)")
+    cfg_show.add_argument("--json", action="store_true", help="Output JSON")
+    cfg_show.set_defaults(func=cmd_config_show)
+    cfg_validate = config_sub.add_parser("validate", help="Validate local .plate configuration")
+    cfg_validate.add_argument("--repo-root", default=".", help="Repository root containing .plate (default: current directory)")
+    cfg_validate.add_argument("--json", action="store_true", help="Output JSON")
+    cfg_validate.set_defaults(func=cmd_config_validate)
+    cfg_init = config_sub.add_parser("init", help="Create a baseline .plate file if missing")
+    cfg_init.add_argument("--repo-root", default=".", help="Repository root containing .plate (default: current directory)")
+    cfg_init.add_argument(
+        "--apply",
+        action="store_true",
+        help="Accepted for parity with bootstrap flows; config init always writes the file.",
+    )
+    cfg_init.add_argument("--force", action="store_true", help="Overwrite an existing .plate file")
+    cfg_init.add_argument("--json", action="store_true", help="Output JSON")
+    cfg_init.set_defaults(func=cmd_config_init)
+    cfg_upgrade = config_sub.add_parser("upgrade", help="Upgrade an existing .plate file to the current schema")
+    cfg_upgrade.add_argument("--repo-root", default=".", help="Repository root containing .plate (default: current directory)")
+    cfg_upgrade.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write the upgraded .plate file back to disk. Without this flag, show the upgrade result only.",
+    )
+    cfg_upgrade.add_argument("--json", action="store_true", help="Output JSON")
+    cfg_upgrade.set_defaults(func=cmd_config_upgrade)
 
     pr = sub.add_parser("pr", help="PR feedback operations")
     pr_sub = pr.add_subparsers(dest="pr_command", required=True)
@@ -619,6 +876,38 @@ def build_parser() -> argparse.ArgumentParser:
     rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_notes.add_argument("--json", action="store_true", help="Output JSON")
     rel_notes.set_defaults(func=cmd_release_notes)
+
+    costs = sub.add_parser("costs", help="Harvest and aggregate USAGE REPORTs for observability/cost tracking (Epic #265)")
+    costs.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    costs.add_argument("--epic-label", dest="epic_label", help="Filter to reports under a specific Epic: label (e.g. Epic: beta-roadmap)")
+    costs.add_argument("--json", action="store_true", help="Output JSON")
+    costs.set_defaults(func=cmd_costs)
+
+    rel_cut = release_sub.add_parser("cut", help="Cut a release: aggregate fragments to versioned dir (first-class MVP per #261)")
+    rel_cut.add_argument("version", nargs="?", help="Explicit version e.g. vX.Y.Z (optional, auto-detect)")
+    rel_cut.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
+    rel_cut.add_argument("--version-type", dest="version_type", choices=["major", "minor", "patch"], help="Override bump type for auto-detect")
+    rel_cut.add_argument("--dry-run", action="store_true", help="Do not write files (dry-run)")
+    rel_cut.add_argument("--json", action="store_true", help="Output JSON (future)")
+    rel_cut.set_defaults(func=cmd_release_cut)
+
+    # Finalize stub (plan step 8 for #313 / Epic #306): performs tag + triggers from .plate + spawn next Next Release.
+    # MVP: prints guidance + invokes a couple core actions if configured; full in follow-ups.
+    rel_finalize = release_sub.add_parser("finalize", help="Finalize a release: tag, kick .plate-configured downstream triggers, ensure next 'Next Release' issue (per refined ceremony)")
+    rel_finalize.add_argument("version", nargs="?", help="The version being finalized (e.g. vX.Y.Z)")
+    rel_finalize.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
+    rel_finalize.add_argument("--dry-run", action="store_true", help="Do not execute side effects (dry-run)")
+    rel_finalize.add_argument("--json", action="store_true", help="Output JSON (future)")
+    rel_finalize.set_defaults(func=cmd_release_finalize)
+
+    rel_target = release_sub.add_parser(
+        "target-epic",
+        help="Validate an Epic against the active Next Release and print the manual issue-link step required by GitHub UI (#313)",
+    )
+    rel_target.add_argument("epic", help="Epic issue number to target to the current Next Release")
+    rel_target.add_argument("--repo", help="owner/name")
+    rel_target.add_argument("--json", action="store_true", help="Output JSON guidance")
+    rel_target.set_defaults(func=cmd_release_target_epic)
 
     migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")
     migrate_sub = migrate.add_subparsers(dest="migrate_command", required=True)

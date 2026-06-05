@@ -232,11 +232,16 @@ class PlateConfigSchema(unittest.TestCase):
 
 # --- Real runtime integration tests for Issue #129 implementation ---
 from plate_core.plate_config import (
+    CURRENT_CONFIG_VERSION,
     load_plate_config,
     PlateConfig,
     PlateConfigError,
     validate_plate_config,
     DEFAULT_CONFIG,
+    apply_plate_config_upgrade,
+    get_plate_config_report,
+    init_plate_config,
+    upgrade_plate_config_dict,
 )
 
 
@@ -245,7 +250,7 @@ class PlateConfigRuntimeTests(unittest.TestCase):
 
     def test_load_defaults_when_no_file(self):
         cfg = load_plate_config(Path("/tmp/nonexistent-plate-root-xyz"))
-        self.assertEqual(cfg.version, "1.0")
+        self.assertEqual(cfg.version, CURRENT_CONFIG_VERSION)
         self.assertEqual(cfg.methodology.get("marker_prefix"), "PLATES-CORE")
 
     def test_load_and_validate_local_file(self):
@@ -274,31 +279,156 @@ class PlateConfigRuntimeTests(unittest.TestCase):
         self.assertIn("version", DEFAULT_CONFIG)
         self.assertIn("marker_prefix", DEFAULT_CONFIG["methodology"])
 
+    def test_get_plate_config_report_returns_defaults_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = get_plate_config_report(Path(tmp))
+            self.assertFalse(report.present)
+            self.assertTrue(report.valid)
+            self.assertEqual(report.source, "defaults")
+            self.assertEqual(report.config["version"], CURRENT_CONFIG_VERSION)
+
+    def test_init_plate_config_creates_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = init_plate_config(Path(tmp))
+            self.assertTrue((Path(tmp) / ".plate").exists())
+            self.assertTrue(report.present)
+            self.assertTrue(report.valid)
+            self.assertEqual(report.source, "local_file")
+            self.assertEqual(report.resolved_version, CURRENT_CONFIG_VERSION)
+
+    def test_init_plate_config_rejects_existing_file_without_force(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(json.dumps({"version": "1.0"}))
+            with self.assertRaises(PlateConfigError):
+                init_plate_config(root)
+
     def test_deeply_nested_resolution(self):
         """Test resolution with deeply nested configs."""
-        defaults = {
-            "version": "1.0",
-            "methodology": {
-                "settings": {
-                    "nested": {
-                        "value": "default",
-                    },
-                },
-            },
-        }
-        local = {
-            "methodology": {
-                "settings": {
-                    "nested": {
-                        "value": "override",
-                    },
-                },
-            },
-        }
-        
-        validator = ConfigValidator()
-        resolved = validator.resolve([defaults, local])
-        self.assertEqual(resolved["methodology"]["settings"]["nested"]["value"], "override")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(
+                json.dumps(
+                    {
+                        "version": "1.1",
+                        "methodology": {
+                            "settings": {
+                                "nested": {
+                                    "value": "override",
+                                }
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            resolved = load_plate_config(root).to_dict()
+            self.assertEqual(resolved["methodology"]["settings"]["nested"]["value"], "override")
+
+    def test_enabled_builtin_extension_contributes_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(
+                json.dumps(
+                    {
+                        "version": "1.1",
+                        "extensions": {"enabled": True, "installed": {"release-track-management": True}},
+                        "overrides": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            cfg = load_plate_config(root)
+            self.assertEqual(cfg.release["triggers"], ["require-release-track-label"])
+            report = get_plate_config_report(root)
+            self.assertEqual(report.extension_providers["release-track-management"], "builtin:release-ceremony")
+            self.assertEqual(report.extension_path_providers["release.triggers"], "builtin:release-ceremony")
+
+    def test_local_overrides_win_over_extension_contribution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(
+                json.dumps(
+                    {
+                        "version": "1.1",
+                        "extensions": {
+                            "enabled": True,
+                            "installed": {
+                                "specialist-agents": {
+                                    "enabled": True,
+                                    "config": {
+                                        "overrides": {
+                                            "delegation_defaults": {
+                                                "featured_agent_ids": ["security-auditor", "performance-engineer"]
+                                            }
+                                        }
+                                    },
+                                }
+                            },
+                        },
+                        "overrides": {
+                            "delegation_defaults": {
+                                "featured_agent_ids": ["security-auditor"]
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            cfg = load_plate_config(root)
+            self.assertEqual(cfg.overrides["delegation_defaults"]["featured_agent_ids"], ["security-auditor"])
+
+    def test_master_extension_flag_disables_extension_contributions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(
+                json.dumps(
+                    {
+                        "version": "1.1",
+                        "extensions": {"enabled": False, "installed": {"release-track-management": True}},
+                        "overrides": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            cfg = load_plate_config(root)
+            self.assertEqual(cfg.release["triggers"], [])
+
+    def test_upgrade_plate_config_dict_migrates_legacy_shape(self):
+        upgraded, guidance, previous_version = upgrade_plate_config_dict(
+            {
+                "version": "1.0",
+                "methodology": {"marker_prefix": "PLATES-CORE"},
+                "extensions": {"enabled": True, "installed": {"release-track-management": True}},
+                "overrides": {},
+            }
+        )
+        self.assertEqual(previous_version, "1.0")
+        self.assertEqual(upgraded["version"], CURRENT_CONFIG_VERSION)
+        self.assertIn("release", upgraded)
+        self.assertEqual(upgraded["extensions"]["installed"]["release-track-management"]["enabled"], True)
+        self.assertTrue(guidance)
+
+    def test_apply_plate_config_upgrade_writes_file_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / ".plate"
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": "1.0",
+                        "methodology": {"marker_prefix": "PLATES-CORE"},
+                        "extensions": {"enabled": True},
+                        "overrides": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report = apply_plate_config_upgrade(root, apply=True)
+            self.assertTrue(report.changed)
+            self.assertTrue(report.applied)
+            upgraded = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(upgraded["version"], CURRENT_CONFIG_VERSION)
 
 
 class ConfigValidator:
@@ -310,7 +440,7 @@ class ConfigValidator:
             return ValidationResult(valid=False, errors=["Missing version field"])
         
         if strict:
-            allowed_keys = {"version", "methodology", "extensions", "overrides"}
+            allowed_keys = {"version", "methodology", "extensions", "overrides", "release"}
             unknown = set(config.keys()) - allowed_keys
             if unknown:
                 return ValidationResult(valid=False, errors=[f"Unknown fields: {unknown}"])

@@ -4,9 +4,9 @@
 
 | Surface | Target User | How to Install |
 |---|---|---|
-| `gh plate` extension | Humans and scripts — terminal PLATE health checks | `gh extension install akasper/plate_core` |
-| `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in Copilot CLI | `./plate-mcp` (repo clone) |
-| CLI agent plugin (e.g. Copilot CLI, Grok Build, other standards-compliant CLIs) | Interactive sessions — `/agent plate` + MCP wiring (see grok-build epic for CLI-agnostic details) | `copilot plugin install akasper/plate_core` (or equivalent for your CLI) |
+| `gh plate` extension | Humans and scripts — terminal PLATE health checks | `gh extension install akasper/plate` |
+| `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in supported CLIs | `pip install plate-core` then `plate-mcp` (or `python -m plate_core.mcp_server`) |
+| CLI agent plugin (e.g. Copilot CLI, Grok Build, other standards-compliant CLIs) | Interactive sessions — `/agent plate` + MCP wiring (see grok-build epic for CLI-agnostic details) | `copilot plugin install akasper/plate` (or equivalent for your CLI) |
 
 All surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
 
@@ -25,6 +25,14 @@ All surfaces are backed by the same `plate_core` library, ensuring consistent be
 - **CLI agent plugin** — installable agent surface (`/agent plate` or equivalent) with bundled MCP server configuration (CLI-agnostic per grok-build epic)
 
 ## Quick Start
+
+### As a Python package (for `plate-mcp` + library use)
+
+```bash
+pip install plate-core
+plate-mcp   # stdio MCP server for agents
+python -c "import plate_core; print(plate_core.__version__)"
+```
 
 ### As a `gh` extension (v1 baseline)
 

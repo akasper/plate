@@ -1,0 +1,22 @@
+{
+  "slug": "release-ceremony-refinement",
+  "change_type": "process",
+  "surface": "Release issues, branch model (AGENTS.md + process.yml), labels, CI, gh plate release tooling, bootstrap, .plate config, milestone enforcement",
+  "summary": "Refines the PLATE Release ceremony with standing 'Next Release' issues (always-present target, renamed on packaging + immediate spawn of next), Major/Minor/Patch labels on changing issues + three permissive next-*-release branches (release-major/minor/patch), packaging phase (freeze, version lock, versioned release-v* branch creation, issue rename), finalization (git tag + configurable downstream triggers under .plate/ + create next Next Release), heavy differentiated CI for Release PRs/contexts, milestone requirement for Release issues + broad milestone requirement on behavior/doc PRs, and tooling/helpers (enhanced status for linked/on-hold Epics, target-epic helper). Primary design artifact: docs/design/release-ceremony-refinement.md.",
+  "migration_impact": "Downstream PLATE repos will gain a richer, more enforceable release process. Existing single 'release' branch + versioned Release issues continue to work for now (additive model). New labels, branches, and checks will be introduced; bootstrap will offer to create the new next-* branches. Projects using custom release automation or strict branch protection will need to review the updated ceremony and protection guidance. .plate config gains (optional) release trigger section.",
+  "migration_guidance": [
+    "1. Pull latest .github/labels.yml and run `gh label sync .github/labels.yml` (or equivalent) to add Major, Minor, Patch labels.",
+    "2. Update .github/workflows/label-check.yml to include 'Release' in requiresMilestone (and consider Major/Minor/Patch on changing issues).",
+    "3. Copy updated .github/ISSUE_TEMPLATE/release.yml (supports 'Next Release' title and track checklist).",
+    "4. Run `gh plate bootstrap --apply` (or manual) to create release-major, release-minor, release-patch branches if adopting the new tracks.",
+    "5. Review and protect the new branches (require PRs, appropriate source restrictions, status checks).",
+    "6. Update local CI workflows (ci.yml or equivalent) to add conditional heavy jobs for Release-labeled PRs or release-v*/next-* stabilization contexts (after fast-fail gates).",
+    "7. (Optional but recommended) Add a 'release' section to your .plate config for downstream triggers.",
+    "8. Adopt the updated ceremony steps in AGENTS.md / process.yml: work gets Major/Minor/Patch label + targets the matching next-* branch; use sidebar links from Epics to the active Next Release issue; gh plate release status shows targeted vs on-hold; packaging involves freeze/rename/spawn + versioned branch + Release PR; finalization does tag + triggers + ensures next Next Release.",
+    "9. Existing Release issues and the single 'release' branch remain valid during transition; new work can opt into tracks incrementally."
+  ],
+  "agent_notes": "The refined model keeps the spirit of the existing release-ceremony extension and gh plate release surfaces but makes the 'next' release a persistent, linkable target. Use Major/Minor/Patch labels on Feature/Bug/Documentation (and similar) issues to declare track intent and target the corresponding release-*- branch. The standing 'Next Release' issue (created via the Release template) is the thing Epics link to via Development sidebar. Packaging is the moment the version is locked, the issue is renamed from 'Next Release' to 'vX.Y.Z', a versioned release-v* branch is prepared (combining tracks as needed), and a fresh Next Release is spawned. Finalization (new or extended gh plate release finalize) handles the tag + .plate-declared triggers. Heavy CI activates on the stabilization Release context. Update your label-check and PR milestone checks. Fragments remain required for process changes. gh plate release status is the primary visibility tool for on-hold vs. targeted Epics.",
+  "breaking": false,
+  "links": ["TBD-Epic-for-release-refinement"],
+  "requires": ["current release foundation (0.1.x+)"]
+}

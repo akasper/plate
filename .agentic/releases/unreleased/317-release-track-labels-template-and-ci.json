@@ -1,0 +1,17 @@
+{
+  "slug": "317-release-track-labels-template-and-ci",
+  "change_type": "feature",
+  "surface": ".github/labels.yml, .github/ISSUE_TEMPLATE/release.yml, .github/workflows/ci.yml, .github/workflows/label-check.yml, .github/workflows/pr-issue-link-check.yml, src/plate_core/bootstrap.py, src/plate_core/features.py",
+  "summary": "Adds release-track labels, updates the Release issue template, extends milestone enforcement, and introduces the heavy-release CI skeleton for release-ceremony work.",
+  "migration_impact": "Downstream PLATE repos gain release-major/release-minor/release-patch label support, updated Next Release issue guidance, and release-specific CI/milestone scaffolding. Pull the updated labels, template, workflows, and bootstrap surfaces together to keep the release ceremony aligned.",
+  "migration_guidance": [
+    "1. Sync .github/labels.yml and any template-payload copies so release-major, release-minor, and release-patch labels exist before relying on release-track automation.",
+    "2. Sync .github/ISSUE_TEMPLATE/release.yml so standing Next Release issues use the updated checklist and readiness fields.",
+    "3. Sync .github/workflows/ci.yml, .github/workflows/label-check.yml, and .github/workflows/pr-issue-link-check.yml together so heavy-release checks and milestone enforcement behavior stay consistent.",
+    "4. Re-run bootstrap or copy the updated src/plate_core/bootstrap.py logic into downstream tooling if you rely on automated release-track setup."
+  ],
+  "agent_notes": "When working on release-ceremony changes, keep labels, templates, workflows, and bootstrap behavior in sync; partial adoption will leave release-track automation inconsistent.",
+  "breaking": false,
+  "links": ["#306", "#308", "#309", "#310", "#311"],
+  "requires": ["0.1.4"]
+}

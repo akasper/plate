@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+import re
+import shutil
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -33,9 +36,14 @@ class ReleaseStatusReport:
     pending_fragment_count: int
     pending_fragments: list[FragmentSummary]
     extension_release_checks: list[dict]
+    # Refined ceremony (Epic #306): standing Next Release + track visibility + on-hold Epics via native links.
+    active_next_release: dict | None = None
+    linked_epics: list[dict] = field(default_factory=list)
+    on_hold_epics: list[dict] = field(default_factory=list)
+    release_track_summary: dict = field(default_factory=dict)  # e.g. {"Major": 3, "Minor": 5, "Patch": 2}
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "repo": self.repo,
             "release_branch_exists": self.release_branch_exists,
             "open_release_issues": self.open_release_issues,
@@ -44,7 +52,26 @@ class ReleaseStatusReport:
             "pending_fragment_count": self.pending_fragment_count,
             "pending_fragments": [f.to_dict() for f in self.pending_fragments],
             "extension_release_checks": self.extension_release_checks,
+            "active_next_release": self.active_next_release,
+            "linked_epics": self.linked_epics,
+            "on_hold_epics": self.on_hold_epics,
+            "release_track_summary": self.release_track_summary,
         }
+        return d
+
+
+@dataclass
+class ReleaseTargetEpicGuidance:
+    repo: str
+    epic: dict | None
+    active_next_release: dict | None
+    can_target: bool
+    api_write_supported: bool
+    message: str
+    manual_steps: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 @dataclass
@@ -262,6 +289,81 @@ def get_release_status(
         for i in (search.get("items") or [])
     ]
 
+    # Refined ceremony support (Epic #306): detect standing "Next Release" and its linked Epics (via native sidebar/connected events).
+    # Also compute basic track summary from open Epics/Features with Major/Minor/Patch labels, and on-hold (track label but no link to active Next).
+    active_next_release = None
+    linked_epics: list[dict] = []
+    on_hold_epics: list[dict] = []
+    release_track_summary: dict = {"Major": 0, "Minor": 0, "Patch": 0}
+
+    active_next = next((i for i in open_release_issues if "next" in (i.get("title") or "").lower()), None)
+    if active_next:
+        active_next_release = active_next
+        # Use GraphQL to get connected Epics (adapted from pr-issue-link-check and epics.py patterns).
+        try:
+            owner, repo_name = target.split("/", 1) if "/" in target else (target, target)
+            gquery = """
+            query($owner: String!, $repo: String!, $number: Int!) {
+              repository(owner: $owner, name: $repo) {
+                issue(number: $number) {
+                  closingIssuesReferences(first: 20) {
+                    nodes { number title url labels(first:5){nodes{name}} }
+                  }
+                  timelineItems(first: 50, itemTypes: [CONNECTED_EVENT]) {
+                    nodes {
+                      ... on ConnectedEvent {
+                        subject { __typename ... on Issue { number title url labels(first:5){nodes{name}} } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """
+            # gh.api("graphql") via helper style
+            gfields = {"query": gquery, "owner": owner, "repo": repo_name, "number": active_next["number"]}
+            gdata = gh.api("graphql", method="POST", fields=gfields)
+            nodes = []
+            issue_data = (gdata.get("data") or {}).get("repository", {}).get("issue", {})
+            for n in (issue_data.get("closingIssuesReferences", {}) or {}).get("nodes", []) or []:
+                nodes.append(n)
+            for n in (issue_data.get("timelineItems", {}) or {}).get("nodes", []) or []:
+                subj = (n or {}).get("subject") or {}
+                if subj.get("__typename") == "Issue":
+                    nodes.append(subj)
+            seen = set()
+            for n in nodes:
+                num = n.get("number")
+                if num and num not in seen:
+                    seen.add(num)
+                    labels = [l["name"] for l in ((n.get("labels") or {}).get("nodes") or [])]
+                    if "Epic" in labels:
+                        linked_epics.append(
+                            {"number": num, "title": n.get("title"), "html_url": n.get("url"), "labels": labels}
+                        )
+        except Exception:
+            pass  # degrade gracefully
+
+    # Basic track summary + on-hold detection (search open Epics/Features with track labels).
+    try:
+        track_search = gh.api(
+            f"search/issues?q={quote_plus(f'repo:{target} is:issue is:open (label:Major OR label:Minor OR label:Patch) (label:Epic OR label:Feature)')}"
+        )
+        for item in (track_search.get("items") or []):
+            labels = [l["name"] for l in item.get("labels", [])]
+            for t in ["Major", "Minor", "Patch"]:
+                if t in labels:
+                    release_track_summary[t] += 1
+            # Simple on-hold heuristic: has track label but not linked to the active next (if we have it).
+            if active_next_release:
+                linked_nums = {e["number"] for e in linked_epics}
+                if item["number"] not in linked_nums and "Epic" in [l["name"] for l in item.get("labels", [])]:
+                    on_hold_epics.append(
+                        {"number": item["number"], "title": item["title"], "html_url": item["html_url"], "labels": labels}
+                    )
+    except Exception:
+        pass
+
     # Discover versions from local releases dir if available
     pending_fragments: list[FragmentSummary] = []
     current_version: str | None = None
@@ -288,6 +390,88 @@ def get_release_status(
         pending_fragment_count=len(pending_fragments),
         pending_fragments=pending_fragments,
         extension_release_checks=extension_release_checks,
+        active_next_release=active_next_release,
+        linked_epics=linked_epics,
+        on_hold_epics=on_hold_epics,
+        release_track_summary=release_track_summary,
+    )
+
+
+def get_release_target_epic_guidance(
+    epic_number: int,
+    repo: str | None = None,
+    client: GhClient | None = None,
+) -> ReleaseTargetEpicGuidance:
+    """Return validated guidance for targeting an Epic to the active Next Release.
+
+    GitHub exposes read APIs for connected issue events, but it does not expose a public
+    write API for creating the issue-to-issue sidebar link itself. This helper therefore
+    validates the target state and returns precise manual steps instead of pretending to
+    create an unsupported link.
+    """
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    issue = gh.api(f"repos/{target}/issues/{epic_number}")
+    labels = [label["name"] for label in issue.get("labels", [])]
+    epic = {
+        "number": issue["number"],
+        "title": issue["title"],
+        "html_url": issue["html_url"],
+        "labels": labels,
+    }
+    if issue.get("pull_request"):
+        return ReleaseTargetEpicGuidance(
+            repo=target,
+            epic=epic,
+            active_next_release=None,
+            can_target=False,
+            api_write_supported=False,
+            message=f"#{epic_number} is a pull request, not an Epic issue.",
+            manual_steps=[],
+        )
+    if "Epic" not in labels:
+        return ReleaseTargetEpicGuidance(
+            repo=target,
+            epic=epic,
+            active_next_release=None,
+            can_target=False,
+            api_write_supported=False,
+            message=f"Issue #{epic_number} is not labeled Epic, so it cannot be targeted as an Epic.",
+            manual_steps=[],
+        )
+
+    status = get_release_status(repo=target, client=gh)
+    next_release = status.active_next_release
+    if not next_release:
+        return ReleaseTargetEpicGuidance(
+            repo=target,
+            epic=epic,
+            active_next_release=None,
+            can_target=False,
+            api_write_supported=False,
+            message="No active 'Next Release' issue is open, so there is nothing to target yet.",
+            manual_steps=[
+                "1. Open or identify the standing Release issue whose title includes 'Next Release'.",
+                "2. Re-run `gh plate release target-epic <epic-number>` after that issue exists.",
+            ],
+        )
+
+    return ReleaseTargetEpicGuidance(
+        repo=target,
+        epic=epic,
+        active_next_release=next_release,
+        can_target=True,
+        api_write_supported=False,
+        message=(
+            "GitHub's public API does not support creating the issue-to-issue sidebar link directly, "
+            "so the final targeting action must still be completed in the GitHub UI."
+        ),
+        manual_steps=[
+            f"1. Open the Epic: {epic['html_url']}",
+            f"2. Open the active Next Release issue: {next_release['html_url']}",
+            "3. In the GitHub UI, create the issue-to-issue link between them.",
+            "4. Re-run `gh plate release status` to verify the Epic moves into Linked Epics instead of On-hold Epics.",
+        ],
     )
 
 
@@ -344,3 +528,242 @@ def get_release_notes_diff(
         entries=all_entries,
         migration_steps=all_migration_steps,
     )
+
+
+# ---------------------------------------------------------------------------
+# Release cut logic (ported from scripts/cut_release.py for #261 first-class cut)
+# ---------------------------------------------------------------------------
+
+_SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+
+
+def parse_version(v: str | None) -> tuple[int, int, int] | None:
+    if not v:
+        return None
+    m = _SEMVER_RE.match(v.strip())
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+
+def fmt_version(t: tuple[int, int, int]) -> str:
+    return f"{t[0]}.{t[1]}.{t[2]}"
+
+
+def bump_version(current: tuple[int, int, int], bump: str) -> tuple[int, int, int]:
+    major, minor, patch = current
+    if bump == "major":
+        return (major + 1, 0, 0)
+    if bump == "minor":
+        return (major, minor + 1, 0)
+    return (major, minor, patch + 1)
+
+
+def _git_versions(repo_root: Path) -> list[tuple[int, int, int]]:
+    try:
+        import subprocess
+        out = subprocess.check_output(
+            ["git", "-C", str(repo_root), "tag", "--list", "v*"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        vers = []
+        for line in out.splitlines():
+            t = parse_version(line.strip())
+            if t:
+                vers.append(t)
+        return vers
+    except Exception:
+        return []
+
+
+def detect_latest_version(releases_dir: Path) -> tuple[int, int, int] | None:
+    candidates: list[tuple[int, int, int]] = []
+    # Legacy flat
+    for f in releases_dir.glob("v*.json"):
+        t = parse_version(f.stem)
+        if t:
+            candidates.append(t)
+    # Versioned dirs
+    for d in releases_dir.iterdir():
+        if d.is_dir() and _SEMVER_RE.match(d.name):
+            t = parse_version(d.name)
+            if t and (d / "release.json").exists():
+                candidates.append(t)
+    # Git tags
+    repo_root = releases_dir
+    for _ in range(6):
+        if (repo_root / ".git").exists():
+            break
+        repo_root = repo_root.parent
+    candidates.extend(_git_versions(repo_root))
+    return max(candidates) if candidates else None
+
+
+def _load_json_fragments_from_dir(source_dir: Path, source_label: str) -> list[dict]:
+    fragments = []
+    for f in sorted(source_dir.glob("*.json")):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(f"  WARNING: could not parse {f}: {exc}")
+            continue
+        data["_source_file"] = f.name
+        data["_source_dir"] = str(source_dir)
+        data["_source_label"] = source_label
+        fragments.append(data)
+    return fragments
+
+
+def collect_fragments(releases_dir: Path) -> list[dict]:
+    all_fragments: list[dict] = []
+    unreleased = releases_dir / "unreleased"
+    if unreleased.is_dir():
+        all_fragments.extend(_load_json_fragments_from_dir(unreleased, "unreleased"))
+    for d in sorted(releases_dir.iterdir()):
+        if d.is_dir() and re.match(r"^epic-", d.name):
+            all_fragments.extend(_load_json_fragments_from_dir(d, d.name))
+    return all_fragments
+
+
+def infer_bump_type(fragments: list[dict]) -> str:
+    if any(f.get("breaking") for f in fragments):
+        return "major"
+    if any(f.get("change_type") == "feature" for f in fragments):
+        return "minor"
+    return "patch"
+
+
+def fragment_to_entry(fragment: dict) -> dict:
+    entry: dict = {
+        "change_type": fragment.get("change_type", "docs"),
+        "surface": fragment.get("surface", ""),
+        "migration_impact": fragment.get("migration_impact", ""),
+        "agent_notes": fragment.get("agent_notes", ""),
+    }
+    if "migration_guidance" in fragment:
+        entry["migration_guidance"] = fragment["migration_guidance"]
+    if fragment.get("breaking"):
+        entry["breaking"] = True
+    if fragment.get("links"):
+        entry["links"] = fragment["links"]
+    if fragment.get("requires"):
+        entry["requires"] = fragment["requires"]
+    return entry
+
+
+def build_release(version: str, fragments: list[dict]) -> dict:
+    entries = [fragment_to_entry(f) for f in fragments]
+    slugs = [f.get("slug", f.get("_source_file", "")) for f in fragments]
+    summary_slugs = ", ".join(slugs[:5]) + ("..." if len(slugs) > 5 else "")
+    return {
+        "version": version,
+        "summary": f"PLATE {version} -- {len(entries)} change(s): {summary_slugs}.",
+        "cut_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "fragment_count": len(fragments),
+        "fragment_slugs": [f.get("slug", f["_source_file"]) for f in fragments],
+        "entries": entries,
+    }
+
+
+def cut_release(
+    version: str | None,
+    releases_dir: Path,
+    version_type: str | None = None,
+    dry_run: bool = False,
+) -> int:
+    fragments = collect_fragments(releases_dir)
+    if not fragments:
+        print("No pending fragments found. Nothing to cut.")
+        return 1
+
+    print(f"Found {len(fragments)} pending fragment(s):")
+    for f in fragments:
+        label = f.get("_source_label", "?")
+        slug = f.get("slug", f["_source_file"])
+        summary = f.get("summary", "(no summary)")
+        print(f"  [{label}] {slug}: {summary}")
+
+    if version:
+        version = version.lstrip("v")
+        if version_type:
+            print("NOTE: --version-type is ignored when an explicit version is supplied.")
+    else:
+        latest = detect_latest_version(releases_dir)
+        if latest is None:
+            print(
+                "ERROR: Could not detect the current PLATE baseline.\n"
+                "No versioned release files or git tags found.\n"
+                "Supply an explicit version: cut_release.py vX.Y.Z"
+            )
+            return 1
+        bump_type = version_type or infer_bump_type(fragments)
+        next_ver = bump_version(latest, bump_type)
+        version = fmt_version(next_ver)
+        override_note = "  (overridden via --version-type)" if version_type else ""
+        print(
+            f"\nCurrent baseline : v{fmt_version(latest)}"
+            f"\nInferred bump    : {bump_type}{override_note}"
+            f"\nProposed version : v{version}"
+        )
+
+    versioned_dir = releases_dir / f"v{version}"
+    if versioned_dir.exists():
+        print(f"ERROR: {versioned_dir} already exists. Choose a different version or remove it first.")
+        return 1
+
+    current = detect_latest_version(releases_dir)
+    proposed = parse_version(version)
+    if current and proposed and proposed <= current:
+        print(
+            f"WARNING: v{version} is not greater than the current baseline "
+            f"v{fmt_version(current)}. Proceed with caution."
+        )
+
+    fragments_dir = versioned_dir / "fragments"
+    release_data = build_release(version, fragments)
+
+    if dry_run:
+        print("\n[DRY RUN] Would create:")
+        print(f"  {versioned_dir / 'release.json'}")
+        for frag in fragments:
+            src_dir = Path(frag["_source_dir"])
+            print(f"  {fragments_dir / frag['_source_file']}  (moved from {src_dir.name}/)")
+        print("\n[DRY RUN] release.json preview:")
+        print(json.dumps(release_data, indent=2))
+        return 0
+
+    versioned_dir.mkdir(parents=True, exist_ok=True)
+    fragments_dir.mkdir(parents=True, exist_ok=True)
+
+    release_file = versioned_dir / "release.json"
+    release_file.write_text(json.dumps(release_data, indent=2) + "\n", encoding="utf-8")
+    print(f"\nWrote {release_file}")
+
+    seen_epic_dirs: set[Path] = set()
+    for frag in fragments:
+        src = Path(frag["_source_dir"]) / frag["_source_file"]
+        dst = fragments_dir / frag["_source_file"]
+        shutil.move(str(src), str(dst))
+        label = frag.get("_source_label", "?")
+        print(f"  Moved [{label}] {frag['_source_file']} -> fragments/")
+        if frag.get("_source_label", "").startswith("epic-"):
+            seen_epic_dirs.add(Path(frag["_source_dir"]))
+
+    for epic_dir in seen_epic_dirs:
+        remaining = [f for f in epic_dir.iterdir() if not f.name.startswith(".")]
+        if not remaining:
+            epic_dir.rmdir()
+            print(f"  Removed empty epic dir: {epic_dir.name}/")
+
+    print(f"\nRelease v{version} cut successfully.")
+    print("Next steps:")
+    print(f"  1. Review {versioned_dir / 'release.json'} and adjust the summary if needed.")
+    print(f"  2. Commit the new {versioned_dir}/ directory.")
+    print("  3. Open a PR: release -> main.")
+    print(f"  4. After merge: git tag v{version} && git push --tags")
+    print(
+        f"  5. Hard-reset release branch: "
+        f"git checkout release && git reset --hard v{version} && git push --force-with-lease"
+    )
+    return 0

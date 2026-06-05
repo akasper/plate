@@ -1,7 +1,9 @@
 import io
 import json
+import tempfile
 import unittest
 from contextlib import redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.cli import main
@@ -25,6 +27,10 @@ class CliTests(unittest.TestCase):
             branch_protection_enabled=True,
             open_epic_count=2,
             status="pass",
+            open_question_count=1,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
         )
         out = io.StringIO()
         with redirect_stdout(out):
@@ -88,13 +94,67 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["repo"], "akasper/plate_core")
         self.assertEqual(payload["actions"][0]["name"], "enable-wiki")
 
+    def test_config_show_json_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["config", "show", "--repo-root", tmp, "--json"])
+            self.assertEqual(code, 0)
+            payload = json.loads(out.getvalue().strip())
+            self.assertFalse(payload["present"])
+            self.assertEqual(payload["source"], "defaults")
+            self.assertEqual(payload["resolved_version"], "1.1")
+
+    def test_config_init_json_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["config", "init", "--repo-root", tmp, "--json"])
+            self.assertEqual(code, 0)
+            payload = json.loads(out.getvalue().strip())
+            self.assertTrue(payload["present"])
+            self.assertTrue((Path(tmp) / ".plate").exists())
+            self.assertEqual(payload["resolved_version"], "1.1")
+
+    def test_config_validate_invalid_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".plate").write_text("{not-json", encoding="utf-8")
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["config", "validate", "--repo-root", tmp, "--json"])
+            self.assertEqual(code, 1)
+            payload = json.loads(out.getvalue().strip())
+            self.assertFalse(payload["valid"])
+
+    def test_config_upgrade_json_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".plate").write_text(
+                json.dumps(
+                    {
+                        "version": "1.0",
+                        "methodology": {"marker_prefix": "PLATES-CORE"},
+                        "extensions": {"enabled": True, "installed": {"release-track-management": True}},
+                        "overrides": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["config", "upgrade", "--repo-root", tmp, "--json"])
+            self.assertEqual(code, 0)
+            payload = json.loads(out.getvalue().strip())
+            self.assertTrue(payload["changed"])
+            self.assertFalse(payload["applied"])
+            self.assertEqual(payload["current_version"], "1.1")
+
     def test_agents_json_output(self):
         out = io.StringIO()
         with redirect_stdout(out):
             code = main(["agents", "list", "--json"])
         self.assertEqual(code, 0)
         payload = json.loads(out.getvalue().strip())
-        self.assertEqual(len(payload["agents"]), 12)
+        self.assertEqual(len(payload["agents"]), 15)
         self.assertEqual(payload["agents"][0]["id"], "project-manager")
 
     def test_agent_show_json_output(self):
@@ -179,6 +239,16 @@ class CliTests(unittest.TestCase):
             )
         self.assertEqual(code, 0)
         self.assertEqual(mock_record.call_args.kwargs["revision_of"], "12345")
+    @patch("plate_core.cli.core_cut_release")
+    def test_release_cut_json_output(self, mock_core_cut):
+        """First-class release cut using core (for #261)."""
+        mock_core_cut.return_value = 0
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["release", "cut", "v0.1.5", "--dry-run", "--json"])
+        self.assertEqual(code, 0)
+        self.assertTrue(mock_core_cut.called)
+        # Note: full output from core in real run; here stub verifies wiring.
 
 
 if __name__ == "__main__":

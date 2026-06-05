@@ -21,9 +21,20 @@ from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
-from .release import get_release_notes_diff, get_release_status
+from .plate_config import apply_plate_config_upgrade, get_plate_config_report, init_plate_config
+from .release import get_release_notes_diff, get_release_status, get_release_target_epic_guidance
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
+from .costs import get_cost_report
+from .discussions import (
+    list_discussions,
+    get_discussion,
+    list_discussion_comments,
+    add_discussion_comment,
+    create_discussion,
+    list_discussion_categories,
+    list_open_ideas,
+)
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
     CreateBlockingQuestionTool,
@@ -59,6 +70,48 @@ def _plan_epic_stub(args: dict) -> object:
                 "note": "Phase 1 stub. Full interactive planning is handled via the host agent's chat or gh plate qanda (CLI-agnostic). See grok-build epic for agent integration.",
             }
     return _Stub()
+
+
+def _what_next(repo: str | None, agent_type: str | None = None) -> dict:
+    """v1 static What Next? for PLATE process (Epic #282 / #285).
+
+    Uses live health + simple heuristics over documented flows (epics, labels, fragments, Goals).
+    Returns next recommended action + prompt segment for agent use.
+    """
+    try:
+        from .health import get_health
+        h = get_health(repo).to_dict() if repo or True else {}
+        labels_ok = h.get("label_coverage_ok", False)
+        open_epics = h.get("open_epic_count", 0)
+        # simplistic v1
+        if not labels_ok:
+            action = "run bootstrap to establish labels/wiki/epic/starters"
+            prompt = (
+                "Follow the PLATE bootstrap flow: create required labels, enable wiki, seed initial Epic, "
+                "seed starter Questions from catalog. Then create a Goals wiki page per convention and use it for audits."
+            )
+        elif open_epics > 0:
+            action = "advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement"
+            prompt = (
+                "Use plate_epic_status or gh plate epic status to list children. For a Feature: read full issue, "
+                "add/update tests first, implement smallest change, author fragment in .agentic/releases/unreleased/, "
+                "PR with clean title + labels (Feature + area + Epic:*) + Closes #N in body only, babysit with gh plate pr babysit."
+            )
+        else:
+            action = "check for pending release fragments or next beta item"
+            prompt = (
+                "Run gh plate release status. If unreleased fragments, prepare for cut_release. "
+                "Otherwise pick next beta-roadmap Feature (e.g. #260 local-rebase, #285 what-next, packaging, etc.)."
+            )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": "v1 heuristic on health (labels, open_epics); expand with full state (epics, fragments, Goals presence) in follow-ups",
+            "state_snapshot": {"label_coverage_ok": labels_ok, "open_epic_count": open_epics},
+            "agent_type": agent_type or "general",
+        }
+    except Exception as exc:
+        return {"next_action": "inspect with plate_health + plate_epic_status", "error": str(exc)}
 
 
 def _handle_tools_call(req_id: object, params: dict) -> None:
@@ -113,6 +166,17 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = get_features(args.get("repo")).to_dict()
         elif name == "plate_bootstrap":
             payload = run_bootstrap(args.get("repo"), apply_mode=bool(args.get("apply", False))).to_dict()
+        elif name == "plate_config_get":
+            payload = get_plate_config_report(args.get("repo_root")).to_dict()
+        elif name == "plate_config_validate":
+            payload = get_plate_config_report(args.get("repo_root")).to_dict()
+        elif name == "plate_config_init":
+            payload = init_plate_config(args.get("repo_root"), force=bool(args.get("force", False))).to_dict()
+        elif name == "plate_config_upgrade":
+            payload = apply_plate_config_upgrade(
+                args.get("repo_root"),
+                apply=bool(args.get("apply", False)),
+            ).to_dict()
         elif name == "plate_plan_epic":
             payload = _plan_epic_stub(args).to_dict()
         elif name == "plate_pr_babysit":
@@ -137,6 +201,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 thread_id=thread_id,
                 repo=args.get("repo"),
             )
+        elif name == "plate_what_next":
+            # What Next? (Epic #282 / #285 v1 static)
+            # Uses live state (health, epics, fragments, labels) to pick next PLATE step and prompt segment.
+            # For v1: simple decision tree over common paths; future data-driven.
+            payload = _what_next(args.get("repo"), args.get("agent_type"))
         elif name == "plate_contemplate":
             # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
             qn = args.get("question_number")
@@ -162,6 +231,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 repo=args.get("repo"),
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
             ).to_dict()
+        elif name == "plate_release_target_epic":
+            payload = get_release_target_epic_guidance(
+                epic_number=int(args.get("epic_number")),
+                repo=args.get("repo"),
+            ).to_dict()
         elif name == "plate_release_notes":
             from pathlib import Path
             releases_dir_arg = args.get("releases_dir")
@@ -169,6 +243,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 from_version=args.get("from_version"),
                 to_version=args.get("to_version"),
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
+            ).to_dict()
+        elif name == "plate_costs":
+            payload = get_cost_report(
+                repo=args.get("repo"),
+                epic_label=args.get("epic_label"),
             ).to_dict()
         elif name == "plate_migrate_plan":
             plan = generate_migration_plan()
@@ -183,6 +262,51 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
+        # GitHub Discussions surface (Feature #329): plate_discussions_* + conveniences.
+        # Enables Ideas capture, inter-agent comms, orchestration logs (see Ideas #287/#292/#293).
+        elif name == "plate_list_discussions":
+            payload = [
+                d.to_dict()
+                for d in list_discussions(
+                    repo=args.get("repo"),
+                    category=args.get("category"),
+                    state=args.get("state"),
+                    per_page=int(args.get("per_page", 30)),
+                    page=int(args.get("page", 1)),
+                )
+            ]
+        elif name == "plate_get_discussion":
+            num = args.get("number")
+            payload = get_discussion(
+                repo=args.get("repo"), number=int(num) if num is not None else None
+            ).to_dict()
+        elif name == "plate_list_discussion_comments":
+            num = args.get("number")
+            payload = [
+                c.to_dict()
+                for c in list_discussion_comments(
+                    repo=args.get("repo"), number=int(num) if num is not None else None
+                )
+            ]
+        elif name == "plate_add_discussion_comment":
+            num = args.get("number")
+            payload = add_discussion_comment(
+                repo=args.get("repo"),
+                number=int(num) if num is not None else None,
+                body=args.get("body"),
+            )
+        elif name == "plate_create_discussion":
+            payload = create_discussion(
+                repo=args.get("repo"),
+                category_slug=args.get("category_slug"),
+                category_id=args.get("category_id"),
+                title=args.get("title"),
+                body=args.get("body"),
+            )
+        elif name == "plate_list_discussion_categories":
+            payload = {"categories": list_discussion_categories(repo=args.get("repo"))}
+        elif name == "plate_list_open_ideas":
+            payload = [d.to_dict() for d in list_open_ideas(repo=args.get("repo"))]
         elif name in AUDIT_TOOLS:
             # Information Audit tools (Epic #218 / Feature #221)
             # Contract per Design #223; model per #220. Stub for v1; full engine in follow-ups.
@@ -433,6 +557,66 @@ def run() -> None:
                                 },
                             },
                             {
+                                "name": "plate_config_get",
+                                "description": "Return effective local .plate configuration state for the current repository or repo_root.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_validate",
+                                "description": "Validate local .plate configuration and return the effective report shape.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_init",
+                                "description": "Create a baseline root .plate configuration file if missing (or overwrite with force).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        },
+                                        "force": {
+                                            "type": "boolean",
+                                            "description": "Overwrite an existing .plate file when true.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_upgrade",
+                                "description": "Upgrade an existing local .plate file to the current schema version, optionally writing it back to disk.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "When true, write the upgraded .plate file back to disk.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
                                 "name": "plate_plan_epic",
                                 "description": "Return the interactive epic planning schema for a repository session. Phase 1 stub.",
                                 "inputSchema": {
@@ -479,7 +663,7 @@ def run() -> None:
                                             "enum": ["copilot-request", "local-rebase", "none"],
                                             "description": (
                                                 "How to handle out-of-sync base branch: copilot-request (default, triggers Copilot merge assist), "
-                                                "local-rebase (not yet implemented), or none (detect only)."
+                                                "local-rebase (local worktree rebase+push), or none (detect only)."
                                             ),
                                         },
                                     },
@@ -502,6 +686,23 @@ def run() -> None:
                                         },
                                     },
                                     "required": ["thread_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_what_next",
+                                "description": "What Next? MCP tool (Epic #282 / Feature #285). Returns the next recommended PLATE process step + templatized prompt segment based on live repo state (health, epics, labels, fragments, etc.). v1 static flow covering primary paths; enables agents to drive autonomous progress.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "agent_type": {
+                                            "type": "string",
+                                            "description": "Optional hint for specialized guidance (general, coding, docs, etc.).",
+                                        },
+                                    },
                                 },
                             },
                             {
@@ -673,7 +874,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_release_status",
-                                "description": "Return the current PLATE release status: release branch existence, open Release issues, latest version, pending unreleased fragments, and extension release checks.",
+                                "description": "Return the current PLATE release status: release branch existence, open Release issues, active Next Release visibility, linked/on-hold Epics, track summary, pending unreleased fragments, and extension release checks.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -686,6 +887,24 @@ def run() -> None:
                                             "description": "Path to the releases directory. Defaults to .agentic/releases.",
                                         },
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_release_target_epic",
+                                "description": "Validate an Epic against the active Next Release and return the manual issue-linking guidance required because GitHub does not expose a public API to create the issue-to-issue sidebar link directly.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "epic_number": {
+                                            "type": "integer",
+                                            "description": "Epic issue number to validate against the active Next Release.",
+                                        },
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                    },
+                                    "required": ["epic_number"],
                                 },
                             },
                             {
@@ -707,6 +926,24 @@ def run() -> None:
                                             "description": "Path to the releases directory. Defaults to .agentic/releases.",
                                         },
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_costs",
+                                "description": "Harvest USAGE REPORT blocks from closed issues (per AGENTS.md), aggregate tokens/cost/duration for observability (Epic #265). Supports epic_label filter. Emits JSON + MD.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "epic_label": {
+                                            "type": "string",
+                                            "description": "Optional 'Epic: foo' label to scope aggregation.",
+                                        },
+                                    },
+                                    "required": [],
                                 },
                             },
                             {
@@ -742,8 +979,97 @@ def run() -> None:
                                         "agent_type": {"type": "string", "description": "general | marketing | engineering (default: general) for specialized scoping/heuristics"},
                                         "max_questions": {"type": "integer", "description": "Cap on proposals (default 5)", "default": 5},
                                         "dry_run": {"type": "boolean", "description": "Propose only; do not create Issues (default false)", "default": False},
-                                        "include_defaults": {"type": "boolean", "description": "Include platform + extension default informational goals (default true)", "default": True}
-                                    }
+                                        "include_defaults": {"type": "boolean", "description": "Include platform + extension default informational goals (default true)", "default": True},
+                                    },
+                                },
+                            },
+                            # Discussions MCP surface (Feature #329). plate_* naming for consistency with other github/process tools.
+                            # Supports Ideas category use cases, inter-agent comms, logs (Ideas #287, #292, #293; enables #282 orchestrator vision).
+                            {
+                                "name": "plate_list_discussions",
+                                "description": "List discussions (filter by category e.g. 'ideas', state 'open'). Returns normalized records with number/title/url/body_preview.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional if inside clone."},
+                                        "category": {"type": "string", "description": "Filter by category slug or name (e.g. 'ideas')."},
+                                        "state": {"type": "string", "description": "open or closed (client filtered for reliability)."},
+                                        "per_page": {"type": "integer", "description": "Max results (default 30)."},
+                                        "page": {"type": "integer", "description": "Page (default 1)."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_get_discussion",
+                                "description": "Get full discussion by number (includes body, category, etc.).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "number": {"type": "integer", "description": "Discussion number."},
+                                    },
+                                    "required": ["number"],
+                                },
+                            },
+                            {
+                                "name": "plate_list_discussion_comments",
+                                "description": "List comments on a discussion.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "number": {"type": "integer", "description": "Discussion number."},
+                                        "per_page": {"type": "integer", "description": "Max comments (default 30)."},
+                                    },
+                                    "required": ["number"],
+                                },
+                            },
+                            {
+                                "name": "plate_add_discussion_comment",
+                                "description": "Add a comment to an existing discussion.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "number": {"type": "integer", "description": "Discussion number."},
+                                        "body": {"type": "string", "description": "Comment markdown content."},
+                                    },
+                                    "required": ["number", "body"],
+                                },
+                            },
+                            {
+                                "name": "plate_create_discussion",
+                                "description": "Create a new discussion. Provide category_slug (e.g. 'ideas') or category_id (node ID).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "category_slug": {"type": "string", "description": "Category slug or name (resolved via list)."},
+                                        "category_id": {"type": "string", "description": "Direct category node ID (from GraphQL)."},
+                                        "title": {"type": "string", "description": "Discussion title."},
+                                        "body": {"type": "string", "description": "Discussion body (markdown)."},
+                                    },
+                                    "required": ["title", "body"],
+                                },
+                            },
+                            {
+                                "name": "plate_list_discussion_categories",
+                                "description": "List available discussion categories (id, name, slug, description) for the repo.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_list_open_ideas",
+                                "description": "Convenience: list open discussions in the 'ideas' category (common for process/idea capture).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
                                 },
                             },
                         ]

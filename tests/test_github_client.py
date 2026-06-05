@@ -1,9 +1,9 @@
-"""Tests for GhClient field serialization."""
+"""Tests for GhClient field serialization and resilience (#270 error/rate/secret)."""
 
 import unittest
 from unittest.mock import MagicMock, patch
 
-from plate_core.github_client import GhClient
+from plate_core.github_client import GhClient, GhApiError, _sanitize_error
 
 
 class GhClientFieldSerializationTests(unittest.TestCase):
@@ -61,6 +61,66 @@ class GhClientFieldSerializationTests(unittest.TestCase):
         # has_wiki must use -F
         wiki_idx = cmd.index("has_wiki=true") - 1
         self.assertEqual(cmd[wiki_idx], "-F")
+
+
+class GhClientResilienceTests(unittest.TestCase):
+    """Retry/backoff, rate limit tolerance, secret redaction (#270)."""
+
+    def test_sanitize_redacts_tokens(self):
+        msg = "Bad credentials for token ghp_ABC123def456 or Bearer xyz"
+        safe = _sanitize_error(msg)
+        self.assertNotIn("ghp_ABC123def456", safe)
+        self.assertNotIn("xyz", safe)
+        self.assertIn("[REDACTED]", safe)
+
+    def test_api_retries_on_transient_and_succeeds(self):
+        with patch("plate_core.github_client.subprocess.run") as mock_run:
+            # First two fail (rate), third succeeds
+            mock_run.side_effect = [
+                MagicMock(returncode=1, stdout="", stderr="API rate limit exceeded"),
+                MagicMock(returncode=1, stdout="", stderr="temporary error"),
+                MagicMock(returncode=0, stdout='{"ok":true}', stderr=""),
+            ]
+            client = GhClient()
+            result = client.api("repos/o/r", retries=3, base_backoff=0.01)
+            self.assertEqual(result, {"ok": True})
+            self.assertEqual(mock_run.call_count, 3)
+
+    def test_api_raises_after_retries_exhausted(self):
+        with patch("plate_core.github_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="rate limit")
+            client = GhClient()
+            with self.assertRaises(GhApiError) as ctx:
+                client.api("repos/o/r", retries=2, base_backoff=0.01)
+            self.assertIn("rate limit", str(ctx.exception))
+            self.assertEqual(mock_run.call_count, 2)
+
+
+class GhClientDiscussionsTests(unittest.TestCase):
+    """Feature #329: GhClient discussion helpers (REST + GraphQL paths for #329 MCP surface)."""
+
+    def test_list_discussions_builds_endpoint_and_passes_params(self):
+        with patch("plate_core.github_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout='[{"number":54,"title":"foo"}]', stderr="")
+            res = GhClient().list_discussions("akasper", "plate", per_page=5, state="open")
+            cmd = mock_run.call_args[0][0]
+            self.assertIn("repos/akasper/plate/discussions", cmd)
+            self.assertIn("-f", cmd)
+            joined = " ".join(cmd)
+            self.assertIn("per_page=5", joined)
+            self.assertEqual(res, [{"number": 54, "title": "foo"}])
+
+    def test_create_discussion_uses_graphql_and_resolves_repo_id(self):
+        # Simulate two calls: repo id query, then mutation
+        responses = [
+            MagicMock(returncode=0, stdout='{"data":{"repository":{"id":"R_123"}} }', stderr=""),
+            MagicMock(returncode=0, stdout='{"data":{"createDiscussion":{"discussion":{"number":999,"title":"new"}}}}', stderr=""),
+        ]
+        with patch("plate_core.github_client.subprocess.run", side_effect=responses) as mock_run:
+            res = GhClient().create_discussion("akasper", "plate", category_id="DIC_foo", title="t", body="b")
+            self.assertEqual(res.get("number"), 999)
+            # At least 2 calls made
+            self.assertGreaterEqual(mock_run.call_count, 2)
 
 
 if __name__ == "__main__":

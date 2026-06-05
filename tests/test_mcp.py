@@ -1,12 +1,15 @@
 import json
 import io
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.bootstrap import BootstrapAction, BootstrapReport
 from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.features import FeatureFlag, FeatureReport
 from plate_core.health import HealthReport
+from plate_core.mcp.tools import ValidateE2eTestsTool
 from plate_core.mcp_server import _handle_tools_call, run
 from plate_core.pr_babysit import BabysitReport
 
@@ -24,6 +27,10 @@ class McpTests(unittest.TestCase):
             branch_protection_enabled=True,
             open_epic_count=1,
             status="pass",
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
         )
         _handle_tools_call(1, {"name": "plate_health", "arguments": {"repo": "akasper/plate_core"}})
         self.assertTrue(mock_write.called)
@@ -74,7 +81,7 @@ class McpTests(unittest.TestCase):
     def test_tools_call_plate_agents(self, mock_write):
         _handle_tools_call(11, {"name": "plate_agents", "arguments": {}})
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
-        self.assertEqual(len(payload["agents"]), 12)
+        self.assertEqual(len(payload["agents"]), 15)
         self.assertEqual(payload["agents"][0]["id"], "project-manager")
 
     @patch("plate_core.mcp_server._write")
@@ -122,6 +129,41 @@ class McpTests(unittest.TestCase):
         self.assertEqual(payload["actions"][0]["name"], "enable-wiki")
 
     @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_config_get(self, mock_write):
+        with tempfile.TemporaryDirectory() as tmp:
+            _handle_tools_call(12, {"name": "plate_config_get", "arguments": {"repo_root": tmp}})
+            payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+            self.assertFalse(payload["present"])
+            self.assertEqual(payload["source"], "defaults")
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_config_init(self, mock_write):
+        with tempfile.TemporaryDirectory() as tmp:
+            _handle_tools_call(13, {"name": "plate_config_init", "arguments": {"repo_root": tmp}})
+            payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+            self.assertTrue(payload["present"])
+            self.assertTrue((Path(tmp) / ".plate").exists())
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_config_upgrade(self, mock_write):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".plate").write_text(
+                json.dumps(
+                    {
+                        "version": "1.0",
+                        "methodology": {"marker_prefix": "PLATES-CORE"},
+                        "extensions": {"enabled": True},
+                        "overrides": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            _handle_tools_call(14, {"name": "plate_config_upgrade", "arguments": {"repo_root": tmp}})
+            payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+            self.assertTrue(payload["changed"])
+            self.assertEqual(payload["current_version"], "1.1")
+
+    @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_plan_epic(self, mock_write):
         _handle_tools_call(12, {"name": "plate_plan_epic", "arguments": {}})
         self.assertTrue(mock_write.called)
@@ -163,6 +205,32 @@ class McpTests(unittest.TestCase):
         self.assertTrue(payload["resolved"])
 
     @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.get_release_target_epic_guidance")
+    def test_tools_call_plate_release_target_epic(self, mock_guidance, mock_write):
+        mock_guidance.return_value = type(
+            "Guidance",
+            (),
+            {
+                "to_dict": lambda self: {
+                    "repo": "akasper/plate",
+                    "epic": {"number": 306},
+                    "active_next_release": {"number": 50},
+                    "can_target": True,
+                    "api_write_supported": False,
+                    "message": "manual step required",
+                    "manual_steps": ["1. Do the UI link"],
+                }
+            },
+        )()
+        _handle_tools_call(
+            15,
+            {"name": "plate_release_target_epic", "arguments": {"repo": "akasper/plate", "epic_number": 306}},
+        )
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertTrue(payload["can_target"])
+        self.assertFalse(payload["api_write_supported"])
+
+    @patch("plate_core.mcp_server._write")
     @patch(
         "plate_core.mcp_server.sys.stdin",
         new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":5,"method":"tools/list"}\n'),
@@ -173,6 +241,11 @@ class McpTests(unittest.TestCase):
         names = {tool["name"] for tool in tools}
         self.assertIn("plate_features", names)
         self.assertIn("plate_bootstrap", names)
+        self.assertIn("plate_config_get", names)
+        self.assertIn("plate_config_validate", names)
+        self.assertIn("plate_config_init", names)
+        self.assertIn("plate_config_upgrade", names)
+        self.assertIn("plate_release_target_epic", names)
 
     @patch("plate_core.mcp_server._write")
     @patch(
@@ -228,6 +301,25 @@ class McpTests(unittest.TestCase):
         # Either success content or isError=True with message (both acceptable for this smoke)
         self.assertIn("content", result)
 
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.get_health")
+    def test_tools_call_plate_what_next(self, mock_get_health, mock_write):
+        """Feature #285: plate_what_next MCP tool is registered and callable (v1 static)."""
+        mock_get_health.return_value = HealthReport(
+            plate_config_present=True,
+            repo="akasper/plate_core",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=0,
+            status="pass",
+        )
+        _handle_tools_call(30, {"name": "plate_what_next", "arguments": {"repo": "akasper/plate_core"}})
+        self.assertTrue(mock_write.called)
+        result = mock_write.call_args[0][0]["result"]
+        self.assertIn("content", result)
+
     def test_create_blocking_question_tool_exists_and_schema(self):
         """Feature #147/#151: Blocking creation tool is registered (Epic #139)."""
         from plate_core.mcp.curiosity_tools import CreateBlockingQuestionTool, CURIOSITY_TOOLS
@@ -249,6 +341,113 @@ class McpTests(unittest.TestCase):
             }
         })
         self.assertTrue(mock_write.called)
+
+    def test_validate_e2e_tests_tool_status_and_actionable(self):
+        """#263: ValidateE2eTestsTool produces clear pass/warn/fail + next_steps (stricter, CI/evidence aware)."""
+        # Non-existent -> fail
+        res = ValidateE2eTestsTool.execute("/non/existent/path/12345")
+        self.assertEqual(res["status"], "fail")
+        self.assertFalse(res["valid"])
+        self.assertIn("Repository not found", res["issues"][0])
+        self.assertTrue(any("next_steps" in k or "next" in str(v).lower() for k, v in res.items() if isinstance(v, (list, str))))
+
+        # Empty temp dir -> fail (missing core)
+        with tempfile.TemporaryDirectory() as tmp:
+            res = ValidateE2eTestsTool.execute(tmp)
+            self.assertIn(res["status"], ("fail", "warn"))
+            self.assertIn("Missing playwright.config.ts", " ".join(res["issues"]))
+            self.assertTrue(res.get("next_steps"))
+            # Has actionable recs
+            self.assertTrue(any("init-playwright" in r or "Copy" in r for r in res.get("recommendations", [])))
+
+        # Minimal good structure -> should reach warn or pass (no critical missing)
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "playwright.config.ts").touch()
+            (p / "tests" / "e2e" / "specs").mkdir(parents=True)
+            (p / "tests" / "e2e" / "specs" / "example.spec.ts").touch()
+            (p / "package.json").write_text('{"devDependencies": {"@playwright/test": "^1"}, "scripts": {"test:e2e": "playwright test"}}')
+            (p / ".github" / "workflows").mkdir(parents=True)
+            (p / ".github" / "workflows" / "test.yml").write_text("playwright: npx playwright test")
+            res = ValidateE2eTestsTool.execute(tmp)
+            self.assertIn(res["status"], ("pass", "warn"))
+            self.assertTrue(res.get("next_steps"))
+            # Evidence rec if no gifs yet (acceptable)
+            recs = " ".join(res.get("recommendations", []))
+            self.assertTrue("evidence" in recs.lower() or "GIF" in recs or "record" in recs.lower() or not recs)
+
+    @patch("plate_core.mcp.tools.subprocess.run")
+    def test_record_e2e_gif_tool_trimming_and_size_advice(self, mock_run):
+        """#263: RecordE2eGifTool accepts trim params, returns size/quality/recommendations, advises trim for large GIFs."""
+        from plate_core.mcp.tools import RecordE2eGifTool
+        # Success with GIF present (mock)
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "scripts").mkdir(parents=True)
+            (p / "scripts" / "e2e-record.sh").touch()
+            gif_dir = p / "tests" / "e2e" / "fixtures" / "gifs"
+            gif_dir.mkdir(parents=True)
+            gif = gif_dir / "demo.gif"
+            gif.write_bytes(b"0" * (6 * 1024 * 1024))  # >5MB to trigger advice
+            mock_run.return_value = type("R", (), {"returncode": 0, "stderr": ""})()
+            res = RecordE2eGifTool.execute(tmp, "demo", quality="low", start="00:00:02", duration=10)
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["quality"], "low")
+            self.assertIn("gif_path", res)
+            self.assertTrue(res.get("recommendations"))
+            self.assertIn("trim", res)  # trim params echoed
+            recs_str = " ".join(res.get("recommendations", []))
+            self.assertTrue("large" in recs_str.lower() or "trim" in recs_str.lower())
+
+        # Error on bad test name
+        res = RecordE2eGifTool.execute(".", "bad name with spaces!")
+        self.assertEqual(res["status"], "error")
+        self.assertIn("Invalid test name", res["message"])
+
+    @patch("plate_core.mcp_server._write")
+    @patch(
+        "plate_core.mcp_server.sys.stdin",
+        new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":40,"method":"tools/list"}\n'),
+    )
+    def test_tools_list_includes_discussions_mcp_surface(self, _mock_stdin, mock_write):
+        """Feature #329: Discussions MCP tools (list/get/comments/add/create/categories + open_ideas convenience) are discoverable via tools/list."""
+        run()
+        tools = mock_write.call_args[0][0]["result"]["tools"]
+        names = {tool["name"] for tool in tools}
+        for expected in [
+            "plate_list_discussions",
+            "plate_get_discussion",
+            "plate_list_discussion_comments",
+            "plate_add_discussion_comment",
+            "plate_create_discussion",
+            "plate_list_discussion_categories",
+            "plate_list_open_ideas",
+        ]:
+            self.assertIn(expected, names)
+
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.list_open_ideas")
+    def test_tools_call_plate_list_open_ideas(self, mock_list_open_ideas, mock_write):
+        """Feature #329: plate_list_open_ideas MCP tool is registered and callable (uses discussions.py; GH calls mocked)."""
+        from plate_core.discussions import Discussion
+        mock_list_open_ideas.return_value = [
+            Discussion(
+                number=54,
+                title="Add CLI path for repo upgrade",
+                html_url="https://github.com/akasper/plate/discussions/54",
+                state="open",
+                created_at="2026-05-26T15:22:38Z",
+                updated_at="2026-05-26T15:22:38Z",
+            )
+        ]
+        _handle_tools_call(41, {"name": "plate_list_open_ideas", "arguments": {"repo": "akasper/plate"}})
+        self.assertTrue(mock_write.called)
+        result = mock_write.call_args[0][0]["result"]
+        self.assertIn("content", result)
+        # Ensure the handler produced json text payload (smoke for dispatch + to_dict path)
+        text = result["content"][0]["text"]
+        self.assertIn("54", text)
+        self.assertIn("Add CLI path for repo upgrade", text)
 
 if __name__ == "__main__":
     unittest.main()

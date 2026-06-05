@@ -42,6 +42,15 @@ jobs:
               return;
             }
 
+            if (!pullRequest.milestone) {
+              core.warning(
+                `Warning-only rollout: this ${labels.filter((l) => ['Feature', 'Bug', 'Documentation'].includes(l)).join('/')} PR has no milestone. ` +
+                `Add one with: gh pr edit ${pullRequest.number} --milestone \"<milestone title>\"`
+              );
+            } else {
+              core.info(`PR milestone present: ${pullRequest.milestone.title}`);
+            }
+
             let data;
             try {
               data = await github.graphql(

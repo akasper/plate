@@ -1,0 +1,16 @@
+{
+  "slug": "306-release-track-status-targeting",
+  "change_type": "feature",
+  "surface": "gh plate bootstrap, gh plate release status, gh plate release target-epic, MCP release tools, .plate release config",
+  "summary": "Add multi-track release bootstrap branches, richer Next Release / linked-Epic status reporting, and validated target-epic guidance for the refined PLATE release ceremony.",
+  "migration_impact": "PLATE repositories can now bootstrap release-major/release-minor/release-patch alongside legacy release, read richer release-status signals, and use validated target-epic guidance while the final issue-to-issue GitHub link remains a manual UI step.",
+  "migration_guidance": [
+    "1. Run `gh plate bootstrap --apply` to create release-major, release-minor, release-patch, and legacy release when they are absent.",
+    "2. Use `gh plate release status` or MCP `plate_release_status` to inspect the active Next Release, linked Epics, on-hold Epics, and track summary.",
+    "3. Use `gh plate release target-epic <epic-number>` or MCP `plate_release_target_epic` to validate the Epic and identify the active Next Release before completing the final issue-to-issue link in the GitHub UI.",
+    "4. If you use `.plate`, optionally add a `release` section for default track policy and downstream trigger configuration."
+  ],
+  "agent_notes": "Do not assume GitHub can create the Epic-to-Release issue link via API. Use the helper output to validate state, then complete the link manually in GitHub UI and re-run release status to confirm the Epic moves out of the on-hold bucket.",
+  "breaking": false,
+  "links": ["#306", "#312", "#313", "#318"]
+}

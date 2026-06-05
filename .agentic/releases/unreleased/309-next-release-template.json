@@ -1,0 +1,15 @@
+{
+  "slug": "309-next-release-template",
+  "change_type": "feature",
+  "surface": ".github/ISSUE_TEMPLATE/release.yml, AGENTS.md",
+  "summary": "Evolve the Release issue template for the standing Next Release lifecycle, packaging rename, heavy-release validation, and immediate spawn of the next planning target.",
+  "migration_impact": "Release issues should now begin life as the single standing `Next Release` planning target, with the version field remaining optional until packaging locks `vX.Y.Z`.",
+  "migration_guidance": [
+    "1. Update `.github/ISSUE_TEMPLATE/release.yml` so new release issues start as `Next Release` instead of assuming a version is already known.",
+    "2. During packaging, rename or replace the standing issue with the concrete versioned release issue and keep the checklist aligned with the packaging/finalization flow.",
+    "3. After packaging begins, immediately create a fresh standing `Next Release` issue so future work has a canonical target."
+  ],
+  "agent_notes": "Do not create separate standing Major/Minor/Patch release issues. Use one `Next Release` issue plus Major/Minor/Patch labels on work items and the corresponding release-track branches.",
+  "breaking": false,
+  "links": ["#309", "#306"]
+}
