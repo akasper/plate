@@ -191,13 +191,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             # For v1: simple decision tree over common paths; future data-driven.
             payload = _what_next(args.get("repo"), args.get("agent_type"))
         elif name == "plate_contemplate":
-            # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
+            # Contemplation Engine entrypoint (v2.1 per Feature #343 / Epic #257)
             qn = args.get("question_number")
             if not qn:
                 raise ValueError("question_number is required")
             payload = trigger_contemplation(
                 question_number=qn,
                 answer_text=args.get("answer_text", ""),
+                all_previous_answers=args.get("all_previous_answers"),
                 repo=args.get("repo"),
                 session=args.get("session"),
                 source=args.get("source", "contemplation"),

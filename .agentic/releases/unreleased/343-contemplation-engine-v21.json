@@ -1,0 +1,28 @@
+{
+  "type": "feature",
+  "summary": "Contemplation Engine v2.1: signal-driven Q&A with evidence evaluation and strict closure",
+  "description": "Replaces v1 heuristics with real answer_signal parsing (checklist/artifact/keyword formats per #326), evidence-based signal evaluation with citations, strict close decision (only if signal met with confidence + usage report), typed child issue creation (Feature/Research/Design with back-refs), and enhanced blocking Question resumption with detailed unblock reports.",
+  "implementation_evidence": [
+    "src/plate_core/contemplation.py:1-421 (v2.1 engine with _parse_answer_signal, _evaluate_signal, _create_usage_report, ContemplationEngine.contemplate with full transcript/evaluation/closure/children/resumption)",
+    "tests/test_contemplation.py:1-433 (20 comprehensive tests covering signal parsing, evaluation, closure, child creation, blocking resumption, integration flows)",
+    "src/plate_core/mcp_server.py:194-201 (plate_contemplate tool updated for v2.1 with all_previous_answers support)",
+    "src/plate_core/agent_guidance.py:73-141 (QANDA_CURIOSITY_GUIDANCE updated with v2.1 specifics section)",
+    "plugin/agents/plate.agent.md:24-32 (.plugin/agents/plate.agent.md:24-32) (Q&A mode section updated with v2.1 engine details)"
+  ],
+  "verification_evidence": [
+    "All 335 tests pass including 20 new contemplation-specific tests",
+    "Test coverage: signal parsing (5 tests), evaluation logic (6 tests), full engine (6 tests), integration (1 test), trigger function (1 test), usage report (1 test)",
+    "Supports checklist format (- [ ] item), artifact requirements (docs/, commit, .md), keyword matching",
+    "Evidence-based evaluation with citations, confidence scoring (high/medium/low)",
+    "Strict closure: only when signal met with medium-to-high confidence, includes === USAGE REPORT ===",
+    "Child creation: types issues (Feature/Research/Design) based on content, includes parent refs",
+    "Blocking resumption: detects PLATE-BLOCKING-DUMP, posts unblock report on original with eval status + children"
+  ],
+  "breaking": false,
+  "migration_guidance": "Existing v1 contemplation calls work unchanged. v2.1 adds optional all_previous_answers parameter to plate_contemplate MCP tool. Question bodies should include answer_signal field (per .github/ISSUE_TEMPLATE/question.yml) for best results; engine gracefully handles missing signals. Agents should update to v2.1 guidance in agent_guidance.py and plate.agent.md.",
+  "related_issues": [257, 326, 342, 143, 139, 147, 148],
+  "epic": "contemplation-v2",
+  "author": "claude",
+  "pr": null,
+  "committed_at": null
+}
