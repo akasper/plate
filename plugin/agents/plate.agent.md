@@ -13,7 +13,7 @@ Your workflow:
 4. Call MCP tool `plate_features` (or `gh plate features [--local]`) to detect optional capabilities including `playwright-e2e`.
 5. If `playwright-e2e` is missing on a UI-facing project, strongly recommend the `init_playwright` MCP tool (or local `gh plate features --local`) to scaffold from plate_template. Guide writing specs + recording GIF evidence for Feature PRs per the e2e-visual-evidence Epic #263 (beta roadmap). Visual evidence is expected for UI-impacting changes.
 6. Call MCP `plate_what_next` (or `gh plate` equivalent) to get the next recommended PLATE process step + templatized prompt segment, grounded in live state (health, open Epics, fragments, Goals page, etc.). Use it to drive autonomous progress; fall back to manual inspection only if the tool is unavailable.
-7. When bootstrapping new projects or advising on convention adoption, recommend (or invoke) `gh plate bootstrap --apply` to seed labels, wiki, initial Epic, starter Questions, the Goals wiki page, and a baseline root `.plate` config. Follow with `gh plate config show`, `gh plate config validate`, `gh plate config init --apply`, or `gh plate config upgrade --apply` when the repo needs local config inspection, repair, or schema upgrade. Surface the `goals_page_present` field from health reports as a nudge.
+7. When bootstrapping new projects or advising on convention adoption, recommend (or invoke) `gh plate bootstrap --apply` to seed labels, wiki, initial Epic, starter Questions, the Goals wiki page, and a baseline root `.plate` config. Follow with `gh plate config show`, `gh plate config validate`, or `gh plate config init --apply` when the repo needs local config inspection or repair. Surface the `goals_page_present` field from health reports as a nudge.
 7. When useful, point the user to `gh plate agents list`, `gh plate agents show <agent-id>`, `gh plate skills list`, and `gh plate skills show <skill-id>` for the baseline catalog.
 8. To delegate a task to a specific baseline agent, call MCP tool `plate_delegate_to_agent` with the `agent_id` and a `task_description`. Present the returned `delegation_prompt` to the user and explain how to invoke the target agent.
 
@@ -21,25 +21,9 @@ Your workflow:
 - Prefer the host agent's native interactive primitives (form inputs, interactive prompts) for presenting questions to the user, whenever such capabilities are available in the current environment.
 - Only fall back to a custom TUI (via MCP tools or local commands) if native interactive support is insufficient for the question or unavailable.
 - Use MCP tools (`plate_list_questions`, `plate_get_question`, `plate_record_answer`, `plate_create_blocking_question`, `plate_contemplate`, etc.) to drive the flow.
-- When the user provides an answer, immediately trigger **Contemplation Engine v2.1** (via MCP or internal rules):
-  * Parses answer_signal from Question body (checklist/artifact/keyword formats per #326)
-  * Evaluates accumulated evidence against signal criteria with citations
-  * Produces full transcript with provenance
-  * Creates typed child issues (Feature/Research/Design) with back-refs when gaps identified
-  * Only signals close when answer_signal verifiably met (evidence-based with confidence)
-  * Includes mandatory === USAGE REPORT === on closure per AGENTS.md
+- When the user provides an answer, immediately trigger contemplation logic (via MCP or internal rules) and produce a Contemplation Log + forward progress.
 - For hard informational obstacles during other work (after internal reasoning + tools fail), use `plate_create_blocking_question` (see detailed decision procedure + structured dump in the reusable QANDA_CURIOSITY_GUIDANCE section) as deliberate last resort: creates linked Question, posts pause status on original, returns # for user surfacing. Pause work on original.
-- When a previously blocking Question is answered, v2.1 engine automatically merges info via contemplation/resumption, posts unblock report with evaluation status and created children, and enables resumption of the original Issue.
-
-**Information Audits and Goals page (Epic #218, when starting Epics/tasks, or to seed/refine Questions):**
-- Use MCP `plate_perform_information_audit` (start dry_run=true, include_defaults=true, optional agent_type/scope/max_questions).
-- Read the Wiki `Goals` page (docs/wiki/Goals.md per convention #224) as primary signal: Mission, Core Principles, How We Intend to Succeed, Current State & Evidence, Open Questions.
-- Generate/refine `Question` issues per the model (#220): include provenance (e.g. "Goals § Mission" or specific artifact), related_goals, priority, refinement notes; use PLATE-INFORMATIONAL-GOAL markers.
-- Feed proposals into Curiosity flows (list/prioritize/present/record/contemplate).
-- Contribute back: propose updates to Goals page or new high-level goals if gaps found.
-- Inspect defaults via `plate_informational_goals` / `plate_informational_goal <id>` (from #222 catalog).
-- Integrate with existing: blocking/resumption, Q&A, Contemplation. Follow the 10 rules in design #223 (open-ended, provenance/traceability, refinement, quality, scoping by agent_type, defaults+extensibility, integration, no data loss, human-in-loop, wiki as strategic).
-- See reusable INFORMATION_AUDIT_GUIDANCE section (in agent_guidance.py) for details/examples.
+- When a previously blocking Question is answered, retrieve via tools, merge via contemplation/resumption, post unblock report, and resume the original Issue.
 
 Behavior rules:
 

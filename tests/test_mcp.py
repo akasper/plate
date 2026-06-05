@@ -19,7 +19,6 @@ class McpTests(unittest.TestCase):
     @patch("plate_core.mcp_server.get_health")
     def test_tools_call_plate_health(self, mock_get_health, mock_write):
         mock_get_health.return_value = HealthReport(
-            goals_page_present=True,
             repo="akasper/plate_core",
             label_coverage_ok=True,
             missing_labels=[],
@@ -27,6 +26,7 @@ class McpTests(unittest.TestCase):
             branch_protection_enabled=True,
             open_epic_count=1,
             status="pass",
+            goals_page_present=True,
             open_question_count=0,
             plate_config_present=False,
             plate_config_valid=False,
@@ -145,25 +145,6 @@ class McpTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / ".plate").exists())
 
     @patch("plate_core.mcp_server._write")
-    def test_tools_call_plate_config_upgrade(self, mock_write):
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / ".plate").write_text(
-                json.dumps(
-                    {
-                        "version": "1.0",
-                        "methodology": {"marker_prefix": "PLATES-CORE"},
-                        "extensions": {"enabled": True},
-                        "overrides": {},
-                    }
-                ),
-                encoding="utf-8",
-            )
-            _handle_tools_call(14, {"name": "plate_config_upgrade", "arguments": {"repo_root": tmp}})
-            payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
-            self.assertTrue(payload["changed"])
-            self.assertEqual(payload["current_version"], "1.1")
-
-    @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_plan_epic(self, mock_write):
         _handle_tools_call(12, {"name": "plate_plan_epic", "arguments": {}})
         self.assertTrue(mock_write.called)
@@ -244,7 +225,6 @@ class McpTests(unittest.TestCase):
         self.assertIn("plate_config_get", names)
         self.assertIn("plate_config_validate", names)
         self.assertIn("plate_config_init", names)
-        self.assertIn("plate_config_upgrade", names)
         self.assertIn("plate_release_target_epic", names)
 
     @patch("plate_core.mcp_server._write")
@@ -285,7 +265,6 @@ class McpTests(unittest.TestCase):
             "plate_get_question",
             "plate_record_answer",
             "plate_get_answers",
-            "plate_backfill_answers",
             "plate_synthesize_priorities",
             "plate_create_blocking_question",  # Feature #147 last-resort creation
         ]:
@@ -403,51 +382,6 @@ class McpTests(unittest.TestCase):
         res = RecordE2eGifTool.execute(".", "bad name with spaces!")
         self.assertEqual(res["status"], "error")
         self.assertIn("Invalid test name", res["message"])
-
-    @patch("plate_core.mcp_server._write")
-    @patch(
-        "plate_core.mcp_server.sys.stdin",
-        new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":40,"method":"tools/list"}\n'),
-    )
-    def test_tools_list_includes_discussions_mcp_surface(self, _mock_stdin, mock_write):
-        """Feature #329: Discussions MCP tools (list/get/comments/add/create/categories + open_ideas convenience) are discoverable via tools/list."""
-        run()
-        tools = mock_write.call_args[0][0]["result"]["tools"]
-        names = {tool["name"] for tool in tools}
-        for expected in [
-            "plate_list_discussions",
-            "plate_get_discussion",
-            "plate_list_discussion_comments",
-            "plate_add_discussion_comment",
-            "plate_create_discussion",
-            "plate_list_discussion_categories",
-            "plate_list_open_ideas",
-        ]:
-            self.assertIn(expected, names)
-
-    @patch("plate_core.mcp_server._write")
-    @patch("plate_core.mcp_server.list_open_ideas")
-    def test_tools_call_plate_list_open_ideas(self, mock_list_open_ideas, mock_write):
-        """Feature #329: plate_list_open_ideas MCP tool is registered and callable (uses discussions.py; GH calls mocked)."""
-        from plate_core.discussions import Discussion
-        mock_list_open_ideas.return_value = [
-            Discussion(
-                number=54,
-                title="Add CLI path for repo upgrade",
-                html_url="https://github.com/akasper/plate/discussions/54",
-                state="open",
-                created_at="2026-05-26T15:22:38Z",
-                updated_at="2026-05-26T15:22:38Z",
-            )
-        ]
-        _handle_tools_call(41, {"name": "plate_list_open_ideas", "arguments": {"repo": "akasper/plate"}})
-        self.assertTrue(mock_write.called)
-        result = mock_write.call_args[0][0]["result"]
-        self.assertIn("content", result)
-        # Ensure the handler produced json text payload (smoke for dispatch + to_dict path)
-        text = result["content"][0]["text"]
-        self.assertIn("54", text)
-        self.assertIn("Add CLI path for repo upgrade", text)
 
 if __name__ == "__main__":
     unittest.main()

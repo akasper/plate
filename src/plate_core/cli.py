@@ -29,12 +29,7 @@ from .release import (
 )
 from .migration import generate_migration_plan, apply_migration_plan
 from .costs import get_cost_report
-from .plate_config import (
-    PlateConfigError,
-    apply_plate_config_upgrade,
-    get_plate_config_report,
-    init_plate_config,
-)
+from .plate_config import PlateConfigError, get_plate_config_report, init_plate_config
 
 
 def cmd_health(args: argparse.Namespace) -> int:
@@ -55,16 +50,7 @@ def cmd_health(args: argparse.Namespace) -> int:
     print(f"Binary artifacts tracked: {bin_count} ({bin_status})")
     print(f"Goals wiki page: {'PRESENT' if report.goals_page_present else 'MISSING'}")
     print(f"Open Questions: {report.open_question_count}")
-    plate_line = f".plate/config: {'PRESENT' if report.plate_config_present else 'MISSING'} (valid: {report.plate_config_valid})"
-    if report.plate_config_present:
-        plate_line += (
-            f" file={report.plate_config_file_version or '(unknown)'}"
-            f" resolved={report.plate_config_resolved_version or '(unknown)'}"
-            f" upgrade={report.plate_config_upgrade_available}"
-        )
-        if report.plate_config_enabled_extensions:
-            plate_line += f" enabled_extensions={','.join(report.plate_config_enabled_extensions)}"
-    print(plate_line)
+    print(f".plate/config: {'PRESENT' if report.plate_config_present else 'MISSING'} (valid: {report.plate_config_valid})")
     print(f"Curiosity answers index: {'PRESENT' if report.curiosity_answers_present else 'MISSING'}")
     return 0 if report.status != "fail" else 1
 
@@ -161,18 +147,8 @@ def cmd_config_show(args: argparse.Namespace) -> int:
     print(f"Present: {report.present}")
     print(f"Valid: {report.valid}")
     print(f"Source: {report.source}")
-    if report.file_version:
-        print(f"File version: {report.file_version}")
-    print(f"Resolved version: {report.resolved_version}")
-    print(f"Upgrade available: {report.upgrade_available}")
-    if report.enabled_extensions:
-        print(f"Enabled extensions: {', '.join(report.enabled_extensions)}")
     if report.errors:
         print(f"Errors: {'; '.join(report.errors)}")
-    if report.migration_guidance:
-        print("Migration guidance:")
-        for step in report.migration_guidance:
-            print(f"- {step}")
     print(json.dumps(report.config, indent=2))
     return 0 if report.valid else 1
 
@@ -205,32 +181,6 @@ def cmd_config_init(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Initialized {report.path}")
-    return 0
-
-
-def cmd_config_upgrade(args: argparse.Namespace) -> int:
-    try:
-        report = apply_plate_config_upgrade(Path(args.repo_root), apply=bool(args.apply))
-    except PlateConfigError as exc:
-        if args.json:
-            print(json.dumps({"path": str(Path(args.repo_root) / ".plate"), "error": str(exc)}))
-        else:
-            print(str(exc))
-        return 1
-
-    if args.json:
-        print(json.dumps(report.to_dict()))
-        return 0
-
-    print(f"Path: {report.path}")
-    print(f"Previous version: {report.previous_version}")
-    print(f"Current version: {report.current_version}")
-    print(f"Changed: {report.changed}")
-    print(f"Applied: {report.applied}")
-    if report.migration_guidance:
-        print("Migration guidance:")
-        for step in report.migration_guidance:
-            print(f"- {step}")
     return 0
 
 
@@ -502,7 +452,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
     This gh plate qanda entrypoint is for direct terminal use or scripting.
     """
     from plate_core.mcp.curiosity_tools import (
-        BackfillAnswersTool,
         ListQuestionsTool,
         GetQuestionTool,
         RecordAnswerTool,
@@ -514,12 +463,7 @@ def cmd_qanda(args: argparse.Namespace) -> int:
     json_out = getattr(args, "json", False)
 
     if getattr(args, "list", False) or args.command == "qanda" and not any(
-        [
-            getattr(args, "question", None),
-            getattr(args, "synthesize", False),
-            getattr(args, "record", False),
-            getattr(args, "backfill", False),
-        ]
+        [getattr(args, "question", None), getattr(args, "synthesize", False), getattr(args, "record", False)]
     ):
         # Default: list + synthesize top priorities
         result = SynthesizePrioritiesTool.execute(repo=repo, max_results=getattr(args, "limit", 5))
@@ -561,28 +505,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
         print("\n(Use --record to append an answer and trigger contemplation.)")
         return 0
 
-    if getattr(args, "backfill", False):
-        result = BackfillAnswersTool.execute(
-            repo=repo,
-            state=getattr(args, "backfill_state", "all"),
-            limit=getattr(args, "backfill_limit", 50),
-        )
-        if json_out:
-            print(json.dumps(result))
-            return 0
-        print(f"Repo: {result.get('repo')}")
-        print(f"Questions processed: {result.get('question_count', 0)}")
-        print(f"Answers written: {result.get('answers_written', 0)}")
-        for item in result.get("processed_questions", []):
-            if item.get("status") == "backfilled":
-                print(
-                    f"  - #{item.get('question_number')}: backfilled {item.get('answers_written')} answer(s)"
-                    f" -> {item.get('committed_file')}"
-                )
-            else:
-                print(f"  - #{item.get('question_number')}: skipped ({item.get('reason')})")
-        return 0
-
     if getattr(args, "record", None):
         qnum = args.record
         answer_text = getattr(args, "answer", None)
@@ -615,7 +537,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
             answered_by=getattr(args, "by", "cli-user"),
             repo=repo,
             source="cli-interactive",
-            revision_of=getattr(args, "revision_of", None),
         )
         if json_out:
             print(json.dumps(result))
@@ -623,8 +544,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
         print(f"Answer recorded for #{qnum}: {result.get('status')}")
         if result.get("comment_url"):
             print(f"Comment: {result['comment_url']}")
-        if result.get("committed_storage"):
-            print(f"Committed storage: {result['committed_storage']}")
         print("Next: Contemplation will create follow-ups / unblock if this was a blocking Question (#147/#148).")
         return 0
 
@@ -634,8 +553,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
     print("  gh plate qanda --question 140            # details for one")
     print("  gh plate qanda --record 140              # interactive prompt for answer (basic TUI fallback)")
     print("  gh plate qanda --record 140 --answer 'text'")
-    print("  gh plate qanda --record 140 --answer 'revised' --revision-of 123456789")
-    print("  gh plate qanda --backfill --backfill-state all")
     print("  gh plate qanda --synthesize --json")
     print("\nNative Copilot CLI sessions: agent uses host native forms + MCP tools (plate_create_blocking_question for #147 obstacles, record + contemplate for #148 resumption).")
     print("See QANDA_CURIOSITY_GUIDANCE and #151 for full TUI + GIF evidence.")
@@ -829,15 +746,6 @@ def build_parser() -> argparse.ArgumentParser:
     cfg_init.add_argument("--force", action="store_true", help="Overwrite an existing .plate file")
     cfg_init.add_argument("--json", action="store_true", help="Output JSON")
     cfg_init.set_defaults(func=cmd_config_init)
-    cfg_upgrade = config_sub.add_parser("upgrade", help="Upgrade an existing .plate file to the current schema")
-    cfg_upgrade.add_argument("--repo-root", default=".", help="Repository root containing .plate (default: current directory)")
-    cfg_upgrade.add_argument(
-        "--apply",
-        action="store_true",
-        help="Write the upgraded .plate file back to disk. Without this flag, show the upgrade result only.",
-    )
-    cfg_upgrade.add_argument("--json", action="store_true", help="Output JSON")
-    cfg_upgrade.set_defaults(func=cmd_config_upgrade)
 
     pr = sub.add_parser("pr", help="PR feedback operations")
     pr_sub = pr.add_subparsers(dest="pr_command", required=True)
@@ -929,10 +837,6 @@ def build_parser() -> argparse.ArgumentParser:
     qanda.add_argument("--record", type=int, help="Record an answer to this Question number")
     qanda.add_argument("--answer", help="Answer text when using --record")
     qanda.add_argument("--by", help="Who is answering (for provenance)", default="cli-user")
-    qanda.add_argument("--revision-of", help="Optional prior answer/comment id this answer supersedes")
-    qanda.add_argument("--backfill", action="store_true", help="Backfill committed answer artifacts from existing Question issues")
-    qanda.add_argument("--backfill-state", default="all", choices=["open", "closed", "all"], help="Issue state filter for --backfill")
-    qanda.add_argument("--backfill-limit", type=int, default=50, help="Max Questions to scan during --backfill")
     qanda.add_argument("--limit", type=int, default=5, help="Max results for synthesize")
     qanda.set_defaults(func=cmd_qanda)
     return parser
