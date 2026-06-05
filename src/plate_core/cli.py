@@ -29,7 +29,12 @@ from .release import (
 )
 from .migration import generate_migration_plan, apply_migration_plan
 from .costs import get_cost_report
-from .plate_config import PlateConfigError, get_plate_config_report, init_plate_config
+from .plate_config import (
+    PlateConfigError,
+    apply_plate_config_upgrade,
+    get_plate_config_report,
+    init_plate_config,
+)
 
 
 def cmd_health(args: argparse.Namespace) -> int:
@@ -50,7 +55,16 @@ def cmd_health(args: argparse.Namespace) -> int:
     print(f"Binary artifacts tracked: {bin_count} ({bin_status})")
     print(f"Goals wiki page: {'PRESENT' if report.goals_page_present else 'MISSING'}")
     print(f"Open Questions: {report.open_question_count}")
-    print(f".plate/config: {'PRESENT' if report.plate_config_present else 'MISSING'} (valid: {report.plate_config_valid})")
+    plate_line = f".plate/config: {'PRESENT' if report.plate_config_present else 'MISSING'} (valid: {report.plate_config_valid})"
+    if report.plate_config_present:
+        plate_line += (
+            f" file={report.plate_config_file_version or '(unknown)'}"
+            f" resolved={report.plate_config_resolved_version or '(unknown)'}"
+            f" upgrade={report.plate_config_upgrade_available}"
+        )
+        if report.plate_config_enabled_extensions:
+            plate_line += f" enabled_extensions={','.join(report.plate_config_enabled_extensions)}"
+    print(plate_line)
     print(f"Curiosity answers index: {'PRESENT' if report.curiosity_answers_present else 'MISSING'}")
     return 0 if report.status != "fail" else 1
 
@@ -147,8 +161,18 @@ def cmd_config_show(args: argparse.Namespace) -> int:
     print(f"Present: {report.present}")
     print(f"Valid: {report.valid}")
     print(f"Source: {report.source}")
+    if report.file_version:
+        print(f"File version: {report.file_version}")
+    print(f"Resolved version: {report.resolved_version}")
+    print(f"Upgrade available: {report.upgrade_available}")
+    if report.enabled_extensions:
+        print(f"Enabled extensions: {', '.join(report.enabled_extensions)}")
     if report.errors:
         print(f"Errors: {'; '.join(report.errors)}")
+    if report.migration_guidance:
+        print("Migration guidance:")
+        for step in report.migration_guidance:
+            print(f"- {step}")
     print(json.dumps(report.config, indent=2))
     return 0 if report.valid else 1
 
@@ -181,6 +205,32 @@ def cmd_config_init(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Initialized {report.path}")
+    return 0
+
+
+def cmd_config_upgrade(args: argparse.Namespace) -> int:
+    try:
+        report = apply_plate_config_upgrade(Path(args.repo_root), apply=bool(args.apply))
+    except PlateConfigError as exc:
+        if args.json:
+            print(json.dumps({"path": str(Path(args.repo_root) / ".plate"), "error": str(exc)}))
+        else:
+            print(str(exc))
+        return 1
+
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Path: {report.path}")
+    print(f"Previous version: {report.previous_version}")
+    print(f"Current version: {report.current_version}")
+    print(f"Changed: {report.changed}")
+    print(f"Applied: {report.applied}")
+    if report.migration_guidance:
+        print("Migration guidance:")
+        for step in report.migration_guidance:
+            print(f"- {step}")
     return 0
 
 
@@ -746,6 +796,15 @@ def build_parser() -> argparse.ArgumentParser:
     cfg_init.add_argument("--force", action="store_true", help="Overwrite an existing .plate file")
     cfg_init.add_argument("--json", action="store_true", help="Output JSON")
     cfg_init.set_defaults(func=cmd_config_init)
+    cfg_upgrade = config_sub.add_parser("upgrade", help="Upgrade an existing .plate file to the current schema")
+    cfg_upgrade.add_argument("--repo-root", default=".", help="Repository root containing .plate (default: current directory)")
+    cfg_upgrade.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write the upgraded .plate file back to disk. Without this flag, show the upgrade result only.",
+    )
+    cfg_upgrade.add_argument("--json", action="store_true", help="Output JSON")
+    cfg_upgrade.set_defaults(func=cmd_config_upgrade)
 
     pr = sub.add_parser("pr", help="PR feedback operations")
     pr_sub = pr.add_subparsers(dest="pr_command", required=True)

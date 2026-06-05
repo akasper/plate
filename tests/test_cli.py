@@ -103,6 +103,7 @@ class CliTests(unittest.TestCase):
             payload = json.loads(out.getvalue().strip())
             self.assertFalse(payload["present"])
             self.assertEqual(payload["source"], "defaults")
+            self.assertEqual(payload["resolved_version"], "1.1")
 
     def test_config_init_json_output(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -113,6 +114,7 @@ class CliTests(unittest.TestCase):
             payload = json.loads(out.getvalue().strip())
             self.assertTrue(payload["present"])
             self.assertTrue((Path(tmp) / ".plate").exists())
+            self.assertEqual(payload["resolved_version"], "1.1")
 
     def test_config_validate_invalid_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -123,6 +125,28 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 1)
             payload = json.loads(out.getvalue().strip())
             self.assertFalse(payload["valid"])
+
+    def test_config_upgrade_json_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".plate").write_text(
+                json.dumps(
+                    {
+                        "version": "1.0",
+                        "methodology": {"marker_prefix": "PLATES-CORE"},
+                        "extensions": {"enabled": True, "installed": {"release-track-management": True}},
+                        "overrides": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["config", "upgrade", "--repo-root", tmp, "--json"])
+            self.assertEqual(code, 0)
+            payload = json.loads(out.getvalue().strip())
+            self.assertTrue(payload["changed"])
+            self.assertFalse(payload["applied"])
+            self.assertEqual(payload["current_version"], "1.1")
 
     def test_agents_json_output(self):
         out = io.StringIO()

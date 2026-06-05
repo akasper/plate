@@ -63,14 +63,15 @@ class DryRunPlanner:
         except Exception:
             inventory = {"error": "inventory unavailable"}
 
+        plate_cfg_present = (self.repo_root / ".plate").exists()
         try:
-            plate_cfg = load_plate_config(self.repo_root).to_dict()
+            load_plate_config(self.repo_root)
         except Exception:
-            plate_cfg = {"present": False}
+            plate_cfg_present = False
 
         current = {
             "inventory_summary": inventory,
-            "has_plate_config": plate_cfg.get("present", False),
+            "has_plate_config": plate_cfg_present,
             "templates_in_use": "unknown",  # would scan .github etc in fuller impl
         }
 
@@ -115,7 +116,7 @@ class DryRunPlanner:
             current_state=current,
             target_state=target,
             steps=steps,
-            estimated_risk="low" if plate_cfg.get("present") else "medium",
+            estimated_risk="low" if plate_cfg_present else "medium",
             rollback_checkpoint="pre-migration-" + "placeholder",
         )
         return plan
