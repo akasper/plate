@@ -70,14 +70,20 @@ PLATE supports a Curiosity-driven workflow where informational goals are tracked
 - **Direct `gh plate qanda` usage or fallback:** Use lightweight custom TUI tools (e.g. gum/huh) or simple prompts.
 - The goal is the most seamless possible experience for the user in their primary interface.
 
-### Question handling flow
+### Question handling flow (v2.1 Contemplation Engine)
 1. Use available MCP tools (or future equivalents such as `plate_list_questions`, `plate_get_question`) to discover and prioritize open Questions.
 2. Present the question using the native preference above.
 3. When the user provides an answer, capture it with full provenance (see Answer Model).
-4. Trigger contemplation logic (via MCP tools or rules) and produce a Contemplation Log.
+4. **Trigger Contemplation Engine v2.1** (via MCP tools or rules):
+   - Parses `answer_signal` from Question body (supports checklist, artifact, keyword formats per #326)
+   - Evaluates accumulated evidence against signal criteria
+   - Produces full transcript with citations
+   - Creates typed child issues (Feature/Research/Design) with back-refs when gaps identified
+   - Only signals close when answer_signal is verifiably met (evidence-based with confidence)
+   - Includes mandatory === USAGE REPORT === block on closure per AGENTS.md
 5. Create forward progress (new issues, artifact updates) as defined in the Contemplation contract.
 6. For hard informational obstacles during other work, create a blocking `Question` issue (with a clear structured information dump) as a deliberate last resort, post a status on the original Issue, and pause work on it.
-7. When a blocking Question is later answered, offer to merge the new information back into the original Issue and resume the blocked work.
+7. When a blocking Question is later answered, the v2.1 engine merges the new information back into the original Issue with an auditable unblock report and resumes the blocked work.
 
 ### Blocking / informational obstacle pattern (Feature #147 / Epic #139)
 **Decision procedure (invoke ONLY as deliberate last resort):**
@@ -101,20 +107,33 @@ When criteria met:
 
 This is the concrete last-resort escape hatch. Over-use is a risk — prefer reasoning first. Document the decision in your reasoning trace.
 
-### Resumption pattern (Feature #148 / Epic #139)
+### Resumption pattern (Feature #148 / Epic #139 / v2.1 enhancement)
 When you (or a future session) detect that a previously blocking Question (one containing PLATE-BLOCKING-DUMP or explicit "blocking" marker + link to original Issue) has been answered:
 1. Use `plate_get_question` + `plate_get_answers` (or record_answer path) to fetch the full answer + provenance from the blocking Question.
 2. Identify the original blocked Issue from the dump/block (or Question body links).
-3. Perform structured merge:
-   - Post a clear, human/machine-readable "**Unblocked by answer to Question #N**" report comment on the original (key excerpts, provenance, link back, actions taken).
-   - Update the original Issue body/sections/comments with the new info where it changes scope/understanding (append-only where possible).
-   - Create any follow-on artifacts or child issues warranted by the new information (via normal contemplation rules).
-4. Resume or hand off work on the original Issue (or mark it ready for next agent).
-5. Close the blocking Question only if its answer_signal is met (normal contemplation closure).
+3. **Trigger Contemplation Engine v2.1** on the answer — the engine will:
+   - Evaluate the answer against signal criteria
+   - Create typed child issues if gaps remain
+   - Post a structured "Unblocked by answer to Question #N" report on the original Issue with:
+     * Answer excerpt and evaluation status
+     * List of created follow-up issues
+     * Next steps guidance
+     * Full provenance link
+4. Update the original Issue body/sections/comments with the new info where it changes scope/understanding (append-only where possible).
+5. Resume or hand off work on the original Issue (or mark it ready for next agent).
+6. Close the blocking Question only if its answer_signal is met (normal contemplation closure).
 
 **MCP integration**: The `plate_record_answer` (source=\"blocking\") + contemplation path, or a dedicated `plate_resume_from_blocking_question` tool (to be added), triggers the above. Always produce auditable unblock report. Preserve full bidirectional traceability. No data loss.
 
 This completes the loop started by #147 creation. Dogfood the full create → answer → resume in this repo.
+
+### v2.1 Contemplation Engine specifics
+The v2.1 engine (Feature #343 / Epic #257) provides:
+- **Real signal parsing**: Extracts answer_signal from Question body in checklist format (`- [ ] item`), artifact format (mentions `docs/`, `commit`, etc.), or keyword format
+- **Evidence-based evaluation**: Checks accumulated answers against parsed criteria, provides citations from answer excerpts
+- **Strict closure**: Only signals close when signal is met with medium-to-high confidence; includes === USAGE REPORT === per AGENTS.md
+- **Typed child creation**: Creates Feature/Research/Design issues based on identified gaps in answers, with full back-refs to parent Question
+- **Enhanced resumption**: Blocking Question answers trigger detailed unblock reports on original Issues with evaluation status and created children
 
 ### Related MCP tools (examples)
 - Future tools for listing/synthesizing Questions, recording answers, triggering contemplation, and managing blocking/resumption flows.
