@@ -166,3 +166,4 @@ Use this sync flow:
 
 This keeps downstream repos aligned with new core PLATE behavior without erasing project-specific policy.
 <!-- PLATES-CORE:END keeping-your-fork-current -->
+# trivial trigger for CI recheck after label fix
