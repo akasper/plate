@@ -603,6 +603,7 @@ def run() -> None:
                                         "answered_by": {"type": "string", "description": "Username or agent id. Defaults to 'agent'."},
                                         "session": {"type": "string", "description": "Optional session/turn id for provenance."},
                                         "source": {"type": "string", "description": "qanda | agent-contemplation | manual | blocking", "default": "qanda"},
+                                        "revision_of": {"type": "string", "description": "Optional prior answer/comment id this answer supersedes."},
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "agent_actions": {
                                             "type": "array",
@@ -615,7 +616,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_get_answers",
-                                "description": "Return answers for a Question. Prefers the fast committed docs/curiosity/answers.yml index (Answer Model #150); falls back to scanning PLATE-ANSWER comment blocks on the issue.",
+                                "description": "Return answers for a Question. Prefers the fast committed docs/curiosity/answers.yml index plus docs/curiosity/answers/*.md artifacts (Answer Model #150); falls back to scanning PLATE-ANSWER comment blocks on the issue.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -623,6 +624,23 @@ def run() -> None:
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                     },
                                     "required": ["question_number"],
+                                },
+                            },
+                            {
+                                "name": "plate_backfill_answers",
+                                "description": "Backfill committed curiosity answer storage from historical Question issues. Writes docs/curiosity/answers/*.md plus docs/curiosity/answers.yml from existing answer comments or closure summaries.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "state": {"type": "string", "description": "Issue state filter: open, closed, or all.", "default": "all"},
+                                        "limit": {"type": "integer", "description": "Max Questions to scan when question_numbers is omitted.", "default": 50},
+                                        "question_numbers": {
+                                            "type": "array",
+                                            "items": {"type": "integer"},
+                                            "description": "Optional explicit Question issue numbers to backfill.",
+                                        },
+                                    },
                                 },
                             },
                             {

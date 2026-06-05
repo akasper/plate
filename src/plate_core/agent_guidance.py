@@ -104,6 +104,8 @@ This is the concrete last-resort escape hatch. Over-use is a risk — prefer rea
 ### Resumption pattern (Feature #148 / Epic #139)
 When you (or a future session) detect that a previously blocking Question (one containing PLATE-BLOCKING-DUMP or explicit "blocking" marker + link to original Issue) has been answered:
 1. Use `plate_get_question` + `plate_get_answers` (or record_answer path) to fetch the full answer + provenance from the blocking Question.
+   - Prefer the committed fast path from `plate_get_answers` when `docs/curiosity/answers.yml` and `docs/curiosity/answers/*.md` are present.
+   - If you are working from historical Questions that predate committed storage, run `plate_backfill_answers` (or `gh plate qanda --backfill`) once before synthesis/resumption.
 2. Identify the original blocked Issue from the dump/block (or Question body links).
 3. Perform structured merge:
    - Post a clear, human/machine-readable "**Unblocked by answer to Question #N**" report comment on the original (key excerpts, provenance, link back, actions taken).

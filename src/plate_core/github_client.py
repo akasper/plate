@@ -16,9 +16,7 @@ class GhClient:
     """Minimal GitHub API helper using the authenticated `gh` CLI."""
 
     def api(self, endpoint: str, method: str = "GET", fields: dict | None = None) -> object:
-        cmd = ["gh", "api", endpoint]
-        if method != "GET":
-            cmd.extend(["-X", method])
+        cmd = ["gh", "api", endpoint, "-X", method]
         for key, value in (fields or {}).items():
             # Use -F (typed inference) only for native Python types that gh can safely coerce.
             # Strings use -f to prevent mis-parsing (e.g. "5319e7" as scientific notation).
