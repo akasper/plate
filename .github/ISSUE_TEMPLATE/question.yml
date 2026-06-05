@@ -26,8 +26,13 @@ body:
     id: answer_signal
     attributes:
       label: Answer signal
-      description: How will we know this question is answered?
-      placeholder: "A documented recommendation in docs/research/question-agent-packaging.md and follow-up implementation issue(s)."
+      description: |
+        Use checklist-style markdown criteria. Each item should name the expected artifact or claim
+        and be satisfiable only with explicit citations or links in the recorded answer history.
+      placeholder: |
+        - [ ] `docs/research/question-agent-packaging.md` contains the recommendation
+        - [ ] follow-up implementation issue(s) are linked
+        - [ ] any operating-rule changes cite the updated `AGENTS.md` / `.agentic/skills.yml`
     validations:
       required: true
   - type: textarea
