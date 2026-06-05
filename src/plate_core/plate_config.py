@@ -1,19 +1,11 @@
-""" .plate root configuration schema, parser, validator, and precedence resolver.
-
-Per Epic #89 / Issue #108 design and Issue #129 implementation.
-
-Precedence (lowest to highest):
-1. Tool defaults (from plate)
-2. Enabled extensions (future)
-3. Local .plate (highest)
-"""
+""".plate root configuration schema, report, parser, validator, and init helpers."""
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -29,12 +21,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "installed": {},
     },
     "overrides": {},
-    # Release ceremony refinement (Epic #306): project-specific config for finalization triggers,
-    # default track policy, etc. Common triggers (e.g. docs) in core; others via extensions.
-    # Reconciles with user request for .plate/ area (here as sub-key for the existing .plate file convention).
     "release": {
-        "triggers": [],  # list of {id, description, command_or_action, human_approval_required?}
-        "default_track": None,  # "Major" | "Minor" | "Patch"
+        "triggers": [],
+        "default_track": None,
     },
 }
 
@@ -61,58 +50,132 @@ class PlateConfig:
         )
 
 
+@dataclass
+class PlateConfigReport:
+    repo_root: str
+    path: str
+    present: bool
+    valid: bool
+    source: str
+    config: Dict[str, Any]
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        payload = asdict(self)
+        if not payload.get("errors"):
+            payload.pop("errors", None)
+        return payload
+
+
 class PlateConfigError(ValueError):
     """Raised for invalid .plate configuration."""
 
 
-def validate_plate_config(config: Dict[str, Any]) -> None:
+def _is_valid_semver_like(value: str) -> bool:
+    parts = value.split(".")
+    if not (2 <= len(parts) <= 3):
+        return False
+    try:
+        return all(int(part) >= 0 for part in parts)
+    except ValueError:
+        return False
+
+
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            merged[key] = _deep_merge(base[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _plate_path(repo_root: Path | None = None) -> Path:
+    root = Path(repo_root) if repo_root else Path(".")
+    return root / ".plate"
+
+
+def validate_plate_config(config: Dict[str, Any], *, strict: bool = False) -> None:
     """Validate .plate config against schema rules."""
+
     if "version" not in config:
         raise PlateConfigError("missing required 'version' field")
     version = config["version"]
     if not isinstance(version, str) or not _is_valid_semver_like(version):
         raise PlateConfigError(f"invalid version format: {version!r}")
-    # methodology, extensions, overrides, release are optional objects for forward compat
+
+    allowed = {"version", "methodology", "extensions", "overrides", "release"}
+    if strict:
+        unknown = sorted(set(config) - allowed)
+        if unknown:
+            raise PlateConfigError(f"unknown top-level keys: {', '.join(unknown)}")
+
     for key in ("methodology", "extensions", "overrides", "release"):
         if key in config and not isinstance(config[key], dict):
             raise PlateConfigError(f"'{key}' must be an object if present")
 
 
-def _is_valid_semver_like(v: str) -> bool:
-    parts = v.split(".")
-    if not (2 <= len(parts) <= 3):
-        return False
-    try:
-        return all(int(p) >= 0 for p in parts)
-    except ValueError:
-        return False
-
-
 def load_plate_config(repo_root: Path | None = None) -> PlateConfig:
-    """Load and resolve .plate config with precedence (defaults < local for MVP)."""
-    root = repo_root or Path(".")
-    local_path = root / ".plate"
+    """Load and resolve .plate config with precedence defaults < local."""
+
+    local_path = _plate_path(repo_root)
     local: Dict[str, Any] = {}
     if local_path.exists():
         try:
             local = json.loads(local_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
-            raise PlateConfigError(f"invalid JSON in .plate: {e}") from e
+        except json.JSONDecodeError as exc:
+            raise PlateConfigError(f"invalid JSON in .plate: {exc}") from exc
 
-    # MVP: defaults overridden by local (extensions merge later)
-    merged = {**DEFAULT_CONFIG, **local}
-    # Deep merge for nested dicts (simple last-wins for now)
-    for k in ("methodology", "extensions", "overrides", "release"):
-        if k in local and isinstance(local[k], dict):
-            merged[k] = {**DEFAULT_CONFIG.get(k, {}), **local[k]}
-
+    merged = _deep_merge(DEFAULT_CONFIG, local)
     validate_plate_config(merged)
     return PlateConfig.from_dict(merged)
 
 
-def save_plate_config(config: PlateConfig, repo_root: Path | None = None) -> Path:
-    """Write .plate (for gh plate configure etc)."""
-    root = repo_root or Path(".")
-    path = root / ".plate"
+def get_plate_config_report(repo_root: Path | None = None) -> PlateConfigReport:
+    """Return effective .plate state for CLI/MCP surfaces."""
+
+    local_path = _plate_path(repo_root)
+    root = str(local_path.parent.resolve())
+    try:
+        config = load_plate_config(local_path.parent).to_dict()
+        return PlateConfigReport(
+            repo_root=root,
+            path=str(local_path),
+            present=local_path.exists(),
+            valid=True,
+            source="local_file" if local_path.exists() else "defaults",
+            config=config,
+        )
+    except PlateConfigError as exc:
+        return PlateConfigReport(
+            repo_root=root,
+            path=str(local_path),
+            present=local_path.exists(),
+            valid=False,
+            source="local_file" if local_path.exists() else "defaults",
+            config=dict(DEFAULT_CONFIG),
+            errors=[str(exc)],
+        )
+
+
+def save_plate_config(
+    config: PlateConfig,
+    repo_root: Path | None = None,
+    *,
+    overwrite: bool = True,
+) -> Path:
+    """Write .plate to disk."""
+
+    path = _plate_path(repo_root)
+    if path.exists() and not overwrite:
+        raise PlateConfigError(".plate already exists; use --force to overwrite")
     path.write_text(json.dumps(config.to_dict(), indent=2) + "\n", encoding="utf-8")
     return path
+
+
+def init_plate_config(repo_root: Path | None = None, *, force: bool = False) -> PlateConfigReport:
+    """Create a baseline .plate file if absent (or overwrite with --force)."""
+
+    path = save_plate_config(PlateConfig.from_dict(DEFAULT_CONFIG), repo_root, overwrite=force)
+    return get_plate_config_report(path.parent)

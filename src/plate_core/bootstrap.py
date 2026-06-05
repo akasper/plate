@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import base64
+import json
 from dataclasses import asdict, dataclass
 
 from .github_client import GhClient
 from .health import REQUIRED_LABELS, get_health, resolve_repo
+from .plate_config import DEFAULT_CONFIG
 
 
 DEFAULT_LABEL_COLOR = "5319e7"
@@ -142,6 +144,33 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
                 name="init-goals-page",
                 state="already-configured",
                 detail="docs/wiki/Goals.md already present (Goals convention adopted)",
+            )
+        )
+
+    if not health.plate_config_present:
+        if apply_mode:
+            content = base64.b64encode((json.dumps(DEFAULT_CONFIG, indent=2) + "\n").encode("utf-8")).decode("ascii")
+            gh.api(
+                f"repos/{target}/contents/.plate",
+                method="PUT",
+                fields={
+                    "message": "Bootstrap: initialize .plate baseline config (Epic #259)",
+                    "content": content,
+                    "branch": default_branch,
+                },
+            )
+            state = "applied"
+            detail = "Initialized root .plate baseline config"
+        else:
+            state = "planned"
+            detail = "Initialize root .plate baseline config"
+        actions.append(BootstrapAction(name="init-plate-config", state=state, detail=detail))
+    else:
+        actions.append(
+            BootstrapAction(
+                name="init-plate-config",
+                state="already-configured",
+                detail="Root .plate config already present",
             )
         )
 

@@ -1,7 +1,9 @@
 import io
 import json
+import tempfile
 import unittest
 from contextlib import redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.cli import main
@@ -91,6 +93,36 @@ class CliTests(unittest.TestCase):
         payload = json.loads(out.getvalue().strip())
         self.assertEqual(payload["repo"], "akasper/plate_core")
         self.assertEqual(payload["actions"][0]["name"], "enable-wiki")
+
+    def test_config_show_json_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["config", "show", "--repo-root", tmp, "--json"])
+            self.assertEqual(code, 0)
+            payload = json.loads(out.getvalue().strip())
+            self.assertFalse(payload["present"])
+            self.assertEqual(payload["source"], "defaults")
+
+    def test_config_init_json_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["config", "init", "--repo-root", tmp, "--json"])
+            self.assertEqual(code, 0)
+            payload = json.loads(out.getvalue().strip())
+            self.assertTrue(payload["present"])
+            self.assertTrue((Path(tmp) / ".plate").exists())
+
+    def test_config_validate_invalid_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".plate").write_text("{not-json", encoding="utf-8")
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["config", "validate", "--repo-root", tmp, "--json"])
+            self.assertEqual(code, 1)
+            payload = json.loads(out.getvalue().strip())
+            self.assertFalse(payload["valid"])
 
     def test_agents_json_output(self):
         out = io.StringIO()

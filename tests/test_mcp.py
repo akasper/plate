@@ -129,6 +129,22 @@ class McpTests(unittest.TestCase):
         self.assertEqual(payload["actions"][0]["name"], "enable-wiki")
 
     @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_config_get(self, mock_write):
+        with tempfile.TemporaryDirectory() as tmp:
+            _handle_tools_call(12, {"name": "plate_config_get", "arguments": {"repo_root": tmp}})
+            payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+            self.assertFalse(payload["present"])
+            self.assertEqual(payload["source"], "defaults")
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_config_init(self, mock_write):
+        with tempfile.TemporaryDirectory() as tmp:
+            _handle_tools_call(13, {"name": "plate_config_init", "arguments": {"repo_root": tmp}})
+            payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+            self.assertTrue(payload["present"])
+            self.assertTrue((Path(tmp) / ".plate").exists())
+
+    @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_plan_epic(self, mock_write):
         _handle_tools_call(12, {"name": "plate_plan_epic", "arguments": {}})
         self.assertTrue(mock_write.called)
@@ -206,6 +222,9 @@ class McpTests(unittest.TestCase):
         names = {tool["name"] for tool in tools}
         self.assertIn("plate_features", names)
         self.assertIn("plate_bootstrap", names)
+        self.assertIn("plate_config_get", names)
+        self.assertIn("plate_config_validate", names)
+        self.assertIn("plate_config_init", names)
         self.assertIn("plate_release_target_epic", names)
 
     @patch("plate_core.mcp_server._write")

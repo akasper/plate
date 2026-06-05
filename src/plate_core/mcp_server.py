@@ -12,6 +12,7 @@ from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
+from .plate_config import get_plate_config_report, init_plate_config
 from .release import get_release_notes_diff, get_release_status, get_release_target_epic_guidance
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
@@ -140,6 +141,12 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = get_features(args.get("repo")).to_dict()
         elif name == "plate_bootstrap":
             payload = run_bootstrap(args.get("repo"), apply_mode=bool(args.get("apply", False))).to_dict()
+        elif name == "plate_config_get":
+            payload = get_plate_config_report(args.get("repo_root")).to_dict()
+        elif name == "plate_config_validate":
+            payload = get_plate_config_report(args.get("repo_root")).to_dict()
+        elif name == "plate_config_init":
+            payload = init_plate_config(args.get("repo_root"), force=bool(args.get("force", False))).to_dict()
         elif name == "plate_plan_epic":
             payload = _plan_epic_stub(args).to_dict()
         elif name == "plate_pr_babysit":
@@ -443,6 +450,49 @@ def run() -> None:
                                             "type": "boolean",
                                             "description": "When true, apply supported actions; default false (dry-run).",
                                         },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_get",
+                                "description": "Return effective local .plate configuration state for the current repository or repo_root.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_validate",
+                                "description": "Validate local .plate configuration and return the effective report shape.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_config_init",
+                                "description": "Create a baseline root .plate configuration file if missing (or overwrite with force).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        },
+                                        "force": {
+                                            "type": "boolean",
+                                            "description": "Overwrite an existing .plate file when true.",
+                                        }
                                     },
                                 },
                             },

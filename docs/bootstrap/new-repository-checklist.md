@@ -32,6 +32,7 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 | Enable delete-branch-on-merge (default; configurable off) | Keeps the repository clean after reviewed work lands while still allowing explicit opt-out for repositories that need to preserve merged branches. | Yes |
 | Initialize the wiki from `docs/wiki/Home.md` | Prevents the GitHub wiki from starting empty when the repository-managed source already exists. | Yes, when `--init-wiki` / `-InitWiki` is passed |
 | Seed the Goals wiki page (docs/wiki/Goals.md) from convention template | Provides the canonical high-level mission/intent page for agents (Information Audits, #218) and humans. | Yes (via bootstrap goals init; flag/interactive support added for #266) |
+| Seed a baseline root `.plate` config | Gives the repo a durable local configuration surface that `gh plate config show/validate` and MCP tools can inspect or repair later. | Yes |
 | Apply conservative baseline branch protection | Provides immediate protection against force-pushes and branch deletion while requiring conversation resolution. | Yes, when `--protect-branch BRANCH` / `-ProtectBranch BRANCH` is passed |
 
 ## Human Decisions Still Required
@@ -53,6 +54,7 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 3. The GitHub wiki exists but stays empty even though `docs/wiki/Home.md` already defines the intended homepage.
 4. The repository claims GitHub Projects should hold mutable planning state, but no actual project fields have been created yet.
 5. Branch protection is missing or too weak for a GitHub-first workflow.
+6. No root `.plate` file exists, so local configuration and extension intent remain invisible to `gh plate config` / MCP surfaces until someone runs bootstrap or `gh plate config init --apply`.
 
 ## Recommended First Follow-Up Issue
 

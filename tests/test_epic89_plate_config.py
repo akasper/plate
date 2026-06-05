@@ -237,6 +237,8 @@ from plate_core.plate_config import (
     PlateConfigError,
     validate_plate_config,
     DEFAULT_CONFIG,
+    get_plate_config_report,
+    init_plate_config,
 )
 
 
@@ -273,6 +275,29 @@ class PlateConfigRuntimeTests(unittest.TestCase):
     def test_module_exports_defaults(self):
         self.assertIn("version", DEFAULT_CONFIG)
         self.assertIn("marker_prefix", DEFAULT_CONFIG["methodology"])
+
+    def test_get_plate_config_report_returns_defaults_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = get_plate_config_report(Path(tmp))
+            self.assertFalse(report.present)
+            self.assertTrue(report.valid)
+            self.assertEqual(report.source, "defaults")
+            self.assertEqual(report.config["version"], "1.0")
+
+    def test_init_plate_config_creates_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = init_plate_config(Path(tmp))
+            self.assertTrue((Path(tmp) / ".plate").exists())
+            self.assertTrue(report.present)
+            self.assertTrue(report.valid)
+            self.assertEqual(report.source, "local_file")
+
+    def test_init_plate_config_rejects_existing_file_without_force(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(json.dumps({"version": "1.0"}))
+            with self.assertRaises(PlateConfigError):
+                init_plate_config(root)
 
     def test_deeply_nested_resolution(self):
         """Test resolution with deeply nested configs."""
