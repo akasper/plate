@@ -31,8 +31,9 @@ PLATE needs a single, explicit boundary between tool-owned methodology and repo-
 
 - Effective config is resolved in strict order:
   1. Tool defaults (`akasper/plate`)
-  2. Enabled extension-provided config
+  2. Enabled extension-provided config (built-in manifests first; local inline extension `config` may refine that layer)
   3. Local `.plate` overrides (final precedence)
+- List values use replacement semantics at each layer; a later layer replaces the full list instead of appending.
 
 ### Validation semantics
 
@@ -45,7 +46,7 @@ PLATE needs a single, explicit boundary between tool-owned methodology and repo-
 
 1. `gh plate init` creates baseline `.plate`.
 2. `gh plate configure` mutates safe fields.
-3. `gh plate upgrade` applies schema migration transforms by `version`.
+3. `gh plate config upgrade` applies schema migration transforms by `version`.
 4. Validation runs pre-apply and in CI checks.
 
 ## Alternatives Rejected

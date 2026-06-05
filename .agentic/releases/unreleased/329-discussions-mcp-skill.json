@@ -1,0 +1,23 @@
+{
+  "version": "unreleased",
+  "summary": "Discussions MCP surface (plate_discussions_* tools) + github-discussions skill in baseline catalog (Issue #329 / Epic #282)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "github_client.py (new discussion REST/GraphQL helpers), discussions.py (new high-level normalized API + list_open_ideas etc), mcp_server.py (imports + handler dispatch + tools/list schemas for 7 new tools), baseline_catalog.yml (new github-discussions skill + wired to research-agent etc), tests (test_mcp.py + test_github_client.py additions), fragment",
+      "migration_impact": "Agents and orchestrators (via plate-mcp or host MCP dispatch) can now use plate_list_discussions / plate_get_discussion / plate_add_discussion_comment / plate_create_discussion / plate_list_open_ideas etc for reliable GitHub Discussions access (Ideas category, inter-agent comms, logs). Replaces ad-hoc gh api + jq in agent flows. The baseline catalog skill 'github-discussions' makes it first-class for agent personas (research, pm, etc).",
+      "agent_notes": "Prefer plate_list_open_ideas for Ideas backlog, plate_add_discussion_comment for posting updates/logs, plate_create_discussion(category_slug='ideas') for new notes. Use with plate_what_next for orchestration. Category IDs resolved automatically for create. See the skill draft in #329 comment for Grok TUI skill patterns that can wrap these MCP tools. Graceful on rate limits via GhClient.",
+      "breaking": false,
+      "links": [
+        "#329",
+        "#282",
+        "#287",
+        "#292",
+        "#293",
+        "Ideas (akasper/plate discussions)",
+        "Epic: beta-roadmap",
+        "Epic: what-next-mcp"
+      ]
+    }
+  ]
+}

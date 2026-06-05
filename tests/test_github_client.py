@@ -88,5 +88,32 @@ class GhClientResilienceTests(unittest.TestCase):
             self.assertEqual(mock_run.call_count, 2)
 
 
+class GhClientDiscussionsTests(unittest.TestCase):
+    """Feature #329: GhClient discussion helpers (REST + GraphQL paths for #329 MCP surface)."""
+
+    def test_list_discussions_builds_endpoint_and_passes_params(self):
+        with patch("plate_core.github_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout='[{"number":54,"title":"foo"}]', stderr="")
+            res = GhClient().list_discussions("akasper", "plate", per_page=5, state="open")
+            cmd = mock_run.call_args[0][0]
+            self.assertIn("repos/akasper/plate/discussions", cmd)
+            self.assertIn("-f", cmd)
+            joined = " ".join(cmd)
+            self.assertIn("per_page=5", joined)
+            self.assertEqual(res, [{"number": 54, "title": "foo"}])
+
+    def test_create_discussion_uses_graphql_and_resolves_repo_id(self):
+        # Simulate two calls: repo id query, then mutation
+        responses = [
+            MagicMock(returncode=0, stdout='{"data":{"repository":{"id":"R_123"}} }', stderr=""),
+            MagicMock(returncode=0, stdout='{"data":{"createDiscussion":{"discussion":{"number":999,"title":"new"}}}}', stderr=""),
+        ]
+        with patch("plate_core.github_client.subprocess.run", side_effect=responses) as mock_run:
+            res = GhClient().create_discussion("akasper", "plate", category_id="DIC_foo", title="t", body="b")
+            self.assertEqual(res.get("number"), 999)
+            # At least 2 calls made
+            self.assertGreaterEqual(mock_run.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

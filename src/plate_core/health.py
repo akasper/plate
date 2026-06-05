@@ -27,6 +27,10 @@ class HealthReport:
     open_question_count: int = 0
     plate_config_present: bool = False
     plate_config_valid: bool = False
+    plate_config_file_version: str | None = None
+    plate_config_resolved_version: str | None = None
+    plate_config_upgrade_available: bool = False
+    plate_config_enabled_extensions: list[str] = field(default_factory=list)
     curiosity_answers_present: bool = False
 
     def to_dict(self) -> dict:
@@ -105,6 +109,10 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
     # .plate/config validity (for #262 health expansion, #259)
     plate_config_present = False
     plate_config_valid = False
+    plate_config_file_version = None
+    plate_config_resolved_version = None
+    plate_config_upgrade_available = False
+    plate_config_enabled_extensions: list[str] = []
     try:
         plate_content = gh.api(f"repos/{target}/contents/.plate")
         if isinstance(plate_content, dict) and plate_content.get("type") == "file":
@@ -115,9 +123,21 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
                 if plate_content.get("encoding") == "base64":
                     content = base64.b64decode(content).decode("utf-8")
                 data = json.loads(content)
-                from .plate_config import validate_plate_config, PlateConfigError
+                from .plate_config import upgrade_plate_config_dict, validate_plate_config
                 validate_plate_config(data)
+                upgraded, _guidance, previous_version = upgrade_plate_config_dict(data)
                 plate_config_valid = True
+                plate_config_file_version = previous_version
+                plate_config_resolved_version = upgraded["version"]
+                plate_config_upgrade_available = previous_version != upgraded["version"]
+                extensions = upgraded.get("extensions", {})
+                installed = extensions.get("installed", {})
+                if extensions.get("enabled", True) and isinstance(installed, dict):
+                    for extension_id, settings in installed.items():
+                        if settings is True:
+                            plate_config_enabled_extensions.append(extension_id)
+                        elif isinstance(settings, dict) and settings.get("enabled", True):
+                            plate_config_enabled_extensions.append(extension_id)
             except Exception:
                 plate_config_valid = False
     except GhApiError:
@@ -181,6 +201,10 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         open_question_count=open_question_count,
         plate_config_present=plate_config_present,
         plate_config_valid=plate_config_valid,
+        plate_config_file_version=plate_config_file_version,
+        plate_config_resolved_version=plate_config_resolved_version,
+        plate_config_upgrade_available=plate_config_upgrade_available,
+        plate_config_enabled_extensions=plate_config_enabled_extensions,
         curiosity_answers_present=curiosity_answers_present,
     )
     return report

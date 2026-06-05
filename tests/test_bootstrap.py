@@ -43,6 +43,10 @@ class BootstrapTests(unittest.TestCase):
         self.assertIsNotNone(goals_action, "init-goals-page action must be present for #266")
         self.assertEqual(goals_action.state, "planned")
         self.assertIn("Initialize docs/wiki/Goals.md", goals_action.detail)
+        plate_action = next((a for a in report.actions if a.name == "init-plate-config"), None)
+        self.assertIsNotNone(plate_action, "init-plate-config action must be present for #259")
+        self.assertEqual(plate_action.state, "planned")
+        self.assertIn("root .plate", plate_action.detail)
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_wiki_passes_bool_not_string(self, mock_get_health):
@@ -99,6 +103,12 @@ class BootstrapTests(unittest.TestCase):
             and call.kwargs.get("method") == "PUT"
         ]
         self.assertTrue(goals_puts, "Expected PUT to create docs/wiki/Goals.md on apply when missing")
+        plate_puts = [
+            call for call in client.api.call_args_list
+            if call.args and "contents/.plate" in str(call.args[0])
+            and call.kwargs.get("method") == "PUT"
+        ]
+        self.assertTrue(plate_puts, "Expected PUT to create .plate on apply when missing")
 
 
 if __name__ == "__main__":

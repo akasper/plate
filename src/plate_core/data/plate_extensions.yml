@@ -1,0 +1,20 @@
+schema_version: 1
+extensions:
+  - id: release-track-management
+    provided_by: builtin:release-ceremony
+    config:
+      release:
+        triggers:
+          - require-release-track-label
+      overrides:
+        release_management:
+          required_label: release-track
+  - id: specialist-agents
+    provided_by: baseline-catalog
+    config:
+      overrides:
+        delegation_defaults:
+          featured_agent_ids:
+            - security-auditor
+            - performance-engineer
+            - data-engineer

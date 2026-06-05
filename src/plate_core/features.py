@@ -92,6 +92,7 @@ def get_features(repo: str | None = None, client: GhClient | None = None) -> Fea
     target = resolve_repo(repo)
     checks = [
         ("autonomous-mode", ".github/AUTONOMOUS_MODE"),
+        ("plate-config-root", ".plate"),
         ("platform-monitor-workflow", ".github/workflows/platform-monitor.yml"),
         ("copilot-plugin-root", ".plugin/plugin.json"),
         ("copilot-plugin-source", "plugin/plugin.json"),
