@@ -49,6 +49,9 @@
 - name: "Question"
   color: "d4c5f9"
   description: "Issue type: information goal that captures an unknown and closes with documented answer artifacts."
+- name: "Task"
+  color: "cfd3d7"
+  description: "Issue type: human-only blocker or explicitly requested human action item."
 
 - name: "area:product"
   color: "bfd4f2"
