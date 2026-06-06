@@ -1,0 +1,19 @@
+{
+  "version": "unreleased",
+  "summary": "Adopt Goals wiki page convention into PLATE template payload and bootstrap (Epic #218 / Feature #224)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "template_payload + docs/wiki/Goals.md + inventory",
+      "migration_impact": "New adopters via bootstrap or template now receive the recommended lightweight Goals wiki page convention (Mission, Core Principles, How We Intend to Succeed, etc.). Existing projects can manually add docs/wiki/Goals.md following the structure in the shipped convention doc.",
+      "agent_notes": "Information Audit agents (Epic #218) will now expect and read a Goals page when present as a primary strategic signal. The convention doc itself is in the payload under docs/design/. Use it when generating or refining Questions against project mission.",
+      "breaking": false,
+      "links": [
+        "#224",
+        "#218",
+        "#219",
+        "#220"
+      ]
+    }
+  ]
+}

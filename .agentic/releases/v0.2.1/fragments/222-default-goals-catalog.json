@@ -1,0 +1,20 @@
+{
+  "version": "unreleased",
+  "summary": "Default platform and extension informational goals catalog (Epic #218 / Feature #222)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "baseline_catalog + mcp + bootstrap + audit integration",
+      "migration_impact": "New and existing PLATE projects now get an expanded, versioned set of default informational goals (5+ platform defaults) via the baseline catalog. These seed Questions in bootstrap and are included by the Information Audit engine. Extensions can contribute via the catalog (future #226). The catalog is queryable via MCP (plate_informational_goals / plate_informational_goal).",
+      "agent_notes": "Use plate_informational_goals (or plate_informational_goal <id>) to inspect defaults. The audit tool (plate_perform_information_audit with include_defaults=true) will now pull from this catalog for proposals grounded in the #220 model. Bootstrap uses it for initial Questions. See yml for structure and extension guidance.",
+      "breaking": false,
+      "links": [
+        "#222",
+        "#218",
+        "#220",
+        "#221",
+        "#224"
+      ]
+    }
+  ]
+}

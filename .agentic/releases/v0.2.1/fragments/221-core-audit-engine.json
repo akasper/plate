@@ -1,0 +1,20 @@
+{
+  "version": "unreleased",
+  "summary": "Core Information Audit engine and Question generation (Epic #218 / Feature #221) - MCP tool skeleton + tests + registration",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "mcp + plate_core/mcp/audit_tools.py + tests + mcp_server registration",
+      "migration_impact": "New MCP tool `plate_perform_information_audit` (and future gh plate surface) available for agents. Initial stub returns proposed Questions grounded in Wiki Goals page + platform defaults (per #220 model and #223 contract). Full open-ended discovery, refinement, provenance, CLI, and integration in subsequent commits for this Feature. Downstream adopters will inherit via platform.",
+      "agent_notes": "Call plate_perform_information_audit (start with dry_run=true) to discover Informational Goals and receive well-formed Question proposals (title/body with provenance/related_goals per #220). Output is designed to feed Curiosity/Q&A and Contemplation flows. See designs #220 and #223 for the exact model and 10 behavior rules.",
+      "breaking": false,
+      "links": [
+        "#221",
+        "#218",
+        "#220",
+        "#223",
+        "#224"
+      ]
+    }
+  ]
+}
