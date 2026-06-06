@@ -16,7 +16,7 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Release', 'Research', 'Design', 'Question', 'Audit', 'Migration', 'Feedback Response'];
+            const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Release', 'Research', 'Design', 'Question', 'Task', 'Audit', 'Migration', 'Feedback Response'];
             const requiresMilestone = ['Feature', 'Epic', 'Release'];
             const issue = context.payload.issue;
 

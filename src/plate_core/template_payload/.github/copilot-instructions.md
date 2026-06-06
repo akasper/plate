@@ -52,12 +52,13 @@ Read those pieces together when making process changes. A change in one of them 
 
 - Treat repository artifacts as the source of durable truth. If behavior, process, or evidence changes, update the relevant artifact instead of relying on chat history.
 - If `AGENTS.md`, `.agentic\process.yml`, and the template files disagree, preserve the PLATE intent and keep them aligned.
-- Labels are stable process metadata, not casual tags. Use type labels (`Bug`, `Feature`, `Epic`, `Documentation`, `Research`, `Design`, `Question`, `Audit`, `Migration`) and prefixed labels (`Epic:`, `area:`, `risk:`, `need:`) according to the existing taxonomy. Do not introduce `priority:` or `status:` labels; those belong in GitHub Projects fields.
+- Labels are stable process metadata, not casual tags. Use type labels (`Bug`, `Feature`, `Epic`, `Documentation`, `Research`, `Design`, `Question`, `Task`, `Audit`, `Migration`) and prefixed labels (`Epic:`, `area:`, `risk:`, `need:`) according to the existing taxonomy. Do not introduce `priority:` or `status:` labels; those belong in GitHub Projects fields.
 - `Feature` issues must carry both the `Feature` label and a matching `Epic: short-name` label. Their issue template expects acceptance criteria, test expectations, and documentation impact.
 - `Bug` work should include a reproduction path or explicitly signal the gap with `need:reproduction`, plus a regression test plan.
 - `Research` issues must close with a committed artifact in `docs/research/` or a `SPEC.md` update — not just an issue comment. See `docs/research/README.md`.
 - `Design` issues must close with a committed artifact in `docs/design/` or `docs/wiki/Features/`. See `docs/design/README.md`.
 - `Question` issues are information goals. Batch triage with `/question-batch` or `scripts/question_batch.sh`, and when an answer changes agent guidance, update both `AGENTS.md` and `.agentic/skills.yml` in the closing PR.
+- `Task` issues represent human-only blockers or explicitly requested human action items. They close with a completion comment containing `<!-- PLATE-TASK-CLOSED -->`, not a PR, unless completing the Task also changes repository truth that should be committed.
 - Every PR must carry a type label (`Bug`, `Feature`, or `Documentation`). **Critical:** The checkboxes in the PR template body do **not** apply GitHub labels — labels must be set explicitly via the CLI or GitHub API. Preferred approach: include `--label "<type>"` in `gh pr create` so the label is applied atomically at PR creation. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before doing anything else. `Feature` PRs must update per-feature change files in `.agentic/releases/`; documentation-only changes should use the `Documentation` label.
 - When a PR is opened without a type label, the `label-check.yml` CI workflow fails immediately **and posts a repair comment on the PR** with the exact `gh pr edit` command to fix it. Look for the ⚠️ bot comment on the PR — it contains the precise repair command for that PR number.
 - **Copilot PR title rule:** Use clean, human-readable PR titles with no bracketed prefixes (`[Feature]`, `[Documentation]`, `[WIP]`, etc.) and no issue-closing metadata in the title (`Closes #N`, `Fixes #N`, `Resolves #N`). Put closing keywords in the PR body only. This is enforced by `.github/workflows/pr-title-check.yml`.
@@ -200,4 +201,3 @@ Quick reference:
 - Before creating, check for duplicate epics (Jaccard ≥ 0.5 on title tokens).
 - Store session state in `<!-- PLATE_SESSION_STATE: {...} -->` at the end of the Epic body.
 - Post a planning summary comment when the session ends.
-
