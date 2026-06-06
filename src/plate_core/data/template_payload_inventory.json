@@ -232,6 +232,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/design/goals-wiki-page-convention.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/design/onboarding-questions.md",
       "classification": "copy_to_downstream"
     },
@@ -321,6 +325,10 @@
     },
     {
       "path": "docs/wiki/Automatic-Epic-Creation.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/wiki/Goals.md",
       "classification": "copy_to_downstream"
     },
     {

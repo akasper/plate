@@ -158,6 +158,27 @@ https://raw.githubusercontent.com/akasper/plate_template/main/.agentic/extension
 
 That registry would list vetted extensions, default trust policies, and compatibility notes. It behaves like Homebrew taps or a package index mirror: helpful, but not the only way to install.
 
+## Informational Goals and Audit Extensibility (Epic #218 / #226)
+
+Extensions can contribute default informational goals (and optionally audit heuristics) by including them in their package.
+
+Example in extension's `plate-extension.yml` (or separate `informational-goals.yml` referenced):
+
+```yaml
+informational_goals:
+  - id: my-ext-gtm
+    title: "..."
+    body: "..."
+    provided_by: my-extension
+    # ...
+```
+
+Core catalog (post #222/#226) merges platform + extension goals when `include_defaults` is used in audits.
+
+See `data/baseline_catalog.yml` for platform examples and `src/plate_core/baseline_catalog.py` for the `provided_by` field and loading.
+
+Docs for authors live in template_payload and will be referenced from the main PLATE docs.
+
 #### Future discovery: marketplace UI
 
 If the catalog grows, a GitHub Pages site or repo wiki page can render registry entries into a browsable marketplace. That should be generated from the registry file instead of becoming a separate source of truth.
