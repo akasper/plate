@@ -388,7 +388,7 @@ Autonomous mode is an opt-in operating posture for unattended sessions (overnigh
 
 ```bash
 # First: gh plate release status  (discover --base: release or release-*)
-gh pr create --base release --label "risk:low" --label "auto-merge" [other required labels] ...
+gh pr create --base <base> --label "risk:low" --label "auto-merge" [other required labels] ...
 gh pr merge --auto --squash <PR_NUMBER>
 ```
 
@@ -562,7 +562,7 @@ Every Feature pull request that changes PLATE process, templates, or agent surfa
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
-When opening pull requests through GitHub CLI, first run `gh plate release status` to discover the correct integration base branch (`release` for legacy; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base release --label "Feature"` (or the Documentation equivalent). If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never default to `main`.
+When opening pull requests through GitHub CLI, first run `gh plate release status` to discover the correct integration base branch (`release` for legacy; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base <base> --label "Feature"` (or the Documentation equivalent, where <base> is from `gh plate release status`). If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never rely on the repository's default branch implicitly; always pass `--base` explicitly (sometimes that will be `main`, e.g. for Release PRs).
 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
