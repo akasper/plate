@@ -150,6 +150,55 @@ duration: <hh:mm:ss>
 
 `Feature` and `Question` issue closures are harvested by `.github/workflows/plates-on-issue-closed.yml` and appended to `.agentic/COSTS.md`.
 
+## Stub Issues
+
+A **Stub Issue** is an intentionally minimal GitHub issue created to establish a traceable artifact and reserve a place in an Epic (via milestone) or as an incremental child during planning, with the understanding that full details will be supplied later.
+
+There are two primary kinds in current PLATE practice:
+
+**Epic Stubs**
+
+When a major Epic idea is identified (for example "Human Action Items" or "Test Coverage Audit"), the canonical first step is:
+1. Create the GitHub Milestone that will own the Epic.
+2. Create a minimal companion issue labeled `Epic` (title typically "[Epic]: Human-Readable Name") and assign it to that milestone.
+
+The issue body should follow the structure of `.github/ISSUE_TEMPLATE/epic.yml` but treat most fields as placeholders:
+- Use "TBD" (or the shortest possible one-sentence note) for Desired outcome, Scope and boundaries, Success criteria, Expected child features, and Risks.
+- The readiness checkboxes may be left unchecked or minimally marked.
+- **Do not** pre-author rich narrative, detailed acceptance criteria, or exhaustive child lists directly into the GitHub issue body at stub-creation time unless the requester explicitly asks for a filled narrative artifact.
+
+Rich planning work (problem analysis, design decisions, child decomposition, acceptance criteria, risks, evidence) belongs in:
+- `docs/design/<kebab-slug>.md` (preferred for design-oriented Epics)
+- `docs/research/<slug>.md` when research is the first child
+- Updates to `SPEC.md`, `docs/wiki/`, or `.agentic/releases/` fragments as appropriate
+- Subsequent comments on the Epic issue itself as refinement occurs
+
+The recently created blank stubs #349 (Human Action Items) and #350 (Test Coverage Audit) are the current reference examples of correct Epic stub creation. Their accompanying `docs/design/` files contain the immediate planning expansions.
+
+**Planning Child Stubs (`need:refinement`)**
+
+During interactive epic planning (see the Interactive Epic Planning section and the `plate_plan_epic` flow), agents create child Research, Design, and Feature issues as soon as a need is identified. These are created with the `need:refinement` label (see the `need:refinement Semantics` subsection below for deferred vs. non-deferred gates).
+
+These child stubs contain only the minimum required fields for traceability:
+- Correct issue type label
+- Linkage to the parent Epic (milestone or `<!-- PLATES-EPIC: #N -->` marker)
+- Title and a one-line summary
+- `need:refinement` label
+
+Full acceptance criteria, test expectations, documentation impact, and per-feature fragments are added when the stub is refined and the `need:refinement` label is removed.
+
+**Agent Rules for Stubs**
+
+- When a user says "create stubs for [Epic ideas]" or "stub out these Epics", create the minimal GitHub Epic issue(s) + milestone(s) first.
+- Immediately begin the "planning" phase by authoring the supporting design/research artifacts in the repo, updating SPEC/wiki/Home as needed, and/or posting a short planning-start comment on the new stub Epic(s) that links to the docs.
+- Never over-author the initial GitHub issue body for a stub. The GitHub issue is the durable skeleton and traceability anchor; the repo's documentation tree is where the thinking lives.
+- `need:refinement` stubs may have some gates relaxed (per the existing rules), but issue type labels, milestone assignment (when known), and closing-keyword discipline on PRs are never relaxed.
+- When a stub (Epic or child) has been sufficiently refined that implementation can begin, remove `need:refinement` (for children) or expand the Epic body as part of the refinement step.
+
+This convention exists to keep GitHub issues scannable, to reduce the chance of agents "doing the human's planning for them" in the issue body, and to make the separation between the minimal artifact and the rich planning work explicit.
+
+See Feature #351 for the originating discussion and the design docs for #349/#350 for worked examples of the stub + planning expansion pattern.
+
 ## Autonomous Mode
 
 Autonomous mode is an opt-in operating posture for unattended sessions (overnight runs, long-running autopilot, `/delegate` tasks) where no human reviewer is available interactively. It selectively lifts the self-merge prohibition for lightweight, low-risk PRs.

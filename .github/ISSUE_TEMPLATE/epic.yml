@@ -8,6 +8,8 @@ body:
     attributes:
       value: |
         GitHub Milestones are the canonical Epic container. Create or select the milestone first, then use this issue only when the Epic needs a durable narrative, design, or decision artifact in addition to the milestone itself.
+
+        Epic issues frequently begin as minimal **stubs** (see AGENTS.md § Stub Issues). Populate the fields below only to the minimum needed for creation and milestone assignment. Rich outcome, scope, success criteria, and child planning belong in `docs/design/<slug>.md` (or research/wiki artifacts) or are added during later refinement of the stub. The two most recent examples of correct blank Epic stubs are #349 and #350.
   - type: input
     id: epic_milestone
     attributes:

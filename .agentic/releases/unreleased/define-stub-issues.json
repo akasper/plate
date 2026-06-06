@@ -1,0 +1,17 @@
+{
+  "slug": "define-stub-issues",
+  "change_type": "process",
+  "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, .github/ISSUE_TEMPLATE/epic.yml",
+  "summary": "Adds authoritative definition of 'Stub Issue' (minimal GitHub Epic stubs and need:refinement planning child stubs) and rules for agents creating them vs. authoring rich planning in docs/ artifacts.",
+  "migration_impact": "When creating Epic stubs (or using interactive planning flows that emit child stubs), agents and humans will now produce intentionally minimal GitHub issues by default. Detailed narrative, AC, and child lists move to design/research docs or iterative refinement. Repos that copy AGENTS.md or the Epic template will receive updated guidance and template text.",
+  "agent_notes": "On requests like 'create stubs for these Epic ideas' or during plate_plan_epic sessions: create the minimal issue + milestone (or child with need:refinement), then immediately start planning by writing docs/design/ (or research) files, SPEC/wiki updates, etc. Reference blank examples #349 and #350. Do not over-author the initial GitHub issue body. The new 'Stub Issues' section in AGENTS.md is the contract.",
+  "migration_guidance": [
+    "1. Pull the latest AGENTS.md (root and any local copies) and .github/ISSUE_TEMPLATE/epic.yml.",
+    "2. When an agent or human next creates an Epic stub, use the minimal/TBD posture described in the new Stub Issues section.",
+    "3. Existing open Epics and stubs are unaffected; the convention applies going forward and to refinement of the new stubs (#349, #350, etc.).",
+    "4. Update any custom agent prompts or scripts that construct Epic issue bodies to prefer placeholders over pre-filled rich content unless a filled narrative was explicitly requested."
+  ],
+  "breaking": false,
+  "links": ["#351"],
+  "requires": []
+}

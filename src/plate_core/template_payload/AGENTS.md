@@ -269,9 +269,17 @@ Spike issues must include in their body:
 
 Spike issues do **not** require an `Epic: short-name` label. They close with a short findings note (committed artifact or inline comment).
 
+### Stub Issues
+
+A **Stub Issue** is an intentionally minimal GitHub issue (Epic or Research/Design/Feature child) created to provide a traceable artifact and reserve a slot in an Epic's milestone, with the explicit understanding that it will be refined later.
+
+**Epic Stubs**: When a major Epic idea is identified, create the GitHub Milestone first, then a minimal Epic-labeled issue assigned to it. Use the epic.yml template structure but leave substantive fields as "TBD" (or one-sentence placeholders). Do not pre-author rich outcome, scope, success criteria, or child lists in the GitHub issue body at creation time. Detailed planning belongs in `docs/design/<slug>.md`, `docs/research/`, SPEC/wiki updates, or later comments on the Epic. The recently created blank stubs #349 and #350 are reference examples of the correct minimal posture.
+
+**Planning Child Stubs**: See the `need:refinement Semantics` below. These are the Research → Design → Feature children created during interactive planning sessions.
+
 ### need:refinement Semantics
 
-The `need:refinement` label is applied to issue stubs created during interactive epic planning. It signals that the issue is intentionally incomplete and not yet ready for implementation.
+The `need:refinement` label is applied to planning child stubs (and sometimes other intentionally incomplete issues) created during interactive epic planning. It signals that the issue is intentionally incomplete and not yet ready for implementation.
 
 **Gates deferred by `need:refinement`:**
 - Acceptance criteria completeness check
@@ -283,6 +291,8 @@ The `need:refinement` label is applied to issue stubs created during interactive
 - Any PR that closes the issue must include a closing keyword (`Closes #N`)
 
 Remove `need:refinement` from an issue when its AC and scope are sufficiently defined for implementation to begin. Agents may remove this label autonomously when adding full AC in a planning follow-up session.
+
+See the "Stub Issues" section above for the broader convention (including Epic stubs) and agent rules for creation vs. rich planning work. The root `AGENTS.md` in a PLATE repository contains the authoritative definition.
 
 Before closing any issue (manually or via linked PR), post a final comment that includes a structured usage block:
 
