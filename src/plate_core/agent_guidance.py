@@ -128,4 +128,20 @@ def get_agent_guidance_sections() -> dict[str, str]:
     return {
         "playwright_e2e": PLAYWRIGHT_E2E_GUIDANCE,
         "qanda_curiosity": QANDA_CURIOSITY_GUIDANCE,
+        "information_audit": INFORMATION_AUDIT_GUIDANCE,
     }
+
+
+INFORMATION_AUDIT_GUIDANCE = """
+## Information Audits and Goals Page
+
+PLATE supports structured Information Audits (Epic #218 / #221, cross-cutting beta roadmap) to keep SPEC.md aligned with implemented state (release fragments as durable evidence, working tests as strong signal, code/docs/wiki as supporting).
+
+- Evidence hierarchy and owner-vision intake (via Q&A where needed).
+- Auditable reports: stale claims, undocumented implementation, vision/reality gaps, with per-finding confidence (high/medium/low).
+- Generates follow-on artifacts (Question/Research/Design/Feature/Bug/Doc) with provenance; supports draft SPEC patches (insertion-first).
+- Exposed via `plate_perform_information_audit` (CLI + MCP), health signals, and `plate_what_next` prioritization when findings exist.
+- Human approval boundaries preserved for public claims/vision/SPEC changes.
+
+Use when drift is suspected or after landing beta Epics. See docs/research/ and the 257/221 fragments for details. Ties into Goals page bootstrap (#224) and extension goals.
+"""
