@@ -98,6 +98,17 @@ Reproduce the failure or document why reproduction is not yet possible. Add a re
 | 4 | When the answer changes operating guidance, update `AGENTS.md` and `.agentic/skills.yml` in the same PR. |
 | 5 | Open a Documentation PR with `Closes #N` in the body. |
 
+**Task**
+
+| Step | Required Behavior |
+|---|---|
+| 1 | Confirm the issue is labeled `Task` and represents a human-only blocker or an explicitly requested human action item. |
+| 2 | Ensure the issue includes: human action required, why the agent cannot safely proceed, context and affected artifacts, best-effort instructions, done signal, and related links. |
+| 3 | Link the relevant artifacts in the body and inherit the Epic milestone when the Task is clearly Epic-related. Do not require an `Epic: <slug>` label. |
+| 4 | Redact and summarize sensitive provenance when the blocker involves credentials, infrastructure, or other secret-bearing systems. |
+| 5 | When the work is complete, add a short completion comment containing `<!-- PLATE-TASK-CLOSED -->` and then close the issue directly. |
+| 6 | If completing the Task changes repository truth, open a follow-up PR or documentation change as appropriate instead of relying on the Task issue alone. |
+
 **Audit**
 
 Commit findings to `docs/audits/`. If drift is found, open a follow-up `Bug` or `Feature` issue per finding. Open a Documentation PR with `Closes #N` in the body.
@@ -122,7 +133,7 @@ See `docs/design/release-ceremony-refinement.md` for the full model, branch tabl
 
 ## Issue Artifact Rules
 
-Every issue must close with a traceable git artifact — either a code change in a PR or a documentation commit. Closing an issue without a corresponding PR is not permitted.
+Every issue must close with a traceable artifact. For most issue types this is a code change in a PR or a documentation commit. `Task` issues instead close with a completion comment containing `<!-- PLATE-TASK-CLOSED -->`, unless repository truth also changed and needs a PR-backed artifact.
 
 | Issue Type | Required Git Artifact | Typical PR Type Label |
 |---|---|---|
@@ -131,14 +142,15 @@ Every issue must close with a traceable git artifact — either a code change in
 | `Research` | Findings committed to `docs/research/<slug>.md` or `SPEC.md` update | `Documentation` |
 | `Design` | Artifact committed to `docs/design/<slug>.md` or `docs/wiki/Features/<feature>.md` | `Documentation` |
 | `Question` | Answer artifact committed to `docs/research/<slug>.md` and process updates when guidance changes (`AGENTS.md`, `.agentic/skills.yml`) | `Documentation` |
+| `Task` | Completion comment on the GitHub issue containing `<!-- PLATE-TASK-CLOSED -->`; add a PR or documentation artifact only when repository truth changes | `Documentation` when follow-up docs are needed, otherwise none |
 | `Audit` | Report committed to `docs/audits/<slug>.md` | `Documentation` |
 | `Migration` | Update committed to `docs/migration/` | `Documentation` |
 | `Epic` | Wiki summary in `docs/wiki/` or epic comment summarizing child outcomes | `Documentation` |
 | `Release` | Aggregated `.agentic/releases/vX.Y.Z/` directory + tag + GitHub Release | `Documentation` |
 
-When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. **Always include a closing keyword in the PR body.** This is enforced by `.github/workflows/pr-issue-link-check.yml` (warning gate).
+When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. **Always include a closing keyword in the PR body** when a PR is the intended closure path. This is enforced by `.github/workflows/pr-issue-link-check.yml` (warning gate). `Task` issues are exempt when they close via the Task completion comment instead.
 
-Before closing any issue (manually or via linked PR), post a final comment that includes a structured usage block:
+Before closing any issue through an agent-run implementation or answer flow, post a final comment that includes a structured usage block:
 
 ```text
 === USAGE REPORT ===
@@ -149,6 +161,7 @@ duration: <hh:mm:ss>
 ```
 
 `Feature` and `Question` issue closures are harvested by `.github/workflows/plates-on-issue-closed.yml` and appended to `.agentic/COSTS.md`.
+`Task` issues are exempt from the usage-report requirement and instead require the lightweight Task completion comment.
 
 ## Stub Issues
 
@@ -341,7 +354,7 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 | Label Family | Usage |
 |---|---|
-| `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
+| `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Task`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
 | `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
 | `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by the deprecated legacy workflow; no Epic milestone required. |
 | `Epic: short-name` | Legacy/supplemental Epic identity label (optional). GitHub Milestones are the canonical Epic container (see Epic #100 / native GitHub PR integration). Feature, Epic, and Release issues require milestone assignment instead. |
@@ -438,4 +451,4 @@ Escalate to a human when product intent is ambiguous, acceptance criteria confli
 
 ## Prohibited Actions
 
-Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without a corresponding PR that carries a `Closes #N` reference in its body. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body.
+Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body.

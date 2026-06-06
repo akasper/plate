@@ -1,0 +1,15 @@
+{
+  "slug": "task-issue-type",
+  "change_type": "feature",
+  "surface": "AGENTS.md, .agentic/process.yml, .github/labels.yml, .github/ISSUE_TEMPLATE/task.yml, label-check workflow, template payload",
+  "summary": "Adds Task as a first-class PLATE issue type for human-only blockers and requested human action items.",
+  "migration_impact": "Downstream PLATE repositories should add the Task label, the Task issue template, updated issue-type enforcement, and the Task closure marker rule.",
+  "migration_guidance": [
+    "1. Copy the updated .github/labels.yml, .github/workflows/label-check.yml, and .github/ISSUE_TEMPLATE/task.yml into your repository.",
+    "2. Update AGENTS.md and .agentic/process.yml so Task is treated as a first-class issue type with milestone inheritance but no required Epic label.",
+    "3. Allow Task issues to close with a completion comment containing <!-- PLATE-TASK-CLOSED --> instead of requiring a PR, unless repository truth changed."
+  ],
+  "agent_notes": "Use Task for human-only blockers or explicitly requested human action items. When closing a Task, add a short visible completion note plus the <!-- PLATE-TASK-CLOSED --> marker and avoid leaking secrets.",
+  "breaking": false,
+  "links": ["#349", "#358", "#359", "#360"]
+}

@@ -76,6 +76,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".github/ISSUE_TEMPLATE/task.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".github/PULL_REQUEST_TEMPLATE.md",
       "classification": "copy_to_downstream"
     },
