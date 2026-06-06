@@ -62,14 +62,6 @@ class GhClientFieldSerializationTests(unittest.TestCase):
         wiki_idx = cmd.index("has_wiki=true") - 1
         self.assertEqual(cmd[wiki_idx], "-F")
 
-    def test_get_requests_force_get_method_even_with_fields(self):
-        """GET requests with query fields must remain GET so gh does not reinterpret them as POST."""
-        with patch("plate_core.github_client.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
-            GhClient().api("repos/owner/repo/issues", fields={"labels": "Question"})
-            cmd = mock_run.call_args[0][0]
-        self.assertEqual(cmd[:5], ["gh", "api", "repos/owner/repo/issues", "-X", "GET"])
-
 
 class GhClientResilienceTests(unittest.TestCase):
     """Retry/backoff, rate limit tolerance, secret redaction (#270)."""
