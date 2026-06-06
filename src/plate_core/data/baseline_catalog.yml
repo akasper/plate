@@ -496,7 +496,9 @@ skills:
 - id: run-qanda-session
   name: Run Q&A Session
   description: Discover, prioritize, present (via native or fallback), and record
-    answers to open Question issues, triggering contemplation.
+    answers to open Question issues, triggering contemplation against checklist-style
+    answer signals with explicit citations before any Question is considered ready
+    to close.
   inputs:
   - Repo / Epic context
   - Open Questions (via MCP or gh plate qanda)

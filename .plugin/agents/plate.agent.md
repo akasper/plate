@@ -13,7 +13,7 @@ Your workflow:
 4. Call MCP tool `plate_features` (or `gh plate features [--local]`) to detect optional capabilities including `playwright-e2e`.
 5. If `playwright-e2e` is missing on a UI-facing project, recommend the `init_playwright` MCP tool (or local `gh plate features --local`) to scaffold from plate_template. Guide writing specs + recording GIF evidence for Feature PRs per the e2e-visual-evidence epic.
 6. Call MCP `plate_what_next` (or `gh plate` equivalent) to get the next recommended PLATE process step + templatized prompt segment, grounded in live state (health, open Epics, fragments, Goals page, etc.). Use it to drive autonomous progress; fall back to manual inspection only if the tool is unavailable.
-7. When bootstrapping new projects or advising on convention adoption, recommend (or invoke) `gh plate bootstrap --apply` to seed labels, wiki, initial Epic, starter Questions, the Goals wiki page, and a baseline root `.plate` config. Follow with `gh plate config show`, `gh plate config validate`, `gh plate config init --apply`, or `gh plate config upgrade --apply` when the repo needs local config inspection, repair, or schema upgrade. Surface the `goals_page_present` field from health reports as a nudge.
+7. When bootstrapping new projects or advising on convention adoption, recommend (or invoke) `gh plate bootstrap --apply` (or the Goals init path) to seed labels, wiki, initial Epic, starter Questions, and the Goals wiki page (per #266 / #229). Guide users to customize the Goals page with project-specific mission and to enable wiki sync for publication. Surface the `goals_page_present` field from health reports as a nudge.
 7. When useful, point the user to `gh plate agents list`, `gh plate agents show <agent-id>`, `gh plate skills list`, and `gh plate skills show <skill-id>` for the baseline catalog.
 8. To delegate a task to a specific baseline agent, call MCP tool `plate_delegate_to_agent` with the `agent_id` and a `task_description`. Present the returned `delegation_prompt` to the user and explain how to invoke the target agent.
 
@@ -23,6 +23,7 @@ Your workflow:
 
 - Use MCP tools (future `plate_list_questions`, `plate_record_answer`, etc.) to drive the flow.
 - When the user provides an answer, immediately trigger contemplation logic (via MCP or internal rules) and produce a Contemplation Log.
+- Treat `Answer signal` as checklist-style markdown criteria. A Question is only ready to close when every checklist item is backed by explicit citations/links in the effective answer history; revised answers can invalidate earlier satisfied items.
 - For hard informational obstacles during other work, consider creating a blocking `Question` issue (with a clear information dump) as a last resort, then pause work on the original task.
 - When a previously blocking Question is answered, offer to merge the information and resume the original work.
 

@@ -609,7 +609,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_contemplate",
-                                "description": "Run the Contemplation Engine on an answer to a Question (Epic #139 / #149). Creates follow-up issues, posts structured log, detects close signals. Core driver of autonomous progress from Q&A.",
+                                "description": "Run the Contemplation Engine on an answer to a Question. Evaluates checklist-style Answer signal criteria against cited answer evidence, posts a structured contemplation log, preserves blocking-question resumption, and reports when the Question is ready to close via a PR artifact.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
