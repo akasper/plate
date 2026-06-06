@@ -502,7 +502,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
     This gh plate qanda entrypoint is for direct terminal use or scripting.
     """
     from plate_core.mcp.curiosity_tools import (
-        BackfillAnswersTool,
         ListQuestionsTool,
         GetQuestionTool,
         RecordAnswerTool,
@@ -514,12 +513,7 @@ def cmd_qanda(args: argparse.Namespace) -> int:
     json_out = getattr(args, "json", False)
 
     if getattr(args, "list", False) or args.command == "qanda" and not any(
-        [
-            getattr(args, "question", None),
-            getattr(args, "synthesize", False),
-            getattr(args, "record", False),
-            getattr(args, "backfill", False),
-        ]
+        [getattr(args, "question", None), getattr(args, "synthesize", False), getattr(args, "record", False)]
     ):
         # Default: list + synthesize top priorities
         result = SynthesizePrioritiesTool.execute(repo=repo, max_results=getattr(args, "limit", 5))
@@ -561,28 +555,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
         print("\n(Use --record to append an answer and trigger contemplation.)")
         return 0
 
-    if getattr(args, "backfill", False):
-        result = BackfillAnswersTool.execute(
-            repo=repo,
-            state=getattr(args, "backfill_state", "all"),
-            limit=getattr(args, "backfill_limit", 50),
-        )
-        if json_out:
-            print(json.dumps(result))
-            return 0
-        print(f"Repo: {result.get('repo')}")
-        print(f"Questions processed: {result.get('question_count', 0)}")
-        print(f"Answers written: {result.get('answers_written', 0)}")
-        for item in result.get("processed_questions", []):
-            if item.get("status") == "backfilled":
-                print(
-                    f"  - #{item.get('question_number')}: backfilled {item.get('answers_written')} answer(s)"
-                    f" -> {item.get('committed_file')}"
-                )
-            else:
-                print(f"  - #{item.get('question_number')}: skipped ({item.get('reason')})")
-        return 0
-
     if getattr(args, "record", None):
         qnum = args.record
         answer_text = getattr(args, "answer", None)
@@ -615,7 +587,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
             answered_by=getattr(args, "by", "cli-user"),
             repo=repo,
             source="cli-interactive",
-            revision_of=getattr(args, "revision_of", None),
         )
         if json_out:
             print(json.dumps(result))
@@ -623,8 +594,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
         print(f"Answer recorded for #{qnum}: {result.get('status')}")
         if result.get("comment_url"):
             print(f"Comment: {result['comment_url']}")
-        if result.get("committed_storage"):
-            print(f"Committed storage: {result['committed_storage']}")
         print("Next: Contemplation will create follow-ups / unblock if this was a blocking Question (#147/#148).")
         return 0
 
@@ -634,8 +603,6 @@ def cmd_qanda(args: argparse.Namespace) -> int:
     print("  gh plate qanda --question 140            # details for one")
     print("  gh plate qanda --record 140              # interactive prompt for answer (basic TUI fallback)")
     print("  gh plate qanda --record 140 --answer 'text'")
-    print("  gh plate qanda --record 140 --answer 'revised' --revision-of 123456789")
-    print("  gh plate qanda --backfill --backfill-state all")
     print("  gh plate qanda --synthesize --json")
     print("\nNative Copilot CLI sessions: agent uses host native forms + MCP tools (plate_create_blocking_question for #147 obstacles, record + contemplate for #148 resumption).")
     print("See QANDA_CURIOSITY_GUIDANCE and #151 for full TUI + GIF evidence.")
@@ -929,10 +896,6 @@ def build_parser() -> argparse.ArgumentParser:
     qanda.add_argument("--record", type=int, help="Record an answer to this Question number")
     qanda.add_argument("--answer", help="Answer text when using --record")
     qanda.add_argument("--by", help="Who is answering (for provenance)", default="cli-user")
-    qanda.add_argument("--revision-of", help="Optional prior answer/comment id this answer supersedes")
-    qanda.add_argument("--backfill", action="store_true", help="Backfill committed answer artifacts from existing Question issues")
-    qanda.add_argument("--backfill-state", default="all", choices=["open", "closed", "all"], help="Issue state filter for --backfill")
-    qanda.add_argument("--backfill-limit", type=int, default=50, help="Max Questions to scan during --backfill")
     qanda.add_argument("--limit", type=int, default=5, help="Max results for synthesize")
     qanda.set_defaults(func=cmd_qanda)
     return parser
