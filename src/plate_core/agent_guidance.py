@@ -105,8 +105,6 @@ This is the concrete last-resort escape hatch. Over-use is a risk — prefer rea
 ### Resumption pattern (Feature #148 / Epic #139)
 When you (or a future session) detect that a previously blocking Question (one containing PLATE-BLOCKING-DUMP or explicit "blocking" marker + link to original Issue) has been answered:
 1. Use `plate_get_question` + `plate_get_answers` (or record_answer path) to fetch the full answer + provenance from the blocking Question.
-   - Prefer the committed fast path from `plate_get_answers` when `docs/curiosity/answers.yml` and `docs/curiosity/answers/*.md` are present.
-   - If you are working from historical Questions that predate committed storage, run `plate_backfill_answers` (or `gh plate qanda --backfill`) once before synthesis/resumption.
 2. Identify the original blocked Issue from the dump/block (or Question body links).
 3. Perform structured merge:
    - Post a clear, human/machine-readable "**Unblocked by answer to Question #N**" report comment on the original (key excerpts, provenance, link back, actions taken).
@@ -124,60 +122,6 @@ This completes the loop started by #147 creation. Dogfood the full create → an
 - Always prefer the most native user experience the host environment (Copilot CLI) can provide.
 """
 
-
-INFORMATION_AUDIT_GUIDANCE = """
-## Information Audits and Goals Page (Epic #218, #221 core engine, #222 defaults catalog)
-
-PLATE supports proactive Information Audits to discover Informational Goals (gaps against the project's high-level Goals) and generate well-formed `Question` issues.
-
-### When to perform an Information Audit
-- At start of Epic or major task, or periodically (e.g. via `plate_perform_information_audit` or equivalent).
-- When the Goals page or context seems stale/missing signals for prioritization or Question generation.
-- To seed or refine open Questions for Curiosity/Q&A mode.
-- Scoped by agent_type (general, marketing, engineering) or scope (repo, epic, etc.).
-
-### How to run
-- Prefer MCP tool `plate_perform_information_audit` (or future gh plate / Copilot surface).
-- Start with `dry_run: true` to review proposals before creating Issues.
-- Set `include_defaults: true` to incorporate platform + extension defaults from the catalog (#222).
-- Provide `agent_type` for specialized scoping/heuristics.
-- Use `max_questions` to cap output.
-
-### Inputs to use
-- The Wiki `Goals` page (per convention #219/#224) as primary strategic signal: read Mission, Core Principles, How We Intend to Succeed, Current State & Evidence, Open Questions.
-- Other surfaces: code patterns, open issues/PRs/discussions, existing Questions, bootstrap state.
-- Never assume Goals page is the *only* source (per contract rule #1).
-
-### Output and Question generation (per #220 model)
-- Proposed Questions include:
-  - title/body following Question template + provenance (where gap noticed, e.g. "Goals § Mission", specific file/issue), related_goals, priority_rationale, refinement_note.
-  - Use PLATE-INFORMATIONAL-GOAL markers for Answer Model / Contemplation compatibility.
-- Link back to originating Goal(s) and forward to artifacts that should be updated on resolution.
-- Support continuous refinement: broad → specific; detect clusters of related Questions.
-
-### Best practices and integration
-- Quality over quantity: use heuristics + reasoning to avoid noise; cap and prioritize.
-- After audit, feed proposals into Curiosity flows (list/prioritize/present via native TUI or gh plate qanda, record answers, contemplate).
-- Contribute back: if audit reveals missing/stale Goals page content, propose updates or new high-level goals.
-- For hard obstacles during audit or other work, fall back to blocking Question pattern (#147).
-- When blocking Question answered, resume via unblock report + merge (as in Q&A section).
-
-### Examples
-- General audit: `plate_perform_information_audit --dry-run --include-defaults` → review 3-5 high-signal Questions tied to Mission/risks.
-- Marketing agent: scope to users/GTM gaps, produce Questions for personas or value prop.
-- After Goals page populated: re-audit to surface "Current State & Evidence" gaps or risks.
-
-See design #223 for the 10 enforceable behavior rules (open-ended, provenance, refinement, quality, scoping, defaults+extensibility, integration, auditability, human-in-loop, wiki as strategic home).
-
-Use the catalog (`plate_informational_goals`) to inspect defaults.
-
-**MCP tools (core):**
-- `plate_perform_information_audit` (dry_run, scope, agent_type, max_questions, include_defaults)
-- `plate_informational_goals` / `plate_informational_goal <id>` (from #222 catalog)
-- Existing Curiosity tools for follow-up (list/get/record/prioritize/contemplate/blocking/resume).
-
-Always produce auditable output (logs, provenance). Prefer native Copilot TUI for presenting proposals if available.
-"""
 
 def get_agent_guidance_sections() -> dict[str, str]:
     """Return guidance sections for agents."""
