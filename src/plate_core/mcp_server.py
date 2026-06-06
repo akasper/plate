@@ -17,15 +17,6 @@ from .release import get_release_notes_diff, get_release_status, get_release_tar
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
-from .discussions import (
-    list_discussions,
-    get_discussion,
-    list_discussion_comments,
-    add_discussion_comment,
-    create_discussion,
-    list_discussion_categories,
-    list_open_ideas,
-)
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
     CreateBlockingQuestionTool,
@@ -191,14 +182,13 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             # For v1: simple decision tree over common paths; future data-driven.
             payload = _what_next(args.get("repo"), args.get("agent_type"))
         elif name == "plate_contemplate":
-            # Contemplation Engine entrypoint (v2.1 per Feature #343 / Epic #257)
+            # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
             qn = args.get("question_number")
             if not qn:
                 raise ValueError("question_number is required")
             payload = trigger_contemplation(
                 question_number=qn,
                 answer_text=args.get("answer_text", ""),
-                all_previous_answers=args.get("all_previous_answers"),
                 repo=args.get("repo"),
                 session=args.get("session"),
                 source=args.get("source", "contemplation"),
@@ -247,51 +237,6 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
-        # GitHub Discussions surface (Feature #329): plate_discussions_* + conveniences.
-        # Enables Ideas capture, inter-agent comms, orchestration logs (see Ideas #287/#292/#293).
-        elif name == "plate_list_discussions":
-            payload = [
-                d.to_dict()
-                for d in list_discussions(
-                    repo=args.get("repo"),
-                    category=args.get("category"),
-                    state=args.get("state"),
-                    per_page=int(args.get("per_page", 30)),
-                    page=int(args.get("page", 1)),
-                )
-            ]
-        elif name == "plate_get_discussion":
-            num = args.get("number")
-            payload = get_discussion(
-                repo=args.get("repo"), number=int(num) if num is not None else None
-            ).to_dict()
-        elif name == "plate_list_discussion_comments":
-            num = args.get("number")
-            payload = [
-                c.to_dict()
-                for c in list_discussion_comments(
-                    repo=args.get("repo"), number=int(num) if num is not None else None
-                )
-            ]
-        elif name == "plate_add_discussion_comment":
-            num = args.get("number")
-            payload = add_discussion_comment(
-                repo=args.get("repo"),
-                number=int(num) if num is not None else None,
-                body=args.get("body"),
-            )
-        elif name == "plate_create_discussion":
-            payload = create_discussion(
-                repo=args.get("repo"),
-                category_slug=args.get("category_slug"),
-                category_id=args.get("category_id"),
-                title=args.get("title"),
-                body=args.get("body"),
-            )
-        elif name == "plate_list_discussion_categories":
-            payload = {"categories": list_discussion_categories(repo=args.get("repo"))}
-        elif name == "plate_list_open_ideas":
-            payload = [d.to_dict() for d in list_open_ideas(repo=args.get("repo"))]
         else:
             _write(
                 {
@@ -664,13 +609,12 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_contemplate",
-                                "description": "Run the Contemplation Engine v2.1 on an answer to a Question (Epic #257 / Feature #343). Parses answer_signal, appends full-transcript log with evidence citations, creates typed child issues with back-refs, signals close only when high-confidence + evidence + emits USAGE REPORT. Supports all_previous_answers for accumulated context. Core driver of autonomous progress from Q&A per contract #143.",
+                                "description": "Run the Contemplation Engine on an answer to a Question. Evaluates checklist-style Answer signal criteria against cited answer evidence, posts a structured contemplation log, preserves blocking-question resumption, and reports when the Question is ready to close via a PR artifact.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "question_number": {"type": "integer", "description": "The Question being answered."},
                                         "answer_text": {"type": "string", "description": "The answer text (full transcript captured)."},
-                                        "all_previous_answers": {"type": "array", "items": {"type": "string"}, "description": "List of prior answer texts for full context and evaluation (v2.1 accumulated transcript)."},
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "session": {"type": "string", "description": "Session/turn for provenance."},
                                         "source": {"type": "string", "description": "qanda | agent-contemplation | blocking", "default": "contemplation"},
@@ -904,95 +848,6 @@ def run() -> None:
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "dry_run": {"type": "boolean", "description": "Simulate only (default true for safety)."},
-                                    },
-                                },
-                            },
-                            # Discussions MCP surface (Feature #329). plate_* naming for consistency with other github/process tools.
-                            # Supports Ideas category use cases, inter-agent comms, logs (Ideas #287, #292, #293; enables #282 orchestrator vision).
-                            {
-                                "name": "plate_list_discussions",
-                                "description": "List discussions (filter by category e.g. 'ideas', state 'open'). Returns normalized records with number/title/url/body_preview.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional if inside clone."},
-                                        "category": {"type": "string", "description": "Filter by category slug or name (e.g. 'ideas')."},
-                                        "state": {"type": "string", "description": "open or closed (client filtered for reliability)."},
-                                        "per_page": {"type": "integer", "description": "Max results (default 30)."},
-                                        "page": {"type": "integer", "description": "Page (default 1)."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_get_discussion",
-                                "description": "Get full discussion by number (includes body, category, etc.).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "number": {"type": "integer", "description": "Discussion number."},
-                                    },
-                                    "required": ["number"],
-                                },
-                            },
-                            {
-                                "name": "plate_list_discussion_comments",
-                                "description": "List comments on a discussion.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "number": {"type": "integer", "description": "Discussion number."},
-                                        "per_page": {"type": "integer", "description": "Max comments (default 30)."},
-                                    },
-                                    "required": ["number"],
-                                },
-                            },
-                            {
-                                "name": "plate_add_discussion_comment",
-                                "description": "Add a comment to an existing discussion.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "number": {"type": "integer", "description": "Discussion number."},
-                                        "body": {"type": "string", "description": "Comment markdown content."},
-                                    },
-                                    "required": ["number", "body"],
-                                },
-                            },
-                            {
-                                "name": "plate_create_discussion",
-                                "description": "Create a new discussion. Provide category_slug (e.g. 'ideas') or category_id (node ID).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "category_slug": {"type": "string", "description": "Category slug or name (resolved via list)."},
-                                        "category_id": {"type": "string", "description": "Direct category node ID (from GraphQL)."},
-                                        "title": {"type": "string", "description": "Discussion title."},
-                                        "body": {"type": "string", "description": "Discussion body (markdown)."},
-                                    },
-                                    "required": ["title", "body"],
-                                },
-                            },
-                            {
-                                "name": "plate_list_discussion_categories",
-                                "description": "List available discussion categories (id, name, slug, description) for the repo.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_list_open_ideas",
-                                "description": "Convenience: list open discussions in the 'ideas' category (common for process/idea capture).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
                                     },
                                 },
                             },

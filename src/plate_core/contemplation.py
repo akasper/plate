@@ -1,23 +1,14 @@
-"""Contemplation Engine v2.1 runtime (Epic #139/#257, Feature #343).
+"""Contemplation Engine runtime (Epic #257 evolution of Feature #149 + #148 resumption).
 
-This is the core driver that turns every recorded answer into forward progress:
-- Parses answer_signal from Question body (checklist format per #326)
-- Evaluates accumulated evidence against signal criteria
-- Appends structured Contemplation Log with full transcript + provenance
-- Creates new actionable child issues (Features/Research/Design) based on answer content + gaps
-- Only signals close when answer_signal is verifiably met (evidence-based with citations)
-- Includes mandatory === USAGE REPORT === on closure per AGENTS.md
-- Special path for answers to blocking Questions (#147 creation): parse dump, post unblock report, resume (#148)
+This driver turns recorded Question answers into durable forward progress:
+- Appends a structured contemplation log to the Question
+- Evaluates checklist-style `Answer signal` criteria against cited answer evidence
+- Signals PR-ready closure only when all criteria are satisfied
+- Preserves the blocking-question resumption path (#147/#148)
 
-Invoked from plate_record_answer (via optional trigger) and directly via MCP.
-Follows the contract in Design #143.
-
-v2.1 changes (phased per #257 + #342 + #326 recs):
-- Real answer_signal parsing and evaluation (replaces v1 heuristics)
-- Full transcript with citations and evidence tracking
-- Strict close decision with usage reporting
-- Basic typed child creation with back-refs
-- Enhanced blocking/resumption with merge reports
+The engine intentionally does *not* close GitHub issues directly. PLATE Question
+issues must close via a PR that commits the required artifact and includes
+`Closes #N` in the PR body.
 """
 
 from __future__ import annotations
@@ -26,8 +17,26 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+from .curiosity.answers import parse_plate_answer_blocks
 from .github_client import GhClient, GhApiError
 from .health import resolve_repo
+
+_CHECKLIST_ITEM_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\[(?: |x|X)\]\s+(.*\S)\s*$")
+_ANSWER_SIGNAL_SECTION_RE = re.compile(
+    r"(?ims)^##+\s*Answer signal\s*$\n?(.*?)(?=^##+\s|\Z)"
+)
+_URL_RE = re.compile(r"https?://[^\s)>\]]+")
+_PATH_RE = re.compile(
+    r"(?:docs|src|tests|scripts|plugin|\.plugin|\.github|\.agentic)/[A-Za-z0-9._/\-]+"
+)
+_ISSUE_REF_RE = re.compile(r"(?<!\w)#\d+\b")
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_STOPWORDS = {
+    "the", "and", "for", "with", "that", "this", "from", "into", "must", "when",
+    "then", "only", "will", "have", "has", "been", "are", "was", "were", "how",
+    "what", "which", "should", "than", "via", "its", "their", "them", "your",
+    "into", "each", "item", "cite", "cites", "cited", "criterion", "criteria",
+}
 
 
 def _get_gh(client: GhClient | None = None) -> GhClient:
@@ -38,159 +47,144 @@ def _resolve(repo: str | None) -> str:
     return resolve_repo(repo)
 
 
-def _parse_answer_signal(question_body: str) -> dict[str, Any]:
-    """Parse answer_signal from Question body.
-
-    Returns dict with:
-    - raw_signal: the full text from answer_signal field
-    - criteria: list of parsed criteria items (checklist items, keywords, etc.)
-    - signal_type: 'checklist' | 'keyword' | 'artifact' | 'unknown'
-    """
-    if not question_body:
-        return {"raw_signal": "", "criteria": [], "signal_type": "unknown"}
-
-    # Extract answer_signal field content from template
-    # Format from template: "## Answer signal\n\nHow will we know this question is answered?\n\n<content>"
-    signal_match = re.search(
-        r'(?:^|\n)(?:##\s*Answer signal|Answer signal)[:\s]*\n+(.*?)(?=\n##|\Z)',
-        question_body,
-        re.IGNORECASE | re.DOTALL
-    )
-
-    if not signal_match:
-        # Fallback: look for answer_signal: pattern
-        signal_match = re.search(
-            r'answer_signal[:\s]+(.+?)(?:\n\n|\Z)',
-            question_body,
-            re.IGNORECASE | re.DOTALL
-        )
-
-    raw_signal = signal_match.group(1).strip() if signal_match else ""
-
-    if not raw_signal:
-        return {"raw_signal": "", "criteria": [], "signal_type": "unknown"}
-
-    # Parse checklist items (- [ ] or - [x] format per #326)
-    checklist_items = re.findall(r'^\s*-\s*\[([ xX])\]\s*(.+?)$', raw_signal, re.MULTILINE)
-    if checklist_items:
-        criteria = [{"type": "checklist", "checked": item[0].lower() == 'x', "text": item[1].strip()}
-                   for item in checklist_items]
-        return {"raw_signal": raw_signal, "criteria": criteria, "signal_type": "checklist"}
-
-    # Parse artifact requirements
-    if any(keyword in raw_signal.lower() for keyword in ['commit', 'docs/', 'artifact', '.md', 'issue']):
-        return {"raw_signal": raw_signal, "criteria": [{"type": "artifact", "text": raw_signal}], "signal_type": "artifact"}
-
-    # Fallback: treat as keyword-based
-    return {"raw_signal": raw_signal, "criteria": [{"type": "keyword", "text": raw_signal}], "signal_type": "keyword"}
+def _extract_answer_signal_section(body: str) -> str:
+    match = _ANSWER_SIGNAL_SECTION_RE.search(body or "")
+    return match.group(1).strip() if match else ""
 
 
-def _evaluate_signal(
-    answer_signal: dict[str, Any],
-    answer_text: str,
-    created_issues: list[dict[str, Any]],
-    all_answers: list[str] | None = None
-) -> dict[str, Any]:
-    """Evaluate whether answer_signal criteria are met.
+def _parse_answer_signal_criteria(body: str) -> tuple[list[str], list[str]]:
+    section = _extract_answer_signal_section(body)
+    if not section:
+        return [], ["Question body does not include an `Answer signal` section."]
 
-    Returns:
-    - met: bool
-    - confidence: 'high' | 'medium' | 'low'
-    - evidence: list of citation excerpts
-    - missing: list of unmet criteria descriptions
-    """
-    signal_type = answer_signal.get("signal_type", "unknown")
-    criteria = answer_signal.get("criteria", [])
-    all_text = "\n\n".join(all_answers or [answer_text])
+    criteria = []
+    for line in section.splitlines():
+        match = _CHECKLIST_ITEM_RE.match(line)
+        if match:
+            criteria.append(match.group(1).strip())
 
     if not criteria:
-        return {
-            "met": False,
-            "confidence": "low",
-            "evidence": [],
-            "missing": ["No answer_signal criteria found in Question body"],
-        }
+        return [], [
+            "Answer signal contains no parseable checklist criteria; manual closure remains required."
+        ]
+    return criteria, []
 
-    evidence = []
-    missing = []
-    met_count = 0
 
-    if signal_type == "checklist":
-        # For checklist, check each item against answer content
-        for criterion in criteria:
-            text = criterion.get("text", "")
-            # Simple heuristic: look for keywords from criterion in answer
-            keywords = [w.lower() for w in re.findall(r'\b\w{4,}\b', text)]
-            matches = [kw for kw in keywords if kw in all_text.lower()]
+def _extract_citations(text: str) -> list[str]:
+    citations = set(_URL_RE.findall(text or ""))
+    citations.update(_PATH_RE.findall(text or ""))
+    citations.update(_ISSUE_REF_RE.findall(text or ""))
+    return sorted(citations)
 
-            if len(matches) >= max(1, len(keywords) // 2):  # At least half keywords present
-                met_count += 1
-                # Extract excerpt as evidence
-                for kw in matches[:1]:  # Just first match for brevity
-                    match = re.search(rf'.{{0,50}}{re.escape(kw)}.{{0,50}}', all_text, re.IGNORECASE | re.DOTALL)
-                    if match:
-                        evidence.append(f"'{match.group(0).strip()}' (addresses: {text[:60]}...)")
-                        break
-            else:
-                missing.append(text)
 
-        # Checklist is met if all items addressed
-        met = len(missing) == 0 and met_count == len(criteria)
-        confidence = "high" if met else ("medium" if met_count > 0 else "low")
-
-    elif signal_type == "artifact":
-        # Check if issues were created or artifact mentioned
-        artifact_text = criteria[0].get("text", "")
-        if created_issues:
-            met = True
-            confidence = "high"
-            evidence.append(f"Created {len(created_issues)} follow-up issue(s)")
-        else:
-            # Check for artifact references in answer
-            artifact_keywords = ['docs/', 'commit', 'pr', 'issue', 'artifact']
-            found_refs = [kw for kw in artifact_keywords if kw in all_text.lower()]
-            met = len(found_refs) > 0
-            confidence = "medium" if met else "low"
-            if met:
-                evidence.append(f"References artifacts: {', '.join(found_refs)}")
-            else:
-                missing.append(artifact_text)
-
-    else:  # keyword or unknown
-        # Basic keyword presence check
-        signal_text = answer_signal.get("raw_signal", "")
-        keywords = [w.lower() for w in re.findall(r'\b\w{4,}\b', signal_text)]
-        matches = [kw for kw in keywords if kw in all_text.lower()]
-
-        met = len(matches) >= max(1, len(keywords) // 3)
-        confidence = "high" if len(matches) >= len(keywords) // 2 else ("medium" if matches else "low")
-
-        if met:
-            evidence.append(f"Addressed keywords: {', '.join(matches[:3])}")
-        else:
-            missing.append("Answer does not sufficiently address signal criteria")
-
+def _tokenize(text: str) -> set[str]:
     return {
-        "met": met,
-        "confidence": confidence,
-        "evidence": evidence,
-        "missing": missing,
+        token
+        for token in _TOKEN_RE.findall((text or "").lower())
+        if len(token) > 2 and token not in _STOPWORDS
     }
 
 
-def _create_usage_report() -> str:
-    """Generate usage report block per AGENTS.md requirements."""
-    # In real implementation, this would track actual usage
-    # For now, provide a structured placeholder
-    return """=== USAGE REPORT ===
-tokens: 0
-cost: $0.00
-duration: 00:00:00
-=== END USAGE REPORT ==="""
+def _build_answer_records(
+    question_number: int,
+    comments: list[dict[str, Any]],
+    answer_text: str,
+    answered_by: str,
+    source: str,
+    timestamp: str,
+) -> list[dict[str, Any]]:
+    answers: list[dict[str, Any]] = []
+    for comment in comments:
+        for block in parse_plate_answer_blocks(comment.get("body") or ""):
+            answer_value = block.get("answer", "")
+            answers.append(
+                {
+                    "id": str(comment.get("id") or block.get("id") or ""),
+                    "question_number": question_number,
+                    "answered_by": block.get("answered by", "unknown"),
+                    "timestamp": block.get("timestamp", timestamp),
+                    "source": block.get("source", "manual"),
+                    "answer_text": answer_value,
+                    "revision_of": block.get("revision of"),
+                    "comment_url": comment.get("html_url"),
+                    "citations": _extract_citations(answer_value),
+                }
+            )
+
+    if answer_text.strip() and not any(
+        existing["answer_text"].strip() == answer_text.strip() for existing in answers
+    ):
+        answers.append(
+            {
+                "id": f"ephemeral-{question_number}-{timestamp}",
+                "question_number": question_number,
+                "answered_by": answered_by,
+                "timestamp": timestamp,
+                "source": source,
+                "answer_text": answer_text,
+                "revision_of": None,
+                "comment_url": None,
+                "citations": _extract_citations(answer_text),
+            }
+        )
+    return answers
+
+
+def _effective_answers(answers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    superseded = {str(answer["revision_of"]) for answer in answers if answer.get("revision_of")}
+    effective = [answer for answer in answers if str(answer["id"]) not in superseded]
+    return sorted(effective, key=lambda answer: answer.get("timestamp", ""))
+
+
+def _criterion_satisfied(
+    criterion: str,
+    answers: list[dict[str, Any]],
+) -> tuple[bool, list[dict[str, Any]]]:
+    criterion_citations = _extract_citations(criterion)
+    criterion_tokens = _tokenize(criterion)
+    supporting_answers = []
+
+    for answer in answers:
+        if not answer["citations"]:
+            continue
+
+        answer_text = answer["answer_text"]
+        answer_tokens = _tokenize(answer_text)
+        tokens_overlap = criterion_tokens.intersection(answer_tokens)
+        required_overlap = 1 if len(criterion_tokens) <= 4 else 2
+
+        path_match = any(citation in answer_text for citation in criterion_citations)
+        issue_ref_match = any(citation in answer["citations"] for citation in criterion_citations)
+        token_match = len(tokens_overlap) >= required_overlap if criterion_tokens else False
+
+        if path_match or issue_ref_match or token_match:
+            supporting_answers.append(
+                {
+                    "answer_id": answer["id"],
+                    "answered_by": answer["answered_by"],
+                    "timestamp": answer["timestamp"],
+                    "comment_url": answer["comment_url"],
+                    "citations": answer["citations"],
+                }
+            )
+
+    return bool(supporting_answers), supporting_answers
+
+
+def _format_usage_report() -> str:
+    return "\n".join(
+        [
+            "=== USAGE REPORT ===",
+            "tokens: 0",
+            "cost: $0.00",
+            "duration: 00:00:00",
+            "=== END USAGE REPORT ===",
+        ]
+    )
 
 
 class ContemplationEngine:
-    """Core engine v2.1: signal-driven evaluation + full transcript + strict close."""
+    """Deterministic engine for Question answer evaluation and resumption."""
 
     def __init__(self, client: GhClient | None = None):
         self.gh = client or GhClient()
@@ -203,217 +197,187 @@ class ContemplationEngine:
         session: str | None = None,
         source: str = "qanda",
         answered_by: str = "agent",
-        all_previous_answers: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Run contemplation on an answer. Returns log + created issues + close_signal."""
+        """Run contemplation on an answer and report closure readiness."""
+
         target = _resolve(repo)
         timestamp = datetime.now(timezone.utc).isoformat()
-
-        created_issues: list[dict[str, Any]] = []
-        actions: list[str] = []
-        close_signal_met = False
-
-        # Normalize answer_text (defensive)
         answer_text = answer_text or ""
+        actions: list[str] = []
+        created_issues: list[dict[str, Any]] = []
+        log_url = None
+        close_ready_comment_url = None
 
-        # Fetch Question to get answer_signal and full context
-        try:
-            q = self.gh.api(f"repos/{target}/issues/{question_number}")
-            q_body = (q.get("body") or "") if isinstance(q, dict) else ""
-            q_title = (q.get("title") or "") if isinstance(q, dict) else ""
-        except GhApiError as e:
-            q_body = ""
-            q_title = ""
-            actions.append(f"Warning: Could not fetch Question body: {e}")
+        issue = self.gh.api(f"repos/{target}/issues/{question_number}")
+        comments = self.gh.api(
+            f"repos/{target}/issues/{question_number}/comments",
+            fields={"per_page": 100},
+        ) or []
+        comments_list = comments if isinstance(comments, list) else []
+        issue_body = (issue.get("body") or "") if isinstance(issue, dict) else ""
 
-        # Parse answer_signal
-        answer_signal = _parse_answer_signal(q_body)
-        actions.append(f"Parsed answer_signal: {answer_signal['signal_type']}")
+        criteria, criterion_warnings = _parse_answer_signal_criteria(issue_body)
+        answers = _build_answer_records(
+            question_number=question_number,
+            comments=comments_list,
+            answer_text=answer_text,
+            answered_by=answered_by,
+            source=source,
+            timestamp=timestamp,
+        )
+        effective_answers = _effective_answers(answers)
 
-        # Build transcript with full provenance
+        answer_signal_evaluation = []
+        close_signal_met = False
+        if criteria:
+            for criterion in criteria:
+                satisfied, supporting_answers = _criterion_satisfied(criterion, effective_answers)
+                answer_signal_evaluation.append(
+                    {
+                        "criterion": criterion,
+                        "satisfied": satisfied,
+                        "supporting_answers": supporting_answers,
+                    }
+                )
+            close_signal_met = all(item["satisfied"] for item in answer_signal_evaluation)
+        else:
+            actions.extend(criterion_warnings)
+
+        if (
+            not close_signal_met
+            and (
+                any(keyword in answer_text.lower() for keyword in ["risk", "unknown", "create ", "implement ", "add "])
+                or len(answer_text) > 80
+            )
+        ):
+            try:
+                title = f"[Feature]: Follow-up from answer to Question #{question_number}"
+                body = (
+                    f"Contemplation-driven follow-up from answer to Question #{question_number}.\n\n"
+                    f"**Original answer excerpt:**\n\n> {answer_text[:300]}\n\n"
+                    "**Next steps (agent/human):** Refine scope, split if needed, and implement.\n\n"
+                    f"<!-- plate-contemplation-ref: q{question_number} @{timestamp} -->"
+                )
+                new_issue = self.gh.api(
+                    f"repos/{target}/issues",
+                    method="POST",
+                    fields={"title": title, "body": body, "labels": ["Feature"]},
+                )
+                created_issues.append(
+                    {"number": new_issue.get("number"), "title": title, "url": new_issue.get("html_url")}
+                )
+                actions.append(f"Created: #{new_issue.get('number')}")
+            except GhApiError as exc:
+                actions.append(f"Create issue failed: {exc}")
+
         log_lines = [
             "<!-- PLATE-CONTEMPLATION:BEGIN -->",
-            f"**Contemplation v2.1**",
-            f"",
-            f"Question: #{question_number}",
-            f"Title: {q_title[:100]}",
+            f"Question: {question_number}",
             f"Answered by: {answered_by}",
             f"Timestamp: {timestamp}",
             f"Source: {source}",
             f"Session: {session or 'none'}",
-            f"",
-            f"**Answer (full transcript):**",
-            f"",
-            f"> {answer_text}",
-            f"",
-            f"**Answer Signal Evaluation:**",
-            f"",
+            f"Answer excerpt: {answer_text[:180]}{'...' if len(answer_text) > 180 else ''}",
+            f"Answer signal criteria: {len(criteria)}",
+            f"Effective answers considered: {len(effective_answers)}",
         ]
-
-        # Analyze answer for gaps and create child issues
-        text_lower = answer_text.lower()
-
-        # Heuristic gap detection (enhanced from v1)
-        if any(k in text_lower for k in ["need to", "should ", "could ", "recommend ", "next step"]):
-            # Extract action items as potential child issues
-            sentences = [s.strip() for s in re.split(r'[.!?]\s+', answer_text) if len(s.strip()) > 20]
-            action_sentences = [s for s in sentences
-                              if any(k in s.lower() for k in ["need to", "should", "could", "recommend", "implement", "create", "add"])]
-
-            for idx, action in enumerate(action_sentences[:3]):  # Limit to 3 children
-                # Determine issue type from content
-                issue_type = "Feature"
-                if any(k in action.lower() for k in ["research", "investigate", "explore"]):
-                    issue_type = "Research"
-                elif any(k in action.lower() for k in ["design", "plan", "architecture"]):
-                    issue_type = "Design"
-
-                try:
-                    title = f"[{issue_type}]: {action[:80]}..."
-                    body = (
-                        f"Forward progress from answer to Question #{question_number}.\n\n"
-                        f"**Parent Question:** #{question_number} ({q_title})\n\n"
-                        f"**Identified gap/action:**\n\n> {action}\n\n"
-                        f"**Full answer context:**\n\n> {answer_text[:400]}{'...' if len(answer_text) > 400 else ''}\n\n"
-                        f"**Next steps:** Refine scope and implement per PLATE {issue_type} loop.\n\n"
-                        f"**Provenance:** Epic #257, Epic #139 (Contemplation v2.1)\n"
-                        f"<!-- plate-contemplation-child: parent=q{question_number} @{timestamp} -->"
-                    )
-                    new_issue = self.gh.api(
-                        f"repos/{target}/issues",
-                        method="POST",
-                        fields={"title": title, "body": body, "labels": [issue_type]},
-                    )
-                    created_issues.append({
-                        "number": new_issue.get("number"),
-                        "title": title,
-                        "url": new_issue.get("html_url"),
-                        "type": issue_type,
-                    })
-                    actions.append(f"Created {issue_type} #{new_issue.get('number')}")
-                except GhApiError as e:
-                    actions.append(f"Create {issue_type} failed: {e}")
-
-        # Evaluate signal with all context
-        all_answers_list = (all_previous_answers or []) + [answer_text]
-        evaluation = _evaluate_signal(answer_signal, answer_text, created_issues, all_answers_list)
-
-        log_lines.extend([
-            f"- Signal type: `{answer_signal['signal_type']}`",
-            f"- Criteria count: {len(answer_signal.get('criteria', []))}",
-            f"- Evaluation: {'✓ MET' if evaluation['met'] else '✗ NOT MET'}",
-            f"- Confidence: {evaluation['confidence']}",
-            f"",
-        ])
-
-        if evaluation["evidence"]:
-            log_lines.append("**Evidence (citations):**")
-            for ev in evaluation["evidence"]:
-                log_lines.append(f"- {ev}")
-            log_lines.append("")
-
-        if evaluation["missing"]:
-            log_lines.append("**Still missing:**")
-            for miss in evaluation["missing"]:
-                log_lines.append(f"- {miss}")
-            log_lines.append("")
-
-        # Decide on closure (strict per #143 contract + #326: evidence-based with citations;
-        # only high confidence AND at least one evidence excerpt)
-        close_signal_met = (
-            bool(evaluation.get("met"))
-            and evaluation.get("confidence") == "high"
-            and len(evaluation.get("evidence", [])) >= 1
-        )
-
+        for warning in criterion_warnings:
+            log_lines.append(f"Warning: {warning}")
+        for index, evaluation in enumerate(answer_signal_evaluation, start=1):
+            status = "satisfied" if evaluation["satisfied"] else "unsatisfied"
+            citations = []
+            for supporting in evaluation["supporting_answers"]:
+                citations.extend(supporting["citations"])
+            unique_citations = ", ".join(sorted(dict.fromkeys(citations))) if citations else "none"
+            log_lines.append(f"Criterion {index}: {status} - {evaluation['criterion']}")
+            log_lines.append(f"Criterion {index} citations: {unique_citations}")
         if close_signal_met:
-            log_lines.append("**✓ Close signal MET** — Question may be closed with usage report.")
-            actions.append("Close signal detected (evidence-based)")
-            # Add usage report
-            log_lines.append("")
-            log_lines.append(_create_usage_report())
-        else:
-            log_lines.append("**✗ Close signal NOT met** — More work needed or signal not addressed.")
-            actions.append("Close signal not met (needs more evidence)")
-
-        log_lines.extend([
-            "",
-            f"**Actions triggered:** {'; '.join(actions) if actions else 'none'}",
-            "",
-            f"**Created issues:** {len(created_issues)}",
-        ])
-
-        for issue in created_issues:
-            log_lines.append(f"- {issue['type']} #{issue['number']}: {issue['title'][:80]}")
-
-        log_lines.append("")
+            actions.append("Answer signal satisfied; Question is ready to close via a PR artifact")
+        log_lines.append(f"Actions triggered: {'; '.join(actions) if actions else 'none'}")
+        log_lines.append(f"Close signal met: {str(close_signal_met).lower()}")
         log_lines.append("<!-- PLATE-CONTEMPLATION:END -->")
-
         contemplation_comment = "\n".join(log_lines)
 
-        # Post the Contemplation Log comment to the Question
-        log_url = None
         try:
-            comment = self.gh.api(
+            log_comment = self.gh.api(
                 f"repos/{target}/issues/{question_number}/comments",
                 method="POST",
                 fields={"body": contemplation_comment},
             )
-            log_url = comment.get("html_url")
+            log_url = log_comment.get("html_url")
             actions.append(f"Logged contemplation: {log_url}")
-        except GhApiError as e:
-            actions.append(f"Log failed: {e}")
+        except GhApiError as exc:
+            actions.append(f"Log failed: {exc}")
 
-        # Blocking Question resumption path (#148)
-        # Detect via marker written by CreateBlockingQuestionTool (in Question body).
-        if "PLATE-BLOCKING-DUMP" in q_body or "last-resort" in q_body.lower() or "blocking info needed" in q_body.lower():
+        if close_signal_met:
+            closure_lines = [
+                "**Answer signal satisfied.**",
+                "",
+                "This Question is ready to close via a PR that commits the required artifact and includes "
+                f"`Closes #{question_number}` in the PR body.",
+                "",
+                "### Verified criteria",
+            ]
+            for evaluation in answer_signal_evaluation:
+                citations = []
+                for supporting in evaluation["supporting_answers"]:
+                    citations.extend(supporting["citations"])
+                closure_lines.append(
+                    f"- [x] {evaluation['criterion']} "
+                    f"(citations: {', '.join(sorted(dict.fromkeys(citations))) or 'none'})"
+                )
+            closure_lines.extend(["", _format_usage_report()])
             try:
-                m = re.search(r"original[=_](\d+)", q_body)
-                if m:
-                    orig = int(m.group(1))
-                    excerpt = (answer_text or "")[:250]
+                close_comment = self.gh.api(
+                    f"repos/{target}/issues/{question_number}/comments",
+                    method="POST",
+                    fields={"body": "\n".join(closure_lines)},
+                )
+                close_ready_comment_url = close_comment.get("html_url")
+                actions.append("Posted PR-ready closure report with usage block")
+            except GhApiError as exc:
+                actions.append(f"Closure report failed: {exc}")
+
+        try:
+            if (
+                "PLATE-BLOCKING-DUMP" in issue_body
+                or "last-resort" in issue_body.lower()
+                or "blocking info needed" in issue_body.lower()
+            ):
+                match = re.search(r'original(?:_issue)?["=: ]+(\d+)', issue_body)
+                if match:
+                    original_issue = int(match.group(1))
+                    excerpt = answer_text[:250]
                     unblock_body = (
-                        f"**Unblocked by answer to Question #{question_number} (resumption from blocking Question)**\n\n"
-                        f"Human answer to the blocking Question has been recorded and contemplated. Key information merged into context.\n\n"
-                        f"**Answer excerpt:**\n\n> {excerpt}{'...' if len(answer_text or '') > 250 else ''}\n\n"
-                        f"**Evaluation:** Signal {'MET' if close_signal_met else 'not yet met'}\n\n"
-                    )
-
-                    if created_issues:
-                        unblock_body += f"**Created follow-up issues:**\n\n"
-                        for issue in created_issues:
-                            unblock_body += f"- #{issue['number']}: {issue['title'][:80]}\n"
-                        unblock_body += "\n"
-
-                    unblock_body += (
-                        "**Next steps:** Resume or hand off work on this Issue using the new information and any created follow-ups. "
-                        "Full provenance and contemplation log live in the Question.\n\n"
+                        f"**Unblocked by answer to Question #{question_number} (blocking resumption)**\n\n"
+                        "Human answer to the blocking Question has been recorded. Key information merged into context.\n\n"
+                        f"**Answer excerpt:**\n\n> {excerpt}{'...' if len(answer_text) > 250 else ''}\n\n"
+                        "**Next steps:** Resume or hand off work on this Issue using the new information. "
+                        "Full provenance and dump live in the Question.\n\n"
                         f"**Blocking Question:** #{question_number}\n"
-                        f"<!-- plate-unblock: q{question_number} orig={orig} @{timestamp} -->"
+                        f"<!-- plate-unblock: q{question_number} orig={original_issue} @{timestamp} -->"
                     )
                     self.gh.api(
-                        f"repos/{target}/issues/{orig}/comments",
+                        f"repos/{target}/issues/{original_issue}/comments",
                         method="POST",
                         fields={"body": unblock_body},
                     )
-                    actions.append(f"Unblock report posted on original #{orig} (resumption v2.1)")
-            except Exception as e:
-                actions.append(f"Blocking resumption/merge check failed (non-fatal): {e}")
+                    actions.append(f"Unblock report posted on original #{original_issue} (resumption from blocking Question)")
+        except Exception as exc:  # noqa: BLE001 - resumption remains non-fatal
+            actions.append(f"Blocking resumption/merge check failed (non-fatal): {exc}")
 
-        result = {
+        return {
             "status": "contemplated",
-            "version": "v2.1",
             "question_number": question_number,
             "timestamp": timestamp,
             "actions": actions,
             "created_issues": created_issues,
             "close_signal_met": close_signal_met,
-            "evaluation": evaluation,
-            "answer_signal": answer_signal,
             "contemplation_log_url": log_url,
-            "note": "v2.1 phased: real signal eval, full transcript, strict close, basic typed child creation, enhanced resumption. Per Feature #343 / Epic #257.",
+            "close_ready_comment_url": close_ready_comment_url,
+            "answer_signal_evaluation": answer_signal_evaluation,
+            "note": "Strict checklist-based contemplation engine. Questions become PR-close-ready only when every answer-signal checklist item is backed by cited evidence from effective answers.",
         }
-        return result
 
 
 def trigger_contemplation(
@@ -422,5 +386,6 @@ def trigger_contemplation(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Convenience entrypoint used by RecordAnswerTool and MCP plate_contemplate."""
+
     engine = ContemplationEngine(kwargs.pop("client", None))
     return engine.contemplate(question_number, answer_text, **kwargs)

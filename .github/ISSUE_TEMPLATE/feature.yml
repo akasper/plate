@@ -8,6 +8,8 @@ body:
     attributes:
       value: |
         Feature issues must be assigned to the GitHub milestone that represents their Epic. Planning state such as priority, owner, target date, and status belongs in GitHub Projects fields.
+
+        A Feature (or any other issue type) can be created as a **Stub** when it still needs a lot of detail. See AGENTS.md § Stub Issues for the definition and guidance. Stubs are encouraged for structure during uncertainty, as memory placeholders, and for pre-planning. Use the `status:stub` label when helpful. Full definition happens through the normal PLATE process.
   - type: input
     id: epic_milestone
     attributes:

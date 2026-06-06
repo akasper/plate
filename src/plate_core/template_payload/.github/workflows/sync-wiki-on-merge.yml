@@ -78,6 +78,8 @@ jobs:
         if: steps.gate.outputs.is_feature == 'true' && steps.gate.outputs.enabled == 'true'
         run: |
           set -euo pipefail
+          # docs/wiki/ includes Goals.md (PLATE convention from Epic #218/#224/#229) for agent Information Audits + health nudges.
+          # The Goals page is the recommended/default file for wiki sync when docs/wiki/ is present.
           if [ -d docs/wiki ]; then
             rsync -av --delete --exclude='.git' docs/wiki/ tmp_wiki/
           fi

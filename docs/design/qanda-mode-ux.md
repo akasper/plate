@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Q&A Mode UX, TUI Forms, and Trigger Surface — Design Spec
 
 - **Issue:** #144

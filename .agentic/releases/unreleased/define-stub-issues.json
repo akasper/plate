@@ -1,0 +1,18 @@
+{
+  "slug": "define-stub-issues",
+  "change_type": "process",
+  "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, .github/labels.yml, .github/ISSUE_TEMPLATE/*.yml",
+  "summary": "Defines 'Stub' as any issue (Epic, Feature, Bug, Documentation, etc.) that still needs substantial detail. Documents the three purposes (structure under uncertainty, human memory placeholder, pre-planning surface) and aligns agent/human behavior.",
+  "migration_impact": "The term 'stub' now has a precise, general meaning in PLATE. Any issue type can be a stub. Agents should create incomplete issues when asked without over-filling them. Downstream repos will receive updated AGENTS.md guidance and a new status:stub label option.",
+  "agent_notes": "A Stub is an issue that still needs a lot of detail. Purposes: (1) structure while working through uncertainty, (2) memory placeholder/sidenote for humans, (3) pre-planning surface. Any issue type can be one. Create them readily; refine via the process later. Use status:stub label when explicit marking helps. See the full section in AGENTS.md.",
+  "migration_guidance": [
+    "1. Pull the latest AGENTS.md (root and any local copies), .github/labels.yml, and the ISSUE_TEMPLATE files.",
+    "2. When a user asks to 'create a stub', 'stub this out', or similar for any issue type, create the issue with the appropriate type label(s) and only the detail currently known. Leave the rest for later definition via the process.",
+    "3. Optionally apply the new `status:stub` label (or an appropriate `need:*` label) for visibility.",
+    "4. Existing issues that are still light on detail can be referred to or labeled as stubs; no bulk migration is required.",
+    "5. Update custom agent prompts, scripts, or planning flows that create issues to respect the general stub concept rather than assuming every new issue must be fully detailed upfront."
+  ],
+  "breaking": false,
+  "links": ["#351"],
+  "requires": []
+}

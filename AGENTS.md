@@ -61,7 +61,7 @@ Follow the loop that matches the issue type.
 | 4 | Implement the smallest coherent change that satisfies the issue. |
 | 5 | Update per-feature change files in `.agentic/releases/` to describe implemented behavior and verification evidence. |
 | 6 | Add or update `.agentic/releases/` when the change affects PLATE process or templates. |
-| 7 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
+| 7 | Determine the correct base branch using `gh plate release status` (or by inspecting any Major/Minor/Patch label on the issue and the Branch Model below). For repositories on the legacy single-`release` model (the current state of this repo), target `release`. For multi-track, target the matching `release-major` / `release-minor` / `release-patch`. Open a PR labeled `Feature` **targeting that base branch** (`--base <base>` or equivalent in `gh pr create`, where <base> comes from the status command) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
 | 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
 **Bug**
@@ -150,6 +150,35 @@ duration: <hh:mm:ss>
 
 `Feature` and `Question` issue closures are harvested by `.github/workflows/plates-on-issue-closed.yml` and appended to `.agentic/COSTS.md`.
 
+## Stub Issues
+
+In PLATE, a **Stub** is an issue that still needs a lot of detail. It serves the purposes of:
+
+1. Adding structure while working through uncertainty.
+2. Serving as a memory placeholder for humans who want to make a sidenote while they are focused on another task.
+3. Providing a surface for pre-planning.
+
+Any kind of Issue — Epic, Feature, Documentation, Bug, Research, Design, Question, Audit, Migration, Release, etc. — can be a Stub. Being a stub just means that it still needs to be defined via the process.
+
+Stubs are a normal and encouraged part of the workflow. They let the project maintain forward structure and memory even when individual items are not yet fully specified. Agents and humans should treat stubs as legitimate, first-class artifacts rather than "incomplete" in a pejorative sense.
+
+### Marking and Working with Stubs
+- An issue becomes (or remains) a stub when its description, acceptance criteria, scope, or other key details are still to be worked out.
+- Existing `need:*` labels (especially `need:decision`, `need:docs`, `need:tests`, `need:design`) can indicate specific dimensions that still need work.
+- The `status:stub` label (see `.github/labels.yml`) can be used to explicitly signal that an issue is intentionally in stub state. (The `status:blocked` and `status:ready-to-work` labels serve related but distinct planning-state purposes.)
+- During interactive planning flows (e.g. `plate_plan_epic`), child issues are often created as stubs carrying the `need:refinement` label. The `need:refinement` semantics (deferred gates for full AC and fragments) remain valid for these planning-time stubs.
+
+### Agent and Human Guidance
+- When a user asks to "create a stub for X", "stub this out", or "make a placeholder issue", create the issue with the appropriate type label(s), link it to the relevant Epic/milestone where applicable, and leave the body with only the detail that is currently known. Do not over-specify.
+- Stubs can (and should) be referenced from other issues, Epics, design docs, or agent sessions.
+- Refinement of a stub happens through normal PLATE processes: comments, linked children, dedicated Research/Design work, or follow-up Q&A/contemplation.
+- Agents must not treat a stub as ready for implementation work unless the stub status has been removed or the required detail has been supplied.
+- When closing a stub, ensure it has a proper traceable git artifact per the Issue Artifact Rules (even if the artifact is simply "this stub was superseded by #N" or a design doc).
+
+Stubs are one of the primary tools PLATE provides for operating effectively in the presence of uncertainty while still preserving GitHub as the single source of truth.
+
+See Feature #351 for the discussion that produced this definition. The two Epic issues #349 and #350 were created as stubs under this understanding.
+
 ## Autonomous Mode
 
 Autonomous mode is an opt-in operating posture for unattended sessions (overnight runs, long-running autopilot, `/delegate` tasks) where no human reviewer is available interactively. It selectively lifts the self-merge prohibition for lightweight, low-risk PRs.
@@ -175,7 +204,8 @@ Autonomous mode is an opt-in operating posture for unattended sessions (overnigh
 **How to auto-merge an eligible PR in autonomous mode:**
 
 ```bash
-gh pr create --label "risk:low" --label "auto-merge" [other required labels] ...
+# First: gh plate release status  (to learn the correct --base: release or release-*)
+gh pr create --base <base> --label "risk:low" --label "auto-merge" [other required labels] ...
 gh pr merge --auto --squash <PR_NUMBER>
 ```
 
@@ -209,6 +239,8 @@ PLATE uses a **multi-track release-oriented branch model** (refined in the Relea
 | `main` | Stable, tagged history. Every commit on `main` is a semver release. | Release PRs only (squash) from a versioned release branch |
 
 **Legacy single `release` branch** remains supported during transition for repos not yet adopting the multi-track model. See the design doc and migration guidance in the release-ceremony-refinement fragment for adoption steps. The persistent `release` (when present) continues to point at the tip that will become (or most recently became) a tag.
+
+**For agents opening PRs:** Always run `gh plate release status` (or inspect the issue's semver track label) immediately before `gh pr create`. Include `--base <base>` explicitly (where <base> is the value reported by `gh plate release status`, e.g. `release` for legacy or `release-minor` etc. for multi-track). Defaulting to `main` is incorrect for ongoing Feature/Bug work and will require manual retargeting. The "Open a PR" steps in the Feature and Bug work loops above take precedence for execution.
 
 ### Epic-close ceremony
 
@@ -260,6 +292,8 @@ Preferred flow is now **local babysitting** driven by `gh plate pr babysit <numb
 Use this loop:
 
 1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance).
+
+Information Audits (#218) are now part of the core capability: agents should use `plate_perform_information_audit` (dry_run first) to discover gaps against the Goals page (#224) and generate Questions. Guidance in plugin/agents/plate.agent.md and agent_guidance.py (INFORMATION_AUDIT_GUIDANCE). Catalog defaults (#222) and extensibility (#226) apply.
 2. The babysitter automatically detects two types of issues:
    - **Unresolved review threads** from third-party agents (actionable feedback)
    - **Base branch out-of-sync** state (PR branch behind, conflicting, or dirty relative to base branch)
@@ -323,7 +357,7 @@ Every Feature pull request that changes PLATE process, templates, or agent surfa
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
-When opening pull requests through GitHub CLI, prefer an atomic command such as `gh pr create --label "Feature"` or `gh pr create --label "Documentation"`. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work.
+When opening pull requests through GitHub CLI, first run `gh plate release status` to discover the correct integration base branch (`release` for legacy single-release setups; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base <base> --label "Feature"` (or `--base release-minor --label "Feature"`, etc., where <base> is from `gh plate release status`) or the Documentation equivalent. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never rely on the repository's default branch implicitly; always pass `--base` explicitly (sometimes that will be `main`, e.g. for Release PRs).
 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
@@ -343,7 +377,7 @@ cat > /tmp/body.md << 'EOF'
 - First point
 - Second point with details
 EOF
-gh pr create --body-file /tmp/body.md --label Documentation ...
+gh pr create --base <base> --body-file /tmp/body.md --label Documentation ...
 ```
 
 **PowerShell here-string (avoids all escaping pitfalls):**
@@ -355,7 +389,7 @@ $body = @"
 - Second point
 "@
 Set-Content -Path $env:TEMP\body.md -Value $body -Encoding UTF8
-gh pr create --body-file $env:TEMP\body.md ...
+gh pr create --base <base> --body-file $env:TEMP\body.md ...
 ```
 
 Use `--body-file` (or the equivalent here-string + temp file) for every agent-authored multiline body. Update examples in this file and downstream docs when they are refreshed from upstream.

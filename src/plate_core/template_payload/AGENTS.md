@@ -56,7 +56,7 @@ Follow the loop that matches the issue type.
 | 4 | Implement the smallest coherent change that satisfies the issue. |
 | 5 | Update per-feature change files in `.agentic/releases/` to describe the implemented behavior and verification evidence. |
 | 6 | If the feature includes UI changes, record a demo GIF (see Demo GIF Recording guidance below). |
-| 7 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
+| 7 | Determine the correct base branch using `gh plate release status` (legacy `release` for single-release repos; matching `release-*` track otherwise). Open a PR labeled `Feature` **targeting that base** (include `--base release` etc. in `gh pr create`) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
 | 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
 **Demo GIF Recording for UI Features**
@@ -269,9 +269,27 @@ Spike issues must include in their body:
 
 Spike issues do **not** require an `Epic: short-name` label. They close with a short findings note (committed artifact or inline comment).
 
+### Stub Issues
+
+In PLATE, a **Stub** is an issue that still needs a lot of detail. It serves the purposes of:
+
+1. Adding structure while working through uncertainty.
+2. Serving as a memory placeholder for humans who want to make a sidenote while they are focused on another task.
+3. Providing a surface for pre-planning.
+
+Any kind of Issue — Epic, Feature, Documentation, Bug, Research, Design, Question, Audit, Migration, Release, etc. — can be a Stub. Being a stub just means that it still needs to be defined via the process.
+
+Stubs are a normal and encouraged part of the workflow. They let the project maintain forward structure and memory even when individual items are not yet fully specified.
+
+### Marking and Working with Stubs
+- An issue is (or remains) a stub when its description, acceptance criteria, scope, or other key details are still to be worked out.
+- `need:*` labels (especially `need:decision`, `need:docs`, `need:tests`, `need:design`) indicate specific areas that still need work.
+- The `status:stub` label can be used to explicitly mark an issue that is intentionally in stub state.
+- In interactive planning flows, child stubs are commonly created with the `need:refinement` label (see next section). The deferred-gate rules for `need:refinement` remain valid for these.
+
 ### need:refinement Semantics
 
-The `need:refinement` label is applied to issue stubs created during interactive epic planning. It signals that the issue is intentionally incomplete and not yet ready for implementation.
+The `need:refinement` label is applied to planning child stubs created during interactive epic planning. It signals that the issue is intentionally incomplete and not yet ready for implementation.
 
 **Gates deferred by `need:refinement`:**
 - Acceptance criteria completeness check
@@ -283,6 +301,8 @@ The `need:refinement` label is applied to issue stubs created during interactive
 - Any PR that closes the issue must include a closing keyword (`Closes #N`)
 
 Remove `need:refinement` from an issue when its AC and scope are sufficiently defined for implementation to begin. Agents may remove this label autonomously when adding full AC in a planning follow-up session.
+
+The authoritative definition of Stubs lives in the root `AGENTS.md` of a PLATE repository (see the "Stub Issues" section). This shipped copy aligns with it for convenience in new repositories.
 
 Before closing any issue (manually or via linked PR), post a final comment that includes a structured usage block:
 
@@ -367,7 +387,8 @@ Autonomous mode is an opt-in operating posture for unattended sessions (overnigh
 **How to auto-merge an eligible PR in autonomous mode:**
 
 ```bash
-gh pr create --label "risk:low" --label "auto-merge" [other required labels] ...
+# First: gh plate release status  (discover --base: release or release-*)
+gh pr create --base <base> --label "risk:low" --label "auto-merge" [other required labels] ...
 gh pr merge --auto --squash <PR_NUMBER>
 ```
 
@@ -541,7 +562,7 @@ Every Feature pull request that changes PLATE process, templates, or agent surfa
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
-When opening pull requests through GitHub CLI, prefer an atomic command such as `gh pr create --label "Feature"` or `gh pr create --label "Documentation"`. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work.
+When opening pull requests through GitHub CLI, first run `gh plate release status` to discover the correct integration base branch (`release` for legacy; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base <base> --label "Feature"` (or the Documentation equivalent, where <base> is from `gh plate release status`). If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never rely on the repository's default branch implicitly; always pass `--base` explicitly (sometimes that will be `main`, e.g. for Release PRs).
 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
