@@ -1,15 +1,16 @@
 {
   "slug": "define-stub-issues",
   "change_type": "process",
-  "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, .github/ISSUE_TEMPLATE/epic.yml",
-  "summary": "Adds authoritative definition of 'Stub Issue' (minimal GitHub Epic stubs and need:refinement planning child stubs) and rules for agents creating them vs. authoring rich planning in docs/ artifacts.",
-  "migration_impact": "When creating Epic stubs (or using interactive planning flows that emit child stubs), agents and humans will now produce intentionally minimal GitHub issues by default. Detailed narrative, AC, and child lists move to design/research docs or iterative refinement. Repos that copy AGENTS.md or the Epic template will receive updated guidance and template text.",
-  "agent_notes": "On requests like 'create stubs for these Epic ideas' or during plate_plan_epic sessions: create the minimal issue + milestone (or child with need:refinement), then immediately start planning by writing docs/design/ (or research) files, SPEC/wiki updates, etc. Reference blank examples #349 and #350. Do not over-author the initial GitHub issue body. The new 'Stub Issues' section in AGENTS.md is the contract.",
+  "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, .github/labels.yml, .github/ISSUE_TEMPLATE/*.yml",
+  "summary": "Defines 'Stub' as any issue (Epic, Feature, Bug, Documentation, etc.) that still needs substantial detail. Documents the three purposes (structure under uncertainty, human memory placeholder, pre-planning surface) and aligns agent/human behavior.",
+  "migration_impact": "The term 'stub' now has a precise, general meaning in PLATE. Any issue type can be a stub. Agents should create incomplete issues when asked without over-filling them. Downstream repos will receive updated AGENTS.md guidance and a new status:stub label option.",
+  "agent_notes": "A Stub is an issue that still needs a lot of detail. Purposes: (1) structure while working through uncertainty, (2) memory placeholder/sidenote for humans, (3) pre-planning surface. Any issue type can be one. Create them readily; refine via the process later. Use status:stub label when explicit marking helps. See the full section in AGENTS.md.",
   "migration_guidance": [
-    "1. Pull the latest AGENTS.md (root and any local copies) and .github/ISSUE_TEMPLATE/epic.yml.",
-    "2. When an agent or human next creates an Epic stub, use the minimal/TBD posture described in the new Stub Issues section.",
-    "3. Existing open Epics and stubs are unaffected; the convention applies going forward and to refinement of the new stubs (#349, #350, etc.).",
-    "4. Update any custom agent prompts or scripts that construct Epic issue bodies to prefer placeholders over pre-filled rich content unless a filled narrative was explicitly requested."
+    "1. Pull the latest AGENTS.md (root and any local copies), .github/labels.yml, and the ISSUE_TEMPLATE files.",
+    "2. When a user asks to 'create a stub', 'stub this out', or similar for any issue type, create the issue with the appropriate type label(s) and only the detail currently known. Leave the rest for later definition via the process.",
+    "3. Optionally apply the new `status:stub` label (or an appropriate `need:*` label) for visibility.",
+    "4. Existing issues that are still light on detail can be referred to or labeled as stubs; no bulk migration is required.",
+    "5. Update custom agent prompts, scripts, or planning flows that create issues to respect the general stub concept rather than assuming every new issue must be fully detailed upfront."
   ],
   "breaking": false,
   "links": ["#351"],
