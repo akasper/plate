@@ -1,0 +1,17 @@
+{
+  "slug": "clarify-pr-base-branch-guidance",
+  "change_type": "process",
+  "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md",
+  "summary": "Strengthens guidance for agents opening PRs: must run `gh plate release status` first and explicitly pass `--base release` (or track-specific release-*) to `gh pr create`. Updates Feature work loop, CLI examples, and autonomous mode patterns.",
+  "migration_impact": "Agents (Grok Build, Copilot, etc.) will now correctly target the active integration branch (`release` in legacy single-release repos like this one) instead of defaulting to `main`. Existing PRs may have required manual retargeting; future ones will not. Downstream PLATE repos copying AGENTS.md will inherit the corrected recipe.",
+  "agent_notes": "Before any `gh pr create` for Feature or Bug work: 1. Run `gh plate release status`. 2. Use the reported base (release or release-*) with `--base`. The Feature work loop step 7 now mandates this. Do not rely on repo default branch. This applies even for Documentation and process PRs that land on the integration branch.",
+  "migration_guidance": [
+    "1. Update your local AGENTS.md (and any vendored template_payload copy) from the release that contains this fragment.",
+    "2. In all future agent sessions or custom prompts that emit `gh pr create`, include the `gh plate release status` discovery step + explicit `--base`.",
+    "3. If you have automation/scripts that open PRs, audit them for missing `--base`.",
+    "4. No change to existing open PRs or merged history required."
+  ],
+  "breaking": false,
+  "links": [],
+  "requires": []
+}
