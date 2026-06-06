@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass, field
 from .github_client import GhApiError, GhClient
 
 
-REQUIRED_LABELS = ["Bug", "Feature", "Epic", "Documentation", "Research", "Design", "Question"]
+REQUIRED_LABELS = ["Bug", "Feature", "Epic", "Documentation", "Research", "Design", "Question", "Task"]
 
 
 @dataclass
