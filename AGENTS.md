@@ -61,7 +61,7 @@ Follow the loop that matches the issue type.
 | 4 | Implement the smallest coherent change that satisfies the issue. |
 | 5 | Update per-feature change files in `.agentic/releases/` to describe implemented behavior and verification evidence. |
 | 6 | Add or update `.agentic/releases/` when the change affects PLATE process or templates. |
-| 7 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
+| 7 | Determine the correct base branch using `gh plate release status` (or by inspecting any Major/Minor/Patch label on the issue and the Branch Model below). For repositories on the legacy single-`release` model (the current state of this repo), target `release`. For multi-track, target the matching `release-major` / `release-minor` / `release-patch`. Open a PR labeled `Feature` **targeting that base branch** (`--base <base>` or equivalent in `gh pr create`, where <base> comes from the status command) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
 | 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
 **Bug**
@@ -204,7 +204,8 @@ Autonomous mode is an opt-in operating posture for unattended sessions (overnigh
 **How to auto-merge an eligible PR in autonomous mode:**
 
 ```bash
-gh pr create --label "risk:low" --label "auto-merge" [other required labels] ...
+# First: gh plate release status  (to learn the correct --base: release or release-*)
+gh pr create --base <base> --label "risk:low" --label "auto-merge" [other required labels] ...
 gh pr merge --auto --squash <PR_NUMBER>
 ```
 
@@ -238,6 +239,8 @@ PLATE uses a **multi-track release-oriented branch model** (refined in the Relea
 | `main` | Stable, tagged history. Every commit on `main` is a semver release. | Release PRs only (squash) from a versioned release branch |
 
 **Legacy single `release` branch** remains supported during transition for repos not yet adopting the multi-track model. See the design doc and migration guidance in the release-ceremony-refinement fragment for adoption steps. The persistent `release` (when present) continues to point at the tip that will become (or most recently became) a tag.
+
+**For agents opening PRs:** Always run `gh plate release status` (or inspect the issue's semver track label) immediately before `gh pr create`. Include `--base <base>` explicitly (where <base> is the value reported by `gh plate release status`, e.g. `release` for legacy or `release-minor` etc. for multi-track). Defaulting to `main` is incorrect for ongoing Feature/Bug work and will require manual retargeting. The "Open a PR" steps in the Feature and Bug work loops above take precedence for execution.
 
 ### Epic-close ceremony
 
@@ -354,7 +357,7 @@ Every Feature pull request that changes PLATE process, templates, or agent surfa
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
-When opening pull requests through GitHub CLI, prefer an atomic command such as `gh pr create --label "Feature"` or `gh pr create --label "Documentation"`. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work.
+When opening pull requests through GitHub CLI, first run `gh plate release status` to discover the correct integration base branch (`release` for legacy single-release setups; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base <base> --label "Feature"` (or `--base release-minor --label "Feature"`, etc., where <base> is from `gh plate release status`) or the Documentation equivalent. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never rely on the repository's default branch implicitly; always pass `--base` explicitly (sometimes that will be `main`, e.g. for Release PRs).
 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
@@ -374,7 +377,7 @@ cat > /tmp/body.md << 'EOF'
 - First point
 - Second point with details
 EOF
-gh pr create --body-file /tmp/body.md --label Documentation ...
+gh pr create --base <base> --body-file /tmp/body.md --label Documentation ...
 ```
 
 **PowerShell here-string (avoids all escaping pitfalls):**
@@ -386,7 +389,7 @@ $body = @"
 - Second point
 "@
 Set-Content -Path $env:TEMP\body.md -Value $body -Encoding UTF8
-gh pr create --body-file $env:TEMP\body.md ...
+gh pr create --base <base> --body-file $env:TEMP\body.md ...
 ```
 
 Use `--body-file` (or the equivalent here-string + temp file) for every agent-authored multiline body. Update examples in this file and downstream docs when they are refreshed from upstream.
