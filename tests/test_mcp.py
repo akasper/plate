@@ -19,6 +19,7 @@ class McpTests(unittest.TestCase):
     @patch("plate_core.mcp_server.get_health")
     def test_tools_call_plate_health(self, mock_get_health, mock_write):
         mock_get_health.return_value = HealthReport(
+            goals_page_present=True,
             repo="akasper/plate_core",
             label_coverage_ok=True,
             missing_labels=[],
@@ -26,7 +27,6 @@ class McpTests(unittest.TestCase):
             branch_protection_enabled=True,
             open_epic_count=1,
             status="pass",
-            goals_page_present=True,
             open_question_count=0,
             plate_config_present=False,
             plate_config_valid=False,
@@ -285,6 +285,7 @@ class McpTests(unittest.TestCase):
             "plate_get_question",
             "plate_record_answer",
             "plate_get_answers",
+            "plate_backfill_answers",
             "plate_synthesize_priorities",
             "plate_create_blocking_question",  # Feature #147 last-resort creation
         ]:
