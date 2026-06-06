@@ -1,0 +1,145 @@
+{
+  "version": "0.2.1",
+  "summary": "PLATE 0.2.1 -- 14 change(s): 221-core-audit-engine.json, 222-default-goals-catalog.json, 224-adopt-goals-convention.json, 225-agent-guidance-updates.json, 226-extensibility-model.json....",
+  "cut_at": "2026-06-06T14:34:22Z",
+  "fragment_count": 14,
+  "fragment_slugs": [
+    "221-core-audit-engine.json",
+    "222-default-goals-catalog.json",
+    "224-adopt-goals-convention.json",
+    "225-agent-guidance-updates.json",
+    "226-extensibility-model.json",
+    "227-tests-harness-e2e.json",
+    "228-docs-migration-rollout.json",
+    "229-wiki-sync-goals-enforcement.json",
+    "257-contemplation-engine-v2.json",
+    "258-curiosity-answer-model.json",
+    "259-plate-config-lifecycle",
+    "333-plate-config-extension-upgrade",
+    "clarify-pr-base-branch-guidance",
+    "define-stub-issues"
+  ],
+  "entries": [
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/plate_config.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, src/plate_core/bootstrap.py, src/plate_core/features.py, docs/bootstrap/new-repository-checklist.md, plugin/agents/plate.agent.md",
+      "migration_impact": "PLATE repositories can now initialize and inspect a root .plate file consistently through CLI, MCP, and bootstrap flows. Bootstrap dry-runs also surface missing .plate state explicitly.",
+      "agent_notes": "",
+      "migration_guidance": [
+        "1. Run `gh plate config init --apply` (or `gh plate bootstrap --apply`) in repositories that do not yet have a root `.plate` file.",
+        "2. Use `gh plate config show --json` or MCP `plate_config_get` in agent flows that need the effective local config shape instead of re-parsing `.plate` ad hoc.",
+        "3. Treat extension precedence and schema upgrades as follow-up work; this slice intentionally covers baseline local lifecycle surfaces only."
+      ],
+      "links": [
+        "#259",
+        "#332",
+        "#333",
+        "docs/design/plate-root-config-schema-lifecycle.md"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/plate_config.py, src/plate_core/data/plate_extensions.yml, src/plate_core/cli.py, src/plate_core/mcp_server.py, src/plate_core/migration.py, docs/design/plate-root-config-schema-lifecycle.md, plugin/agents/plate.agent.md",
+      "migration_impact": "Repositories with older `.plate` files can now upgrade them to schema v1.1 and inspect built-in extension contributions before local overrides are applied.",
+      "agent_notes": "",
+      "migration_guidance": [
+        "1. Run `gh plate config show --json` to see whether your `.plate` file reports `upgrade_available` or any enabled built-in extension contributions.",
+        "2. Run `gh plate config upgrade --apply` (or MCP `plate_config_upgrade` with `apply=true`) to rewrite older schema v1.0 files to v1.1.",
+        "3. Re-check the resolved config after upgrade; built-in extension manifests now contribute config before local overrides, and list-valued fields use replacement semantics."
+      ],
+      "links": [
+        "#333",
+        "#259",
+        "docs/design/plate-root-config-schema-lifecycle.md"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md",
+      "migration_impact": "Agents (Grok Build, Copilot, etc.) will now correctly target the active integration branch (`release` in legacy single-release repos like this one) instead of defaulting to `main`. Existing PRs may have required manual retargeting; future ones will not. Downstream PLATE repos copying AGENTS.md will inherit the corrected recipe.",
+      "agent_notes": "Before any `gh pr create` for Feature or Bug work: 1. Run `gh plate release status`. 2. Use the reported base (release or release-*) with `--base`. The Feature work loop step 7 now mandates this. Do not rely on repo default branch. This applies even for Documentation and process PRs that land on the integration branch.",
+      "migration_guidance": [
+        "1. Update your local AGENTS.md (and any vendored template_payload copy) from the release that contains this fragment.",
+        "2. In all future agent sessions or custom prompts that emit `gh pr create`, include the `gh plate release status` discovery step + explicit `--base`.",
+        "3. If you have automation/scripts that open PRs, audit them for missing `--base`.",
+        "4. No change to existing open PRs or merged history required."
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, .github/labels.yml, .github/ISSUE_TEMPLATE/*.yml",
+      "migration_impact": "The term 'stub' now has a precise, general meaning in PLATE. Any issue type can be a stub. Agents should create incomplete issues when asked without over-filling them. Downstream repos will receive updated AGENTS.md guidance and a new status:stub label option.",
+      "agent_notes": "A Stub is an issue that still needs a lot of detail. Purposes: (1) structure while working through uncertainty, (2) memory placeholder/sidenote for humans, (3) pre-planning surface. Any issue type can be one. Create them readily; refine via the process later. Use status:stub label when explicit marking helps. See the full section in AGENTS.md.",
+      "migration_guidance": [
+        "1. Pull the latest AGENTS.md (root and any local copies), .github/labels.yml, and the ISSUE_TEMPLATE files.",
+        "2. When a user asks to 'create a stub', 'stub this out', or similar for any issue type, create the issue with the appropriate type label(s) and only the detail currently known. Leave the rest for later definition via the process.",
+        "3. Optionally apply the new `status:stub` label (or an appropriate `need:*` label) for visibility.",
+        "4. Existing issues that are still light on detail can be referred to or labeled as stubs; no bulk migration is required.",
+        "5. Update custom agent prompts, scripts, or planning flows that create issues to respect the general stub concept rather than assuming every new issue must be fully detailed upfront."
+      ],
+      "links": [
+        "#351"
+      ]
+    }
+  ]
+}
