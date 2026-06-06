@@ -5,16 +5,7 @@ from __future__ import annotations
 import json
 import sys
 
-from .baseline_catalog import (
-    BaselineCatalogError,
-    delegate_to_agent,
-    get_agent,
-    get_informational_goal,
-    get_skill,
-    list_agents,
-    list_informational_goals,
-    list_skills,
-)
+from .baseline_catalog import BaselineCatalogError, delegate_to_agent, get_agent, get_skill, list_agents, list_skills
 from .bootstrap import run_bootstrap
 from .epics import get_epic_status
 from .features import get_features
@@ -26,15 +17,6 @@ from .release import get_release_notes_diff, get_release_status, get_release_tar
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
-from .discussions import (
-    list_discussions,
-    get_discussion,
-    list_discussion_comments,
-    add_discussion_comment,
-    create_discussion,
-    list_discussion_categories,
-    list_open_ideas,
-)
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
     CreateBlockingQuestionTool,
@@ -43,9 +25,6 @@ from .mcp.curiosity_tools import (
     ListQuestionsTool,
     RecordAnswerTool,
     SynthesizePrioritiesTool,
-)
-from .mcp.audit_tools import (
-    AUDIT_TOOLS,
 )
 
 
@@ -150,10 +129,6 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = {"skills": [skill.to_dict() for skill in list_skills()]}
         elif name == "plate_skill":
             payload = get_skill(args.get("skill_id")).to_dict()
-        elif name == "plate_informational_goals":
-            payload = {"informational_goals": [g.to_dict() for g in list_informational_goals()]}
-        elif name == "plate_informational_goal":
-            payload = get_informational_goal(args.get("goal_id")).to_dict()
         elif name == "plate_delegate_to_agent":
             agent_id = args.get("agent_id")
             task_description = args.get("task_description")
@@ -207,14 +182,13 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             # For v1: simple decision tree over common paths; future data-driven.
             payload = _what_next(args.get("repo"), args.get("agent_type"))
         elif name == "plate_contemplate":
-            # Contemplation Engine entrypoint (v2.1 per Feature #343 / Epic #257)
+            # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
             qn = args.get("question_number")
             if not qn:
                 raise ValueError("question_number is required")
             payload = trigger_contemplation(
                 question_number=qn,
                 answer_text=args.get("answer_text", ""),
-                all_previous_answers=args.get("all_previous_answers"),
                 repo=args.get("repo"),
                 session=args.get("session"),
                 source=args.get("source", "contemplation"),
@@ -263,56 +237,6 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
-        # GitHub Discussions surface (Feature #329): plate_discussions_* + conveniences.
-        # Enables Ideas capture, inter-agent comms, orchestration logs (see Ideas #287/#292/#293).
-        elif name == "plate_list_discussions":
-            payload = [
-                d.to_dict()
-                for d in list_discussions(
-                    repo=args.get("repo"),
-                    category=args.get("category"),
-                    state=args.get("state"),
-                    per_page=int(args.get("per_page", 30)),
-                    page=int(args.get("page", 1)),
-                )
-            ]
-        elif name == "plate_get_discussion":
-            num = args.get("number")
-            payload = get_discussion(
-                repo=args.get("repo"), number=int(num) if num is not None else None
-            ).to_dict()
-        elif name == "plate_list_discussion_comments":
-            num = args.get("number")
-            payload = [
-                c.to_dict()
-                for c in list_discussion_comments(
-                    repo=args.get("repo"), number=int(num) if num is not None else None
-                )
-            ]
-        elif name == "plate_add_discussion_comment":
-            num = args.get("number")
-            payload = add_discussion_comment(
-                repo=args.get("repo"),
-                number=int(num) if num is not None else None,
-                body=args.get("body"),
-            )
-        elif name == "plate_create_discussion":
-            payload = create_discussion(
-                repo=args.get("repo"),
-                category_slug=args.get("category_slug"),
-                category_id=args.get("category_id"),
-                title=args.get("title"),
-                body=args.get("body"),
-            )
-        elif name == "plate_list_discussion_categories":
-            payload = {"categories": list_discussion_categories(repo=args.get("repo"))}
-        elif name == "plate_list_open_ideas":
-            payload = [d.to_dict() for d in list_open_ideas(repo=args.get("repo"))]
-        elif name in AUDIT_TOOLS:
-            # Information Audit tools (Epic #218 / Feature #221)
-            # Contract per Design #223; model per #220. Stub for v1; full engine in follow-ups.
-            tool_cls = AUDIT_TOOLS[name]
-            payload = tool_cls.execute(**args)
         else:
             _write(
                 {
@@ -502,29 +426,6 @@ def run() -> None:
                                         }
                                     },
                                     "required": ["skill_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_informational_goals",
-                                "description": "Return the baseline informational goals catalog (for #222 / #221 audit defaults).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {},
-                                    "required": [],
-                                },
-                            },
-                            {
-                                "name": "plate_informational_goal",
-                                "description": "Return one baseline informational goal by id.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "goal_id": {
-                                            "type": "string",
-                                            "description": "Baseline informational goal id.",
-                                        }
-                                    },
-                                    "required": ["goal_id"],
                                 },
                             },
                             {
@@ -805,7 +706,6 @@ def run() -> None:
                                         "answered_by": {"type": "string", "description": "Username or agent id. Defaults to 'agent'."},
                                         "session": {"type": "string", "description": "Optional session/turn id for provenance."},
                                         "source": {"type": "string", "description": "qanda | agent-contemplation | manual | blocking", "default": "qanda"},
-                                        "revision_of": {"type": "string", "description": "Optional prior answer/comment id this answer supersedes."},
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "agent_actions": {
                                             "type": "array",
@@ -818,7 +718,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_get_answers",
-                                "description": "Return answers for a Question. Prefers the fast committed docs/curiosity/answers.yml index plus docs/curiosity/answers/*.md artifacts (Answer Model #150); falls back to scanning PLATE-ANSWER comment blocks on the issue.",
+                                "description": "Return answers for a Question. Prefers the fast committed docs/curiosity/answers.yml index (Answer Model #150); falls back to scanning PLATE-ANSWER comment blocks on the issue.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -826,23 +726,6 @@ def run() -> None:
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                     },
                                     "required": ["question_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_backfill_answers",
-                                "description": "Backfill committed curiosity answer storage from historical Question issues. Writes docs/curiosity/answers/*.md plus docs/curiosity/answers.yml from existing answer comments or closure summaries.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "state": {"type": "string", "description": "Issue state filter: open, closed, or all.", "default": "all"},
-                                        "limit": {"type": "integer", "description": "Max Questions to scan when question_numbers is omitted.", "default": 50},
-                                        "question_numbers": {
-                                            "type": "array",
-                                            "items": {"type": "integer"},
-                                            "description": "Optional explicit Question issue numbers to backfill.",
-                                        },
-                                    },
                                 },
                             },
                             {
@@ -954,7 +837,6 @@ def run() -> None:
                                     "type": "object",
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "dry_run": {"type": "boolean", "description": "Simulate only (default true for safety)."},
                                     },
                                 },
                             },
@@ -966,110 +848,6 @@ def run() -> None:
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "dry_run": {"type": "boolean", "description": "Simulate only (default true for safety)."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_perform_information_audit",
-                                "description": "Perform an Information Audit (Epic #218). Scans the Wiki Goals page + code/issues/PRs/discussions to surface Informational Goals and propose well-formed Question issues (per model in #220 and 10-rule contract in #223). Supports dry_run, scope, agent_type (general/marketing/engineering), max_questions, and include_defaults. Output feeds Curiosity/Q&A and Contemplation. v1 uses Goals signals + heuristics; full open-ended + refinement in follow-ups for #221.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "scope": {"type": "string", "description": "repo | epic:<n> | label:<name> | surface:... (default: repo)"},
-                                        "agent_type": {"type": "string", "description": "general | marketing | engineering (default: general) for specialized scoping/heuristics"},
-                                        "max_questions": {"type": "integer", "description": "Cap on proposals (default 5)", "default": 5},
-                                        "dry_run": {"type": "boolean", "description": "Propose only; do not create Issues (default false)", "default": False},
-                                        "include_defaults": {"type": "boolean", "description": "Include platform + extension default informational goals (default true)", "default": True},
-                                    },
-                                },
-                            },
-                            # Discussions MCP surface (Feature #329). plate_* naming for consistency with other github/process tools.
-                            # Supports Ideas category use cases, inter-agent comms, logs (Ideas #287, #292, #293; enables #282 orchestrator vision).
-                            {
-                                "name": "plate_list_discussions",
-                                "description": "List discussions (filter by category e.g. 'ideas', state 'open'). Returns normalized records with number/title/url/body_preview.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional if inside clone."},
-                                        "category": {"type": "string", "description": "Filter by category slug or name (e.g. 'ideas')."},
-                                        "state": {"type": "string", "description": "open or closed (client filtered for reliability)."},
-                                        "per_page": {"type": "integer", "description": "Max results (default 30)."},
-                                        "page": {"type": "integer", "description": "Page (default 1)."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_get_discussion",
-                                "description": "Get full discussion by number (includes body, category, etc.).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "number": {"type": "integer", "description": "Discussion number."},
-                                    },
-                                    "required": ["number"],
-                                },
-                            },
-                            {
-                                "name": "plate_list_discussion_comments",
-                                "description": "List comments on a discussion.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "number": {"type": "integer", "description": "Discussion number."},
-                                        "per_page": {"type": "integer", "description": "Max comments (default 30)."},
-                                    },
-                                    "required": ["number"],
-                                },
-                            },
-                            {
-                                "name": "plate_add_discussion_comment",
-                                "description": "Add a comment to an existing discussion.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "number": {"type": "integer", "description": "Discussion number."},
-                                        "body": {"type": "string", "description": "Comment markdown content."},
-                                    },
-                                    "required": ["number", "body"],
-                                },
-                            },
-                            {
-                                "name": "plate_create_discussion",
-                                "description": "Create a new discussion. Provide category_slug (e.g. 'ideas') or category_id (node ID).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "category_slug": {"type": "string", "description": "Category slug or name (resolved via list)."},
-                                        "category_id": {"type": "string", "description": "Direct category node ID (from GraphQL)."},
-                                        "title": {"type": "string", "description": "Discussion title."},
-                                        "body": {"type": "string", "description": "Discussion body (markdown)."},
-                                    },
-                                    "required": ["title", "body"],
-                                },
-                            },
-                            {
-                                "name": "plate_list_discussion_categories",
-                                "description": "List available discussion categories (id, name, slug, description) for the repo.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_list_open_ideas",
-                                "description": "Convenience: list open discussions in the 'ideas' category (common for process/idea capture).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
                                     },
                                 },
                             },

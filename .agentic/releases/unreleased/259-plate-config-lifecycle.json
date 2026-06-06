@@ -1,0 +1,14 @@
+{
+  "slug": "259-plate-config-lifecycle",
+  "change_type": "feature",
+  "surface": "src/plate_core/plate_config.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, src/plate_core/bootstrap.py, src/plate_core/features.py, docs/bootstrap/new-repository-checklist.md, plugin/agents/plate.agent.md",
+  "summary": "Add first-class local .plate lifecycle surfaces with shared config reports, gh plate config show/validate/init, MCP parity, bootstrap seeding, and root-config feature detection.",
+  "migration_impact": "PLATE repositories can now initialize and inspect a root .plate file consistently through CLI, MCP, and bootstrap flows. Bootstrap dry-runs also surface missing .plate state explicitly.",
+  "migration_guidance": [
+    "1. Run `gh plate config init --apply` (or `gh plate bootstrap --apply`) in repositories that do not yet have a root `.plate` file.",
+    "2. Use `gh plate config show --json` or MCP `plate_config_get` in agent flows that need the effective local config shape instead of re-parsing `.plate` ad hoc.",
+    "3. Treat extension precedence and schema upgrades as follow-up work; this slice intentionally covers baseline local lifecycle surfaces only."
+  ],
+  "breaking": false,
+  "links": ["#259", "#332", "#333", "docs/design/plate-root-config-schema-lifecycle.md"]
+}
