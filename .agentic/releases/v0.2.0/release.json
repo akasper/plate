@@ -1,0 +1,659 @@
+{
+  "version": "0.2.0",
+  "summary": "PLATE 0.2.0 -- 48 change(s): 128-rollout-playbook, 129-plate-config-schema, 130-plates-core-marker-contract, 130-plates-core-markers, 131-migration-primitives....",
+  "cut_at": "2026-06-06T01:10:06Z",
+  "fragment_count": 48,
+  "fragment_slugs": [
+    "128-rollout-playbook",
+    "129-plate-config-schema",
+    "130-plates-core-marker-contract",
+    "130-plates-core-markers",
+    "131-migration-primitives",
+    "132-cli-mcp-surfaces",
+    "147-blocking-question-last-resort.json",
+    "148-merge-resume-blocking.json",
+    "151-qanda-tui-fallback-interactive.json",
+    "155-curiosity-tests.json",
+    "156-curiosity-docs-wiki.json",
+    "157-baseline-catalog-curiosity.json",
+    "205-cli-agnostic-plugin.json",
+    "206-verify-plate-plan-epic",
+    "207-cli-agnostic-e2e-tests",
+    "208-cli-agnostic-docs",
+    "259-plate-config-lifecycle",
+    "260-babysit-graphql-fix.json",
+    "260-local-rebase-babysit.json",
+    "261-release-cut",
+    "263-e2e-agent-guidance",
+    "264-baseline-catalog-expansion.json",
+    "265-observability-costs.json",
+    "266-wiki-sync-goals-bootstrap.json",
+    "267-packaging-hardening.json",
+    "268-projects-v2-integration.json",
+    "269-verification-harness.json",
+    "270-error-resilience-hardening.json",
+    "285-what-next-mcp.json",
+    "306-release-track-status-targeting",
+    "309-next-release-template",
+    "310-milestone-enforcement",
+    "314-payload-release-sync",
+    "317-release-track-labels-template-and-ci",
+    "329-discussions-mcp-skill.json",
+    "333-plate-config-extension-upgrade",
+    "343-contemplation-engine-v21",
+    "auto-version-detection",
+    "beta-roadmap-spec-update",
+    "bootstrap-release-branch",
+    "branch-model-and-ceremonies-docs",
+    "extensions-release-checks",
+    "fragment-model-and-aggregation",
+    "health-label-case",
+    "migration-guidance-field",
+    "plate-core-release-module",
+    "release-ceremony-refinement",
+    "release-issue-type"
+  ],
+  "entries": [
+    {
+      "change_type": "Documentation",
+      "surface": "docs",
+      "migration_impact": "",
+      "agent_notes": "",
+      "migration_guidance": "This playbook is the canonical reference for all future template-to-plate adoptions. Existing users should review Phase 1\u20132 guidance before running gh plate migrate commands.",
+      "links": [
+        "https://github.com/akasper/plate/issues/128",
+        "https://github.com/akasper/plate/issues/126",
+        "docs/design/plate-template-cutover-plan.md",
+        "docs/migration/rollout-playbook.md",
+        "PRs for #127\u2013#132 (inventory, schema, markers, migration, CLI/MCP surfaces)"
+      ]
+    },
+    {
+      "change_type": "Feature",
+      "surface": "backend + agent",
+      "migration_impact": "",
+      "agent_notes": "",
+      "migration_guidance": "No migration required for this slice; .plate files are new opt-in artifacts.",
+      "links": [
+        "https://github.com/akasper/plate/issues/129",
+        "https://github.com/akasper/plate/issues/126",
+        "docs/design/plate-root-config-schema-lifecycle.md"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core/markers.py + tests",
+      "migration_impact": "Repos using PLATES-CORE:BEGIN/END (or simple) markers in AGENTS.md, configs, or code can now leverage plate_core runtime (and future gh plate / MCP surfaces) for deterministic syncs that preserve local edits outside markers while incorporating upstream updates inside them.",
+      "agent_notes": "Use markers.find_marked_sections / validate_marker_nesting / merge_with_diagnostics (or the _compat) for any tooling that needs to reason about or perform marker-aware merges. Duplicate names and true nesting are now rejected at validation time. Real AGENTS.md and similar self-describing docs with literal examples are tolerated.",
+      "migration_guidance": [
+        "1. No immediate action for most downstream repos; the runtime enables future `plate` sync commands.",
+        "2. When authoring new PLATES-CORE blocks, follow the documented BEGIN/END syntax and uniqueness rules.",
+        "3. Existing marked blocks in forks continue to work; the conservative merge prefers local on conflict."
+      ],
+      "links": [
+        "#130",
+        "#109",
+        "#89",
+        "#126"
+      ]
+    },
+    {
+      "change_type": "Feature",
+      "surface": "backend",
+      "migration_impact": "",
+      "agent_notes": "",
+      "migration_guidance": "No user migration required. The runtime is new; existing PLATES-CORE comments in AGENTS.md and template files continue to work as before.",
+      "links": [
+        "https://github.com/akasper/plate/issues/130",
+        "https://github.com/akasper/plate/issues/126",
+        "docs/design/plates-core-marker-contract-upstream-sync.md",
+        "tests/test_epic89_markers.py"
+      ]
+    },
+    {
+      "change_type": "Feature",
+      "surface": "infra",
+      "migration_impact": "",
+      "agent_notes": "",
+      "migration_guidance": "New opt-in tooling. Existing users can continue using manual processes until full CLI surfaces (#132) land.",
+      "links": [
+        "https://github.com/akasper/plate/issues/131",
+        "https://github.com/akasper/plate/issues/126",
+        "docs/design/plate-template-cutover-plan.md",
+        "tests/test_epic89_cutover.py"
+      ]
+    },
+    {
+      "change_type": "Feature",
+      "surface": "agent",
+      "migration_impact": "",
+      "agent_notes": "",
+      "migration_guidance": "New commands/tools; existing users see no breakage. Use after #131 migration primitives.",
+      "links": [
+        "https://github.com/akasper/plate/issues/132",
+        "https://github.com/akasper/plate/issues/126",
+        "src/plate_core/cli.py",
+        "src/plate_core/mcp_server.py",
+        "tests/test_cli.py",
+        "tests/test_mcp.py"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/mcp_server.py (plate_plan_epic stub + descriptions) + tests/test_mcp.py",
+      "migration_impact": "No breaking changes. Agents using plate_plan_epic via MCP will see updated generic guidance in payloads.",
+      "agent_notes": "This hardens the primary epic planning ceremony for the grok-build epic (CLI-agnostic plugin). Use before Q&A or delegation in any supported CLI.",
+      "migration_guidance": [
+        "1. Existing calls to plate_plan_epic continue to work (stub behavior unchanged).",
+        "2. The 'note' field in responses now emphasizes CLI-agnostic usage (host agent chat / gh plate qanda).",
+        "3. Update any custom agent prompts referencing old Copilot-specific notes if present."
+      ],
+      "links": [
+        "#206",
+        "#202"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "tests/e2e/copilot-plugin.spec.ts (and structure verification)",
+      "migration_impact": "No runtime changes; test updates ensure ongoing verification that the plugin remains free of CLI-vendor lock-in (Copilot, Grok, etc.).",
+      "agent_notes": "The plugin E2E suite now better reflects the CLI-agnostic design from the grok-build epic research/design. Use this as model for other agent surfaces.",
+      "migration_guidance": [
+        "1. Existing tests continue to pass for the Copilot binary path (one supported CLI).",
+        "2. The structure tests already assert no vendor-specific language in key files.",
+        "3. When adding new CLI-specific tests in future, follow the agnostic pattern (test the binary path separately, verify manifests are clean)."
+      ],
+      "links": [
+        "#207",
+        "#202",
+        "#204"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "README.md (primary; other docs like AGENTS.md/.agentic/extensions.yml already generic)",
+      "migration_impact": "No breaking changes. Documentation now accurately reflects the CLI-agnostic design for any compatible agent (install/usage examples updated with generic notes).",
+      "agent_notes": "Plugin is now documented as CLI-agnostic. Use with any standards-compliant agent supporting the common manifest + agents/ + MCP pattern.",
+      "migration_guidance": [
+        "1. README install and feature sections now use inclusive language; Copilot examples retained as one supported path.",
+        "2. Existing users unaffected; new generic CLI agents can follow the updated guidance.",
+        "3. See grok-build epic artifacts (#203 research, #204 design, #206/207 verification) for full context and verification that plugin files contain no vendor-specific language."
+      ],
+      "links": [
+        "#208",
+        "#202"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/plate_config.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, src/plate_core/bootstrap.py, src/plate_core/features.py, docs/bootstrap/new-repository-checklist.md, plugin/agents/plate.agent.md",
+      "migration_impact": "PLATE repositories can now initialize and inspect a root .plate file consistently through CLI, MCP, and bootstrap flows. Bootstrap dry-runs also surface missing .plate state explicitly.",
+      "agent_notes": "",
+      "migration_guidance": [
+        "1. Run `gh plate config init --apply` (or `gh plate bootstrap --apply`) in repositories that do not yet have a root `.plate` file.",
+        "2. Use `gh plate config show --json` or MCP `plate_config_get` in agent flows that need the effective local config shape instead of re-parsing `.plate` ad hoc.",
+        "3. Treat extension precedence and schema upgrades as follow-up work; this slice intentionally covers baseline local lifecycle surfaces only."
+      ],
+      "links": [
+        "#259",
+        "docs/design/plate-root-config-schema-lifecycle.md"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "feature",
+      "surface": "gh plate release cut (cli + mcp future)",
+      "migration_impact": "Users can now use gh plate release cut instead of python scripts/cut_release.py directly. Behavior identical for MVP.",
+      "agent_notes": "Use gh plate release cut [vX.Y.Z] [--dry-run] to aggregate fragments. Aligns with release branch model.",
+      "links": [
+        "#261",
+        "Epic: beta-roadmap"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plugin/agents/plate.agent.md (E2E recommendation language); src/plate_core/mcp/tools.py (ValidateE2eTestsTool status+CI+evidence checks)",
+      "migration_impact": "Validate now returns status + next_steps (pass/warn/fail); stronger agent guidance for E2E on UI Features. Downstream using plate tools get better signals; no breaking changes.",
+      "agent_notes": "When a project has UI changes, explicitly call for Playwright E2E + GIF evidence in Feature work. Use validate_e2e_tests for actionable diagnosis before/after recording. Update any custom prompts that reference e2e.",
+      "links": [
+        "#263",
+        "Epic: beta-roadmap"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "feature",
+      "surface": "gh plate bootstrap, gh plate release status, gh plate release target-epic, MCP release tools, .plate release config",
+      "migration_impact": "PLATE repositories can now bootstrap release-major/release-minor/release-patch alongside legacy release, read richer release-status signals, and use validated target-epic guidance while the final issue-to-issue GitHub link remains a manual UI step.",
+      "agent_notes": "Do not assume GitHub can create the Epic-to-Release issue link via API. Use the helper output to validate state, then complete the link manually in GitHub UI and re-run release status to confirm the Epic moves out of the on-hold bucket.",
+      "migration_guidance": [
+        "1. Run `gh plate bootstrap --apply` to create release-major, release-minor, release-patch, and legacy release when they are absent.",
+        "2. Use `gh plate release status` or MCP `plate_release_status` to inspect the active Next Release, linked Epics, on-hold Epics, and track summary.",
+        "3. Use `gh plate release target-epic <epic-number>` or MCP `plate_release_target_epic` to validate the Epic and identify the active Next Release before completing the final issue-to-issue link in the GitHub UI.",
+        "4. If you use `.plate`, optionally add a `release` section for default track policy and downstream trigger configuration."
+      ],
+      "links": [
+        "#306",
+        "#312",
+        "#313",
+        "#318"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/ISSUE_TEMPLATE/release.yml, AGENTS.md",
+      "migration_impact": "Release issues should now begin life as the single standing `Next Release` planning target, with the version field remaining optional until packaging locks `vX.Y.Z`.",
+      "agent_notes": "Do not create separate standing Major/Minor/Patch release issues. Use one `Next Release` issue plus Major/Minor/Patch labels on work items and the corresponding release-track branches.",
+      "migration_guidance": [
+        "1. Update `.github/ISSUE_TEMPLATE/release.yml` so new release issues start as `Next Release` instead of assuming a version is already known.",
+        "2. During packaging, rename or replace the standing issue with the concrete versioned release issue and keep the checklist aligned with the packaging/finalization flow.",
+        "3. After packaging begins, immediately create a fresh standing `Next Release` issue so future work has a canonical target."
+      ],
+      "links": [
+        "#309",
+        "#306"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/workflows/label-check.yml, .github/workflows/pr-issue-link-check.yml, AGENTS.md, .agentic/process.yml",
+      "migration_impact": "Release issues now fail CI when no milestone is assigned. Feature, Bug, and issue-driven Documentation PRs now emit a visible warning when the PR milestone is missing, but do not fail yet.",
+      "agent_notes": "Use the PR warning phase to clean up active milestone hygiene before converting the check into a hard fail in a later slice.",
+      "migration_guidance": [
+        "1. Ensure Release issues are created with a GitHub milestone.",
+        "2. Start assigning the owning Epic or release milestone to Feature, Bug, and issue-driven Documentation PRs.",
+        "3. Treat the PR milestone warning as a migration aid; future PLATE slices may tighten it from warning to failure."
+      ],
+      "links": [
+        "#310",
+        "#306"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/template_payload/.agentic/process.yml, src/plate_core/template_payload/.github/ISSUE_TEMPLATE/release.yml, src/plate_core/template_payload/.github/workflows/label-check.yml, src/plate_core/template_payload/.github/workflows/pr-issue-link-check.yml, src/plate_core/template_payload/.github/workflows/pr-documentation-check.yml, src/plate_core/template_payload/AGENTS.md, src/plate_core/template_payload/CONTRIBUTING.md",
+      "migration_impact": "New PLATE repositories created from the template now inherit the standing Next Release template, milestone-based Epic/Release enforcement, Development-sidebar-compatible PR issue linking, and fragment-first release-note guidance.",
+      "agent_notes": "Do not sync the root repository CI or Copilot instructions wholesale into the payload; those files are intentionally different because the payload is a downstream template, not the self-hosting `plate` repo.",
+      "migration_guidance": [
+        "1. Pull the updated template payload files together so release issue templates, enforcement workflows, and process docs all use the same milestone-based release ceremony.",
+        "2. Add the payload `.github/ISSUE_TEMPLATE/release.yml` alongside the updated inventory so downstream repositories bootstrap a standing `Next Release` issue instead of relying on manual reconstruction.",
+        "3. If you previously relied on `Epic: short-name` labels as the only Epic container, start assigning Epic milestones and keep PR milestones aligned during the warning-first rollout."
+      ],
+      "links": [
+        "#314",
+        "#306"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/labels.yml, .github/ISSUE_TEMPLATE/release.yml, .github/workflows/ci.yml, .github/workflows/label-check.yml, .github/workflows/pr-issue-link-check.yml, src/plate_core/bootstrap.py, src/plate_core/features.py",
+      "migration_impact": "Downstream PLATE repos gain release-major/release-minor/release-patch label support, updated Next Release issue guidance, and release-specific CI/milestone scaffolding. Pull the updated labels, template, workflows, and bootstrap surfaces together to keep the release ceremony aligned.",
+      "agent_notes": "When working on release-ceremony changes, keep labels, templates, workflows, and bootstrap behavior in sync; partial adoption will leave release-track automation inconsistent.",
+      "migration_guidance": [
+        "1. Sync .github/labels.yml and any template-payload copies so release-major, release-minor, and release-patch labels exist before relying on release-track automation.",
+        "2. Sync .github/ISSUE_TEMPLATE/release.yml so standing Next Release issues use the updated checklist and readiness fields.",
+        "3. Sync .github/workflows/ci.yml, .github/workflows/label-check.yml, and .github/workflows/pr-issue-link-check.yml together so heavy-release checks and milestone enforcement behavior stay consistent.",
+        "4. Re-run bootstrap or copy the updated src/plate_core/bootstrap.py logic into downstream tooling if you rely on automated release-track setup."
+      ],
+      "links": [
+        "#306",
+        "#308",
+        "#309",
+        "#310",
+        "#311"
+      ],
+      "requires": [
+        "0.1.4"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/plate_config.py, src/plate_core/data/plate_extensions.yml, src/plate_core/cli.py, src/plate_core/mcp_server.py, src/plate_core/migration.py, docs/design/plate-root-config-schema-lifecycle.md, plugin/agents/plate.agent.md",
+      "migration_impact": "Repositories with older `.plate` files can now upgrade them to schema v1.1 and inspect built-in extension contributions before local overrides are applied.",
+      "agent_notes": "",
+      "migration_guidance": [
+        "1. Run `gh plate config show --json` to see whether your `.plate` file reports `upgrade_available` or any enabled built-in extension contributions.",
+        "2. Run `gh plate config upgrade --apply` (or MCP `plate_config_upgrade` with `apply=true`) to rewrite older schema v1.0 files to v1.1.",
+        "3. Re-check the resolved config after upgrade; built-in extension manifests now contribute config before local overrides, and list-valued fields use replacement semantics."
+      ],
+      "links": [
+        "#333",
+        "#259",
+        "docs/design/plate-root-config-schema-lifecycle.md"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/contemplation.py, src/plate_core/mcp_server.py, tests/test_contemplation.py, src/plate_core/agent_guidance.py, plugin/agents/plate.agent.md, .plugin/agents/plate.agent.md",
+      "migration_impact": "plate_contemplate MCP and trigger_contemplation now support all_previous_answers for accumulated context; emit full-transcript contemplation logs with evidence citations; close only on verifiable high-confidence signals that include usage report block. Question bodies should populate answer_signal (checklist per question.yml) for best results. Downstream agents must consume the new log format and respect strict close. Existing v1 calls continue to work (graceful fallback).",
+      "agent_notes": "Implementations must call _parse_answer_signal on Question body (supports checklist - [x]/ - [X], artifact, keyword). Use _evaluate_signal (now requires high confidence + >=1 evidence excerpt for close_signal_met). Always include === USAGE REPORT === (from _create_usage_report) when close met. Child issues created with back-refs to parent Question + Epic #257. Update any wrappers that call contemplation to pass prior answers list. Tests in test_contemplation.py validate parser/eval/close/child/resume paths.",
+      "migration_guidance": [
+        "1. Pull latest plate-core (or sync core files) to get v2.1 contemplation.py + mcp_server updates.",
+        "2. For Questions intending strict closure, ensure body includes '## Answer signal' section with - [ ] checklist items (see .github/ISSUE_TEMPLATE/question.yml).",
+        "3. When invoking plate_contemplate or RecordAnswerTool, prefer passing all_previous_answers=[...] for full context (optional but enables better eval).",
+        "4. Agent personas/guidance updated (agent_guidance.py + plate.agent.md); re-sync if customized.",
+        "5. Fragments for this change aggregated at next cut_release; no action for most repos."
+      ],
+      "links": [
+        "#343",
+        "#257",
+        "#326",
+        "#342",
+        "#139",
+        "#143"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "scripts/cut_release.py, scripts/render_release_migrations.py",
+      "migration_impact": "cut_release.py no longer requires a version argument -- it infers the next semver from the current baseline (flat files, versioned dirs, git tags) and from fragment metadata (breaking -> major, feature -> minor, else patch). render_release_migrations.py gains --auto-from to detect the from-version from a downstream repo. Fragments may now be placed in epic-NNN-slug/ directories in addition to unreleased/.",
+      "agent_notes": "When cutting a release, omit the version argument to let cut_release.py compute it automatically. The tool reads existing release files and git tags to find the latest baseline, then bumps based on fragment types. Supply --version-type or an explicit version if the inference is wrong. Use --auto-from in render_release_migrations.py to avoid hardcoding from-version values.",
+      "migration_guidance": [
+        "1. Pull the updated scripts/cut_release.py and scripts/render_release_migrations.py.",
+        "2. To cut a release without specifying a version, run: python scripts/cut_release.py",
+        "3. To override the bump type, run: python scripts/cut_release.py --version-type minor",
+        "4. To auto-detect the from-version for migration guidance, run: python scripts/render_release_migrations.py .agentic/releases --auto-from ../downstream-repo/.agentic/releases",
+        "5. Optionally organise epic-specific fragments in epic-NNN-slug/ directories alongside unreleased/."
+      ],
+      "links": [
+        "#178"
+      ],
+      "requires": [
+        "0.1.4"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "SPEC.md",
+      "migration_impact": "No migration required for downstream PLATE repositories or adopters. This is a pure documentation update to the product vision and roadmap guidance in SPEC.md; it does not change any runtime behavior, templates, CLI/MCP surfaces, or process rules.",
+      "agent_notes": "Consult the new Beta Roadmap section in SPEC.md before proposing or starting implementation work on the core loops (planning, Q&A/Contemplation, release, config, health enforcement, E2E, catalog, observability). Items directly address gaps such as the plate_plan_epic stub (mcp_server.py), v1 Contemplation heuristics (contemplation.py), missing .plate CLI surfaces, and incomplete release automation. This snapshot was synthesized post-Information Audit Epic #218 landing and should be revisited on future releases.",
+      "migration_guidance": [
+        "1. Fetch the latest SPEC.md (or re-clone template) to see the new ## Beta Roadmap section.",
+        "2. Reference the listed items when creating follow-on Epics/Features (each will need its own milestone linkage, tests, fragments, and PRs per AGENTS.md).",
+        "3. Agents and humans should align new work proposals against this section in addition to the North Star and Goals."
+      ],
+      "links": [
+        "#254"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/bootstrap.py, .github/workflows/pr-documentation-check.yml",
+      "migration_impact": "gh plate bootstrap --apply now creates the 'release' branch if it does not exist. The pr-documentation-check.yml now requires .agentic/releases/unreleased/<slug>.json instead of any .agentic/releases/ file.",
+      "agent_notes": "Always author a fragment in .agentic/releases/unreleased/ before opening a Feature PR. Run gh plate bootstrap --apply once per new repo to set up the release branch.",
+      "migration_guidance": [
+        "1. Run `gh plate bootstrap --apply` in your repo to create the 'release' branch from main.",
+        "2. Protect the 'release' branch: enable 'Require a pull request before merging', no direct push.",
+        "3. Feature PRs must now include a fragment at .agentic/releases/unreleased/<slug>.json \u2014 legacy flat .agentic/releases/vX.Y.Z.json files are still accepted but deprecated.",
+        "4. Release ceremony: git checkout release && git reset --hard <tag> && git push --force-with-lease"
+      ],
+      "links": [
+        "#199",
+        "#194"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "AGENTS.md, CONTRIBUTING.md, .github/copilot-instructions.md",
+      "migration_impact": "AGENTS.md, CONTRIBUTING.md, and copilot-instructions.md now document the epic/release/main branch model, fragment-first authoring, and both ceremonies. Downstream repos should sync these sections when upgrading.",
+      "agent_notes": "When working in a PLATE repo, always check AGENTS.md \u00a7Branch Model and Ceremonies to understand which branch to target for a Feature PR (the Epic branch, not main). Use gh plate release status before opening a Release PR.",
+      "migration_guidance": [
+        "1. Add a 'Branch Model and Ceremonies' section to AGENTS.md following the pattern in akasper/plate AGENTS.md \u00a7Branch Model and Ceremonies.",
+        "2. Update CONTRIBUTING.md \u00a7Branch and Pull Request Rules to describe the three-tier model and reference the ceremonies.",
+        "3. Update copilot-instructions.md to reference 'gh plate release status', 'gh plate release notes', and fragment-first authoring.",
+        "4. Add 'Release' to the issue type label enumeration in all three docs.",
+        "5. Update Documentation Rules to say 'author a fragment under .agentic/releases/unreleased/<slug>.json' rather than 'update a change file'."
+      ],
+      "links": [
+        "#196",
+        "#194"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".agentic/extensions.yml, src/plate_core/release.py",
+      "migration_impact": "gh plate release status will now report outstanding extension release checks. No migration required \u2014 all additions are additive.",
+      "agent_notes": "Check gh plate release status before starting a release PR \u2014 it lists all outstanding extension release checks. Complete all required ones before merging release into main.",
+      "migration_guidance": [
+        "1. Pull the updated .agentic/extensions.yml.",
+        "2. Run `gh plate release status --repo owner/repo` to see extension release checks in the output.",
+        "3. To add your own extension's release checks, follow the schema in .agentic/extensions.yml: release_checks is an array of {id, description, required, human_approval_required}.",
+        "4. Checks marked required: true will block release by convention; human_approval_required: true means a human must sign off."
+      ],
+      "links": [
+        "#200",
+        "#194"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".agentic/releases/unreleased/, scripts/cut_release.py, render_release_notes.py, render_release_migrations.py",
+      "migration_impact": "Release notes now follow a fragment-first model. Authors commit .json fragments to .agentic/releases/unreleased/ during feature work. At release time, scripts/cut_release.py (or gh plate release cut) aggregates them into .agentic/releases/vX.Y.Z/. Legacy flat vX.Y.Z.json files remain supported.",
+      "agent_notes": "Always create a fragment in .agentic/releases/unreleased/ when implementing a Feature that changes PLATE process, templates, or agent surfaces. Name the file <slug>.json. Run scripts/cut_release.py --dry-run to preview the next release cut.",
+      "migration_guidance": [
+        "1. Create .agentic/releases/unreleased/ in your repo (mkdir -p).",
+        "2. Copy scripts/cut_release.py from plate into your repo's scripts/ directory.",
+        "3. Copy .agentic/releases/unreleased/README.md to document the contract for contributors.",
+        "4. Update .agentic/releases/README.md to document both layouts.",
+        "5. Update scripts/render_release_notes.py and render_release_migrations.py to use the new iter_release_files/load_release_files that handles vX.Y.Z/ dirs.",
+        "6. For new Feature PRs: author a fragment in unreleased/ instead of editing a flat version file.",
+        "7. Legacy flat files (v0.1.x.json) continue to render correctly \u2014 no migration needed for existing records."
+      ],
+      "links": [
+        "#197",
+        "#194"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/health.py (label coverage check)",
+      "migration_impact": "Health reports will now correctly show label_coverage_ok=true on repos where GH surfaces the label in lowercase. No action needed.",
+      "agent_notes": "plate_health and bootstrap will see complete label coverage even if GH returns 'question'. Improves signals for new repo setup and beta readiness.",
+      "links": [
+        "health"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "Release note fragment schema, render_release_notes.py, render_release_migrations.py, .agentic/releases/README.md",
+      "migration_impact": "Fragment schema gains an optional migration_guidance field (string or ordered-steps array). Renderers now display a prominent 'Migration steps' section when the field is present.",
+      "agent_notes": "Prefer migration_guidance (array) for step-by-step recipes, and keep migration_impact as the prose summary. Both can coexist. Renderers surface migration_guidance as a numbered/bulleted 'Migration steps' block.",
+      "migration_guidance": [
+        "1. Add 'migration_guidance' (string or array of strings) to any new release-note fragment where upgrade steps are discrete.",
+        "2. Pull updated scripts/render_release_notes.py and scripts/render_release_migrations.py \u2014 both now render the field.",
+        "3. Update .agentic/releases/README.md to the new version that documents both fields and both layouts.",
+        "4. Existing fragments without the field continue to render correctly (field is optional)."
+      ],
+      "links": [
+        "#201",
+        "#197",
+        "#194"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/release.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, src/plate_core/features.py",
+      "migration_impact": "New gh plate release status and gh plate release notes subcommands are available. Two new MCP tools (plate_release_status, plate_release_notes) are registered. Feature detection gains release-branch and release-notes-layout flags.",
+      "agent_notes": "Use gh plate release status to inspect the current release state before opening a Release PR. Use gh plate release notes --from X --to Y to understand what changed between PLATE versions. Both commands support --json for machine-readable output.",
+      "migration_guidance": [
+        "1. Pull the updated src/plate_core/release.py, cli.py, mcp_server.py, and features.py into your repo.",
+        "2. The new CLI subcommand is: gh plate release status [--repo ...] [--json]",
+        "3. The new CLI subcommand is: gh plate release notes [--from X] [--to Y] [--json]",
+        "4. Two new MCP tools are registered: plate_release_status and plate_release_notes.",
+        "5. gh plate features now reports release-branch and release-notes-layout flags.",
+        "6. No migration needed for existing functionality \u2014 all additions are additive."
+      ],
+      "links": [
+        "#198",
+        "#194"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "Release issues, branch model (AGENTS.md + process.yml), labels, CI, gh plate release tooling, bootstrap, .plate config, milestone enforcement",
+      "migration_impact": "Downstream PLATE repos will gain a richer, more enforceable release process. Existing single 'release' branch + versioned Release issues continue to work for now (additive model). New labels, branches, and checks will be introduced; bootstrap will offer to create the new next-* branches. Projects using custom release automation or strict branch protection will need to review the updated ceremony and protection guidance. .plate config gains (optional) release trigger section.",
+      "agent_notes": "The refined model keeps the spirit of the existing release-ceremony extension and gh plate release surfaces but makes the 'next' release a persistent, linkable target. Use Major/Minor/Patch labels on Feature/Bug/Documentation (and similar) issues to declare track intent and target the corresponding release-*- branch. The standing 'Next Release' issue (created via the Release template) is the thing Epics link to via Development sidebar. Packaging is the moment the version is locked, the issue is renamed from 'Next Release' to 'vX.Y.Z', a versioned release-v* branch is prepared (combining tracks as needed), and a fresh Next Release is spawned. Finalization (new or extended gh plate release finalize) handles the tag + .plate-declared triggers. Heavy CI activates on the stabilization Release context. Update your label-check and PR milestone checks. Fragments remain required for process changes. gh plate release status is the primary visibility tool for on-hold vs. targeted Epics.",
+      "migration_guidance": [
+        "1. Pull latest .github/labels.yml and run `gh label sync .github/labels.yml` (or equivalent) to add Major, Minor, Patch labels.",
+        "2. Update .github/workflows/label-check.yml to include 'Release' in requiresMilestone (and consider Major/Minor/Patch on changing issues).",
+        "3. Copy updated .github/ISSUE_TEMPLATE/release.yml (supports 'Next Release' title and track checklist).",
+        "4. Run `gh plate bootstrap --apply` (or manual) to create release-major, release-minor, release-patch branches if adopting the new tracks.",
+        "5. Review and protect the new branches (require PRs, appropriate source restrictions, status checks).",
+        "6. Update local CI workflows (ci.yml or equivalent) to add conditional heavy jobs for Release-labeled PRs or release-v*/next-* stabilization contexts (after fast-fail gates).",
+        "7. (Optional but recommended) Add a 'release' section to your .plate config for downstream triggers.",
+        "8. Adopt the updated ceremony steps in AGENTS.md / process.yml: work gets Major/Minor/Patch label + targets the matching next-* branch; use sidebar links from Epics to the active Next Release issue; gh plate release status shows targeted vs on-hold; packaging involves freeze/rename/spawn + versioned branch + Release PR; finalization does tag + triggers + ensures next Next Release.",
+        "9. Existing Release issues and the single 'release' branch remain valid during transition; new work can opt into tracks incrementally."
+      ],
+      "links": [
+        "TBD-Epic-for-release-refinement"
+      ],
+      "requires": [
+        "current release foundation (0.1.x+)"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "Issue types, label registry, label-check workflow, process.yml",
+      "migration_impact": "Add 'Release' to issueTypeLabels in your label-check.yml workflow and to issue_type_labels in process.yml. Run `gh label sync .github/labels.yml` to create the Release label. The new .github/ISSUE_TEMPLATE/release.yml template is available for tracking release ceremonies.",
+      "agent_notes": "Release issues are now valid PLATE issue types. The label-check workflow accepts them without requiring a milestone. Use Release issues to track pre-release checklists, extension hooks, and semver tag traceability.",
+      "migration_guidance": [
+        "1. Pull the latest .github/labels.yml and run: gh label sync .github/labels.yml (or gh api repos/{owner}/{repo}/labels --method POST --field name='Release' --field color='0052cc' --field description='...').",
+        "2. Copy .github/ISSUE_TEMPLATE/release.yml from the plate template into your repo.",
+        "3. In .github/workflows/label-check.yml, add 'Release' to the issueTypeLabels array.",
+        "4. In .agentic/process.yml, add 'Release' under labels.issue_type_labels.required_exactly_one.",
+        "5. Add the release_rules block from process.yml to document branch model and ceremonies."
+      ],
+      "links": [
+        "#195",
+        "#194"
+      ],
+      "requires": [
+        "0.1.3"
+      ]
+    }
+  ]
+}
