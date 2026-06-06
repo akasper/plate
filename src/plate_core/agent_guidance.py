@@ -70,20 +70,15 @@ PLATE supports a Curiosity-driven workflow where informational goals are tracked
 - **Direct `gh plate qanda` usage or fallback:** Use lightweight custom TUI tools (e.g. gum/huh) or simple prompts.
 - The goal is the most seamless possible experience for the user in their primary interface.
 
-### Question handling flow (v2.1 Contemplation Engine)
+### Question handling flow
 1. Use available MCP tools (or future equivalents such as `plate_list_questions`, `plate_get_question`) to discover and prioritize open Questions.
 2. Present the question using the native preference above.
 3. When the user provides an answer, capture it with full provenance (see Answer Model).
-4. **Trigger Contemplation Engine v2.1** (via MCP tools or rules):
-   - Parses `answer_signal` from Question body (supports checklist, artifact, keyword formats per #326)
-   - Evaluates accumulated evidence against signal criteria
-   - Produces full transcript with citations
-   - Creates typed child issues (Feature/Research/Design) with back-refs when gaps identified
-   - Only signals close when answer_signal is verifiably met (evidence-based with confidence)
-   - Includes mandatory === USAGE REPORT === block on closure per AGENTS.md
+4. Trigger contemplation logic (via MCP tools or rules) and produce a Contemplation Log.
 5. Create forward progress (new issues, artifact updates) as defined in the Contemplation contract.
-6. For hard informational obstacles during other work, create a blocking `Question` issue (with a clear structured information dump) as a deliberate last resort, post a status on the original Issue, and pause work on it.
-7. When a blocking Question is later answered, the v2.1 engine merges the new information back into the original Issue with an auditable unblock report and resumes the blocked work.
+6. Treat the Question body's `Answer signal` as checklist-style markdown criteria. A Question is only ready to close when every checklist item is backed by explicit citations or links in the effective answer history; revised answers can invalidate previously satisfied items until new cited evidence exists.
+7. For hard informational obstacles during other work, create a blocking `Question` issue (with a clear structured information dump) as a deliberate last resort, post a status on the original Issue, and pause work on it.
+8. When a blocking Question is later answered, offer to merge the new information back into the original Issue and resume the blocked work.
 
 ### Blocking / informational obstacle pattern (Feature #147 / Epic #139)
 **Decision procedure (invoke ONLY as deliberate last resort):**
@@ -107,95 +102,26 @@ When criteria met:
 
 This is the concrete last-resort escape hatch. Over-use is a risk — prefer reasoning first. Document the decision in your reasoning trace.
 
-### Resumption pattern (Feature #148 / Epic #139 / v2.1 enhancement)
+### Resumption pattern (Feature #148 / Epic #139)
 When you (or a future session) detect that a previously blocking Question (one containing PLATE-BLOCKING-DUMP or explicit "blocking" marker + link to original Issue) has been answered:
 1. Use `plate_get_question` + `plate_get_answers` (or record_answer path) to fetch the full answer + provenance from the blocking Question.
-   - Prefer the committed fast path from `plate_get_answers` when `docs/curiosity/answers.yml` and `docs/curiosity/answers/*.md` are present.
-   - If you are working from historical Questions that predate committed storage, run `plate_backfill_answers` (or `gh plate qanda --backfill`) once before synthesis/resumption.
 2. Identify the original blocked Issue from the dump/block (or Question body links).
-3. **Trigger Contemplation Engine v2.1** on the answer — the engine will:
-   - Evaluate the answer against signal criteria
-   - Create typed child issues if gaps remain
-   - Post a structured "Unblocked by answer to Question #N" report on the original Issue with:
-     * Answer excerpt and evaluation status
-     * List of created follow-up issues
-     * Next steps guidance
-     * Full provenance link
-4. Update the original Issue body/sections/comments with the new info where it changes scope/understanding (append-only where possible).
-5. Resume or hand off work on the original Issue (or mark it ready for next agent).
-6. Close the blocking Question only if its answer_signal is met (normal contemplation closure).
+3. Perform structured merge:
+   - Post a clear, human/machine-readable "**Unblocked by answer to Question #N**" report comment on the original (key excerpts, provenance, link back, actions taken).
+   - Update the original Issue body/sections/comments with the new info where it changes scope/understanding (append-only where possible).
+   - Create any follow-on artifacts or child issues warranted by the new information (via normal contemplation rules).
+4. Resume or hand off work on the original Issue (or mark it ready for next agent).
+5. Close the blocking Question only if its answer_signal is met (normal contemplation closure).
 
 **MCP integration**: The `plate_record_answer` (source=\"blocking\") + contemplation path, or a dedicated `plate_resume_from_blocking_question` tool (to be added), triggers the above. Always produce auditable unblock report. Preserve full bidirectional traceability. No data loss.
 
 This completes the loop started by #147 creation. Dogfood the full create → answer → resume in this repo.
-
-### v2.1 Contemplation Engine specifics
-The v2.1 engine (Feature #343 / Epic #257) provides:
-- **Real signal parsing**: Extracts answer_signal from Question body in checklist format (`- [ ] item`), artifact format (mentions `docs/`, `commit`, etc.), or keyword format
-- **Evidence-based evaluation**: Checks accumulated answers against parsed criteria, provides citations from answer excerpts
-- **Strict closure**: Only signals close when signal is met with medium-to-high confidence; includes === USAGE REPORT === per AGENTS.md
-- **Typed child creation**: Creates Feature/Research/Design issues based on identified gaps in answers, with full back-refs to parent Question
-- **Enhanced resumption**: Blocking Question answers trigger detailed unblock reports on original Issues with evaluation status and created children
 
 ### Related MCP tools (examples)
 - Future tools for listing/synthesizing Questions, recording answers, triggering contemplation, and managing blocking/resumption flows.
 - Always prefer the most native user experience the host environment (Copilot CLI) can provide.
 """
 
-
-INFORMATION_AUDIT_GUIDANCE = """
-## Information Audits and Goals Page (Epic #218, #221 core engine, #222 defaults catalog)
-
-PLATE supports proactive Information Audits to discover Informational Goals (gaps against the project's high-level Goals) and generate well-formed `Question` issues.
-
-### When to perform an Information Audit
-- At start of Epic or major task, or periodically (e.g. via `plate_perform_information_audit` or equivalent).
-- When the Goals page or context seems stale/missing signals for prioritization or Question generation.
-- To seed or refine open Questions for Curiosity/Q&A mode.
-- Scoped by agent_type (general, marketing, engineering) or scope (repo, epic, etc.).
-
-### How to run
-- Prefer MCP tool `plate_perform_information_audit` (or future gh plate / Copilot surface).
-- Start with `dry_run: true` to review proposals before creating Issues.
-- Set `include_defaults: true` to incorporate platform + extension defaults from the catalog (#222).
-- Provide `agent_type` for specialized scoping/heuristics.
-- Use `max_questions` to cap output.
-
-### Inputs to use
-- The Wiki `Goals` page (per convention #219/#224) as primary strategic signal: read Mission, Core Principles, How We Intend to Succeed, Current State & Evidence, Open Questions.
-- Other surfaces: code patterns, open issues/PRs/discussions, existing Questions, bootstrap state.
-- Never assume Goals page is the *only* source (per contract rule #1).
-
-### Output and Question generation (per #220 model)
-- Proposed Questions include:
-  - title/body following Question template + provenance (where gap noticed, e.g. "Goals § Mission", specific file/issue), related_goals, priority_rationale, refinement_note.
-  - Use PLATE-INFORMATIONAL-GOAL markers for Answer Model / Contemplation compatibility.
-- Link back to originating Goal(s) and forward to artifacts that should be updated on resolution.
-- Support continuous refinement: broad → specific; detect clusters of related Questions.
-
-### Best practices and integration
-- Quality over quantity: use heuristics + reasoning to avoid noise; cap and prioritize.
-- After audit, feed proposals into Curiosity flows (list/prioritize/present via native TUI or gh plate qanda, record answers, contemplate).
-- Contribute back: if audit reveals missing/stale Goals page content, propose updates or new high-level goals.
-- For hard obstacles during audit or other work, fall back to blocking Question pattern (#147).
-- When blocking Question answered, resume via unblock report + merge (as in Q&A section).
-
-### Examples
-- General audit: `plate_perform_information_audit --dry-run --include-defaults` → review 3-5 high-signal Questions tied to Mission/risks.
-- Marketing agent: scope to users/GTM gaps, produce Questions for personas or value prop.
-- After Goals page populated: re-audit to surface "Current State & Evidence" gaps or risks.
-
-See design #223 for the 10 enforceable behavior rules (open-ended, provenance, refinement, quality, scoping, defaults+extensibility, integration, auditability, human-in-loop, wiki as strategic home).
-
-Use the catalog (`plate_informational_goals`) to inspect defaults.
-
-**MCP tools (core):**
-- `plate_perform_information_audit` (dry_run, scope, agent_type, max_questions, include_defaults)
-- `plate_informational_goals` / `plate_informational_goal <id>` (from #222 catalog)
-- Existing Curiosity tools for follow-up (list/get/record/prioritize/contemplate/blocking/resume).
-
-Always produce auditable output (logs, provenance). Prefer native Copilot TUI for presenting proposals if available.
-"""
 
 def get_agent_guidance_sections() -> dict[str, str]:
     """Return guidance sections for agents."""
@@ -204,3 +130,18 @@ def get_agent_guidance_sections() -> dict[str, str]:
         "qanda_curiosity": QANDA_CURIOSITY_GUIDANCE,
         "information_audit": INFORMATION_AUDIT_GUIDANCE,
     }
+
+
+INFORMATION_AUDIT_GUIDANCE = """
+## Information Audits and Goals Page
+
+PLATE supports structured Information Audits (Epic #218 / #221, cross-cutting beta roadmap) to keep SPEC.md aligned with implemented state (release fragments as durable evidence, working tests as strong signal, code/docs/wiki as supporting).
+
+- Evidence hierarchy and owner-vision intake (via Q&A where needed).
+- Auditable reports: stale claims, undocumented implementation, vision/reality gaps, with per-finding confidence (high/medium/low).
+- Generates follow-on artifacts (Question/Research/Design/Feature/Bug/Doc) with provenance; supports draft SPEC patches (insertion-first).
+- Exposed via `plate_perform_information_audit` (CLI + MCP), health signals, and `plate_what_next` prioritization when findings exist.
+- Human approval boundaries preserved for public claims/vision/SPEC changes.
+
+Use when drift is suspected or after landing beta Epics. See docs/research/ and the 257/221 fragments for details. Ties into Goals page bootstrap (#224) and extension goals.
+"""
