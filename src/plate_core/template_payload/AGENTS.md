@@ -56,7 +56,7 @@ Follow the loop that matches the issue type.
 | 4 | Implement the smallest coherent change that satisfies the issue. |
 | 5 | Update per-feature change files in `.agentic/releases/` to describe the implemented behavior and verification evidence. |
 | 6 | If the feature includes UI changes, record a demo GIF (see Demo GIF Recording guidance below). |
-| 7 | Open a PR labeled `Feature` with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
+| 7 | Determine the correct base branch using `gh plate release status` (legacy `release` for single-release repos; matching `release-*` track otherwise). Open a PR labeled `Feature` **targeting that base** (include `--base release` etc. in `gh pr create`) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
 | 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
 **Demo GIF Recording for UI Features**
@@ -387,7 +387,8 @@ Autonomous mode is an opt-in operating posture for unattended sessions (overnigh
 **How to auto-merge an eligible PR in autonomous mode:**
 
 ```bash
-gh pr create --label "risk:low" --label "auto-merge" [other required labels] ...
+# First: gh plate release status  (discover --base: release or release-*)
+gh pr create --base release --label "risk:low" --label "auto-merge" [other required labels] ...
 gh pr merge --auto --squash <PR_NUMBER>
 ```
 
@@ -561,7 +562,7 @@ Every Feature pull request that changes PLATE process, templates, or agent surfa
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
-When opening pull requests through GitHub CLI, prefer an atomic command such as `gh pr create --label "Feature"` or `gh pr create --label "Documentation"`. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work.
+When opening pull requests through GitHub CLI, first run `gh plate release status` to discover the correct integration base branch (`release` for legacy; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base release --label "Feature"` (or the Documentation equivalent). If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never default to `main`.
 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
