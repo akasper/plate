@@ -19,6 +19,7 @@ class CliTests(unittest.TestCase):
     @patch("plate_core.cli.get_health")
     def test_health_json_output(self, mock_get_health):
         mock_get_health.return_value = HealthReport(
+            goals_page_present=True,
             repo="akasper/plate_core",
             label_coverage_ok=True,
             missing_labels=[],
@@ -26,7 +27,6 @@ class CliTests(unittest.TestCase):
             branch_protection_enabled=True,
             open_epic_count=2,
             status="pass",
-            goals_page_present=True,
             open_question_count=1,
             plate_config_present=False,
             plate_config_valid=False,
@@ -193,6 +193,52 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["pr_number"], 112)
         self.assertTrue(payload["trigger_comment_posted"])
 
+    @patch("plate_core.mcp.curiosity_tools.BackfillAnswersTool.execute")
+    def test_qanda_backfill_json_output(self, mock_backfill):
+        mock_backfill.return_value = {
+            "repo": "akasper/plate",
+            "processed_questions": [
+                {
+                    "question_number": 275,
+                    "status": "backfilled",
+                    "answers_written": 1,
+                    "committed_file": "docs/curiosity/answers/host-agent.md",
+                }
+            ],
+            "question_count": 1,
+            "answers_written": 1,
+        }
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["qanda", "--backfill", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(payload["question_count"], 1)
+        self.assertEqual(payload["answers_written"], 1)
+
+    @patch("plate_core.mcp.curiosity_tools.RecordAnswerTool.execute")
+    def test_qanda_record_passes_revision_of(self, mock_record):
+        mock_record.return_value = {
+            "status": "recorded",
+            "question_number": 275,
+            "comment_url": "https://example.invalid/comment",
+            "committed_storage": "docs/curiosity/answers/host-agent.md",
+        }
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(
+                [
+                    "qanda",
+                    "--record",
+                    "275",
+                    "--answer",
+                    "Revised answer",
+                    "--revision-of",
+                    "12345",
+                ]
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(mock_record.call_args.kwargs["revision_of"], "12345")
     @patch("plate_core.cli.core_cut_release")
     def test_release_cut_json_output(self, mock_core_cut):
         """First-class release cut using core (for #261)."""

@@ -1,0 +1,26 @@
+{
+  "version": "unreleased",
+  "summary": "Committed curiosity answer storage, backfill, and fast lookup for Question issues (Epic #258)",
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "Curiosity / Q&A answer model",
+      "migration_impact": "Question answers now persist to committed storage under docs/curiosity/answers/*.md plus docs/curiosity/answers.yml. Use `gh plate qanda --backfill` (or MCP `plate_backfill_answers`) to materialize historical Question answers into the fast local index.",
+      "agent_notes": "plate_record_answer now updates committed curiosity storage immediately, plate_get_answers prefers that committed index, and revision links are preserved in the stored model. This slice also dogfoods the model with five committed Question artifacts in this repository, including two new follow-on Questions for epics #257 and #259.",
+      "breaking": false,
+      "links": [
+        "#258",
+        "#139",
+        "#142",
+        "#150",
+        "#257",
+        "#259"
+      ],
+      "requires": [
+        "unreleased/148-merge-resume-blocking",
+        "unreleased/151-qanda-tui-fallback-interactive",
+        "unreleased/155-curiosity-tests"
+      ]
+    }
+  ]
+}

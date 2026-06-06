@@ -1,0 +1,147 @@
+'275':
+  answers:
+  - agent_actions: []
+    answer_text: 'I don''t have any specifics for the exact wire-up of #275. There
+      may be per-CLI-tool capabilities, but I''m not yet sure how to implement those.
+      I would also like to see a way to surface my own TUI widget as a fallback, but
+      I''m not sure that that''s possible either. One thing I notice is that both
+      Grok Build and GitHub Copilot CLI have great TUI widgets they use for asking
+      multiple choice questions, but it doesn''t seem like there''s any way for plugins
+      to access or create those. In my ideal world, that''s how it would work. (As
+      a side note, if this ISN''T possible -- if I CAN''T trigger CLI-tool-native
+      TUI forms -- then I may have to instead author my own PLATE TUI, because I consider
+      this a key workflow for PLATE. This is where much of the value of the platform
+      is added.) Do you have any suggestions?'
+    answered_by: user
+    full_comment_url: https://github.com/akasper/plate/issues/275#issuecomment-4608404419
+    id: '4608404419'
+    provenance:
+      raw_block:
+        answer: 'I don''t have any specifics for the exact wire-up of #275. There
+          may be per-CLI-tool capabilities, but I''m not yet sure how to implement
+          those. I would also like to see a way to surface my own TUI widget as a
+          fallback, but I''m not sure that that''s possible either. One thing I notice
+          is that both Grok Build and GitHub Copilot CLI have great TUI widgets they
+          use for asking multiple choice questions, but it doesn''t seem like there''s
+          any way for plugins to access or create those. In my ideal world, that''s
+          how it would work. (As a side note, if this ISN''T possible -- if I CAN''T
+          trigger CLI-tool-native TUI forms -- then I may have to instead author my
+          own PLATE TUI, because I consider this a key workflow for PLATE. This is
+          where much of the value of the platform is added.) Do you have any suggestions?'
+        answered by: user
+        question: '275'
+        source: cli-interactive
+        timestamp: '2026-06-03T01:50:05.903506+00:00'
+    question_number: 275
+    revision_of: null
+    session: null
+    source: cli-interactive
+    timestamp: '2026-06-03T01:50:05.903506+00:00'
+  file_path: docs/curiosity/answers/question-host-agent-integration-ux-surface-for-plate-plan-epic-native-forms-vs-fallback.md
+  title: '[Question]: Host-agent integration / UX surface for plate_plan_epic (native
+    forms vs fallback)'
+'276':
+  answers:
+  - agent_actions: []
+    answer_text: In order to engage in a PLATE-driven Q&A, the underlying repo should
+      be a PLATE project. (It has a .plate/config file or directory). Dry run should
+      always be allowed, and yes, there should be a --force flag.
+    answered_by: user
+    full_comment_url: https://github.com/akasper/plate/issues/276#issuecomment-4608372063
+    id: '4608372063'
+    provenance:
+      raw_block:
+        answer: In order to engage in a PLATE-driven Q&A, the underlying repo should
+          be a PLATE project. (It has a .plate/config file or directory). Dry run
+          should always be allowed, and yes, there should be a --force flag.
+        answered by: user
+        question: '276'
+        source: cli-interactive
+        timestamp: '2026-06-03T01:42:39.937325+00:00'
+    question_number: 276
+    revision_of: null
+    session: null
+    source: cli-interactive
+    timestamp: '2026-06-03T01:42:39.937325+00:00'
+  file_path: docs/curiosity/answers/question-repo-scope-permission-policy-for-plate-plan-epic-any-repo-vs-plate-signals-only.md
+  title: '[Question]: Repo scope / permission policy for plate_plan_epic (any repo
+    vs PLATE signals only)'
+'319':
+  answers:
+  - agent_actions: []
+    answer_text: 'Research summary:
+
+
+      - Canonical standing target: one open `Release` issue titled `Next Release`,
+      not separate Major/Minor/Patch release issues.
+
+      - Initial standing branch creation belongs to `gh plate bootstrap --apply`;
+      packaging rollover belongs to `gh plate release finalize`; repair should be
+      a dedicated idempotent init/repair command.
+
+      - Healthy vs never-initialized vs drifted state is now documented in `docs/research/release-track-bootstrap-and-repair.md`.
+
+      - Follow-up implementation gap is tracked in #320.
+
+
+      Documentation PR: #321'
+    answered_by: akasper
+    full_comment_url: https://github.com/akasper/plate/issues/319#issuecomment-4617960226
+    id: '4617960226'
+    provenance:
+      summary_comment: true
+    question_number: 319
+    revision_of: null
+    session: null
+    source: summary-backfill
+    timestamp: '2026-06-04T00:48:25Z'
+  file_path: docs/curiosity/answers/question-how-should-a-new-plate-repository-create-and-repair-standing-release-track-issues-and-branches.md
+  title: '[Question]: How should a new PLATE repository create and repair standing
+    release-track issues and branches?'
+'326':
+  answers:
+  - agent_actions: []
+    answer_text: 'Provisional recommendation: treat `answer_signal` as an explicit
+      structured section on the Question body, preserved in human-readable markdown
+      but constrained to parseable line items. The engine should evaluate closure
+      against those declared criteria plus cited evidence from the accumulated answer
+      history; heuristic keywords like done/complete should never close a Question
+      on their own. In practice, this means Contemplation Engine v2 should read the
+      `Answer signal` section verbatim, normalize it into line-oriented criteria,
+      and require each criterion to be satisfied or intentionally superseded before
+      closing.'
+    answered_by: copilot-agent
+    full_comment_url: https://github.com/akasper/plate/issues/326#issuecomment-4631443674
+    id: '4631443674'
+    provenance:
+      recorded_via: plate_record_answer
+    question_number: 326
+    revision_of: null
+    session: null
+    source: agent-contemplation
+    timestamp: '2026-06-05T12:14:44.942297+00:00'
+  file_path: docs/curiosity/answers/question-what-answer-signal-representation-should-contemplation-engine-v2-evaluate-for-strict-closure.md
+  title: '[Question]: What answer_signal representation should Contemplation Engine
+    v2 evaluate for strict closure?'
+'327':
+  answers:
+  - agent_actions: []
+    answer_text: 'Provisional recommendation: keep `.plate` at the repository root.
+      The existing epic, design, and implementation language all define it as repo-owned
+      root configuration, which makes it visible to both humans and tooling without
+      coupling it to GitHub-only metadata under `.github/`. Future CLI, MCP, bootstrap,
+      and extension flows should therefore continue treating root placement as the
+      canonical location, with `.github/` reserved for GitHub-native automation artifacts
+      rather than core project configuration.'
+    answered_by: copilot-agent
+    full_comment_url: https://github.com/akasper/plate/issues/327#issuecomment-4631443806
+    id: '4631443806'
+    provenance:
+      recorded_via: plate_record_answer
+    question_number: 327
+    revision_of: null
+    session: null
+    source: agent-contemplation
+    timestamp: '2026-06-05T12:14:46.055634+00:00'
+  file_path: docs/curiosity/answers/question-should-plate-remain-a-repository-root-config-surface.md
+  title: '[Question]: Should .plate remain a repository-root config surface?'

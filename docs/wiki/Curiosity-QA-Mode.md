@@ -14,8 +14,9 @@ Informational goals are first-class citizens in PLATE, captured as `Question` is
 ### 1. Normal Q&A
 - Discover/prioritize via `plate_list_questions` + `plate_synthesize_priorities` (or `gh plate qanda --list`).
 - Present using **native host primitives** (Copilot CLI TUI/forms preferred per Design #144) or `gh plate qanda` fallback (now with basic interactive prompting).
-- Record via `plate_record_answer` (or `gh plate qanda --record`).
+- Record via `plate_record_answer` (or `gh plate qanda --record`); committed answer artifacts are written to `docs/curiosity/answers/` plus `docs/curiosity/answers.yml`.
 - Contemplation Engine (#149) appends full transcript (Answer Model #150 provenance), creates forward-progress issues/artifacts, closes only when `answer_signal` verifiably met.
+- For historical Questions that predate committed storage, run `plate_backfill_answers` (or `gh plate qanda --backfill`) to materialize the fast local index before broader synthesis.
 
 ### 2. Blocking / Last-Resort Obstacle Handling (#147)
 When an agent hits a hard informational obstacle on any open Issue (Research/Design/Feature/etc.):
@@ -37,8 +38,8 @@ When a human answers a blocking Question:
 Full bidirectional traceability is preserved via comments, markers, and links.
 
 ## Surfaces
-- **MCP tools**: `plate_list_questions`, `plate_get_question`, `plate_record_answer`, `plate_get_answers`, `plate_synthesize_priorities`, `plate_create_blocking_question`, `plate_contemplate` (and `plate_resume` patterns via the engine).
-- **CLI**: `gh plate qanda` (list / view / interactive record / synthesize). Primary experience inside Copilot CLI uses native forms + the plate agent + MCP.
+- **MCP tools**: `plate_list_questions`, `plate_get_question`, `plate_record_answer`, `plate_get_answers`, `plate_backfill_answers`, `plate_synthesize_priorities`, `plate_create_blocking_question`, `plate_contemplate` (and `plate_resume` patterns via the engine).
+- **CLI**: `gh plate qanda` (list / view / interactive record / backfill / synthesize). Primary experience inside Copilot CLI uses native forms + the plate agent + MCP.
 - **Guidance**: Centralized in `QANDA_CURIOSITY_GUIDANCE`; referenced from personas and AGENTS.md.
 
 ## Key Artifacts (delivered in the Epic)

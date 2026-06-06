@@ -37,6 +37,32 @@ class BaselineSkill:
 
 
 @dataclass(frozen=True)
+class BaselineInformationalGoal:
+    """Default informational goal (for #222 catalog, usable by #221 audit and bootstrap)."""
+
+    id: str
+    title: str
+    body: str
+    related_goals: tuple[str, ...] = ()
+    provenance_hint: str = ""
+    priority_rationale: str = ""
+    refinement_note: str = ""
+    provided_by: str = "platform"  # "platform" or extension id for #226 extensibility
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "body": self.body,
+            "related_goals": list(self.related_goals),
+            "provenance_hint": self.provenance_hint,
+            "priority_rationale": self.priority_rationale,
+            "refinement_note": self.refinement_note,
+            "provided_by": self.provided_by,
+        }
+
+
+@dataclass(frozen=True)
 class BaselineAgent:
     id: str
     name: str
@@ -61,12 +87,14 @@ class BaselineCatalog:
     schema_version: int
     agents: tuple[BaselineAgent, ...]
     skills: tuple[BaselineSkill, ...]
+    informational_goals: tuple[BaselineInformationalGoal, ...]
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "agents": [agent.to_dict() for agent in self.agents],
             "skills": [skill.to_dict() for skill in self.skills],
+            "informational_goals": [g.to_dict() for g in self.informational_goals],
         }
 
     def agent_by_id(self, agent_id: str) -> BaselineAgent:
@@ -80,6 +108,15 @@ class BaselineCatalog:
             if skill.id == skill_id:
                 return skill
         raise BaselineCatalogError(f"Unknown skill: {skill_id}")
+
+    def list_informational_goals(self) -> tuple[BaselineInformationalGoal, ...]:
+        return self.informational_goals
+
+    def informational_goal_by_id(self, goal_id: str) -> BaselineInformationalGoal:
+        for g in self.informational_goals:
+            if g.id == goal_id:
+                return g
+        raise BaselineCatalogError(f"Unknown informational goal: {goal_id}")
 
 
 def _catalog_path() -> Path:
@@ -156,6 +193,33 @@ def _load_skills(raw_skills: Any) -> tuple[BaselineSkill, ...]:
     return tuple(skills)
 
 
+def _load_informational_goals(raw_goals: Any) -> tuple[BaselineInformationalGoal, ...]:
+    if raw_goals is None:
+        return ()
+    _require(isinstance(raw_goals, list), "informational_goals must be a list or absent")
+    goals: list[BaselineInformationalGoal] = []
+    seen: set[str] = set()
+    for item in raw_goals:
+        _require(isinstance(item, dict), "each informational_goal must be a mapping")
+        gid = item.get("id")
+        _require(isinstance(gid, str) and gid, "informational_goal.id must be a non-empty string")
+        _require(gid not in seen, f"duplicate informational_goal id: {gid}")
+        seen.add(gid)
+        goals.append(
+            BaselineInformationalGoal(
+                id=gid,
+                title=item.get("title", gid),
+                body=item.get("body", ""),
+                related_goals=_as_str_tuple(item.get("related_goals", []), f"informational_goal {gid} related_goals"),
+                provenance_hint=item.get("provenance_hint", ""),
+                priority_rationale=item.get("priority_rationale", ""),
+                refinement_note=item.get("refinement_note", ""),
+                provided_by=item.get("provided_by", "platform"),
+            )
+        )
+    return tuple(goals)
+
+
 @lru_cache(maxsize=1)
 def load_baseline_catalog() -> BaselineCatalog:
     data = _load_yaml()
@@ -163,6 +227,7 @@ def load_baseline_catalog() -> BaselineCatalog:
     _require(schema_version == 1, "baseline catalog schema_version must be 1")
     agents = _load_agents(data.get("agents"))
     skills = _load_skills(data.get("skills"))
+    informational_goals = _load_informational_goals(data.get("informational_goals"))
 
     agent_ids = {agent.id for agent in agents}
     skill_ids = {skill.id for skill in skills}
@@ -177,7 +242,7 @@ def load_baseline_catalog() -> BaselineCatalog:
         for agent_id in skill.owning_agent_ids:
             _require(agent_id in agent_ids, f"skill {skill.id} references unknown agent {agent_id}")
 
-    return BaselineCatalog(schema_version=1, agents=agents, skills=skills)
+    return BaselineCatalog(schema_version=1, agents=agents, skills=skills, informational_goals=informational_goals)
 
 
 @dataclass(frozen=True)
@@ -273,3 +338,11 @@ def get_agent(agent_id: str) -> BaselineAgent:
 
 def get_skill(skill_id: str) -> BaselineSkill:
     return load_baseline_catalog().skill_by_id(skill_id)
+
+
+def list_informational_goals() -> tuple[BaselineInformationalGoal, ...]:
+    return load_baseline_catalog().informational_goals
+
+
+def get_informational_goal(goal_id: str) -> BaselineInformationalGoal:
+    return load_baseline_catalog().informational_goal_by_id(goal_id)
