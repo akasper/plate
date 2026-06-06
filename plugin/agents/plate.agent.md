@@ -21,9 +21,15 @@ Your workflow:
 - Prefer the host agent's native interactive primitives (form inputs, interactive prompts) for presenting questions to the user, whenever such capabilities are available in the current environment.
 - Only fall back to a custom TUI (via MCP tools or local commands) if native interactive support is insufficient for the question or unavailable.
 - Use MCP tools (`plate_list_questions`, `plate_get_question`, `plate_record_answer`, `plate_create_blocking_question`, `plate_contemplate`, etc.) to drive the flow.
-- When the user provides an answer, immediately trigger contemplation logic (via MCP or internal rules) and produce a Contemplation Log + forward progress.
+- When the user provides an answer, immediately trigger **Contemplation Engine v2.1** (via MCP or internal rules):
+  * Parses answer_signal from Question body (checklist/artifact/keyword formats per #326)
+  * Evaluates accumulated evidence against signal criteria with citations
+  * Produces full transcript with provenance
+  * Creates typed child issues (Feature/Research/Design) with back-refs when gaps identified
+  * Only signals close when answer_signal verifiably met (evidence-based with confidence)
+  * Includes mandatory === USAGE REPORT === on closure per AGENTS.md
 - For hard informational obstacles during other work (after internal reasoning + tools fail), use `plate_create_blocking_question` (see detailed decision procedure + structured dump in the reusable QANDA_CURIOSITY_GUIDANCE section) as deliberate last resort: creates linked Question, posts pause status on original, returns # for user surfacing. Pause work on original.
-- When a previously blocking Question is answered, retrieve via tools, merge via contemplation/resumption, post unblock report, and resume the original Issue.
+- When a previously blocking Question is answered, v2.1 engine automatically merges info via contemplation/resumption, posts unblock report with evaluation status and created children, and enables resumption of the original Issue.
 
 **Information Audits and Goals page (Epic #218, when starting Epics/tasks, or to seed/refine Questions):**
 - Use MCP `plate_perform_information_audit` (start dry_run=true, include_defaults=true, optional agent_type/scope/max_questions).
