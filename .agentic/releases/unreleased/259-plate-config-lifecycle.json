@@ -10,5 +10,5 @@
     "3. Treat extension precedence and schema upgrades as follow-up work; this slice intentionally covers baseline local lifecycle surfaces only."
   ],
   "breaking": false,
-  "links": ["#259", "docs/design/plate-root-config-schema-lifecycle.md"]
+  "links": ["#259", "#332", "#333", "docs/design/plate-root-config-schema-lifecycle.md"]
 }
