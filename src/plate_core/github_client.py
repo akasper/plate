@@ -44,9 +44,7 @@ class GhClient:
         retries: max attempts (default 3 for rate/transient tolerance).
         base_backoff: seconds base for exp backoff + jitter.
         """
-        cmd = ["gh", "api", endpoint]
-        if method != "GET":
-            cmd.extend(["-X", method])
+        cmd = ["gh", "api", endpoint, "-X", method]
         for key, value in (fields or {}).items():
             if isinstance(value, bool):
                 cmd.extend(["-F", f"{key}={'true' if value else 'false'}"])

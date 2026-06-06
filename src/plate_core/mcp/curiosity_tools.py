@@ -20,6 +20,13 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Any
 
+from ..curiosity.answers import (
+    Answer,
+    build_answer_from_block,
+    get_answers_for_question,
+    parse_plate_answer_blocks,
+    update_answers_index,
+)
 from ..github_client import GhClient, GhApiError
 from ..health import resolve_repo
 
@@ -38,6 +45,104 @@ def _get_gh_client(client: GhClient | None = None) -> GhClient:
 
 def _resolve_target_repo(repo: str | None) -> str:
     return resolve_repo(repo)
+
+
+def _extract_answers_from_comments(
+    question_number: int,
+    comments: list[dict[str, Any]],
+) -> list[Answer]:
+    answers: list[Answer] = []
+    for comment in comments:
+        body = comment.get("body") or ""
+        for block in parse_plate_answer_blocks(body):
+            answers.append(
+                build_answer_from_block(
+                    block,
+                    question_number=question_number,
+                    comment_url=comment.get("html_url"),
+                    answer_id=str(comment.get("id") or ""),
+                )
+            )
+    return answers
+
+
+def _extract_answer_from_summary_comment(
+    question_number: int,
+    comments: list[dict[str, Any]],
+) -> list[Answer]:
+    if not comments:
+        return []
+
+    summary_markers = ("research summary:", "resolution summary:", "answer summary:")
+    for comment in reversed(comments):
+        body = (comment.get("body") or "").strip()
+        if not body or not body.lower().startswith(summary_markers):
+            continue
+        created_at = comment.get("created_at") or datetime.now(timezone.utc).isoformat()
+        return [
+            Answer(
+                id=str(comment.get("id") or f"summary-{question_number}-{created_at}"),
+                question_number=question_number,
+                answered_by=(comment.get("user") or {}).get("login", "unknown"),
+                timestamp=created_at,
+                source="summary-backfill",
+                answer_text=body,
+                full_comment_url=comment.get("html_url"),
+                provenance={"summary_comment": True},
+            )
+        ]
+    return []
+
+
+def _extract_issue_body_answer(question_number: int, issue: dict[str, Any]) -> list[Answer]:
+    body = issue.get("body") or ""
+    answer_match = re.search(
+        r"\*\*Answer:\*\*\s*(.+?)(?:\n\n\*\*Contemplation:\*\*|\Z)",
+        body,
+        re.DOTALL,
+    )
+    if not answer_match:
+        return []
+
+    answered_by_match = re.search(r"\*\*Answered by:\*\*\s*(.+)", body)
+    answered_by = answered_by_match.group(1).strip() if answered_by_match else "unknown"
+    answer_text = answer_match.group(1).strip()
+    timestamp = (
+        issue.get("closed_at")
+        or issue.get("updated_at")
+        or issue.get("created_at")
+        or datetime.now(timezone.utc).isoformat()
+    )
+    return [
+        Answer(
+            id=f"body-{question_number}",
+            question_number=question_number,
+            answered_by=answered_by,
+            timestamp=timestamp,
+            source="body-backfill",
+            answer_text=answer_text,
+            provenance={"issue_body_backfill": True},
+            full_comment_url=issue.get("html_url"),
+        )
+    ]
+
+
+def _persist_answers(
+    question_number: int,
+    question_title: str | None,
+    answers: list[Answer],
+) -> tuple[int, str | None]:
+    updated = 0
+    committed_path: str | None = None
+    for answer in answers:
+        question_answers = update_answers_index(
+            question_number=question_number,
+            new_answer=answer,
+            question_title=question_title,
+        )
+        committed_path = question_answers.file_path
+        updated += 1
+    return updated, committed_path
 
 
 class ListQuestionsTool:
@@ -185,6 +290,7 @@ class RecordAnswerTool:
         answered_by: str = "agent",
         session: str | None = None,
         source: str = "qanda",
+        revision_of: str | None = None,
         repo: str | None = None,
         client: GhClient | None = None,
         agent_actions: list[str] | None = None,
@@ -206,6 +312,8 @@ class RecordAnswerTool:
         if session:
             block_lines.append(f"Session: {session}")
         block_lines.append(f"Source: {source}")
+        if revision_of:
+            block_lines.append(f"Revision of: {revision_of}")
         block_lines.append(f"Answer: {answer_text}")
         if actions:
             block_lines.append(f"Agent actions triggered: {'; '.join(actions)}")
@@ -219,6 +327,25 @@ class RecordAnswerTool:
                 method="POST",
                 fields={"body": comment_body},
             )
+            issue = gh.api(f"repos/{target}/issues/{question_number}")
+            committed_answer = Answer(
+                id=str(comment.get("id")),
+                question_number=question_number,
+                answered_by=answered_by,
+                timestamp=timestamp,
+                session=session,
+                source=source,
+                answer_text=answer_text,
+                provenance={"recorded_via": "plate_record_answer"},
+                agent_actions=actions,
+                full_comment_url=comment.get("html_url"),
+                revision_of=revision_of,
+            )
+            committed_question = update_answers_index(
+                question_number=question_number,
+                new_answer=committed_answer,
+                question_title=issue.get("title"),
+            )
             return {
                 "status": "recorded",
                 "question_number": question_number,
@@ -226,7 +353,8 @@ class RecordAnswerTool:
                 "comment_url": comment.get("html_url"),
                 "timestamp": timestamp,
                 "plate_answer_block": comment_body,
-                "note": "Answer persisted as GitHub comment. Contemplation Engine (#149) should now be invoked to create follow-up issues / update resources. Update local docs/curiosity/answers.yml index if Answer Model present.",
+                "committed_storage": committed_question.file_path,
+                "note": "Answer persisted as GitHub comment and committed curiosity storage. Contemplation Engine (#149) should now be invoked to create follow-up issues / update resources.",
             }
         except GhApiError as exc:
             return {"status": "error", "error": str(exc), "question_number": question_number}
@@ -245,45 +373,135 @@ class GetAnswersTool:
         gh = _get_gh_client(client)
         target = _resolve_target_repo(repo)
 
-        # Try the fast index first (from Answer Model #150)
-        try:
-            from ..curiosity.answers import get_answers_for_question, load_answers_index  # type: ignore
-
-            qa = get_answers_for_question(question_number)
-            if qa:
-                return {
-                    "question_number": question_number,
-                    "source": "committed_index",
-                    "answers": [a.to_dict() for a in qa.answers],
-                    "latest": qa.latest_answer().to_dict() if qa.latest_answer() else None,
-                    "count": len(qa.answers),
-                }
-        except Exception:
-            pass  # Index not present or import failed; fall back
+        qa = get_answers_for_question(question_number)
+        if qa:
+            return {
+                "question_number": question_number,
+                "source": "committed_index",
+                "title": qa.title,
+                "committed_file": qa.file_path,
+                "answers": [answer.to_dict() for answer in qa.answers],
+                "latest": qa.latest_answer().to_dict() if qa.latest_answer() else None,
+                "count": len(qa.answers),
+            }
 
         # Fallback: scan comments for PLATE-ANSWER blocks
         try:
             comments = gh.api(f"repos/{target}/issues/{question_number}/comments", fields={"per_page": 100}) or []
-            answers = []
-            for c in (comments if isinstance(comments, list) else []):
-                body = c.get("body") or ""
-                if PLATE_ANSWER_BEGIN in body:
-                    # Minimal parse (full parser lives in Answer Model)
-                    answers.append({
-                        "comment_url": c.get("html_url"),
-                        "user": (c.get("user") or {}).get("login"),
-                        "created_at": c.get("created_at"),
-                        "body_preview": body[:400],
-                    })
+            parsed_answers = _extract_answers_from_comments(
+                question_number=question_number,
+                comments=comments if isinstance(comments, list) else [],
+            )
             return {
                 "question_number": question_number,
                 "source": "github_comment_scan",
-                "answers": answers,
-                "count": len(answers),
-                "note": "Full structured parsing + index available after Answer Model (#150) lands.",
+                "answers": [answer.to_dict() for answer in parsed_answers],
+                "latest": parsed_answers[-1].to_dict() if parsed_answers else None,
+                "count": len(parsed_answers),
+                "note": "Use plate_backfill_answers to materialize committed docs/curiosity artifacts for historical Questions.",
             }
         except GhApiError as exc:
             return {"question_number": question_number, "error": str(exc), "answers": [], "count": 0}
+
+
+class BackfillAnswersTool:
+    """Backfill committed curiosity answer storage from historical Question issues."""
+
+    @staticmethod
+    def execute(
+        repo: str | None = None,
+        state: str = "all",
+        limit: int = 50,
+        question_numbers: list[int] | None = None,
+        client: GhClient | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        gh = _get_gh_client(client)
+        target = _resolve_target_repo(repo)
+
+        try:
+            if question_numbers:
+                issue_summaries = [
+                    gh.api(f"repos/{target}/issues/{question_number}")
+                    for question_number in question_numbers
+                ]
+            else:
+                issue_summaries = gh.api(
+                    f"repos/{target}/issues",
+                    fields={
+                        "labels": "Question",
+                        "state": state,
+                        "per_page": min(limit, 100),
+                        "page": 1,
+                    },
+                ) or []
+
+            processed: list[dict[str, Any]] = []
+            total_answers = 0
+
+            for issue in issue_summaries if isinstance(issue_summaries, list) else []:
+                question_number = issue.get("number")
+                if not question_number:
+                    continue
+                full_issue = gh.api(f"repos/{target}/issues/{question_number}")
+                comments = gh.api(
+                    f"repos/{target}/issues/{question_number}/comments",
+                    fields={"per_page": 100},
+                ) or []
+                answers = _extract_answers_from_comments(
+                    question_number=question_number,
+                    comments=comments if isinstance(comments, list) else [],
+                )
+                if not answers:
+                    answers = _extract_issue_body_answer(question_number, full_issue)
+                if not answers:
+                    answers = _extract_answer_from_summary_comment(
+                        question_number,
+                        comments if isinstance(comments, list) else [],
+                    )
+
+                if not answers:
+                    processed.append(
+                        {
+                            "question_number": question_number,
+                            "title": full_issue.get("title"),
+                            "status": "skipped",
+                            "reason": "No answer-like history found to backfill.",
+                        }
+                    )
+                    continue
+
+                updated_count, committed_path = _persist_answers(
+                    question_number=question_number,
+                    question_title=full_issue.get("title"),
+                    answers=answers,
+                )
+                total_answers += updated_count
+                processed.append(
+                    {
+                        "question_number": question_number,
+                        "title": full_issue.get("title"),
+                        "status": "backfilled",
+                        "answers_written": updated_count,
+                        "committed_file": committed_path,
+                    }
+                )
+
+            return {
+                "repo": target,
+                "processed_questions": processed,
+                "question_count": len(processed),
+                "answers_written": total_answers,
+                "note": "Committed curiosity storage now lives under docs/curiosity/answers/ plus docs/curiosity/answers.yml.",
+            }
+        except GhApiError as exc:
+            return {
+                "repo": target,
+                "error": str(exc),
+                "processed_questions": [],
+                "question_count": 0,
+                "answers_written": 0,
+            }
 
 
 class SynthesizePrioritiesTool:
@@ -450,6 +668,7 @@ CURIOSITY_TOOLS = {
     "plate_get_question": GetQuestionTool,
     "plate_record_answer": RecordAnswerTool,
     "plate_get_answers": GetAnswersTool,
+    "plate_backfill_answers": BackfillAnswersTool,
     "plate_synthesize_priorities": SynthesizePrioritiesTool,
     "plate_create_blocking_question": CreateBlockingQuestionTool,
 }

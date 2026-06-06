@@ -16,6 +16,14 @@ class GhClientFieldSerializationTests(unittest.TestCase):
             GhClient().api("repos/owner/repo", method="PATCH", fields=fields)
             return mock_run.call_args[0][0]
 
+    def test_get_requests_force_get_method_even_with_fields(self):
+        """GET requests with query fields must stay GET so gh does not reinterpret them as POST."""
+        with patch("plate_core.github_client.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
+            GhClient().api("repos/owner/repo/issues", fields={"labels": "Question"})
+            cmd = mock_run.call_args[0][0]
+        self.assertEqual(cmd[:5], ["gh", "api", "repos/owner/repo/issues", "-X", "GET"])
+
     def test_string_uses_dash_f(self):
         """String values must use -f (raw) to prevent type mis-inference."""
         cmd = self._captured_cmd({"color": "5319e7"})

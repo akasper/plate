@@ -22,8 +22,8 @@ class HealthReport:
     open_epic_count: int
     binary_artifacts_tracked: int
     status: str
-    errors: list[str] = field(default_factory=list)  # partial failure details for resilience (#270)
     goals_page_present: bool = False
+    errors: list[str] = field(default_factory=list)  # partial failure details for resilience (#270)
     open_question_count: int = 0
     plate_config_present: bool = False
     plate_config_valid: bool = False
@@ -179,6 +179,16 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         binary_artifacts_tracked = -1  # unknown in this environment
         errors.append(f"binary_artifacts: {e}")
 
+    # Goals page convention discovery / nudge (Epic #218 / #229): agents + health surfaces can reliably detect adoption of docs/wiki/Goals.md
+    goals_page_present = False
+    try:
+        gh.api(f"repos/{target}/contents/docs/wiki/Goals.md")
+        goals_page_present = True
+    except GhApiError:
+        pass
+    except Exception:
+        pass  # defensive; presence is best-effort
+
     label_ok = len(missing) == 0
     hygiene_ok = binary_artifacts_tracked == 0
     if label_ok and protected and hygiene_ok:
@@ -195,9 +205,9 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         branch_protection_enabled=protected,
         open_epic_count=open_epics,
         binary_artifacts_tracked=binary_artifacts_tracked,
+        goals_page_present=goals_page_present,
         status=status,
         errors=errors,
-        goals_page_present=goals_page_present,
         open_question_count=open_question_count,
         plate_config_present=plate_config_present,
         plate_config_valid=plate_config_valid,
