@@ -1,0 +1,11 @@
+{
+  "slug": "test-coverage-audit-mcp-surface",
+  "change_type": "feature",
+  "surface": "MCP + CLI test coverage / feature-proof audit surface (plate_perform_test_coverage_audit) for Epic #350 / #363",
+  "summary": "Expose repeatable PerformTestCoverageAuditTool (and companion information audit) as first-class MCP tool plate_perform_test_coverage_audit (registered/dispatched in mcp_server). Includes dedicated audit_tools.py module (grounded in #361 Research inventory + classification), dry_run support, classification (feature_proof/supporting/infra), prioritized gaps report. Dogfooded repeatedly in autonomous sessions (produced actionable gaps for planning engine, contemplation v2, bidirectional links). Small atomic PR + fragment. Advances #350 Test Coverage Audit after #361 close and #362 convention.",
+  "migration_impact": "Agents and orchestrators can now call plate_perform_test_coverage_audit (dry_run first) to get live classification + gap suggestions tied to documented claims (Goals, SPEC beta, designs). Supports the repeatable audit method and Acceptance Evidence conventions from #350/#361/#362. Downstream repos inherit via plate-mcp and template updates. Complements information_audit and health surfaces.",
+  "agent_notes": "Prefer early in sessions on beta roadmap Epics or when health/claims drift suspected. Use dry_run=True for inspection; the report includes counts, gaps with related_claims + suggested_tests, and refs to the #361 artifacts. Follow with #364 for gap-closing tests + doc Evidence updates. See dogfood outputs in session comments on #350/#363 for example reports. Update both the tool and the inventory/audit docs on future claim or test changes (with fragment).",
+  "breaking": false,
+  "links": ["#363", "#350", "#361", "#362", "#364", "#218"],
+  "requires": []
+}
