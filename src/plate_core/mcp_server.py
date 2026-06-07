@@ -237,6 +237,9 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
+        elif name == "plate_perform_test_coverage_audit":
+            from .mcp.audit_tools import PerformTestCoverageAuditTool
+            payload = PerformTestCoverageAuditTool.execute(repo=repo, dry_run=args.get("dry_run", True))
         else:
             _write(
                 {
