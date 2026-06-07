@@ -237,6 +237,15 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
+        elif name == "plate_perform_test_coverage_audit":
+            # Wired for #350 / #363 (grounded in #361 Research inventory + classification).
+            # Dogfood (repeated): 18 feature_proof / 8 supporting / 6 infra; prioritized gaps
+            # for interactive epic planning, Contemplation v2, bidirectional Evidence links.
+            from .mcp.audit_tools import PerformTestCoverageAuditTool
+            payload = PerformTestCoverageAuditTool.execute(
+                repo=repo,
+                dry_run=args.get("dry_run", True),
+            )
         else:
             _write(
                 {
