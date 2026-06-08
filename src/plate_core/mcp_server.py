@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 
+from . import __version__
 from .baseline_catalog import BaselineCatalogError, delegate_to_agent, get_agent, get_skill, list_agents, list_skills
 from .bootstrap import run_bootstrap
 from .epics import get_epic_status
@@ -286,7 +287,7 @@ def run() -> None:
                     "id": req_id,
                     "result": {
                         "protocolVersion": "2024-11-05",
-                        "serverInfo": {"name": "plate-mcp", "version": "0.1.0"},
+                        "serverInfo": {"name": "plate-mcp", "version": __version__},
                         "capabilities": {"tools": {}},
                     },
                 }
