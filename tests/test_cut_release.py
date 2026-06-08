@@ -23,6 +23,45 @@ from cut_release import (
 )
 
 
+def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
+    (repo_root / "src" / "plate_core").mkdir(parents=True, exist_ok=True)
+    (repo_root / "plugin").mkdir(parents=True, exist_ok=True)
+    (repo_root / ".plugin").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "plate_core" / "__init__.py").write_text(
+        f'"""plate_core runtime package."""\n\n__version__ = "{version}"\n',
+        encoding="utf-8",
+    )
+    (repo_root / "pyproject.toml").write_text(
+        '\n'.join(
+            [
+                "[project]",
+                'name = "plate-core"',
+                f'version = "{version}"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    plugin_manifest = {
+        "name": "plate-core",
+        "version": version,
+        "repository": "https://github.com/akasper/plate",
+    }
+    (repo_root / "plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
+    (repo_root / ".plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
+
+
+def _assert_version_files(repo_root: Path, version: str) -> None:
+    runtime = (repo_root / "src" / "plate_core" / "__init__.py").read_text(encoding="utf-8")
+    pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
+    plugin_manifest = json.loads((repo_root / "plugin" / "plugin.json").read_text(encoding="utf-8"))
+    root_plugin_manifest = json.loads((repo_root / ".plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert f'__version__ = "{version}"' in runtime
+    assert f'version = "{version}"' in pyproject
+    assert plugin_manifest["version"] == version
+    assert root_plugin_manifest["version"] == version
+
+
 # ---------------------------------------------------------------------------
 # Version helpers
 # ---------------------------------------------------------------------------
@@ -188,6 +227,7 @@ class InferBumpTypeTests(unittest.TestCase):
 class CutReleaseAutoVersionTests(unittest.TestCase):
     def _make_releases_dir(self, tmp: str) -> Path:
         d = Path(tmp)
+        _seed_version_files(d)
         (d / "v0.1.4.json").write_text('{"version":"0.1.4"}')
         unreleased = d / "unreleased"
         unreleased.mkdir()
@@ -206,10 +246,12 @@ class CutReleaseAutoVersionTests(unittest.TestCase):
             self.assertTrue((d / "v0.2.0" / "release.json").exists())
             data = json.loads((d / "v0.2.0" / "release.json").read_text())
             self.assertEqual(data["version"], "0.2.0")
+            _assert_version_files(d, "0.2.0")
 
     def test_auto_patch_bump_when_only_docs(self):
         with TemporaryDirectory() as tmp:
             d = Path(tmp)
+            _seed_version_files(d)
             (d / "v0.1.4.json").write_text('{"version":"0.1.4"}')
             _write_fragment(
                 d / "unreleased",
@@ -219,6 +261,7 @@ class CutReleaseAutoVersionTests(unittest.TestCase):
             rc = cut_release(version=None, releases_dir=d)
             self.assertEqual(rc, 0)
             self.assertTrue((d / "v0.1.5" / "release.json").exists())
+            _assert_version_files(d, "0.1.5")
 
     def test_version_type_override(self):
         with TemporaryDirectory() as tmp:
@@ -226,6 +269,7 @@ class CutReleaseAutoVersionTests(unittest.TestCase):
             rc = cut_release(version=None, releases_dir=d, version_type="patch")
             self.assertEqual(rc, 0)
             self.assertTrue((d / "v0.1.5" / "release.json").exists())
+            _assert_version_files(d, "0.1.5")
 
     def test_explicit_version_used(self):
         with TemporaryDirectory() as tmp:
@@ -233,10 +277,12 @@ class CutReleaseAutoVersionTests(unittest.TestCase):
             rc = cut_release(version="v1.0.0", releases_dir=d)
             self.assertEqual(rc, 0)
             self.assertTrue((d / "v1.0.0" / "release.json").exists())
+            _assert_version_files(d, "1.0.0")
 
     def test_no_baseline_and_no_version_returns_error(self):
         with TemporaryDirectory() as tmp:
             d = Path(tmp)
+            _seed_version_files(d)
             _write_fragment(
                 d / "unreleased",
                 "x.json",
@@ -248,6 +294,7 @@ class CutReleaseAutoVersionTests(unittest.TestCase):
     def test_no_fragments_returns_error(self):
         with TemporaryDirectory() as tmp:
             d = Path(tmp)
+            _seed_version_files(d)
             (d / "v0.1.4.json").write_text('{"version":"0.1.4"}')
             rc = cut_release(version="v0.1.5", releases_dir=d)
             self.assertEqual(rc, 1)
@@ -262,6 +309,7 @@ class CutReleaseAutoVersionTests(unittest.TestCase):
     def test_epic_dir_fragments_aggregated(self):
         with TemporaryDirectory() as tmp:
             d = Path(tmp)
+            _seed_version_files(d)
             (d / "v0.1.4.json").write_text('{"version":"0.1.4"}')
             _write_fragment(
                 d / "epic-99-splines",
@@ -273,6 +321,7 @@ class CutReleaseAutoVersionTests(unittest.TestCase):
             self.assertTrue((d / "v0.2.0" / "fragments" / "spline.json").exists())
             # Empty epic dir should be cleaned up
             self.assertFalse((d / "epic-99-splines").exists())
+            _assert_version_files(d, "0.2.0")
 
     def test_dry_run_does_not_write(self):
         with TemporaryDirectory() as tmp:
@@ -281,6 +330,7 @@ class CutReleaseAutoVersionTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertFalse((d / "v0.2.0").exists())
             self.assertTrue((d / "unreleased" / "cool.json").exists())
+            _assert_version_files(d, "0.1.4")
 
     def test_duplicate_version_returns_error(self):
         with TemporaryDirectory() as tmp:

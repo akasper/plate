@@ -1,0 +1,20 @@
+{
+  "version": "0.4.0",
+  "summary": "PLATE 0.4.0 -- 1 change(s): release-cut-plugin-version-sync.",
+  "cut_at": "2026-06-08T15:49:22Z",
+  "fragment_count": 1,
+  "fragment_slugs": [
+    "release-cut-plugin-version-sync"
+  ],
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "Release cut now updates the package and Copilot plugin manifest versions together.",
+      "migration_impact": "Release cuts now keep src/plate_core/__init__.py, pyproject.toml, and both plugin manifests aligned automatically.",
+      "agent_notes": "Use the normal release cut flow; manual plugin-manifest version bumps are no longer needed after cutting a release.",
+      "links": [
+        "#386"
+      ]
+    }
+  ]
+}
