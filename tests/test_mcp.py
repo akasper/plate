@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from plate_core import __version__
 from plate_core.bootstrap import BootstrapAction, BootstrapReport
 from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.features import FeatureFlag, FeatureReport
@@ -54,6 +55,17 @@ class McpTests(unittest.TestCase):
     def test_run_ignores_notification_without_id(self, _mock_stdin, mock_write):
         run()
         mock_write.assert_not_called()
+
+    @patch(
+        "plate_core.mcp_server.sys.stdin",
+        new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":1,"method":"initialize"}\n'),
+    )
+    @patch("plate_core.mcp_server._write")
+    def test_initialize_reports_package_version(self, mock_write, _mock_stdin):
+        run()
+        payload = mock_write.call_args[0][0]
+        self.assertEqual(payload["result"]["serverInfo"]["name"], "plate-mcp")
+        self.assertEqual(payload["result"]["serverInfo"]["version"], __version__)
 
     @patch("plate_core.mcp_server._write")
     @patch("plate_core.mcp_server.get_epic_status")

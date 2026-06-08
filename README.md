@@ -6,7 +6,7 @@
 |---|---|---|
 | `gh plate` extension | Humans and scripts — terminal PLATE health checks | `gh extension install akasper/plate` |
 | `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in supported CLIs | `pip install plate-core` then `plate-mcp` (or `python -m plate_core.mcp_server`) |
-| CLI agent plugin (e.g. Copilot CLI, Grok Build, other standards-compliant CLIs) | Interactive sessions — `/agent plate` + MCP wiring (see grok-build epic for CLI-agnostic details) | `copilot plugin install akasper/plate` (or equivalent for your CLI) |
+| CLI agent plugin (e.g. Copilot CLI, Grok Build, other standards-compliant CLIs) | Interactive sessions — `/agent plate` + MCP wiring (see grok-build epic for CLI-agnostic details) | `pip install plate-core` then `copilot plugin marketplace add akasper/plate` and `copilot plugin install plate-core@plate-marketplace` |
 
 All surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
 
@@ -37,17 +37,17 @@ python -c "import plate_core; print(plate_core.__version__)"
 ### As a `gh` extension (v1 baseline)
 
 ```sh
-gh extension install akasper/plate_core
+gh extension install akasper/plate
 gh plate health                   # PLATE health check for the current repo
-gh plate health --repo akasper/plate_core --json
-gh plate epic status --repo akasper/plate_core --json
-gh plate features --repo akasper/plate_core --json
+gh plate health --repo akasper/plate --json
+gh plate epic status --repo akasper/plate --json
+gh plate features --repo akasper/plate --json
 gh plate agents list --json
 gh plate agents show research-agent --json
 gh plate skills list --json
 gh plate skills show crud-projects --json
-gh plate bootstrap --repo akasper/plate_core --json     # dry-run plan
-gh plate bootstrap --repo akasper/plate_core --apply    # apply supported steps
+gh plate bootstrap --repo akasper/plate --json     # dry-run plan
+gh plate bootstrap --repo akasper/plate --apply    # apply supported steps
 gh plate pr babysit 112 --repo akasper/plate --json
 ```
 
@@ -55,24 +55,46 @@ gh plate pr babysit 112 --repo akasper/plate --json
 
 ```sh
 # In a supported CLI agent session (e.g. Copilot CLI):
-/mcp connect /absolute/path/to/plate_core/plate-mcp
+/mcp connect /absolute/path/to/plate/plate-mcp
 # Then call tools: plate_health, plate_epic_status, plate_features, plate_bootstrap, plate_plan_epic, plate_pr_babysit, plate_resolve_review_thread, plate_agents, plate_agent, plate_skills, plate_skill
 ```
 
 ### As a CLI agent plugin (Copilot CLI, Grok Build, and other standards-compliant CLIs)
 
 ```sh
-# Install plugin from this repository (example for Copilot CLI; use equivalent for your agent)
-copilot plugin install akasper/plate_core
+# Install the runtime prerequisite first so the plugin's MCP command is available.
+pip install plate-core
+
+# Register this repository as a marketplace, then install the plugin from it.
+copilot plugin marketplace add akasper/plate
+copilot plugin install plate-core@plate-marketplace
 
 # In a new session with your CLI agent, invoke the plate agent (see your agent's docs for the exact command, e.g. /agent plate)
 ```
 
-If you specifically want the dedicated plugin surface directory, this equivalent command also works (adjust for your CLI):
+For local development or direct-source installation, these equivalent commands also work (adjust for your CLI):
 
 ```sh
-copilot plugin install akasper/plate_core:plugin
+copilot plugin install /absolute/path/to/plate
+# or
+copilot plugin install akasper/plate:plugin
 ```
+
+The marketplace flow is the supported public install path. The plugin still expects the `plate-mcp` command to be available on `PATH`, which is why `pip install plate-core` remains a prerequisite until publication/runtime provisioning is further automated. There is no separate GitHub-run submission process for Copilot CLI marketplaces: this repository itself becomes the marketplace once the manifest is merged to the default branch and you treat that path as the supported public install channel.
+
+#### Marketplace release checklist
+
+Before cutting the release that includes this marketplace path:
+
+1. Confirm `.github/plugin/marketplace.json` still points at the intended plugin source (`plugin/`).
+2. Verify the runtime prerequisite is available with `pip install plate-core`.
+3. Smoke-test the pre-launch install flow:
+   ```sh
+   copilot plugin marketplace add akasper/plate
+   copilot plugin install plate-core@plate-marketplace
+   ```
+4. Complete the human-owned publication tasks tracked in #380 and #381.
+5. Fold the finished Epic into the active release issue (#376) and cut the release through the normal PLATE release ceremony.
 
 See the grok-build epic for full CLI-agnostic details and verification that no vendor-specific language remains in the plugin files.
 
@@ -126,8 +148,9 @@ Playwright E2E Testing............. ✅ ENABLED
 ## Runtime layout (v1 baseline)
 
 ```text
-plate_core/
+plate/
 ├── .plugin/               # root plugin discovery manifest + agent + MCP config
+├── .github/plugin/        # Copilot CLI marketplace manifest
 ├── plugin/                # plugin source surface (mirrors .plugin metadata)
 ├── src/plate_core/
 │   ├── github_client.py   # gh api wrapper
