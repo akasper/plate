@@ -38,8 +38,16 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_SRC_ROOT = _REPO_ROOT / "src"
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
+
+from plate_core.version_sync import find_repo_root, sync_repository_version
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +283,8 @@ def cut_release(
             f"v{fmt_version(current)}. Proceed with caution."
         )
 
+    repo_root = find_repo_root(releases_dir)
+    version_files = sync_repository_version(version, repo_root, dry_run=True)
     fragments_dir = versioned_dir / "fragments"
     release_data = build_release(version, fragments)
 
@@ -285,6 +295,9 @@ def cut_release(
         for frag in fragments:
             src_dir = Path(frag["_source_dir"])
             print(f"  {fragments_dir / frag['_source_file']}  (moved from {src_dir.name}/)")
+        print("\n[DRY RUN] Would sync version files:")
+        for path in version_files:
+            print(f"  {path.relative_to(repo_root)} -> {version}")
         print("\n[DRY RUN] release.json preview:")
         print(json.dumps(release_data, indent=2))
         return 0
@@ -296,6 +309,10 @@ def cut_release(
     release_file = versioned_dir / "release.json"
     release_file.write_text(json.dumps(release_data, indent=2) + "\n", encoding="utf-8")
     print(f"\nWrote {release_file}")
+    sync_repository_version(version, repo_root)
+    print("Synced version files:")
+    for path in version_files:
+        print(f"  {path.relative_to(repo_root)} -> {version}")
 
     # Move fragments and clean up emptied epic directories
     seen_epic_dirs: set[Path] = set()
