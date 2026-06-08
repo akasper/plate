@@ -36,12 +36,14 @@ jobs:
           copilot plugin install "$GITHUB_WORKSPACE"
           copilot plugin uninstall plate-core
 
-      - name: Plugin install smoke test (GitHub repo source)
+      - name: Plugin install smoke test (pre-launch marketplace surface)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
-          copilot plugin install akasper/plate_core
+          copilot plugin marketplace add akasper/plate
+          copilot plugin install plate-core@plate-marketplace
           copilot plugin uninstall plate-core
+          copilot plugin marketplace remove plate-marketplace --force
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
