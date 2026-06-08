@@ -12,6 +12,7 @@ from urllib.parse import quote_plus
 
 from .github_client import GhApiError, GhClient
 from .health import resolve_repo
+from .version_sync import find_repo_root, sync_repository_version
 
 
 @dataclass
@@ -720,6 +721,8 @@ def cut_release(
             f"v{fmt_version(current)}. Proceed with caution."
         )
 
+    repo_root = find_repo_root(releases_dir)
+    version_files = sync_repository_version(version, repo_root, dry_run=True)
     fragments_dir = versioned_dir / "fragments"
     release_data = build_release(version, fragments)
 
@@ -729,6 +732,9 @@ def cut_release(
         for frag in fragments:
             src_dir = Path(frag["_source_dir"])
             print(f"  {fragments_dir / frag['_source_file']}  (moved from {src_dir.name}/)")
+        print("\n[DRY RUN] Would sync version files:")
+        for path in version_files:
+            print(f"  {path.relative_to(repo_root)} -> {version}")
         print("\n[DRY RUN] release.json preview:")
         print(json.dumps(release_data, indent=2))
         return 0
@@ -739,6 +745,10 @@ def cut_release(
     release_file = versioned_dir / "release.json"
     release_file.write_text(json.dumps(release_data, indent=2) + "\n", encoding="utf-8")
     print(f"\nWrote {release_file}")
+    sync_repository_version(version, repo_root)
+    print("Synced version files:")
+    for path in version_files:
+        print(f"  {path.relative_to(repo_root)} -> {version}")
 
     seen_epic_dirs: set[Path] = set()
     for frag in fragments:

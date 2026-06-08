@@ -1,0 +1,9 @@
+{
+  "slug": "release-cut-plugin-version-sync",
+  "change_type": "feature",
+  "surface": "Release cut now updates the package and Copilot plugin manifest versions together.",
+  "summary": "Sync package and plugin manifest versions during release cuts.",
+  "migration_impact": "Release cuts now keep src/plate_core/__init__.py, pyproject.toml, and both plugin manifests aligned automatically.",
+  "agent_notes": "Use the normal release cut flow; manual plugin-manifest version bumps are no longer needed after cutting a release.",
+  "links": ["#386"]
+}

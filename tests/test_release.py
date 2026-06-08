@@ -16,6 +16,7 @@ from plate_core.release import (
     _list_versions,
     _load_pending_fragments,
     _load_release,
+    cut_release,
     get_release_notes_diff,
     get_release_status,
     get_release_target_epic_guidance,
@@ -121,6 +122,34 @@ class LoadPendingFragmentsTests(unittest.TestCase):
             frags = _load_pending_fragments(d)
             self.assertEqual(frags, [])
 
+
+def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
+    (repo_root / "src" / "plate_core").mkdir(parents=True, exist_ok=True)
+    (repo_root / "plugin").mkdir(parents=True, exist_ok=True)
+    (repo_root / ".plugin").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "plate_core" / "__init__.py").write_text(
+        f'"""plate_core runtime package."""\n\n__version__ = "{version}"\n',
+        encoding="utf-8",
+    )
+    (repo_root / "pyproject.toml").write_text(
+        '\n'.join(
+            [
+                "[project]",
+                'name = "plate-core"',
+                f'version = "{version}"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    plugin_manifest = {
+        "name": "plate-core",
+        "version": version,
+        "repository": "https://github.com/akasper/plate",
+    }
+    (repo_root / "plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
+    (repo_root / ".plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
+
     def test_skips_malformed_json(self):
         with TemporaryDirectory() as tmp:
             d = Path(tmp)
@@ -202,6 +231,42 @@ class GetReleaseNotesDiffTests(unittest.TestCase):
             self.assertIn("releases_found", d_out)
             self.assertIn("entries", d_out)
             self.assertIn("migration_steps", d_out)
+
+
+class CutReleaseVersionSyncTests(unittest.TestCase):
+    def test_core_cut_release_syncs_package_and_plugin_versions(self):
+        with TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            _seed_version_files(d)
+            (d / "v0.1.4.json").write_text('{"version":"0.1.4"}')
+            unreleased = d / "unreleased"
+            unreleased.mkdir()
+            (unreleased / "cool.json").write_text(
+                json.dumps(
+                    {
+                        "slug": "cool",
+                        "change_type": "feature",
+                        "surface": "s",
+                        "migration_impact": "m",
+                        "agent_notes": "n",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            rc = cut_release(version=None, releases_dir=d)
+
+            self.assertEqual(rc, 0)
+            self.assertIn('__version__ = "0.2.0"', (d / "src" / "plate_core" / "__init__.py").read_text(encoding="utf-8"))
+            self.assertIn('version = "0.2.0"', (d / "pyproject.toml").read_text(encoding="utf-8"))
+            self.assertEqual(
+                json.loads((d / "plugin" / "plugin.json").read_text(encoding="utf-8"))["version"],
+                "0.2.0",
+            )
+            self.assertEqual(
+                json.loads((d / ".plugin" / "plugin.json").read_text(encoding="utf-8"))["version"],
+                "0.2.0",
+            )
 
 
 class GetReleaseStatusTests(unittest.TestCase):
