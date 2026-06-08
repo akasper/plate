@@ -4,7 +4,7 @@ This repository uses PLATE to keep human judgment, agent execution, and durable 
 
 ## Issue Rules
 
-Every issue must carry exactly one issue type label: `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Audit`, or `Migration`. Feature issues, and optional Epic issues when used, must also be assigned to the GitHub milestone that represents the Epic. Question issues are information goals and are not tied to an Epic milestone by default. Mutable planning state such as status, priority, target date, owner, iteration, and release target belongs in GitHub Projects fields.
+Every issue must carry exactly one issue type label: `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Task`, `Audit`, or `Migration`. Feature issues, and optional Epic issues when used, must also be assigned to the GitHub milestone that represents the Epic. Question issues are information goals and are not tied to an Epic milestone by default. Task issues may be standalone or inherit an Epic milestone when clearly Epic-related, but they do not require an `Epic:` label and close with a completion comment containing `<!-- PLATE-TASK-CLOSED -->`. Mutable planning state such as status, priority, target date, owner, iteration, and release target belongs in GitHub Projects fields.
 
 ## Branch and Pull Request Rules
 

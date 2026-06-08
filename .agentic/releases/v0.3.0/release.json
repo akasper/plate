@@ -1,0 +1,62 @@
+{
+  "version": "0.3.0",
+  "summary": "PLATE 0.3.0 -- 3 change(s): test-coverage-audit-mcp-surface, task-issue-type, marketplace-install-surface.",
+  "cut_at": "2026-06-08T14:52:32Z",
+  "fragment_count": 3,
+  "fragment_slugs": [
+    "test-coverage-audit-mcp-surface",
+    "task-issue-type",
+    "marketplace-install-surface"
+  ],
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "MCP + CLI test coverage / feature-proof audit surface (plate_perform_test_coverage_audit) for Epic #350 / #363",
+      "migration_impact": "Agents and orchestrators can now call plate_perform_test_coverage_audit (dry_run first) to get live classification + gap suggestions tied to documented claims (Goals, SPEC beta, designs). Supports the repeatable audit method and Acceptance Evidence conventions from #350/#361/#362. Downstream repos inherit via plate-mcp and template updates. Complements information_audit and health surfaces.",
+      "agent_notes": "Prefer early in sessions on beta roadmap Epics or when health/claims drift suspected. Use dry_run=True for inspection; the report includes counts, gaps with related_claims + suggested_tests, and refs to the #361 artifacts. Follow with #364 for gap-closing tests + doc Evidence updates. See dogfood outputs in session comments on #350/#363 for example reports. Update both the tool and the inventory/audit docs on future claim or test changes (with fragment).",
+      "links": [
+        "#363",
+        "#350",
+        "#361",
+        "#362",
+        "#364",
+        "#218"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "AGENTS.md, .agentic/process.yml, .github/labels.yml, .github/ISSUE_TEMPLATE/task.yml, label-check workflow, template payload",
+      "migration_impact": "Downstream PLATE repositories should add the Task label, the Task issue template, updated issue-type enforcement, and the Task closure marker rule.",
+      "agent_notes": "Use Task for human-only blockers or explicitly requested human action items. When closing a Task, add a short visible completion note plus the <!-- PLATE-TASK-CLOSED --> marker and avoid leaking secrets.",
+      "migration_guidance": [
+        "1. Copy the updated .github/labels.yml, .github/workflows/label-check.yml, and .github/ISSUE_TEMPLATE/task.yml into your repository.",
+        "2. Update AGENTS.md and .agentic/process.yml so Task is treated as a first-class issue type with milestone inheritance but no required Epic label.",
+        "3. Allow Task issues to close with a completion comment containing <!-- PLATE-TASK-CLOSED --> instead of requiring a PR, unless repository truth changed."
+      ],
+      "links": [
+        "#349",
+        "#358",
+        "#359",
+        "#360"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "README.md, .github/plugin/marketplace.json, .github/workflows/ci.yml, tests/test_copilot_cli_marketplace_packaging.py",
+      "migration_impact": "Downstream PLATE repositories that want marketplace-based Copilot CLI installation should add a .github/plugin/marketplace.json manifest, document the marketplace registration/install commands, and keep the plugin runtime prerequisite explicit.",
+      "agent_notes": "For PLATE marketplace installs, prefer the marketplace flow over direct repo-path commands in public docs. Keep the runtime prerequisite (`plate-core` / `plate-mcp`) explicit until the plugin bundles or provisions it automatically.",
+      "migration_guidance": [
+        "1. Add .github/plugin/marketplace.json with a stable marketplace name and plugin source path.",
+        "2. Document the public install flow as: register marketplace, install plugin from marketplace, and separately install the runtime prerequisite if the plugin launches an external command.",
+        "3. Add a CI smoke test that exercises the intended pre-launch marketplace registration/install path."
+      ],
+      "links": [
+        "#377",
+        "#378",
+        "#379",
+        "#380",
+        "#381"
+      ]
+    }
+  ]
+}

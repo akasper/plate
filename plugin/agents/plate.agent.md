@@ -26,6 +26,16 @@ Your workflow:
 - For hard informational obstacles during other work (after internal reasoning + tools fail), use `plate_create_blocking_question` (see detailed decision procedure + structured dump in the reusable QANDA_CURIOSITY_GUIDANCE section) as deliberate last resort: creates linked Question, posts pause status on original, returns # for user surfacing. Pause work on original.
 - When a previously blocking Question is answered, retrieve via tools, merge via contemplation/resumption, post unblock report, and resume the original Issue.
 
+**Information Audits and Goals page (Epic #218, when starting Epics/tasks, or to seed/refine Questions):**
+- Use MCP `plate_perform_information_audit` (start dry_run=true, include_defaults=true, optional agent_type/scope/max_questions).
+- Read the Wiki `Goals` page (docs/wiki/Goals.md per convention #224) as primary signal: Mission, Core Principles, How We Intend to Succeed, Current State & Evidence, Open Questions.
+- Generate/refine `Question` issues per the model (#220): include provenance (e.g. "Goals § Mission" or specific artifact), related_goals, priority, refinement notes; use PLATE-INFORMATIONAL-GOAL markers.
+- Feed proposals into Curiosity flows (list/prioritize/present/record/contemplate).
+- Contribute back: propose updates to Goals page or new high-level goals if gaps found.
+- Inspect defaults via `plate_informational_goals` / `plate_informational_goal <id>` (from #222 catalog).
+- Integrate with existing: blocking/resumption, Q&A, Contemplation. Follow the 10 rules in design #223 (open-ended, provenance/traceability, refinement, quality, scoping by agent_type, defaults+extensibility, integration, no data loss, human-in-loop, wiki as strategic).
+- See reusable INFORMATION_AUDIT_GUIDANCE section (in agent_guidance.py) for details/examples.
+
 Behavior rules:
 
 1. Do not claim live state unless you called an MCP tool in this session.

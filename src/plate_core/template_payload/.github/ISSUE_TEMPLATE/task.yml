@@ -1,0 +1,71 @@
+name: Task
+description: Track a human-only blocker or explicitly requested human action item.
+title: "[Task]: "
+labels:
+  - Task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Task issues are for **human-only blockers** and **explicitly requested human action items**.
+
+        They can be standalone or linked to other artifacts. If a Task is clearly related to an Epic, assign the Epic milestone. Do **not** include secrets or raw credentials in this issue; redact and summarize sensitive provenance.
+  - type: input
+    id: epic_milestone
+    attributes:
+      label: Epic milestone (optional unless clearly Epic-related)
+      description: If this Task is part of a specific Epic, name the milestone it should inherit.
+      placeholder: "Human Action Items"
+    validations:
+      required: false
+  - type: textarea
+    id: human_action_required
+    attributes:
+      label: Human action required
+      description: What must a human do?
+    validations:
+      required: true
+  - type: textarea
+    id: why_agent_cannot_proceed
+    attributes:
+      label: Why the agent cannot safely proceed
+      description: Explain the blocker or safety boundary that prevents agent-side completion.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and affected artifacts
+      description: Link related issues, docs, workflows, deployments, or external systems affected by this Task.
+    validations:
+      required: true
+  - type: textarea
+    id: instructions
+    attributes:
+      label: Best-effort instructions / next steps
+      description: Give suggested next steps. These are best effort, not guaranteed-correct instructions.
+    validations:
+      required: true
+  - type: textarea
+    id: done_signal
+    attributes:
+      label: Done signal
+      description: How should a human know this Task is complete?
+    validations:
+      required: true
+  - type: textarea
+    id: related_links
+    attributes:
+      label: Related links
+      description: Link blocking issues, follow-up issues, docs, dashboards, or external consoles relevant to this Task.
+    validations:
+      required: true
+  - type: checkboxes
+    id: closing
+    attributes:
+      label: Closing requirements
+      options:
+        - label: "This Task will close with a completion comment that includes `<!-- PLATE-TASK-CLOSED -->`."
+          required: true
+        - label: "The completion comment will not include secrets, credentials, tokens, or privileged configuration values."
+          required: true

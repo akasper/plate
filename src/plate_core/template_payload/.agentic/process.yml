@@ -56,6 +56,7 @@ labels:
       - "Research"
       - "Design"
       - "Question"
+      - "Task"
       - "Audit"
       - "Migration"
   # Semver track labels (Major/Minor/Patch) are used on changing issues (Feature, Bug, Documentation, etc.) to declare target release track and drive landing on release-major/minor/patch branches. They are not a "type" but a stable planning signal for the release model (see release-ceremony-refinement design). They are registered in .github/labels.yml alongside area:/risk:/need: labels.
@@ -143,6 +144,14 @@ issues:
     - "information goal"
     - "answer signal"
     - "required git artifact"
+  required_for_task:
+    - "Task label"
+    - "human action required"
+    - "why the agent cannot safely proceed"
+    - "context and affected artifacts"
+    - "best-effort instructions"
+    - "done signal"
+    - "related links"
   required_for_audit:
     - "Audit label"
     - "source audit"

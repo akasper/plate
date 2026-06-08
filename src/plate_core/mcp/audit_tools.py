@@ -173,6 +173,160 @@ class PerformInformationAuditTool:
         }
 
 
+class PerformTestCoverageAuditTool:
+    """Stub for test/feature-proof coverage audit (Epic #350 / Feature #363).
+
+    Returns structured classification + gaps based on the Research #361 inventory
+    (see docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md and
+    docs/research/test-classification-inventory.md). v1 uses static data + heuristics
+    from the inventory pass; future versions can re-scan or integrate with
+    information_audit.
+
+    Contract modeled on #223 / PerformInformationAuditTool for consistency.
+    """
+
+    @staticmethod
+    def execute(
+        repo: str | None = None,
+        scope: str = "repo",
+        dry_run: bool = True,
+        include_defaults: bool = True,
+        client: GhClient | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Returns:
+            {
+                "repo": "...",
+                "scope": "...",
+                "classifications": {"feature_proof": N, "supporting": N, "infra": N, "total": N},
+                "gaps": [ {"priority": 1, "description": "...", "related_claims": [...], "suggested_tests": "..."}, ... ],
+                "audit_log": "...",
+                "dry_run": bool,
+                "count": N,
+            }
+        """
+        # v1 stub grounded in the #361 Research inventory (as of 2026-06-06 deep pass)
+        classifications = {
+            "feature_proof": 18,  # approx from deep pass (health, release, babysit, epics, mcp surfaces, contemplation partial, curiosity, features, catalog, 221, native-pr, etc.)
+            "supporting": 8,
+            "infra": 6,
+            "total": 32,
+        }
+        gaps = [
+            {
+                "priority": 1,
+                "description": "Interactive epic planning engine (full guided flow + child stubs + SESSION_STATE per SPEC beta roadmap and AGENTS). Current: _plan_epic_stub only.",
+                "related_claims": ["SPEC beta roadmap: Full Interactive Epic Planning Engine", "mcp_server.py:36 _plan_epic_stub", "test_mcp.py plate_plan_epic test"],
+                "suggested_tests": "tests/test_mcp.py + new integration for full flow; docs updates",
+            },
+            {
+                "priority": 2,
+                "description": "Contemplation v2 full contract (non-destructive transcript for all artifact types, complete forward progress, strict verified closure).",
+                "related_claims": ["docs/design/contemplation-engine-contract.md", "SPEC beta 'Contemplation Engine v2'", "docs/research/contemplation-engine-v2-contract-enumeration.md"],
+                "suggested_tests": "Expand tests/test_contemplation.py + test_curiosity_answers.py; e2e for Q&A loop",
+            },
+            {
+                "priority": 3,
+                "description": "Bidirectional test proof links + standardized Acceptance Evidence sections across design docs (per #350 human direction).",
+                "related_claims": ["Many design/*.md Acceptance Evidence sections (weak vs strong examples in #361 research doc)"],
+                "suggested_tests": "N/A (doc + convention updates in #362)",
+            },
+        ]
+        return {
+            "repo": repo or "akasper/plate",
+            "scope": scope,
+            "classifications": classifications,
+            "gaps": gaps[:3],  # cap for focus, like max_questions
+            "audit_log": (
+                f"Stub test coverage audit (dry_run={dry_run}, grounded in Epic #350 Research #361 inventory 2026-06-06). "
+                f"Classified ~{classifications['total']} tests. Produced {len(gaps)} prioritized gaps. "
+                "See docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md and docs/research/test-classification-inventory.md. "
+                "Full open-ended scan + dynamic re-classification + health integration in follow-ups for #363."
+            ),
+            "dry_run": dry_run,
+            "count": len(gaps),
+        }
+
+
+class PerformTestCoverageAuditTool:
+    """Stub for test/feature-proof coverage audit (Epic #350 / Feature #363).
+
+    Returns structured classification + gaps based on the Research #361 inventory
+    (see docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md and
+    docs/research/test-classification-inventory.md). v1 uses static data + heuristics
+    from the inventory pass; future versions can re-scan or integrate with
+    information_audit.
+
+    Contract modeled on #223 / PerformInformationAuditTool for consistency.
+    """
+
+    @staticmethod
+    def execute(
+        repo: str | None = None,
+        scope: str = "repo",
+        dry_run: bool = True,
+        include_defaults: bool = True,
+        client: GhClient | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Returns:
+            {
+                "repo": "...",
+                "scope": "...",
+                "classifications": {"feature_proof": N, "supporting": N, "infra": N, "total": N},
+                "gaps": [ {"priority": 1, "description": "...", "related_claims": [...], "suggested_tests": "..."}, ... ],
+                "audit_log": "...",
+                "dry_run": bool,
+                "count": N,
+            }
+        """
+        # v1 stub grounded in the #361 Research inventory (as of 2026-06-06 deep pass)
+        classifications = {
+            "feature_proof": 18,  # approx from deep pass (health, release, babysit, epics, mcp surfaces, contemplation partial, curiosity, features, catalog, 221, native-pr, etc.)
+            "supporting": 8,
+            "infra": 6,
+            "total": 32,
+        }
+        gaps = [
+            {
+                "priority": 1,
+                "description": "Interactive epic planning engine (full guided flow + child stubs + SESSION_STATE per SPEC beta roadmap and AGENTS). Current: _plan_epic_stub only.",
+                "related_claims": ["SPEC beta roadmap: Full Interactive Epic Planning Engine", "mcp_server.py:36 _plan_epic_stub", "test_mcp.py plate_plan_epic test"],
+                "suggested_tests": "tests/test_mcp.py + new integration for full flow; docs updates",
+            },
+            {
+                "priority": 2,
+                "description": "Contemplation v2 full contract (non-destructive transcript for all artifact types, complete forward progress, strict verified closure).",
+                "related_claims": ["docs/design/contemplation-engine-contract.md", "SPEC beta 'Contemplation Engine v2'", "docs/research/contemplation-engine-v2-contract-enumeration.md"],
+                "suggested_tests": "Expand tests/test_contemplation.py + test_curiosity_answers.py; e2e for Q&A loop",
+            },
+            {
+                "priority": 3,
+                "description": "Bidirectional test proof links + standardized Acceptance Evidence sections across design docs (per #350 human direction).",
+                "related_claims": ["Many design/*.md Acceptance Evidence sections (weak vs strong examples in #361 research doc)"],
+                "suggested_tests": "N/A (doc + convention updates in #362)",
+            },
+        ]
+        return {
+            "repo": repo or "akasper/plate",
+            "scope": scope,
+            "classifications": classifications,
+            "gaps": gaps[:3],  # cap for focus, like max_questions
+            "audit_log": (
+                f"Stub test coverage audit (dry_run={dry_run}, grounded in Epic #350 Research #361 inventory 2026-06-06). "
+                f"Classified ~{classifications['total']} tests. Produced {len(gaps)} prioritized gaps. "
+                "See docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md and docs/research/test-classification-inventory.md. "
+                "Full open-ended scan + dynamic re-classification + health integration in follow-ups for #363."
+            ),
+            "dry_run": dry_run,
+            "count": len(gaps),
+        }
+
+
 AUDIT_TOOLS = {
     "plate_perform_information_audit": PerformInformationAuditTool,
+    "plate_perform_test_coverage_audit": PerformTestCoverageAuditTool,
 }
+

@@ -110,6 +110,10 @@ Closing still requires committed artifact + PR with `Closes #N`.
 - Question template + audit outputs can be shown to follow the model.
 - Clear traceability examples in the akasper/plate repo (and template) after #221/#224.
 - Integrates without contradiction to #139 machinery and #223 contract.
+- **Proving tests** (per Epic #350 Test Coverage Audit convention + Research #361 classification):
+  - `tests/test_221_core_audit_engine.py` (PerformInformationAuditTool, catalog goals, Goals page signals, agent guidance integration).
+  - `tests/test_curiosity_answers.py` (Answer Model supporting provenance/traceability).
+  - (See `docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md` and `docs/research/test-classification-inventory.md` for the full matrix.)
 
 This modeling design provides the conceptual foundation for the core audit engine (#221) and convention adoption (#224). It ensures consistency across the PLATE ecosystem.
 
@@ -117,4 +121,4 @@ This modeling design provides the conceptual foundation for the core audit engin
 
 *Related: #219 (Goals structure), #221 (audit engine), #222 (defaults catalog), #223 (audit contract), Epic #139 (Curiosity/Q&A foundation), Epic #218.*
 
-Closes #220
+Closes #220 (Updated for #350/#361 convention dogfooding.)

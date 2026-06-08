@@ -145,6 +145,10 @@ See the approved plan.md (session artifact) for the detailed file-by-file delta 
 - All tests (including "workflow text contains" + new coverage) pass; `gh plate bootstrap --dry-run` and a manual dry-run of the ceremony succeed.
 - Template payload updated so new repos inherit the model.
 - No unresolved `need:*` or `status:blocked` on the Epic (or explicitly accepted by human).
+- **Proving tests** (per Epic #350 Test Coverage Audit convention + Research #361 classification):
+  - `tests/test_release.py` (fragments, versions, get_release_status, notes diff).
+  - `tests/test_cut_release.py`, `tests/test_bootstrap.py`, `tests/test_native_github_pr_integration.py` (as listed in original Evidence).
+  - (See `docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md` and `docs/research/test-classification-inventory.md` for the full matrix.)
 
 ---
 

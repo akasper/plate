@@ -1,0 +1,15 @@
+{
+  "slug": "marketplace-install-surface",
+  "change_type": "feature",
+  "surface": "README.md, .github/plugin/marketplace.json, .github/workflows/ci.yml, tests/test_copilot_cli_marketplace_packaging.py",
+  "summary": "Add a first-class GitHub Copilot CLI marketplace install surface for PLATE and document the public install flow.",
+  "migration_impact": "Downstream PLATE repositories that want marketplace-based Copilot CLI installation should add a .github/plugin/marketplace.json manifest, document the marketplace registration/install commands, and keep the plugin runtime prerequisite explicit.",
+  "migration_guidance": [
+    "1. Add .github/plugin/marketplace.json with a stable marketplace name and plugin source path.",
+    "2. Document the public install flow as: register marketplace, install plugin from marketplace, and separately install the runtime prerequisite if the plugin launches an external command.",
+    "3. Add a CI smoke test that exercises the intended pre-launch marketplace registration/install path."
+  ],
+  "agent_notes": "For PLATE marketplace installs, prefer the marketplace flow over direct repo-path commands in public docs. Keep the runtime prerequisite (`plate-core` / `plate-mcp`) explicit until the plugin bundles or provisions it automatically.",
+  "breaking": false,
+  "links": ["#377", "#378", "#379", "#380", "#381"]
+}

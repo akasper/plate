@@ -20,6 +20,7 @@ class FakeClient:
                 {"name": "Research"},
                 {"name": "Design"},
                 {"name": "Question"},
+                {"name": "Task"},
             ]
         if endpoint == "repos/akasper/plate_core":
             return {"default_branch": "main"}
@@ -110,6 +111,7 @@ class HealthTests(unittest.TestCase):
                         {"name": "Research"},
                         {"name": "Design"},
                         {"name": "question"},  # GH often returns lowercase
+                        {"name": "Task"},
                     ]
                 return FakeClient.api(self, endpoint, **kwargs)
 
