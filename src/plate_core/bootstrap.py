@@ -13,7 +13,7 @@ from .health import REQUIRED_LABELS, get_health, resolve_repo
 from .plate_config import DEFAULT_CONFIG
 from .template_payload import (
     load_template_payload_manifest,
-    resolve_template_source_root,
+    resolve_template_source,
     should_include_template_file,
 )
 
@@ -36,9 +36,15 @@ class BootstrapReport:
     repo: str
     apply_mode: bool
     actions: list[BootstrapAction]
+    template_source: str = "unknown"
 
     def to_dict(self) -> dict:
-        return {"repo": self.repo, "apply_mode": self.apply_mode, "actions": [a.to_dict() for a in self.actions]}
+        return {
+            "repo": self.repo,
+            "apply_mode": self.apply_mode,
+            "template_source": self.template_source,
+            "actions": [a.to_dict() for a in self.actions],
+        }
 
 
 def _is_missing_content_error(error: GhApiError) -> bool:
@@ -81,18 +87,57 @@ def _copy_template_payload(repo: str, default_branch: str, gh: GhClient, templat
             continue
 
         content = base64.b64encode(source.read_bytes()).decode("ascii")
-        gh.api(
-            endpoint,
-            method="PUT",
-            fields={
-                "message": f"Bootstrap: initialize {rel} from PLATE template payload",
-                "content": content,
-                "branch": default_branch,
-            },
-        )
+        try:
+            gh.api(
+                endpoint,
+                method="PUT",
+                fields={
+                    "message": f"Bootstrap: initialize {rel} from PLATE template payload",
+                    "content": content,
+                    "branch": default_branch,
+                },
+            )
+        except GhApiError as error:
+            if _is_missing_content_error(error):
+                workflow_scope_hint = ""
+                if rel.startswith(".github/workflows/"):
+                    workflow_scope_hint = (
+                        " This path is under .github/workflows/, so classic PATs must include "
+                        "`workflow` scope in addition to `repo`."
+                    )
+                raise RuntimeError(
+                    "Failed to write template payload file via GitHub contents API. "
+                    f"repo={repo} branch={default_branch} path={rel}. "
+                    "GitHub returned 404, which usually means the target branch ref does not exist yet, "
+                    "the authenticated user/token cannot write contents, or the repository identifier is incorrect."
+                    f"{workflow_scope_hint} "
+                    f"Original error: {error}"
+                ) from error
+            raise
         copied += 1
 
     return copied, skipped
+
+
+def _validate_bootstrap_preconditions(repo: str, repo_obj: dict, default_branch: str, gh: GhClient) -> None:
+    permissions = repo_obj.get("permissions")
+    if isinstance(permissions, dict) and permissions.get("push") is False:
+        raise RuntimeError(
+            "Bootstrap requires repository contents write permission, but GitHub reports push=false "
+            f"for {repo}. Authenticate with an account/token that can push to the repository."
+        )
+
+    ref_endpoint = f"repos/{repo}/git/ref/heads/{quote(default_branch, safe='')}"
+    try:
+        gh.api(ref_endpoint)
+    except GhApiError as error:
+        if _is_missing_content_error(error):
+            raise RuntimeError(
+                f"Bootstrap requires an existing default branch ref ('{default_branch}') in {repo}, "
+                "but it was not found. If this is a brand-new empty repository, create an initial commit "
+                "(for example README.md on the default branch) and rerun `gh plate bootstrap --apply`."
+            ) from error
+        raise
 
 
 def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhClient | None = None) -> BootstrapReport:
@@ -103,21 +148,32 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
     default_branch = repo_obj.get("default_branch", "main")
     actions: list[BootstrapAction] = []
 
-    template_root = resolve_template_source_root()
+    template_root, template_source = resolve_template_source()
     template_paths = _template_payload_relative_paths(template_root)
+    actions.append(
+        BootstrapAction(
+            name="template-source",
+            state="detected",
+            detail=f"{template_source} ({template_root})",
+        )
+    )
     if apply_mode:
+        _validate_bootstrap_preconditions(target, repo_obj, default_branch, gh)
         copied_count, skipped_count = _copy_template_payload(target, default_branch, gh, template_root)
         if copied_count:
             state = "applied"
-            detail = f"Copied {copied_count} template payload files into the repository"
+            detail = f"Copied {copied_count} template payload files into the repository from {template_source}"
             if skipped_count:
                 detail += f" and skipped {skipped_count} existing file{'s' if skipped_count != 1 else ''}"
         else:
             state = "already-configured"
-            detail = f"Template payload already present ({skipped_count} existing file{'s' if skipped_count != 1 else ''})"
+            detail = (
+                f"Template payload already present from {template_source} "
+                f"({skipped_count} existing file{'s' if skipped_count != 1 else ''})"
+            )
     else:
         state = "planned"
-        detail = f"Copy {len(template_paths)} template payload files into the repository"
+        detail = f"Copy {len(template_paths)} template payload files into the repository from {template_source}"
     actions.append(BootstrapAction(name="copy-template-payload", state=state, detail=detail))
 
     for label in health.missing_labels:
@@ -294,4 +350,4 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
                     )
             actions.append(BootstrapAction(name=f"create-{branch_name}-branch", state=state, detail=detail))
 
-    return BootstrapReport(repo=target, apply_mode=apply_mode, actions=actions)
+    return BootstrapReport(repo=target, apply_mode=apply_mode, actions=actions, template_source=template_source)
