@@ -27,16 +27,16 @@ Playwright guidance defaults:
 
 ## Quick routing
 
-Use the lightest surface that can answer the question:
+Start with `gh plate context list/show` or the matching MCP tools `plate_contexts` / `plate_context` when the task is figuring out where authoritative truth lives.
 
-| Concern | First stop | Authoritative artifact |
-|---|---|---|
-| process / ceremony / PR rules | `AGENTS.md` | `AGENTS.md` |
-| intended goal state | `SPEC.md` | `SPEC.md` |
-| implemented behavior / release evidence | `.agentic/releases/` | `.agentic/releases/` |
-| release targeting | `gh plate release status` | live release state + `AGENTS.md` |
-| bootstrap / onboarding | `docs/bootstrap/new-repository-checklist.md` | bootstrap docs + scripts |
-| deep rationale / prior tradeoffs | `docs/design/*`, `docs/research/*` | referenced design/research doc |
+Then use the lightest surface that can answer the question:
+
+- process / ceremony / PR rules -> `AGENTS.md`
+- intended goal state -> `SPEC.md`
+- implemented behavior / release evidence -> `.agentic/releases/`
+- release targeting -> `gh plate release status`
+- bootstrap / onboarding -> `docs/bootstrap/new-repository-checklist.md`
+- deep rationale / prior tradeoffs -> `docs/design/*`, `docs/research/*`
 
 ## High-level architecture
 

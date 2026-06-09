@@ -12,16 +12,16 @@ When the stack is selected and implemented, update this section with:
 
 ## Quick routing
 
-Use the lightest surface that can answer the question:
+Start with `gh plate context list/show` or the matching MCP tools `plate_contexts` / `plate_context` when the task is figuring out where authoritative truth lives.
 
-| Concern | First stop | Authoritative artifact |
-|---|---|---|
-| process / ceremony / PR rules | `AGENTS.md` | `AGENTS.md` |
-| intended product or process goal state | `SPEC.md` | `SPEC.md` |
-| implemented behavior / release evidence | `.agentic/releases/` | `.agentic/releases/` |
-| agent or skill discovery | `gh plate agents list/show`, `gh plate skills list/show`, or matching MCP tools | catalog metadata |
-| release targeting | `gh plate release status` | live release state + `AGENTS.md` |
-| deep rationale / prior tradeoffs | `docs/design/*`, `docs/research/*` | referenced design/research doc |
+Then use the lightest surface that can answer the question:
+
+- process / ceremony / PR rules -> `AGENTS.md`
+- intended product or process goal state -> `SPEC.md`
+- implemented behavior / release evidence -> `.agentic/releases/`
+- agent or skill discovery -> `gh plate agents list/show`, `gh plate skills list/show`, or matching MCP tools
+- release targeting -> `gh plate release status`
+- deep rationale / prior tradeoffs -> `docs/design/*`, `docs/research/*`
 
 ## High-level architecture
 
