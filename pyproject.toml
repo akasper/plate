@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plate-core"
-version = "0.5.3"
+version = "0.5.5"
 description = "PLATE core library, gh extension entrypoint, and MCP server for GitHub project methodology automation"
 readme = "README.md"
 requires-python = ">=3.10"
