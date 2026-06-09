@@ -269,7 +269,7 @@ See the detailed steps in the **Release** work loop table above and the full mod
 
 1. Standing "Next Release" issue exists and is the target for Epics (via sidebar links) and track-labeled work (Major/Minor/Patch labels drive landing on the matching `release-major` / `release-minor` / `release-patch` permissive next- branches).
 2. Packaging (the decision + freeze + version lock point): determine semver, create versioned `release-vX.Y.Z` branch (combining tracks for minor/major as appropriate), rename the issue to the concrete version, immediately spawn a fresh "Next Release" issue.
-3. Release PR from the versioned branch → `main` (this PR carries the `Release` label/context and receives heavy CI).
+3. Release PR from the versioned branch → `main` (this PR uses the `Documentation` PR type label, and its release branch context triggers heavy CI).
 4. Human merge.
 5. GitHub Actions tags the merged Release PR commit (`vX.Y.Z`), then finalization handles configurable downstream triggers (`.plate/` + extensions), ensures next Next Release exists, and hard-resets the relevant branch as needed.
 6. GitHub Release created from the aggregated notes.

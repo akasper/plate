@@ -86,7 +86,7 @@ labels:
     release_ceremony:
       - "Standing 'Next Release' issue exists and is the target for Epics (sidebar links) and track-labeled work."
       - "Packaging: determine semver, create versioned branch (combining tracks), rename Next Release issue to vX.Y.Z, immediately create fresh Next Release issue."
-      - "Open Release PR from versioned branch → main (labeled Documentation; carries Release context for heavy CI). Include Closes #N."
+      - "Open Release PR from versioned branch → main (labeled Documentation; release branch context triggers heavy CI). Include Closes #N."
       - "PR reviewed and approved."
       - "Squash-merge PR into main."
       - "Release automation validates the intended release artifact and remote tag availability before merge, then creates/pushes vX.Y.Z from the merged Release PR commit."
@@ -226,7 +226,7 @@ workflows:
     name: "Release"
     path: ".github/workflows/release.yml"
     notes_source: ".agentic/releases/"
-    # Refined model adds differentiated heavy CI jobs (in ci.yml or companion) gated on Release label or release-*/release-v* branch targets, plus label-check + PR milestone enforcement updates. See design doc.
+    # Refined model adds differentiated heavy CI jobs (in ci.yml or companion) gated on release-*/release-v* branch context, plus label-check + PR milestone enforcement updates. See design doc.
 
 audit:
   cadence: "weekly_or_pre_release"
