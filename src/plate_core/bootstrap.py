@@ -5,59 +5,20 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import asdict, dataclass
+from pathlib import Path
+from urllib.parse import quote
 
-from .github_client import GhClient
+from .github_client import GhApiError, GhClient
 from .health import REQUIRED_LABELS, get_health, resolve_repo
 from .plate_config import DEFAULT_CONFIG
+from .template_payload import (
+    load_template_payload_manifest,
+    resolve_template_source_root,
+    should_include_template_file,
+)
 
 
 DEFAULT_LABEL_COLOR = "5319e7"
-
-# Placeholder for bootstrap init of Goals wiki page (per convention).
-GOALS_PAGE_PLACEHOLDER = """# Goals
-
-**This page is part of the PLATE convention for managing high-level project intent.**
-
-Every PLATE project is encouraged to maintain a `Goals` page in its Wiki. This page serves as the canonical, agent-accessible source for the project's overall **mission** — why it exists and how it intends to succeed.
-
-This is distinct from `SPEC.md`, which focuses on product implementation details, architecture decisions, and engineering outcomes.
-
-## Purpose of This Page
-
-The `Goals` page answers high-level questions such as:
-- Why is this project being built?
-- Who is it for, and what outcomes matter most?
-- What does "winning" look like at a strategic level?
-- What are the key principles or constraints that should guide major decisions?
-
-Agents performing Information Audits are expected to read this page as one of their primary signals.
-
-## Mission
-
-> [Replace this with your project's broad directional mission. Keep it high-level — why you exist and how you intend to succeed (go-to-market, impact, revenue model, etc.).]
-
-## Core Principles
-
-- [Principle 1 with short rationale]
-- [Principle 2 with short rationale]
-
-## How We Intend to Succeed
-
-- [Broad strategic outcome 1]
-- [Broad strategic outcome 2]
-
-## Current State & Evidence
-
-[Light, high-level snapshot of where things stand today.]
-
-## Open Strategic Questions
-
-[Link to major `Question` issues that represent big unresolved informational goals against the mission above.]
-
----
-
-*This is the recommended starting template for the PLATE Goals wiki page convention (see `docs/design/goals-wiki-page-convention.md` in the template payload for full guidance).*
-"""
 
 
 @dataclass
@@ -80,12 +41,84 @@ class BootstrapReport:
         return {"repo": self.repo, "apply_mode": self.apply_mode, "actions": [a.to_dict() for a in self.actions]}
 
 
+def _is_missing_content_error(error: GhApiError) -> bool:
+    message = str(error).lower()
+    return "404" in message or "not found" in message
+
+
+def _template_payload_relative_paths(template_root: Path) -> list[str]:
+    manifest = load_template_payload_manifest()
+    rel_paths: list[str] = []
+    for path in sorted(template_root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(template_root).as_posix()
+        if should_include_template_file(rel, manifest):
+            rel_paths.append(rel)
+    return rel_paths
+
+
+def _copy_template_payload(repo: str, default_branch: str, gh: GhClient, template_root: Path) -> tuple[int, int]:
+    copied = 0
+    skipped = 0
+    rel_paths = _template_payload_relative_paths(template_root)
+    if not rel_paths:
+        raise RuntimeError(f"No template payload files found under {template_root}")
+
+    for rel in rel_paths:
+        source = template_root / rel
+        if not source.is_file():
+            raise RuntimeError(f"Template payload file missing: {source}")
+
+        endpoint = f"repos/{repo}/contents/{quote(rel, safe='')}"
+        try:
+            gh.api(endpoint)
+        except GhApiError as error:
+            if not _is_missing_content_error(error):
+                raise
+        else:
+            skipped += 1
+            continue
+
+        content = base64.b64encode(source.read_bytes()).decode("ascii")
+        gh.api(
+            endpoint,
+            method="PUT",
+            fields={
+                "message": f"Bootstrap: initialize {rel} from PLATE template payload",
+                "content": content,
+                "branch": default_branch,
+            },
+        )
+        copied += 1
+
+    return copied, skipped
+
+
 def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhClient | None = None) -> BootstrapReport:
     gh = client or GhClient()
     target = resolve_repo(repo)
     health = get_health(target, gh)
     repo_obj = gh.api(f"repos/{target}")
+    default_branch = repo_obj.get("default_branch", "main")
     actions: list[BootstrapAction] = []
+
+    template_root = resolve_template_source_root()
+    template_paths = _template_payload_relative_paths(template_root)
+    if apply_mode:
+        copied_count, skipped_count = _copy_template_payload(target, default_branch, gh, template_root)
+        if copied_count:
+            state = "applied"
+            detail = f"Copied {copied_count} template payload files into the repository"
+            if skipped_count:
+                detail += f" and skipped {skipped_count} existing file{'s' if skipped_count != 1 else ''}"
+        else:
+            state = "already-configured"
+            detail = f"Template payload already present ({skipped_count} existing file{'s' if skipped_count != 1 else ''})"
+    else:
+        state = "planned"
+        detail = f"Copy {len(template_paths)} template payload files into the repository"
+    actions.append(BootstrapAction(name="copy-template-payload", state=state, detail=detail))
 
     for label in health.missing_labels:
         if apply_mode:
@@ -108,44 +141,6 @@ def run_bootstrap(repo: str | None = None, apply_mode: bool = False, client: GhC
         actions.append(BootstrapAction(name="enable-wiki", state=state, detail="Set has_wiki=true"))
     else:
         actions.append(BootstrapAction(name="enable-wiki", state="already-configured", detail="Wiki already enabled"))
-
-    # Bootstrap support for Goals page convention (for #266 / beta, building on #229 / #224).
-    # Seeds docs/wiki/Goals.md with placeholder if missing (after enabling wiki).
-    # Supports "flag or interactive" via always planning if wiki on and no page (interactive in future CLI).
-    # For apply, creates via contents API.
-    default_branch = repo_obj.get("default_branch", "main")
-    goals_present = False
-    try:
-        gh.api(f"repos/{target}/contents/docs/wiki/Goals.md")
-        goals_present = True
-    except Exception:
-        pass
-    if not goals_present:
-        if apply_mode:
-            content = base64.b64encode(GOALS_PAGE_PLACEHOLDER.encode("utf-8")).decode("ascii")
-            gh.api(
-                f"repos/{target}/contents/docs%2Fwiki%2FGoals.md",
-                method="PUT",
-                fields={
-                    "message": "Bootstrap: initialize docs/wiki/Goals.md per PLATE convention (Epic #218 / #266)",
-                    "content": content,
-                    "branch": default_branch,
-                },
-            )
-            state = "applied"
-            detail = "Initialized docs/wiki/Goals.md with PLATE convention placeholder"
-        else:
-            state = "planned"
-            detail = "Initialize docs/wiki/Goals.md (PLATE Goals wiki page convention for agent audits + health nudges; flag/interactive in CLI)"
-        actions.append(BootstrapAction(name="init-goals-page", state=state, detail=detail))
-    else:
-        actions.append(
-            BootstrapAction(
-                name="init-goals-page",
-                state="already-configured",
-                detail="docs/wiki/Goals.md already present (Goals convention adopted)",
-            )
-        )
 
     if not health.plate_config_present:
         if apply_mode:

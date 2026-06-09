@@ -1,6 +1,6 @@
 """plate_core runtime package."""
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 # Core subsystems
 from . import markers  # PLATES-CORE marker parsing, validation, and safe upstream sync (Issue #130)
