@@ -94,6 +94,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["repo"], "akasper/plate_core")
         self.assertEqual(payload["actions"][0]["name"], "enable-wiki")
 
+    @patch("plate_core.cli.run_bootstrap")
+    def test_bootstrap_json_error_output(self, mock_run_bootstrap):
+        mock_run_bootstrap.side_effect = RuntimeError("boom")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["bootstrap", "--repo", "akasper/plate_core", "--json"])
+        self.assertEqual(code, 1)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(payload["error"], "boom")
+
     def test_config_show_json_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = io.StringIO()
