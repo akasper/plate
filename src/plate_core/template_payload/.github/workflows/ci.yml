@@ -112,7 +112,6 @@ jobs:
   validate-release-pr:
     needs: test
     if: |
-      contains(github.event.pull_request.labels.*.name, 'Release') ||
       github.head_ref == 'release' ||
       startsWith(github.head_ref, 'release-v')
     runs-on: ubuntu-latest
