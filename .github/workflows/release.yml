@@ -2,8 +2,88 @@ name: Release
 on:
   push:
     branches: [main]
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
 jobs:
+  tag-release-merge:
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      (
+        contains(github.event.pull_request.labels.*.name, 'Release') ||
+        github.event.pull_request.head.ref == 'release' ||
+        startsWith(github.event.pull_request.head.ref, 'release-v')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Resolve release version
+        id: release-version
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          from plate_core.release import validate_release_workspace
+
+          report = validate_release_workspace(Path(os.environ["GITHUB_WORKSPACE"]))
+          print(json.dumps(report.to_dict(), indent=2))
+          if report.errors:
+              print("\n".join(report.errors), file=sys.stderr)
+              raise SystemExit(1)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"release_tag={report.release_tag}\n")
+          PY
+
+      - name: Create or verify release tag
+        env:
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          RELEASE_TAG: ${{ steps.release-version.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          existing_sha="$(
+            git ls-remote --tags origin "refs/tags/${RELEASE_TAG}^{}" | awk '{print $1}' | head -n1
+          )"
+          if [ -z "${existing_sha}" ]; then
+            existing_sha="$(
+              git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}' | head -n1
+            )"
+          fi
+
+          if [ -z "${existing_sha}" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "${RELEASE_TAG}" "${MERGE_SHA}"
+            git push origin "refs/tags/${RELEASE_TAG}"
+            echo "Created ${RELEASE_TAG} at ${MERGE_SHA}."
+            exit 0
+          fi
+
+          if [ "${existing_sha}" = "${MERGE_SHA}" ]; then
+            echo "${RELEASE_TAG} already exists on ${MERGE_SHA}; nothing to do."
+            exit 0
+          fi
+
+          echo "${RELEASE_TAG} already exists on ${existing_sha}, not ${MERGE_SHA}."
+          exit 1
+
   deploy:
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

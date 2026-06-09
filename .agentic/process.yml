@@ -76,7 +76,7 @@ labels:
         - "release-patch"
       versioned_release_branch_pattern: "release-vX.Y.Z"
       main_branch: "main"
-      flow: "work receives Major/Minor/Patch label + targets matching release-{major,minor,patch} (permissive next- integration) → packaging (freeze, version lock, versioned release-vX.Y.Z branch created by combining tracks as needed, standing Next Release issue renamed, fresh Next Release spawned) → Release PR (versioned branch → main, heavy CI) → finalization (tag + .plate triggers + next Next Release) → main + tag"
+      flow: "work receives Major/Minor/Patch label + targets matching release-{major,minor,patch} (permissive next- integration) → packaging (freeze, version lock, versioned release-vX.Y.Z branch created by combining tracks as needed, standing Next Release issue renamed, fresh Next Release spawned) → Release PR (versioned branch → main, heavy CI + version/tag guards) → merge-triggered git tag from the Release PR commit → finalization (.plate triggers + next Next Release) → main + tag"
     epic_close_ceremony:
       - "All child Feature/Bug issues closed."
       - "Work funneled via track label into the appropriate next- release branch (or legacy release branch)."
@@ -88,7 +88,8 @@ labels:
       - "Open Release PR from versioned branch → main (labeled Documentation; carries Release context for heavy CI). Include Closes #N."
       - "PR reviewed and approved."
       - "Squash-merge PR into main."
-      - "Finalization: PLATE performs git tag vX.Y.Z; kicks configurable downstream triggers (from .plate/ + extensions/release_checks); ensures next Next Release issue exists."
+      - "GitHub Actions creates/pushes vX.Y.Z from the merged Release PR commit after Release PR validation confirms synced version files and no remote tag conflict."
+      - "Finalization: PLATE kicks configurable downstream triggers (from .plate/ + extensions/release_checks), handles rollover/repair, and ensures next Next Release issue exists."
       - "Create GitHub Release from the tag (auto-populated from notes)."
       - "Hard-reset the versioned (or originating next-/legacy release) branch to the tag as appropriate: git checkout <branch> && git reset --hard vX.Y.Z && git push --force-with-lease"
     fragment_contract:
