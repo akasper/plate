@@ -866,6 +866,85 @@ class GetReleaseStatusTests(unittest.TestCase):
             )
             self.assertEqual(report.release_track_summary, {"Major": 1, "Minor": 1, "Patch": 1})
 
+    def test_status_marks_track_labeled_epics_on_hold_without_active_next_release(self):
+        with TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "v0.1.3.json").write_text('{"version":"0.1.3","entries":[]}')
+
+            client = Mock()
+
+            def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+                if endpoint in {
+                    "repos/owner/repo/branches/release",
+                    "repos/owner/repo/branches/release-major",
+                    "repos/owner/repo/branches/release-minor",
+                    "repos/owner/repo/branches/release-patch",
+                }:
+                    return {"name": "release"}
+                if endpoint.startswith("search/issues?q=") and "label%3ARelease" in endpoint:
+                    return {"items": [], "total_count": 0}
+                if endpoint.startswith("search/issues?q=") and "label%3AMajor" in endpoint:
+                    return {
+                        "items": [
+                            {
+                                "number": 401,
+                                "title": "Track epic without active next",
+                                "html_url": "https://github.com/owner/repo/issues/401",
+                                "labels": [{"name": "Epic"}, {"name": "Minor"}],
+                            }
+                        ],
+                        "total_count": 1,
+                    }
+                raise AssertionError(f"Unexpected endpoint: {endpoint}")
+
+            client.api.side_effect = api_side_effect
+
+            with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+                report = get_release_status(repo="owner/repo", releases_dir=d, client=client)
+
+            self.assertEqual(report.active_next_release, None)
+            self.assertEqual(
+                report.on_hold_epics,
+                [
+                    {
+                        "number": 401,
+                        "title": "Track epic without active next",
+                        "html_url": "https://github.com/owner/repo/issues/401",
+                        "labels": ["Epic", "Minor"],
+                    }
+                ],
+            )
+
+    def test_status_reports_hybrid_mode_when_track_branches_are_partial(self):
+        with TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "v0.1.3.json").write_text('{"version":"0.1.3","entries":[]}')
+
+            client = Mock()
+
+            def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+                if endpoint in {"repos/owner/repo/branches/release", "repos/owner/repo/branches/release-major"}:
+                    return {"name": "release"}
+                if endpoint in {"repos/owner/repo/branches/release-minor", "repos/owner/repo/branches/release-patch"}:
+                    raise GhApiError("Not Found")
+                if endpoint.startswith("search/issues?q=") and "label%3ARelease" in endpoint:
+                    return {"items": [], "total_count": 0}
+                if endpoint.startswith("search/issues?q=") and "label%3AMajor" in endpoint:
+                    return {"items": [], "total_count": 0}
+                raise AssertionError(f"Unexpected endpoint: {endpoint}")
+
+            client.api.side_effect = api_side_effect
+
+            with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+                report = get_release_status(repo="owner/repo", releases_dir=d, client=client)
+
+            self.assertEqual(report.release_branch_mode, "hybrid")
+            self.assertEqual(report.release_track_branches["release"], True)
+            self.assertEqual(report.release_track_branches["release-major"], True)
+            self.assertEqual(report.release_track_branches["release-minor"], False)
+            self.assertEqual(report.release_track_branches["release-patch"], False)
+            self.assertGreaterEqual(len(report.warnings), 1)
+
 
 class ReleaseTargetEpicGuidanceTests(unittest.TestCase):
     def test_guidance_returns_manual_steps_for_epic_and_next_release(self):

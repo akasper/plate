@@ -475,13 +475,22 @@ def get_release_status(
             for t in ["Major", "Minor", "Patch"]:
                 if t in labels:
                     release_track_summary[t] += 1
-            # Simple on-hold heuristic: has track label but not linked to the active next (if we have it).
+            is_epic = "Epic" in labels
+            if not is_epic:
+                continue
+            # On-hold heuristic:
+            # - with active Next Release: Epic has track label but is not linked to Next
+            # - without active Next Release: all open track-labeled Epics are on hold
             if active_next_release:
                 linked_nums = {e["number"] for e in linked_epics}
-                if item["number"] not in linked_nums and "Epic" in [l["name"] for l in item.get("labels", [])]:
+                if item["number"] not in linked_nums:
                     on_hold_epics.append(
                         {"number": item["number"], "title": item["title"], "html_url": item["html_url"], "labels": labels}
                     )
+            else:
+                on_hold_epics.append(
+                    {"number": item["number"], "title": item["title"], "html_url": item["html_url"], "labels": labels}
+                )
     except Exception:
         pass
 
