@@ -57,10 +57,10 @@ def _update_json(path: Path, version: str, *, dry_run: bool) -> None:
 def _extract_pattern_value(path: Path, pattern: re.Pattern[str], field_name: str) -> str:
     if not path.exists():
         raise RuntimeError(f"Version sync target missing: {path}")
-    match = pattern.search(path.read_text(encoding="utf-8"))
-    if match is None:
+    matches = list(pattern.finditer(path.read_text(encoding="utf-8")))
+    if len(matches) != 1:
         raise RuntimeError(f"Expected exactly one version field in {path}")
-    line = match.group(0)
+    line = matches[0].group(0)
     value_match = re.search(r'"([^"]+)"', line)
     if value_match is None:
         raise RuntimeError(f"Could not parse {field_name} version in {path}")

@@ -34,6 +34,8 @@ class TemplatePayloadCurrentMdCutoverTests(unittest.TestCase):
         content = release_template.read_text(encoding="utf-8")
         self.assertIn('title: "Next Release"', content)
         self.assertIn("pre_release_checklist", content)
+        self.assertIn("release-artifact and remote tag-conflict checks", content)
+        self.assertIn("merged Release PR commit", content)
 
     def test_template_process_tracks_refined_release_ceremony(self):
         process = read(".agentic/process.yml")
@@ -46,6 +48,8 @@ class TemplatePayloadCurrentMdCutoverTests(unittest.TestCase):
         label_check = read(".github/workflows/label-check.yml")
         issue_link = read(".github/workflows/pr-issue-link-check.yml")
         doc_check = read(".github/workflows/pr-documentation-check.yml")
+        ci = read(".github/workflows/ci.yml")
+        release = read(".github/workflows/release.yml")
 
         self.assertIn("requiresMilestone", label_check)
         self.assertIn("Release issues must be assigned to a GitHub milestone.", label_check)
@@ -53,6 +57,10 @@ class TemplatePayloadCurrentMdCutoverTests(unittest.TestCase):
         self.assertIn("--milestone", issue_link)
         self.assertIn(".agentic/releases/unreleased/", doc_check)
         self.assertIn("release fragment", doc_check)
+        self.assertIn("validate-release-pr", ci)
+        self.assertIn("git ls-remote --tags origin", ci)
+        self.assertIn("pull_request:", release)
+        self.assertIn("github.event.pull_request.merge_commit_sha", release)
 
 
 if __name__ == "__main__":

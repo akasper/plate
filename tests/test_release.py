@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
+from plate_core.version_sync import read_repository_versions
 from plate_core.release import (
     FragmentSummary,
     ReleaseNotesDiffReport,
@@ -270,6 +271,21 @@ class CutReleaseVersionSyncTests(unittest.TestCase):
             )
 
 
+class VersionSyncReadTests(unittest.TestCase):
+    def test_read_repository_versions_rejects_duplicate_version_lines(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            runtime = repo_root / "src" / "plate_core" / "__init__.py"
+            runtime.write_text(
+                '"""plate_core runtime package."""\n\n__version__ = "0.5.0"\n__version__ = "0.5.1"\n',
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "Expected exactly one version field"):
+                read_repository_versions(repo_root)
+
+
 class ReleaseWorkspaceValidationTests(unittest.TestCase):
     def test_validation_passes_for_synced_version_files_and_release_artifact(self):
         with TemporaryDirectory() as tmp:
@@ -325,6 +341,43 @@ class ReleaseWorkspaceValidationTests(unittest.TestCase):
                 any("does not match synced repository version" in error for error in report.errors),
                 report.errors,
             )
+
+    def test_validation_rejects_invalid_semver_without_follow_on_release_artifact_probe(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            pyproject = repo_root / "pyproject.toml"
+            pyproject.write_text(
+                "\n".join(
+                    [
+                        "[project]",
+                        'name = "plate-core"',
+                        'version = "../oops"',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (repo_root / "plugin" / "plugin.json").write_text(
+                json.dumps({"name": "plate-core", "version": "../oops", "repository": "https://github.com/akasper/plate"}),
+                encoding="utf-8",
+            )
+            (repo_root / ".plugin" / "plugin.json").write_text(
+                json.dumps({"name": "plate-core", "version": "../oops", "repository": "https://github.com/akasper/plate"}),
+                encoding="utf-8",
+            )
+            (repo_root / "src" / "plate_core" / "__init__.py").write_text(
+                '"""plate_core runtime package."""\n\n__version__ = "../oops"\n',
+                encoding="utf-8",
+            )
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertEqual(report.release_version, "../oops")
+            self.assertIn("Repository version '../oops' is not valid semver.", report.errors)
+            self.assertEqual(report.release_file, None)
+            self.assertEqual(report.release_file_version, None)
+            self.assertEqual(len(report.errors), 1)
 
 
 class GetReleaseStatusTests(unittest.TestCase):

@@ -193,39 +193,41 @@ def validate_release_workspace(
     effective_releases_dir = releases_dir or root / ".agentic" / "releases"
 
     if release_version is not None:
-        if parse_version(release_version) is None:
+        parsed_release_version = parse_version(release_version)
+        if parsed_release_version is None:
             errors.append(f"Repository version {release_version!r} is not valid semver.")
-        release_data = _load_release(effective_releases_dir, release_version)
-        versioned_release_file = effective_releases_dir / f"v{release_version}" / "release.json"
-        legacy_release_file = effective_releases_dir / f"v{release_version}.json"
-        if versioned_release_file.exists():
-            release_file_path = versioned_release_file
-        elif legacy_release_file.exists():
-            release_file_path = legacy_release_file
-
-        if release_data is None:
-            errors.append(
-                f"Expected release artifact for v{release_version} at "
-                f"{(effective_releases_dir / f'v{release_version}' / 'release.json').relative_to(root).as_posix()} "
-                f"or {(effective_releases_dir / f'v{release_version}.json').relative_to(root).as_posix()}."
-            )
         else:
-            candidate_version = release_data.get("version")
-            if isinstance(candidate_version, str):
-                release_file_version = candidate_version
-            else:
-                errors.append(f"Release artifact for v{release_version} is missing a string 'version' field.")
-            if release_file_version is not None and release_file_version != release_version:
+            release_data = _load_release(effective_releases_dir, release_version)
+            versioned_release_file = effective_releases_dir / f"v{release_version}" / "release.json"
+            legacy_release_file = effective_releases_dir / f"v{release_version}.json"
+            if versioned_release_file.exists():
+                release_file_path = versioned_release_file
+            elif legacy_release_file.exists():
+                release_file_path = legacy_release_file
+
+            if release_data is None:
                 errors.append(
-                    f"Release artifact version {release_file_version!r} does not match synced repository version {release_version!r}."
+                    f"Expected release artifact for v{release_version} at "
+                    f"{(effective_releases_dir / f'v{release_version}' / 'release.json').relative_to(root).as_posix()} "
+                    f"or {(effective_releases_dir / f'v{release_version}.json').relative_to(root).as_posix()}."
                 )
+            else:
+                candidate_version = release_data.get("version")
+                if isinstance(candidate_version, str):
+                    release_file_version = candidate_version
+                else:
+                    errors.append(f"Release artifact for v{release_version} is missing a string 'version' field.")
+                if release_file_version is not None and release_file_version != release_version:
+                    errors.append(
+                        f"Release artifact version {release_file_version!r} does not match synced repository version {release_version!r}."
+                    )
 
     return ReleaseWorkspaceValidationReport(
         repo_root=str(root),
         release_version=release_version,
         release_tag=f"v{release_version}" if release_version is not None else None,
         version_files=version_files,
-        release_file=str(release_file_path.relative_to(root)) if release_file_path is not None else None,
+        release_file=release_file_path.relative_to(root).as_posix() if release_file_path is not None else None,
         release_file_version=release_file_version,
         errors=errors,
     )

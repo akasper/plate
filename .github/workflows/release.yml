@@ -54,7 +54,14 @@ jobs:
           RELEASE_TAG: ${{ steps.release-version.outputs.release_tag }}
         run: |
           set -euo pipefail
-          existing_sha="$(git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}')"
+          existing_sha="$(
+            git ls-remote --tags origin "refs/tags/${RELEASE_TAG}^{}" | awk '{print $1}' | head -n1
+          )"
+          if [ -z "${existing_sha}" ]; then
+            existing_sha="$(
+              git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}' | head -n1
+            )"
+          fi
 
           if [ -z "${existing_sha}" ]; then
             git config user.name "github-actions[bot]"
