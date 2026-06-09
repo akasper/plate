@@ -41,6 +41,8 @@ Use GitHub's "Use this template" flow to create a new repository.
 
 From the new repository root:
 
+First, run `gh plate bootstrap --apply` to materialize the repository-level PLATE scaffold (AGENTS, docs, workflows, scripts, and starter assets). Then run the GitHub bootstrap scripts below to apply labels, wiki, and branch protection.
+
 **macOS / Linux / WSL**
 ```bash
 bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle @your-handle --remove-default-labels --set-delete-branch-on-merge --protect-branch main
@@ -122,4 +124,3 @@ Use this sync flow:
 
 This keeps downstream repos aligned with new core PLATE behavior without erasing project-specific policy.
 <!-- PLATES-CORE:END keeping-your-fork-current -->
-
