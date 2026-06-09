@@ -18,6 +18,7 @@ from plate_core.release import (
     _load_pending_fragments,
     _load_release,
     cut_release,
+    cleanup_dead_branches,
     get_release_notes_diff,
     get_release_status,
     get_release_target_epic_guidance,
@@ -984,6 +985,92 @@ class ReleaseTargetEpicGuidanceTests(unittest.TestCase):
         self.assertEqual(guidance.active_next_release["number"], 50)
         self.assertIn("GitHub's public API does not support", guidance.message)
         self.assertEqual(len(guidance.manual_steps), 4)
+
+
+class CleanupDeadBranchesTests(unittest.TestCase):
+    def test_cleanup_dead_branches_dry_run(self):
+        client = Mock()
+
+        def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+            if endpoint == "repos/owner/repo":
+                return {"default_branch": "main"}
+            if endpoint == "repos/owner/repo/branches?per_page=100&page=1":
+                return [
+                    {"name": "main", "protected": True},
+                    {"name": "release", "protected": False},
+                    {"name": "release-minor", "protected": False},
+                    {"name": "feature-merged", "protected": False},
+                    {"name": "feature-open-pr", "protected": False},
+                    {"name": "feature-unmerged", "protected": False},
+                    {"name": "protected-branch", "protected": True},
+                ]
+            if endpoint == "repos/owner/repo/branches?per_page=100&page=2":
+                return []
+            if endpoint == "repos/owner/repo/pulls?state=open&head=owner:feature-merged&per_page=1":
+                return []
+            if endpoint == "repos/owner/repo/pulls?state=open&head=owner:feature-open-pr&per_page=1":
+                return [{"number": 101}]
+            if endpoint == "repos/owner/repo/pulls?state=open&head=owner:feature-unmerged&per_page=1":
+                return []
+            if endpoint == "repos/owner/repo/compare/main...feature-merged":
+                return {"status": "behind", "ahead_by": 0}
+            if endpoint == "repos/owner/repo/compare/main...feature-unmerged":
+                return {"status": "ahead", "ahead_by": 2}
+            raise AssertionError(f"Unexpected endpoint: {endpoint}")
+
+        client.api.side_effect = api_side_effect
+        with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+            report = cleanup_dead_branches(repo="owner/repo", client=client)
+
+        self.assertEqual(report.base_branch, "main")
+        self.assertFalse(report.apply)
+        self.assertEqual(report.candidates, ["feature-merged"])
+        self.assertEqual(report.skipped_open_pr, ["feature-open-pr"])
+        self.assertEqual(report.skipped_not_merged, ["feature-unmerged"])
+        self.assertEqual(report.deleted, [])
+
+    def test_cleanup_dead_branches_apply_with_failure(self):
+        client = Mock()
+
+        def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+            if endpoint == "repos/owner/repo":
+                return {"default_branch": "main"}
+            if endpoint == "repos/owner/repo/branches?per_page=100&page=1":
+                return [
+                    {"name": "feature-merged-a", "protected": False},
+                    {"name": "feature-merged-b", "protected": False},
+                ]
+            if endpoint == "repos/owner/repo/branches?per_page=100&page=2":
+                return []
+            if endpoint in {
+                "repos/owner/repo/pulls?state=open&head=owner:feature-merged-a&per_page=1",
+                "repos/owner/repo/pulls?state=open&head=owner:feature-merged-b&per_page=1",
+            }:
+                return []
+            if endpoint in {
+                "repos/owner/repo/compare/main...feature-merged-a",
+                "repos/owner/repo/compare/main...feature-merged-b",
+            }:
+                return {"status": "behind", "ahead_by": 0}
+            if endpoint == "repos/owner/repo/git/refs/heads/feature-merged-a" and method == "DELETE":
+                return {}
+            if endpoint == "repos/owner/repo/git/refs/heads/feature-merged-b" and method == "DELETE":
+                raise GhApiError("delete failed")
+            raise AssertionError(f"Unexpected endpoint: {endpoint} ({method})")
+
+        client.api.side_effect = api_side_effect
+        with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+            report = cleanup_dead_branches(
+                repo="owner/repo",
+                apply=True,
+                client=client,
+            )
+
+        self.assertTrue(report.apply)
+        self.assertEqual(report.candidates, ["feature-merged-a", "feature-merged-b"])
+        self.assertEqual(report.deleted, ["feature-merged-a"])
+        self.assertEqual(len(report.failed), 1)
+        self.assertEqual(report.failed[0]["branch"], "feature-merged-b")
 
 
 if __name__ == "__main__":
