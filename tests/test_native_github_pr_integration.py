@@ -71,6 +71,23 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn("Development sidebar links", design_doc)
         self.assertIn("Delete branch on merge", design_doc)
 
+    def test_release_ci_validates_versions_and_remote_tag_conflicts(self):
+        workflow = read_text(".github/workflows/ci.yml")
+
+        self.assertIn("validate-release-pr", workflow)
+        self.assertIn("validate_release_workspace", workflow)
+        self.assertIn("git ls-remote --tags origin", workflow)
+        self.assertIn("Release tag ${RELEASE_TAG} already exists on origin.", workflow)
+
+    def test_release_workflow_tags_merged_release_pr_commit(self):
+        workflow = read_text(".github/workflows/release.yml")
+
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("types: [closed]", workflow)
+        self.assertIn("github.event.pull_request.merge_commit_sha", workflow)
+        self.assertIn('git tag "${RELEASE_TAG}" "${MERGE_SHA}"', workflow)
+        self.assertIn('git push origin "refs/tags/${RELEASE_TAG}"', workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

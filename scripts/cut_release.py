@@ -336,9 +336,10 @@ def cut_release(
     print(f"  1. Review {versioned_dir / 'release.json'} and adjust the summary if needed.")
     print(f"  2. Commit the new {versioned_dir}/ directory.")
     print( "  3. Open a PR: release -> main.")
-    print(f"  4. After merge: git tag v{version} && git push --tags")
+    print(f"  4. Ensure the Release PR passes version-sync and remote tag-conflict validation for v{version}.")
+    print(f"  5. After merge, the release workflow will create/push tag v{version} from the merged Release PR commit.")
     print(
-        f"  5. Hard-reset release branch: "
+        f"  6. Hard-reset release branch: "
         f"git checkout release && git reset --hard v{version} && git push --force-with-lease"
     )
     return 0

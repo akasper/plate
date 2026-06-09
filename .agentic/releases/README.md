@@ -66,8 +66,9 @@ The tool will use it verbatim and note when it differs from the inferred version
 1. Review `vX.Y.Z/release.json` and adjust the `summary` field if needed.
 2. Commit the new `vX.Y.Z/` directory (fragments have already been moved).
 3. Open a PR: `release` → `main`.
-4. After merge: `git tag vX.Y.Z && git push --tags`
-5. Hard-reset the release branch:
+4. Ensure the Release PR passes the version-sync and remote tag-conflict checks.
+5. After merge, the Release workflow creates and pushes `vX.Y.Z` from the merged Release PR commit.
+6. Hard-reset the release branch:
    `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`
 
 ## Fragment schema

@@ -58,9 +58,9 @@ body:
         - [ ] Concrete version `vX.Y.Z` is chosen and this issue has been renamed or replaced accordingly.
         - [ ] Versioned packaging branch (`release-vX.Y.Z`) has been created from the selected integration state.
         - [ ] `gh plate release status` shows the expected fragments, targeted epics, and no unexpected on-hold work.
-        - [ ] Heavy Release PR validation has run for the packaging PR to `main`.
+        - [ ] Heavy Release PR validation has run for the packaging PR to `main`, including release-artifact and remote tag-conflict checks.
         - [ ] Extension release_checks / `.plate` release triggers are satisfied or explicitly waived.
-        - [ ] `git tag vX.Y.Z` applied and pushed.
+        - [ ] The merge-triggered release workflow created and pushed `vX.Y.Z` from the merged Release PR commit.
         - [ ] GitHub Release created (auto-populated from release notes).
         - [ ] Fresh standing `Next Release` issue created for subsequent work.
         - [ ] `release` branch hard-reset to the shipped tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`.
@@ -82,7 +82,7 @@ body:
       description: "What must be true for this release to be considered complete from packaging through finalization?"
       placeholder: |
         - [ ] Versioned release branch and Release PR were created from the intended packaged scope.
-        - [ ] Tag vX.Y.Z exists and points to `main`.
+        - [ ] Tag vX.Y.Z exists and points to the merged Release PR commit on `main`.
         - [ ] GitHub Release is published with accurate notes.
         - [ ] A fresh standing `Next Release` issue exists for future planning.
         - [ ] `release` branch hard-reset to tag.
