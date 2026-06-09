@@ -147,7 +147,7 @@ class BootstrapTests(unittest.TestCase):
         ]
         endpoints = [str(call.args[0]) for call in template_puts]
         self.assertTrue(any("AGENTS.md" in endpoint for endpoint in endpoints))
-        self.assertTrue(any("docs%2Fwiki%2FGoals.md" in endpoint for endpoint in endpoints))
+        self.assertTrue(any("docs/wiki/Goals.md" in endpoint for endpoint in endpoints))
         self.assertFalse(any("README.md" in endpoint for endpoint in endpoints))
 
         # Verify 3 starter Question POSTs were issued (new Feature #153 behavior)
