@@ -340,7 +340,7 @@ def cut_release(
     print(f"  5. After merge, the release workflow will create/push tag v{version} from the merged Release PR commit.")
     print(
         f"  6. Hard-reset release branch: "
-        f"git checkout release && git reset --hard v{version} && git push --force-with-lease"
+        f"git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease"
     )
     return 0
 
