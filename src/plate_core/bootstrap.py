@@ -70,7 +70,7 @@ def _copy_template_payload(repo: str, default_branch: str, gh: GhClient, templat
         if not source.is_file():
             raise RuntimeError(f"Template payload file missing: {source}")
 
-        endpoint = f"repos/{repo}/contents/{quote(rel, safe='')}"
+        endpoint = f"repos/{repo}/contents/{quote(rel, safe='/')}"
         try:
             gh.api(endpoint)
         except GhApiError as error:

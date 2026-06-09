@@ -1,0 +1,9 @@
+{
+  "slug": "bootstrap-nested-path-encoding",
+  "change_type": "fix",
+  "surface": "src/plate_core/bootstrap.py, tests/test_bootstrap.py",
+  "summary": "gh plate bootstrap now uploads nested template payload files with literal path separators so the GitHub contents API can create docs and workflow files correctly.",
+  "migration_impact": "Downstream bootstrap runs no longer fail on nested scaffold files such as docs/wiki/Goals.md. No manual migration is required; rerun bootstrap to receive the nested template payload files successfully.",
+  "agent_notes": "The GitHub contents API expects path separators to remain literal inside the endpoint path. Preserve '/' when building nested contents endpoints and only encode characters that truly need escaping.",
+  "links": ["#421"]
+}
