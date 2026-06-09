@@ -1,0 +1,10 @@
+{
+  "slug": "bootstrap-scaffolding-copy",
+  "change_type": "process",
+  "surface": "src/plate_core/bootstrap.py, src/plate_core/template_payload/**, docs/bootstrap/new-repository-checklist.md",
+  "summary": "gh plate bootstrap now uploads the checked-in PLATE template payload into new repositories while preserving any files that already exist.",
+  "migration_impact": "Downstream repositories initialized with `gh plate bootstrap --apply` will now receive the repository-level PLATE scaffold (AGENTS, docs, workflows, scripts, starter assets) in addition to the existing GitHub-side bootstrap work. Rerunning bootstrap leaves existing files untouched.",
+  "agent_notes": "Treat the template payload manifest as the source of truth for repository-scaffold files. The new bootstrap phase uploads the selected payload files through the GitHub contents API and skips any file that already exists. `.plate` remains a separate bootstrap artifact.",
+  "breaking": false,
+  "links": ["#413", "#414", "#415", "#416"]
+}
