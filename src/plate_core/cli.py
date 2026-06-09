@@ -445,14 +445,15 @@ def cmd_release_cut(args: argparse.Namespace) -> int:
 
 def cmd_release_finalize(args: argparse.Namespace) -> int:
     """Finalize stub for refined ceremony (Epic #306 / #313).
-    In real impl: git tag, load .plate release.triggers, invoke common ones (e.g. docs render),
-    ensure/create next 'Next Release' issue via gh API, etc.
+    In the current automation model, GitHub Actions owns the initial tag creation on merged
+    Release PRs. finalize remains the surface for downstream triggers, rollover/repair, and
+    any post-tag follow-up automation.
     """
     version = getattr(args, "version", None) or "vX.Y.Z"
     dry_run = getattr(args, "dry_run", False)
     print(f"Running release finalize for {version} (dry_run={dry_run})...")
     print("Steps (MVP stub; full impl follows design):")
-    print("  1. git tag + push (if not dry)")
+    print("  1. Verify the merged Release PR created/pushed the expected git tag")
     print("  2. Load .plate['release']['triggers'] (or defaults)")
     print("  3. Invoke core triggers (e.g. render_release_notes)")
     print("  4. Create/ensure next 'Next Release' issue (label Release)")

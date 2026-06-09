@@ -12,7 +12,7 @@ from urllib.parse import quote_plus
 
 from .github_client import GhApiError, GhClient
 from .health import resolve_repo
-from .version_sync import find_repo_root, sync_repository_version
+from .version_sync import find_repo_root, read_repository_versions, sync_repository_version
 
 
 @dataclass
@@ -87,6 +87,20 @@ class ReleaseNotesDiffReport:
         return asdict(self)
 
 
+@dataclass
+class ReleaseWorkspaceValidationReport:
+    repo_root: str
+    release_version: str | None
+    release_tag: str | None
+    version_files: dict[str, str]
+    release_file: str | None
+    release_file_version: str | None
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
 def _list_versions(releases_dir: Path) -> list[str]:
     """Return sorted list of version strings from the releases directory."""
     versions = []
@@ -155,6 +169,66 @@ def _load_pending_fragments(releases_dir: Path) -> list[FragmentSummary]:
         except Exception:
             pass
     return fragments
+
+
+def validate_release_workspace(
+    repo_root: Path,
+    releases_dir: Path | None = None,
+) -> ReleaseWorkspaceValidationReport:
+    """Validate that the repository and release artifact agree on a single release version."""
+    root = find_repo_root(repo_root)
+    version_files = read_repository_versions(root)
+    errors: list[str] = []
+
+    discovered_versions = sorted(set(version_files.values()))
+    release_version: str | None = None
+    if len(discovered_versions) == 1:
+        release_version = discovered_versions[0]
+    else:
+        mismatch_summary = ", ".join(f"{path}={version}" for path, version in version_files.items())
+        errors.append(f"Repository version files are not in sync: {mismatch_summary}.")
+
+    release_file_path: Path | None = None
+    release_file_version: str | None = None
+    effective_releases_dir = releases_dir or root / ".agentic" / "releases"
+
+    if release_version is not None:
+        if parse_version(release_version) is None:
+            errors.append(f"Repository version {release_version!r} is not valid semver.")
+        release_data = _load_release(effective_releases_dir, release_version)
+        versioned_release_file = effective_releases_dir / f"v{release_version}" / "release.json"
+        legacy_release_file = effective_releases_dir / f"v{release_version}.json"
+        if versioned_release_file.exists():
+            release_file_path = versioned_release_file
+        elif legacy_release_file.exists():
+            release_file_path = legacy_release_file
+
+        if release_data is None:
+            errors.append(
+                f"Expected release artifact for v{release_version} at "
+                f"{(effective_releases_dir / f'v{release_version}' / 'release.json').relative_to(root).as_posix()} "
+                f"or {(effective_releases_dir / f'v{release_version}.json').relative_to(root).as_posix()}."
+            )
+        else:
+            candidate_version = release_data.get("version")
+            if isinstance(candidate_version, str):
+                release_file_version = candidate_version
+            else:
+                errors.append(f"Release artifact for v{release_version} is missing a string 'version' field.")
+            if release_file_version is not None and release_file_version != release_version:
+                errors.append(
+                    f"Release artifact version {release_file_version!r} does not match synced repository version {release_version!r}."
+                )
+
+    return ReleaseWorkspaceValidationReport(
+        repo_root=str(root),
+        release_version=release_version,
+        release_tag=f"v{release_version}" if release_version is not None else None,
+        version_files=version_files,
+        release_file=str(release_file_path.relative_to(root)) if release_file_path is not None else None,
+        release_file_version=release_file_version,
+        errors=errors,
+    )
 
 
 def _load_extension_release_checks(agentic_dir: Path) -> list[dict]:
@@ -771,9 +845,10 @@ def cut_release(
     print(f"  1. Review {versioned_dir / 'release.json'} and adjust the summary if needed.")
     print(f"  2. Commit the new {versioned_dir}/ directory.")
     print("  3. Open a PR: release -> main.")
-    print(f"  4. After merge: git tag v{version} && git push --tags")
+    print(f"  4. Ensure the Release PR passes version-sync and remote tag-conflict validation for v{version}.")
+    print(f"  5. After merge, the release workflow will create/push tag v{version} from the merged Release PR commit.")
     print(
-        f"  5. Hard-reset release branch: "
+        f"  6. Hard-reset release branch: "
         f"git checkout release && git reset --hard v{version} && git push --force-with-lease"
     )
     return 0

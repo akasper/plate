@@ -20,6 +20,7 @@ from plate_core.release import (
     get_release_notes_diff,
     get_release_status,
     get_release_target_epic_guidance,
+    validate_release_workspace,
 )
 from plate_core.github_client import GhApiError
 
@@ -266,6 +267,63 @@ class CutReleaseVersionSyncTests(unittest.TestCase):
             self.assertEqual(
                 json.loads((d / ".plugin" / "plugin.json").read_text(encoding="utf-8"))["version"],
                 "0.2.0",
+            )
+
+
+class ReleaseWorkspaceValidationTests(unittest.TestCase):
+    def test_validation_passes_for_synced_version_files_and_release_artifact(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            versioned_release = repo_root / ".agentic" / "releases" / "v0.5.0"
+            versioned_release.mkdir(parents=True)
+            (versioned_release / "release.json").write_text(
+                json.dumps({"version": "0.5.0", "entries": []}),
+                encoding="utf-8",
+            )
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertEqual(report.release_version, "0.5.0")
+            self.assertEqual(report.release_tag, "v0.5.0")
+            self.assertEqual(report.release_file, ".agentic/releases/v0.5.0/release.json")
+            self.assertEqual(report.release_file_version, "0.5.0")
+            self.assertEqual(report.errors, [])
+
+    def test_validation_detects_out_of_sync_version_files(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            plugin_manifest_path = repo_root / "plugin" / "plugin.json"
+            plugin_manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
+            plugin_manifest["version"] = "0.5.1"
+            plugin_manifest_path.write_text(json.dumps(plugin_manifest), encoding="utf-8")
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertIsNone(report.release_version)
+            self.assertIsNone(report.release_tag)
+            self.assertEqual(report.release_file, None)
+            self.assertTrue(any("Repository version files are not in sync" in error for error in report.errors))
+
+    def test_validation_requires_matching_release_artifact(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            versioned_release = repo_root / ".agentic" / "releases" / "v0.5.0"
+            versioned_release.mkdir(parents=True)
+            (versioned_release / "release.json").write_text(
+                json.dumps({"version": "0.4.9", "entries": []}),
+                encoding="utf-8",
+            )
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertEqual(report.release_version, "0.5.0")
+            self.assertEqual(report.release_file_version, "0.4.9")
+            self.assertTrue(
+                any("does not match synced repository version" in error for error in report.errors),
+                report.errors,
             )
 
 
