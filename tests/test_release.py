@@ -152,13 +152,14 @@ def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
     }
     (repo_root / "plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
     (repo_root / ".plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
-    marketplace_manifest = {
-        "name": "plate-marketplace",
-        "metadata": {"version": version},
-        "plugins": [dict(plugin_manifest)],
-    }
     (repo_root / ".github" / "plugin" / "marketplace.json").write_text(
-        json.dumps(marketplace_manifest),
+        json.dumps(
+            {
+                "name": "plate-marketplace",
+                "metadata": {"version": version},
+                "plugins": [{"name": "plate-core", "source": "plugin", "version": version}],
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -279,11 +280,9 @@ class CutReleaseVersionSyncTests(unittest.TestCase):
                 json.loads((d / ".plugin" / "plugin.json").read_text(encoding="utf-8"))["version"],
                 "0.2.0",
             )
-            marketplace_manifest = json.loads(
-                (d / ".github" / "plugin" / "marketplace.json").read_text(encoding="utf-8")
-            )
-            self.assertEqual(marketplace_manifest["metadata"]["version"], "0.2.0")
-            self.assertTrue(all(plugin["version"] == "0.2.0" for plugin in marketplace_manifest["plugins"]))
+            marketplace = json.loads((d / ".github" / "plugin" / "marketplace.json").read_text(encoding="utf-8"))
+            self.assertEqual(marketplace["metadata"]["version"], "0.2.0")
+            self.assertEqual(marketplace["plugins"][0]["version"], "0.2.0")
 
 
 class VersionSyncReadTests(unittest.TestCase):
@@ -386,13 +385,251 @@ class ReleaseWorkspaceValidationTests(unittest.TestCase):
                     {
                         "name": "plate-marketplace",
                         "metadata": {"version": "../oops"},
+                        "plugins": [{"name": "plate-core", "source": "plugin", "version": "../oops"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (repo_root / "src" / "plate_core" / "__init__.py").write_text(
+                '"""plate_core runtime package."""\n\n__version__ = "../oops"\n',
+                encoding="utf-8",
+            )
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertEqual(report.release_version, "../oops")
+            self.assertIn("Repository version '../oops' is not valid semver.", report.errors)
+            self.assertEqual(report.release_file, None)
+            self.assertEqual(report.release_file_version, None)
+            self.assertEqual(len(report.errors), 1)
+
+
+class VersionSyncReadTests(unittest.TestCase):
+    def test_read_repository_versions_rejects_duplicate_version_lines(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            runtime = repo_root / "src" / "plate_core" / "__init__.py"
+            runtime.write_text(
+                '"""plate_core runtime package."""\n\n__version__ = "0.5.0"\n__version__ = "0.5.1"\n',
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "Expected exactly one version field"):
+                read_repository_versions(repo_root)
+
+
+class ReleaseWorkspaceValidationTests(unittest.TestCase):
+    def test_validation_passes_for_synced_version_files_and_release_artifact(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            versioned_release = repo_root / ".agentic" / "releases" / "v0.5.0"
+            versioned_release.mkdir(parents=True)
+            (versioned_release / "release.json").write_text(
+                json.dumps({"version": "0.5.0", "entries": []}),
+                encoding="utf-8",
+            )
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertEqual(report.release_version, "0.5.0")
+            self.assertEqual(report.release_tag, "v0.5.0")
+            self.assertEqual(report.release_file, ".agentic/releases/v0.5.0/release.json")
+            self.assertEqual(report.release_file_version, "0.5.0")
+            self.assertEqual(report.errors, [])
+
+    def test_validation_detects_out_of_sync_version_files(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            plugin_manifest_path = repo_root / "plugin" / "plugin.json"
+            plugin_manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
+            plugin_manifest["version"] = "0.5.1"
+            plugin_manifest_path.write_text(json.dumps(plugin_manifest), encoding="utf-8")
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertIsNone(report.release_version)
+            self.assertIsNone(report.release_tag)
+            self.assertEqual(report.release_file, None)
+            self.assertTrue(any("Repository version files are not in sync" in error for error in report.errors))
+
+    def test_validation_requires_matching_release_artifact(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            versioned_release = repo_root / ".agentic" / "releases" / "v0.5.0"
+            versioned_release.mkdir(parents=True)
+            (versioned_release / "release.json").write_text(
+                json.dumps({"version": "0.4.9", "entries": []}),
+                encoding="utf-8",
+            )
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertEqual(report.release_version, "0.5.0")
+            self.assertEqual(report.release_file_version, "0.4.9")
+            self.assertTrue(
+                any("does not match synced repository version" in error for error in report.errors),
+                report.errors,
+            )
+
+    def test_validation_rejects_invalid_semver_without_follow_on_release_artifact_probe(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            pyproject = repo_root / "pyproject.toml"
+            pyproject.write_text(
+                "\n".join(
+                    [
+                        "[project]",
+                        'name = "plate-core"',
+                        'version = "../oops"',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (repo_root / "plugin" / "plugin.json").write_text(
+                json.dumps({"name": "plate-core", "version": "../oops", "repository": "https://github.com/akasper/plate"}),
+                encoding="utf-8",
+            )
+            (repo_root / ".plugin" / "plugin.json").write_text(
+                json.dumps({"name": "plate-core", "version": "../oops", "repository": "https://github.com/akasper/plate"}),
+                encoding="utf-8",
+            )
+            (repo_root / ".github" / "plugin" / "marketplace.json").write_text(
+                json.dumps(
+                    {
+                        "metadata": {"version": "../oops"},
                         "plugins": [
                             {
                                 "name": "plate-core",
+                                "description": "PLATE core plugin",
                                 "version": "../oops",
                                 "repository": "https://github.com/akasper/plate",
                             }
                         ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (repo_root / "src" / "plate_core" / "__init__.py").write_text(
+                '"""plate_core runtime package."""\n\n__version__ = "../oops"\n',
+                encoding="utf-8",
+            )
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertEqual(report.release_version, "../oops")
+            self.assertIn("Repository version '../oops' is not valid semver.", report.errors)
+            self.assertEqual(report.release_file, None)
+            self.assertEqual(report.release_file_version, None)
+            self.assertEqual(len(report.errors), 1)
+
+
+class VersionSyncReadTests(unittest.TestCase):
+    def test_read_repository_versions_rejects_duplicate_version_lines(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            runtime = repo_root / "src" / "plate_core" / "__init__.py"
+            runtime.write_text(
+                '"""plate_core runtime package."""\n\n__version__ = "0.5.0"\n__version__ = "0.5.1"\n',
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "Expected exactly one version field"):
+                read_repository_versions(repo_root)
+
+
+class ReleaseWorkspaceValidationTests(unittest.TestCase):
+    def test_validation_passes_for_synced_version_files_and_release_artifact(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            versioned_release = repo_root / ".agentic" / "releases" / "v0.5.0"
+            versioned_release.mkdir(parents=True)
+            (versioned_release / "release.json").write_text(
+                json.dumps({"version": "0.5.0", "entries": []}),
+                encoding="utf-8",
+            )
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertEqual(report.release_version, "0.5.0")
+            self.assertEqual(report.release_tag, "v0.5.0")
+            self.assertEqual(report.release_file, ".agentic/releases/v0.5.0/release.json")
+            self.assertEqual(report.release_file_version, "0.5.0")
+            self.assertEqual(report.errors, [])
+
+    def test_validation_detects_out_of_sync_version_files(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            plugin_manifest_path = repo_root / "plugin" / "plugin.json"
+            plugin_manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
+            plugin_manifest["version"] = "0.5.1"
+            plugin_manifest_path.write_text(json.dumps(plugin_manifest), encoding="utf-8")
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertIsNone(report.release_version)
+            self.assertIsNone(report.release_tag)
+            self.assertEqual(report.release_file, None)
+            self.assertTrue(any("Repository version files are not in sync" in error for error in report.errors))
+
+    def test_validation_requires_matching_release_artifact(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            versioned_release = repo_root / ".agentic" / "releases" / "v0.5.0"
+            versioned_release.mkdir(parents=True)
+            (versioned_release / "release.json").write_text(
+                json.dumps({"version": "0.4.9", "entries": []}),
+                encoding="utf-8",
+            )
+
+            report = validate_release_workspace(repo_root)
+
+            self.assertEqual(report.release_version, "0.5.0")
+            self.assertEqual(report.release_file_version, "0.4.9")
+            self.assertTrue(
+                any("does not match synced repository version" in error for error in report.errors),
+                report.errors,
+            )
+
+    def test_validation_rejects_invalid_semver_without_follow_on_release_artifact_probe(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            pyproject = repo_root / "pyproject.toml"
+            pyproject.write_text(
+                "\n".join(
+                    [
+                        "[project]",
+                        'name = "plate-core"',
+                        'version = "../oops"',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (repo_root / "plugin" / "plugin.json").write_text(
+                json.dumps({"name": "plate-core", "version": "../oops", "repository": "https://github.com/akasper/plate"}),
+                encoding="utf-8",
+            )
+            (repo_root / ".plugin" / "plugin.json").write_text(
+                json.dumps({"name": "plate-core", "version": "../oops", "repository": "https://github.com/akasper/plate"}),
+                encoding="utf-8",
+            )
+            (repo_root / ".github" / "plugin" / "marketplace.json").write_text(
+                json.dumps(
+                    {
+                        "name": "plate-marketplace",
+                        "metadata": {"version": "../oops"},
+                        "plugins": [{"name": "plate-core", "source": "plugin", "version": "../oops"}],
                     }
                 ),
                 encoding="utf-8",

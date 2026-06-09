@@ -109,7 +109,7 @@ jobs:
 
   # Release ceremony refinement: differentiated heavy CI for Release PRs / stabilization contexts.
   # These jobs run *after* the lightweight gates (the test job above acts as a common fast-fail).
-  # They activate for PRs labeled "Release" or targeting release-* / release-v* branches.
+  # They activate for release packaging/stabilization PRs targeting release-* / release-v* branches.
   # Add expensive steps here: expanded e2e matrix, security scans (trivy/snyk/etc.), architecture
   # review / lint, full recompilation + packaging for all targets, etc.
   # Normal development to the permissive next-* branches stays on the lightweight path.
@@ -118,7 +118,6 @@ jobs:
       - test
       - validate-release-pr
     if: |
-      contains(github.event.pull_request.labels.*.name, 'Release') ||
       startsWith(github.head_ref, 'release-') ||
       startsWith(github.base_ref, 'release-')
     runs-on: ubuntu-latest
@@ -126,7 +125,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Heavy release context detected
         run: |
-          echo "This is a Release-labeled PR or targets a release-*/release-v* branch."
+          echo "This PR is in release packaging/stabilization context via release-*/release-v* branches."
           echo "Run expensive steps here (full builds, security, extra e2e, architecture review, packaging...)."
           echo "Remember common gateway fast-fails earlier in the job or previous jobs."
       # TODO in implementation slices: add real heavy steps (matrix, security action, etc.)

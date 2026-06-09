@@ -50,13 +50,14 @@ def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
     }
     (repo_root / "plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
     (repo_root / ".plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
-    marketplace_manifest = {
-        "name": "plate-marketplace",
-        "metadata": {"version": version},
-        "plugins": [dict(plugin_manifest)],
-    }
     (repo_root / ".github" / "plugin" / "marketplace.json").write_text(
-        json.dumps(marketplace_manifest),
+        json.dumps(
+            {
+                "name": "plate-marketplace",
+                "metadata": {"version": version},
+                "plugins": [{"name": "plate-core", "source": "plugin", "version": version}],
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -72,7 +73,7 @@ def _assert_version_files(repo_root: Path, version: str) -> None:
     assert plugin_manifest["version"] == version
     assert root_plugin_manifest["version"] == version
     assert marketplace_manifest["metadata"]["version"] == version
-    assert all(plugin["version"] == version for plugin in marketplace_manifest["plugins"])
+    assert marketplace_manifest["plugins"][0]["version"] == version
 
 
 # ---------------------------------------------------------------------------
