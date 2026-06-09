@@ -624,6 +624,16 @@ class ReleaseWorkspaceValidationTests(unittest.TestCase):
                 json.dumps({"name": "plate-core", "version": "../oops", "repository": "https://github.com/akasper/plate"}),
                 encoding="utf-8",
             )
+            (repo_root / ".github" / "plugin" / "marketplace.json").write_text(
+                json.dumps(
+                    {
+                        "name": "plate-marketplace",
+                        "metadata": {"version": "../oops"},
+                        "plugins": [{"name": "plate-core", "source": "plugin", "version": "../oops"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
             (repo_root / "src" / "plate_core" / "__init__.py").write_text(
                 '"""plate_core runtime package."""\n\n__version__ = "../oops"\n',
                 encoding="utf-8",
