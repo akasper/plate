@@ -55,7 +55,10 @@ class BootstrapTests(unittest.TestCase):
         client.api.side_effect = api_side
         with _make_template_root() as tmpdir:
             template_root = Path(tmpdir)
-            with patch("plate_core.bootstrap.resolve_template_source_root", return_value=template_root):
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
                 report = run_bootstrap("akasper/plate_core", apply_mode=False, client=client)
         states = {a.name: a.state for a in report.actions}
         self.assertEqual(states["copy-template-payload"], "planned")
@@ -122,7 +125,10 @@ class BootstrapTests(unittest.TestCase):
 
         with _make_template_root() as tmpdir:
             template_root = Path(tmpdir)
-            with patch("plate_core.bootstrap.resolve_template_source_root", return_value=template_root):
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
                 report = run_bootstrap("akasper/test-repo", apply_mode=True, client=client)
 
         # Find the PATCH call for has_wiki
@@ -165,6 +171,95 @@ class BootstrapTests(unittest.TestCase):
             and call.kwargs.get("method") == "PUT"
         ]
         self.assertTrue(plate_puts, "Expected PUT to create .plate on apply when missing")
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_fails_with_actionable_error_when_default_branch_ref_missing(self, mock_get_health):
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/empty-repo",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=False,
+            open_epic_count=0,
+            status="warn",
+            goals_page_present=False,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            if endpoint == "repos/akasper/empty-repo":
+                return {"has_wiki": False, "default_branch": "main"}
+            if endpoint == "repos/akasper/empty-repo/git/ref/heads/main":
+                raise GhApiError("gh: Not Found (HTTP 404)")
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                with self.assertRaises(RuntimeError) as ctx:
+                    run_bootstrap("akasper/empty-repo", apply_mode=True, client=client)
+        msg = str(ctx.exception)
+        self.assertIn("default branch ref", msg)
+        self.assertIn("create an initial commit", msg.lower())
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_wraps_contents_404_with_repo_branch_path_context(self, mock_get_health):
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/test-repo",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=False,
+            open_epic_count=0,
+            status="warn",
+            goals_page_present=False,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/test-repo":
+                return {"has_wiki": False, "default_branch": "main", "permissions": {"push": True}}
+            if endpoint == "repos/akasper/test-repo/git/ref/heads/main":
+                return {"ref": "refs/heads/main"}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint.startswith("repos/akasper/test-repo/contents/"):
+                if method == "GET":
+                    raise GhApiError("gh: Not Found (HTTP 404)")
+                raise GhApiError("gh: Not Found (HTTP 404)")
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                with self.assertRaises(RuntimeError) as ctx:
+                    run_bootstrap("akasper/test-repo", apply_mode=True, client=client)
+        msg = str(ctx.exception)
+        self.assertIn("repo=akasper/test-repo", msg)
+        self.assertIn("branch=main", msg)
+        self.assertIn("path=AGENTS.md", msg)
+        self.assertIn("returned 404", msg.lower())
 
 
 if __name__ == "__main__":

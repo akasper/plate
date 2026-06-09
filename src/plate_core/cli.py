@@ -20,6 +20,7 @@ from .baseline_catalog import (
 from .context_map import ContextMapError, get_context_route, list_context_routes
 from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
+from .github_client import GhApiError
 from .health import get_health
 from .pr_babysit import babysit_pr
 from .release import (
@@ -175,13 +176,21 @@ def cmd_context_show(args: argparse.Namespace) -> int:
 
 
 def cmd_bootstrap(args: argparse.Namespace) -> int:
-    report = run_bootstrap(args.repo, apply_mode=args.apply)
+    try:
+        report = run_bootstrap(args.repo, apply_mode=args.apply)
+    except (RuntimeError, GhApiError) as exc:
+        if args.json:
+            print(json.dumps({"error": str(exc)}))
+        else:
+            print(f"Error: {exc}")
+        return 1
     if args.json:
         print(json.dumps(report.to_dict()))
         return 0
 
     print(f"Repo: {report.repo}")
     print(f"Mode: {'APPLY' if report.apply_mode else 'DRY-RUN'}")
+    print(f"Template source: {report.template_source}")
     for action in report.actions:
         print(f"- {action.name}: {action.state} ({action.detail})")
     return 0
