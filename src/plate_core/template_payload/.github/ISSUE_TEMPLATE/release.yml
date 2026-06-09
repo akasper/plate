@@ -63,7 +63,7 @@ body:
         - [ ] The merge-triggered release workflow created and pushed `vX.Y.Z` from the merged Release PR commit.
         - [ ] GitHub Release created (auto-populated from release notes).
         - [ ] Fresh standing `Next Release` issue created for subsequent work.
-        - [ ] `release` branch hard-reset to the shipped tag: `git checkout release && git reset --hard vX.Y.Z && git push --force-with-lease`.
+        - [ ] `release` branch hard-reset to `main`: `git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease`.
     validations:
       required: true
   - type: textarea
@@ -85,7 +85,7 @@ body:
         - [ ] Tag vX.Y.Z exists and points to the merged Release PR commit on `main`.
         - [ ] GitHub Release is published with accurate notes.
         - [ ] A fresh standing `Next Release` issue exists for future planning.
-        - [ ] `release` branch hard-reset to tag.
+        - [ ] `release` branch hard-reset to main.
     validations:
       required: true
   - type: checkboxes

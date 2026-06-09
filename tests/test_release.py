@@ -664,16 +664,25 @@ class GetReleaseStatusTests(unittest.TestCase):
             (unreleased / "my-feat.json").write_text(json.dumps(frag))
 
             client = Mock()
-            # release branch check raises → not found
-            client.api.side_effect = [
-                GhApiError("Not Found"),  # branches/release
-                {"items": [], "total_count": 0},  # open Release issues
-            ]
+            def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+                if endpoint.startswith("repos/owner/repo/branches/"):
+                    raise GhApiError("Not Found")
+                if endpoint.startswith("search/issues?q=") and "label%3ARelease" in endpoint:
+                    return {"items": [], "total_count": 0}
+                if endpoint.startswith("search/issues?q=") and "label%3AMajor" in endpoint:
+                    return {"items": [], "total_count": 0}
+                raise AssertionError(f"Unexpected endpoint: {endpoint}")
+
+            client.api.side_effect = api_side_effect
 
             with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
                 report = get_release_status(repo="owner/repo", releases_dir=d, client=client)
 
             self.assertFalse(report.release_branch_exists)
+            self.assertEqual(report.release_branch_mode, "none")
+            self.assertEqual(report.release_track_branches["release"], False)
+            self.assertEqual(report.release_branch_reset_target, "main")
+            self.assertGreaterEqual(len(report.warnings), 1)
             self.assertEqual(report.pending_fragment_count, 1)
             self.assertEqual(report.pending_fragments[0].slug, "my-feat")
 
@@ -683,15 +692,27 @@ class GetReleaseStatusTests(unittest.TestCase):
             (d / "v0.1.3.json").write_text('{"version":"0.1.3","entries":[]}')
 
             client = Mock()
-            client.api.side_effect = [
-                {"name": "release"},  # branches/release → exists
-                {"items": [{"number": 10, "title": "Release v0.2.0", "html_url": "https://..."}], "total_count": 1},
-            ]
+            def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+                if endpoint == "repos/owner/repo/branches/release":
+                    return {"name": "release"}
+                if endpoint.startswith("repos/owner/repo/branches/"):
+                    raise GhApiError("Not Found")
+                if endpoint.startswith("search/issues?q=") and "label%3ARelease" in endpoint:
+                    return {"items": [{"number": 10, "title": "Release v0.2.0", "html_url": "https://..."}], "total_count": 1}
+                if endpoint.startswith("search/issues?q=") and "label%3AMajor" in endpoint:
+                    return {"items": [], "total_count": 0}
+                raise AssertionError(f"Unexpected endpoint: {endpoint}")
+
+            client.api.side_effect = api_side_effect
 
             with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
                 report = get_release_status(repo="owner/repo", releases_dir=d, client=client)
 
             self.assertTrue(report.release_branch_exists)
+            self.assertEqual(report.release_branch_mode, "legacy")
+            self.assertEqual(report.release_track_branches["release-major"], False)
+            self.assertEqual(report.release_branch_reset_target, "main")
+            self.assertGreaterEqual(len(report.warnings), 1)
             self.assertEqual(report.latest_version, "0.1.3")
             self.assertEqual(len(report.open_release_issues), 1)
 
@@ -699,6 +720,10 @@ class GetReleaseStatusTests(unittest.TestCase):
         report = ReleaseStatusReport(
             repo="owner/repo",
             release_branch_exists=True,
+            release_track_branches={},
+            release_branch_mode="legacy",
+            release_branch_reset_target="main",
+            warnings=[],
             open_release_issues=[],
             current_version="0.1.3",
             latest_version="0.1.3",
@@ -712,6 +737,10 @@ class GetReleaseStatusTests(unittest.TestCase):
         )
         d = report.to_dict()
         self.assertIn("release_branch_exists", d)
+        self.assertIn("release_track_branches", d)
+        self.assertIn("release_branch_mode", d)
+        self.assertIn("release_branch_reset_target", d)
+        self.assertIn("warnings", d)
         self.assertIn("pending_fragments", d)
         self.assertIn("extension_release_checks", d)
         self.assertIn("active_next_release", d)
@@ -727,7 +756,12 @@ class GetReleaseStatusTests(unittest.TestCase):
             client = Mock()
 
             def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
-                if endpoint == "repos/owner/repo/branches/release":
+                if endpoint in {
+                    "repos/owner/repo/branches/release",
+                    "repos/owner/repo/branches/release-major",
+                    "repos/owner/repo/branches/release-minor",
+                    "repos/owner/repo/branches/release-patch",
+                }:
                     return {"name": "release"}
                 if endpoint.startswith("search/issues?q=") and "label%3ARelease" in endpoint:
                     return {
@@ -805,6 +839,9 @@ class GetReleaseStatusTests(unittest.TestCase):
 
             self.assertEqual(report.active_next_release["number"], 50)
             self.assertEqual(report.active_next_release["html_url"], "https://github.com/owner/repo/issues/50")
+            self.assertEqual(report.release_branch_mode, "multi-track")
+            self.assertEqual(report.release_branch_reset_target, "main")
+            self.assertEqual(report.warnings, [])
             self.assertEqual(
                 report.linked_epics,
                 [
@@ -842,6 +879,10 @@ class ReleaseTargetEpicGuidanceTests(unittest.TestCase):
         status = ReleaseStatusReport(
             repo="owner/repo",
             release_branch_exists=True,
+            release_track_branches={"release": True, "release-major": True, "release-minor": True, "release-patch": True},
+            release_branch_mode="multi-track",
+            release_branch_reset_target="main",
+            warnings=[],
             open_release_issues=[{"number": 50, "title": "Next Release", "html_url": "https://github.com/owner/repo/issues/50"}],
             current_version="0.1.3",
             latest_version="0.1.3",

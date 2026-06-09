@@ -84,7 +84,7 @@ extensions:
         required: true
         human_approval_required: false
       - id: "release-branch-rebased"
-        description: "The 'release' branch must be rebased on the latest main tip (or the release tag) before merging release PRs."
+        description: "After a release ships, hard-reset the 'release' branch to main so integration resumes from the current main tip."
         required: true
         human_approval_required: false
       - id: "release-issue-open"

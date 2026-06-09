@@ -1,0 +1,15 @@
+{
+  "slug": "release-reset-main-and-branch-state-status",
+  "change_type": "feature",
+  "surface": "release tooling, status surfaces, and release ceremony templates",
+  "summary": "Updates release guidance to hard-reset legacy release to main after shipping and adds explicit release branch mode/state fields in status outputs.",
+  "migration_impact": "Repositories using legacy release should update release runbooks/checklists to reset release to main (not to a version tag) and can now consume branch mode/warnings from release status JSON.",
+  "migration_guidance": [
+    "1. Replace legacy post-release commands that reset release to vX.Y.Z with: git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease.",
+    "2. If automation parses gh plate release status JSON, read the new fields: release_track_branches, release_branch_mode, release_branch_reset_target, and warnings.",
+    "3. If status reports legacy/hybrid/none warnings, run gh plate bootstrap --apply to repair standing release branch state."
+  ],
+  "agent_notes": "Use release_branch_mode and warnings to detect legacy fallback and branch drift before opening integration PRs.",
+  "breaking": false,
+  "links": ["#439", "#436"]
+}

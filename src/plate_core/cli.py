@@ -365,6 +365,15 @@ def cmd_release_status(args: argparse.Namespace) -> int:
 
     print(f"Repo: {report.repo}")
     print(f"Release branch: {'EXISTS' if report.release_branch_exists else 'MISSING'}")
+    if getattr(report, "release_track_branches", None):
+        print(f"Release branches: {report.release_track_branches}")
+    if getattr(report, "release_branch_mode", None):
+        print(f"Release branch mode: {report.release_branch_mode}")
+    if getattr(report, "release_branch_reset_target", None):
+        print(f"Post-release reset target: {report.release_branch_reset_target}")
+    if getattr(report, "warnings", None):
+        for warning in report.warnings:
+            print(f"WARNING: {warning}")
     print(f"Current version: {report.current_version or '(none)'}")
     print(f"Latest version:  {report.latest_version or '(none)'}")
     print(f"Open Release issues: {len(report.open_release_issues)}")
