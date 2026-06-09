@@ -13,9 +13,9 @@ class ThinSurfaceContractTests(unittest.TestCase):
         self.assertLess(path.stat().st_size, 4500)
         self.assertIn("plate_what_next", content)
         self.assertIn("plate_delegate_to_agent", content)
+        self.assertIn("gh plate context list/show", content)
         self.assertIn("AGENTS.md", content)
         self.assertIn("SPEC.md", content)
-        self.assertIn(".agentic/releases/", content)
         self.assertIn("gh plate release status", content)
 
     def test_repo_copilot_instructions_have_quick_routing_and_under_budget(self):
@@ -24,6 +24,7 @@ class ThinSurfaceContractTests(unittest.TestCase):
 
         self.assertLess(path.stat().st_size, 6000)
         self.assertIn("## Quick routing", content)
+        self.assertIn("gh plate context list/show", content)
         self.assertIn("AGENTS.md", content)
         self.assertIn("SPEC.md", content)
         self.assertIn(".agentic/releases/", content)
@@ -36,6 +37,7 @@ class ThinSurfaceContractTests(unittest.TestCase):
 
         self.assertLess(path.stat().st_size, 11000)
         self.assertIn("## Quick routing", content)
+        self.assertIn("gh plate context list/show", content)
         self.assertIn("AGENTS.md", content)
         self.assertIn(".agentic/releases/", content)
         self.assertIn("gh plate release status", content)
