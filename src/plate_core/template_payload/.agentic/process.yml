@@ -92,7 +92,7 @@ labels:
       - "Release automation validates the intended release artifact and remote tag availability before merge, then creates/pushes vX.Y.Z from the merged Release PR commit."
       - "Finalization: PLATE kicks configurable downstream triggers (from .plate/ + extensions/release_checks), handles rollover/repair, and ensures next Next Release issue exists."
       - "Create GitHub Release from the tag (auto-populated from notes)."
-      - "Hard-reset the versioned (or originating next-/legacy release) branch to the tag as appropriate: git checkout <branch> && git reset --hard vX.Y.Z && git push --force-with-lease"
+      - "After a release ships, hard-reset legacy release to main so the standing integration branch matches current main: git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease"
     fragment_contract:
       source_dir: ".agentic/releases/unreleased/"
       versioned_dir: ".agentic/releases/vX.Y.Z/"

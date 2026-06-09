@@ -31,6 +31,10 @@ class FragmentSummary:
 class ReleaseStatusReport:
     repo: str
     release_branch_exists: bool
+    release_track_branches: dict
+    release_branch_mode: str
+    release_branch_reset_target: str
+    warnings: list[str]
     open_release_issues: list[dict]
     current_version: str | None
     latest_version: str | None
@@ -47,6 +51,10 @@ class ReleaseStatusReport:
         d = {
             "repo": self.repo,
             "release_branch_exists": self.release_branch_exists,
+            "release_track_branches": self.release_track_branches,
+            "release_branch_mode": self.release_branch_mode,
+            "release_branch_reset_target": self.release_branch_reset_target,
+            "warnings": self.warnings,
             "open_release_issues": self.open_release_issues,
             "current_version": self.current_version,
             "latest_version": self.latest_version,
@@ -349,13 +357,49 @@ def get_release_status(
     gh = client or GhClient()
     target = resolve_repo(repo)
 
-    # Check if release branch exists
-    release_branch_exists = False
-    try:
-        gh.api(f"repos/{target}/branches/release")
-        release_branch_exists = True
-    except GhApiError:
-        pass
+    def _branch_exists(branch_name: str) -> bool:
+        try:
+            gh.api(f"repos/{target}/branches/{branch_name}")
+            return True
+        except GhApiError:
+            return False
+
+    release_track_branches = {
+        "release": _branch_exists("release"),
+        "release-major": _branch_exists("release-major"),
+        "release-minor": _branch_exists("release-minor"),
+        "release-patch": _branch_exists("release-patch"),
+    }
+    release_branch_exists = release_track_branches["release"]
+    tracks_present = [b for b in ["release-major", "release-minor", "release-patch"] if release_track_branches[b]]
+    warnings: list[str] = []
+    if len(tracks_present) == 3:
+        release_branch_mode = "multi-track"
+    elif release_branch_exists and len(tracks_present) == 0:
+        release_branch_mode = "legacy"
+        warnings.append(
+            "Legacy release mode detected: track branches release-major/release-minor/release-patch are missing; "
+            "feature work falls back to release. Run 'gh plate bootstrap --apply' to repair standing track branches."
+        )
+    elif release_branch_exists and 0 < len(tracks_present) < 3:
+        release_branch_mode = "hybrid"
+        missing = [b for b in ["release-major", "release-minor", "release-patch"] if b not in tracks_present]
+        warnings.append(
+            "Hybrid release mode detected: partial track branch state; missing "
+            + ", ".join(missing)
+            + ". Run 'gh plate bootstrap --apply' to repair standing track branches."
+        )
+    elif not release_branch_exists and len(tracks_present) > 0:
+        release_branch_mode = "track-only"
+        warnings.append(
+            "Track branches exist but legacy release is missing. Verify whether migration is complete "
+            "or recreate release as needed for compatibility."
+        )
+    else:
+        release_branch_mode = "none"
+        warnings.append(
+            "No release integration branches detected. Run 'gh plate bootstrap --apply' to initialize standing release branches."
+        )
 
     # Find open Release issues
     search = gh.api(
@@ -461,6 +505,10 @@ def get_release_status(
     return ReleaseStatusReport(
         repo=target,
         release_branch_exists=release_branch_exists,
+        release_track_branches=release_track_branches,
+        release_branch_mode=release_branch_mode,
+        release_branch_reset_target="main",
+        warnings=warnings,
         open_release_issues=open_release_issues,
         current_version=current_version,
         latest_version=latest_version,
@@ -851,6 +899,6 @@ def cut_release(
     print(f"  5. After merge, the release workflow will create/push tag v{version} from the merged Release PR commit.")
     print(
         f"  6. Hard-reset release branch: "
-        f"git checkout release && git reset --hard v{version} && git push --force-with-lease"
+        f"git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease"
     )
     return 0
