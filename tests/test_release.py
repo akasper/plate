@@ -129,6 +129,7 @@ def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
     (repo_root / "src" / "plate_core").mkdir(parents=True, exist_ok=True)
     (repo_root / "plugin").mkdir(parents=True, exist_ok=True)
     (repo_root / ".plugin").mkdir(parents=True, exist_ok=True)
+    (repo_root / ".github" / "plugin").mkdir(parents=True, exist_ok=True)
     (repo_root / "src" / "plate_core" / "__init__.py").write_text(
         f'"""plate_core runtime package."""\n\n__version__ = "{version}"\n',
         encoding="utf-8",
@@ -151,6 +152,15 @@ def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
     }
     (repo_root / "plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
     (repo_root / ".plugin" / "plugin.json").write_text(json.dumps(plugin_manifest), encoding="utf-8")
+    marketplace_manifest = {
+        "name": "plate-marketplace",
+        "metadata": {"version": version},
+        "plugins": [dict(plugin_manifest)],
+    }
+    (repo_root / ".github" / "plugin" / "marketplace.json").write_text(
+        json.dumps(marketplace_manifest),
+        encoding="utf-8",
+    )
 
     def test_skips_malformed_json(self):
         with TemporaryDirectory() as tmp:
@@ -269,6 +279,11 @@ class CutReleaseVersionSyncTests(unittest.TestCase):
                 json.loads((d / ".plugin" / "plugin.json").read_text(encoding="utf-8"))["version"],
                 "0.2.0",
             )
+            marketplace_manifest = json.loads(
+                (d / ".github" / "plugin" / "marketplace.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(marketplace_manifest["metadata"]["version"], "0.2.0")
+            self.assertTrue(all(plugin["version"] == "0.2.0" for plugin in marketplace_manifest["plugins"]))
 
 
 class VersionSyncReadTests(unittest.TestCase):
@@ -364,6 +379,22 @@ class ReleaseWorkspaceValidationTests(unittest.TestCase):
             )
             (repo_root / ".plugin" / "plugin.json").write_text(
                 json.dumps({"name": "plate-core", "version": "../oops", "repository": "https://github.com/akasper/plate"}),
+                encoding="utf-8",
+            )
+            (repo_root / ".github" / "plugin" / "marketplace.json").write_text(
+                json.dumps(
+                    {
+                        "name": "plate-marketplace",
+                        "metadata": {"version": "../oops"},
+                        "plugins": [
+                            {
+                                "name": "plate-core",
+                                "version": "../oops",
+                                "repository": "https://github.com/akasper/plate",
+                            }
+                        ],
+                    }
+                ),
                 encoding="utf-8",
             )
             (repo_root / "src" / "plate_core" / "__init__.py").write_text(

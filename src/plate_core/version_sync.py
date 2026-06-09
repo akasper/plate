@@ -20,6 +20,7 @@ def repository_version_targets(repo_root: Path) -> list[Path]:
         root / "pyproject.toml",
         root / "plugin" / "plugin.json",
         root / ".plugin" / "plugin.json",
+        root / ".github" / "plugin" / "marketplace.json",
     ]
 
 
@@ -54,6 +55,25 @@ def _update_json(path: Path, version: str, *, dry_run: bool) -> None:
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _update_marketplace_json(path: Path, version: str, *, dry_run: bool) -> None:
+    if not path.exists():
+        raise RuntimeError(f"Version sync target missing: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    metadata = data.get("metadata")
+    if not isinstance(metadata, dict):
+        raise RuntimeError(f"Missing object 'metadata' field in {path}")
+    plugins = data.get("plugins")
+    if not isinstance(plugins, list):
+        raise RuntimeError(f"Missing array 'plugins' field in {path}")
+
+    metadata["version"] = version
+    for plugin in plugins:
+        if isinstance(plugin, dict):
+            plugin["version"] = version
+    if not dry_run:
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
 def _extract_pattern_value(path: Path, pattern: re.Pattern[str], field_name: str) -> str:
     if not path.exists():
         raise RuntimeError(f"Version sync target missing: {path}")
@@ -77,6 +97,32 @@ def _read_json_version(path: Path) -> str:
     return value
 
 
+def _read_marketplace_version(path: Path) -> str:
+    if not path.exists():
+        raise RuntimeError(f"Version sync target missing: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    metadata = data.get("metadata")
+    if not isinstance(metadata, dict):
+        raise RuntimeError(f"Missing object 'metadata' field in {path}")
+    metadata_version = metadata.get(_JSON_VERSION_KEY)
+    if not isinstance(metadata_version, str) or not metadata_version:
+        raise RuntimeError(f"Missing string 'metadata.{_JSON_VERSION_KEY}' field in {path}")
+    plugins = data.get("plugins")
+    if not isinstance(plugins, list):
+        raise RuntimeError(f"Missing array 'plugins' field in {path}")
+    for plugin in plugins:
+        if not isinstance(plugin, dict):
+            continue
+        plugin_version = plugin.get(_JSON_VERSION_KEY)
+        if not isinstance(plugin_version, str) or not plugin_version:
+            raise RuntimeError(f"Missing string 'plugins[].{_JSON_VERSION_KEY}' field in {path}")
+        if plugin_version != metadata_version:
+            raise RuntimeError(
+                f"Mismatched versions in {path}: metadata.version={metadata_version!r}, plugin.version={plugin_version!r}"
+            )
+    return metadata_version
+
+
 def read_repository_versions(repo_root: Path) -> dict[str, str]:
     """Read the current version from each canonical repository version file."""
     root = repo_root.resolve()
@@ -86,6 +132,7 @@ def read_repository_versions(repo_root: Path) -> dict[str, str]:
         targets[1].relative_to(root).as_posix(): _extract_pattern_value(targets[1], _PYPROJECT_VERSION_RE, "project"),
         targets[2].relative_to(root).as_posix(): _read_json_version(targets[2]),
         targets[3].relative_to(root).as_posix(): _read_json_version(targets[3]),
+        targets[4].relative_to(root).as_posix(): _read_marketplace_version(targets[4]),
     }
 
 
@@ -95,6 +142,7 @@ def sync_repository_version(version: str, repo_root: Path, *, dry_run: bool = Fa
     targets = repository_version_targets(root)
     _replace_pattern(targets[0], _INIT_VERSION_RE, f'__version__ = "{version}"', dry_run=dry_run)
     _replace_pattern(targets[1], _PYPROJECT_VERSION_RE, f'version = "{version}"', dry_run=dry_run)
-    for path in targets[2:]:
+    for path in targets[2:4]:
         _update_json(path, version, dry_run=dry_run)
+    _update_marketplace_json(targets[4], version, dry_run=dry_run)
     return targets
