@@ -10,7 +10,7 @@ Use this routing order:
 1. For the next PLATE step, call `plate_what_next` first when it is available.
 2. When the question is "where should I look first?", use `gh plate context list/show` or the matching MCP tools `plate_contexts` / `plate_context`.
 3. For live repo state, prefer MCP/CLI surfaces over broad prose reads: `plate_health`, `plate_epic_status`, `plate_features`, `gh plate release status`, `gh plate agents list`, and `gh plate skills list`.
-4. For delegation requests, always call `plate_delegate_to_agent` with the target `agent_id` and a short `task_description`.
+4. For delegation requests, always call `plate_delegate_to_agent` with the target `agent_id` and a short `task_description`; it returns a narrow task packet plus a short rendered prompt.
 5. The core authority split remains: process -> `AGENTS.md`, intent -> `SPEC.md`, implemented behavior -> `.agentic/releases/`.
 6. Treat `docs/design/*` and `docs/research/*` as background references to open only when the lighter routing surfaces are not enough.
 
