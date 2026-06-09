@@ -195,7 +195,7 @@ Commit progress to `docs/migration/`. Update completion status in `docs/migratio
 | 3 | During packaging, lock the semver, create the versioned `release-vX.Y.Z` branch, and rename or replace the standing issue with the concrete release issue. |
 | 4 | Run `gh plate release cut vX.Y.Z` (or the equivalent script) to aggregate fragments into `.agentic/releases/vX.Y.Z/`. |
 | 5 | Open a Release PR from the versioned release branch to `main`, run the heavy release validation path, and include `Closes #N` in the PR body. |
-| 6 | After human approval and merge, tag the release, publish the GitHub Release, and create a fresh standing `Next Release` issue for subsequent work. |
+| 6 | After human approval and merge, the release workflow tags the merged Release PR commit. Then publish the GitHub Release and create a fresh standing `Next Release` issue for subsequent work. |
 
 ## Issue Artifact Rules
 
