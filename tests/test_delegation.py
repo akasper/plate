@@ -51,8 +51,9 @@ class DelegationResultStructureTests(unittest.TestCase):
         d = result.to_dict()
         for field in (
             "agent_id", "agent_name", "agent_description",
-            "task_description", "delegation_prompt",
-            "relevant_skills", "surfaces", "invocation_hints",
+            "task_description", "task", "artifacts", "retrieval_hints",
+            "constraints", "delegation_prompt", "relevant_skills",
+            "surfaces", "invocation_hints",
         ):
             self.assertIn(field, d, f"DelegationResult.to_dict() missing field '{field}'")
 
@@ -79,6 +80,13 @@ class DelegationResultStructureTests(unittest.TestCase):
         from plate_core.baseline_catalog import delegate_to_agent
         result = delegate_to_agent("project-manager", "Groom the backlog")
         self.assertGreater(len(result.relevant_skills), 0)
+
+    def test_delegation_result_exposes_packet_fields(self):
+        from plate_core.baseline_catalog import delegate_to_agent
+        result = delegate_to_agent("research-agent", "Summarize MCP frameworks")
+        self.assertEqual(result.task["summary"], "Summarize MCP frameworks")
+        self.assertEqual(result.retrieval_hints["concern"], "delegation")
+        self.assertIn("docs/wiki/Agent-Context-Map.md", result.artifacts["authoritative"])
 
     def test_delegation_result_surfaces_includes_all_three(self):
         from plate_core.baseline_catalog import delegate_to_agent
@@ -143,6 +151,27 @@ class DelegationPromptTests(unittest.TestCase):
         result = delegate_to_agent("designer", task)
         self.assertIn(task, result.delegation_prompt)
 
+    def test_delegation_prompt_uses_context_map_hint(self):
+        from plate_core.baseline_catalog import delegate_to_agent
+        result = delegate_to_agent("research-agent", "Summarize MCP frameworks")
+        self.assertIn("gh plate context show delegation", result.delegation_prompt)
+
+    def test_delegation_prompt_is_shorter_than_legacy_template(self):
+        from plate_core.baseline_catalog import build_delegation_prompt, get_agent, list_skills
+        agent = get_agent("research-agent")
+        skills = [s for s in list_skills() if s.id in agent.primary_skill_ids]
+        task = "Summarize MCP frameworks"
+        prompt = build_delegation_prompt(agent, task, skills)
+        legacy_constraints = "\n".join(f"- {c}" for c in agent.constraints) if agent.constraints else "(none)"
+        legacy_prompt = (
+            f"You are acting as the {agent.name} for this task:\n\n"
+            f"{task}\n\n"
+            f"Relevant skills: {', '.join(s.name for s in skills) if skills else '(none)'}\n"
+            f"Constraints:\n{legacy_constraints}\n\n"
+            "Proceed with the task."
+        )
+        self.assertLess(len(prompt), len(legacy_prompt))
+
 
 class CliDelegationTests(unittest.TestCase):
     """gh plate agents delegate <id> --task "..." [--json] must work correctly."""
@@ -171,6 +200,7 @@ class CliDelegationTests(unittest.TestCase):
             main(["agents", "delegate", "research-agent", "--task", "Research MCP frameworks", "--json"])
         payload = json.loads(out.getvalue().strip())
         for field in ("agent_id", "agent_name", "task_description", "delegation_prompt",
+                      "task", "artifacts", "retrieval_hints", "constraints",
                       "relevant_skills", "surfaces", "invocation_hints"):
             self.assertIn(field, payload, f"CLI delegate JSON missing field '{field}'")
 
@@ -249,6 +279,7 @@ class McpDelegationTests(unittest.TestCase):
         })
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
         for field in ("agent_id", "agent_name", "task_description", "delegation_prompt",
+                      "task", "artifacts", "retrieval_hints", "constraints",
                       "relevant_skills", "surfaces", "invocation_hints"):
             self.assertIn(field, payload, f"MCP delegation response missing field '{field}'")
 

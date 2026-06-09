@@ -17,6 +17,7 @@ from .baseline_catalog import (
     list_skills,
 )
 from .bootstrap import run_bootstrap
+from .context_map import get_context_route, list_context_routes
 from .epics import get_epic_status
 from .features import get_features
 from .health import get_health
@@ -148,6 +149,10 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = {"skills": [skill.to_dict() for skill in list_skills()]}
         elif name == "plate_skill":
             payload = get_skill(args.get("skill_id")).to_dict()
+        elif name == "plate_contexts":
+            payload = {"contexts": [route.to_dict() for route in list_context_routes()]}
+        elif name == "plate_context":
+            payload = get_context_route(args.get("context_id")).to_dict()
         elif name == "plate_delegate_to_agent":
             agent_id = args.get("agent_id")
             task_description = args.get("task_description")
@@ -448,6 +453,29 @@ def run() -> None:
                                         }
                                     },
                                     "required": ["skill_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_contexts",
+                                "description": "Return the canonical PLATE context-map routes used to decide where authoritative truth lives for a task.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {},
+                                    "required": [],
+                                },
+                            },
+                            {
+                                "name": "plate_context",
+                                "description": "Return one canonical PLATE context-map route by id.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "context_id": {
+                                            "type": "string",
+                                            "description": "Context route id.",
+                                        }
+                                    },
+                                    "required": ["context_id"],
                                 },
                             },
                             {

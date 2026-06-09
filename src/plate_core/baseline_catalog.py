@@ -9,6 +9,8 @@ from typing import Any
 
 import yaml
 
+from .context_map import get_context_route
+
 
 class BaselineCatalogError(ValueError):
     """Raised when the baseline catalog is missing or invalid."""
@@ -253,6 +255,10 @@ class DelegationResult:
     agent_name: str
     agent_description: str
     task_description: str
+    task: dict[str, Any]
+    artifacts: dict[str, Any]
+    retrieval_hints: dict[str, Any]
+    constraints: tuple[str, ...]
     delegation_prompt: str
     relevant_skills: tuple[BaselineSkill, ...]
     surfaces: tuple[str, ...]
@@ -264,6 +270,10 @@ class DelegationResult:
             "agent_name": self.agent_name,
             "agent_description": self.agent_description,
             "task_description": self.task_description,
+            "task": dict(self.task),
+            "artifacts": dict(self.artifacts),
+            "retrieval_hints": dict(self.retrieval_hints),
+            "constraints": list(self.constraints),
             "delegation_prompt": self.delegation_prompt,
             "relevant_skills": [s.to_dict() for s in self.relevant_skills],
             "surfaces": list(self.surfaces),
@@ -277,19 +287,76 @@ def build_delegation_prompt(
     skills: list[BaselineSkill],
 ) -> str:
     """Build a deterministic delegation prompt from catalog data. No LLM call needed."""
-    skill_names = ", ".join(s.name for s in skills) if skills else "(none)"
-    constraints_block = (
-        "\n".join(f"- {c}" for c in agent.constraints)
-        if agent.constraints
-        else "(none)"
-    )
+    packet = build_delegation_packet(agent, task, skills)
+    skill_names = [s.name for s in skills]
+    if len(skill_names) > 2:
+        skill_summary = f"{', '.join(skill_names[:2])} +{len(skill_names) - 2} more"
+    else:
+        skill_summary = ", ".join(skill_names) if skill_names else "(none)"
+
+    out_of_scope = "; ".join(packet["task"]["out_of_scope"])
     return (
-        f"You are acting as the {agent.name} for this task:\n\n"
-        f"{task}\n\n"
-        f"Relevant skills: {skill_names}\n"
-        f"Constraints:\n{constraints_block}\n\n"
-        "Proceed with the task."
+        f"Act as the {agent.name}.\n"
+        f"Task: {packet['task']['summary']}\n"
+        f"Kind: {packet['task']['kind']}\n"
+        f"Skills: {skill_summary}\n"
+        f"Success: {packet['task']['success_signal']}\n"
+        f"Out of scope: {out_of_scope}\n"
+        f"If more context is needed: {packet['retrieval_hints']['first_steps'][0]}"
     )
+
+
+def build_delegation_packet(
+    agent: BaselineAgent,
+    task: str,
+    skills: list[BaselineSkill],
+) -> dict[str, Any]:
+    """Build the packet-first delegation contract used by CLI, MCP, and prompt renderers."""
+    route = get_context_route("delegation")
+    first_skill = skills[0].id if skills else None
+    task_kind = infer_delegation_task_kind(agent, skills)
+    working_set = [f"gh plate agents show {agent.id}"]
+    if first_skill:
+        working_set.append(f"gh plate skills show {first_skill}")
+
+    return {
+        "task": {
+            "summary": task,
+            "kind": task_kind,
+            "success_signal": f"Return a focused {task_kind} outcome that completes the delegated task.",
+            "scope": [task],
+            "out_of_scope": [
+                "Re-explaining broad repository rules",
+                "Unrelated work outside the delegated task",
+            ],
+        },
+        "artifacts": {
+            "authoritative": ["docs/wiki/Agent-Context-Map.md"],
+            "working_set": working_set,
+            "references": list(route.reference_docs),
+        },
+        "retrieval_hints": {
+            "concern": route.id,
+            "first_steps": [
+                "gh plate context show delegation",
+                f"gh plate agents show {agent.id}",
+            ],
+        },
+        "constraints": tuple(agent.constraints) + ("Keep the response scoped to the delegated task.",),
+    }
+
+
+def infer_delegation_task_kind(agent: BaselineAgent, skills: list[BaselineSkill]) -> str:
+    values = " ".join([agent.id, agent.name, agent.description, *(skill.id for skill in skills)]).lower()
+    if "research" in values:
+        return "research"
+    if "design" in values:
+        return "design"
+    if "review" in values or "audit" in values or "security" in values:
+        return "triage"
+    if "manager" in values or "planner" in values:
+        return "planning"
+    return "implementation"
 
 
 def delegate_to_agent(agent_id: str, task_description: str) -> DelegationResult:
@@ -302,14 +369,15 @@ def delegate_to_agent(agent_id: str, task_description: str) -> DelegationResult:
         skill_map[sid] for sid in agent.primary_skill_ids if sid in skill_map
     )
 
+    packet = build_delegation_packet(agent, task_description, list(relevant_skills))
     prompt = build_delegation_prompt(agent, task_description, list(relevant_skills))
 
     hints: dict[str, str] = {
         "copilot_plugin": (
-            f"Select the '{agent_id}' agent in the Copilot agent picker and paste the delegation prompt."
+            f"Select the '{agent_id}' agent in the Copilot agent picker and pass the short rendered prompt or packet fields."
         ),
         "gh_plate": f"gh plate agents show {agent_id}",
-        "mcp": f"Call plate_delegate_to_agent with agent_id={agent_id} and your task.",
+        "mcp": f"Call plate_delegate_to_agent with agent_id={agent_id} and task_description=<task>.",
     }
 
     return DelegationResult(
@@ -317,6 +385,10 @@ def delegate_to_agent(agent_id: str, task_description: str) -> DelegationResult:
         agent_name=agent.name,
         agent_description=agent.description,
         task_description=task_description,
+        task=packet["task"],
+        artifacts=packet["artifacts"],
+        retrieval_hints=packet["retrieval_hints"],
+        constraints=packet["constraints"],
         delegation_prompt=prompt,
         relevant_skills=relevant_skills,
         surfaces=agent.surfaces,

@@ -1,0 +1,55 @@
+{
+  "version": "0.5.0",
+  "summary": "PLATE 0.5.0 -- 3 change(s): cost-control-context-map, cost-control-delegation-packets, cost-control-thin-agent-surfaces.",
+  "cut_at": "2026-06-09T13:37:58Z",
+  "fragment_count": 3,
+  "fragment_slugs": [
+    "cost-control-context-map",
+    "cost-control-delegation-packets",
+    "cost-control-thin-agent-surfaces"
+  ],
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "gh plate context, plate_contexts/plate_context MCP tools, docs/wiki/Agent-Context-Map.md",
+      "migration_impact": "Downstream PLATE surfaces can point to gh plate context list/show and the context-map wiki page as the default discovery front door. This reduces duplicated routing guidance in prompt files and makes source-of-truth lookup more direct.",
+      "agent_notes": "When the task is to figure out where authoritative truth lives, start with the context map rather than scanning AGENTS.md, prompt entrypoints, and deep docs in parallel.",
+      "migration_guidance": [
+        "1. Update thin prompt surfaces to point to gh plate context list/show or the matching MCP tools instead of carrying their own routing tables.",
+        "2. Keep docs/wiki/Agent-Context-Map.md aligned with the runtime context-map model.",
+        "3. Use the concern ids from the context map in future delegation and discovery features."
+      ],
+      "links": [
+        "#397"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_delegate_to_agent, gh plate agents delegate, delegation packet contract",
+      "migration_impact": "Consumers of plate_delegate_to_agent can use the new packet fields instead of parsing the rendered prompt. The prompt itself is shorter and now points back to the canonical context map for extra discovery.",
+      "agent_notes": "Treat task/artifacts/retrieval_hints/constraints as the primary delegation contract. Use the rendered prompt only for text-only handoff surfaces.",
+      "migration_guidance": [
+        "1. Prefer the structured delegation packet fields over parsing delegation_prompt.",
+        "2. If extra context is needed during delegated work, follow gh plate context show delegation rather than copying broad repository instructions.",
+        "3. Keep future delegation extensions additive so existing CLI and MCP consumers remain compatible."
+      ],
+      "links": [
+        "#398"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/copilot-instructions.md, plugin/agents/plate.agent.md, src/plate_core/template_payload/.github/copilot-instructions.md",
+      "migration_impact": "Downstream PLATE repositories that copy these instruction surfaces will get shorter, routing-oriented prompts. Agents should consult AGENTS.md, SPEC.md, .agentic/releases/, and gh plate release status via the quick-routing table instead of relying on large duplicated prose blocks.",
+      "agent_notes": "Prefer the quick-routing table for first-step discovery. Treat AGENTS.md as the full process contract, SPEC.md as intent, .agentic/releases/ as implemented evidence, and gh plate release status as the default release-targeting lookup before opening PRs.",
+      "migration_guidance": [
+        "1. Update .github/copilot-instructions.md and any equivalent template-owned instruction surface from the release that contains this fragment.",
+        "2. Keep local prompt surfaces thin: surface-specific behavior plus routing cues only.",
+        "3. If you maintain custom agents, point them to authoritative artifacts and live discovery commands instead of copying large process summaries."
+      ],
+      "links": [
+        "#396"
+      ]
+    }
+  ]
+}

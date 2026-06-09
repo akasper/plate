@@ -116,6 +116,20 @@ class McpTests(unittest.TestCase):
         self.assertEqual(payload["id"], "crud-projects")
 
     @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_contexts(self, mock_write):
+        _handle_tools_call(15, {"name": "plate_contexts", "arguments": {}})
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertGreaterEqual(len(payload["contexts"]), 6)
+        self.assertEqual(payload["contexts"][0]["id"], "process")
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_context(self, mock_write):
+        _handle_tools_call(16, {"name": "plate_context", "arguments": {"context_id": "release-targeting"}})
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload["id"], "release-targeting")
+        self.assertIn("gh plate release status", payload["machine_surfaces"])
+
+    @patch("plate_core.mcp_server._write")
     @patch("plate_core.mcp_server.get_features")
     def test_tools_call_plate_features(self, mock_get_features, mock_write):
         mock_get_features.return_value = FeatureReport(

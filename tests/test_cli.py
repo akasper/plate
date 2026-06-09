@@ -157,6 +157,24 @@ class CliTests(unittest.TestCase):
         self.assertEqual(len(payload["agents"]), 15)
         self.assertEqual(payload["agents"][0]["id"], "project-manager")
 
+    def test_context_list_json_output(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["context", "list", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertGreaterEqual(len(payload["contexts"]), 6)
+        self.assertEqual(payload["contexts"][0]["id"], "process")
+
+    def test_context_show_json_output(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["context", "show", "release-targeting", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(payload["id"], "release-targeting")
+        self.assertIn("gh plate release status", payload["machine_surfaces"])
+
     def test_agent_show_json_output(self):
         out = io.StringIO()
         with redirect_stdout(out):

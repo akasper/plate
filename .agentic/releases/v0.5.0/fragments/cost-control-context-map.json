@@ -1,0 +1,18 @@
+{
+  "slug": "cost-control-context-map",
+  "change_type": "feature",
+  "surface": "gh plate context, plate_contexts/plate_context MCP tools, docs/wiki/Agent-Context-Map.md",
+  "summary": "Adds a canonical PLATE context map so agents can retrieve discovery guidance from one shared model instead of inferring the right artifact from several prompt surfaces.",
+  "migration_impact": "Downstream PLATE surfaces can point to gh plate context list/show and the context-map wiki page as the default discovery front door. This reduces duplicated routing guidance in prompt files and makes source-of-truth lookup more direct.",
+  "agent_notes": "When the task is to figure out where authoritative truth lives, start with the context map rather than scanning AGENTS.md, prompt entrypoints, and deep docs in parallel.",
+  "migration_guidance": [
+    "1. Update thin prompt surfaces to point to gh plate context list/show or the matching MCP tools instead of carrying their own routing tables.",
+    "2. Keep docs/wiki/Agent-Context-Map.md aligned with the runtime context-map model.",
+    "3. Use the concern ids from the context map in future delegation and discovery features."
+  ],
+  "breaking": false,
+  "links": [
+    "#397"
+  ],
+  "requires": []
+}

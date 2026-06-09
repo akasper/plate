@@ -47,7 +47,8 @@ Link to versioned per-feature change files under `.agentic/releases/` and any ge
 
 ## Feature Documentation
 
-List major feature pages and their traceability links.
+- [Agent Context Map](Agent-Context-Map.md) — the canonical discovery index for "where should I look first?"
+- List major feature pages and their traceability links.
 
 ## Operations and Maintenance
 

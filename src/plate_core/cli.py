@@ -17,6 +17,7 @@ from .baseline_catalog import (
     list_agents,
     list_skills,
 )
+from .context_map import ContextMapError, get_context_route, list_context_routes
 from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .health import get_health
@@ -134,6 +135,42 @@ def cmd_features(args: argparse.Namespace) -> int:
     if getattr(args, "local", False):
         print("\n(Note: Playwright E2E flag used local filesystem heuristic; run without --local for pure GitHub view.)")
     
+    return 0
+
+
+def cmd_context_list(args: argparse.Namespace) -> int:
+    contexts = [route.to_dict() for route in list_context_routes()]
+    if args.json:
+        print(json.dumps({"contexts": contexts}))
+        return 0
+
+    for route in contexts:
+        print(f"{route['id']}: {route['concern']}")
+        print(f"  First step: {route['first_step']}")
+        print(f"  Authority: {', '.join(route['authoritative_artifacts'])}")
+    return 0
+
+
+def cmd_context_show(args: argparse.Namespace) -> int:
+    try:
+        route = get_context_route(args.context_id)
+    except ContextMapError as exc:
+        if args.json:
+            print(json.dumps({"error": str(exc)}))
+        else:
+            print(f"Error: {exc}")
+        return 1
+
+    if args.json:
+        print(json.dumps(route.to_dict()))
+        return 0
+
+    print(f"Context: {route.concern} ({route.id})")
+    print(f"First step: {route.first_step}")
+    print(f"Authoritative artifacts: {', '.join(route.authoritative_artifacts)}")
+    print(f"Machine surfaces: {', '.join(route.machine_surfaces)}")
+    if route.reference_docs:
+        print(f"References: {', '.join(route.reference_docs)}")
     return 0
 
 
@@ -743,6 +780,16 @@ def build_parser() -> argparse.ArgumentParser:
     features.add_argument("--json", action="store_true", help="Output JSON")
     features.add_argument("--local", action="store_true", help="Use local filesystem checks for Playwright E2E (config.* + tests/e2e + package.json) per #64 heuristic")
     features.set_defaults(func=cmd_features)
+
+    context = sub.add_parser("context", help="Show canonical PLATE discovery routes")
+    context_sub = context.add_subparsers(dest="context_command", required=True)
+    context_list = context_sub.add_parser("list", help="List context routes")
+    context_list.add_argument("--json", action="store_true", help="Output JSON")
+    context_list.set_defaults(func=cmd_context_list)
+    context_show = context_sub.add_parser("show", help="Show one context route")
+    context_show.add_argument("context_id", help="Context route id")
+    context_show.add_argument("--json", action="store_true", help="Output JSON")
+    context_show.set_defaults(func=cmd_context_show)
 
     agents = sub.add_parser("agents", help="Show baseline agent catalog")
     agents_sub = agents.add_subparsers(dest="agents_command", required=True)

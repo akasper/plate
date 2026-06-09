@@ -1,0 +1,18 @@
+{
+  "slug": "cost-control-thin-agent-surfaces",
+  "change_type": "feature",
+  "surface": ".github/copilot-instructions.md, plugin/agents/plate.agent.md, src/plate_core/template_payload/.github/copilot-instructions.md",
+  "summary": "Shrinks the main PLATE agent-facing instruction surfaces and reorients them around quick routing to authoritative artifacts and live discovery commands.",
+  "migration_impact": "Downstream PLATE repositories that copy these instruction surfaces will get shorter, routing-oriented prompts. Agents should consult AGENTS.md, SPEC.md, .agentic/releases/, and gh plate release status via the quick-routing table instead of relying on large duplicated prose blocks.",
+  "agent_notes": "Prefer the quick-routing table for first-step discovery. Treat AGENTS.md as the full process contract, SPEC.md as intent, .agentic/releases/ as implemented evidence, and gh plate release status as the default release-targeting lookup before opening PRs.",
+  "migration_guidance": [
+    "1. Update .github/copilot-instructions.md and any equivalent template-owned instruction surface from the release that contains this fragment.",
+    "2. Keep local prompt surfaces thin: surface-specific behavior plus routing cues only.",
+    "3. If you maintain custom agents, point them to authoritative artifacts and live discovery commands instead of copying large process summaries."
+  ],
+  "breaking": false,
+  "links": [
+    "#396"
+  ],
+  "requires": []
+}
