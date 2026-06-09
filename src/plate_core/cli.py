@@ -24,6 +24,7 @@ from .github_client import GhApiError
 from .health import get_health
 from .pr_babysit import babysit_pr
 from .release import (
+    cleanup_dead_branches,
     cut_release as core_cut_release,
     get_release_notes_diff,
     get_release_status,
@@ -401,6 +402,43 @@ def cmd_release_status(args: argparse.Namespace) -> int:
             status = "satisfied" if chk.get("satisfied") else "pending" if chk.get("satisfied") is None else "open"
             req = "REQUIRED" if chk.get("required") else "optional"
             print(f"  [{req}] {chk.get('extension_id')}/{chk.get('id')}: {chk.get('description')} ({status})")
+    return 0
+
+
+def cmd_release_cleanup_branches(args: argparse.Namespace) -> int:
+    report = cleanup_dead_branches(
+        repo=args.repo,
+        base_branch=getattr(args, "base", None),
+        apply=bool(getattr(args, "apply", False)),
+        limit=getattr(args, "limit", None),
+    )
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0
+
+    print(f"Repo: {report.repo}")
+    print(f"Base branch: {report.base_branch}")
+    print(f"Mode: {'APPLY' if report.apply else 'DRY-RUN'}")
+    print(f"Scanned branches: {report.scanned_branches}")
+    print(f"Candidates: {len(report.candidates)}")
+    for branch in report.candidates:
+        print(f"  - {branch}")
+    if report.skipped_open_pr:
+        print(f"Skipped (open PR): {len(report.skipped_open_pr)}")
+    if report.skipped_not_merged:
+        print(f"Skipped (not merged into {report.base_branch}): {len(report.skipped_not_merged)}")
+    if report.apply:
+        print(f"Deleted: {len(report.deleted)}")
+        for branch in report.deleted:
+            print(f"  - {branch}")
+    if report.failed:
+        print(f"Failed deletions: {len(report.failed)}")
+        for item in report.failed:
+            print(f"  - {item.get('branch')}: {item.get('error')}")
+    for warning in report.warnings:
+        print(f"WARNING: {warning}")
+    if not report.apply:
+        print("Re-run with --apply to delete candidate branches.")
     return 0
 
 
@@ -903,6 +941,27 @@ def build_parser() -> argparse.ArgumentParser:
     rel_status.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_status.add_argument("--json", action="store_true", help="Output JSON")
     rel_status.set_defaults(func=cmd_release_status)
+    rel_cleanup = release_sub.add_parser(
+        "cleanup-branches",
+        help="Find and optionally delete dead remote branches (merged + no open PR).",
+    )
+    rel_cleanup.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    rel_cleanup.add_argument(
+        "--base",
+        help="Base branch to compare merge state against (default: repository default branch).",
+    )
+    rel_cleanup.add_argument(
+        "--apply",
+        action="store_true",
+        help="Delete candidate branches. Without this flag, command runs in dry-run mode.",
+    )
+    rel_cleanup.add_argument(
+        "--limit",
+        type=int,
+        help="Optional maximum number of candidate branches to delete/report.",
+    )
+    rel_cleanup.add_argument("--json", action="store_true", help="Output JSON")
+    rel_cleanup.set_defaults(func=cmd_release_cleanup_branches)
     rel_notes = release_sub.add_parser("notes", help="Show release notes diff between versions")
     rel_notes.add_argument("--from", dest="from_version", help="Start version (exclusive)")
     rel_notes.add_argument("--to", dest="to_version", help="End version (inclusive)")

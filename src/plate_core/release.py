@@ -8,7 +8,7 @@ import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 
 from .github_client import GhApiError, GhClient
 from .health import resolve_repo
@@ -90,6 +90,23 @@ class ReleaseNotesDiffReport:
     releases_found: list[str]
     entries: list[dict]
     migration_steps: list[str]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class DeadBranchCleanupReport:
+    repo: str
+    base_branch: str
+    apply: bool
+    scanned_branches: int
+    candidates: list[str]
+    deleted: list[str]
+    failed: list[dict]
+    skipped_open_pr: list[str]
+    skipped_not_merged: list[str]
+    warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -661,6 +678,117 @@ def get_release_notes_diff(
         releases_found=selected,
         entries=all_entries,
         migration_steps=all_migration_steps,
+    )
+
+
+def cleanup_dead_branches(
+    repo: str | None = None,
+    base_branch: str | None = None,
+    apply: bool = False,
+    limit: int | None = None,
+    client: GhClient | None = None,
+) -> DeadBranchCleanupReport:
+    """Find and optionally delete dead remote branches."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    owner, _repo_name = target.split("/", 1) if "/" in target else (target, target)
+
+    repo_info = gh.api(f"repos/{target}")
+    default_branch = repo_info.get("default_branch", "main")
+    effective_base = base_branch or default_branch
+
+    reserved = {
+        effective_base,
+        default_branch,
+        "release",
+        "release-major",
+        "release-minor",
+        "release-patch",
+    }
+
+    def _is_reserved(name: str) -> bool:
+        if name in reserved:
+            return True
+        return (
+            name.startswith("release-")
+            or name.startswith("release/")
+            or name.startswith("release-v")
+        )
+
+    branches: list[dict] = []
+    page = 1
+    while True:
+        batch = gh.api(f"repos/{target}/branches?per_page=100&page={page}") or []
+        if not batch:
+            break
+        branches.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+
+    candidates: list[str] = []
+    deleted: list[str] = []
+    failed: list[dict] = []
+    skipped_open_pr: list[str] = []
+    skipped_not_merged: list[str] = []
+    warnings: list[str] = []
+
+    for branch in branches:
+        name = branch.get("name")
+        if not name:
+            continue
+        if branch.get("protected"):
+            continue
+        if _is_reserved(name):
+            continue
+
+        open_prs = gh.api(
+            f"repos/{target}/pulls?state=open&head={owner}:{quote(name, safe='')}&per_page=1"
+        ) or []
+        if open_prs:
+            skipped_open_pr.append(name)
+            continue
+
+        cmp = gh.api(
+            f"repos/{target}/compare/{quote(effective_base, safe='')}...{quote(name, safe='')}"
+        )
+        ahead_by = int(cmp.get("ahead_by", 0))
+        status = (cmp.get("status") or "").lower()
+        merged_into_base = ahead_by == 0 and status in {"behind", "identical"}
+        if not merged_into_base:
+            skipped_not_merged.append(name)
+            continue
+
+        candidates.append(name)
+
+    if limit is not None and limit > 0 and len(candidates) > limit:
+        warnings.append(
+            f"Candidate set truncated by --limit: showing {limit} of {len(candidates)} merged branch candidates."
+        )
+        candidates = candidates[:limit]
+
+    if apply:
+        for name in candidates:
+            try:
+                gh.api(
+                    f"repos/{target}/git/refs/heads/{quote(name, safe='')}",
+                    method="DELETE",
+                )
+                deleted.append(name)
+            except GhApiError as exc:
+                failed.append({"branch": name, "error": str(exc)})
+
+    return DeadBranchCleanupReport(
+        repo=target,
+        base_branch=effective_base,
+        apply=apply,
+        scanned_branches=len(branches),
+        candidates=candidates,
+        deleted=deleted,
+        failed=failed,
+        skipped_open_pr=skipped_open_pr,
+        skipped_not_merged=skipped_not_merged,
+        warnings=warnings,
     )
 
 
