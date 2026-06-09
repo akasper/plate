@@ -127,7 +127,7 @@ Commit progress to `docs/migration/`. Update completion status in `docs/migratio
 | 4 | Commit any release notes directory (via `gh plate release cut` or equivalent), then open the Release PR from the versioned branch → `main` (labeled Documentation, body contains `Closes #N` for the now-versioned Release issue). This is a "Release PR" and receives differentiated heavy CI (e2e, security, architecture review, full packaging, etc. after fast-fail gates). |
 | 5 | After human approval and merge of the Release PR, GitHub Actions creates and pushes `vX.Y.Z` from the merged Release PR commit. Finalization (`gh plate release finalize` or equivalent) then handles downstream triggers (declared under `.plate/` with common ones in core + others via extensions/release_checks), rollover/repair, and ensuring the next "Next Release" issue exists. |
 | 6 | Create the GitHub Release from the tag (populated from `.agentic/releases/vX.Y.Z/release.json`). |
-| 7 | After a release ships, hard-reset legacy `release` to match `main` for the next cycle: `git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease`. |
+| 7 | Hard-reset the appropriate branch (the versioned one or the originating next- track) to the tag as needed for the next cycle: e.g. `git checkout release-vX.Y.Z && git reset --hard vX.Y.Z && git push --force-with-lease` (or the legacy single `release` equivalent). |
 
 See `docs/design/release-ceremony-refinement.md` for the full model, branch table, packaging vs. finalization distinction, negotiation/on-hold visibility, and migration notes. The legacy single-`release` + always-versioned-upfront ceremony remains supported during transition.
 
