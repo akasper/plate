@@ -1,0 +1,18 @@
+{
+  "slug": "cost-control-delegation-packets",
+  "change_type": "feature",
+  "surface": "plate_delegate_to_agent, gh plate agents delegate, delegation packet contract",
+  "summary": "Makes PLATE delegation packet-first by returning structured task, artifact, constraint, and retrieval-hint fields while rendering a shorter prompt from that packet.",
+  "migration_impact": "Consumers of plate_delegate_to_agent can use the new packet fields instead of parsing the rendered prompt. The prompt itself is shorter and now points back to the canonical context map for extra discovery.",
+  "agent_notes": "Treat task/artifacts/retrieval_hints/constraints as the primary delegation contract. Use the rendered prompt only for text-only handoff surfaces.",
+  "migration_guidance": [
+    "1. Prefer the structured delegation packet fields over parsing delegation_prompt.",
+    "2. If extra context is needed during delegated work, follow gh plate context show delegation rather than copying broad repository instructions.",
+    "3. Keep future delegation extensions additive so existing CLI and MCP consumers remain compatible."
+  ],
+  "breaking": false,
+  "links": [
+    "#398"
+  ],
+  "requires": []
+}
