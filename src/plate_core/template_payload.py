@@ -121,19 +121,33 @@ def resolve_template_source_root(template_repo: str | None = None) -> Path:
     2. Checked-in payload in this repository
     3. Legacy sibling plate_template checkout fallback
     """
+    source_root, _source_kind = resolve_template_source(template_repo)
+    return source_root
+
+
+def resolve_template_source(template_repo: str | None = None) -> tuple[Path, str]:
+    """Resolve scaffold source root and return source provenance.
+
+    Returns:
+        (path, source_kind)
+        source_kind is one of:
+        - "explicit_path"
+        - "package_payload"
+        - "legacy_sibling_fallback"
+    """
     if template_repo:
         explicit = Path(template_repo).resolve()
         if not explicit.exists():
             raise RuntimeError(f"Template repository not found: {explicit}")
-        return explicit
+        return explicit, "explicit_path"
 
     payload = payload_root()
     if payload.exists():
-        return payload
+        return payload, "package_payload"
 
     fallback = Path.cwd().resolve().parent / "plate_template"
     if fallback.exists():
-        return fallback
+        return fallback, "legacy_sibling_fallback"
 
     raise RuntimeError(
         "No template source found. Expected either an explicit template_repo, "
