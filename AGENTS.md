@@ -125,7 +125,7 @@ Commit progress to `docs/migration/`. Update completion status in `docs/migratio
 | 2 | During active development, work lands on the permissive track-specific next- branch (`release-major` / `release-minor` / `release-patch`) matching its label (Epic-close PRs funnel through the track). Run `gh plate release status` regularly to see pending fragments, extension release_checks, linked/targeted Epics, and on-hold work (Epics with a semver label but no link to an active Next Release). |
 | 3 | When ready to commit to a release (packaging phase): freeze non-bug merges (ceremony + status + human gates), determine/lock the final semver (cut_release inference from fragments + track labels + Release issue signals), create the concrete versioned branch (`release-vX.Y.Z`, combining tracks as needed for minor/major), rename the standing issue title from "Next Release" to the specific version (e.g. "v0.1.1"), and *immediately create a fresh "Next Release" issue*. |
 | 4 | Commit any release notes directory (via `gh plate release cut` or equivalent), then open the Release PR from the versioned branch → `main` (labeled Documentation, body contains `Closes #N` for the now-versioned Release issue). This is a "Release PR" and receives differentiated heavy CI (e2e, security, architecture review, full packaging, etc. after fast-fail gates). |
-| 5 | After human approval and merge of the Release PR, enter finalization: PLATE (via `gh plate release finalize` or equivalent) performs the git tag (`git tag vX.Y.Z && git push --tags`), kicks configurable downstream triggers (declared under `.plate/` with common ones in core + others via extensions/release_checks), and ensures the next "Next Release" issue exists. |
+| 5 | After human approval and merge of the Release PR, GitHub Actions creates and pushes `vX.Y.Z` from the merged Release PR commit. Finalization (`gh plate release finalize` or equivalent) then handles downstream triggers (declared under `.plate/` with common ones in core + others via extensions/release_checks), rollover/repair, and ensuring the next "Next Release" issue exists. |
 | 6 | Create the GitHub Release from the tag (populated from `.agentic/releases/vX.Y.Z/release.json`). |
 | 7 | Hard-reset the appropriate branch (the versioned one or the originating next- track) to the tag as needed for the next cycle: e.g. `git checkout release-vX.Y.Z && git reset --hard vX.Y.Z && git push --force-with-lease` (or the legacy single `release` equivalent). |
 
@@ -269,9 +269,9 @@ See the detailed steps in the **Release** work loop table above and the full mod
 
 1. Standing "Next Release" issue exists and is the target for Epics (via sidebar links) and track-labeled work (Major/Minor/Patch labels drive landing on the matching `release-major` / `release-minor` / `release-patch` permissive next- branches).
 2. Packaging (the decision + freeze + version lock point): determine semver, create versioned `release-vX.Y.Z` branch (combining tracks for minor/major as appropriate), rename the issue to the concrete version, immediately spawn a fresh "Next Release" issue.
-3. Release PR from the versioned branch → `main` (this PR carries the `Release` label/context and receives heavy CI).
+3. Release PR from the versioned branch → `main` (this PR uses the `Documentation` PR type label, and its release branch context triggers heavy CI).
 4. Human merge.
-5. Finalization: tag, configurable downstream triggers (`.plate/` + extensions), ensure next Next Release exists, hard-reset the relevant branch.
+5. GitHub Actions tags the merged Release PR commit (`vX.Y.Z`), then finalization handles configurable downstream triggers (`.plate/` + extensions), ensures next Next Release exists, and hard-resets the relevant branch as needed.
 6. GitHub Release created from the aggregated notes.
 
 Legacy single-`release` + upfront versioned Release issue flow remains valid for transition (see migration guidance in the release-ceremony-refinement fragment).

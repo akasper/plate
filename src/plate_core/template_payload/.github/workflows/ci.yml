@@ -108,3 +108,58 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run Tests
         run: bash scripts/validate_plate_repo.sh .
+
+  validate-release-pr:
+    needs: test
+    if: |
+      github.head_ref == 'release' ||
+      startsWith(github.head_ref, 'release-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release artifact version
+        id: release-version
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          release_files="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" | grep -E '^\.agentic/releases/v[0-9]+\.[0-9]+\.[0-9]+/release\.json$' || true)"
+          release_file_count="$(printf '%s\n' "${release_files}" | sed '/^$/d' | wc -l | tr -d ' ')"
+          if [ "${release_file_count}" -ne 1 ]; then
+            echo "Expected exactly one changed versioned release artifact in the PR, found ${release_file_count}."
+            printf '%s\n' "${release_files}"
+            exit 1
+          fi
+
+          release_file="$(printf '%s\n' "${release_files}" | sed -n '1p')"
+          release_tag="$(python - "${release_file}" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as fh:
+              data = json.load(fh)
+
+          version = data.get("version")
+          if not isinstance(version, str) or not version:
+              raise SystemExit("release.json must include a non-empty string version")
+
+          print(f"v{version}")
+          PY
+          )"
+
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "release_file=${release_file}" >> "${GITHUB_OUTPUT}"
+
+      - name: Fail if remote release tag already exists
+        env:
+          RELEASE_TAG: ${{ steps.release-version.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | grep -q .; then
+            echo "Release tag ${RELEASE_TAG} already exists on origin."
+            exit 1
+          fi
