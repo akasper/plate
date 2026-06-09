@@ -22,10 +22,13 @@ bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle
 
 Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable GitHub bootstrap work that otherwise gets missed in brand-new repositories.
 
+`gh plate bootstrap --apply` covers the repository-scaffolding side of bootstrap: it copies the checked-in PLATE template payload into the repo so AGENTS, docs, workflows, scripts, and starter assets are present locally.
+
 ## Automatable Steps
 
 | Step | Why It Matters | Covered by Helper |
 |---|---|---|
+| Copy the PLATE template payload into the repository | Gives new repos the in-repository PLATE artifacts that teach agents and humans how to work here. | Yes, when `gh plate bootstrap --apply` is used |
 | Sync canonical PLATE labels from `.github/labels.yml` | The label taxonomy drives routing, enforcement, and review semantics. | Yes |
 | Remove conflicting default GitHub labels | Default labels such as `documentation` and `enhancement` create drift from the canonical PLATE taxonomy. | Yes |
 | Replace `@PLATE_REPO_OWNER` in `.github/CODEOWNERS` | Placeholder owners break review routing and code-owner protection. | Yes |
@@ -44,7 +47,7 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 | Create the first real GitHub milestone for Epic work | Milestones are the canonical Epic container and should reflect the project’s actual roadmap. |
 | Tune CI, release, pages, and audit workflows | The template ships scaffolds, but real commands and release policy depend on the project stack. |
 | Decide whether to enable wiki sync | Write automation, token scope, and wiki publication policy require explicit approval. |
-| Customize the Goals page content | The bootstrap seeds a placeholder; replace with project-specific mission, principles, etc. |
+| Customize the Goals page content | The bootstrap copies the starter Goals page; replace it with project-specific mission, principles, etc. | 
 
 ## Common Bootstrap Failure Modes
 
