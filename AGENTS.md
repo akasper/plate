@@ -16,6 +16,19 @@ The PLATE book explains doctrine and the reasons behind the method. This reposit
 | Documentation | Update per-feature change files under `.agentic/releases/`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
 | Stack selection | Prototype and benchmark candidate stacks per the Research issue. | Final language/runtime choice and distribution format. |
 
+## Default PLATE Persona (Epic #459)
+
+When operating in a repository that has adopted PLATE (signaled locally by `.plate/` or `.plate/config` + `AGENTS.md` / `.agentic/`, or on GitHub by Epic labels, release artifacts, etc.), agents **must default to the `plate` persona** ( `plugin/agents/plate.agent.md` + `src/plate_core/agent_guidance.py` sections + baseline catalog).
+
+- No special user command (e.g. `/agent plate`) is required for normal work.
+- The host should surface or prefer the "plate" persona in pickers / auto-suggest / default loading when PLATE signals are present.
+- Explicit opt-out / fallback to the host's raw/default persona is supported and first-class, e.g. `/plate agent off` (or host equivalent). Persistence priority: **session > user > repo > global default (PLATE)**. Re-enablement is symmetric and low-friction.
+- This default ensures the full PLATE rules (this document), quiet operations, thin surfaces, delegation packets, ceremony flows, human checkpoints, and traceability are applied consistently.
+- Power users and non-PLATE work can still use other agents or the raw host persona; the opt-out is reversible.
+- Template payloads and onboarding ship with this expectation.
+
+See Epic #459 and its children for the implementation (detection, host integration, opt-out UX, docs). Related fast-follow: #462 "Scriptify Ceremonies" (prompts + scripts for processes, assuming reliable default persona).
+
 ## Autopilot Doctrine
 
 PLATE defaults to an **autopilot posture**: agents should proceed autonomously through a task queue and pause only at defined human checkpoints, rather than asking permission at each step. This posture is only safe when work is structured so that any step can be cheaply reviewed and reversed.
@@ -306,7 +319,7 @@ Use this loop:
 
 1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance).
 
-Information Audits (#218) are now part of the core capability: agents should use `plate_perform_information_audit` (dry_run first) to discover gaps against the Goals page (#224) and generate Questions. Guidance in plugin/agents/plate.agent.md and agent_guidance.py (INFORMATION_AUDIT_GUIDANCE). Catalog defaults (#222) and extensibility (#226) apply.
+**Quiet Agents note:** For looped or long-running babysitting/monitoring, the supervising agent must follow the quiet_operations rules (see `plugin/agents/plate.agent.md` Behavior rules + Special modes, and `src/plate_core/agent_guidance.py` QUIET_OPERATIONS_GUIDANCE): only terse bullet-list one-sentence turn summaries in the terminal; post GitHub comments on the PR only for meaningful forward progress (not "checked, 0 actionable" no-ops). The persona and catalog constraints are the primary enforcement surface. Information Audits (#218) are now part of the core capability: agents should use `plate_perform_information_audit` (dry_run first) to discover gaps against the Goals page (#224) and generate Questions. Guidance in plugin/agents/plate.agent.md and agent_guidance.py (INFORMATION_AUDIT_GUIDANCE, plus the new quiet section). Catalog defaults (#222) and extensibility (#226) apply.
 2. The babysitter automatically detects two types of issues:
    - **Unresolved review threads** from third-party agents (actionable feedback)
    - **Base branch out-of-sync** state (PR branch behind, conflicting, or dirty relative to base branch)
