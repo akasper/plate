@@ -8,7 +8,7 @@ import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 
 from .github_client import GhApiError, GhClient
 from .health import resolve_repo
@@ -31,6 +31,10 @@ class FragmentSummary:
 class ReleaseStatusReport:
     repo: str
     release_branch_exists: bool
+    release_track_branches: dict
+    release_branch_mode: str
+    release_branch_reset_target: str
+    warnings: list[str]
     open_release_issues: list[dict]
     current_version: str | None
     latest_version: str | None
@@ -47,6 +51,10 @@ class ReleaseStatusReport:
         d = {
             "repo": self.repo,
             "release_branch_exists": self.release_branch_exists,
+            "release_track_branches": self.release_track_branches,
+            "release_branch_mode": self.release_branch_mode,
+            "release_branch_reset_target": self.release_branch_reset_target,
+            "warnings": self.warnings,
             "open_release_issues": self.open_release_issues,
             "current_version": self.current_version,
             "latest_version": self.latest_version,
@@ -82,6 +90,23 @@ class ReleaseNotesDiffReport:
     releases_found: list[str]
     entries: list[dict]
     migration_steps: list[str]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class DeadBranchCleanupReport:
+    repo: str
+    base_branch: str
+    apply: bool
+    scanned_branches: int
+    candidates: list[str]
+    deleted: list[str]
+    failed: list[dict]
+    skipped_open_pr: list[str]
+    skipped_not_merged: list[str]
+    warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -349,13 +374,49 @@ def get_release_status(
     gh = client or GhClient()
     target = resolve_repo(repo)
 
-    # Check if release branch exists
-    release_branch_exists = False
-    try:
-        gh.api(f"repos/{target}/branches/release")
-        release_branch_exists = True
-    except GhApiError:
-        pass
+    def _branch_exists(branch_name: str) -> bool:
+        try:
+            gh.api(f"repos/{target}/branches/{branch_name}")
+            return True
+        except GhApiError:
+            return False
+
+    release_track_branches = {
+        "release": _branch_exists("release"),
+        "release-major": _branch_exists("release-major"),
+        "release-minor": _branch_exists("release-minor"),
+        "release-patch": _branch_exists("release-patch"),
+    }
+    release_branch_exists = release_track_branches["release"]
+    tracks_present = [b for b in ["release-major", "release-minor", "release-patch"] if release_track_branches[b]]
+    warnings: list[str] = []
+    if len(tracks_present) == 3:
+        release_branch_mode = "multi-track"
+    elif release_branch_exists and len(tracks_present) == 0:
+        release_branch_mode = "legacy"
+        warnings.append(
+            "Legacy release mode detected: track branches release-major/release-minor/release-patch are missing; "
+            "feature work falls back to release. Run 'gh plate bootstrap --apply' to repair standing track branches."
+        )
+    elif release_branch_exists and 0 < len(tracks_present) < 3:
+        release_branch_mode = "hybrid"
+        missing = [b for b in ["release-major", "release-minor", "release-patch"] if b not in tracks_present]
+        warnings.append(
+            "Hybrid release mode detected: partial track branch state; missing "
+            + ", ".join(missing)
+            + ". Run 'gh plate bootstrap --apply' to repair standing track branches."
+        )
+    elif not release_branch_exists and len(tracks_present) > 0:
+        release_branch_mode = "track-only"
+        warnings.append(
+            "Track branches exist but legacy release is missing. Verify whether migration is complete "
+            "or recreate release as needed for compatibility."
+        )
+    else:
+        release_branch_mode = "none"
+        warnings.append(
+            "No release integration branches detected. Run 'gh plate bootstrap --apply' to initialize standing release branches."
+        )
 
     # Find open Release issues
     search = gh.api(
@@ -431,13 +492,22 @@ def get_release_status(
             for t in ["Major", "Minor", "Patch"]:
                 if t in labels:
                     release_track_summary[t] += 1
-            # Simple on-hold heuristic: has track label but not linked to the active next (if we have it).
+            is_epic = "Epic" in labels
+            if not is_epic:
+                continue
+            # On-hold heuristic:
+            # - with active Next Release: Epic has track label but is not linked to Next
+            # - without active Next Release: all open track-labeled Epics are on hold
             if active_next_release:
                 linked_nums = {e["number"] for e in linked_epics}
-                if item["number"] not in linked_nums and "Epic" in [l["name"] for l in item.get("labels", [])]:
+                if item["number"] not in linked_nums:
                     on_hold_epics.append(
                         {"number": item["number"], "title": item["title"], "html_url": item["html_url"], "labels": labels}
                     )
+            else:
+                on_hold_epics.append(
+                    {"number": item["number"], "title": item["title"], "html_url": item["html_url"], "labels": labels}
+                )
     except Exception:
         pass
 
@@ -461,6 +531,10 @@ def get_release_status(
     return ReleaseStatusReport(
         repo=target,
         release_branch_exists=release_branch_exists,
+        release_track_branches=release_track_branches,
+        release_branch_mode=release_branch_mode,
+        release_branch_reset_target="main",
+        warnings=warnings,
         open_release_issues=open_release_issues,
         current_version=current_version,
         latest_version=latest_version,
@@ -604,6 +678,117 @@ def get_release_notes_diff(
         releases_found=selected,
         entries=all_entries,
         migration_steps=all_migration_steps,
+    )
+
+
+def cleanup_dead_branches(
+    repo: str | None = None,
+    base_branch: str | None = None,
+    apply: bool = False,
+    limit: int | None = None,
+    client: GhClient | None = None,
+) -> DeadBranchCleanupReport:
+    """Find and optionally delete dead remote branches."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    owner, _repo_name = target.split("/", 1) if "/" in target else (target, target)
+
+    repo_info = gh.api(f"repos/{target}")
+    default_branch = repo_info.get("default_branch", "main")
+    effective_base = base_branch or default_branch
+
+    reserved = {
+        effective_base,
+        default_branch,
+        "release",
+        "release-major",
+        "release-minor",
+        "release-patch",
+    }
+
+    def _is_reserved(name: str) -> bool:
+        if name in reserved:
+            return True
+        return (
+            name.startswith("release-")
+            or name.startswith("release/")
+            or name.startswith("release-v")
+        )
+
+    branches: list[dict] = []
+    page = 1
+    while True:
+        batch = gh.api(f"repos/{target}/branches?per_page=100&page={page}") or []
+        if not batch:
+            break
+        branches.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+
+    candidates: list[str] = []
+    deleted: list[str] = []
+    failed: list[dict] = []
+    skipped_open_pr: list[str] = []
+    skipped_not_merged: list[str] = []
+    warnings: list[str] = []
+
+    for branch in branches:
+        name = branch.get("name")
+        if not name:
+            continue
+        if branch.get("protected"):
+            continue
+        if _is_reserved(name):
+            continue
+
+        open_prs = gh.api(
+            f"repos/{target}/pulls?state=open&head={owner}:{quote(name, safe='')}&per_page=1"
+        ) or []
+        if open_prs:
+            skipped_open_pr.append(name)
+            continue
+
+        cmp = gh.api(
+            f"repos/{target}/compare/{quote(effective_base, safe='')}...{quote(name, safe='')}"
+        )
+        ahead_by = int(cmp.get("ahead_by", 0))
+        status = (cmp.get("status") or "").lower()
+        merged_into_base = ahead_by == 0 and status in {"behind", "identical"}
+        if not merged_into_base:
+            skipped_not_merged.append(name)
+            continue
+
+        candidates.append(name)
+
+    if limit is not None and limit > 0 and len(candidates) > limit:
+        warnings.append(
+            f"Candidate set truncated by --limit: showing {limit} of {len(candidates)} merged branch candidates."
+        )
+        candidates = candidates[:limit]
+
+    if apply:
+        for name in candidates:
+            try:
+                gh.api(
+                    f"repos/{target}/git/refs/heads/{quote(name, safe='')}",
+                    method="DELETE",
+                )
+                deleted.append(name)
+            except GhApiError as exc:
+                failed.append({"branch": name, "error": str(exc)})
+
+    return DeadBranchCleanupReport(
+        repo=target,
+        base_branch=effective_base,
+        apply=apply,
+        scanned_branches=len(branches),
+        candidates=candidates,
+        deleted=deleted,
+        failed=failed,
+        skipped_open_pr=skipped_open_pr,
+        skipped_not_merged=skipped_not_merged,
+        warnings=warnings,
     )
 
 
@@ -851,6 +1036,6 @@ def cut_release(
     print(f"  5. After merge, the release workflow will create/push tag v{version} from the merged Release PR commit.")
     print(
         f"  6. Hard-reset release branch: "
-        f"git checkout release && git reset --hard v{version} && git push --force-with-lease"
+        f"git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease"
     )
     return 0

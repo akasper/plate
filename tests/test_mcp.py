@@ -257,6 +257,35 @@ class McpTests(unittest.TestCase):
         self.assertFalse(payload["api_write_supported"])
 
     @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.cleanup_dead_branches")
+    def test_tools_call_plate_release_cleanup_branches(self, mock_cleanup, mock_write):
+        mock_cleanup.return_value = type(
+            "CleanupReport",
+            (),
+            {
+                "to_dict": lambda self: {
+                    "repo": "akasper/plate",
+                    "base_branch": "main",
+                    "apply": False,
+                    "scanned_branches": 4,
+                    "candidates": ["feature-merged"],
+                    "deleted": [],
+                    "failed": [],
+                    "skipped_open_pr": [],
+                    "skipped_not_merged": [],
+                    "warnings": [],
+                }
+            },
+        )()
+        _handle_tools_call(
+            16,
+            {"name": "plate_release_cleanup_branches", "arguments": {"repo": "akasper/plate"}},
+        )
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload["repo"], "akasper/plate")
+        self.assertEqual(payload["candidates"], ["feature-merged"])
+
+    @patch("plate_core.mcp_server._write")
     @patch(
         "plate_core.mcp_server.sys.stdin",
         new_callable=lambda: io.StringIO('{"jsonrpc":"2.0","id":5,"method":"tools/list"}\n'),
@@ -272,6 +301,7 @@ class McpTests(unittest.TestCase):
         self.assertIn("plate_config_init", names)
         self.assertIn("plate_config_upgrade", names)
         self.assertIn("plate_release_target_epic", names)
+        self.assertIn("plate_release_cleanup_branches", names)
 
     @patch("plate_core.mcp_server._write")
     @patch(

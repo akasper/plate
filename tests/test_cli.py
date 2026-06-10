@@ -232,6 +232,34 @@ class CliTests(unittest.TestCase):
         self.assertTrue(mock_core_cut.called)
         # Note: full output from core in real run; here stub verifies wiring.
 
+    @patch("plate_core.cli.cleanup_dead_branches")
+    def test_release_cleanup_branches_json_output(self, mock_cleanup):
+        mock_cleanup.return_value = type(
+            "CleanupReport",
+            (),
+            {
+                "to_dict": lambda self: {
+                    "repo": "owner/repo",
+                    "base_branch": "main",
+                    "apply": False,
+                    "scanned_branches": 5,
+                    "candidates": ["feature-merged"],
+                    "deleted": [],
+                    "failed": [],
+                    "skipped_open_pr": [],
+                    "skipped_not_merged": [],
+                    "warnings": [],
+                }
+            },
+        )()
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["release", "cleanup-branches", "--repo", "owner/repo", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertEqual(payload["repo"], "owner/repo")
+        self.assertEqual(payload["candidates"], ["feature-merged"])
+
 
 if __name__ == "__main__":
     unittest.main()

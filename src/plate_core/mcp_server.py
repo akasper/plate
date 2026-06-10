@@ -24,7 +24,12 @@ from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
 from .pr_babysit import babysit_pr, resolve_review_thread
 from .plate_config import apply_plate_config_upgrade, get_plate_config_report, init_plate_config
-from .release import get_release_notes_diff, get_release_status, get_release_target_epic_guidance
+from .release import (
+    cleanup_dead_branches,
+    get_release_notes_diff,
+    get_release_status,
+    get_release_target_epic_guidance,
+)
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
@@ -234,6 +239,13 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = get_release_target_epic_guidance(
                 epic_number=int(args.get("epic_number")),
                 repo=args.get("repo"),
+            ).to_dict()
+        elif name == "plate_release_cleanup_branches":
+            payload = cleanup_dead_branches(
+                repo=args.get("repo"),
+                base_branch=args.get("base_branch"),
+                apply=bool(args.get("apply", False)),
+                limit=args.get("limit"),
             ).to_dict()
         elif name == "plate_release_notes":
             from pathlib import Path
@@ -819,6 +831,31 @@ def run() -> None:
                                         "releases_dir": {
                                             "type": "string",
                                             "description": "Path to the releases directory. Defaults to .agentic/releases.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_release_cleanup_branches",
+                                "description": "Find dead remote branches (merged into base and no open PR) and optionally delete them as a fallback cleanup tool.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "base_branch": {
+                                            "type": "string",
+                                            "description": "Base branch to compare merge state against. Defaults to repository default branch.",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "When true, delete candidate branches. Defaults to false (dry-run).",
+                                        },
+                                        "limit": {
+                                            "type": "integer",
+                                            "description": "Optional max number of candidate branches to process.",
                                         },
                                     },
                                 },
