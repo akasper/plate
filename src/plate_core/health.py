@@ -32,6 +32,7 @@ class HealthReport:
     plate_config_upgrade_available: bool = False
     plate_config_enabled_extensions: list[str] = field(default_factory=list)
     curiosity_answers_present: bool = False
+    plate_repo_signals: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -156,6 +157,24 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         except GhApiError:
             curiosity_answers_present = False
 
+    # PLATE repo detection signals (for #459 / #464 default persona activation)
+    # Strong local signal: .plate/config (already computed); supplement with other common signals.
+    plate_repo_signals: list[str] = []
+    if plate_config_present:
+        plate_repo_signals.append(".plate/config present")
+    try:
+        gh.api(f"repos/{target}/contents/AGENTS.md")
+        plate_repo_signals.append("AGENTS.md present")
+    except GhApiError:
+        pass
+    try:
+        gh.api(f"repos/{target}/contents/.agentic")
+        plate_repo_signals.append(".agentic/ present")
+    except GhApiError:
+        pass
+    if open_epics > 0:
+        plate_repo_signals.append("open Epic issues (GitHub signal)")
+
     # Binary artifact hygiene check (addresses Bug #90 / #91 regression guard)
     # Uses git ls-files to detect any tracked .pyc, __pycache__, or common binaries
     binary_artifacts_tracked = 0
@@ -216,5 +235,6 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         plate_config_upgrade_available=plate_config_upgrade_available,
         plate_config_enabled_extensions=plate_config_enabled_extensions,
         curiosity_answers_present=curiosity_answers_present,
+        plate_repo_signals=plate_repo_signals,
     )
     return report
