@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 authors = [
   {name = "Andrew Kasper"}
 ]
-license = {text = "MIT"}
+license = {text = "MIT with Commons Clause"}
 dependencies = []
 classifiers = [
   "Development Status :: 4 - Beta",
