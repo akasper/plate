@@ -1,0 +1,82 @@
+{
+  "version": "0.6.0",
+  "summary": "PLATE 0.6.0 -- 5 change(s): 408-release-tag-automation, bootstrap-nested-path-encoding, dead-branch-cleanup-fallback-tool, release-reset-main-and-branch-state-status, bootstrap-scaffolding-copy.",
+  "cut_at": "2026-06-10T00:02:40Z",
+  "fragment_count": 5,
+  "fragment_slugs": [
+    "408-release-tag-automation",
+    "bootstrap-nested-path-encoding",
+    "dead-branch-cleanup-fallback-tool",
+    "release-reset-main-and-branch-state-status",
+    "bootstrap-scaffolding-copy"
+  ],
+  "entries": [
+    {
+      "change_type": "process",
+      "surface": "Release PR validation, merge-triggered tagging workflow, release doctrine, release issue template",
+      "migration_impact": "Repositories adopting this change should update Release PR automation so the versioned release artifact and repository version files stay in sync before merge. The merge workflow now owns initial tag creation, while finalize remains responsible for downstream triggers and rollover/repair.",
+      "agent_notes": "Use the release artifact and synced repository version surfaces as the authoritative release version. This fragment is intentionally patch-level: it improves release ceremony automation without changing the product's semver surface. The merge workflow should refuse to retag a different commit and should treat an existing tag on the same merge commit as a no-op.",
+      "migration_guidance": [
+        "1. Update Release PR CI to resolve the intended release version from synced repository version files plus `.agentic/releases/vX.Y.Z/release.json`.",
+        "2. Fail Release PRs when version files disagree or when `refs/tags/vX.Y.Z` already exists on the remote.",
+        "3. Update the release workflow to tag `pull_request.merge_commit_sha` after a merged Release PR to `main`, succeeding idempotently when the tag already points at that commit.",
+        "4. Update release ceremony docs and templates so Release PR merge creates the tag automatically and finalize only handles downstream triggers / rollover."
+      ],
+      "links": [
+        "#306",
+        "#408"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/bootstrap.py, tests/test_bootstrap.py",
+      "migration_impact": "Downstream bootstrap runs no longer fail on nested scaffold files such as docs/wiki/Goals.md. No manual migration is required; rerun bootstrap to receive the nested template payload files successfully.",
+      "agent_notes": "The GitHub contents API expects path separators to remain literal inside the endpoint path. Preserve '/' when building nested contents endpoints and only encode characters that truly need escaping.",
+      "links": [
+        "#421"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "release CLI/MCP tooling",
+      "migration_impact": "Operators and agents can run a dry-run branch cleanup before applying deletions, reducing orphaned-branch drift after merge automation misses cleanup.",
+      "agent_notes": "The cleanup tool automatically excludes protected/default/release namespace branches and only targets branches merged into base with no open PR.",
+      "migration_guidance": [
+        "1. Use `gh plate release cleanup-branches` to preview dead branch candidates.",
+        "2. Use `gh plate release cleanup-branches --apply` to delete candidates after review.",
+        "3. For MCP workflows, call `plate_release_cleanup_branches` with `apply: false` first, then `apply: true`."
+      ],
+      "links": [
+        "#445",
+        "#436"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "release tooling, status surfaces, and release ceremony templates",
+      "migration_impact": "Repositories using legacy release should update release runbooks/checklists to reset release to main (not to a version tag) and can now consume branch mode/warnings from release status JSON.",
+      "agent_notes": "Use release_branch_mode and warnings to detect legacy fallback and branch drift before opening integration PRs.",
+      "migration_guidance": [
+        "1. Replace legacy post-release commands that reset release to vX.Y.Z with: git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease.",
+        "2. If automation parses gh plate release status JSON, read the new fields: release_track_branches, release_branch_mode, release_branch_reset_target, and warnings.",
+        "3. If status reports legacy/hybrid/none warnings, run gh plate bootstrap --apply to repair standing release branch state."
+      ],
+      "links": [
+        "#439",
+        "#436"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "src/plate_core/bootstrap.py, src/plate_core/template_payload/**, docs/bootstrap/new-repository-checklist.md",
+      "migration_impact": "Downstream repositories initialized with `gh plate bootstrap --apply` will now receive the repository-level PLATE scaffold (AGENTS, docs, workflows, scripts, starter assets) in addition to the existing GitHub-side bootstrap work. Rerunning bootstrap leaves existing files untouched.",
+      "agent_notes": "Treat the template payload manifest as the source of truth for repository-scaffold files. The new bootstrap phase uploads the selected payload files through the GitHub contents API and skips any file that already exists. `.plate` remains a separate bootstrap artifact.",
+      "links": [
+        "#413",
+        "#414",
+        "#415",
+        "#416"
+      ]
+    }
+  ]
+}
