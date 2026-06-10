@@ -2,6 +2,18 @@
 
 This repository uses PLATE to keep human judgment, agent execution, and durable GitHub evidence aligned. Contributions should begin with a typed issue, proceed through testable implementation, and end with a pull request that links intent, evidence, documentation, and risk.
 
+## Licensing and Contributions
+
+This repository is licensed under the terms described in the [LICENSE](LICENSE) file at the root (a permissive base license subject to the Commons Clause License Condition v1.0, which restricts commercial use, resale, or SaaS offerings without a separate license from the copyright holder).
+
+**Summary for users:** Free for non-commercial, personal, or internal use and modification. Commercial use, resale, or SaaS offerings require a separate license.
+
+By submitting a contribution (for example, a pull request or patch), you agree that the contribution is provided under the same license terms as the project.
+
+See the full text in the LICENSE file, including the Commons Clause.
+
+(If a formal CLA or additional contribution agreement is adopted in the future, it will be referenced here.)
+
 ## Issue Rules
 
 Every issue must carry exactly one issue type label: `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Task`, `Audit`, or `Migration`. Feature issues, and optional Epic issues when used, must also be assigned to the GitHub milestone that represents the Epic. Question issues are information goals and are not tied to an Epic milestone by default. Task issues may be standalone or inherit an Epic milestone when clearly Epic-related, but they do not require an `Epic:` label and close with a completion comment containing `<!-- PLATE-TASK-CLOSED -->`. Mutable planning state such as status, priority, target date, owner, iteration, and release target belongs in GitHub Projects fields.

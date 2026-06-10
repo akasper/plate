@@ -1,0 +1,9 @@
+{
+  "slug": "add-explicit-licensing",
+  "change_type": "feature",
+  "surface": "LICENSE, README.md, CONTRIBUTING.md, pyproject.toml, plugin/plugin.json, .agentic/releases/unreleased/",
+  "summary": "Adds explicit LICENSE file (MIT + Commons Clause), README blurb, CONTRIBUTING licensing section, metadata updates, and per-feature fragment for Licensing Epic.",
+  "migration_impact": "No immediate changes required for downstream PLATE repositories (per Option C in #390; licensing artifacts are core-only for this release). Template payload propagation is tracked separately in #454.",
+  "agent_notes": "Reference the root LICENSE as the single source of truth for the project's licensing posture (source-available with commercial restriction). The fragment ensures this change is captured in release notes.",
+  "links": ["#390", "#452"]
+}
