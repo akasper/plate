@@ -221,6 +221,7 @@ class AutonomyEngine:
         today = datetime.now(timezone.utc).date()
         if today != self._last_reset:
             self._spent_this_cycle = 0
+            self._spent_today = 0
             self._last_reset = today
 
         cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000)
