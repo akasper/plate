@@ -104,8 +104,9 @@ class AutonomyEngine:
             self.risk_tolerance = (rt or "medium").lower().strip()
         self.procedures: list[ProcedureDef] = self._load_procedures()
         # Simple in-memory spend for governor (real impl would persist or use comments)
+        # Separate per-cycle (reset each run_cycle) and daily (UTC day rollover) counters to address review feedback on budget tracking.
         self._spent_this_cycle: int = 0
-
+        self._spent_today: int = 0
         self._last_reset = datetime.now(timezone.utc).date()
 
     def _load_procedures(self) -> list[ProcedureDef]:
@@ -156,7 +157,7 @@ class AutonomyEngine:
         budget_pct = 0
         daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         if daily > 0:
-            remaining = self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_this_cycle
+            remaining = self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today
             budget_pct = max(0, min(100, (remaining / daily) * 100))
         proc_bonus = min(20, len([p for p in self.procedures if p.enabled]) * 5)
         autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
@@ -170,7 +171,7 @@ class AutonomyEngine:
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_this_cycle if self.autonomy_config else None,
+            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today if self.autonomy_config else None,
             budget_remaining_usd=budget_remaining_usd,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
@@ -220,17 +221,17 @@ class AutonomyEngine:
         today = datetime.now(timezone.utc).date()
         if today != self._last_reset:
             self._spent_this_cycle = 0
-
+            self._spent_today = 0
             self._last_reset = today
 
         cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000)
         daily_cap = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
 
-        projected = self._spent_this_cycle + estimated  # (real: over-estimate here, e.g. * 1.5 + buffer)
+        projected_cycle = self._spent_this_cycle + estimated
+        projected_daily = self._spent_today + estimated
 
-        if projected > cap or (self._spent_this_cycle + estimated) > daily_cap:
-
+        if projected_cycle > cap or projected_daily > daily_cap:
             if action == "pause":
                 # In full engine: set paused, post status comment on Epic or autonomy Discussion
                 return False
@@ -240,10 +241,11 @@ class AutonomyEngine:
                 return False
             # warn: allow but log
             self._spent_this_cycle += estimated
+            self._spent_today += estimated
             return True
 
         self._spent_this_cycle += estimated
-
+        self._spent_today += estimated
         return True
 
     def decide_next(self, snapshot: ProjectSnapshot) -> list[dict[str, Any]]:
