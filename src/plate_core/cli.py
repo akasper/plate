@@ -1048,6 +1048,7 @@ def build_parser() -> argparse.ArgumentParser:
     autonomy.add_argument("--run", action="store_true", help="Run one cycle (or with --loop)")
     autonomy.add_argument("--loop", action="store_true", help="Run multiple cycles (use --max-cycles)")
     autonomy.add_argument("--max-cycles", type=int, default=3, help="For --loop")
+    autonomy.add_argument("--sleep-seconds", type=int, help="Sleep between loop cycles (defaults to .plate autonomy.loop.default_sleep_seconds or 2)")
     autonomy.add_argument("--dry-run", action="store_true", help="Dry run (no side effects)")
     autonomy.add_argument("--max-steps", type=int, help="Cap actions per cycle")
     autonomy.add_argument("--json", action="store_true", help="Output JSON")
