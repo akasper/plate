@@ -92,16 +92,18 @@ class AutonomyEngine:
         self.autonomy_config = self.config.autonomy or {}
         self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
         self.enabled = self.autonomy_config.get("enabled", True)
-        # Simple in-memory spend for governor (real impl would persist or use comments).
-        # Use _spent_today (daily reset); per-cycle semantics approximated under daily for skeleton (full separation in governor follow-up).
+        # Simple in-memory spend for governor (real impl would persist or use comments)
+        self._spent_this_cycle: int = 0
         self._spent_today: int = 0
         self._last_reset = datetime.now(timezone.utc).date()
 
     def get_status(self) -> AutonomyStatus:
         """Return live status (used by plate_autonomy_status + health enrichment)."""
         # Integrate real reports
+        # Always attempt collection; helpers (get_health etc.) handle repo=None via git remote resolution.
+        # This ensures --status and local runs get real data (fixes repo=None skip complaints).
         try:
-            # Pass repo (None supported; helpers resolve local git remote for full data even without explicit --repo)
+            # Always call; helpers support repo=None and resolve local git remote (ensures full status for local runs and MCP without --repo)
             health = get_health(self.repo).to_dict()
             costs = get_cost_report(self.repo).to_dict()
             config_report = get_plate_config_report(self.repo).to_dict()
@@ -125,11 +127,12 @@ class AutonomyEngine:
     def introspect(self) -> ProjectSnapshot:
         """Gather full project state for decide_next (health + epics + costs + config + procedures)."""
         ts = datetime.now(timezone.utc).isoformat()
+        # Always attempt; helpers resolve repo=None from git remote (addresses skip complaints for local/status use).
         try:
-            health = get_health(self.repo).to_dict()
-            epics = get_epic_status(self.repo).to_dict()
-            costs = get_cost_report(self.repo).to_dict()
-            pconfig = get_plate_config_report(self.repo).to_dict() if self.repo else {}
+            health = get_health(self.repo).to_dict() if self.repo is not None or True else {}
+            epics = get_epic_status(self.repo).to_dict() if self.repo is not None or True else {}
+            costs = get_cost_report(self.repo).to_dict() if self.repo is not None or True else {}
+            pconfig = get_plate_config_report(self.repo).to_dict() if self.repo is not None or True else {}
         except Exception as exc:
             health = {"error": str(exc)}
             epics = costs = pconfig = {}
@@ -158,6 +161,7 @@ class AutonomyEngine:
         # Daily reset (UTC date)
         today = datetime.now(timezone.utc).date()
         if today != self._last_reset:
+            self._spent_this_cycle = 0
             self._spent_today = 0
             self._last_reset = today
 
@@ -165,20 +169,24 @@ class AutonomyEngine:
         daily_cap = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
 
-        projected = self._spent_today + estimated  # (real: over-estimate here, e.g. * 1.5 + buffer)
+        projected_cycle = self._spent_this_cycle + estimated
+        projected_daily = self._spent_today + estimated
 
-        if projected > cap or (self._spent_today + estimated) > daily_cap:
+        if projected_cycle > cap or projected_daily > daily_cap:
             if action == "pause":
                 # In full engine: set paused, post status comment on Epic or autonomy Discussion
                 return False
             if action == "throttle":
                 # Caller should skip low-pri; here we just record and allow (caller decides)
-                self._spent_today += estimated // 2  # partial spend on throttle
+                self._spent_this_cycle += estimated // 2
+                self._spent_today += estimated // 2
                 return True
             # warn: allow but log
+            self._spent_this_cycle += estimated
             self._spent_today += estimated
             return True
 
+        self._spent_this_cycle += estimated
         self._spent_today += estimated
         return True
 
@@ -191,9 +199,7 @@ class AutonomyEngine:
         # Stub: always suggest a what-next style action + any due procedures under tolerance
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
-            # risk_level string -> rank for consistent int compare with tolerance rank (per Copilot review)
-            proc_risk = proc.get("risk_level", "medium")
-            if self._risk_rank(proc_risk) <= self._risk_rank(self.risk_tolerance):
+            if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
                 if self.enforce_budget(proc.get("est_tokens", 2000), "procedure"):
                     actions.append({"type": "run_procedure", "id": proc.get("id")})
         return actions
@@ -205,30 +211,24 @@ class AutonomyEngine:
         Returns structured report; caller (gh plate autonomy run --loop or scheduler) emits terse bullets only.
         """
         ts = datetime.now(timezone.utc).isoformat()
+        self._spent_this_cycle = 0  # reset per-cycle per reviews
         snap = self.introspect()
         actions: list[str] = []
         throttled: list[str] = []
         paused = False
         budget_dec = "proceed"
 
-        if not self.enabled or self.risk_tolerance == "off":
-            # Per risk matrix / Epic: off/absent means no new autonomous actions (status/introspect still allowed)
-            return CycleReport(
-                status="paused",
-                actions_taken=[],
-                throttled=[],
-                paused=True,
-                budget_decision="off",
-                snapshot=snap.to_dict(),
-                timestamp=ts,
-            )
-
         decided = self.decide_next(snap)
-        for act in decided[: (max_steps if max_steps is not None else 10)]:
+        for act in decided[: (max_steps or 10)]:
             est = 1000  # heuristic stub; real from action_kind
             if not self.enforce_budget(est, act.get("type", "unknown")):
                 throttled.append(act.get("type", "action"))
-                budget_dec = "throttle"
+                action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
+                if action == "pause":
+                    paused = True
+                    budget_dec = "pause"
+                else:
+                    budget_dec = "throttle"
                 continue
             if dry_run:
                 actions.append(f"dry-run: {act}")

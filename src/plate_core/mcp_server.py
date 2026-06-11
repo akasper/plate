@@ -267,10 +267,16 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_autonomy_status":
             payload = get_autonomy_status(args.get("repo"))
         elif name == "plate_autonomy_run_cycle":
+            max_steps = args.get("max_steps")
+            if max_steps is not None:
+                try:
+                    max_steps = int(max_steps)
+                except (ValueError, TypeError):
+                    max_steps = None
             payload = run_autonomy_cycle(
                 repo=args.get("repo"),
                 dry_run=bool(args.get("dry_run", False)),
-                max_steps=args.get("max_steps"),
+                max_steps=max_steps,
             )
         elif name == "plate_migrate_plan":
             plan = generate_migration_plan()
