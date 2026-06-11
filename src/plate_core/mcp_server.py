@@ -979,7 +979,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_autonomy_run_procedure",
-                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run.",
+                                "description": "Run a specific procedure by id (pre-filtered by risk_tolerance + budget via decide_next/tick_schedules per design; run_procedure dispatches). Supports dry_run.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
