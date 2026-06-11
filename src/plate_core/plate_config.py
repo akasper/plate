@@ -319,7 +319,7 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
             if "max_cycles" in lp:
                 m = lp["max_cycles"]
                 if m is not None and (isinstance(m, bool) or not isinstance(m, (int, float)) or m < 0):
-                    raise PlateConfigError("'autonomy.loop.max_cycles' must be positive number or null")
+                    raise PlateConfigError("'autonomy.loop.max_cycles' must be non-negative number or null")
 
     extensions = config.get("extensions", {})
     if isinstance(extensions, dict):
@@ -366,7 +366,7 @@ MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
         "1.2",
         _migrate_1_1_to_1_2,
         [
-            "Add 'autonomy' section (risk_tolerance off/low/medium/high, token_budget, cost_ceiling, schedules, loop) for Epic #470. Existing .plate without the key deep-merges explicit defaults (enabled=True/medium balanced; edit to risk_tolerance:'off' for no new autonomous behavior per risk matrix).",
+            "Add 'autonomy' section (risk_tolerance off/low/medium/high, token_budget, cost_ceiling, schedules, loop) for Epic #470. Existing .plate without the key deep-merges explicit defaults (enabled=False/risk_tolerance=off conservative per risk matrix: absent/off means no new autonomous behavior until explicitly set; edit to 'medium'/'high' to opt in).",
             "Run `gh plate config upgrade` (or equivalent) to v1.2; the checked-in .plate now includes the section explicitly.",
         ],
     ),

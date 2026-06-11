@@ -16,8 +16,8 @@
     "default_track": null
   },
   "autonomy": {
-    "enabled": true,
-    "risk_tolerance": "medium",
+    "enabled": false,
+    "risk_tolerance": "off",
     "token_budget": {
       "daily": 50000,
       "per_cycle": 8000,
