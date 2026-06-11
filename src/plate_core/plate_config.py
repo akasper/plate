@@ -12,9 +12,9 @@ from typing import Any
 import yaml
 
 
-CURRENT_CONFIG_VERSION = "1.1"
+CURRENT_CONFIG_VERSION = "1.2"
 ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release", "autonomy"}
-ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release"}
+ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release", "autonomy"}
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -33,6 +33,21 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "release": {
         "triggers": [],
         "default_track": None,
+    },
+    "autonomy": {
+        "enabled": False,
+        "risk_tolerance": "off",
+        "token_budget": {
+            "daily": 50000,
+            "per_cycle": 8000,
+            "action": "throttle",
+        },
+        "cost_ceiling_usd": 10.0,
+        "schedules_enabled": True,
+        "loop": {
+            "default_sleep_seconds": 300,
+            "max_cycles": None,
+        },
     },
 }
 
@@ -279,6 +294,15 @@ def _migrate_1_0_to_1_1(config: dict[str, Any]) -> dict[str, Any]:
     return upgraded
 
 
+def _migrate_1_1_to_1_2(config: dict[str, Any]) -> dict[str, Any]:
+    """Add autonomy section (default disabled/off for safe transition per #476)."""
+    upgraded = copy.deepcopy(config)
+    if "autonomy" not in upgraded or not upgraded.get("autonomy"):
+        upgraded["autonomy"] = copy.deepcopy(DEFAULT_CONFIG.get("autonomy", {}))
+    upgraded["version"] = "1.2"
+    return upgraded
+
+
 MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
     "1.0": (
         "1.1",
@@ -286,6 +310,14 @@ MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
         [
             "Upgrade `.plate` to schema v1.1 so root config files always carry the `release` section and normalized extension settings.",
             "Review any enabled extensions after upgrade with `gh plate config show --json`; built-in extension manifests now contribute config before local overrides.",
+        ],
+    ),
+    "1.1": (
+        "1.2",
+        _migrate_1_1_to_1_2,
+        [
+            "Add the 'autonomy' section (default off/risk_tolerance 'off' for safe no-new-auto behavior per #470/#476).",
+            "Set risk_tolerance explicitly in .plate to enable graduated autonomous operation ('low'/'medium'/'high').",
         ],
     ),
 }
