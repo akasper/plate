@@ -1,16 +1,15 @@
 {
   "slug": "autonomous-plate-engine-config-procedures",
   "change_type": "process",
-  "surface": ".plate (new autonomy section + migration), src/plate_core/plate_config.py (DEFAULT + ALLOWED keys + validate_plate_config deep schema for autonomy/token_budget/loop + bool/numeric/enum/unknown checks), docs/research/budget-governor-models-*.md, .agentic/releases/unreleased/ fragment (this slice), AGENTS.md alignment notes",
-  "summary": "Adds the .plate 'autonomy' top-level section (enabled, risk_tolerance off/low/medium/high, token_budget daily/per_cycle/action, cost_ceiling, schedules_enabled, loop) with full validation in plate_config (unknown keys rejected at all levels, bools enforced, numerics reject bools, enums, non-negative ranges, nested shapes). Includes DEFAULT_CONFIG with conservative off default (per Epic risk matrix: absent/off = no new auto behavior until explicit in .plate), extension contribution key for autonomy, migration notes, and research artifact updates. This is the config schema + validation slice of the Autonomous PLATE Engine (Epic #470). Full runtime/engine/MCP/CLI/procedures follow in sibling PRs.",
-  "migration_impact": "Downstream PLATE repositories can now declare autonomy declaratively in .plate (risk_tolerance: 'off' to disable, 'low'/'medium'/'high' for graduated auto). Validation will reject bad values early. This PR adds the schema surface and validate; later slices wire the engine to honor it. Legacy .github/AUTONOMOUS_MODE remains for compat during transition (see migration_guidance).",
-  "agent_notes": "plate_config now validates autonomy payloads strictly (use gh plate config validate). Risk tolerance from .plate is the single knob (off = no new autonomous actions). This slice enables the config; engine surfaces in follow-ups will consult it for decide/enforce/tick.",
+  "surface": "src/plate_core/autonomy.py (skeleton + dataclasses AutonomyStatus/ProjectSnapshot/CycleReport/ProcedureDef + AutonomyEngine __init__/get_status/introspect basic), src/plate_core/mcp_server.py (basic plate_autonomy_status + plate_autonomy_run_cycle wiring), src/plate_core/plate_config.py (autonomy in ALLOWED/DEFAULT + deep validate + v1.2 + migration), .plate (explicit autonomy section), docs/design/autonomous-plate-engine.md (ref), docs/research/budget-governor-models-*.md (update), AGENTS.md (notes), .agentic/releases/unreleased/ fragment (this slice)",
+  "summary": "AutonomyEngine skeleton (core dataclasses + basic AutonomyEngine for Epic #470) + initial plate_autonomy_* MCP surfaces (status, run_cycle) + plate_config autonomy schema addition (v1.2, deep validate for risk/token_budget/loop/bools/enums, migration, extension keys, DEFAULT) + explicit .plate example + research/design/AGENTS alignment. This is the engine skeleton + config/MCP groundwork slice. Full governor, procedures, CLI, observability, persona updates, and AUTONOMOUS_MODE transition in sibling PRs.",
+  "migration_impact": "Repos get AutonomyEngine skeleton and basic MCP status/run_cycle. .plate autonomy section now validated at v1.2 (add it for explicit control; risk_tolerance 'off' disables new auto per matrix). Migration from 1.1 adds the section via deep-merge defaults. Later slices will wire more surfaces and procedures.",
+  "agent_notes": "Basic autonomy surfaces (plate_autonomy_status, run_cycle) now available via MCP/CLI. Use the skeleton for introspect/decide stubs. Full engine behavior (enforce, tick, procedures) lands in follow-ups. Respect .plate autonomy for any autonomous work. Quiet ops apply.",
   "links": [],
   "breaking": false,
   "migration_guidance": [
-    "Add the 'autonomy' section to .plate (copy from DEFAULT or docs). Use 'off' for no new auto, 'medium' for balanced (recommended start).",
-    "Run validation (gh plate config validate or plate_config.validate_plate_config) to catch bad risk/enum/negative/bool-in-numeric early.",
-    "For prior .github/AUTONOMOUS_MODE users: keep the marker for now if needed by legacy paths; add .plate autonomy to opt into new behavior. Full sunset and template removal in later Epic slices.",
-    "See the research doc and design for the full risk matrix and token_budget guidance."
+    "Add the 'autonomy' section to .plate (or run upgrade) for v1.2 schema; set risk_tolerance explicitly ('medium' balanced default; 'off' for no new autonomous per Epic risk matrix).",
+    "The skeleton enables basic status/introspect via MCP; full run_cycle/procedures in sibling changes.",
+    "For legacy .github/AUTONOMOUS_MODE users: this is incremental; full transition (including template removal) in later Epic slices."
   ]
 }
