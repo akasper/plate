@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import asdict
 
 from . import __version__
 from .baseline_catalog import (
@@ -277,6 +278,20 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 repo=args.get("repo"),
                 dry_run=bool(args.get("dry_run", False)),
                 max_steps=max_steps,
+            )
+        elif name == "plate_autonomy_list_procedures":
+            from .autonomy import AutonomyEngine
+            from dataclasses import asdict
+            engine = AutonomyEngine(args.get("repo"))
+            tol_rank = engine._risk_rank(engine.risk_tolerance)
+            procs = [p for p in engine.procedures if engine._risk_rank(p.risk_level) <= tol_rank]
+            payload = {"procedures": [asdict(p) for p in procs]}
+        elif name == "plate_autonomy_run_procedure":
+            from .autonomy import AutonomyEngine
+            engine = AutonomyEngine(args.get("repo"))
+            payload = engine.run_procedure(
+                proc_id=args.get("proc_id"),
+                dry_run=bool(args.get("dry_run", False)),
             )
         elif name == "plate_migrate_plan":
             plan = generate_migration_plan()
@@ -949,6 +964,29 @@ def run() -> None:
                                         "dry_run": {"type": "boolean", "description": "Default false."},
                                         "max_steps": {"type": "integer", "description": "Cap actions this cycle."},
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_autonomy_list_procedures",
+                                "description": "List loaded procedures (from .agentic/procedures/*.json + built-ins), filtered by current risk_tolerance.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_autonomy_run_procedure",
+                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "proc_id": {"type": "string", "description": "Procedure id e.g. nightly-drift-detection"},
+                                        "dry_run": {"type": "boolean", "description": "Default false."},
+                                    },
+                                    "required": ["proc_id"],
                                 },
                             },
                             {

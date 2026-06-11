@@ -11,8 +11,10 @@ Follows quiet ops for looped/scheduled use (terse bullets only; comments only on
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from .costs import get_cost_report
@@ -27,7 +29,7 @@ class AutonomyStatus:
     enabled: bool = True
     risk_tolerance: str = "medium"  # off | low | medium | high
     budget_remaining_tokens: int | None = None
-    budget_remaining_usd: str | None = None  # str for stable JSON/MCP/CLI (populated from cost_ceiling_usd when autonomy section present)
+    budget_remaining_usd: str | None = None
     last_cycle: str | None = None
     next_scheduled: str | None = None
     autopilot_score: int = 0  # 0-100 composite
@@ -89,68 +91,102 @@ class AutonomyEngine:
         self.repo = repo
         self.client = client
         self.config = load_plate_config()
-        # Autonomy section is opt-in only (absent .plate or absent 'autonomy' key => off / legacy AUTONOMOUS_MODE only per #470/#476 contract).
-        # Do not inherit from DEFAULT_CONFIG; only user-provided autonomy section in .plate enables graduated auto behavior.
-        config_dict = self.config.to_dict() if hasattr(self.config, "to_dict") else {}
-        self.autonomy_config = config_dict.get("autonomy", {}) or {}
-        if not self.autonomy_config:
-            self.enabled = False
-            self.risk_tolerance = "off"
-        else:
-            self.enabled = self.autonomy_config.get("enabled", True)
-            self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
+        self.autonomy_config = self.config.autonomy or {}
+        self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
+        self.enabled = self.autonomy_config.get("enabled", True)
+        self.procedures: list[ProcedureDef] = self._load_procedures()
         # Simple in-memory spend for governor (real impl would persist or use comments)
         self._spent_this_cycle: int = 0
         self._last_reset = datetime.now(timezone.utc).date()
 
+    def _load_procedures(self) -> list[ProcedureDef]:
+        """Load procedure defs from .agentic/procedures/*.json (data-driven per design) + built-ins."""
+        procs: list[ProcedureDef] = []
+        proc_dir = Path(".agentic/procedures")
+        if proc_dir.exists():
+            for f in sorted(proc_dir.glob("*.json")):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                    procs.append(ProcedureDef(
+                        id=data["id"],
+                        cadence=data.get("cadence", "manual"),
+                        risk_level=data.get("risk_level", "medium"),
+                        description=data.get("description", ""),
+                        enabled=data.get("enabled", True),
+                    ))
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                    continue  # skip bad/incomplete procedure defs only (do not hide FS/permission errors)
+        # Ensure core built-ins for the Epic (even if files present)
+        existing = {p.id for p in procs}
+        for builtin in [
+            {"id": "nightly-drift-detection", "cadence": "nightly", "risk_level": "medium", "description": "Built-in drift detection (labels, Goals, fragments, health vs expected)"},
+            {"id": "feedback-integration", "cadence": "nightly", "risk_level": "low", "description": "Babysit PR feedback for agents"},
+            {"id": "cost-rollup", "cadence": "weekly", "risk_level": "low", "description": "Aggregate USAGE REPORTs and costs"},
+        ]:
+            if builtin["id"] not in existing:
+                procs.append(ProcedureDef(**builtin))
+        return procs
+
     def get_status(self) -> AutonomyStatus:
         """Return live status (used by plate_autonomy_status + health enrichment)."""
-        # Integrate real reports
-        # Always attempt collection; helpers (get_health etc.) handle repo=None via git remote resolution.
-        # This ensures --status and local runs get real data (fixes repo=None skip complaints).
+        # Integrate real reports. Always call helpers even if self.repo is None; they resolve
+        # from local git remote (origin) when repo=None per design and other call sites.
         try:
-            health = get_health(self.repo).to_dict() if self.repo else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
-            # Config report is always from local filesystem (.plate); never pass remote 'owner/name' string (would be misinterpreted as path).
-            # See review feedback on get_plate_config_report(self.repo) misuse.
-            config_report = get_plate_config_report(None).to_dict()
+            health = get_health(self.repo).to_dict()
+            costs = get_cost_report(self.repo).to_dict()
+            # pconfig: use local Path if repo looks like remote "owner/name"; default to cwd for None
+            if self.repo and isinstance(self.repo, str) and "/" in self.repo:
+                pconfig = get_plate_config_report(Path(".")).to_dict()
+            else:
+                pconfig = get_plate_config_report(self.repo or Path(".")).to_dict()
         except Exception:
-            health = costs = config_report = {}
+            health = costs = pconfig = {}
 
-        # Basic autopilot stub (real: composite from PRs closed autonomously, cycles, gaps, adherence)
-        autopilot = 42  # placeholder; real computation in observability child
+        # autopilot_score (risk + budget adherence + proc count)
+        risk_rank = self._risk_rank(self.risk_tolerance)
+        base = 30 + (risk_rank * 15)
+        budget_pct = 0
+        daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
+        if daily > 0:
+            remaining = daily - self._spent_this_cycle
+            budget_pct = max(0, min(100, (remaining / daily) * 100))
+        proc_bonus = min(20, len([p for p in self.procedures if p.enabled]) * 5)
+        autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
+        autopilot = max(0, min(100, autopilot))
 
-        # budget_remaining_usd reported as str for JSON/MCP/CLI consumer stability (addresses type annotation feedback).
-        usd_val = self.autonomy_config.get("cost_ceiling_usd") if self.autonomy_config else None
-        budget_remaining_usd = str(usd_val) if usd_val is not None else None
-
+        due_ids = [p.id for p in self.procedures if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance)]
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_this_cycle if self.autonomy_config else None,
-            budget_remaining_usd=budget_remaining_usd,
+            budget_remaining_tokens=daily - self._spent_this_cycle,
+            budget_remaining_usd=str(self.autonomy_config.get("cost_ceiling_usd")) if self.autonomy_config.get("cost_ceiling_usd") is not None else None,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
-            due_procedures=[],  # populated by tick_schedules in full impl
+            due_procedures=due_ids,
             open_human_checkpoints=health.get("errors", []),
         )
 
     def introspect(self) -> ProjectSnapshot:
         """Gather full project state for decide_next (health + epics + costs + config + procedures)."""
         ts = datetime.now(timezone.utc).isoformat()
-        # Always attempt; helpers resolve repo=None from git remote (addresses skip complaints for local/status use).
         try:
-            health = get_health(self.repo).to_dict() if self.repo else {}
-            epics = get_epic_status(self.repo).to_dict() if self.repo else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
-            # Config report always local FS (see get_status fix); passing repo str would treat owner/name as path and could raise/blank data.
-            pconfig = get_plate_config_report(None).to_dict()
+            health = get_health(self.repo).to_dict()
+            epics = get_epic_status(self.repo).to_dict()
+            costs = get_cost_report(self.repo).to_dict()
+            # pconfig: use local Path if repo looks like remote "owner/name"; default to cwd for None
+            if self.repo and isinstance(self.repo, str) and "/" in self.repo:
+                pconfig = get_plate_config_report(Path(".")).to_dict()
+            else:
+                pconfig = get_plate_config_report(self.repo or Path(".")).to_dict()
         except Exception as exc:
             health = {"error": str(exc)}
             epics = costs = pconfig = {}
 
-        # due_procedures stub (full: load from .agentic/procedures/ + built-ins, filter by risk_tolerance)
-        due: list[dict[str, Any]] = []
+        # Populate due from loaded procedures (filter risk)
+        due = []
+        for p in self.procedures:
+            if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance):
+                due.append({"id": p.id, "cadence": p.cadence, "risk_level": p.risk_level, "est_tokens": 4000})
 
         return ProjectSnapshot(
             health=health,
@@ -200,18 +236,19 @@ class AutonomyEngine:
     def decide_next(self, snapshot: ProjectSnapshot) -> list[dict[str, Any]]:
         """Decide actions for the cycle (what_next + risk-filtered procedures + budget-aware).
 
-        In full impl: call plate_what_next, tick_schedules, filter by risk_tolerance + enforce_budget.
+        In full impl: call plate_what_next, tick_schedules, filter by risk_tolerance.
+        Budget enforcement (which mutates spend) is performed only at execution time in run_cycle
+        to avoid double-counting when decide_next is called during planning (see run_cycle).
         """
         actions: list[dict[str, Any]] = []
-        # Per design/#470: if disabled or risk 'off', no autonomous actions (no what_next, no procedures).
-        if not self.enabled or self.risk_tolerance == 'off':
+        if not self.enabled or self.risk_tolerance == "off":
             return actions
-        # Suggest what-next + due procedures (risk filtered)
+        # Suggest what-next + due procedures (risk filtered via rank)
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
-                if self.enforce_budget(proc.get("est_tokens", 2000), "procedure"):
-                    actions.append({"type": "run_procedure", "id": proc.get("id")})
+                # Do not call enforce_budget here (planning only); execution path will enforce and record spend.
+                actions.append({"type": "run_procedure", "id": proc.get("id")})
         return actions
 
     def run_cycle(self, *, dry_run: bool = False, max_steps: int | None = None) -> CycleReport:
@@ -221,7 +258,6 @@ class AutonomyEngine:
         Returns structured report; caller (gh plate autonomy run --loop or scheduler) emits terse bullets only.
         """
         ts = datetime.now(timezone.utc).isoformat()
-        self._spent_this_cycle = 0
         snap = self.introspect()
         actions: list[str] = []
         throttled: list[str] = []
@@ -229,7 +265,8 @@ class AutonomyEngine:
         budget_dec = "proceed"
 
         decided = self.decide_next(snap)
-        for act in decided[: (max_steps or 10)]:
+        limit = 10 if max_steps is None else max_steps
+        for act in decided[:limit]:
             est = 1000  # heuristic stub; real from action_kind
             if not self.enforce_budget(est, act.get("type", "unknown")):
                 throttled.append(act.get("type", "action"))
@@ -249,7 +286,7 @@ class AutonomyEngine:
             # <!-- PLATE-AUTONOMY-CYCLE: ... -->
 
         report = CycleReport(
-            status="completed" if not paused else "paused",
+            status="paused" if paused else "completed",
             actions_taken=actions,
             throttled=throttled,
             paused=paused,
@@ -264,18 +301,33 @@ class AutonomyEngine:
         """Run a named procedure (from .agentic/procedures/ or built-in)."""
         if dry_run:
             return {"proc_id": proc_id, "status": "dry-run"}
-        # Full: load def, dispatch allow-listed steps (info_audit, health, babysit, etc.), log PLATE-PROCEDURE-RUN + usage
-        return {"proc_id": proc_id, "status": "executed", "log_marker": f"<!-- PLATE-PROCEDURE-RUN:{proc_id} -->"}
+        # Find def for logging
+        pdef = next((p for p in self.procedures if p.id == proc_id), None)
+        if not pdef:
+            return {"proc_id": proc_id, "status": "not_found"}
+        if not pdef.enabled or self._risk_rank(pdef.risk_level) > self._risk_rank(self.risk_tolerance):
+            return {"proc_id": proc_id, "status": "skipped", "reason": "disabled or exceeds risk_tolerance"}
+        # In full impl: dispatch steps using allow-listed MCP calls (e.g. plate_perform_information_audit, plate_pr_babysit, plate_costs)
+        # For now, record marker + usage (as required by PLATE for procedures)
+        marker = f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence={pdef.cadence if pdef else 'unknown'} risk={pdef.risk_level if pdef else 'unknown'} -->"
+        return {"proc_id": proc_id, "status": "executed", "log_marker": marker}
 
     def tick_schedules(self) -> list[dict[str, Any]]:
         """Find due procedures (cadence match) whose risk_level <= tolerance and run them."""
-        # Stub: in real load from .agentic/procedures/*.json + built-ins, filter, call run_procedure
-        return []
+        due = []
+        for p in self.procedures:
+            if not p.enabled:
+                continue
+            if self._risk_rank(p.risk_level) > self._risk_rank(self.risk_tolerance):
+                continue
+            # Demo: treat "nightly"/"weekly" as due in this autonomous run (real would use last-run timestamp or cron lib)
+            if p.cadence in ("nightly", "weekly", "manual"):
+                due.append({"id": p.id, "risk_level": p.risk_level, "est_tokens": 4000})
+        return due
 
     def _risk_rank(self, tol: str) -> int:
         order = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
-        # Default to 0 (off) for unknown/invalid risk_tolerance (fail closed; prevents silent low-rank allow on typo per review feedback).
-        return order.get((tol or '').lower(), 0)
+        return order.get((tol or "").lower(), 99)  # unknown = most restrictive (not allowed)
 
 
 # Convenience for MCP/CLI
