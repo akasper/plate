@@ -68,7 +68,7 @@ This research directly feeds the Design #472 (add estimate_cost helper to contra
 1. Adopt a simple heuristic-based estimator in the AutonomyEngine (static base costs per known PLATE action + dynamic factors from health/epic_status + historical from costs harvest; always 1.5-2x over-estimate).
 2. Implement enforce_budget that returns Decision (proceed | throttle | pause | warn) and updates internal spend tracking with daily reset.
 3. Expose via plate_autonomy_status (budget fields) and enrich health.
-4. Update the design doc (autonomous-plate-engine.md) if needed for the model details (this Research doc serves as the detailed artifact).
+4. Update the design doc (docs/design/autonomous-plate-engine.md from #472 / PR 494) if needed for the model details (this Research doc serves as the detailed artifact).
 5. No SPEC.md change (this is internal engine detail, not product intent).
 6. The implementing Feature PRs should reference this Research and close #471 via the Documentation PR that lands this .md file.
 
