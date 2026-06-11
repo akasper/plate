@@ -1,0 +1,13 @@
+{
+  "id": "cost-rollup",
+  "cadence": "weekly",
+  "risk_level": "low",
+  "description": "Harvest USAGE REPORTs, aggregate costs per Epic, update .agentic/COSTS.md and wiki snippet.",
+  "steps": [
+    {"tool": "plate_costs", "args": {"epic_label": null}, "apply_if_risk_ok": true},
+    {"action": "update_costs_md"}
+  ],
+  "log_to": ".agentic/autonomy/runs/",
+  "max_tokens_per_run": 3000,
+  "enabled": true
+}

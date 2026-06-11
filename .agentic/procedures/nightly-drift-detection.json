@@ -1,0 +1,15 @@
+{
+  "id": "nightly-drift-detection",
+  "cadence": "nightly",
+  "risk_level": "medium",
+  "description": "Compare live labels, wiki/Goals, .agentic/ fragments, health, and .plate against expected; surface drift as Audit or Question issues.",
+  "steps": [
+    {"tool": "plate_perform_information_audit", "args": {"scope": "repo", "dry_run": false}, "apply_if_risk_ok": true},
+    {"tool": "plate_health", "args": {}},
+    {"action": "compare_and_propose_drift_issues"}
+  ],
+  "log_to": ".agentic/autonomy/runs/",
+  "max_tokens_per_run": 12000,
+  "enabled": true,
+  "requires": ["goals_page_present"]
+}
