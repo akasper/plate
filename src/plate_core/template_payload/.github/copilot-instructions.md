@@ -44,7 +44,7 @@ In a PLATE repository (signaled by the presence of a `.plate/` directory or `.pl
 
 See the root `AGENTS.md` "Default PLATE Persona" section (including the "Workarounds for Default Persona and Auto-Discovery Without Host Coordination" subsection), `plugin/agents/plate.agent.md`, and Epic #459 for details and the opt-out UX contract. This is a core part of making PLATE "just work" without special prompting.
 
-For the extent of what we can achieve without external host coordination: the AGENTS.md + persona + these instructions make PLATE the default *behavioral assumption* (including Quiet Agents #456 rules as fast follow) once the agent engages the local materials. TUI agents discover personas via plugin/ and .github/. Opt-out via explicit host persona or chat prefix (documented in AGENTS.md) provides the reliable switch. See AGENTS.md for full workaround details.
+To the extent of what we can achieve without external host coordination: the AGENTS.md + persona + these instructions make PLATE the default *behavioral assumption* (including Quiet Agents #456 rules as fast follow) once the agent engages the local materials. TUI agents discover personas via plugin/ and .github/. Opt-out via explicit host persona or chat prefix (documented in AGENTS.md) provides the reliable switch. See AGENTS.md for full workaround details.
 
 - process / ceremony / PR rules -> `AGENTS.md`
 - intended goal state -> `SPEC.md`
