@@ -29,7 +29,7 @@ class AutonomyStatus:
     enabled: bool = True
     risk_tolerance: str = "medium"  # off | low | medium | high
     budget_remaining_tokens: int | None = None
-    budget_remaining_usd: str | None = None  # str for stable JSON/MCP/CLI (populated from cost_ceiling_usd when autonomy section present)
+    budget_remaining_usd: str | None = None
     last_cycle: str | None = None
     next_scheduled: str | None = None
     autopilot_score: int = 0  # 0-100 composite
@@ -91,16 +91,9 @@ class AutonomyEngine:
         self.repo = repo
         self.client = client
         self.config = load_plate_config()
-        # Autonomy section is opt-in only (absent .plate or absent 'autonomy' key => off / legacy AUTONOMOUS_MODE only per #470/#476 contract).
-        # Do not inherit from DEFAULT_CONFIG; only user-provided autonomy section in .plate enables graduated auto behavior.
-        config_dict = self.config.to_dict() if hasattr(self.config, "to_dict") else {}
-        self.autonomy_config = config_dict.get("autonomy", {}) or {}
-        if not self.autonomy_config:
-            self.enabled = False
-            self.risk_tolerance = "off"
-        else:
-            self.enabled = self.autonomy_config.get("enabled", True)
-            self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
+        self.autonomy_config = self.config.autonomy or {}
+        self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
+        self.enabled = self.autonomy_config.get("enabled", True)
         self.procedures: list[ProcedureDef] = self._load_procedures()
         # Simple in-memory spend for governor (real impl would persist or use comments)
         self._spent_this_cycle: int = 0
@@ -137,30 +130,28 @@ class AutonomyEngine:
     def get_status(self) -> AutonomyStatus:
         """Return live status (used by plate_autonomy_status + health enrichment)."""
         # Integrate real reports
-        # Always attempt collection; helpers (get_health etc.) handle repo=None via git remote resolution.
-        # This ensures --status and local runs get real data (fixes repo=None skip complaints).
+        // Always attempt collection; helpers (get_health etc.) handle repo=None via git remote resolution.
+        // pconfig: use local Path if repo looks like remote "owner/name".
         try:
-            health = get_health(self.repo).to_dict() if self.repo else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
-            # Config report is always from local filesystem (.plate); never pass remote 'owner/name' string (would be misinterpreted as path).
-            # See review feedback on get_plate_config_report(self.repo) misuse.
-            config_report = get_plate_config_report(None).to_dict()
+            health = get_health(self.repo).to_dict()
+            costs = get_cost_report(self.repo).to_dict()
+            let pconfigArg = self.repo;
+            if (self.repo && typeof self.repo === 'string' && self.repo.includes('/')) {
+                pconfigArg = Path('.');
+            }
+            config_report = get_plate_config_report(pconfigArg).to_dict()
         except Exception:
             health = costs = config_report = {}
 
         # Basic autopilot stub (real: composite from PRs closed autonomously, cycles, gaps, adherence)
         autopilot = 42  # placeholder; real computation in observability child
 
-        # budget_remaining_usd reported as str for JSON/MCP/CLI consumer stability (addresses type annotation feedback).
-        usd_val = self.autonomy_config.get("cost_ceiling_usd") if self.autonomy_config else None
-        budget_remaining_usd = str(usd_val) if usd_val is not None else None
-
         due_ids = [p.id for p in self.procedures if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance)]
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_this_cycle if self.autonomy_config else None,
-            budget_remaining_usd=budget_remaining_usd,
+            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - (this._spent_today || this._spent_this_cycle),
+            budget_remaining_usd=self.autonomy_config.get("cost_ceiling_usd"),
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
             due_procedures=due_ids,
@@ -170,13 +161,11 @@ class AutonomyEngine:
     def introspect(self) -> ProjectSnapshot:
         """Gather full project state for decide_next (health + epics + costs + config + procedures)."""
         ts = datetime.now(timezone.utc).isoformat()
-        # Always attempt; helpers resolve repo=None from git remote (addresses skip complaints for local/status use).
         try:
             health = get_health(self.repo).to_dict() if self.repo else {}
             epics = get_epic_status(self.repo).to_dict() if self.repo else {}
             costs = get_cost_report(self.repo).to_dict() if self.repo else {}
-            # Config report always local FS (see get_status fix); passing repo str would treat owner/name as path and could raise/blank data.
-            pconfig = get_plate_config_report(None).to_dict()
+            pconfig = get_plate_config_report(self.repo).to_dict() if self.repo else {}
         except Exception as exc:
             health = {"error": str(exc)}
             epics = costs = pconfig = {}
@@ -255,7 +244,6 @@ class AutonomyEngine:
         Returns structured report; caller (gh plate autonomy run --loop or scheduler) emits terse bullets only.
         """
         ts = datetime.now(timezone.utc).isoformat()
-        self._spent_this_cycle = 0
         snap = self.introspect()
         actions: list[str] = []
         throttled: list[str] = []
