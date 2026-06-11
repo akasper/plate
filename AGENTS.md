@@ -47,9 +47,7 @@ Full auto-activation (host TUI automatically loading the plate persona on repo o
 
 These changes (in the persona, AGENTS.md, and template copilot-instructions) mean that in practice, agents in PLATE repos will use PLATE behaviors by default once they engage with the local materials. No external host coordination is required for the *behavioral* default and opt-out convention.
 
-See Epic #459 and its children for implementation status. Related: #456 (Quiet Agents, fast follow), #462 (Scriptify Ceremonies, fast follow). 
-
-See Epic #459 and its children for the implementation (detection, host integration, opt-out UX, docs). Related fast-follow: #462 "Scriptify Ceremonies" (prompts + scripts for processes, assuming reliable default persona).
+See Epic #459 and its children for the implementation (detection, host integration, opt-out UX, docs; related fast-follows #456 Quiet Agents and #462 Scriptify Ceremonies for prompts/scripts assuming reliable default persona).
 
 ## Autopilot Doctrine
 
