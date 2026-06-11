@@ -129,15 +129,16 @@ class AutonomyEngine:
 
     def get_status(self) -> AutonomyStatus:
         """Return live status (used by plate_autonomy_status + health enrichment)."""
-        # Integrate real reports
+        # Integrate real reports. Always call helpers even if self.repo is None; they resolve
+        # from local git remote (origin) when repo=None per design and other call sites.
         try:
-            health = get_health(self.repo).to_dict() if self.repo else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
-            # pconfig: use local Path if repo looks like remote "owner/name"
+            health = get_health(self.repo).to_dict()
+            costs = get_cost_report(self.repo).to_dict()
+            # pconfig: use local Path if repo looks like remote "owner/name"; default to cwd for None
             if self.repo and isinstance(self.repo, str) and "/" in self.repo:
                 pconfig = get_plate_config_report(Path(".")).to_dict()
             else:
-                pconfig = get_plate_config_report(self.repo).to_dict() if self.repo else {}
+                pconfig = get_plate_config_report(self.repo or Path(".")).to_dict()
         except Exception:
             health = costs = pconfig = {}
 
@@ -147,7 +148,7 @@ class AutonomyEngine:
         budget_pct = 0
         daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         if daily > 0:
-            remaining = daily - self._spent_today
+            remaining = daily - self._spent_this_cycle
             budget_pct = max(0, min(100, (remaining / daily) * 100))
         proc_bonus = min(20, len([p for p in self.procedures if p.enabled]) * 5)
         autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
@@ -157,8 +158,8 @@ class AutonomyEngine:
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=daily - self._spent_today,
-            budget_remaining_usd=self.autonomy_config.get("cost_ceiling_usd"),
+            budget_remaining_tokens=daily - self._spent_this_cycle,
+            budget_remaining_usd=str(self.autonomy_config.get("cost_ceiling_usd")) if self.autonomy_config.get("cost_ceiling_usd") is not None else None,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
             due_procedures=due_ids,
@@ -169,10 +170,14 @@ class AutonomyEngine:
         """Gather full project state for decide_next (health + epics + costs + config + procedures)."""
         ts = datetime.now(timezone.utc).isoformat()
         try:
-            health = get_health(self.repo).to_dict() if self.repo else {}
-            epics = get_epic_status(self.repo).to_dict() if self.repo else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
-            pconfig = get_plate_config_report(self.repo).to_dict() if self.repo else {}
+            health = get_health(self.repo).to_dict()
+            epics = get_epic_status(self.repo).to_dict()
+            costs = get_cost_report(self.repo).to_dict()
+            # pconfig: use local Path if repo looks like remote "owner/name"; default to cwd for None
+            if self.repo and isinstance(self.repo, str) and "/" in self.repo:
+                pconfig = get_plate_config_report(Path(".")).to_dict()
+            else:
+                pconfig = get_plate_config_report(self.repo or Path(".")).to_dict()
         except Exception as exc:
             health = {"error": str(exc)}
             epics = costs = pconfig = {}
