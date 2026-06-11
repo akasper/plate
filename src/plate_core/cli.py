@@ -1055,6 +1055,7 @@ def build_parser() -> argparse.ArgumentParser:
         pass  # tolerate duplicate registration during parser build (post-rebase for #492)
     autonomy.add_argument("--dry-run", action="store_true", help="Dry run (no side effects)")
     autonomy.add_argument("--max-steps", type=int, help="Cap actions per cycle")
+    autonomy.add_argument("--sleep-seconds", type=int, help="Sleep seconds between --loop cycles (overrides .plate autonomy.loop.default_sleep_seconds; default 300)")
     autonomy.add_argument("--json", action="store_true", help="Output JSON")
     autonomy.add_argument("--sleep-seconds", type=int, help="Sleep between loop cycles (defaults to .plate autonomy.loop.default_sleep_seconds or 2)")
     autonomy.set_defaults(func=cmd_autonomy)
