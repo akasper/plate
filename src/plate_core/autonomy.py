@@ -29,7 +29,7 @@ class AutonomyStatus:
     enabled: bool = True
     risk_tolerance: str = "medium"  # off | low | medium | high
     budget_remaining_tokens: int | None = None
-    budget_remaining_usd: str | None = None
+    budget_remaining_usd: float | None = None  # float (or None) from cost_ceiling_usd; addresses type annotation review feedback for consistency with assignment in get_status
     last_cycle: str | None = None
     next_scheduled: str | None = None
     autopilot_score: int = 0  # 0-100 composite
@@ -162,16 +162,12 @@ class AutonomyEngine:
         autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
         autopilot = max(0, min(100, autopilot))
 
-        # budget_remaining_usd reported as str for JSON/MCP/CLI consumer stability (addresses type annotation feedback).
-        usd_val = self.autonomy_config.get("cost_ceiling_usd") if self.autonomy_config else None
-        budget_remaining_usd = str(usd_val) if usd_val is not None else None
-
         due_ids = [p.id for p in self.procedures if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance)]
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today if self.autonomy_config else None,
-            budget_remaining_usd=budget_remaining_usd,
+            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - getattr(self, "_spent_today", self._spent_this_cycle),
+            budget_remaining_usd=float(self.autonomy_config.get("cost_ceiling_usd") or 0) if self.autonomy_config.get("cost_ceiling_usd") is not None else None,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
             due_procedures=due_ids,
@@ -253,16 +249,13 @@ class AutonomyEngine:
         In full impl: call plate_what_next, tick_schedules, filter by risk_tolerance + enforce_budget.
         """
         actions: list[dict[str, Any]] = []
-        # Per design/#470: if disabled or risk 'off', no autonomous actions (no what_next, no procedures).
-        if not self.enabled or self.risk_tolerance == 'off':
+        if not self.enabled or self.risk_tolerance == "off":
             return actions
-        # Suggest what-next + due procedures (risk filtered, now from registry)
+        # Risk-filtered; budget check in run_cycle to avoid double (per reviews)
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
-
-                if self.enforce_budget(proc.get("est_tokens", 2000), "procedure"):
-                    actions.append({"type": "run_procedure", "id": proc.get("id")})
+                actions.append({"type": "run_procedure", "id": proc.get("id")})
         return actions
 
     def run_cycle(self, *, dry_run: bool = False, max_steps: int | None = None) -> CycleReport:
