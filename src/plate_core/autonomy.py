@@ -27,7 +27,7 @@ class AutonomyStatus:
     enabled: bool = True
     risk_tolerance: str = "medium"  # off | low | medium | high
     budget_remaining_tokens: int | None = None
-    budget_remaining_usd: str | None = None
+    budget_remaining_usd: float | None = None
     last_cycle: str | None = None
     next_scheduled: str | None = None
     autopilot_score: int = 0  # 0-100 composite
@@ -100,9 +100,10 @@ class AutonomyEngine:
         """Return live status (used by plate_autonomy_status + health enrichment)."""
         # Integrate real reports
         try:
-            health = get_health(self.repo).to_dict() if self.repo else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
-            config_report = get_plate_config_report(self.repo).to_dict() if self.repo else {}
+            # Pass repo (None supported; helpers resolve local git remote for full data even without explicit --repo)
+            health = get_health(self.repo).to_dict()
+            costs = get_cost_report(self.repo).to_dict()
+            config_report = get_plate_config_report(self.repo).to_dict()
         except Exception:
             health = costs = config_report = {}
 
@@ -124,9 +125,9 @@ class AutonomyEngine:
         """Gather full project state for decide_next (health + epics + costs + config + procedures)."""
         ts = datetime.now(timezone.utc).isoformat()
         try:
-            health = get_health(self.repo).to_dict() if self.repo else {}
-            epics = get_epic_status(self.repo).to_dict() if self.repo else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
+            health = get_health(self.repo).to_dict()
+            epics = get_epic_status(self.repo).to_dict()
+            costs = get_cost_report(self.repo).to_dict()
             pconfig = get_plate_config_report(self.repo).to_dict() if self.repo else {}
         except Exception as exc:
             health = {"error": str(exc)}
@@ -207,8 +208,20 @@ class AutonomyEngine:
         paused = False
         budget_dec = "proceed"
 
+        if not self.enabled or self.risk_tolerance == "off":
+            # Per risk matrix / Epic: off/absent means no new autonomous actions (status/introspect still allowed)
+            return CycleReport(
+                status="paused",
+                actions_taken=[],
+                throttled=[],
+                paused=True,
+                budget_decision="off",
+                snapshot=snap.to_dict(),
+                timestamp=ts,
+            )
+
         decided = self.decide_next(snap)
-        for act in decided[: (max_steps or 10)]:
+        for act in decided[: (max_steps if max_steps is not None else 10)]:
             est = 1000  # heuristic stub; real from action_kind
             if not self.enforce_budget(est, act.get("type", "unknown")):
                 throttled.append(act.get("type", "action"))
