@@ -270,6 +270,29 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
         if key in config and not isinstance(config[key], dict):
             raise PlateConfigError(f"'{key}' must be an object if present")
 
+    # Autonomy-specific validation (v1.2 schema; rejects invalid risk, non-numeric budget, unknown keys per test and reviews)
+    auto = config.get("autonomy", {})
+    if isinstance(auto, dict):
+        rt = auto.get("risk_tolerance")
+        if rt is not None and rt not in ("off", "low", "medium", "high"):
+            raise PlateConfigError(f"invalid autonomy.risk_tolerance: {rt!r} (allowed: off/low/medium/high)")
+        tb = auto.get("token_budget", {})
+        if isinstance(tb, dict):
+            for k in ("daily", "per_cycle"):
+                v = tb.get(k)
+                if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
+                    raise PlateConfigError(f"autonomy.token_budget.{k} must be integer number, got {v!r}")
+            allowed_tb = {"daily", "per_cycle", "action"}
+            unk_tb = set(tb) - allowed_tb
+            if unk_tb:
+                raise PlateConfigError(f"unknown autonomy.token_budget keys: {', '.join(sorted(unk_tb))}")
+        allowed_auto = {"enabled", "risk_tolerance", "token_budget", "cost_ceiling_usd", "schedules_enabled", "loop"}
+        unk_auto = set(auto) - allowed_auto
+        if unk_auto:
+            raise PlateConfigError(f"unknown autonomy keys: {', '.join(sorted(unk_auto))}")
+    elif "autonomy" in config:
+        raise PlateConfigError("'autonomy' must be an object if present")
+
     extensions = config.get("extensions", {})
     if isinstance(extensions, dict):
         enabled = extensions.get("enabled", True)
