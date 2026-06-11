@@ -44,7 +44,7 @@ The design for AutonomyEngine explicitly calls for **pre-action governor**:
 - Real-time burn in plate_autonomy_status + health.
 - Ties to risk_tolerance (governor still enforces even at high tolerance).
 
-No existing estimation logic in the codebase (grep confirmed zero "estimate", "throttle" only in design comments, "budget" only in planned config).
+No dedicated *token budget* estimation or throttle logic yet in the AutonomyEngine or decide/run paths (grep confirmed; separate risk/timebox estimation surfaces exist elsewhere in plate_core for other purposes such as contemplation). "budget" and "throttle" appear only in planned config and design prose today.
 
 Heuristics ideas (based on sources):
 - Base cost by action/tool: e.g. plate_perform_information_audit (high, scans many surfaces + Goals + issues) ~ 5k-15k tokens; plate_health (low) ~ 200-500; full plan_epic child gen (medium-high, depends on # gaps); delegation (variable); apply-mode procedures (high if involves multiple MCP calls).
@@ -74,8 +74,91 @@ This research directly feeds the Design #472 (add estimate_cost helper to contra
 
 Next autonomous step: move to next sub-issue (#472 Design) once this Research is closed via its Documentation PR. No more autonomous progress possible on #471 without the implementation slices (which are separate children).
 
-## Usage Report (per AGENTS.md for closures)
-tokens: N/A (planning/execution within scheduled loop; actual costs tracked by host scheduler)
-cost: $0.00 (internal)
-duration: 00:05:00 (approx for this autonomous turn)
+### Pseudocode / API Sketch for AutonomyEngine (for #472 Design / #474 impl lift)
+
+```python
+# Minimal sketch: AutonomyEngine governor (research #471 -> design #472)
+from dataclasses import dataclass
+from datetime import date
+from typing import Literal, Optional
+
+Decision = Literal["proceed", "throttle", "pause", "warn"]
+
+BASE_COSTS = {
+    "plate_perform_information_audit": 8000,
+    "plate_plan_epic": 6000,
+    "plate_delegate_to_agent": 2500,
+    "plate_health": 400,
+    "plate_autonomy_run_cycle": 1500,
+    # ... extend from costs harvest + observed
+}
+
+@dataclass
+class BudgetState:
+    last_reset: date
+    spent_this_cycle: int = 0
+    spent_today: int = 0
+
+class AutonomyEngine:
+    def __init__(self, config: dict):
+        self.autonomy_config = config.get("autonomy", {})
+        self._budget = BudgetState(last_reset=date.today())
+        # daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
+        # per_cycle = ...
+
+    def estimate_cost(self, action: str, context: dict) -> int:
+        base = BASE_COSTS.get(action, 1000)
+        # dynamic: open issues, epic gaps, context size (thin)
+        mult = 1.0 + 0.05 * context.get("open_issues", 0)
+        hist = context.get("historical_avg", 0)
+        if hist:
+            base = max(base, int(hist * 0.8))
+        return int(base * mult * 1.7)  # 1.5-2x over-estimate safety
+
+    def _reset_if_new_day(self):
+        today = date.today()
+        if self._budget.last_reset != today:
+            self._budget.last_reset = today
+            self._budget.spent_today = 0
+
+    def enforce_budget(self, estimated: int, action: str) -> Decision:
+        if not self.autonomy_config.get("enabled", True):
+            return "proceed"
+        self._reset_if_new_day()
+        daily_cap = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
+        cycle_cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000)
+        action_pref = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
+
+        projected_daily = self._budget.spent_today + estimated
+        projected_cycle = self._budget.spent_this_cycle + estimated
+
+        if projected_daily > daily_cap or projected_cycle > cycle_cap:
+            if action_pref == "pause":
+                return "pause"
+            if action_pref == "warn":
+                return "warn"
+            return "throttle"  # default safe
+        # charge (real impl may charge partial on throttle)
+        self._budget.spent_today += estimated
+        self._budget.spent_this_cycle += estimated
+        return "proceed"
+
+    # In run_cycle / decide_next:
+    #   est = self.estimate_cost(proc["id"], snap.context)
+    #   dec = self.enforce_budget(est, "run_procedure")
+    #   if dec != "proceed": ... throttle/pause logic, record in report
+```
+
+This sketch is intentionally small and directly liftable; real impl will live in src/plate_core/autonomy.py with the existing dataclasses (AutonomyStatus, CycleReport) and wire to plate_config.
+
+## Example Usage Report Block (reference only)
+
+Actual reports are posted to issue/PR closure comments (for Feature/Question harvesting by plates-on-issue-closed + .agentic/COSTS.md). See AGENTS.md §Issue Artifact Rules.
+
+```
+=== USAGE REPORT ===
+tokens: 0
+cost: $0.00
+duration: 00:05:00
 === END USAGE REPORT ===
+```
