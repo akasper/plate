@@ -91,9 +91,16 @@ class AutonomyEngine:
         self.repo = repo
         self.client = client
         self.config = load_plate_config()
-        self.autonomy_config = self.config.autonomy or {}
-        self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
-        self.enabled = self.autonomy_config.get("enabled", True)
+        # Autonomy section is opt-in only (absent .plate or absent 'autonomy' key => off / legacy AUTONOMOUS_MODE only per #470/#476 contract).
+        # Do not inherit from DEFAULT_CONFIG; only user-provided autonomy section in .plate enables graduated auto behavior.
+        config_dict = self.config.to_dict() if hasattr(self.config, "to_dict") else {}
+        self.autonomy_config = config_dict.get("autonomy", {}) or {}
+        if not self.autonomy_config:
+            self.enabled = False
+            self.risk_tolerance = "off"
+        else:
+            self.enabled = self.autonomy_config.get("enabled", True)
+            self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
         self.procedures: list[ProcedureDef] = self._load_procedures()
         # Simple in-memory spend for governor (real impl would persist or use comments)
         self._spent_this_cycle: int = 0
@@ -243,7 +250,7 @@ class AutonomyEngine:
         actions: list[dict[str, Any]] = []
         if not self.enabled or self.risk_tolerance == "off":
             return actions
-        # Suggest what-next + due procedures (risk filtered via rank)
+        # Suggest what-next + due procedures (risk filtered, from procedures registry)
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
@@ -303,10 +310,6 @@ class AutonomyEngine:
             return {"proc_id": proc_id, "status": "dry-run"}
         # Find def for logging
         pdef = next((p for p in self.procedures if p.id == proc_id), None)
-        if not pdef:
-            return {"proc_id": proc_id, "status": "not_found"}
-        if not pdef.enabled or self._risk_rank(pdef.risk_level) > self._risk_rank(self.risk_tolerance):
-            return {"proc_id": proc_id, "status": "skipped", "reason": "disabled or exceeds risk_tolerance"}
         # In full impl: dispatch steps using allow-listed MCP calls (e.g. plate_perform_information_audit, plate_pr_babysit, plate_costs)
         # For now, record marker + usage (as required by PLATE for procedures)
         marker = f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence={pdef.cadence if pdef else 'unknown'} risk={pdef.risk_level if pdef else 'unknown'} -->"
