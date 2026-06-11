@@ -114,8 +114,8 @@ class AutonomyEngine:
                         description=data.get("description", ""),
                         enabled=data.get("enabled", True),
                     ))
-                except Exception:
-                    continue  # skip bad defs
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                    continue  # skip bad/incomplete procedure defs only (do not hide FS/permission errors)
         # Ensure core built-ins for the Epic (even if files present)
         existing = {p.id for p in procs}
         for builtin in [
