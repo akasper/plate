@@ -13,7 +13,7 @@ import yaml
 
 
 CURRENT_CONFIG_VERSION = "1.1"
-ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release"}
+ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release", "autonomy"}
 ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release"}
 
 
@@ -34,6 +34,21 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "triggers": [],
         "default_track": None,
     },
+    "autonomy": {
+        "enabled": True,
+        "risk_tolerance": "medium",
+        "token_budget": {
+            "daily": 50000,
+            "per_cycle": 8000,
+            "action": "throttle",
+        },
+        "cost_ceiling_usd": 10.0,
+        "schedules_enabled": True,
+        "loop": {
+            "default_sleep_seconds": 300,
+            "max_cycles": None,
+        },
+    },
 }
 
 
@@ -44,6 +59,7 @@ class PlateConfig:
     extensions: dict[str, Any] = field(default_factory=dict)
     overrides: dict[str, Any] = field(default_factory=dict)
     release: dict[str, Any] = field(default_factory=dict)
+    autonomy: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -56,6 +72,7 @@ class PlateConfig:
             extensions=data.get("extensions", {}),
             overrides=data.get("overrides", {}),
             release=data.get("release", {}),
+            autonomy=data.get("autonomy", {}),
         )
 
 
@@ -249,7 +266,7 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
         if unknown:
             raise PlateConfigError(f"unknown top-level keys: {', '.join(unknown)}")
 
-    for key in ("methodology", "extensions", "overrides", "release"):
+    for key in ("methodology", "extensions", "overrides", "release", "autonomy"):
         if key in config and not isinstance(config[key], dict):
             raise PlateConfigError(f"'{key}' must be an object if present")
 
