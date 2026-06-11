@@ -236,7 +236,9 @@ class AutonomyEngine:
     def decide_next(self, snapshot: ProjectSnapshot) -> list[dict[str, Any]]:
         """Decide actions for the cycle (what_next + risk-filtered procedures + budget-aware).
 
-        In full impl: call plate_what_next, tick_schedules, filter by risk_tolerance + enforce_budget.
+        In full impl: call plate_what_next, tick_schedules, filter by risk_tolerance.
+        Budget enforcement (which mutates spend) is performed only at execution time in run_cycle
+        to avoid double-counting when decide_next is called during planning (see run_cycle).
         """
         actions: list[dict[str, Any]] = []
         if not self.enabled or self.risk_tolerance == "off":
@@ -245,8 +247,8 @@ class AutonomyEngine:
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
-                if self.enforce_budget(proc.get("est_tokens", 2000), "procedure"):
-                    actions.append({"type": "run_procedure", "id": proc.get("id")})
+                # Do not call enforce_budget here (planning only); execution path will enforce and record spend.
+                actions.append({"type": "run_procedure", "id": proc.get("id")})
         return actions
 
     def run_cycle(self, *, dry_run: bool = False, max_steps: int | None = None) -> CycleReport:
