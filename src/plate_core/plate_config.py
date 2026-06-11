@@ -12,9 +12,9 @@ from typing import Any
 import yaml
 
 
-CURRENT_CONFIG_VERSION = "1.2"
+CURRENT_CONFIG_VERSION = "1.1"
 ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release", "autonomy"}
-ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release", "autonomy"}
+ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release"}
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -35,8 +35,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "default_track": None,
     },
     "autonomy": {
-        "enabled": False,
-        "risk_tolerance": "off",
+        "enabled": True,
+        "risk_tolerance": "medium",
         "token_budget": {
             "daily": 50000,
             "per_cycle": 8000,
