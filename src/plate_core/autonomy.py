@@ -141,12 +141,9 @@ class AutonomyEngine:
         # Integrate real reports. Always call helpers even if self.repo is None; they resolve
         # from local git remote (origin) when repo=None per design and other call sites.
         try:
-            health = get_health(self.repo).to_dict()
-            costs = get_cost_report(self.repo).to_dict()
-            # Config report is always from local filesystem (.plate); never pass remote 'owner/name' string (would be misinterpreted as path).
-            # See review feedback on get_plate_config_report(self.repo) misuse.
-            config_report = get_plate_config_report(None).to_dict()
-
+            health = get_health(self.repo).to_dict() if self.repo else {}
+            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
+            config_report = get_plate_config_report().to_dict()  # always use local checkout .plate for config (repo str is for remote health/costs only)
         except Exception:
             health = costs = config_report = {}
 
@@ -156,7 +153,7 @@ class AutonomyEngine:
         budget_pct = 0
         daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         if daily > 0:
-            remaining = self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today
+            remaining = self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today  # use daily counter for daily remaining (per_cycle is separate; see enforce_budget and run_cycle reset)
             budget_pct = max(0, min(100, (remaining / daily) * 100))
         proc_bonus = min(20, len([p for p in self.procedures if p.enabled]) * 5)
         autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
@@ -178,12 +175,10 @@ class AutonomyEngine:
         """Gather full project state for decide_next (health + epics + costs + config + procedures)."""
         ts = datetime.now(timezone.utc).isoformat()
         try:
-            health = get_health(self.repo).to_dict()
-            epics = get_epic_status(self.repo).to_dict()
-            costs = get_cost_report(self.repo).to_dict()
-            # Config report always local FS (see get_status fix); passing repo str would treat owner/name as path and could raise/blank data.
-            pconfig = get_plate_config_report(None).to_dict()
-
+            health = get_health(self.repo).to_dict() if self.repo else {}
+            epics = get_epic_status(self.repo).to_dict() if self.repo else {}
+            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
+            pconfig = get_plate_config_report().to_dict()  # always use local checkout .plate for config (repo str is for remote health/costs only)
         except Exception as exc:
             health = {"error": str(exc)}
             epics = costs = pconfig = {}
