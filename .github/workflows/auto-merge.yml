@@ -37,18 +37,11 @@ jobs:
               plateAutonomyPresent = true;
               const plate = JSON.parse(Buffer.from(plateContent.data.content, 'base64').toString());
               const auto = plate.autonomy;
-              // Mark presence of explicit autonomy section (even if disabled/off) so we do not fall through to legacy.
-              // Absent autonomy section (or no .plate) falls through to legacy .github/AUTONOMOUS_MODE check only.
-              // This matches #470/#476: absent = no new auto behavior; legacy marker is compat path (low only).
-              // Explicit .plate autonomy (enabled:false or risk_tolerance:off) must disable, overriding legacy.
-              // present-but-invalid .plate (parse error or bad autonomy) also disables (no legacy fallback).
-              if (auto && typeof auto === 'object') {
-                if (auto.enabled !== false) {
-                  const rt = (auto.risk_tolerance || '').toLowerCase().trim();
-                  if (rt && rt !== 'off') {
-                    tol = rt;
-                    active = true;
-                  }
+              // Require explicit 'autonomy' section in .plate for the new config (addresses review: do not default to active/medium on missing section or .plate without autonomy key; fall through to legacy only then).
+              if (auto && auto.enabled !== false) {
+                tol = (auto.risk_tolerance || 'medium').toLowerCase();
+                if (tol !== 'off') {
+                  active = true;
                 }
               }
             } catch (e) {
