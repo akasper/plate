@@ -80,8 +80,8 @@ Actual reports are posted to issue/PR closure comments (for Feature/Question har
 
 ```
 === USAGE REPORT ===
-tokens: 0
-cost: $0.00
-duration: 00:05:00
+tokens: N/A (planning/execution within scheduled loop; actual costs tracked by host scheduler)
+cost: $0.00 (internal)
+duration: 00:05:00 (approx for this autonomous turn)
 === END USAGE REPORT ===
 ```
