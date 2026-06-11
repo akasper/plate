@@ -35,9 +35,13 @@ jobs:
               });
               const plate = JSON.parse(Buffer.from(plateContent.data.content, 'base64').toString());
               const auto = plate.autonomy;
+              // Only activate from .plate if explicit autonomy section present with risk_tolerance != 'off' (and not disabled).
+              // Absent autonomy section (or no .plate) falls through to legacy .github/AUTONOMOUS_MODE check only.
+              // This matches #470/#476: absent = no new auto behavior; legacy marker is compat path (low only).
               if (auto && typeof auto === 'object' && auto.enabled !== false) {
-                tol = (auto.risk_tolerance || 'medium').toLowerCase();
-                if (tol !== 'off') {
+                const rt = (auto.risk_tolerance || '').toLowerCase().trim();
+                if (rt && rt !== 'off') {
+                  tol = rt;
                   active = true;
                 }
               }
