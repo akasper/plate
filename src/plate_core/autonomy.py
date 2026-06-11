@@ -94,6 +94,7 @@ class AutonomyEngine:
         self.enabled = self.autonomy_config.get("enabled", True)
         # Simple in-memory spend for governor (real impl would persist or use comments)
         self._spent_this_cycle: int = 0
+        self._spent_today: int = 0
         self._last_reset = datetime.now(timezone.utc).date()
 
     def get_status(self) -> AutonomyStatus:
@@ -112,7 +113,7 @@ class AutonomyEngine:
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_this_cycle,
+            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today,
             budget_remaining_usd=self.autonomy_config.get("cost_ceiling_usd"),
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
@@ -163,21 +164,25 @@ class AutonomyEngine:
         daily_cap = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
 
-        projected = self._spent_this_cycle + estimated  # (real: over-estimate here, e.g. * 1.5 + buffer)
+        projected_cycle = self._spent_this_cycle + estimated
+        projected_daily = self._spent_today + estimated
 
-        if projected > cap or (self._spent_this_cycle + estimated) > daily_cap:
+        if projected_cycle > cap or projected_daily > daily_cap:
             if action == "pause":
                 # In full engine: set paused, post status comment on Epic or autonomy Discussion
                 return False
             if action == "throttle":
                 # Caller should skip low-pri; here we just record and allow (caller decides)
-                self._spent_this_cycle += estimated // 2  # partial spend on throttle
+                self._spent_this_cycle += estimated // 2
+                self._spent_today += estimated // 2
                 return True
             # warn: allow but log
             self._spent_this_cycle += estimated
+            self._spent_today += estimated
             return True
 
         self._spent_this_cycle += estimated
+        self._spent_today += estimated
         return True
 
     def decide_next(self, snapshot: ProjectSnapshot) -> list[dict[str, Any]]:
@@ -189,7 +194,7 @@ class AutonomyEngine:
         # Stub: always suggest a what-next style action + any due procedures under tolerance
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
-            if proc.get("risk_level", "medium") <= self._risk_rank(self.risk_tolerance):
+            if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
                 if self.enforce_budget(proc.get("est_tokens", 2000), "procedure"):
                     actions.append({"type": "run_procedure", "id": proc.get("id")})
         return actions
@@ -201,6 +206,7 @@ class AutonomyEngine:
         Returns structured report; caller (gh plate autonomy run --loop or scheduler) emits terse bullets only.
         """
         ts = datetime.now(timezone.utc).isoformat()
+        self._spent_this_cycle = 0  # reset per-cycle per reviews
         snap = self.introspect()
         actions: list[str] = []
         throttled: list[str] = []
@@ -212,7 +218,12 @@ class AutonomyEngine:
             est = 1000  # heuristic stub; real from action_kind
             if not self.enforce_budget(est, act.get("type", "unknown")):
                 throttled.append(act.get("type", "action"))
-                budget_dec = "throttle"
+                action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
+                if action == "pause":
+                    paused = True
+                    budget_dec = "pause"
+                else:
+                    budget_dec = "throttle"
                 continue
             if dry_run:
                 actions.append(f"dry-run: {act}")

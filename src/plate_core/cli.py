@@ -524,6 +524,10 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         print(f"Last cycle: {status.get('last_cycle')}")
         return 0
 
+    if not getattr(args, "run", False) and not getattr(args, "loop", False):
+        print("No --run or --loop specified; execution skipped (use --status for info only).")
+        return 0
+
     dry_run = getattr(args, "dry_run", False)
     max_steps = getattr(args, "max_steps", None)
     loop = getattr(args, "loop", False)
@@ -531,14 +535,16 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         import time
         max_cycles = getattr(args, "max_cycles", 3) or 3
         for i in range(max_cycles):
-            print(f"Cycle {i+1}/{max_cycles} (dry_run={dry_run})...")
+            if not args.json:
+                print(f"Cycle {i+1}/{max_cycles} (dry_run={dry_run})...")
             rep = run_autonomy_cycle(repo=args.repo, dry_run=dry_run, max_steps=max_steps)
             if args.json:
                 print(json.dumps(rep))
             else:
                 print(f"  status={rep.get('status')} budget={rep.get('budget_decision')} actions={len(rep.get('actions_taken', []))}")
             if i < max_cycles - 1:
-                time.sleep(2)
+                sleep_s = getattr(args, "sleep_seconds", 2) or 2
+                time.sleep(sleep_s)
         return 0
 
     rep = run_autonomy_cycle(repo=args.repo, dry_run=dry_run, max_steps=max_steps)
