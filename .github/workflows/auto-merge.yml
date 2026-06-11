@@ -1,8 +1,8 @@
 name: Auto-merge lightweight PRs
 
 # Triggered when a PR receives the 'auto-merge' label.
-# Only merges if .github/AUTONOMOUS_MODE exists on the default branch,
-# confirming that autonomous mode is intentionally active.
+# Only merges if .plate autonomy.risk_tolerance != "off" (or legacy .github/AUTONOMOUS_MODE for transition).
+# This generalizes the old marker-file gate per Epic #470 / #476 (core philosophy: autonomous by default unless 'off' in .plate config).
 # The PR must still satisfy all branch protection rules before GitHub
 # will complete the merge.
 
@@ -18,23 +18,87 @@ jobs:
       pull-requests: write
       contents: write
     steps:
-      - name: Check autonomous mode is active
+      - name: Check autonomous mode is active (prefer .plate autonomy.risk_tolerance)
         id: check
         uses: actions/github-script@v8
         with:
           script: |
+            let active = false;
+            let tol = 'off';
+            let plateAutonomyPresent = false;
+            // Prefer .plate config (new declarative source per #470 refinement, sunsetting AUTONOMOUS_MODE)
             try {
-              await github.rest.repos.getContent({
+              const plateContent = await github.rest.repos.getContent({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                path: '.github/AUTONOMOUS_MODE',
+                path: '.plate',
                 ref: context.payload.repository.default_branch,
               });
-              core.setOutput('active', 'true');
+              const plate = JSON.parse(Buffer.from(plateContent.data.content, 'base64').toString());
+              const auto = plate.autonomy;
+              // Mark presence of explicit autonomy section (even if disabled/off) so we do not fall through to legacy.
+              // Absent autonomy section (or no .plate) falls through to legacy .github/AUTONOMOUS_MODE check only.
+              // This matches #470/#476: absent = no new auto behavior; legacy marker is compat path (low only).
+              // Explicit .plate autonomy (enabled:false or risk_tolerance:off) must disable, overriding legacy.
+              if (auto && typeof auto === 'object') {
+                plateAutonomyPresent = true;
+                if (auto.enabled !== false) {
+                  const rt = (auto.risk_tolerance || '').toLowerCase().trim();
+                  if (rt && rt !== 'off') {
+                    tol = rt;
+                    active = true;
+                  }
+                }
+              }
             } catch (e) {
-              core.setOutput('active', 'false');
-              core.warning('Autonomous mode is not active (.github/AUTONOMOUS_MODE not found). Skipping auto-merge.');
+              // no .plate or no autonomy section; fall through to legacy check
             }
+            if (!active) {
+              if (plateAutonomyPresent) {
+                // Explicit .plate autonomy section present but not activating (disabled or off or no valid rt): do not fall to legacy.
+                core.warning('Autonomous mode not active from .plate (explicit autonomy section present with enabled:false or risk_tolerance off/disabled). Legacy AUTONOMOUS_MODE is ignored when .plate declares autonomy.');
+              } else {
+                // Legacy compat during transition (will be removed after migration)
+                try {
+                  await github.rest.repos.getContent({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    path: '.github/AUTONOMOUS_MODE',
+                    ref: context.payload.repository.default_branch,
+                  });
+                  active = true;
+                  tol = 'low';  // legacy equivalent to old risk:low only
+                } catch (e) {
+                  core.warning('Autonomous mode is not active (no .plate autonomy section with risk_tolerance != "off", and no legacy .github/AUTONOMOUS_MODE). Skipping auto-merge.');
+                }
+              }
+            }
+            // Enforce PR risk:* label <= tol (never critical). Addresses reviews for #487/#476.
+            // Require exactly one valid risk:* label when active; unknown, missing, multiple, or critical, or > tol => block.
+            // This prevents auto-merge without risk label, with conflicting labels, or unrecognized values (default rank now 0 in related code).
+            try {
+              const prLabels = (context.payload.pull_request && context.payload.pull_request.labels) || [];
+              const riskLabels = prLabels.filter(l => l.name && l.name.toLowerCase().startsWith('risk:'));
+              if (active) {
+                const rank = (r) => ({"off":0,"low":1,"medium":2,"high":3,"critical":4}[r] || 0);
+                const tolRank = rank(tol);
+                if (riskLabels.length !== 1) {
+                  active = false;
+                  core.warning(`Blocking auto-merge: expected exactly one risk:* label, found ${riskLabels.length}.`);
+                } else {
+                  const riskLabel = riskLabels[0];
+                  const prRisk = riskLabel.name.split(':')[1].toLowerCase().trim();
+                  const prRank = rank(prRisk);
+                  if (prRisk === 'critical' || prRank > tolRank || prRank === 0 && prRisk !== 'off') {
+                    active = false;
+                    core.warning(`Blocking auto-merge: PR has ${riskLabel.name} but tol=${tol} (critical, exceeds tolerance, unknown, or invalid).`);
+                  }
+                }
+              }
+            } catch (e) {
+              core.warning('Could not validate PR risk label: ' + e.message);
+            }
+            core.setOutput('active', active ? 'true' : 'false');
 
       - name: Enable auto-merge
         if: steps.check.outputs.active == 'true'

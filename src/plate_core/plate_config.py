@@ -12,9 +12,9 @@ from typing import Any
 import yaml
 
 
-CURRENT_CONFIG_VERSION = "1.1"
+CURRENT_CONFIG_VERSION = "1.2"
 ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release", "autonomy"}
-ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release"}
+ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release", "autonomy"}
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -35,8 +35,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "default_track": None,
     },
     "autonomy": {
-        "enabled": True,
-        "risk_tolerance": "medium",
+        "enabled": False,
+        "risk_tolerance": "off",
         "token_budget": {
             "daily": 50000,
             "per_cycle": 8000,
@@ -270,56 +270,28 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
         if key in config and not isinstance(config[key], dict):
             raise PlateConfigError(f"'{key}' must be an object if present")
 
-    if "autonomy" in config:
-        auto = config["autonomy"]
-        if not isinstance(auto, dict):
-            raise PlateConfigError("'autonomy' must be an object if present")
-        allowed = {"enabled", "risk_tolerance", "token_budget", "cost_ceiling_usd", "schedules_enabled", "loop"}
-        unknown = set(auto.keys()) - allowed
-        if unknown:
-            raise PlateConfigError(f"unknown keys in autonomy: {', '.join(sorted(unknown))}")
-        for bkey in ("enabled", "schedules_enabled"):
-            if bkey in auto and not isinstance(auto[bkey], bool):
-                raise PlateConfigError(f"'autonomy.{bkey}' must be boolean")
-        if "risk_tolerance" in auto:
-            rt = auto["risk_tolerance"]
-            if rt not in ("off", "low", "medium", "high"):
-                raise PlateConfigError(f"invalid autonomy.risk_tolerance: {rt!r} (must be off/low/medium/high)")
-        if "token_budget" in auto:
-            tb = auto["token_budget"]
-            if not isinstance(tb, dict):
-                raise PlateConfigError("'autonomy.token_budget' must be an object if present")
-            tb_allowed = {"daily", "per_cycle", "action"}
-            tb_unknown = set(tb.keys()) - tb_allowed
-            if tb_unknown:
-                raise PlateConfigError(f"unknown keys in autonomy.token_budget: {', '.join(sorted(tb_unknown))}")
+    # Autonomy-specific validation (v1.2 schema; rejects invalid risk, non-numeric budget, unknown keys per test and reviews)
+    auto = config.get("autonomy", {})
+    if isinstance(auto, dict):
+        rt = auto.get("risk_tolerance")
+        if rt is not None and rt not in ("off", "low", "medium", "high"):
+            raise PlateConfigError(f"invalid autonomy.risk_tolerance: {rt!r} (allowed: off/low/medium/high)")
+        tb = auto.get("token_budget", {})
+        if isinstance(tb, dict):
             for k in ("daily", "per_cycle"):
-                if k in tb:
-                    v = tb[k]
-                    if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
-                        raise PlateConfigError(f"'autonomy.token_budget.{k}' must be non-negative number (not bool)")
-            if "action" in tb and tb["action"] not in ("throttle", "pause", "warn"):
-                raise PlateConfigError(f"invalid autonomy.token_budget.action: {tb['action']!r}")
-        if "cost_ceiling_usd" in auto:
-            c = auto["cost_ceiling_usd"]
-            if isinstance(c, bool) or not isinstance(c, (int, float)) or c < 0:
-                raise PlateConfigError("'autonomy.cost_ceiling_usd' must be non-negative number (not bool)")
-        if "loop" in auto:
-            lp = auto["loop"]
-            if not isinstance(lp, dict):
-                raise PlateConfigError("'autonomy.loop' must be an object if present")
-            lp_allowed = {"default_sleep_seconds", "max_cycles"}
-            lp_unknown = set(lp.keys()) - lp_allowed
-            if lp_unknown:
-                raise PlateConfigError(f"unknown keys in autonomy.loop: {', '.join(sorted(lp_unknown))}")
-            if "default_sleep_seconds" in lp:
-                s = lp["default_sleep_seconds"]
-                if s is not None and (isinstance(s, bool) or not isinstance(s, (int, float)) or s < 0):
-                    raise PlateConfigError("'autonomy.loop.default_sleep_seconds' must be non-negative number or null")
-            if "max_cycles" in lp:
-                m = lp["max_cycles"]
-                if m is not None and (isinstance(m, bool) or not isinstance(m, (int, float)) or m < 0):
-                    raise PlateConfigError("'autonomy.loop.max_cycles' must be non-negative number or null")
+                v = tb.get(k)
+                if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
+                    raise PlateConfigError(f"autonomy.token_budget.{k} must be integer number, got {v!r}")
+            allowed_tb = {"daily", "per_cycle", "action"}
+            unk_tb = set(tb) - allowed_tb
+            if unk_tb:
+                raise PlateConfigError(f"unknown autonomy.token_budget keys: {', '.join(sorted(unk_tb))}")
+        allowed_auto = {"enabled", "risk_tolerance", "token_budget", "cost_ceiling_usd", "schedules_enabled", "loop"}
+        unk_auto = set(auto) - allowed_auto
+        if unk_auto:
+            raise PlateConfigError(f"unknown autonomy keys: {', '.join(sorted(unk_auto))}")
+    elif "autonomy" in config:
+        raise PlateConfigError("'autonomy' must be an object if present")
 
     extensions = config.get("extensions", {})
     if isinstance(extensions, dict):
@@ -346,12 +318,13 @@ def _migrate_1_0_to_1_1(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _migrate_1_1_to_1_2(config: dict[str, Any]) -> dict[str, Any]:
-    upgraded = _deep_merge(DEFAULT_CONFIG, copy.deepcopy(config))
+    """Add autonomy section (default disabled/off for safe transition per #476)."""
+    upgraded = copy.deepcopy(config)
+    if "autonomy" not in upgraded or not upgraded.get("autonomy"):
+        upgraded["autonomy"] = copy.deepcopy(DEFAULT_CONFIG.get("autonomy", {}))
     upgraded["version"] = "1.2"
-    # Ensure autonomy section is present (deep merge brings defaults)
-    if "autonomy" not in upgraded:
-        upgraded["autonomy"] = DEFAULT_CONFIG["autonomy"].copy()
     return upgraded
+
 
 MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
     "1.0": (
@@ -366,8 +339,8 @@ MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
         "1.2",
         _migrate_1_1_to_1_2,
         [
-            "Add 'autonomy' section (risk_tolerance off/low/medium/high, token_budget, cost_ceiling, schedules, loop) for Epic #470. Existing .plate without the key deep-merges explicit defaults (enabled=False/risk_tolerance=off conservative per risk matrix: absent/off means no new autonomous behavior until explicitly set; edit to 'medium'/'high' to opt in).",
-            "Run `gh plate config upgrade` (or equivalent) to v1.2; the checked-in .plate now includes the section explicitly.",
+            "Add the 'autonomy' section (default off/risk_tolerance 'off' for safe no-new-auto behavior per #470/#476).",
+            "Set risk_tolerance explicitly in .plate to enable graduated autonomous operation ('low'/'medium'/'high').",
         ],
     ),
 }

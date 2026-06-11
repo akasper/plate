@@ -524,14 +524,17 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         print(f"Last cycle: {status.get('last_cycle')}")
         return 0
 
-    if not getattr(args, "run", False) and not getattr(args, "loop", False):
-        print("No --run or --loop specified; execution skipped (use --status for info only).")
+    run_flag = getattr(args, "run", False)
+    loop_flag = getattr(args, "loop", False)
+    # Require --run (or --status) explicitly when not using --loop, per review feedback on surprising auto-execution.
+    # --loop implies execution (and uses --run semantics for the cycle driver).
+    if not getattr(args, "status", False) and not run_flag and not loop_flag:
+        print("No --status, --run or --loop specified; execution skipped (use --status for info only).")
         return 0
 
     dry_run = getattr(args, "dry_run", False)
     max_steps = getattr(args, "max_steps", None)
-    loop = getattr(args, "loop", False)
-    if loop:
+    if loop_flag:
         import time
         from .autonomy import AutonomyEngine
         max_cycles = getattr(args, "max_cycles", 3) or 3
@@ -541,25 +544,27 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         for i in range(max_cycles):
             if not args.json:
                 print(f"Cycle {i+1}/{max_cycles} (dry_run={dry_run})...")
-            rep = engine.run_cycle(dry_run=dry_run, max_steps=max_steps)
-            if hasattr(rep, "to_dict"):
-                rep = rep.to_dict()
+            rep = run_autonomy_cycle(repo=args.repo, dry_run=dry_run, max_steps=max_steps)
             if args.json:
                 print(json.dumps(rep))
             else:
                 print(f"  status={rep.get('status')} budget={rep.get('budget_decision')} actions={len(rep.get('actions_taken', []))}")
             if i < max_cycles - 1:
-                sleep_s = getattr(args, "sleep_seconds", None) or sleep_default
+                sleep_s = getattr(args, "sleep_seconds", 300) or 300
                 time.sleep(sleep_s)
         return 0
 
-    rep = run_autonomy_cycle(repo=args.repo, dry_run=dry_run, max_steps=max_steps)
-    if args.json:
-        print(json.dumps(rep))
+    if run_flag:
+        rep = run_autonomy_cycle(repo=args.repo, dry_run=dry_run, max_steps=max_steps)
+        if args.json:
+            print(json.dumps(rep))
+            return 0
+        print(f"Autonomy cycle: {rep.get('status')}")
+        print(f"Budget decision: {rep.get('budget_decision')}")
+        print(f"Actions taken: {rep.get('actions_taken', [])}")
         return 0
-    print(f"Autonomy cycle: {rep.get('status')}")
-    print(f"Budget decision: {rep.get('budget_decision')}")
-    print(f"Actions taken: {rep.get('actions_taken', [])}")
+
+    # Only status reached here (already returned)
     return 0
 
 
@@ -1038,8 +1043,8 @@ def build_parser() -> argparse.ArgumentParser:
     autonomy.add_argument("--max-cycles", type=int, default=3, help="For --loop")
     autonomy.add_argument("--dry-run", action="store_true", help="Dry run (no side effects)")
     autonomy.add_argument("--max-steps", type=int, help="Cap actions per cycle")
+    autonomy.add_argument("--sleep-seconds", type=int, default=300, help="Sleep seconds between --loop cycles (defaults to 300; --loop implies execution)")
     autonomy.add_argument("--json", action="store_true", help="Output JSON")
-    autonomy.add_argument("--sleep-seconds", type=int, help="Sleep between loop cycles (defaults to .plate autonomy.loop.default_sleep_seconds or 2)")
     autonomy.set_defaults(func=cmd_autonomy)
 
     rel_cut = release_sub.add_parser("cut", help="Cut a release: aggregate fragments to versioned dir (first-class MVP per #261)")
