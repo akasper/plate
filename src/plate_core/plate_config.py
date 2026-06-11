@@ -14,7 +14,7 @@ import yaml
 
 CURRENT_CONFIG_VERSION = "1.1"
 ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release", "autonomy"}
-ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release"}
+ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release", "autonomy"}
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -278,6 +278,10 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
         unknown = set(auto.keys()) - allowed
         if unknown:
             raise PlateConfigError(f"unknown keys in autonomy: {', '.join(sorted(unknown))}")
+        # Bool fields
+        for bkey in ("enabled", "schedules_enabled"):
+            if bkey in auto and not isinstance(auto[bkey], bool):
+                raise PlateConfigError(f"'autonomy.{bkey}' must be boolean")
         if "risk_tolerance" in auto:
             rt = auto["risk_tolerance"]
             if rt not in ("off", "low", "medium", "high"):
@@ -286,17 +290,37 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
             tb = auto["token_budget"]
             if not isinstance(tb, dict):
                 raise PlateConfigError("'autonomy.token_budget' must be an object if present")
+            tb_allowed = {"daily", "per_cycle", "action"}
+            tb_unknown = set(tb.keys()) - tb_allowed
+            if tb_unknown:
+                raise PlateConfigError(f"unknown keys in autonomy.token_budget: {', '.join(sorted(tb_unknown))}")
             for k in ("daily", "per_cycle"):
                 if k in tb:
                     v = tb[k]
-                    if not isinstance(v, (int, float)) or v < 0:
-                        raise PlateConfigError(f"'autonomy.token_budget.{k}' must be non-negative number")
+                    if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
+                        raise PlateConfigError(f"'autonomy.token_budget.{k}' must be non-negative number (not bool)")
             if "action" in tb and tb["action"] not in ("throttle", "pause", "warn"):
                 raise PlateConfigError(f"invalid autonomy.token_budget.action: {tb['action']!r}")
         if "cost_ceiling_usd" in auto:
             c = auto["cost_ceiling_usd"]
-            if not isinstance(c, (int, float)) or c < 0:
-                raise PlateConfigError("'autonomy.cost_ceiling_usd' must be non-negative number")
+            if isinstance(c, bool) or not isinstance(c, (int, float)) or c < 0:
+                raise PlateConfigError("'autonomy.cost_ceiling_usd' must be non-negative number (not bool)")
+        if "loop" in auto:
+            lp = auto["loop"]
+            if not isinstance(lp, dict):
+                raise PlateConfigError("'autonomy.loop' must be an object if present")
+            lp_allowed = {"default_sleep_seconds", "max_cycles"}
+            lp_unknown = set(lp.keys()) - lp_allowed
+            if lp_unknown:
+                raise PlateConfigError(f"unknown keys in autonomy.loop: {', '.join(sorted(lp_unknown))}")
+            if "default_sleep_seconds" in lp:
+                s = lp["default_sleep_seconds"]
+                if s is not None and (isinstance(s, bool) or not isinstance(s, (int, float)) or s < 0):
+                    raise PlateConfigError("'autonomy.loop.default_sleep_seconds' must be non-negative number or null")
+            if "max_cycles" in lp:
+                m = lp["max_cycles"]
+                if m is not None and (isinstance(m, bool) or not isinstance(m, (int, float)) or m < 0):
+                    raise PlateConfigError("'autonomy.loop.max_cycles' must be positive number or null")
 
     extensions = config.get("extensions", {})
     if isinstance(extensions, dict):
