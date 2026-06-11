@@ -344,6 +344,23 @@ class PlateConfigRuntimeTests(unittest.TestCase):
             self.assertEqual(report.extension_providers["release-track-management"], "builtin:release-ceremony")
             self.assertEqual(report.extension_path_providers["release.triggers"], "builtin:release-ceremony")
 
+    def test_autonomy_validation_rejects_invalid_payloads(self):
+        """Covers autonomy schema validation added in this PR (addresses review: exercise valid/invalid autonomy cases)."""
+        # Valid minimal
+        validate_plate_config({"version": "1.2", "autonomy": {"enabled": False, "risk_tolerance": "off"}}, strict=True)
+        # Invalid risk
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"risk_tolerance": "banana"}}, strict=True)
+        # Bool for numeric
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"token_budget": {"daily": True}}}, strict=True)
+        # Unknown key under autonomy
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"foo": 1}}, strict=True)
+        # Unknown under token_budget
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"token_budget": {"foo": 1}}}, strict=True)
+
     def test_local_overrides_win_over_extension_contribution(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -469,6 +486,40 @@ class ValidationResult:
     def __init__(self, valid: bool, errors: List[str]):
         self.valid = valid
         self.errors = errors
+
+
+class TestAutonomyValidation(unittest.TestCase):
+    """Focused tests for the new autonomy schema validation (Epic #470 / #473)."""
+
+    def test_validate_autonomy_good(self):
+        good = {
+            "version": "1.1",
+            "autonomy": {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "token_budget": {"daily": 50000, "per_cycle": 8000, "action": "throttle"},
+                "cost_ceiling_usd": 10,
+                "schedules_enabled": True,
+                "loop": {"default_sleep_seconds": 300, "max_cycles": None},
+            },
+        }
+        # Should not raise
+        validate_plate_config(good, strict=True)
+
+    def test_validate_autonomy_rejects_unknown_and_bad_values(self):
+        cases = [
+            {"version": "1.1", "autonomy": {"risk_tolerance": "extreme"}},
+            {"version": "1.1", "autonomy": {"token_budget": {"daily": -5}}},
+            {"version": "1.1", "autonomy": {"token_budget": {"daily": True}}},  # bool not allowed for numeric
+            {"version": "1.1", "autonomy": {"enabled": "on"}},
+            {"version": "1.1", "autonomy": {"foo": 1}},  # unknown key
+            {"version": "1.1", "autonomy": {"token_budget": {"daily": 1, "bar": 2}}},
+            {"version": "1.1", "autonomy": {"loop": {"default_sleep_seconds": 10, "baz": 1}}},
+            {"version": "1.1", "autonomy": {"cost_ceiling_usd": -1}},
+        ]
+        for bad in cases:
+            with self.assertRaises(PlateConfigError):
+                validate_plate_config(bad, strict=True)
 
 
 if __name__ == "__main__":

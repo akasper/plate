@@ -1,0 +1,16 @@
+{
+  "slug": "autonomous-plate-engine-config-procedures",
+  "change_type": "process",
+  "surface": ".plate (new autonomy section + migration), src/plate_core/plate_config.py (DEFAULT + ALLOWED keys + validate_plate_config deep schema for autonomy/token_budget/loop + bool/numeric/enum/unknown checks), docs/research/budget-governor-models-*.md, .agentic/releases/unreleased/ fragment (this slice), AGENTS.md alignment notes",
+  "summary": "Adds the .plate 'autonomy' top-level section (enabled, risk_tolerance off/low/medium/high, token_budget daily/per_cycle/action, cost_ceiling, schedules_enabled, loop) with full validation in plate_config (unknown keys rejected at all levels, bools enforced, numerics reject bools, enums, non-negative ranges, nested shapes). Includes DEFAULT_CONFIG with conservative off default (per Epic risk matrix: absent/off = no new auto behavior until explicit in .plate), extension contribution key for autonomy, migration notes, and research artifact updates. This is the config schema + validation slice of the Autonomous PLATE Engine (Epic #470). Full runtime/engine/MCP/CLI/procedures follow in sibling PRs.",
+  "migration_impact": "Downstream PLATE repositories can now declare autonomy declaratively in .plate (risk_tolerance: 'off' to disable, 'low'/'medium'/'high' for graduated auto). Validation will reject bad values early. This PR adds the schema surface and validate; later slices wire the engine to honor it. Legacy .github/AUTONOMOUS_MODE remains for compat during transition (see migration_guidance).",
+  "agent_notes": "plate_config now validates autonomy payloads strictly (use gh plate config validate). Risk tolerance from .plate is the single knob (off = no new autonomous actions). This slice enables the config; engine surfaces in follow-ups will consult it for decide/enforce/tick.",
+  "links": [],
+  "breaking": false,
+  "migration_guidance": [
+    "Add the 'autonomy' section to .plate (copy from DEFAULT or docs). Use 'off' for no new auto, 'medium' for balanced (recommended start).",
+    "Run validation (gh plate config validate or plate_config.validate_plate_config) to catch bad risk/enum/negative/bool-in-numeric early.",
+    "For prior .github/AUTONOMOUS_MODE users: keep the marker for now if needed by legacy paths; add .plate autonomy to opt into new behavior. Full sunset and template removal in later Epic slices.",
+    "See the research doc and design for the full risk matrix and token_budget guidance."
+  ]
+}
