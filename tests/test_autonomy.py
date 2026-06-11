@@ -62,6 +62,7 @@ class TestAutonomyEngine(unittest.TestCase):
     def test_enforce_budget_throttle(self):
         engine = AutonomyEngine(repo=None)
         engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 500, "action": "throttle"}}
+        engine.enabled = True  # test exercises enforcement path (default now conservative False per Epic #470; test must opt-in)
         engine.risk_tolerance = "high"
         engine.enabled = True
         engine._spent_this_cycle = 0
