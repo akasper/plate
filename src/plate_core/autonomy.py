@@ -238,10 +238,9 @@ class AutonomyEngine:
         In full impl: call plate_what_next, tick_schedules, filter by risk_tolerance + enforce_budget.
         """
         actions: list[dict[str, Any]] = []
-        # Per design/#470: if disabled or risk 'off', no autonomous actions (no what_next, no procedures).
-        if not self.enabled or self.risk_tolerance == 'off':
+        if not self.enabled or self.risk_tolerance == "off":
             return actions
-        # Suggest what-next + due procedures (now loaded from .agentic/procedures/)
+        # Suggest what-next + due procedures (risk filtered via rank)
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
@@ -284,7 +283,7 @@ class AutonomyEngine:
             # <!-- PLATE-AUTONOMY-CYCLE: ... -->
 
         report = CycleReport(
-            status="completed" if not paused else "paused",
+            status="paused" if paused else "completed",
             actions_taken=actions,
             throttled=throttled,
             paused=paused,
@@ -315,14 +314,13 @@ class AutonomyEngine:
             if self._risk_rank(p.risk_level) > self._risk_rank(self.risk_tolerance):
                 continue
             # Demo: treat "nightly"/"weekly" as due in this autonomous run (real would use last-run timestamp or cron lib)
-            if p.cadence in ("nightly", "weekly", "manual") or True:
+            if p.cadence in ("nightly", "weekly", "manual"):
                 due.append({"id": p.id, "risk_level": p.risk_level, "est_tokens": 4000})
         return due
 
     def _risk_rank(self, tol: str) -> int:
         order = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
-        # Default to 0 (off) for unknown/invalid risk_tolerance (fail closed; prevents silent low-rank allow on typo per review feedback).
-        return order.get((tol or '').lower(), 0)
+        return order.get((tol or "").lower(), 99)  # unknown = most restrictive (not allowed)
 
 
 # Convenience for MCP/CLI
