@@ -149,24 +149,28 @@ class AutonomyEngine:
         except Exception:
             health = costs = pconfig = {}
 
-        # autopilot_score (risk + budget adherence + proc count)
+        # Compute autopilot_score (for #479 observability): base on risk tolerance (higher tolerance = more autonomous potential), budget adherence, enabled procedures count.
         risk_rank = self._risk_rank(self.risk_tolerance)
-        base = 30 + (risk_rank * 15)
+        base = 30 + (risk_rank * 15)  # 30-75 from risk
         budget_pct = 0
         daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         if daily > 0:
-            remaining = daily - self._spent_this_cycle
+            remaining = self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_this_cycle
             budget_pct = max(0, min(100, (remaining / daily) * 100))
         proc_bonus = min(20, len([p for p in self.procedures if p.enabled]) * 5)
         autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
         autopilot = max(0, min(100, autopilot))
+
+        # budget_remaining_usd reported as str for JSON/MCP/CLI consumer stability (addresses type annotation feedback).
+        usd_val = self.autonomy_config.get("cost_ceiling_usd") if self.autonomy_config else None
+        budget_remaining_usd = str(usd_val) if usd_val is not None else None
 
         due_ids = [p.id for p in self.procedures if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance)]
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
             budget_remaining_tokens=daily - self._spent_this_cycle,
-            budget_remaining_usd=str(self.autonomy_config.get("cost_ceiling_usd")) if self.autonomy_config.get("cost_ceiling_usd") is not None else None,
+            budget_remaining_usd=budget_remaining_usd,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
             due_procedures=due_ids,
