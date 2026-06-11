@@ -130,27 +130,34 @@ class AutonomyEngine:
     def get_status(self) -> AutonomyStatus:
         """Return live status (used by plate_autonomy_status + health enrichment)."""
         # Integrate real reports
-        // Always attempt collection; helpers (get_health etc.) handle repo=None via git remote resolution.
-        // pconfig: use local Path if repo looks like remote "owner/name".
         try:
-            health = get_health(self.repo).to_dict()
-            costs = get_cost_report(self.repo).to_dict()
-            let pconfigArg = self.repo;
-            if (self.repo && typeof self.repo === 'string' && self.repo.includes('/')) {
-                pconfigArg = Path('.');
-            }
-            config_report = get_plate_config_report(pconfigArg).to_dict()
+            health = get_health(self.repo).to_dict() if self.repo else {}
+            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
+            # pconfig: use local Path if repo looks like remote "owner/name"
+            if self.repo and isinstance(self.repo, str) and "/" in self.repo:
+                pconfig = get_plate_config_report(Path(".")).to_dict()
+            else:
+                pconfig = get_plate_config_report(self.repo).to_dict() if self.repo else {}
         except Exception:
-            health = costs = config_report = {}
+            health = costs = pconfig = {}
 
-        # Basic autopilot stub (real: composite from PRs closed autonomously, cycles, gaps, adherence)
-        autopilot = 42  # placeholder; real computation in observability child
+        # autopilot_score (risk + budget adherence + proc count)
+        risk_rank = self._risk_rank(self.risk_tolerance)
+        base = 30 + (risk_rank * 15)
+        budget_pct = 0
+        daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
+        if daily > 0:
+            remaining = daily - self._spent_today
+            budget_pct = max(0, min(100, (remaining / daily) * 100))
+        proc_bonus = min(20, len([p for p in self.procedures if p.enabled]) * 5)
+        autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
+        autopilot = max(0, min(100, autopilot))
 
         due_ids = [p.id for p in self.procedures if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance)]
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - (this._spent_today || this._spent_this_cycle),
+            budget_remaining_tokens=daily - self._spent_today,
             budget_remaining_usd=self.autonomy_config.get("cost_ceiling_usd"),
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
