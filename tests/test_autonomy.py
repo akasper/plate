@@ -63,6 +63,7 @@ class TestAutonomyEngine(unittest.TestCase):
         engine = AutonomyEngine(repo=None)
         engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 500, "action": "throttle"}}
         engine.risk_tolerance = "high"
+        engine.enabled = True
         engine._spent_this_cycle = 0
         # First spend within limits
         self.assertTrue(engine.enforce_budget(400, "test"))
@@ -75,6 +76,7 @@ class TestAutonomyEngine(unittest.TestCase):
         engine = AutonomyEngine(repo=None)
         engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 100, "action": "pause"}}
         engine.risk_tolerance = "high"
+        engine.enabled = True
         engine._spent_this_cycle = 0
         # Under limit: proceeds
         self.assertTrue(engine.enforce_budget(50, "test"))
@@ -103,6 +105,7 @@ class TestAutonomyEngine(unittest.TestCase):
         engine = AutonomyEngine(repo=None)
         engine.risk_tolerance = "medium"
         engine.autonomy_config = {"token_budget": {"daily": 1, "per_cycle": 1, "action": "pause"}}
+        engine.enabled = True
         engine._spent_this_cycle = 100
         report = engine.run_cycle(dry_run=True, max_steps=5)
         self.assertEqual(report.status, "paused")
