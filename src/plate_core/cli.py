@@ -541,15 +541,13 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         for i in range(max_cycles):
             if not args.json:
                 print(f"Cycle {i+1}/{max_cycles} (dry_run={dry_run})...")
-            rep = engine.run_cycle(dry_run=dry_run, max_steps=max_steps)
-            if hasattr(rep, "to_dict"):
-                rep = rep.to_dict()
+            rep = run_autonomy_cycle(repo=args.repo, dry_run=dry_run, max_steps=max_steps)
             if args.json:
                 print(json.dumps(rep))
             else:
                 print(f"  status={rep.get('status')} budget={rep.get('budget_decision')} actions={len(rep.get('actions_taken', []))}")
             if i < max_cycles - 1:
-                sleep_s = getattr(args, "sleep_seconds", None) or sleep_default
+                sleep_s = getattr(args, "sleep_seconds", 2) or 2
                 time.sleep(sleep_s)
         return 0
 

@@ -211,7 +211,7 @@ class AutonomyEngine:
         Returns structured report; caller (gh plate autonomy run --loop or scheduler) emits terse bullets only.
         """
         ts = datetime.now(timezone.utc).isoformat()
-        self._spent_this_cycle = 0  # reset per-cycle per reviews
+        self._spent_this_cycle = 0
         snap = self.introspect()
         actions: list[str] = []
         throttled: list[str] = []
