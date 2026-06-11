@@ -24,6 +24,13 @@ How should the budget governor in the AutonomyEngine estimate costs of actions (
 
 This research artifact itself (the .md) + the pseudocode sketch below serve as the detailed model for Design #472 and Feature #474 slices.
 
+- Primary: docs/design/autonomous-plate-engine.md (the planning design artifact, sections on Token budget governor, AutonomyEngine runtime, risk matrix, enforcement in decide_next/run_cycle)
+- Related design/research: docs/design/cost-control-*.md (prior layered context and thin surfaces for cost control); docs/research/ (other audits like quiet-agents-audit.md showing pattern for findings)
+- GitHub state (via MCP issue_read): #470 and children still open stubs with need:refinement; no existing PRs for this child yet
+- Local workspace (git status, read_file): uncommitted changes from prior planning (design doc, fragment); current .plate lacks autonomy section
+
+Search path documented: Started with GitHub MCP issue_read on #470 + get_sub_issues to confirm children and state. Used local read_file/grep on key sources (design, costs, config, mcp). Ran terminal git status. Cross-referenced AGENTS.md and prior cost-control designs. No external web; all primary repo artifacts.
+
 ## Findings
 
 Current cost system is purely **observability / post-facto**:
