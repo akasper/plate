@@ -81,7 +81,7 @@ class HealthTests(unittest.TestCase):
         self.assertTrue(report.plate_config_present)
         self.assertTrue(report.plate_config_valid)
         self.assertEqual(report.plate_config_file_version, "1.0")
-        self.assertEqual(report.plate_config_resolved_version, "1.1")
+        self.assertEqual(report.plate_config_resolved_version, "1.2")
         self.assertTrue(report.plate_config_upgrade_available)
         self.assertIn(".plate/config present", report.plate_repo_signals)  # #459 / #464 detection for default persona
 
@@ -129,7 +129,7 @@ class HealthTests(unittest.TestCase):
         self.assertTrue(report.plate_config_present)
         self.assertTrue(report.plate_config_valid)
         self.assertEqual(report.plate_config_file_version, "1.0")
-        self.assertEqual(report.plate_config_resolved_version, "1.1")
+        self.assertEqual(report.plate_config_resolved_version, "1.2")
         self.assertTrue(report.plate_config_upgrade_available)
         self.assertTrue(report.curiosity_answers_present)
 

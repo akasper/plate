@@ -331,8 +331,9 @@ class PlateConfigRuntimeTests(unittest.TestCase):
             (root / ".plate").write_text(
                 json.dumps(
                     {
-                        "version": "1.1",
+                        "version": "1.2",
                         "extensions": {"enabled": True, "installed": {"release-track-management": True}},
+                        "autonomy": {"enabled": False, "risk_tolerance": "off", "token_budget": {"daily": 50000, "per_cycle": 8000, "action": "throttle"}, "cost_ceiling_usd": 10.0, "schedules_enabled": False, "loop": {"default_sleep_seconds": 300, "max_cycles": None}},
                         "overrides": {},
                     }
                 ),
@@ -492,7 +493,7 @@ class TestAutonomySchemaDefaultsAndMigration(unittest.TestCase):
     """Tests for v1.2 autonomy addition, defaults, compat (no key in .plate), and migration (Epic #470 / #474 skeleton + config)."""
 
     def test_default_autonomy_present_and_valid(self):
-        # DEFAULT now includes autonomy (conservative per risk matrix); validate accepts it
+        # DEFAULT now includes autonomy (conservative off per Epic #470 risk matrix: absent/off means no new autonomous behavior until explicitly set in .plate)
         self.assertIn("autonomy", DEFAULT_CONFIG)
         auto = DEFAULT_CONFIG["autonomy"]
         self.assertEqual(auto.get("risk_tolerance"), "off")
