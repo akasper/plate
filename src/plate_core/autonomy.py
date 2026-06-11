@@ -259,7 +259,7 @@ class AutonomyEngine:
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
                 # Do not call enforce_budget here (planning only); execution path will enforce and record spend.
-                actions.append({"type": "run_procedure", "id": proc.get("id")})
+                actions.append({"type": "run_procedure", "id": proc.get("id"), "est_tokens": proc.get("est_tokens", 1000)})
         return actions
 
     def run_cycle(self, *, dry_run: bool = False, max_steps: int | None = None) -> CycleReport:
@@ -276,9 +276,8 @@ class AutonomyEngine:
         budget_dec = "proceed"
 
         decided = self.decide_next(snap)
-        limit = 10 if max_steps is None else max_steps
-        for act in decided[:limit]:
-            est = 1000  # heuristic stub; real from action_kind
+        for act in decided[: (max_steps or 10)]:
+            est = act.get("est_tokens", 1000)  # use per-action estimate from decide_next/snapshot when present (e.g. 2000/4000 for procedures); fallback heuristic for others like what_next (addresses copilot review on hardcoded est=1000 ignoring estimates)
             if not self.enforce_budget(est, act.get("type", "unknown")):
                 throttled.append(act.get("type", "action"))
                 action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
