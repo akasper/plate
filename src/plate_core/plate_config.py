@@ -12,7 +12,7 @@ from typing import Any
 import yaml
 
 
-CURRENT_CONFIG_VERSION = "1.1"
+CURRENT_CONFIG_VERSION = "1.2"
 ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release", "autonomy"}
 ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release", "autonomy"}
 
@@ -278,7 +278,6 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
         unknown = set(auto.keys()) - allowed
         if unknown:
             raise PlateConfigError(f"unknown keys in autonomy: {', '.join(sorted(unknown))}")
-        # Bool fields
         for bkey in ("enabled", "schedules_enabled"):
             if bkey in auto and not isinstance(auto[bkey], bool):
                 raise PlateConfigError(f"'autonomy.{bkey}' must be boolean")
@@ -346,6 +345,14 @@ def _migrate_1_0_to_1_1(config: dict[str, Any]) -> dict[str, Any]:
     return upgraded
 
 
+def _migrate_1_1_to_1_2(config: dict[str, Any]) -> dict[str, Any]:
+    upgraded = _deep_merge(DEFAULT_CONFIG, copy.deepcopy(config))
+    upgraded["version"] = "1.2"
+    # Ensure autonomy section is present (deep merge brings defaults)
+    if "autonomy" not in upgraded:
+        upgraded["autonomy"] = DEFAULT_CONFIG["autonomy"].copy()
+    return upgraded
+
 MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
     "1.0": (
         "1.1",
@@ -353,6 +360,14 @@ MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
         [
             "Upgrade `.plate` to schema v1.1 so root config files always carry the `release` section and normalized extension settings.",
             "Review any enabled extensions after upgrade with `gh plate config show --json`; built-in extension manifests now contribute config before local overrides.",
+        ],
+    ),
+    "1.1": (
+        "1.2",
+        _migrate_1_1_to_1_2,
+        [
+            "Add 'autonomy' section (risk_tolerance off/low/medium/high, token_budget, cost_ceiling, schedules, loop) for Epic #470. Existing .plate without the key deep-merges explicit defaults (enabled=True/medium balanced; edit to risk_tolerance:'off' for no new autonomous behavior per risk matrix).",
+            "Run `gh plate config upgrade` (or equivalent) to v1.2; the checked-in .plate now includes the section explicitly.",
         ],
     ),
 }

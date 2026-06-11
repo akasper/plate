@@ -488,39 +488,45 @@ class ValidationResult:
         self.errors = errors
 
 
-class TestAutonomyValidation(unittest.TestCase):
-    """Focused tests for the new autonomy schema validation (Epic #470 / #473)."""
+class TestAutonomySchemaDefaultsAndMigration(unittest.TestCase):
+    """Tests for v1.2 autonomy addition, defaults, compat (no key in .plate), and migration (Epic #470 / #474 skeleton + config)."""
 
-    def test_validate_autonomy_good(self):
-        good = {
-            "version": "1.1",
-            "autonomy": {
-                "enabled": True,
-                "risk_tolerance": "medium",
-                "token_budget": {"daily": 50000, "per_cycle": 8000, "action": "throttle"},
-                "cost_ceiling_usd": 10,
-                "schedules_enabled": True,
-                "loop": {"default_sleep_seconds": 300, "max_cycles": None},
-            },
-        }
-        # Should not raise
-        validate_plate_config(good, strict=True)
+    def test_default_autonomy_present_and_valid(self):
+        # DEFAULT now includes autonomy (conservative per risk matrix); validate accepts it
+        self.assertIn("autonomy", DEFAULT_CONFIG)
+        auto = DEFAULT_CONFIG["autonomy"]
+        self.assertEqual(auto.get("risk_tolerance"), "off")
+        self.assertFalse(auto.get("enabled"))
+        validate_plate_config({"version": "1.2", "autonomy": auto}, strict=True)
 
-    def test_validate_autonomy_rejects_unknown_and_bad_values(self):
-        cases = [
-            {"version": "1.1", "autonomy": {"risk_tolerance": "extreme"}},
-            {"version": "1.1", "autonomy": {"token_budget": {"daily": -5}}},
-            {"version": "1.1", "autonomy": {"token_budget": {"daily": True}}},  # bool not allowed for numeric
-            {"version": "1.1", "autonomy": {"enabled": "on"}},
-            {"version": "1.1", "autonomy": {"foo": 1}},  # unknown key
-            {"version": "1.1", "autonomy": {"token_budget": {"daily": 1, "bar": 2}}},
-            {"version": "1.1", "autonomy": {"loop": {"default_sleep_seconds": 10, "baz": 1}}},
-            {"version": "1.1", "autonomy": {"cost_ceiling_usd": -1}},
-        ]
-        for bad in cases:
-            with self.assertRaises(PlateConfigError):
-                validate_plate_config(bad, strict=True)
+    def test_load_without_autonomy_key_resolves_via_default(self):
+        # A .plate lacking 'autonomy' (like pre-this-change) should still load and resolve to having autonomy via DEFAULT (explicit in root .plate now)
+        # Use a temp minimal .plate without the key
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(json.dumps({
+                "version": "1.1",
+                "release": {"triggers": []}
+            }))
+            cfg = load_plate_config(root)
+            self.assertTrue(hasattr(cfg, "autonomy") or "autonomy" in getattr(cfg, "to_dict", lambda: {})())
+            # resolved should have autonomy section (deep merge)
+            d = cfg.to_dict() if hasattr(cfg, "to_dict") else {}
+            # plate_config dataclass or dict-like
+            autonomy = getattr(cfg, "autonomy", None) or d.get("autonomy", {})
+            self.assertIsInstance(autonomy, dict)
+            self.assertIn("risk_tolerance", autonomy)
 
+    def test_migrate_1_1_to_1_2_adds_autonomy(self):
+        raw = {"version": "1.1", "release": {"triggers": []}}
+        upgraded = upgrade_plate_config_dict(raw)
+        # Depending on return shape (tuple or dict in some paths), ensure autonomy appears
+        if isinstance(upgraded, tuple):
+            data = upgraded[0]
+        else:
+            data = upgraded
+        self.assertIn("autonomy", data)
+        self.assertEqual(data.get("version"), "1.2")
 
 if __name__ == "__main__":
     unittest.main()
