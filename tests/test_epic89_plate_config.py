@@ -344,6 +344,23 @@ class PlateConfigRuntimeTests(unittest.TestCase):
             self.assertEqual(report.extension_providers["release-track-management"], "builtin:release-ceremony")
             self.assertEqual(report.extension_path_providers["release.triggers"], "builtin:release-ceremony")
 
+    def test_autonomy_validation_rejects_invalid_payloads(self):
+        """Covers autonomy schema validation added in this PR (addresses review: exercise valid/invalid autonomy cases)."""
+        # Valid minimal
+        validate_plate_config({"version": "1.2", "autonomy": {"enabled": False, "risk_tolerance": "off"}}, strict=True)
+        # Invalid risk
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"risk_tolerance": "banana"}}, strict=True)
+        # Bool for numeric
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"token_budget": {"daily": True}}}, strict=True)
+        # Unknown key under autonomy
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"foo": 1}}, strict=True)
+        # Unknown under token_budget
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"token_budget": {"foo": 1}}}, strict=True)
+
     def test_local_overrides_win_over_extension_contribution(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -11,24 +11,19 @@ How should the budget governor in the AutonomyEngine estimate costs of actions (
 
 ## Sources
 
-- Epic #470 and child #471 (planning consensus on governor as #1 prioritized love factor; "full governor in core"; "throttle or pause"; "before delegate/plan/audit"; risk matrix with off/absent = no new auto behavior)
-- AGENTS.md (Quiet operations for long-running/looped agents: terse bullets only; resource consciousness; human checkpoints preserved; usage report blocks mandatory on closures for Feature/Question; atomic PR discipline)
-- src/plate_core/costs.py (current post-hoc harvest of === USAGE REPORT === blocks from closed issues, UsageReport/CostReport dataclasses, harvest_usage_reports using GitHub search + comment parsing with regex for tokens/cost/duration, get_cost_report, format_cost_markdown; integrates with .agentic/COSTS.md and plates-on-issue-closed workflow)
-- src/plate_core/plate_config.py (schema + validation for .plate including autonomy section with token_budget {daily, per_cycle, action}, cost_ceiling_usd, risk_tolerance enum, enabled/schedules/loop; deep validate + migration)
-- src/plate_core/mcp_server.py (plate_costs tool exposure; plate_what_next, plate_autonomy_* stubs; integration points for future governor calls before heavy tools)
+- Epic #470 and child #473 (config schema + validation for autonomy section; risk matrix with off/absent = no new auto)
 - AGENTS.md (Quiet operations for long-running/looped agents: terse bullets only; resource consciousness; human checkpoints preserved; usage report blocks mandatory on closures; atomic PR discipline)
+- src/plate_core/costs.py (current post-hoc harvest of === USAGE REPORT === blocks from closed issues, UsageReport/CostReport dataclasses, harvest_usage_reports using GitHub search + comment parsing with regex for tokens/cost/duration, get_cost_report, format_cost_markdown; integrates with .agentic/COSTS.md and plates-on-issue-closed workflow)
+- src/plate_core/plate_config.py (this PR adds autonomy section to schema/DEFAULT/ALLOWED + deep validate for risk enum, token_budget numerics not-bool, bools for enabled/schedules, unknown keys at all levels, loop fields, migration 1.1->1.2)
+- src/plate_core/mcp_server.py (current plate_costs tool exposure and plate_what_next; integration points for future governor calls)
 - .agentic/COSTS.md (current log is header-only; no historical data yet in this repo)
 - Code search (grep for cost|token|budget|estimate|throttle|pause in src/plate_core): confirms costs only in reporting (mcp_server, costs.py); no pre-action estimation; "pause" only in blocking Question/contemplation context; agent_guidance emphasizes resource consciousness for autonomous runs
 - Related design: docs/design/cost-control-*.md (prior layered context and thin surfaces for cost control)
-- GitHub state (via MCP tools): #470 Epic + #471 open; PR 483 is the Documentation artifact for this research
-- Search path documented: Started with GitHub MCP issue_read on #470 + sub-issues to confirm children and state. Used local read_file/grep on key sources (costs, config, mcp, AGENTS). Ran terminal git status. Cross-referenced prior cost-control designs and Epic body. No external web; all primary repo artifacts.
+- GitHub state (via MCP tools): #470 Epic + #473 open; PR 484 is the Documentation artifact for this config slice
 
-- Primary: docs/design/autonomous-plate-engine.md (the planning design artifact, sections on Token budget governor, AutonomyEngine runtime, risk matrix, enforcement in decide_next/run_cycle)
-- Related design/research: docs/design/cost-control-*.md (prior layered context and thin surfaces for cost control); docs/research/ (other audits like quiet-agents-audit.md showing pattern for findings)
-- GitHub state (via MCP issue_read): #470 and children still open stubs with need:refinement; no existing PRs for this child yet
-- Local workspace (git status, read_file): uncommitted changes from prior planning (design doc, fragment); current .plate lacks autonomy section
+Search path documented: Started with GitHub MCP issue_read on #470 + sub-issues to confirm children and state. Used local read_file/grep on key sources (plate_config, costs, AGENTS, mcp). Ran terminal git status. Cross-referenced prior cost-control designs and Epic body. No external web; all primary repo artifacts.
 
-Search path documented: Started with GitHub MCP issue_read on #470 + get_sub_issues to confirm children and state. Used local read_file/grep on key sources (design, costs, config, mcp). Ran terminal git status. Cross-referenced AGENTS.md and prior cost-control designs. No external web; all primary repo artifacts.
+This research + the config slice (plate_config + fragment) + sibling Design #472 provide the models for AutonomyEngine governor.
 
 ## Findings
 
