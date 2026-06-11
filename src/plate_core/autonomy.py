@@ -100,10 +100,12 @@ class AutonomyEngine:
     def get_status(self) -> AutonomyStatus:
         """Return live status (used by plate_autonomy_status + health enrichment)."""
         # Integrate real reports
+        # Always attempt collection; helpers (get_health etc.) handle repo=None via git remote resolution.
+        # This ensures --status and local runs get real data (fixes repo=None skip complaints).
         try:
-            health = get_health(self.repo).to_dict() if self.repo else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
-            config_report = get_plate_config_report(self.repo).to_dict() if self.repo else {}
+            health = get_health(self.repo).to_dict() if self.repo is not None or True else {}
+            costs = get_cost_report(self.repo).to_dict() if self.repo is not None or True else {}
+            config_report = get_plate_config_report(self.repo).to_dict() if self.repo is not None or True else {}
         except Exception:
             health = costs = config_report = {}
 
@@ -124,11 +126,12 @@ class AutonomyEngine:
     def introspect(self) -> ProjectSnapshot:
         """Gather full project state for decide_next (health + epics + costs + config + procedures)."""
         ts = datetime.now(timezone.utc).isoformat()
+        # Always attempt; helpers resolve repo=None from git remote (addresses skip complaints for local/status use).
         try:
-            health = get_health(self.repo).to_dict() if self.repo else {}
-            epics = get_epic_status(self.repo).to_dict() if self.repo else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo else {}
-            pconfig = get_plate_config_report(self.repo).to_dict() if self.repo else {}
+            health = get_health(self.repo).to_dict() if self.repo is not None or True else {}
+            epics = get_epic_status(self.repo).to_dict() if self.repo is not None or True else {}
+            costs = get_cost_report(self.repo).to_dict() if self.repo is not None or True else {}
+            pconfig = get_plate_config_report(self.repo).to_dict() if self.repo is not None or True else {}
         except Exception as exc:
             health = {"error": str(exc)}
             epics = costs = pconfig = {}
@@ -158,6 +161,7 @@ class AutonomyEngine:
         today = datetime.now(timezone.utc).date()
         if today != self._last_reset:
             self._spent_this_cycle = 0
+            self._spent_today = 0
             self._last_reset = today
 
         cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000)
