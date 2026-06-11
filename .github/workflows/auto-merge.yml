@@ -24,6 +24,7 @@ jobs:
         with:
           script: |
             let active = false;
+            let tol = 'off';
             // Prefer .plate config (new declarative source per #470 refinement, sunsetting AUTONOMOUS_MODE)
             try {
               const plateContent = await github.rest.repos.getContent({
@@ -33,9 +34,9 @@ jobs:
                 ref: context.payload.repository.default_branch,
               });
               const plate = JSON.parse(Buffer.from(plateContent.data.content, 'base64').toString());
-              const auto = plate.autonomy || {};
-              if (auto.enabled !== false) {
-                const tol = (auto.risk_tolerance || 'medium').toLowerCase();
+              const auto = plate.autonomy;
+              if (auto && typeof auto === 'object' && auto.enabled !== false) {
+                tol = (auto.risk_tolerance || 'medium').toLowerCase();
                 if (tol !== 'off') {
                   active = true;
                 }
@@ -53,9 +54,27 @@ jobs:
                   ref: context.payload.repository.default_branch,
                 });
                 active = true;
+                tol = 'low';  // legacy equivalent to old risk:low only
               } catch (e) {
                 core.warning('Autonomous mode is not active (no .plate autonomy section with risk_tolerance != "off", and no legacy .github/AUTONOMOUS_MODE). Skipping auto-merge.');
               }
+            }
+            // Enforce PR risk:* label <= tol (never critical). Addresses reviews for #487/#476.
+            try {
+              const prLabels = (context.payload.pull_request && context.payload.pull_request.labels) || [];
+              const riskLabel = prLabels.find(l => l.name && l.name.toLowerCase().startsWith('risk:'));
+              if (riskLabel && active) {
+                const prRisk = riskLabel.name.split(':')[1].toLowerCase().trim();
+                const rank = (r) => ({"off":0,"low":1,"medium":2,"high":3,"critical":4}[r] || 0);
+                const prRank = rank(prRisk);
+                const tolRank = rank(tol);
+                if (prRisk === 'critical' || prRank > tolRank) {
+                  active = false;
+                  core.warning(`Blocking auto-merge: PR has ${riskLabel.name} but tol=${tol} (critical or exceeds not allowed).`);
+                }
+              }
+            } catch (e) {
+              core.warning('Could not validate PR risk label: ' + e.message);
             }
             core.setOutput('active', active ? 'true' : 'false');
 
