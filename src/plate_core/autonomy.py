@@ -203,7 +203,6 @@ class AutonomyEngine:
         In full impl: call plate_what_next, tick_schedules, filter by risk_tolerance + enforce_budget.
         """
         actions: list[dict[str, Any]] = []
-<<<<<<< HEAD
         # Per design/#470: if disabled or risk 'off', no autonomous actions (no what_next, no procedures).
         if not self.enabled or self.risk_tolerance == 'off':
             return actions
@@ -211,12 +210,6 @@ class AutonomyEngine:
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
-=======
-        # Stub: always suggest a what-next style action + any due procedures under tolerance
-        actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
-        for proc in snapshot.due_procedures:
-            if proc.get("risk_level", "medium") <= self._risk_rank(self.risk_tolerance):
->>>>>>> 4c991bf (Feature: AutonomyEngine skeleton + basic plate_autonomy_* MCP surfaces (status, run_cycle))
                 if self.enforce_budget(proc.get("est_tokens", 2000), "procedure"):
                     actions.append({"type": "run_procedure", "id": proc.get("id")})
         return actions
