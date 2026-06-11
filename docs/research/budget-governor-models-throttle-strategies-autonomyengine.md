@@ -11,19 +11,18 @@ How should the budget governor in the AutonomyEngine estimate costs of actions (
 
 ## Sources
 
-- Primary: docs/design/autonomous-plate-engine.md (the planning design artifact, sections on Token budget governor, AutonomyEngine runtime, risk matrix, enforcement in decide_next/run_cycle)
+- Epic #470 and child #471 (planning consensus on governor as #1 prioritized love factor; "full governor in core"; "throttle or pause"; "before delegate/plan/audit"; risk matrix with off/absent = no new auto behavior)
+- AGENTS.md (Quiet operations for long-running/looped agents: terse bullets only; resource consciousness; human checkpoints preserved; usage report blocks mandatory on closures for Feature/Question; atomic PR discipline)
 - src/plate_core/costs.py (current post-hoc harvest of === USAGE REPORT === blocks from closed issues, UsageReport/CostReport dataclasses, harvest_usage_reports using GitHub search + comment parsing with regex for tokens/cost/duration, get_cost_report, format_cost_markdown; integrates with .agentic/COSTS.md and plates-on-issue-closed workflow)
-- src/plate_core/plate_config.py (current schema for .plate; autonomy section not yet present in this snapshot but planned with token_budget {daily, per_cycle, action}, cost_ceiling_usd; load/resolve/validate/migration patterns)
-- src/plate_core/mcp_server.py (plate_costs tool exposure; plate_what_next, plate_autonomy_* stubs; integration points for future governor calls before heavy tools)
-- AGENTS.md (Quiet operations for long-running/looped agents: terse bullets only; resource consciousness; human checkpoints preserved; usage report blocks mandatory on closures; atomic PR discipline)
+- src/plate_core/plate_config.py (current schema for .plate pre-autonomy in this snapshot; load/resolve/validate/migration patterns; future token_budget/cost_ceiling planned)
+- src/plate_core/mcp_server.py (current plate_costs tool exposure and plate_what_next; integration points for future governor calls before heavy tools; no plate_autonomy_* yet in this snapshot)
 - .agentic/COSTS.md (current log is header-only; no historical data yet in this repo)
-- Epic #470 body and child stubs (planning consensus on governor as #1 prioritized love factor; "full governor in core"; "throttle or pause"; "before delegate/plan/audit")
 - Code search (grep for cost|token|budget|estimate|throttle|pause in src/plate_core): confirms costs only in reporting (mcp_server, costs.py); no pre-action estimation; "pause" only in blocking Question/contemplation context; agent_guidance emphasizes resource consciousness for autonomous runs
-- Related design/research: docs/design/cost-control-*.md (prior layered context and thin surfaces for cost control); docs/research/ (other audits like quiet-agents-audit.md showing pattern for findings)
-- GitHub state (via MCP issue_read): #470 and children still open stubs with need:refinement; no existing PRs for this child yet
-- Local workspace (git status, read_file): uncommitted changes from prior planning (design doc, fragment); current .plate lacks autonomy section
+- Related design: docs/design/cost-control-*.md (prior layered context and thin surfaces for cost control)
+- GitHub state (via MCP tools): #470 Epic + #471 open; PR 483 is the Documentation artifact for this research
+- Search path documented: Started with GitHub MCP issue_read on #470 + sub-issues to confirm children and state. Used local read_file/grep on key sources (costs, config, mcp, AGENTS). Ran terminal git status. Cross-referenced prior cost-control designs and Epic body. No external web; all primary repo artifacts.
 
-Search path documented: Started with GitHub MCP issue_read on #470 + get_sub_issues to confirm children and state. Used local read_file/grep on key sources (design, costs, config, mcp). Ran terminal git status. Cross-referenced AGENTS.md and prior cost-control designs. No external web; all primary repo artifacts.
+This research artifact itself (the .md) + the pseudocode sketch below serve as the detailed model for Design #472 and Feature #474 slices.
 
 ## Findings
 
