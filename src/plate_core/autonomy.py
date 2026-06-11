@@ -265,7 +265,8 @@ class AutonomyEngine:
         budget_dec = "proceed"
 
         decided = self.decide_next(snap)
-        for act in decided[: (max_steps or 10)]:
+        limit = 10 if max_steps is None else max_steps
+        for act in decided[:limit]:
             est = 1000  # heuristic stub; real from action_kind
             if not self.enforce_budget(est, act.get("type", "unknown")):
                 throttled.append(act.get("type", "action"))
@@ -302,6 +303,10 @@ class AutonomyEngine:
             return {"proc_id": proc_id, "status": "dry-run"}
         # Find def for logging
         pdef = next((p for p in self.procedures if p.id == proc_id), None)
+        if not pdef:
+            return {"proc_id": proc_id, "status": "not_found"}
+        if not pdef.enabled or self._risk_rank(pdef.risk_level) > self._risk_rank(self.risk_tolerance):
+            return {"proc_id": proc_id, "status": "skipped", "reason": "disabled or exceeds risk_tolerance"}
         # In full impl: dispatch steps using allow-listed MCP calls (e.g. plate_perform_information_audit, plate_pr_babysit, plate_costs)
         # For now, record marker + usage (as required by PLATE for procedures)
         marker = f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence={pdef.cadence if pdef else 'unknown'} risk={pdef.risk_level if pdef else 'unknown'} -->"

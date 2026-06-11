@@ -37,7 +37,8 @@ jobs:
               // Only activate from .plate if explicit 'autonomy' section present with risk_tolerance != 'off' (and not disabled).
               // Absent section (or no .plate) falls through to legacy .github/AUTONOMOUS_MODE only (for compat, tol=low).
               if (auto && typeof auto === 'object' && auto.enabled !== false) {
-                const rt = (auto.risk_tolerance || '').toLowerCase().trim();
+                const rtRaw = auto.risk_tolerance;
+                const rt = (rtRaw == null ? '' : String(rtRaw)).toLowerCase().trim();
                 if (rt && rt !== 'off') {
                   tol = rt;  // outer tol for risk label check
                   active = true;
