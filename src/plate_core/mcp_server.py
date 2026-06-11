@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import asdict
 
 from . import __version__
 from .baseline_catalog import (

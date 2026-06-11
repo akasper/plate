@@ -539,14 +539,17 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
 
     dry_run = getattr(args, "dry_run", False)
     max_steps = getattr(args, "max_steps", None)
-    if loop:
-        import time
-        sleep_s = 2
+    # Use --sleep-seconds if provided (addresses copilot review on hard-coded 2s); else .plate config default or 300 (per docs and prior fixes, not 2s).
+    sleep_s = getattr(args, "sleep_seconds", None)
+    if sleep_s is None:
+        sleep_s = 300
         try:
             eng = AutonomyEngine(repo=args.repo)
-            sleep_s = eng.autonomy_config.get("loop", {}).get("default_sleep_seconds", 2) or 2
+            sleep_s = eng.autonomy_config.get("loop", {}).get("default_sleep_seconds", 300) or 300
         except Exception:
             pass
+    if loop:
+        import time
         max_cycles = getattr(args, "max_cycles", 3) or 3
         for i in range(int(max_cycles)):
             if not getattr(args, "json", False):
