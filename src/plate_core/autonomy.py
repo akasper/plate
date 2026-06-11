@@ -263,8 +263,8 @@ class AutonomyEngine:
         return []
 
     def _risk_rank(self, tol: str) -> int:
-        order = {"off": 0, "low": 1, "medium": 2, "high": 3}
-        return order.get(tol, 1)
+        order = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+        return order.get((tol or "").lower(), 0)
 
 
 # Convenience for MCP/CLI
