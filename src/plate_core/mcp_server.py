@@ -282,7 +282,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             )
         elif name == "plate_autonomy_list_procedures":
             from .autonomy import AutonomyEngine
-            from dataclasses import asdict
+            from dataclasses import asdict  # explicit import here to address review feedback on NameError (top-level import also present)
             engine = AutonomyEngine(args.get("repo"))
             tol_rank = engine._risk_rank(engine.risk_tolerance)
             procs = [p for p in engine.procedures if p.enabled and engine._risk_rank(p.risk_level) <= tol_rank]

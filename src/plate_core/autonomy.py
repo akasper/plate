@@ -155,7 +155,7 @@ class AutonomyEngine:
         budget_pct = 0
         daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         if daily > 0:
-            remaining = self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_this_cycle
+            remaining = daily - self._spent_this_cycle
             budget_pct = max(0, min(100, (remaining / daily) * 100))
         proc_bonus = min(20, len([p for p in self.procedures if p.enabled]) * 5)
         autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
@@ -221,7 +221,6 @@ class AutonomyEngine:
         today = datetime.now(timezone.utc).date()
         if today != self._last_reset:
             self._spent_this_cycle = 0
-            self._spent_today = 0
             self._last_reset = today
 
         cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000)
@@ -259,8 +258,8 @@ class AutonomyEngine:
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
-                # Do not call enforce_budget here (planning only); execution path will enforce and record spend.
-                actions.append({"type": "run_procedure", "id": proc.get("id"), "est_tokens": proc.get("est_tokens", 1000)})
+                # Budget enforcement happens in run_cycle before execution (avoids double-counting spend from decide_next + run_cycle per review feedback).
+                actions.append({"type": "run_procedure", "id": proc.get("id")})
         return actions
 
     def run_cycle(self, *, dry_run: bool = False, max_steps: int | None = None) -> CycleReport:
