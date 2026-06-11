@@ -1057,7 +1057,6 @@ def build_parser() -> argparse.ArgumentParser:
     autonomy.add_argument("--max-steps", type=int, help="Cap actions per cycle")
     autonomy.add_argument("--sleep-seconds", type=int, help="Sleep seconds between --loop cycles (overrides .plate autonomy.loop.default_sleep_seconds; default 300)")
     autonomy.add_argument("--json", action="store_true", help="Output JSON")
-    autonomy.add_argument("--sleep-seconds", type=int, help="Sleep between loop cycles (defaults to .plate autonomy.loop.default_sleep_seconds or 2)")
     autonomy.set_defaults(func=cmd_autonomy)
 
     rel_cut = release_sub.add_parser("cut", help="Cut a release: aggregate fragments to versioned dir (first-class MVP per #261)")
