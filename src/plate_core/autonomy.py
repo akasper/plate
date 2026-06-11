@@ -166,7 +166,7 @@ class AutonomyEngine:
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - getattr(self, "_spent_today", self._spent_this_cycle),
+            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today,
             budget_remaining_usd=float(self.autonomy_config.get("cost_ceiling_usd") or 0) if self.autonomy_config.get("cost_ceiling_usd") is not None else None,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
@@ -212,7 +212,7 @@ class AutonomyEngine:
         if not self.enabled or self.risk_tolerance == "off":
             return True  # explicit off or disabled: no autonomous budget enforcement
 
-        # Daily reset (UTC date)
+        # Daily reset (UTC date) for _spent_today; _spent_this_cycle reset per run_cycle
         today = datetime.now(timezone.utc).date()
         if today != self._last_reset:
             self._spent_this_cycle = 0
@@ -228,13 +228,12 @@ class AutonomyEngine:
 
         if projected_cycle > cap or projected_daily > daily_cap:
             if action == "pause":
-                # In full engine: set paused, post status comment on Epic or autonomy Discussion
                 return False
             if action == "throttle":
                 # Caller should skip low-pri; here we just record and allow (caller decides)
-                self._spent_this_cycle += estimated // 2  # partial spend on throttle
-                return False
-            # warn: allow but log
+                self._spent_this_cycle += estimated // 2
+                self._spent_today += estimated // 2
+                return True
             self._spent_this_cycle += estimated
             self._spent_today += estimated
             return True
@@ -272,6 +271,7 @@ class AutonomyEngine:
         paused = False
         budget_dec = "proceed"
 
+        self._spent_this_cycle = 0  # fresh per cycle
         decided = self.decide_next(snap)
         for act in decided[: (max_steps if max_steps is not None else 10)]:
             est = 1000  # heuristic stub; real from action_kind

@@ -74,14 +74,9 @@ This research directly feeds the Design #472 (add estimate_cost helper to contra
 
 Next autonomous step: move to next sub-issue (#472 Design) once this Research is closed via its Documentation PR. No more autonomous progress possible on #471 without the implementation slices (which are separate children).
 
-## Example Usage Report Block (reference only)
-
-Actual reports are posted to issue/PR closure comments (for Feature/Question harvesting by plates-on-issue-closed + .agentic/COSTS.md per AGENTS.md). See costs.py for harvester.
-
-```
+## Usage Report (per AGENTS.md for closures)
 === USAGE REPORT ===
-tokens: N/A (planning/execution within scheduled loop; actual costs tracked by host scheduler)
-cost: $0.00 (internal)
-duration: 00:05:00 (approx for this autonomous turn)
+tokens: 0
+cost: $0.00
+duration: 00:05:00
 === END USAGE REPORT ===
-```
