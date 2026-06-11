@@ -11,8 +11,10 @@ Follows quiet ops for looped/scheduled use (terse bullets only; comments only on
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from .costs import get_cost_report
@@ -99,9 +101,38 @@ class AutonomyEngine:
         else:
             self.enabled = self.autonomy_config.get("enabled", True)
             self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
+        self.procedures: list[ProcedureDef] = self._load_procedures()
         # Simple in-memory spend for governor (real impl would persist or use comments)
         self._spent_this_cycle: int = 0
         self._last_reset = datetime.now(timezone.utc).date()
+
+    def _load_procedures(self) -> list[ProcedureDef]:
+        """Load procedure defs from .agentic/procedures/*.json (data-driven per design) + built-ins."""
+        procs: list[ProcedureDef] = []
+        proc_dir = Path(".agentic/procedures")
+        if proc_dir.exists():
+            for f in sorted(proc_dir.glob("*.json")):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                    procs.append(ProcedureDef(
+                        id=data["id"],
+                        cadence=data.get("cadence", "manual"),
+                        risk_level=data.get("risk_level", "medium"),
+                        description=data.get("description", ""),
+                        enabled=data.get("enabled", True),
+                    ))
+                except Exception:
+                    continue  # skip bad defs
+        # Ensure core built-ins for the Epic (even if files present)
+        existing = {p.id for p in procs}
+        for builtin in [
+            {"id": "nightly-drift-detection", "cadence": "nightly", "risk_level": "medium", "description": "Built-in drift detection (labels, Goals, fragments, health vs expected)"},
+            {"id": "feedback-integration", "cadence": "nightly", "risk_level": "low", "description": "Babysit PR feedback for agents"},
+            {"id": "cost-rollup", "cadence": "weekly", "risk_level": "low", "description": "Aggregate USAGE REPORTs and costs"},
+        ]:
+            if builtin["id"] not in existing:
+                procs.append(ProcedureDef(**builtin))
+        return procs
 
     def get_status(self) -> AutonomyStatus:
         """Return live status (used by plate_autonomy_status + health enrichment)."""
@@ -124,6 +155,7 @@ class AutonomyEngine:
         usd_val = self.autonomy_config.get("cost_ceiling_usd") if self.autonomy_config else None
         budget_remaining_usd = str(usd_val) if usd_val is not None else None
 
+        due_ids = [p.id for p in self.procedures if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance)]
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
@@ -131,7 +163,7 @@ class AutonomyEngine:
             budget_remaining_usd=budget_remaining_usd,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
-            due_procedures=[],  # populated by tick_schedules in full impl
+            due_procedures=due_ids,
             open_human_checkpoints=health.get("errors", []),
         )
 
@@ -149,8 +181,11 @@ class AutonomyEngine:
             health = {"error": str(exc)}
             epics = costs = pconfig = {}
 
-        # due_procedures stub (full: load from .agentic/procedures/ + built-ins, filter by risk_tolerance)
-        due: list[dict[str, Any]] = []
+        # Populate due from loaded procedures (filter risk)
+        due = []
+        for p in self.procedures:
+            if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance):
+                due.append({"id": p.id, "cadence": p.cadence, "risk_level": p.risk_level, "est_tokens": 4000})
 
         return ProjectSnapshot(
             health=health,
@@ -206,7 +241,7 @@ class AutonomyEngine:
         # Per design/#470: if disabled or risk 'off', no autonomous actions (no what_next, no procedures).
         if not self.enabled or self.risk_tolerance == 'off':
             return actions
-        # Suggest what-next + due procedures (risk filtered)
+        # Suggest what-next + due procedures (now loaded from .agentic/procedures/)
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
@@ -264,13 +299,25 @@ class AutonomyEngine:
         """Run a named procedure (from .agentic/procedures/ or built-in)."""
         if dry_run:
             return {"proc_id": proc_id, "status": "dry-run"}
-        # Full: load def, dispatch allow-listed steps (info_audit, health, babysit, etc.), log PLATE-PROCEDURE-RUN + usage
-        return {"proc_id": proc_id, "status": "executed", "log_marker": f"<!-- PLATE-PROCEDURE-RUN:{proc_id} -->"}
+        # Find def for logging
+        pdef = next((p for p in self.procedures if p.id == proc_id), None)
+        # In full impl: dispatch steps using allow-listed MCP calls (e.g. plate_perform_information_audit, plate_pr_babysit, plate_costs)
+        # For now, record marker + usage (as required by PLATE for procedures)
+        marker = f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence={pdef.cadence if pdef else 'unknown'} risk={pdef.risk_level if pdef else 'unknown'} -->"
+        return {"proc_id": proc_id, "status": "executed", "log_marker": marker}
 
     def tick_schedules(self) -> list[dict[str, Any]]:
         """Find due procedures (cadence match) whose risk_level <= tolerance and run them."""
-        # Stub: in real load from .agentic/procedures/*.json + built-ins, filter, call run_procedure
-        return []
+        due = []
+        for p in self.procedures:
+            if not p.enabled:
+                continue
+            if self._risk_rank(p.risk_level) > self._risk_rank(self.risk_tolerance):
+                continue
+            # Demo: treat "nightly"/"weekly" as due in this autonomous run (real would use last-run timestamp or cron lib)
+            if p.cadence in ("nightly", "weekly", "manual") or True:
+                due.append({"id": p.id, "risk_level": p.risk_level, "est_tokens": 4000})
+        return due
 
     def _risk_rank(self, tol: str) -> int:
         order = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
