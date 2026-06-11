@@ -33,6 +33,7 @@ from .release import (
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
+from .autonomy import get_autonomy_status, run_autonomy_cycle
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -92,20 +93,23 @@ def _what_next(repo: str | None, agent_type: str | None = None) -> dict:
             action = "run bootstrap to establish labels/wiki/epic/starters"
             prompt = (
                 "Follow the PLATE bootstrap flow: create required labels, enable wiki, seed initial Epic, "
-                "seed starter Questions from catalog. Then create a Goals wiki page per convention and use it for audits."
+                "seed starter Questions from catalog. Then create a Goals wiki page per convention and use it for audits. "
+                "For any looped execution, use terse one-sentence bullet turn summaries and post comments only on meaningful progress (quiet_operations guidance)."
             )
         elif open_epics > 0:
             action = "advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement"
             prompt = (
                 "Use plate_epic_status or gh plate epic status to list children. For a Feature: read full issue, "
                 "add/update tests first, implement smallest change, author fragment in .agentic/releases/unreleased/, "
-                "PR with clean title + labels (Feature + area + Epic:*) + Closes #N in body only, babysit with gh plate pr babysit."
+                "PR with clean title + labels (Feature + area + Epic:*) + Closes #N in body only, babysit with gh plate pr babysit. "
+                "In loops: terse bullet turn summaries only; comments only on real progress per quiet_operations."
             )
         else:
             action = "check for pending release fragments or next beta item"
             prompt = (
                 "Run gh plate release status. If unreleased fragments, prepare for cut_release. "
-                "Otherwise pick next beta-roadmap Feature (e.g. #260 local-rebase, #285 what-next, packaging, etc.)."
+                "Otherwise pick next beta-roadmap Feature (e.g. #260 local-rebase, #285 what-next, packaging, etc.). "
+                "Looped runs: emit only terse one-sentence bullets for the turn; follow quiet comment rules."
             )
         return {
             "next_action": action,
@@ -260,6 +264,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 repo=args.get("repo"),
                 epic_label=args.get("epic_label"),
             ).to_dict()
+        elif name == "plate_autonomy_status":
+            payload = get_autonomy_status(args.get("repo"))
+        elif name == "plate_autonomy_run_cycle":
+            payload = run_autonomy_cycle(
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", False)),
+                max_steps=args.get("max_steps"),
+            )
         elif name == "plate_migrate_plan":
             plan = generate_migration_plan()
             if hasattr(plan, "to_dict"):
@@ -654,7 +666,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_what_next",
-                                "description": "What Next? MCP tool (Epic #282 / Feature #285). Returns the next recommended PLATE process step + templatized prompt segment based on live repo state (health, epics, labels, fragments, etc.). v1 static flow covering primary paths; enables agents to drive autonomous progress.",
+                                "description": "Returns the next recommended PLATE process step and a short prompt segment, based on live health/epics/labels/fragments/Goals. Use first for autonomous or looped flows; follow quiet turn-summary rules for long-running use.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -671,7 +683,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_contemplate",
-                                "description": "Run the Contemplation Engine on an answer to a Question. Evaluates checklist-style Answer signal criteria against cited answer evidence, posts a structured contemplation log, preserves blocking-question resumption, and reports when the Question is ready to close via a PR artifact.",
+                                "description": "Run Contemplation on a Question answer: evaluates Answer signal checklist against cited evidence, appends audit log, and reports PR-ready state (or follow-ups). Engine always produces traceable markers; agents follow quiet comment rules for any additional prose.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -687,13 +699,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_delegate_to_agent",
-                                "description": (
-                                    "Route a task to a specific baseline plate agent and return a delegation "
-                                    "instruction with the agent's details, skills, constraints, and a ready-to-use "
-                                    "delegation prompt. Call this when the user asks to delegate work to a specific "
-                                    "agent, wants to know how to use an agent for a task, or an orchestrator needs "
-                                    "to route a task to the right agent."
-                                ),
+                                "description": "Route a task to a baseline agent (by id) and return a narrow delegation packet (details, skills, constraints, short prompt). Always call with a short task_description per the plate persona. Packets include retrieval hints; keep responses scoped and quiet per guidance.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -713,7 +719,7 @@ def run() -> None:
                             # See docs/design/qanda-mcp-cli-surfaces.md and docs/design/curiosity-answer-model.md
                             {
                                 "name": "plate_list_questions",
-                                "description": "List open Question issues (informational goals) for Curiosity / Q&A Mode. Returns summaries with answer_signal hints. Use with plate_synthesize_priorities for agent-driven prioritization.",
+                                "description": "List open Question issues (informational goals) with answer_signal hints. Use with synthesize_priorities before native Q&A presentation. When surfacing, use minimal front matter per quiet_operations guidance.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -792,7 +798,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_synthesize_priorities",
-                                "description": "Return a ranked list of open Questions with rationale. Initial heuristic implementation; agents and future plate_plan_epic evolution provide richer LLM synthesis. Use before presenting via the host agent's native UI or gh plate qanda (CLI-agnostic).",
+                                "description": "Return a ranked list of open Questions with rationale (heuristic v1). Use before native Q&A presentation or gh plate qanda. Prefer minimal framing when surfacing questions (see quiet_operations guidance).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -803,7 +809,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_create_blocking_question",
-                                "description": "Create a blocking Question issue as last resort when the agent hits a hard informational obstacle on another open Issue (Research/Design/Feature/etc.). Per Feature #147 / Epic #139. Performs structured information dump (Answer Model provenance style), bidirectional linking, and posts standardized 'paused' status on the original Issue. Agent should call this only after other reasoning/tools fail, then surface the new Question # to the user and pause work on the original.",
+                                "description": "Create a blocking Question (last resort only) when stuck on hard informational ambiguity on another Issue. Performs structured dump + pause status on the original; returns the new Question #. Agent must have exhausted other tools/reasoning first, then pause work. Follow quiet comment rules for any additional updates.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -915,6 +921,28 @@ def run() -> None:
                                         },
                                     },
                                     "required": [],
+                                },
+                            },
+                            {
+                                "name": "plate_autonomy_status",
+                                "description": "Return AutonomyStatus (risk_tolerance, budget remaining, autopilot_score, due procedures, human checkpoints) for Epic #470 engine. Integrates health/costs/config.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_autonomy_run_cycle",
+                                "description": "Run one AutonomyEngine cycle (introspect, enforce_budget, decide_next, execute/delegate). Supports dry_run and max_steps. For scheduled loops per #470.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "dry_run": {"type": "boolean", "description": "Default false."},
+                                        "max_steps": {"type": "integer", "description": "Cap actions this cycle."},
+                                    },
                                 },
                             },
                             {
