@@ -332,7 +332,7 @@ class AutonomyEngine:
             if self._risk_rank(p.risk_level) > self._risk_rank(self.risk_tolerance):
                 continue
             # Demo: treat "nightly"/"weekly" as due in this autonomous run (real would use last-run timestamp or cron lib)
-            if p.cadence in ("nightly", "weekly", "manual") or True:
+            if p.cadence in ("nightly", "weekly", "manual"):
                 due.append({"id": p.id, "risk_level": p.risk_level, "est_tokens": 4000})
         return due
 

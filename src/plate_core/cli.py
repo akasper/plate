@@ -38,6 +38,7 @@ from .plate_config import (
     apply_plate_config_upgrade,
     get_plate_config_report,
     init_plate_config,
+    load_plate_config,
 )
 
 
@@ -524,35 +525,28 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         print(f"Last cycle: {status.get('last_cycle')}")
         return 0
 
-    # Default to status (safe) unless explicit --run or --loop provided. --run flag is now honored as explicit run.
-    run = getattr(args, "run", False)
-    loop = getattr(args, "loop", False)
-    if not run and not loop:
-        status = get_autonomy_status(args.repo)
-        if getattr(args, "json", False):
-            print(json.dumps(status))
-            return 0
-        print(f"Enabled: {status.get('enabled')}")
-        print(f"Risk tolerance: {status.get('risk_tolerance')}")
-        print("(no --run/--loop; showed status only. Use --run or --loop to execute a cycle.)")
+    if not getattr(args, "run", False) and not getattr(args, "loop", False):
+        print("No --run or --loop specified; execution skipped (use --status for info only).")
         return 0
 
     dry_run = getattr(args, "dry_run", False)
     max_steps = getattr(args, "max_steps", None)
-    # Use --sleep-seconds if provided (addresses copilot review on hard-coded 2s); else .plate config default or 300 (per docs and prior fixes, not 2s).
-    sleep_s = getattr(args, "sleep_seconds", None)
-    if sleep_s is None:
-        sleep_s = 300
-        try:
-            eng = AutonomyEngine(repo=args.repo)
-            sleep_s = eng.autonomy_config.get("loop", {}).get("default_sleep_seconds", 300) or 300
-        except Exception:
-            pass
+    loop = getattr(args, "loop", False)
+    run = getattr(args, "run", False)
+
+    if not run and not loop:
+        print("Usage: gh plate autonomy --status | --run [--dry-run] | --loop [--max-cycles N]", file=sys.stderr)
+        return 1
+
     if loop:
         import time
+        from .autonomy import AutonomyEngine
         max_cycles = getattr(args, "max_cycles", 3) or 3
-        for i in range(int(max_cycles)):
-            if not getattr(args, "json", False):
+        # Create once for persistent in-memory budget/spend across iterations (addresses "recreates each cycle" complaint for budgeted loops)
+        engine = AutonomyEngine(repo=args.repo)
+        sleep_default = engine.autonomy_config.get("loop", {}).get("default_sleep_seconds", 2) if hasattr(engine, "autonomy_config") else 2
+        for i in range(max_cycles):
+            if not args.json:
                 print(f"Cycle {i+1}/{max_cycles} (dry_run={dry_run})...")
             rep = engine.run_cycle(dry_run=dry_run, max_steps=max_steps)
             if hasattr(rep, "to_dict"):
@@ -561,12 +555,19 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
                 print(json.dumps(rep))
             else:
                 print(f"  status={rep.get('status')} budget={rep.get('budget_decision')} actions={len(rep.get('actions_taken', []))}")
-            if i < int(max_cycles) - 1:
+            if i < max_cycles - 1:
+                sleep_s = getattr(args, "sleep_seconds", None)
+                if sleep_s is None:
+                    try:
+                        acfg = load_plate_config().autonomy or {}
+                        sleep_s = int(acfg.get("loop", {}).get("default_sleep_seconds", 2))
+                    except Exception:
+                        sleep_s = 2
                 time.sleep(sleep_s)
         return 0
 
     rep = run_autonomy_cycle(repo=args.repo, dry_run=dry_run, max_steps=max_steps)
-    if getattr(args, "json", False):
+    if args.json:
         print(json.dumps(rep))
         return 0
     print(f"Autonomy cycle: {rep.get('status')}")

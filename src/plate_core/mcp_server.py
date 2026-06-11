@@ -282,7 +282,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_autonomy_list_procedures":
             from .autonomy import AutonomyEngine
             engine = AutonomyEngine(args.get("repo"))
-            payload = {"procedures": [asdict(p) for p in engine.procedures]}
+            filtered = [
+                p for p in engine.procedures
+                if engine._risk_rank(p.risk_level) <= engine._risk_rank(engine.risk_tolerance)
+            ]
+            payload = {"procedures": [asdict(p) for p in filtered]}
         elif name == "plate_autonomy_run_procedure":
             from .autonomy import AutonomyEngine
             engine = AutonomyEngine(args.get("repo"))
