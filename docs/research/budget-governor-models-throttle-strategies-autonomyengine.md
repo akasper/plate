@@ -11,21 +11,19 @@ How should the budget governor in the AutonomyEngine estimate costs of actions (
 
 ## Sources
 
-- Epic #470 and child #473 (config schema + validation for autonomy section; risk matrix with off/absent = no new auto)
 - Primary: docs/design/autonomous-plate-engine.md (the planning design artifact, sections on Token budget governor, AutonomyEngine runtime, risk matrix, enforcement in decide_next/run_cycle)
-- AGENTS.md (Quiet operations for long-running/looped agents: terse bullets only; resource consciousness; human checkpoints preserved; usage report blocks mandatory on closures; atomic PR discipline)
 - src/plate_core/costs.py (current post-hoc harvest of === USAGE REPORT === blocks from closed issues, UsageReport/CostReport dataclasses, harvest_usage_reports using GitHub search + comment parsing with regex for tokens/cost/duration, get_cost_report, format_cost_markdown; integrates with .agentic/COSTS.md and plates-on-issue-closed workflow)
-- src/plate_core/plate_config.py (autonomy section in DEFAULT/ALLOWED + deep validate (risk enum, token_budget numbers not bool + action + nested unknown rejection, bools for enabled/schedules, loop fields, cost), v1.2 schema + 1.1->1.2 migration, load/resolve patterns; explicit .plate seed)
-- src/plate_core/mcp_server.py (plate_costs + basic plate_autonomy_status / plate_autonomy_run_cycle wiring for skeleton; plate_what_next; integration points)
-- src/plate_core/autonomy.py (skeleton dataclasses + AutonomyEngine basic get_status/introspect; repo=None guards, usd type, off early return, max_steps per review)
+- src/plate_core/plate_config.py (current schema for .plate; autonomy section not yet present in this snapshot but planned with token_budget {daily, per_cycle, action}, cost_ceiling_usd; load/resolve/validate/migration patterns)
+- src/plate_core/mcp_server.py (plate_costs tool exposure; plate_what_next, plate_autonomy_* stubs; integration points for future governor calls before heavy tools)
+- AGENTS.md (Quiet operations for long-running/looped agents: terse bullets only; resource consciousness; human checkpoints preserved; usage report blocks mandatory on closures; atomic PR discipline)
 - .agentic/COSTS.md (current log is header-only; no historical data yet in this repo)
+- Epic #470 body and child stubs (planning consensus on governor as #1 prioritized love factor; "full governor in core"; "throttle or pause"; "before delegate/plan/audit")
 - Code search (grep for cost|token|budget|estimate|throttle|pause in src/plate_core): confirms costs only in reporting (mcp_server, costs.py); no pre-action estimation; "pause" only in blocking Question/contemplation context; agent_guidance emphasizes resource consciousness for autonomous runs
-- Related design/research: docs/design/cost-control-*.md (prior layered context and thin surfaces for cost control); docs/design/autonomous-plate-engine.md ; docs/research/ (other audits like quiet-agents-audit.md showing pattern for findings)
-- GitHub state (via MCP tools): #470 Epic + children (config #473 done via PR 484 Documentation; skeleton #474 / AutonomyEngine + basic MCP in PR 485; research #471; design #472). PR 485 is the Feature artifact for the engine skeleton + basic MCP surfaces (status, run_cycle). Sources are stable committed artifacts + GitHub issues/PRs/Epic (no uncommitted workspace state).
+- Related design/research: docs/design/cost-control-*.md (prior layered context and thin surfaces for cost control); docs/research/ (other audits like quiet-agents-audit.md showing pattern for findings)
+- GitHub state (via MCP issue_read): #470 and children still open stubs with need:refinement; no existing PRs for this child yet
+- Local workspace (git status, read_file): uncommitted changes from prior planning (design doc, fragment); current .plate lacks autonomy section
 
-Search path documented: Started with GitHub MCP issue_read on #470 + sub-issues. Used local read_file/grep on key sources (costs, config, mcp_server, autonomy.py, AGENTS, design). Ran terminal git + gh, fetch, rebase. Cross-referenced design fragments, Epic body, sibling PRs (484 config, 485 skeleton), prior cost-control research. No external web; all primary repo artifacts.
-
-This research + the config slice (PR 484) + skeleton + MCP surfaces (PR 485) + sibling Design #472 provide the models for AutonomyEngine governor.
+Search path documented: Started with GitHub MCP issue_read on #470 + get_sub_issues to confirm children and state. Used local read_file/grep on key sources (design, costs, config, mcp). Ran terminal git status. Cross-referenced AGENTS.md and prior cost-control designs. No external web; all primary repo artifacts.
 
 ## Findings
 
@@ -70,20 +68,14 @@ This research directly feeds the Design #472 (add estimate_cost helper to contra
 1. Adopt a simple heuristic-based estimator in the AutonomyEngine (static base costs per known PLATE action + dynamic factors from health/epic_status + historical from costs harvest; always 1.5-2x over-estimate).
 2. Implement enforce_budget that returns Decision (proceed | throttle | pause | warn) and updates internal spend tracking with daily reset.
 3. Expose via plate_autonomy_status (budget fields) and enrich health.
-4. Update the design doc (docs/design/autonomous-plate-engine.md from #472 / PR 494) if needed for the model details (this Research doc serves as the detailed artifact).
+4. Update the design doc (autonomous-plate-engine.md) if needed for the model details (this Research doc serves as the detailed artifact).
 5. No SPEC.md change (this is internal engine detail, not product intent).
 6. The implementing Feature PRs should reference this Research and close #471 via the Documentation PR that lands this .md file.
 
 Next autonomous step: move to next sub-issue (#472 Design) once this Research is closed via its Documentation PR. No more autonomous progress possible on #471 without the implementation slices (which are separate children).
 
-## Example Usage Report Block (reference only; for issue closures per AGENTS.md)
-
-Actual reports are posted to issue closure comments (harvested by plates-on-issue-closed + .agentic/COSTS.md for Feature/Question). Use the exact marker + integer tokens.
-
-```
-=== USAGE REPORT ===
-tokens: 0
-cost: $0.00
-duration: 00:05:00
+## Usage Report (per AGENTS.md for closures)
+tokens: N/A (planning/execution within scheduled loop; actual costs tracked by host scheduler)
+cost: $0.00 (internal)
+duration: 00:05:00 (approx for this autonomous turn)
 === END USAGE REPORT ===
-```
