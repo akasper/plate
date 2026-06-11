@@ -4,7 +4,7 @@
   "risk_level": "low",
   "description": "Babysit open PRs for configured agents (PLATE_PR_FEEDBACK_AGENTS), address feedback, resolve threads.",
   "steps": [
-    {"tool": "plate_pr_babysit_all", "args": {"act": true}, "apply_if_risk_ok": true}
+    {"tool": "plate_pr_babysit", "args": {"act": true}, "apply_if_risk_ok": true}
   ],
   "log_to": ".agentic/autonomy/runs/",
   "max_tokens_per_run": 8000,
