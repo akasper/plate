@@ -27,7 +27,7 @@ class AutonomyStatus:
     enabled: bool = True
     risk_tolerance: str = "medium"  # off | low | medium | high
     budget_remaining_tokens: int | None = None
-    budget_remaining_usd: str | None = None
+    budget_remaining_usd: float | None = None
     last_cycle: str | None = None
     next_scheduled: str | None = None
     autopilot_score: int = 0  # 0-100 composite
@@ -103,9 +103,10 @@ class AutonomyEngine:
         # Always attempt collection; helpers (get_health etc.) handle repo=None via git remote resolution.
         # This ensures --status and local runs get real data (fixes repo=None skip complaints).
         try:
-            health = get_health(self.repo).to_dict() if self.repo is not None or True else {}
-            costs = get_cost_report(self.repo).to_dict() if self.repo is not None or True else {}
-            config_report = get_plate_config_report(self.repo).to_dict() if self.repo is not None or True else {}
+            # Always call; helpers support repo=None and resolve local git remote (ensures full status for local runs and MCP without --repo)
+            health = get_health(self.repo).to_dict()
+            costs = get_cost_report(self.repo).to_dict()
+            config_report = get_plate_config_report(self.repo).to_dict()
         except Exception:
             health = costs = config_report = {}
 
