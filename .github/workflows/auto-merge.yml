@@ -1,8 +1,8 @@
 name: Auto-merge lightweight PRs
 
 # Triggered when a PR receives the 'auto-merge' label.
-# Only merges if .github/AUTONOMOUS_MODE exists on the default branch,
-# confirming that autonomous mode is intentionally active.
+# Only merges if .plate autonomy.risk_tolerance != "off" (or legacy .github/AUTONOMOUS_MODE for transition).
+# This generalizes the old marker-file gate per Epic #470 / #476 (core philosophy: autonomous by default unless 'off' in .plate config).
 # The PR must still satisfy all branch protection rules before GitHub
 # will complete the merge.
 
@@ -18,23 +18,46 @@ jobs:
       pull-requests: write
       contents: write
     steps:
-      - name: Check autonomous mode is active
+      - name: Check autonomous mode is active (prefer .plate autonomy.risk_tolerance)
         id: check
         uses: actions/github-script@v8
         with:
           script: |
+            let active = false;
+            // Prefer .plate config (new declarative source per #470 refinement, sunsetting AUTONOMOUS_MODE)
             try {
-              await github.rest.repos.getContent({
+              const plateContent = await github.rest.repos.getContent({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                path: '.github/AUTONOMOUS_MODE',
+                path: '.plate',
                 ref: context.payload.repository.default_branch,
               });
-              core.setOutput('active', 'true');
+              const plate = JSON.parse(Buffer.from(plateContent.data.content, 'base64').toString());
+              const auto = plate.autonomy || {};
+              if (auto.enabled !== false) {
+                const tol = (auto.risk_tolerance || 'medium').toLowerCase();
+                if (tol !== 'off') {
+                  active = true;
+                }
+              }
             } catch (e) {
-              core.setOutput('active', 'false');
-              core.warning('Autonomous mode is not active (.github/AUTONOMOUS_MODE not found). Skipping auto-merge.');
+              // no .plate or no autonomy section; fall through to legacy check
             }
+            if (!active) {
+              // Legacy compat during transition (will be removed after migration)
+              try {
+                await github.rest.repos.getContent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  path: '.github/AUTONOMOUS_MODE',
+                  ref: context.payload.repository.default_branch,
+                });
+                active = true;
+              } catch (e) {
+                core.warning('Autonomous mode is not active (no .plate autonomy section with risk_tolerance != "off", and no legacy .github/AUTONOMOUS_MODE). Skipping auto-merge.');
+              }
+            }
+            core.setOutput('active', active ? 'true' : 'false');
 
       - name: Enable auto-merge
         if: steps.check.outputs.active == 'true'
