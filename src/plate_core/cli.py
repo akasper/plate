@@ -554,8 +554,10 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         for i in range(int(max_cycles)):
             if not getattr(args, "json", False):
                 print(f"Cycle {i+1}/{max_cycles} (dry_run={dry_run})...")
-            rep = run_autonomy_cycle(repo=args.repo, dry_run=dry_run, max_steps=max_steps)
-            if getattr(args, "json", False):
+            rep = engine.run_cycle(dry_run=dry_run, max_steps=max_steps)
+            if hasattr(rep, "to_dict"):
+                rep = rep.to_dict()
+            if args.json:
                 print(json.dumps(rep))
             else:
                 print(f"  status={rep.get('status')} budget={rep.get('budget_decision')} actions={len(rep.get('actions_taken', []))}")
