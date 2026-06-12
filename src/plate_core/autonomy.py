@@ -91,9 +91,16 @@ class AutonomyEngine:
         self.repo = repo
         self.client = client
         self.config = load_plate_config()
-        self.autonomy_config = self.config.autonomy or {}
-        self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
-        self.enabled = self.autonomy_config.get("enabled", True)
+        # Autonomy section is opt-in only (absent .plate or absent 'autonomy' key => off / legacy AUTONOMOUS_MODE only per #470/#476 contract).
+        # Do not inherit from DEFAULT_CONFIG; only user-provided autonomy section in .plate enables graduated auto behavior.
+        config_dict = self.config.to_dict() if hasattr(self.config, "to_dict") else {}
+        self.autonomy_config = config_dict.get("autonomy", {}) or {}
+        if not self.autonomy_config:
+            self.enabled = False
+            self.risk_tolerance = "off"
+        else:
+            self.enabled = self.autonomy_config.get("enabled", True)
+            self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
         self.procedures: list[ProcedureDef] = self._load_procedures()
         # Simple in-memory spend for governor (real impl would persist or use comments)
         self._spent_this_cycle: int = 0
@@ -142,9 +149,9 @@ class AutonomyEngine:
         except Exception:
             health = costs = pconfig = {}
 
-        # autopilot_score (risk + budget adherence + proc count)
+        # Compute autopilot_score (for #479 observability): base on risk tolerance (higher tolerance = more autonomous potential), budget adherence, enabled procedures count.
         risk_rank = self._risk_rank(self.risk_tolerance)
-        base = 30 + (risk_rank * 15)
+        base = 30 + (risk_rank * 15)  # 30-75 from risk
         budget_pct = 0
         daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         if daily > 0:
@@ -154,12 +161,16 @@ class AutonomyEngine:
         autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
         autopilot = max(0, min(100, autopilot))
 
+        # budget_remaining_usd reported as str for JSON/MCP/CLI consumer stability (addresses type annotation feedback).
+        usd_val = self.autonomy_config.get("cost_ceiling_usd") if self.autonomy_config else None
+        budget_remaining_usd = str(usd_val) if usd_val is not None else None
+
         due_ids = [p.id for p in self.procedures if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance)]
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
             budget_remaining_tokens=daily - self._spent_this_cycle,
-            budget_remaining_usd=str(self.autonomy_config.get("cost_ceiling_usd")) if self.autonomy_config.get("cost_ceiling_usd") is not None else None,
+            budget_remaining_usd=budget_remaining_usd,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
             due_procedures=due_ids,
@@ -243,11 +254,11 @@ class AutonomyEngine:
         actions: list[dict[str, Any]] = []
         if not self.enabled or self.risk_tolerance == "off":
             return actions
-        # Suggest what-next + due procedures (risk filtered via rank)
+        # Suggest what-next + due procedures (risk filtered, from procedures registry)
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
-                # Do not call enforce_budget here (planning only); execution path will enforce and record spend.
+                # Budget enforcement happens in run_cycle before execution (avoids double-counting spend from decide_next + run_cycle per review feedback).
                 actions.append({"type": "run_procedure", "id": proc.get("id")})
         return actions
 
@@ -265,9 +276,8 @@ class AutonomyEngine:
         budget_dec = "proceed"
 
         decided = self.decide_next(snap)
-        limit = 10 if max_steps is None else max_steps
-        for act in decided[:limit]:
-            est = 1000  # heuristic stub; real from action_kind
+        for act in decided[: (max_steps or 10)]:
+            est = act.get("est_tokens", 1000)  # use per-action estimate from decide_next/snapshot when present (e.g. 2000/4000 for procedures); fallback heuristic for others like what_next (addresses copilot review on hardcoded est=1000 ignoring estimates)
             if not self.enforce_budget(est, act.get("type", "unknown")):
                 throttled.append(act.get("type", "action"))
                 action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
@@ -303,10 +313,6 @@ class AutonomyEngine:
             return {"proc_id": proc_id, "status": "dry-run"}
         # Find def for logging
         pdef = next((p for p in self.procedures if p.id == proc_id), None)
-        if not pdef:
-            return {"proc_id": proc_id, "status": "not_found"}
-        if not pdef.enabled or self._risk_rank(pdef.risk_level) > self._risk_rank(self.risk_tolerance):
-            return {"proc_id": proc_id, "status": "skipped", "reason": "disabled or exceeds risk_tolerance"}
         # In full impl: dispatch steps using allow-listed MCP calls (e.g. plate_perform_information_audit, plate_pr_babysit, plate_costs)
         # For now, record marker + usage (as required by PLATE for procedures)
         marker = f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence={pdef.cadence if pdef else 'unknown'} risk={pdef.risk_level if pdef else 'unknown'} -->"

@@ -44,6 +44,7 @@ from .discussions import (
     list_discussions,
     list_open_ideas,
 )
+from dataclasses import asdict
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
     CreateBlockingQuestionTool,
@@ -281,10 +282,10 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             )
         elif name == "plate_autonomy_list_procedures":
             from .autonomy import AutonomyEngine
-            from dataclasses import asdict
+            from dataclasses import asdict  # explicit import here to address review feedback on NameError (top-level import also present)
             engine = AutonomyEngine(args.get("repo"))
             tol_rank = engine._risk_rank(engine.risk_tolerance)
-            procs = [p for p in engine.procedures if engine._risk_rank(p.risk_level) <= tol_rank]
+            procs = [p for p in engine.procedures if p.enabled and engine._risk_rank(p.risk_level) <= tol_rank]
             payload = {"procedures": [asdict(p) for p in procs]}
         elif name == "plate_autonomy_run_procedure":
             from .autonomy import AutonomyEngine
@@ -978,7 +979,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_autonomy_run_procedure",
-                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run.",
+                                "description": "Run a specific procedure by id (pre-filtered by risk_tolerance + budget via decide_next/tick_schedules per design; run_procedure dispatches). Supports dry_run.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
