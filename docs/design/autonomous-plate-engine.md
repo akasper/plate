@@ -249,3 +249,14 @@ This design directly realizes the interactive planning consensus: full governor 
 ## Usage Note (for this planning session)
 
 This design + the subsequent GitHub Epic/child creation constitute the traceable artifact for the planning work. No Feature or Question was closed in this session, so no USAGE REPORT block is required on an issue closure; the design doc and Epic body serve as the record. Future implementation children will carry proper usage blocks on their closures.
+
+## Implementation Status (after autonomous slices for #473/#474/#478/#482)
+- Data models realized exactly as specified: `AutonomyStatus`, `ProjectSnapshot`, `CycleReport`, `ProcedureDef` (see `src/plate_core/autonomy.py`).
+- Engine methods: `get_status`, `introspect` (health+epics+costs+config), `enforce_budget` (daily UTC reset, per-cycle/daily caps, throttle/pause/warn actions), `decide_next` (what_next + risk-filtered due procedures from snapshot), `run_cycle` (dry_run support, markers), `run_procedure`, `tick_schedules` (cadence + risk gate), `_load_procedures` ( .agentic/procedures/*.json + builtins for drift/feedback/cost).
+- Risk handling: `_risk_rank` helper; comparisons now consistent (str levels ranked to int before <=); high tolerance allows more, critical never auto.
+- Observability: autopilot_score computation (risk + budget burn + proc count); integrated in status/health.
+- Quiet + safety: respects quiet ops for loops; budget before any action; human checkpoints (need:human-review, AGENTS/SPEC changes, critical) always preserved.
+- Tests: units for load/risk/budget/status/cycle + e2e dry-run stub (see PR #493).
+- Procedures: data-driven + 3+ builtins; risk gated.
+This fulfills the Design child AC ("polished contract doc ... plus data models that can be implemented").
+
