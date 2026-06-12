@@ -84,6 +84,7 @@ agents:
   constraints:
   - Make small, test-driven changes.
   - Preserve behavior unless a change is explicitly intended.
+  - "Looped or autonomous sessions: use terse bullet turn summaries only and post comments or create issues only on meaningful forward progress per quiet_operations guidance. Prefer MCP data."
   surfaces:
   - copilot-plugin
   - gh-plate
@@ -174,6 +175,7 @@ agents:
   constraints:
   - Separate source facts from recommendations.
   - Prefer committed artifacts over ephemeral notes.
+  - "Looped or autonomous sessions: terse one-sentence bullet turn summaries only; comments and issue creation only on verifiable forward progress (see quiet_operations). Use MCP surfaces for data."
   surfaces:
   - copilot-plugin
   - gh-plate
@@ -591,7 +593,7 @@ skills:
   - data-engineer
 - id: what-next-plate-process
   name: What Next? (PLATE Process Guidance)
-  description: Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment based on current repo state (health, open Epics, fragments, Goals page, etc.). Enables autonomous drive of the full process.
+  description: Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment based on current repo state (health, open Epics, fragments, Goals page, etc.). Enables autonomous drive of the full process. In looped use, the caller must emit only terse bullet turn summaries and follow quiet comment discipline (see quiet_operations guidance and plate persona).
   inputs:
   - Current repo state (via plate_health, plate_epic_status, release status, labels)
   outputs:
