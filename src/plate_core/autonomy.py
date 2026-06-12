@@ -100,7 +100,8 @@ class AutonomyEngine:
             self.risk_tolerance = "off"
         else:
             self.enabled = self.autonomy_config.get("enabled", True)
-            self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
+            rt = self.autonomy_config.get("risk_tolerance", "medium")
+            self.risk_tolerance = (rt or "medium").lower().strip()
         self.procedures: list[ProcedureDef] = self._load_procedures()
         # Simple in-memory spend for governor (real impl would persist or use comments)
         self._spent_this_cycle: int = 0

@@ -44,7 +44,6 @@ from .discussions import (
     list_discussions,
     list_open_ideas,
 )
-from dataclasses import asdict
 from .mcp.curiosity_tools import (
     CURIOSITY_TOOLS,
     CreateBlockingQuestionTool,
