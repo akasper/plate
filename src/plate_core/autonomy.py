@@ -104,7 +104,9 @@ class AutonomyEngine:
             self.risk_tolerance = (rt or "medium").lower().strip()
         self.procedures: list[ProcedureDef] = self._load_procedures()
         # Simple in-memory spend for governor (real impl would persist or use comments)
+        # Separate per-cycle (reset each run_cycle) and daily (UTC day rollover) counters to address review feedback on budget tracking.
         self._spent_this_cycle: int = 0
+        self._spent_today: int = 0
         self._last_reset = datetime.now(timezone.utc).date()
 
     def _load_procedures(self) -> list[ProcedureDef]:
@@ -145,6 +147,7 @@ class AutonomyEngine:
             # Config report is always from local filesystem (.plate); never pass remote 'owner/name' string (would be misinterpreted as path).
             # See review feedback on get_plate_config_report(self.repo) misuse.
             config_report = get_plate_config_report(None).to_dict()
+
         except Exception:
             health = costs = config_report = {}
 
@@ -154,7 +157,7 @@ class AutonomyEngine:
         budget_pct = 0
         daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         if daily > 0:
-            remaining = self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_this_cycle
+            remaining = self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today
             budget_pct = max(0, min(100, (remaining / daily) * 100))
         proc_bonus = min(20, len([p for p in self.procedures if p.enabled]) * 5)
         autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
@@ -168,7 +171,7 @@ class AutonomyEngine:
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_this_cycle if self.autonomy_config else None,
+            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today if self.autonomy_config else None,
             budget_remaining_usd=budget_remaining_usd,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
@@ -185,6 +188,7 @@ class AutonomyEngine:
             costs = get_cost_report(self.repo).to_dict()
             # Config report always local FS (see get_status fix); passing repo str would treat owner/name as path and could raise/blank data.
             pconfig = get_plate_config_report(None).to_dict()
+
         except Exception as exc:
             health = {"error": str(exc)}
             epics = costs = pconfig = {}
@@ -217,15 +221,17 @@ class AutonomyEngine:
         today = datetime.now(timezone.utc).date()
         if today != self._last_reset:
             self._spent_this_cycle = 0
+            self._spent_today = 0
             self._last_reset = today
 
         cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000)
         daily_cap = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
         action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
 
-        projected = self._spent_this_cycle + estimated  # (real: over-estimate here, e.g. * 1.5 + buffer)
+        projected_cycle = self._spent_this_cycle + estimated
+        projected_daily = self._spent_today + estimated
 
-        if projected > cap or (self._spent_this_cycle + estimated) > daily_cap:
+        if projected_cycle > cap or projected_daily > daily_cap:
             if action == "pause":
                 # In full engine: set paused, post status comment on Epic or autonomy Discussion
                 return False
@@ -235,9 +241,11 @@ class AutonomyEngine:
                 return False
             # warn: allow but log
             self._spent_this_cycle += estimated
+            self._spent_today += estimated
             return True
 
         self._spent_this_cycle += estimated
+        self._spent_today += estimated
         return True
 
     def decide_next(self, snapshot: ProjectSnapshot) -> list[dict[str, Any]]:
@@ -253,6 +261,7 @@ class AutonomyEngine:
         actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
+
                 if self.enforce_budget(proc.get("est_tokens", 2000), "procedure"):
                     actions.append({"type": "run_procedure", "id": proc.get("id")})
         return actions
@@ -282,6 +291,7 @@ class AutonomyEngine:
                     budget_dec = "pause"
                 else:
                     budget_dec = "throttle"
+
                 continue
             if dry_run:
                 actions.append(f"dry-run: {act}")
