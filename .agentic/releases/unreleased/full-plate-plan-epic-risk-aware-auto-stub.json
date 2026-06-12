@@ -1,0 +1,16 @@
+{
+  "slug": "full-plate-plan-epic-risk-aware-auto-stub",
+  "change_type": "feature",
+  "surface": "src/plate_core/plate_config.py, src/plate_core/mcp_server.py, tests/test_autonomy.py, tests/test_epic89_plate_config.py, tests/test_mcp.py, docs/design/autonomous-plate-engine.md (plate_plan_epic + risk-aware auto-stub generation per #477)",
+  "summary": "Replaces the plate_plan_epic stub with full risk-aware auto-stub generation (integrates .plate autonomy.risk_tolerance to auto-stub routine children vs. need:refinement; epic-close for #477 planning + autonomy cross-refs). Includes test updates and design doc alignment.",
+  "migration_impact": "Downstream repos get risk-aware auto-stub in plate_plan_epic flows (controlled in .plate). Planning changes now require fragments for Feature PRs. Ties to autonomy engine (procedures, quiet).",
+  "agent_notes": "plate persona uses risk-aware plate_plan_epic by default for new Epics. Low/medium for auto-stubs; human for high-risk. Author fragment for Feature planning work. See AGENTS.md for epic-close rules.",
+  "links": ["#477", "#470", "#494"],
+  "breaking": false,
+  "migration_guidance": [
+    "Use plate_plan_epic (interactive or autonomous) for Epics; it auto-stubs per current risk_tolerance.",
+    "Review stubs; promote complex ones.",
+    "For Feature PRs on planning: add .agentic/releases/unreleased/<slug>.json (see README schema).",
+    "Epic-close PRs need Feature label + fragment and target correct release track."
+  ]
+}

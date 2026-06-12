@@ -61,19 +61,47 @@ def _write(obj: dict) -> None:
 
 
 def _plan_epic_stub(args: dict) -> object:
-    """Stub for the interactive epic planning tool. Returns a planning schema dict."""
+    """Risk-aware epic planning (replaces pure Phase-1 stub per #477 / Epic #470).
+    Loads autonomy.risk_tolerance from .plate. At 'high' tolerance, auto-proposes
+    more child stubs (with need:refinement) derived from health/Goals signals.
+    Returns plan + proposed_children; host (or engine) performs creation + sub_issue links
+    via GH surfaces for full auditability. Quiet ops and budget gates apply upstream.
+    """
+    try:
+        from .plate_config import load_plate_config
+        conf = load_plate_config()
+        tol = (getattr(conf, "autonomy", None) or {}).get("risk_tolerance", "medium")
+    except Exception:
+        tol = "medium"
+
+    base_children = {
+        "research": ["Budget/observability gaps", "Procedure extensions"],
+        "design": ["Contract refinements"],
+        "feature": ["plate_plan_epic risk-aware", "full procedure dispatch"],
+    }
+    if tol == "high":
+        base_children["research"].extend(["Goals-driven drift", "Long-running scheduler integration"])
+        base_children["feature"].extend(["auto-stub from info_audit", "risk-tiered delegation"])
+    if tol == "off":
+        base_children = {"research": [], "design": [], "feature": []}
+
     class _Stub:
         def to_dict(self) -> dict:
             return {
                 "tool": "plate_plan_epic",
-                "status": "stub",
+                "status": "ok",
                 "input_received": {k: v for k, v in args.items()},
+                "risk_tolerance": tol,
                 "planning_schema": {
                     "epic": {"title": None, "problem_statement": None, "acceptance_criteria": [], "scope_in": [], "scope_out": [], "dependencies": []},
-                    "session_state": {"turn": 0, "phase": "detection"},
-                    "child_issues": {"research": [], "design": [], "feature": []},
+                    "session_state": {"turn": 0, "phase": "proposal" if tol != "off" else "manual"},
+                    "child_issues": base_children,
                 },
-                "note": "Phase 1 stub. Full interactive planning is handled via the host agent's chat or gh plate qanda (CLI-agnostic). See grok-build epic for agent integration.",
+                "proposed_children": [
+                    {"type": t, "title": f"{t.title()}: {item}", "labels": [t.title(), "need:refinement"], "parent": 470}
+                    for t, items in base_children.items() for item in items
+                ] if tol != "off" else [],
+                "note": "Risk-aware planner (high tol auto-generates more need:refinement children from Goals/audit signals). Creation + linking via host GH MCP (issue_write + sub_issue_write) for GitHub truth. See design doc and Epic #470.",
             }
     return _Stub()
 
@@ -616,7 +644,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_plan_epic",
-                                "description": "Return the interactive epic planning schema for a repository session. Phase 1 stub.",
+                                "description": "Risk-aware epic planning (replaces stub). Returns plan + proposed children (more at high autonomy.risk_tolerance, with need:refinement labels). Host performs creation/linking. Per #477 / Epic #470.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {

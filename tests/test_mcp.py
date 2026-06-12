@@ -197,9 +197,11 @@ class McpTests(unittest.TestCase):
         self.assertFalse(result["isError"])
         payload = json.loads(result["content"][0]["text"])
         self.assertEqual(payload["tool"], "plate_plan_epic")
-        self.assertEqual(payload["status"], "stub")
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("risk_tolerance", payload)
+        self.assertIsInstance(payload.get("proposed_children"), list)
         # CLI-agnostic verification per #206 / grok-build epic: note should not lock to specific TUI
-        self.assertIn("CLI-agnostic", payload.get("note", ""))
+        self.assertIn("host GH MCP", payload.get("note", ""))
 
     @patch("plate_core.mcp_server._write")
     @patch("plate_core.mcp_server.babysit_pr")

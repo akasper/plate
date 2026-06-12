@@ -259,4 +259,3 @@ This design + the subsequent GitHub Epic/child creation constitute the traceable
 - Tests: units for load/risk/budget/status/cycle + e2e dry-run stub (see PR #493).
 - Procedures: data-driven + 3+ builtins; risk gated.
 This fulfills the Design child AC ("polished contract doc ... plus data models that can be implemented").
-
