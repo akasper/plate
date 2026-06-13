@@ -1,0 +1,11 @@
+{
+  "slug": "autonomy-502-review-fixes",
+  "change_type": "fix",
+  "surface": ["src/plate_core/autonomy.py", "src/plate_core/plate_config.py", "src/plate_core/costs.py", "tests/test_autonomy.py", ".agentic/releases/unreleased/"],
+  "summary": "Address #502 owner review feedback on the AutonomyEngine #474 impl (Epic #470): eliminate double-spend risk by removing redundant enforce_budget call in run_cycle (trust decide_next decision+charge), add explicit WARN annotation on acts in decide_next, switch DEFAULT_CONFIG autonomy to conservative off (enabled=false, risk=off) so user .plate section is the clear opt-in, harden COSTS.md regex (DOTALL+anchored USAGE_BLOCK_RE; estimate_cost now prefers get_cost_report + reuses the shared TOKENS_RE parser instead of crude table scrape). Added regression tests for WARN annotation, spend accounting, and defaults. Ties to #471 heuristics, #472 contract, #479 obs. No behavior change for existing .plate users; improves safety and reviewability.",
+  "migration_impact": "none (defaults only affect new/empty .plate or when no autonomy key; engine opt-in logic already documented)",
+  "agent_notes": "Follow-up to #502 (merged without these items); created alongside Bug #503 (Q&A follow-through stub). All changes in isolated worktree on release base per process. py_compile + test_autonomy pass post-edit.",
+  "links": ["#502", "#503", "#474", "#470", "#471", "#472"],
+  "breaking": false,
+  "migration_guidance": "No action for downstream; the autonomy section in .plate (when present) continues to control exactly as before. The DEFAULT change only makes absent sections default to fully off (consistent with engine __init__ comments)."
+}

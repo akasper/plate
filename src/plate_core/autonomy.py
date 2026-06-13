@@ -109,7 +109,7 @@ class AutonomyEngine:
         self.client = client
         self.config = load_plate_config()
         # Autonomy section is opt-in only (absent .plate or absent 'autonomy' key => off / legacy AUTONOMOUS_MODE only per #470/#476 contract).
-        # Do not inherit from DEFAULT_CONFIG; only user-provided autonomy section in .plate enables graduated auto behavior.
+        # DEFAULT_CONFIG now conservative (enabled=False, risk=off) to address review feedback; user .plate section is the explicit on-ramp.
         config_dict = self.config.to_dict() if hasattr(self.config, "to_dict") else {}
         self.autonomy_config = config_dict.get("autonomy", {}) or {}
         if not self.autonomy_config:
@@ -174,13 +174,23 @@ class AutonomyEngine:
                 hist_avg = int(cr.get("total_tokens", 0) / max(1, len(reps)))
         if hist_avg <= 0:
             try:
-                costs_path = Path(".agentic/COSTS.md")
-                if costs_path.exists():
-                    txt = costs_path.read_text(encoding="utf-8", errors="ignore")
-                    # crude tokens col parse from md table ( | tokens | )
-                    nums = [int(m) for m in re.findall(r"\|\s*(\d{3,})\s*\|", txt)]
-                    if nums:
-                        hist_avg = sum(nums) // len(nums)
+                # Prefer structured report (already parsed via harvest/TOKENS_RE) over fragile md scrape
+                cr = get_cost_report() if "get_cost_report" in globals() or True else None
+                if cr and getattr(cr, "total_tokens", 0):
+                    reps = getattr(cr, "reports", []) or cr.to_dict().get("reports", []) if hasattr(cr, "to_dict") else []
+                    if reps:
+                        hist_avg = int(getattr(cr, "total_tokens", 0) / max(1, len(reps)))
+                if hist_avg <= 0:
+                    costs_path = Path(".agentic/COSTS.md")
+                    if costs_path.exists():
+                        txt = costs_path.read_text(encoding="utf-8", errors="ignore")
+                        # Robust: use the same USAGE_BLOCK_RE + TOKENS_RE as costs.py (no bare table-col regex)
+                        from .costs import USAGE_BLOCK_RE as _UBR, TOKENS_RE as _TR
+                        for m in _UBR.finditer(txt):
+                            block = m.group(1) or ""
+                            tm = _TR.search(block)
+                            if tm:
+                                hist_avg = max(hist_avg, int(tm.group(1)))
             except Exception:
                 pass
         if hist_avg > 100:
@@ -364,6 +374,8 @@ class AutonomyEngine:
             act = {"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time).", "est": est, "decision": dec.value}
             if dec == Decision.THROTTLE:
                 act["throttled"] = True
+            if dec == Decision.WARN:
+                act["annotation"] = "WARN: budget near/ over cap (over-estimate applied)"
             actions.append(act)
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
@@ -373,6 +385,8 @@ class AutonomyEngine:
                     pact = {"type": "run_procedure", "id": proc.get("id"), "est": est, "decision": dec.value}
                     if dec == Decision.THROTTLE:
                         pact["throttled"] = True
+                    if dec == Decision.WARN:
+                        pact["annotation"] = "WARN: budget near/ over cap (over-estimate applied)"
                     actions.append(pact)
         return actions
 
@@ -405,7 +419,9 @@ class AutonomyEngine:
             kind = act.get("type", "unknown")
             est = act.get("est") or self.estimate_cost(kind, {"cost_report": snap.cost_report, "num_items": 2})
             total_est += est
-            dec = self.enforce_budget(est, kind)  # already called in decide but re-enforce here for run (idempotent spend guard)
+            # Use decision from decide_next (which already enforced + charged) to eliminate double-spend risk flagged in #502 review.
+            # Only the initial probe (when no decided actions) may call enforce.
+            dec = Decision[act.get("decision", "PROCEED").upper()] if act.get("decision") else Decision.PROCEED
             if dec == Decision.PAUSE:
                 throttled.append(kind)
                 paused = True
@@ -414,7 +430,7 @@ class AutonomyEngine:
             if dec in (Decision.THROTTLE, Decision.WARN):
                 throttled.append(kind)
                 budget_dec = dec.value if dec != Decision.PROCEED else budget_dec
-                # for throttle: partial already spent in enforce; continue to execute (per task "throttle: partial spend + continue")
+                # for throttle: partial already spent in enforce (from decide_next); continue to execute (per task "throttle: partial spend + continue")
             if dry_run:
                 actions.append(f"dry-run: {kind} est={est}")
                 continue

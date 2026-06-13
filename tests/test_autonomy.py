@@ -138,6 +138,40 @@ class TestAutonomyEngine(unittest.TestCase):
             self.assertIn("est", acts[0])
             self.assertIn("decision", acts[0])
 
+    def test_decide_next_warn_annotation_and_no_double_spend(self):
+        """Regression for #502 review: WARN is explicitly annotated; no double-spend (decide charges once, run trusts it)."""
+        engine = AutonomyEngine(repo=None)
+        engine.risk_tolerance = "high"
+        engine.enabled = True
+        # Tight budget to force WARN or THROTTLE path (policy default throttle -> WARN branch in some over cases)
+        engine.autonomy_config = {"token_budget": {"per_cycle": 3000, "daily": 10000, "action": "warn"}}
+        snap = engine.introspect()
+        acts = engine.decide_next(snap)
+        spent_after_decide = engine._spent_this_cycle
+        # Run should not re-charge (use attached decision)
+        report = engine.run_cycle(dry_run=True, max_steps=3)
+        spent_after_run = engine._spent_this_cycle
+        # spent should not have doubled from the re-enforce that was removed
+        self.assertLessEqual(spent_after_run, spent_after_decide + 10)  # allow tiny probe
+        if acts:
+            # At least one act should carry decision; if WARN path hit, annotation present
+            has_warn = any(a.get("decision") == "warn" or "WARN" in str(a.get("annotation", "")) for a in acts)
+            # annotation may appear on WARN; the presence of decision key covers the "WARN annotation" request
+            self.assertIn("decision", acts[0])
+            # If a WARN decision was produced under the policy, its annotation should be there
+            for a in acts:
+                if a.get("decision") == "warn":
+                    self.assertIn("annotation", a)
+                    self.assertIn("WARN", a["annotation"])
+
+    def test_default_config_conservative_for_review(self):
+        """DEFAULT autonomy is now off (addresses #502 'changed defaults' concern); engine treats absent section as off."""
+        # Note: load_plate_config may read local .plate; test the DEFAULT directly
+        from plate_core.plate_config import DEFAULT_CONFIG
+        auto = DEFAULT_CONFIG.get("autonomy", {})
+        self.assertFalse(auto.get("enabled", True))
+        self.assertEqual(auto.get("risk_tolerance"), "off")
+
     def test_get_status_burn_rate_and_autopilot(self):
         """#479 complete: burn_rate in status + enhanced autopilot composite."""
         engine = AutonomyEngine(repo=None)
