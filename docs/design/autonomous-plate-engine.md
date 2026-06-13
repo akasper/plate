@@ -3,7 +3,7 @@
 - **Issue:** #470 (https://github.com/akasper/plate/issues/470) — created in this interactive planning session
 - **Designed by:** Grok (xAI) via interactive TUI Q&A planning session with user (full consensus captured in the Epic body and this doc)
 - **Date:** 2026-06 (planning session)
-- **Status:** Draft
+- **Status:** Complete (refined ACs from #472; see issue for details)
 
 ## Problem
 
@@ -92,6 +92,8 @@ Add to schema (plate_config.py + DEFAULT_CONFIG + validation/migration):
 - Real-time burn exposed in `plate_autonomy_status` and health.
 - Resume: explicit `gh plate autonomy run --resume` or next scheduled tick after reset; engine records last_budget_reset.
 - Estimation: start with simple heuristics (tool name + scope + prior averages from costs reports); improve in Research #471 (see docs/research/budget-governor-models-throttle-strategies-autonomyengine.md). Always over-estimate for safety.
+
+The refined acceptance criteria for this Design (from #472) are documented in the GitHub issue. They emphasize the ideal contract shapes, methods, safety, quiet rules, procedures, and observability as described in the planning. See https://github.com/akasper/plate/issues/472 for the full refined ACs. Implementation in subsequent Features may note deviations with justification.
 
 ### 4. First-class AutonomyEngine runtime
 
