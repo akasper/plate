@@ -1,0 +1,22 @@
+{
+  "slug": "spec-autonomy-align-470",
+  "change_type": "documentation",
+  "surface": [
+    "SPEC.md",
+    ".agentic/releases/unreleased/"
+  ],
+  "summary": "Align SPEC.md (the human-owned source of product intent) with Epic #470 Autonomous PLATE Engine & Scheduled Procedures and its children. Adds #470 as a top-level Beta Roadmap epic with child summary (budget governor, AutonomyEngine runtime + Decision/estimate_cost, .plate autonomy.risk_tolerance + budgets + procedures, MCP/CLI surfaces, generalize babysit/auto-merge, risk-aware planning, observability). Updates Goals (high agent autonomy details), Architecture ( .plate as single source, AutonomyEngine description), Target Workflows (long-running --loop example), and header date. Ties to design doc, autonomy fragment (autonomous-plate-engine-config-procedures + the #505 review fixes fragment), AGENTS.md, and recent PRs. Ensures SPEC remains the authoritative vision aligned with completed/planned autonomy work.",
+  "migration_impact": "none (SPEC is guidance/intent; no runtime or template changes)",
+  "agent_notes": "Documentation follow-on to #470 (per #488). SPEC is the place humans/agents look for north star, roadmap, and architecture claims. Updated after #499 (research #471 land) merge and during #504 (merged) (autonomy feedback fixes) verification (tests exit 0). Fragment added as this changes documented product intent and references process changes from the Epic.",
+  "links": [
+    "#488",
+    "#470",
+    "#471",
+    "#472",
+    "#474",
+    "#505",
+    "#503"
+  ],
+  "breaking": false,
+  "migration_guidance": "No action required. Future SPEC updates for autonomy or other Epics should continue via Documentation PRs + fragments per AGENTS.md."
+}
