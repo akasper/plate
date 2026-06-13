@@ -493,11 +493,13 @@ class TestAutonomySchemaDefaultsAndMigration(unittest.TestCase):
     """Tests for v1.2 autonomy addition, defaults, compat (no key in .plate), and migration (Epic #470 / #474 skeleton + config)."""
 
     def test_default_autonomy_present_and_valid(self):
-        # DEFAULT now includes autonomy with 'medium'/'enabled' as the intended new behavior for the autonomy engine feature (Epic #470 / this PR); conservative 'off' applies on migration when no section or explicit off in .plate
+        # DEFAULT is now conservative (enabled=False, risk=off) per review feedback on #502 for the autonomy engine PR (#474 / Epic #470).
+        # This makes the .plate autonomy section the explicit opt-in (engine treats absent/empty section as off for safety/legacy compat).
+        # Migration from 1.1 still adds the section (via _migrate_1_1_to_1_2).
         self.assertIn("autonomy", DEFAULT_CONFIG)
         auto = DEFAULT_CONFIG["autonomy"]
-        self.assertEqual(auto.get("risk_tolerance"), "medium")
-        self.assertTrue(auto.get("enabled"))
+        self.assertEqual(auto.get("risk_tolerance"), "off")
+        self.assertFalse(auto.get("enabled"))
         validate_plate_config({"version": "1.2", "autonomy": auto}, strict=True)
 
     def test_load_without_autonomy_key_resolves_via_default(self):
