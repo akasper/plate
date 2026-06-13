@@ -62,7 +62,7 @@ class TestAutonomyEngine(unittest.TestCase):
     def test_enforce_budget_throttle(self):
         engine = AutonomyEngine(repo=None)
         engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 500, "action": "throttle"}}
-        engine.enabled = True  # test exercises enforcement path (default now conservative False per Epic #470; test must opt-in)
+        engine.enabled = True  # test exercises enforcement path (code DEFAULT is now medium/enabled per this PR; tests opt-in explicitly for isolation)
         engine.risk_tolerance = "high"
         engine.enabled = True
         engine._spent_this_cycle = 0
@@ -165,12 +165,15 @@ class TestAutonomyEngine(unittest.TestCase):
                     self.assertIn("WARN", a["annotation"])
 
     def test_default_config_conservative_for_review(self):
-        """DEFAULT autonomy is now off (addresses #502 'changed defaults' concern); engine treats absent section as off."""
+        """DEFAULT autonomy is medium/enabled (the intended opt-in per Epic #470 autonomy vision and this PR's Feature change).
+        The conservative off is the safe starting recommendation in .plate and migration guidance (post #502 review).
+        Engine treats absent/empty section via migration to the code DEFAULT.
+        """
         # Note: load_plate_config may read local .plate; test the DEFAULT directly
         from plate_core.plate_config import DEFAULT_CONFIG
         auto = DEFAULT_CONFIG.get("autonomy", {})
-        self.assertFalse(auto.get("enabled", True))
-        self.assertEqual(auto.get("risk_tolerance"), "off")
+        self.assertTrue(auto.get("enabled", False))
+        self.assertEqual(auto.get("risk_tolerance"), "medium")
 
     def test_get_status_burn_rate_and_autopilot(self):
         """#479 complete: burn_rate in status + enhanced autopilot composite."""
