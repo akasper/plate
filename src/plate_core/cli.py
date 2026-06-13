@@ -520,8 +520,12 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         print(f"Enabled: {status.get('enabled')}")
         print(f"Risk tolerance: {status.get('risk_tolerance')}")
         print(f"Autopilot score: {status.get('autopilot_score')}")
+        print(f"Burn rate: {status.get('burn_rate', 0)}%")
         if status.get("budget_remaining_tokens") is not None:
             print(f"Budget remaining tokens: {status.get('budget_remaining_tokens')}")
+        print(f"Due procedures: {status.get('due_procedures', [])}")
+        if status.get("throttled_actions"):
+            print(f"Throttled actions: {status.get('throttled_actions')}")
         print(f"Last cycle: {status.get('last_cycle')}")
         return 0
 
@@ -554,7 +558,8 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
             if args.json:
                 print(json.dumps(rep))
             else:
-                print(f"  status={rep.get('status')} budget={rep.get('budget_decision')} actions={len(rep.get('actions_taken', []))}")
+                br = rep.get("snapshot", {}).get("cost_report", {}) if isinstance(rep.get("snapshot"), dict) else {}
+                print(f"  status={rep.get('status')} budget={rep.get('budget_decision')} actions={len(rep.get('actions_taken', []))} throttled={len(rep.get('throttled', []))}")
             if i < max_cycles - 1:
                 sleep_s = getattr(args, "sleep_seconds", None)
                 if sleep_s is None:
@@ -572,7 +577,11 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         return 0
     print(f"Autonomy cycle: {rep.get('status')}")
     print(f"Budget decision: {rep.get('budget_decision')}")
-    print(f"Actions taken: {rep.get('actions_taken', [])}")
+    print(f"Actions taken: {len(rep.get('actions_taken', []))} (throttled {len(rep.get('throttled', []))})")
+    if rep.get('actions_taken'):
+        # terse: only first 2 for quiet ops
+        for a in rep.get('actions_taken', [])[:2]:
+            print(f"  - {a}")
     return 0
 
 
