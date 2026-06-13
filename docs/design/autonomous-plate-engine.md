@@ -91,7 +91,7 @@ Add to schema (plate_config.py + DEFAULT_CONFIG + validation/migration):
 - `per_cycle` and `daily` caps in config. Daily resets on UTC date change (or GitHub event).
 - Real-time burn exposed in `plate_autonomy_status` and health.
 - Resume: explicit `gh plate autonomy run --resume` or next scheduled tick after reset; engine records last_budget_reset.
-- Estimation: start with simple heuristics (tool name + scope + prior averages from costs reports); improve in Research child. Always over-estimate for safety.
+- Estimation: start with simple heuristics (tool name + scope + prior averages from costs reports); improve in Research #471 (see docs/research/budget-governor-models-throttle-strategies-autonomyengine.md). Always over-estimate for safety.
 
 ### 4. First-class AutonomyEngine runtime
 
