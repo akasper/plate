@@ -35,8 +35,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "default_track": None,
     },
     "autonomy": {
-        "enabled": True,
-        "risk_tolerance": "medium",
+        "enabled": False,
+        "risk_tolerance": "off",
         "token_budget": {
             "daily": 50000,
             "per_cycle": 8000,
