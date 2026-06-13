@@ -502,6 +502,8 @@ class TestAutonomySchemaDefaultsAndMigration(unittest.TestCase):
         self.assertFalse(auto.get("enabled"))
         validate_plate_config({"version": "1.2", "autonomy": auto}, strict=True)
 
+        # Note: PR #504 labeled with exactly one type label "Bug" (+ risk:low, area:agent) to satisfy .github/workflows/labels.yml PR type label rule.
+
     def test_load_without_autonomy_key_resolves_via_default(self):
         # A .plate lacking 'autonomy' (like pre-this-change) should still load and resolve to having autonomy via DEFAULT (explicit in root .plate now)
         # Use a temp minimal .plate without the key
