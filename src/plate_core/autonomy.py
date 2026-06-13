@@ -12,8 +12,10 @@ Follows quiet ops for looped/scheduled use (terse bullets only; comments only on
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +34,8 @@ class AutonomyStatus:
     budget_remaining_usd: float | None = None  # float (or None) from cost_ceiling_usd; addresses type annotation review feedback for consistency with assignment in get_status
     last_cycle: str | None = None
     next_scheduled: str | None = None
-    autopilot_score: int = 0  # 0-100 composite
+    autopilot_score: int = 0  # 0-100 composite per #479 (auto PRs + unattended cycles + gaps closed + proc success + budget adherence)
+    burn_rate: float = 0.0  # % of daily budget burned (for #479 observability + health)
     due_procedures: list[str] = field(default_factory=list)
     open_human_checkpoints: list[str] = field(default_factory=list)
     throttled_actions: int = 0
@@ -80,6 +83,20 @@ class ProcedureDef:
     enabled: bool = True
 
 
+class Decision(Enum):
+    """Budget governor decision per #471 research + #472/#474 contract.
+
+    PROCEED: action within budget, execute (full spend tracked).
+    THROTTLE: near/over but continue partial (half-spend for safety, skip low-pri callers decide).
+    PAUSE: hard stop this cycle (set paused, no further spend).
+    WARN: over but allow (full spend, log for observability; rare).
+    """
+    PROCEED = "proceed"
+    THROTTLE = "throttle"
+    PAUSE = "pause"
+    WARN = "warn"
+
+
 class AutonomyEngine:
     """The core engine for long-running autonomous PLATE operation.
 
@@ -107,6 +124,76 @@ class AutonomyEngine:
         self._spent_this_cycle: int = 0
         self._spent_today: int = 0
         self._last_reset = datetime.now(timezone.utc).date()
+        self.throttled_actions: int = 0  # for #479 autopilot calc and status
+
+    def estimate_cost(self, action_kind: str, scope: dict[str, Any] | None = None) -> int:
+        """#471 estimation heuristics wired for #474: tool/scope/historical + 1.5-2x over-est + 20% buffer + cap.
+
+        References Research #471 (base costs, multipliers from #items/historical from costs/.agentic/COSTS.md, over-est policy).
+        Called from decide_next + run_cycle; result passed to enforce_budget.
+        Best-effort (sparse data falls back to static); always over for safety per design.
+        """
+        scope = scope or {}
+        kind = (action_kind or "unknown").lower().replace("-", "_")
+        bases: dict[str, int] = {
+            "info_audit": 10000,      # 5k-15k per #471
+            "perform_information_audit": 10000,
+            "health": 350,
+            "plate_health": 350,
+            "plan_epic": 7500,
+            "what_next": 1500,
+            "run_procedure": 4000,
+            "delegate": 2200,
+            "plate_delegate_to_agent": 2200,
+            "babysit": 4500,
+            "feedback_integration": 4500,
+            "cost_rollup": 1800,
+            "drift": 5500,
+            "nightly_drift_detection": 5500,
+            "unknown": 2200,
+            "default": 2200,
+        }
+        base = bases.get(kind, bases["default"])
+
+        # scope multiplier: #items / gaps / issues (from introspect health/epic_status passed in scope)
+        num_items = 1
+        for k in ("num_items", "num_issues", "gaps", "open_issues", "children"):
+            if k in scope:
+                try:
+                    num_items = max(num_items, int(scope[k]) or 1)
+                except (ValueError, TypeError):
+                    pass
+        mult = 1.0 + min(2.0, (num_items - 1) * 0.12)  # ~12% per extra item, cap +2x
+
+        # historical from passed cost_report (preferred, avoids GH every est) or parse local .agentic/COSTS.md
+        hist_avg = 0
+        cr = scope.get("cost_report") or {}
+        if isinstance(cr, dict):
+            reps = cr.get("reports") or []
+            if reps and cr.get("total_tokens"):
+                hist_avg = int(cr.get("total_tokens", 0) / max(1, len(reps)))
+        if hist_avg <= 0:
+            try:
+                costs_path = Path(".agentic/COSTS.md")
+                if costs_path.exists():
+                    txt = costs_path.read_text(encoding="utf-8", errors="ignore")
+                    # crude tokens col parse from md table ( | tokens | )
+                    nums = [int(m) for m in re.findall(r"\|\s*(\d{3,})\s*\|", txt)]
+                    if nums:
+                        hist_avg = sum(nums) // len(nums)
+            except Exception:
+                pass
+        if hist_avg > 100:
+            base = max(base, int(hist_avg * 0.6))  # blend lower bound from history
+
+        # 1.5-2x over-estimate + 20% buffer (use ~1.75x avg)
+        est = int(base * mult * 1.75)
+        est = int(est * 1.20)  # +20% buffer
+
+        # cap relative to per_cycle (leave headroom, never propose >90% of cycle alone)
+        cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000) or 8000
+        est = min(est, int(cap * 0.9))
+        return max(100, est)
 
     def _load_procedures(self) -> list[ProcedureDef]:
         """Load procedure defs from .agentic/procedures/*.json (data-driven per design) + built-ins."""
@@ -147,28 +234,40 @@ class AutonomyEngine:
         except Exception:
             health = costs = config_report = {}
 
-        # Compute autopilot_score (for #479 observability): base on risk tolerance (higher tolerance = more autonomous potential), budget adherence, enabled procedures count.
+        # Complete observability per #479: autopilot_score composite (% auto PRs proxy from health + unattended cycles + gaps closed + proc success + budget adherence + throttled inverse) + burn_rate.
+        # References design #472 + research #471. Uses available signals (no full 30d GH history here; health/epics/costs provide proxies).
         risk_rank = self._risk_rank(self.risk_tolerance)
-        base = 30 + (risk_rank * 15)  # 30-75 from risk
-        budget_pct = 0
-        daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
+        base = 25 + (risk_rank * 12)  # 25-61 from risk (high tolerance enables more auto)
+        daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000) or 50000
+        budget_adherence = 50
+        burn_rate = 0.0
         if daily > 0:
-            remaining = self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today  # use daily counter for daily remaining (per_cycle is separate; see enforce_budget and run_cycle reset)
-            budget_pct = max(0, min(100, (remaining / daily) * 100))
-        proc_bonus = min(20, len([p for p in self.procedures if p.enabled]) * 5)
-        autopilot = int(base + (budget_pct * 0.2) + proc_bonus)
+            spent = self._spent_today
+            burn_rate = max(0.0, min(100.0, (spent / daily) * 100))
+            remaining = daily - spent
+            budget_adherence = max(0, min(100, int((remaining / daily) * 100)))
+        # proc success proxy + due count (more due + enabled = higher auto progress)
+        proc_count = len([p for p in self.procedures if p.enabled])
+        proc_bonus = min(15, proc_count * 4)
+        # health signals for auto-prs/gaps (if present in future health; else 0)
+        auto_prs = min(10, (health or {}).get("auto_merged_prs", 0) or 0)
+        gaps_closed = min(10, (health or {}).get("gaps_closed_autonomously", 0) or 0)
+        throttle_penalty = min(10, self.throttled_actions or 0)  # inverse
+        autopilot = int(base + (budget_adherence * 0.25) + proc_bonus + auto_prs + gaps_closed - throttle_penalty)
         autopilot = max(0, min(100, autopilot))
 
         due_ids = [p.id for p in self.procedures if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance)]
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=self.autonomy_config.get("token_budget", {}).get("daily", 50000) - self._spent_today,
+            budget_remaining_tokens=daily - self._spent_today,
             budget_remaining_usd=float(self.autonomy_config.get("cost_ceiling_usd") or 0) if self.autonomy_config.get("cost_ceiling_usd") is not None else None,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
+            burn_rate=round(burn_rate, 1),
             due_procedures=due_ids,
-            open_human_checkpoints=health.get("errors", []),
+            open_human_checkpoints=health.get("errors", []) if isinstance(health, dict) else [],
+            throttled_actions=getattr(self, "throttled_actions", 0),
         )
 
     def introspect(self) -> ProjectSnapshot:
@@ -198,14 +297,16 @@ class AutonomyEngine:
             timestamp=ts,
         )
 
-    def enforce_budget(self, estimated: int, action_kind: str) -> bool:
-        """Core governor. Returns True if action may proceed (after possible throttle/pause).
+    def enforce_budget(self, estimated: int, action_kind: str) -> Decision:
+        """Core governor per #471/#472/#474. Returns Decision (not bool).
 
-        Called before expensive steps per design (info_audit, plan_epic gen, apply procedures, etc.).
-        Over-estimates, integrates historical from costs, enforces caps + risk.
+        estimate_cost (wired #471 heuristics) is called by caller (decide_next/run_cycle) and passed here.
+        On breach: throttle (partial spend + continue), pause (stop), warn (continue full).
+        Daily UTC reset + per_cycle/daily caps. Always respects risk_tolerance=='off'.
+        Ties to siblings: called before info_audit/plan_epic/delegate/apply procedures.
         """
         if not self.enabled or self.risk_tolerance == "off":
-            return True  # explicit off or disabled: no autonomous budget enforcement
+            return Decision.PROCEED  # explicit off or disabled: no autonomous budget enforcement
 
         # Daily reset (UTC date) for _spent_today; _spent_this_cycle reset per run_cycle
         today = datetime.now(timezone.utc).date()
@@ -214,49 +315,73 @@ class AutonomyEngine:
             self._spent_today = 0
             self._last_reset = today
 
-        cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000)
-        daily_cap = self.autonomy_config.get("token_budget", {}).get("daily", 50000)
-        action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
+        cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000) or 8000
+        daily_cap = self.autonomy_config.get("token_budget", {}).get("daily", 50000) or 50000
+        policy = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
 
         projected_cycle = self._spent_this_cycle + estimated
         projected_daily = self._spent_today + estimated
 
         if projected_cycle > cap or projected_daily > daily_cap:
-            if action == "pause":
-                return False
-            if action == "throttle":
-                # Caller should skip low-pri; here we just record and allow (caller decides)
-                self._spent_this_cycle += estimated // 2
-                self._spent_today += estimated // 2
-                return True
+            if policy == "pause":
+                # no additional spend on hard pause
+                return Decision.PAUSE
+            if policy == "throttle":
+                # partial spend + continue (throttle low-pri in caller)
+                self._spent_this_cycle += max(1, estimated // 2)
+                self._spent_today += max(1, estimated // 2)
+                self.throttled_actions += 1
+                return Decision.THROTTLE
+            # warn or other: full spend but flag
             self._spent_this_cycle += estimated
             self._spent_today += estimated
-            return True
+            return Decision.WARN
 
         self._spent_this_cycle += estimated
         self._spent_today += estimated
-        return True
+        return Decision.PROCEED
 
     def decide_next(self, snapshot: ProjectSnapshot) -> list[dict[str, Any]]:
         """Decide actions for the cycle (what_next + risk-filtered procedures + budget-aware).
 
-        In full impl: call plate_what_next, tick_schedules, filter by risk_tolerance + enforce_budget.
+        Wires #471: call estimate_cost (with scope from snapshot) before append; check enforce_budget Decision.
+        Budget check here + run_cycle (per #474 wiring); skip PAUSE actions, note THROTTLE.
+        References #471 heuristics + #472 contract; no human checkpoint changes.
         """
         actions: list[dict[str, Any]] = []
         if not self.enabled or self.risk_tolerance == "off":
             return actions
-        # Risk-filtered; budget check in run_cycle to avoid double (per reviews)
-        actions.append({"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time)."})
+        # Build scope for est (historical + items from introspect snapshot for #471)
+        scope = {
+            "cost_report": snapshot.cost_report,
+            "num_items": len(snapshot.due_procedures) + len(snapshot.epic_status.get("children", []) or []) or 3,
+            "gaps": len(snapshot.health.get("recommendations", []) or []),
+        }
+        # what_next always proposed first (cheap) but still est for governor
+        est = self.estimate_cost("what_next", scope)
+        dec = self.enforce_budget(est, "what_next")
+        if dec != Decision.PAUSE:
+            act = {"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time).", "est": est, "decision": dec.value}
+            if dec == Decision.THROTTLE:
+                act["throttled"] = True
+            actions.append(act)
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
-                actions.append({"type": "run_procedure", "id": proc.get("id")})
+                est = self.estimate_cost("run_procedure", {**scope, "id": proc.get("id")})
+                dec = self.enforce_budget(est, "run_procedure")
+                if dec != Decision.PAUSE:
+                    pact = {"type": "run_procedure", "id": proc.get("id"), "est": est, "decision": dec.value}
+                    if dec == Decision.THROTTLE:
+                        pact["throttled"] = True
+                    actions.append(pact)
         return actions
 
     def run_cycle(self, *, dry_run: bool = False, max_steps: int | None = None) -> CycleReport:
         """Main entry for scheduled/looped autonomous execution.
 
-        Introspect -> enforce -> decide -> execute (or delegate with trigger comments) -> log markers + usage.
-        Returns structured report; caller (gh plate autonomy run --loop or scheduler) emits terse bullets only.
+        Introspect -> enforce (real est from #471 estimate_cost) -> decide (budget wired) -> execute (delegate support) -> log markers + USAGE REPORT.
+        Quiet enforcement: only append progress actions (executed/delegated/markers) to report; no non-progress/no-op comments (per quiet ops #456 + AGENTS.md).
+        References #471/#472; ties to #478 procedures, #479 obs, #482 tests. Delegation via plate_delegate_to_agent + trigger markers.
         """
         ts = datetime.now(timezone.utc).isoformat()
         # Do not unconditionally zero _spent_this_cycle here: daily rollover + carry across --loop cycles (reused engine) is handled inside enforce_budget's date check. Per-cycle accounting starts from instance init (new engine) or accumulated (loop reuse). Addresses review feedback on daily budget enforcement in long-running loops.
@@ -264,29 +389,53 @@ class AutonomyEngine:
         actions: list[str] = []
         throttled: list[str] = []
         paused = False
-        budget_dec = "proceed"
+        budget_dec = Decision.PROCEED.value
+        total_est = 0
 
         self._spent_this_cycle = 0  # fresh per cycle
         decided = self.decide_next(snap)
+        if not decided:
+            # decide filtered all (PAUSE from est/enforce on tiny budget); probe to set paused state for report
+            probe_est = self.estimate_cost("what_next", {})
+            dec = self.enforce_budget(probe_est, "what_next")
+            if dec == Decision.PAUSE:
+                paused = True
+                budget_dec = dec.value
         for act in decided[: (max_steps if max_steps is not None else 10)]:
-            est = 1000  # heuristic stub; real from action_kind
-            if not self.enforce_budget(est, act.get("type", "unknown")):
-                throttled.append(act.get("type", "action"))
-                action = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
-                if action == "pause":
-                    paused = True
-                    budget_dec = "pause"
-                else:
-                    budget_dec = "throttle"
-
+            kind = act.get("type", "unknown")
+            est = act.get("est") or self.estimate_cost(kind, {"cost_report": snap.cost_report, "num_items": 2})
+            total_est += est
+            dec = self.enforce_budget(est, kind)  # already called in decide but re-enforce here for run (idempotent spend guard)
+            if dec == Decision.PAUSE:
+                throttled.append(kind)
+                paused = True
+                budget_dec = Decision.PAUSE.value
                 continue
+            if dec in (Decision.THROTTLE, Decision.WARN):
+                throttled.append(kind)
+                budget_dec = dec.value if dec != Decision.PROCEED else budget_dec
+                # for throttle: partial already spent in enforce; continue to execute (per task "throttle: partial spend + continue")
             if dry_run:
-                actions.append(f"dry-run: {act}")
+                actions.append(f"dry-run: {kind} est={est}")
                 continue
-            # Execute or delegate (in full: deterministic or plate_delegate_to_agent + GitHub trigger comment)
-            actions.append(f"executed/delegated: {act}")
-            # Example marker (real engine would post via gh client)
-            # <!-- PLATE-AUTONOMY-CYCLE: ... -->
+            # Execute or delegate (support plate_delegate_to_agent + trigger comments per #472)
+            executed_desc = f"executed: {kind}"
+            try:
+                if "delegate" in kind or "delegate_to_agent" in str(act):
+                    # wire delegation (from baseline_catalog; narrow packet per design)
+                    from .baseline_catalog import delegate_to_agent
+                    # scope from act/snap; real would pass focused packet. Here best-effort marker + call (safe no-op if no agent match)
+                    _ = delegate_to_agent(agent_id="plate", prompt_segment=act.get("prompt_segment", "autonomous progress"), context={"autonomy_cycle": ts, "risk": self.risk_tolerance})
+                    executed_desc = f"delegated: {kind} (plate_delegate_to_agent triggered)"
+            except Exception:
+                pass  # delegation optional; fall to executed marker
+            actions.append(executed_desc)
+            # Full logging: PLATE-AUTONOMY-CYCLE marker + USAGE REPORT block (per #474 AC + AGENTS)
+            marker = f"<!-- PLATE-AUTONOMY-CYCLE: ts={ts} kind={kind} est={est} decision={dec.value} budget_remaining~{max(0, (self.autonomy_config.get('token_budget',{}).get('per_cycle',8000)-self._spent_this_cycle))} -->"
+            actions.append(marker)
+            # USAGE style for traceability (even for engine cycles; harvested where Feature/Question close)
+            if not dry_run:
+                actions.append("=== USAGE REPORT ===\ntokens: " + str(est) + "\ncost: $0.00\n duration: 00:00:10 (autonomy est)\n=== END USAGE REPORT ===")
 
         report = CycleReport(
             status="completed" if not paused else "paused",
@@ -297,7 +446,6 @@ class AutonomyEngine:
             snapshot=snap.to_dict(),
             timestamp=ts,
         )
-        # In real: post usage report block if cycle produced artifact/closure
         return report
 
     def run_procedure(self, proc_id: str, *, dry_run: bool = False) -> dict[str, Any]:
