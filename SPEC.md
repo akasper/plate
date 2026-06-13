@@ -2,7 +2,7 @@
 spec_version: "2.0"
 process_version: "PLATE 1.0 (target)"
 owner: "akasper"
-updated_at: "2026-06-03"
+updated_at: "2026-06-13"
 ---
 
 # Project Specification
@@ -58,8 +58,8 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 - Instant project health visibility and structured state for agents.
 - Near-zero-friction bootstrap and adoption.
 - **Test-first mandatory** + continuous verifiable progress (SPEC → CURRENT).
-- High agent autonomy with safety gates, risk-based auto-merge, and human judgment preserved.
-- Observability: health, velocity, cost, drift detection, and dashboards.
+- **High agent autonomy with safety gates, risk-based auto-merge, and human judgment preserved.** Autonomy is the default PLATE philosophy (always-on unless explicitly "off" via .plate); a single `risk_tolerance` knob (off/low/medium/high) plus token budgets and scheduled procedures govern long-running operation at the user's budgeted rate. Core runtime is the AutonomyEngine (introspects health/epics/costs/config/procedures, enforces budgets via Decision (PROCEED/THROTTLE/PAUSE/WARN), decides next actions, executes or delegates via plate_delegate_to_agent, with full observability: autopilot_score, burn_rate, due procedures, human checkpoints). Surfaces: plate_autonomy_status / run_cycle / run_procedure / list_procedures (MCP) and `gh plate autonomy status|run|loop`. .plate is the single source of truth for the autonomy section (replaces legacy .github/AUTONOMOUS_MODE marker during transition). Procedures are data-driven in .agentic/procedures/ (cadence, risk_level, allow-listed steps). Babysit + auto-merge generalized to consult .plate risk_tolerance. See Epic #470 and children (#471 research on budget governor models, #472 design contract, #473 .plate schema, #474 engine skeleton + Decision/estimate_cost, #475 CLI, #476 generalize auto-merge/babysit, #477 full plate_plan_epic with risk-aware stubs, #478 procedures registry, #479 observability, #480 persona/quiet updates, #481 docs/AGENTS, #482 tests).
+- Observability: health, velocity, cost (harvested USAGE REPORTs), drift detection, autopilot_score / burn_rate in autonomy status + health, and dashboards.
 - Acquisition readiness: clean architecture, strong GitHub integration, measurable Copilot impact.
 - Extensibility: future multi-host adapters while staying GitHub-first.
 
@@ -81,8 +81,8 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 - **Core files** (enforced via bootstrap/health):
   - `SPEC.md` (intent)
   - `CURRENT.md` (verified reality)
-  - `AGENTS.md` (authority, rules, autonomy levels)
-  - `.plate/config.yml` (machine-readable settings: autonomy level, test prefs, etc.)
+  - `AGENTS.md` (authority, rules, autonomy levels, quiet operations)
+  - `.plate` (machine-readable root config: versioned schema with autonomy section (risk_tolerance, token_budget {daily,per_cycle,action}, cost_ceiling_usd, schedules_enabled, loop), plus methodology/release/extensions; single source for autonomy replacing legacy AUTONOMOUS_MODE marker)
 - **Progressive features**: Playwright E2E, autonomous mode, skill marketplace, visualization dashboards, multi-agent orchestration, simulation mode.
 
 ---
@@ -92,7 +92,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 - `gh plate bootstrap --apply` → fully scaffolded PLATE repo.
 - `/agent plate "Implement feature X"` → agent plans, implements test-first, opens atomic PR.
 - `gh plate health` + `gh plate epic status` → instant confidence before review/merge.
-- Agents self-correct low-risk issues; escalate via Issues for human judgment.
+- Agents self-correct low-risk issues; escalate via Issues for human judgment. Long-running autonomous operation via `gh plate autonomy run --loop` (or host scheduler) at budgeted token rate, with risk-gated procedures (drift, info audit, feedback integration/babysit, cost rollup, etc.) and full markers + USAGE REPORTs.
 
 ---
 
@@ -131,8 +131,11 @@ Completing these (in approximate priority order, sequenced to minimize merge con
 
 Each item should be opened as its own Epic (or Feature) issue, linked to the appropriate milestone, and executed per the Required Work Loop in AGENTS.md (labeling, tests alongside implementation, per-feature fragments, atomic PRs with clean titles and `Closes #N`, etc.). Many directly close visible gaps such as documented stubs and "minimal" slices.
 
+- **Epic: Autonomous PLATE Engine & Scheduled Procedures (#470)**  
+  The heart of the PLATE vision: first-class AutonomyEngine runtime (plate_core/autonomy.py) that introspects project state (health + epics + costs + config + due procedures), enforces token budgets via Decision + #471 heuristics (over-estimate, historical from costs/.agentic/COSTS.md, scope multipliers), decides next (risk-filtered procedures + what_next), executes or delegates, logs PLATE-AUTONOMY-CYCLE markers + USAGE REPORTs, and exposes observability (autopilot_score, burn_rate). .plate autonomy section (risk_tolerance off/low/medium/high, token_budget, cost_ceiling_usd, schedules_enabled, loop) is the single source (sunsets .github/AUTONOMOUS_MODE). Data-driven procedures in .agentic/procedures/ (nightly-drift-detection, feedback-integration, cost-rollup, etc.). MCP surfaces (plate_autonomy_*) + `gh plate autonomy status|run|loop`. Generalize babysit/auto-merge to .plate risk_tolerance. Full plate_plan_epic with risk-aware auto-stub generation at high tolerance. Persona/AGENTS/quiet updates. Tests + design/research artifacts. (Children #471–482 landed or in flight; see design doc and fragments.)
+
 - **Epic: Full Interactive Epic Planning Engine (plate_plan_epic + gh plate plan / MCP surfaces)**  
-  Replace the Phase-1 stub implementation (`_plan_epic_stub` returning only schema + "host agent's chat or gh plate qanda" note in `src/plate_core/mcp_server.py:34`) with a full guided interactive planning flow. The tool/MCP/CLI surface should create the parent Epic issue + `Epic: short-name` label + ordered child stubs (Research → Design → Feature, auto-labeled `need:refinement`), seed PLATE_SESSION_STATE JSON, integrate with Q&A / bootstrap seeding, and compose with Information Audit. Add a top-level `gh plate plan` (or `epic plan`) command. See sibling designs (interactive-planning-ux.md, epic-intent-detection.md, qanda-mcp-cli-surfaces.md, single-agent-delegation-flow.md) and the planning sections in the template `AGENTS.md`.
+  Replace the Phase-1 stub implementation (`_plan_epic_stub` returning only schema + "host agent's chat or gh plate qanda" note in `src/plate_core/mcp_server.py:34`) with a full guided interactive planning flow. The tool/MCP/CLI surface should create the parent Epic issue + `Epic: short-name` label + ordered child stubs (Research → Design → Feature, auto-labeled `need:refinement`), seed PLATE_SESSION_STATE JSON, integrate with Q&A / bootstrap seeding, and compose with Information Audit. Add a top-level `gh plate plan` (or `epic plan`) command. See sibling designs (interactive-planning-ux.md, epic-intent-detection.md, qanda-mcp-cli-surfaces.md, single-agent-delegation-flow.md) and the planning sections in the template `AGENTS.md`. (Risk-aware auto-stub generation added in #477 as part of #470.)
 
 - **Epic: Contemplation Engine v2 + Full Contract + Reliable Close Logic**  
   Evolve the current heuristic/minimal ContemplationEngine (`src/plate_core/contemplation.py`, invoked via `plate_contemplate` / RecordAnswerTool / MCP) to the complete, enforceable contract defined in Design #143. Must include: full transcript append (non-destructive), deterministic parsing of `answer_signal` from Question bodies, creation of forward-progress artifacts (new linked issues of appropriate types + direct mutations to AGENTS.md / `.agentic/releases/` fragments / SPEC.md / wiki sources / docs/ per the relevant rules), append-only revision handling with `revision_of`, unblock/resume merge for answers to blocking Questions (#147 creation + #148 resumption), and Question closure *if and only if* the answer_signal criteria are verifiably met (citing excerpts; always include the `=== USAGE REPORT ===` block on close). Update agent_guidance.py, `plugin/agents/plate.agent.md`, and baseline catalog entries. This is the core behavioral engine that turns Curiosity answers into durable progress while preserving the four invariants from Epic #139.
