@@ -30,6 +30,7 @@ def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
     (repo_root / "plugin").mkdir(parents=True, exist_ok=True)
     (repo_root / ".plugin").mkdir(parents=True, exist_ok=True)
     (repo_root / ".github" / "plugin").mkdir(parents=True, exist_ok=True)
+    (repo_root / ".grok-plugin").mkdir(parents=True, exist_ok=True)
     (repo_root / "src" / "plate_core" / "__init__.py").write_text(
         f'"""plate_core runtime package."""\n\n__version__ = "{version}"\n',
         encoding="utf-8",
@@ -62,6 +63,15 @@ def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
         ),
         encoding="utf-8",
     )
+    (repo_root / ".grok-plugin" / "marketplace.json").write_text(
+        json.dumps(
+            {
+                "name": "plate-marketplace",
+                "plugins": [{"name": "plate-core", "source": {"type": "local", "path": "./.plugin"}, "version": version}],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def _assert_version_files(repo_root: Path, version: str) -> None:
@@ -70,12 +80,14 @@ def _assert_version_files(repo_root: Path, version: str) -> None:
     plugin_manifest = json.loads((repo_root / "plugin" / "plugin.json").read_text(encoding="utf-8"))
     root_plugin_manifest = json.loads((repo_root / ".plugin" / "plugin.json").read_text(encoding="utf-8"))
     marketplace_manifest = json.loads((repo_root / ".github" / "plugin" / "marketplace.json").read_text(encoding="utf-8"))
+    grok_marketplace_manifest = json.loads((repo_root / ".grok-plugin" / "marketplace.json").read_text(encoding="utf-8"))
     assert f'__version__ = "{version}"' in runtime
     assert f'version = "{version}"' in pyproject
     assert plugin_manifest["version"] == version
     assert root_plugin_manifest["version"] == version
     assert marketplace_manifest["metadata"]["version"] == version
     assert marketplace_manifest["plugins"][0]["version"] == version
+    assert grok_marketplace_manifest["plugins"][0]["version"] == version
 
 
 # ---------------------------------------------------------------------------

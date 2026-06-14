@@ -39,6 +39,14 @@ jobs:
           copilot plugin uninstall plate-core
           copilot plugin marketplace remove plate-marketplace --force
 
+      - name: Grok marketplace packaging check (generator + committed index)
+        run: |
+          set -euo pipefail
+          # Vendored generator (see scripts/generate-grok-plugin-index.py) validates
+          # .grok-plugin/marketplace.json + scans .plugin/ payload into plugin-index.json.
+          # This ensures `grok plugin marketplace add akasper/plate` will show rich previews.
+          python3 scripts/generate-grok-plugin-index.py --check
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:

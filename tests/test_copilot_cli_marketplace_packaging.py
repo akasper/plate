@@ -36,13 +36,52 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         self.assertEqual(root_plugin_manifest["version"], __version__)
         self.assertEqual(plugin_manifest["repository"], plugin_entry["repository"])
 
+    def test_grok_marketplace_manifest_and_index_exist(self):
+        # Grok uses .grok-plugin/ at repo root (distinct from Copilot's .github/plugin/)
+        grok_manifest = read_json(".grok-plugin/marketplace.json")
+        self.assertEqual(grok_manifest["name"], "plate-marketplace")
+        self.assertEqual(len(grok_manifest["plugins"]), 1)
+        entry = grok_manifest["plugins"][0]
+        self.assertEqual(entry["name"], "plate-core")
+        self.assertEqual(entry["version"], __version__)
+        # source is local dict pointing at the committed payload (same as used by e2e structure tests)
+        self.assertEqual(entry["source"]["type"], "local")
+        self.assertEqual(entry["source"]["path"], "./.plugin")
+
+        # plugin-index.json is the committed catalog for rich Marketplace tab previews (TUI)
+        index = read_json(".grok-plugin/plugin-index.json")
+        self.assertEqual(index["version"], 1)
+        self.assertIn("plate-core", index["plugins"])
+        components = index["plugins"]["plate-core"]["components"]
+        self.assertIn("agents", components)
+        self.assertIn("mcpServers", components)
+        self.assertTrue(any(a["name"] == "plate" for a in components["agents"]))
+        self.assertTrue(any(m["name"] == "plate-core" for m in components["mcpServers"]))
+
+    def test_grok_generator_check_passes(self):
+        # The generator must be deterministic and match the committed index.
+        # This is the packaging gate (run via `python3 scripts/generate-grok-plugin-index.py --check`).
+        import subprocess
+        from pathlib import Path
+        repo_root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            ["python3", str(repo_root / "scripts" / "generate-grok-plugin-index.py"), "--check"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        self.assertEqual(result.returncode, 0, msg=f"generator --check failed:\n{result.stderr}\n{result.stdout}")
+        self.assertIn("Plugin index OK", result.stdout)
+
     def test_readme_documents_prelaunch_marketplace_install_flow(self):
         readme = read_text("README.md")
 
         self.assertIn("copilot plugin marketplace add akasper/plate", readme)
         self.assertIn("copilot plugin install plate-core@plate-marketplace", readme)
+        self.assertIn("grok plugin marketplace add akasper/plate", readme)
+        self.assertIn("grok plugin install plate-core@plate-marketplace", readme)
         self.assertIn("pip install plate-core", readme)
-        self.assertIn("There is no separate GitHub-run submission process for Copilot CLI marketplaces", readme)
+        self.assertIn("There is no separate GitHub-run submission process for Copilot CLI or Grok Build marketplaces", readme)
         self.assertIn("Marketplace release checklist", readme)
         self.assertIn("Complete the human-owned publication tasks tracked in #380 and #381.", readme)
 
@@ -56,6 +95,10 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         self.assertIn("copilot plugin marketplace add akasper/plate", workflow)
         self.assertIn("copilot plugin install plate-core@plate-marketplace", workflow)
         self.assertIn("copilot plugin marketplace remove plate-marketplace --force", workflow)
+        # Grok packaging is validated via the committed generator + --check (no public binary
+        # download yet; the generator + unit tests cover the .grok-plugin/ surface for #570).
+        self.assertIn("Grok marketplace packaging check (generator + committed index)", workflow)
+        self.assertIn("generate-grok-plugin-index.py --check", workflow)
 
 
 if __name__ == "__main__":
