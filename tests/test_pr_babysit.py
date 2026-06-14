@@ -532,8 +532,8 @@ class PrBabysitTests(unittest.TestCase):
         # Anchor in persona
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("start with the dedicated pr-babysit skill", persona)
-        self.assertIn("instead of hand-rolling", persona)
+        self.assertIn("start with pr-babysit skill", persona)
+        self.assertIn("not hand-rolling", persona)
 
     def test_verification_strategy_in_guidance(self):
         """Regression test for #523: verification strategy (narrow/targeted first with check-work skill, warn before long runs >5-10min, cross-ref to CI Diagnosis/long-running) must be present in shipped guidance and persona."""
@@ -650,8 +650,33 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("Use encapsulated review thread helpers (plate_get_actionable", persona)
-        self.assertIn("#516", persona)
+        self.assertIn("Use encapsulated review helpers (no raw GraphQL/jq)", persona)
+
+        import plate_core.pr_babysit as pbmod
+        doc = getattr(pbmod, "__doc__", "") or ""
+        self.assertIn("(addresses #516)", doc)
+
+    def test_todo_write_required_for_complex_multi_step_515(self):
+        """Regression test for #515: persona, agent_guidance, and AGENTS must require `todo_write` (mark completed immediately, never batch) for all 3+ step PLATE work (babysit sessions, Q&A refinement, full PR green, ceremonies)."""
+        from plate_core.agent_guidance import TASK_MANAGEMENT_GUIDANCE
+        self.assertIn("Task Management for Complex Multi-Step Work", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("**immediately** use the `todo_write` tool", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("Mark items completed as soon as the atomic step is done", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("babysit/\"get PR green\"", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("interactive Q&A or contemplation/refinement rounds", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("(Addresses #515.)", TASK_MANAGEMENT_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("start with todo_write; mark completed immediately (never batch)", persona)
+        self.assertIn("(Addresses #515.)", persona)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("## Task Management (for agents)", agents)
+        self.assertIn("**must** use the `todo_write` tool (or host equivalent) for any complex multi-step PLATE work with 3+ steps", agents)
+        self.assertIn("Mark each item `completed` **immediately** when that step finishes. **Never batch**", agents)
+        self.assertIn("Examples in context:", agents)
 
 
 if __name__ == "__main__":

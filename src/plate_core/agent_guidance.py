@@ -126,6 +126,22 @@ This completes the loop started by #147 creation. Dogfood the full create → an
 - Always prefer the most native user experience the host environment (Copilot CLI) can provide.
 """
 
+TASK_MANAGEMENT_GUIDANCE = """
+## Task Management for Complex Multi-Step Work
+
+For **any** PLATE work with 3 or more steps — including babysit/"get PR green"/address feedback sessions (multiple gates/threads/tests/re-inspects), interactive Q&A or contemplation/refinement rounds, delegation or subagent flows, information audits, autonomy cycles, or release ceremonies — **immediately** use the `todo_write` tool (or host equivalent) at the start of the effort.
+
+Rules (mandatory per plate persona):
+- Call `todo_write` with a list of structured todos (each with id, content, status: "pending" | "in_progress" | "completed").
+- **Mark items completed as soon as the atomic step is done.** Do not batch multiple completions before marking.
+- Use it to track progress visibly for the user, surface blockers (e.g. "need:human-review before merge"), and prevent skipping steps or losing context across turns.
+
+Examples:
+- Babysit a PR to green: todos for "ci-diagnosis + list all gates", "address actionable review threads via helpers", "targeted test fix if needed", "babysit re-inspect to CLEAN", "merge + release reset".
+- Q&A refinement: ["present question via ask_user_question", "capture answer + provenance", "create/update artifacts per ACs", "follow-through on chosen option before next"].
+
+See AGENTS.md (new Task Management section + work loop examples), the host system prompt, and the `todo_write` tool contract. (Addresses #515.)
+"""
 
 def get_agent_guidance_sections() -> dict[str, str]:
     """Return guidance sections for agents."""
@@ -134,6 +150,7 @@ def get_agent_guidance_sections() -> dict[str, str]:
         "qanda_curiosity": QANDA_CURIOSITY_GUIDANCE,
         "information_audit": INFORMATION_AUDIT_GUIDANCE,
         "quiet_operations": QUIET_OPERATIONS_GUIDANCE,
+        "task_management": TASK_MANAGEMENT_GUIDANCE,
     }
 
 
