@@ -23,6 +23,7 @@ jobs:
       - name: Install Copilot CLI
         run: |
           set -euo pipefail
+          # Pinned to 1.0.60+ for non-interactive deprecation handling (direct/local installs deprecated by Copilot CLI; see #375).
           COPILOT_VERSION="1.0.60"
           curl -fsSL -o copilot-linux-x64.tar.gz "https://github.com/github/copilot-cli/releases/download/v${COPILOT_VERSION}/copilot-linux-x64.tar.gz"
           tar -xzf copilot-linux-x64.tar.gz
@@ -30,14 +31,7 @@ jobs:
           sudo mv copilot /usr/local/bin/copilot
           copilot --version
 
-      - name: Plugin install smoke test (workspace path)
-        run: |
-          set -euo pipefail
-          copilot plugin install "$GITHUB_WORKSPACE"
-          copilot plugin uninstall plate-core
-
       - name: Plugin install smoke test (pre-launch marketplace surface)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
           copilot plugin marketplace add akasper/plate
