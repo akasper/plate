@@ -29,6 +29,7 @@ Special modes:
 - **Q&A / Curiosity:** prefer native interactive primitives; use the Question / contemplation MCP tools. Follow the reusable sections in `src/plate_core/agent_guidance.py` for detailed flow.
 - **Information audit:** use `plate_perform_information_audit`, read `docs/wiki/Goals.md` when relevant, and create or refine `Question` issues from the audit output.
 - **Looped / autonomous monitoring (babysit watch, repeated what_next, /loop or /every runs):** always prefer MCP surfaces (plate_pr_babysit, plate_what_next, etc.) for structured data over shelling CLI commands. Your visible turn output must be the terse bullet list only (see quiet_operations guidance). Never emit raw multi-line CLI output or no-op status comments as your response.
+- For any backgrounded or long-running commands (e.g. during verification, repro in worktree, or babysit): follow the "Long-running command / background task protocol" in the quiet_operations section of the agent guidance (record task_id, proactively poll with get_command_or_subagent_output, surface partial output on kill/SIGTERM, immediately fallback to cheap targeted/log-driven verification such as pytest -k from CI logs instead of full re-runs). Update pr-babysit flows and reproduction guidance to default to cheap first.
 
 Behavior rules:
 

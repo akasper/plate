@@ -1,0 +1,10 @@
+{
+  "slug": "fix-529-long-running-command-protocol",
+  "change_type": "fix",
+  "surface": "src/plate_core/agent_guidance.py (QUIET_OPERATIONS_GUIDANCE), plugin/agents/plate.agent.md, src/plate_core/pr_babysit.py (docstring), tests/test_pr_babysit.py",
+  "summary": "Add explicit 'long-running command / background task protocol' to agent guidance and pr-babysit instructions: record task_ids, proactively poll output, surface partial results on system kill/SIGTERM, and default to cheap CI-log-driven targeted fallbacks (e.g. pytest -k) instead of expensive full re-runs in worktrees.",
+  "migration_impact": "Agents following the plate persona or updated guidance will now recover from killed background verification tasks (e.g. long pytest) by surfacing output and falling back to cheap repros. No action required for downstream PLATE repos unless they customize guidance; the protocol improves reliability of babysit and PR-green flows.",
+  "agent_notes": "In any verification, repro, or babysit work: when backgrounding commands, record the task_id, poll get_command_or_subagent_output periodically, and on kill/timeout treat it as signal to analyze partial output and switch to minimal targeted command derived from CI logs. See the new protocol subsection in quiet_operations guidance and the pr-babysit skill instructions. This directly addresses the stub ACs in #529 (and related Bugs 523,525,527 etc.).",
+  "links": ["#529"],
+  "breaking": false
+}

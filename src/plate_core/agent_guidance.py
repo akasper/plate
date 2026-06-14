@@ -194,5 +194,18 @@ PLATE supports long-running autonomous operation (e.g. Copilot CLI `/every`, Gro
 - Resource consciousness (AGENTS.md) + Atomic PR discipline still apply; quiet rules make them practical for overnight / multi-hour autonomous runs.
 - These rules are enforced primarily through the plate persona, catalog constraints on delegated agents, and what_next / delegation prompt segments. See also AGENTS.md §Resource consciousness, §Human checkpoints, §Issue Artifact Rules, and the babysit / Curiosity sections.
 
+### Long-running command / background task protocol
+When using or encountering backgrounded commands (e.g. `run_terminal_command(..., background=true)`, host-initiated long pytest in worktree, babysit repro, or any long-running verification):
+- **Immediately record the task_id** (or identifier) returned by the backgrounding call or system reminder.
+- Maintain an explicit monitoring plan: proactively and periodically call `get_command_or_subagent_output` (or the `monitor` tool) with the task_id. Surface partial stdout/stderr, progress, and any early failure signals in your (terse) responses. Do not wait passively for "the task ended" reminders.
+- If the task is killed by the system (e.g. SIGTERM / signal 15 after hours, timeout, OOM), or exceeds a practical threshold (e.g. >10min for verification), **treat the kill as data, not "the end"**:
+  - Immediately retrieve the final/partial output via the get/monitor tool.
+  - Analyze it (often the useful work/failure was completed before the kill).
+  - Switch *immediately* to a cheap, targeted fallback (e.g. `pytest -k "exact failing test from CI log or partial output" --tb=line`, single file, or the minimal repro from the original CI job). Never blindly re-background a full expensive suite.
+- In "pr-babysit", "get CI passing", "reproduce the failure (in worktree)", or equivalent flows: **default to cheap, CI-log-driven reproduction first** (use `gh run view` on the specific failing job to extract the exact -k filter, file, or error; run only that). Reserve broad backgrounded commands for last resort, and always with the monitoring + fallback plan above.
+- The pr-babysit skill, "reproduce failure in worktree" guidance, and any verification instructions must encode this preference for log-first, kill-aware, cheap fallbacks over expensive long runs.
+
+This protocol prevents wasted compute and ensures partial results from killed tasks are acted upon quickly.
+
 Use this section for any monitoring, babysitting, contemplation, or repeated what_next work. The goal is dramatically less noise in Issues and terminals while preserving every required traceable artifact.
 """
