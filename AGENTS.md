@@ -132,7 +132,7 @@ After making the PR green (including feedback-resolution for any agent threads),
 | 4 | When the answer changes operating guidance, update `AGENTS.md` and `.agentic/skills.yml` in the same PR. |
 | 5 | Open a Documentation PR with `Closes #N` in the body. |
 
-For PLATE Q&A: consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers (artifacts per ACs) without reminder. Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress. See persona/guidance. (Addresses #518, #517, #521.)
+For PLATE Q&A: consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers (artifacts per ACs) without reminder. Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress. If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed. See persona/guidance. (Addresses #503, #518, #517, #521.)
 
 ## Task Management (for agents)
 
@@ -150,7 +150,7 @@ The plate persona and all delegated agents **must** use the `todo_write` tool (o
 
 **Examples in context:**
 - For babysit of a PR: list items like "run CI diagnosis + get_pr_merge_gates", "use plate_get_actionable_review_threads + resolve addressed via plate_resolve_review_thread", "push to existing branch", "re-babysit until CLEAN", "merge + reset release".
-- For Q&A: "present via native ask_user_question", "record answer + create artifacts per AC", "complete chosen option follow-through before offering more".
+- For Q&A: "present via native ask_user_question", "record answer + create artifacts per AC", "complete chosen option follow-through before offering more" (if option promises review/babysit/address feedback, use pr-babysit skill in worktree to execute fully before next; never advance unaddressed). (Addresses #503.)
 
 This is now part of the plate default persona (see Special modes) and agent_guidance TASK_MANAGEMENT_GUIDANCE. Failure to use it for qualifying work is a drift from #515.
 
