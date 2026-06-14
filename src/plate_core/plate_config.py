@@ -35,8 +35,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "default_track": None,
     },
     "autonomy": {
-        "enabled": False,
-        "risk_tolerance": "off",
+        "enabled": True,
+        "risk_tolerance": "medium",
         "token_budget": {
             "daily": 50000,
             "per_cycle": 8000,
@@ -318,7 +318,7 @@ def _migrate_1_0_to_1_1(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _migrate_1_1_to_1_2(config: dict[str, Any]) -> dict[str, Any]:
-    """Add autonomy section (default disabled/off for safe transition per #476)."""
+    """Add autonomy section (code DEFAULT is enabled/medium per the autonomous engine vision in #470; migration injects the current DEFAULT_CONFIG values for forward compatibility)."""
     upgraded = copy.deepcopy(config)
     if "autonomy" not in upgraded or not upgraded.get("autonomy"):
         upgraded["autonomy"] = copy.deepcopy(DEFAULT_CONFIG.get("autonomy", {}))
@@ -339,8 +339,8 @@ MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
         "1.2",
         _migrate_1_1_to_1_2,
         [
-            "Add the 'autonomy' section (default off/risk_tolerance 'off' for safe no-new-auto behavior per #470/#476).",
-            "Set risk_tolerance explicitly in .plate to enable graduated autonomous operation ('low'/'medium'/'high').",
+            "Add the 'autonomy' section (code DEFAULT is enabled at 'medium' risk tolerance per Epic #470 autonomous vision; the migration copies the live DEFAULT_CONFIG so new behavior is forward-compatible).",
+            "To keep conservative behavior, explicitly set 'enabled: false' and/or 'risk_tolerance: off' (or 'low') in your .plate file. The section is now added with the current code defaults on upgrade.",
         ],
     ),
 }
