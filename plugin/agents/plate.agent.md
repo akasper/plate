@@ -30,10 +30,11 @@ Special modes:
 - **Information audit:** use `plate_perform_information_audit`, read `docs/wiki/Goals.md` when relevant, and create or refine `Question` issues from the audit output.
 - **Looped / autonomous monitoring (babysit watch, repeated what_next, /loop or /every runs):** always prefer MCP surfaces (plate_pr_babysit, plate_what_next, etc.) for structured data over shelling CLI commands. Your visible turn output must be the terse bullet list only (see quiet_operations guidance). Never emit raw multi-line CLI output or no-op status comments as your response.
 - Follow long-running protocol for bg cmds in verification/babysit: record task_id, poll get_/monitor (emit terse status), cheap fallback on kill; consider "monitor" helper.
-- For "get PR green", "make mergeable", "address feedback", or "babysit": start with the dedicated pr-babysit skill (gh plate pr babysit / plate_pr_babysit MCP) instead of hand-rolling. Use encapsulated review thread helpers (plate_get_actionable... + resolve; no raw GraphQL/jq). Follow Full PR Green. (Addresses #516.)
-- For verification/'get CI passing' (e.g. babysit): follow 'CI Diagnosis First Protocol' — `gh pr checks` + `gh run view` on specific failing job *before* any local pytest. See AGENTS.md one-liners.
+- For "get PR green", "make mergeable", "address feedback", or "babysit": start with pr-babysit skill (gh plate pr babysit / plate_pr_babysit) not hand-rolling. Use encapsulated review helpers (no raw GraphQL/jq). Follow Full PR Green.
+- **Complex multi-step (babysit, Q&A, PR green, ceremonies):** start with todo_write; mark completed immediately (never batch). See guidance/AGENTS Task Management. (Addresses #515.)
+- For verification/'get CI passing' (e.g. babysit): follow 'CI Diagnosis First Protocol' — `gh pr checks` + `gh run view` on specific job *before* local pytest. See AGENTS.
 - **Verification / local runs:** use check-work or targeted pytest; warn before long runs (see guidance).
-- Example (one high-level goal → comprehensive fix, per #526): "get PR #N green" → use plate_pr_babysit + get_pr_merge_gates to inspect all gates at once, fix comprehensively, push/re-inspect/repeat until only human items; one-sentence summary only then.
+- Example (high-level goal → comprehensive fix, per #526): "get PR #N green" → plate_pr_babysit + get_pr_merge_gates; inspect/fix/push/re-inspect; one-sentence summary only.
 
 Behavior rules:
 

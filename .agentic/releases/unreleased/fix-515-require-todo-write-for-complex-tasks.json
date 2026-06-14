@@ -1,0 +1,10 @@
+{
+  "slug": "fix-515-require-todo-write-for-complex-tasks",
+  "change_type": "fix",
+  "surface": "plugin/agents/plate.agent.md (new Special mode bullet), src/plate_core/agent_guidance.py (TASK_MANAGEMENT_GUIDANCE + export in get_agent_guidance_sections), AGENTS.md (new ## Task Management section with rules + babysit/Q&A examples), tests/test_pr_babysit.py (regression test)",
+  "summary": "Mandate use of `todo_write` (or host equivalent) in the plate persona, agent_guidance, and AGENTS.md for all complex multi-step PLATE work (3+ steps): babysit/get-green sessions, Q&A/contemplation rounds, delegation, ceremonies, etc. Require immediate start + mark-completed-immediately (no batching). Add examples and regression test. (Addresses #515.)",
+  "migration_impact": "Agents using the plate persona will now automatically create and maintain visible todo lists for any qualifying multi-step work (babysits, Q&A, PR health, release steps). This improves user visibility, step discipline, and auditability. No template or config changes required for downstream repos; the persona/guidance updates apply automatically when the plate persona is active.",
+  "agent_notes": "At the beginning of babysit, 'get PR #N green', Q&A refinement, or any 3+ step flow: call todo_write with the plan. Mark each todo completed right after the step (e.g. after a successful targeted pytest or after resolving a thread and pushing). Never wait to batch completions. Use to record 'need:human-review' items. See the new TASK_MANAGEMENT_GUIDANCE, AGENTS.md Task Management section, and persona Special modes bullet. (Addresses #515; aligns with host system prompt Task Management and the todo_write contract.)",
+  "links": ["#515"],
+  "breaking": false
+}
