@@ -351,6 +351,7 @@ Use this loop:
    - `gh pr checks <N>` (or `gh plate pr babysit` / MCP) for current gates.
    - `gh run list --branch <head> --limit 5` + `gh run view <run-id> --job <job-id> --log-failed` (or --log) on the *specific* failing job to get the exact current error (e.g. labels? unresolved threads? specific test?). Note: `--log-failed` returns only the failing step output (much smaller/cheaper than full `--log`).
    - Only then decide minimal local scope (targeted -k, single file, or just metadata fix). Use/document one-liners for the gh run view flags.
+   - For backgrounded/long-running tasks started during babysit (e.g. pytest): immediately record task_id and proactively schedule/polling with `get_command_or_subagent_output` or `monitor` at intervals (30s/2m/5m/10m); at each poll emit terse one-bullet status to user (e.g. 'still running after 2m, last output: ...'); surface partial output/status in terse responses. Do not wait for system reminders. Consider a lightweight "monitor" helper. (Addresses #525.)
    - Comprehensively inspect *all* current failing gates at the start and after every push using the pr-babysit skill's get_pr_merge_gates helper (or equivalent) + gh commands. Common checklist (mental model for "make this PR mergeable"):
      - Labels (Bug/Feature + area:* + risk:* + Epic:* if applicable; check with gh issue view or edit)
      - Merge state / base sync (mergeStateStatus: BLOCKED, BEHIND, CONFLICTING, DIRTY, UNKNOWN -> use babysit with local-rebase or copilot-request)
