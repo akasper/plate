@@ -347,11 +347,14 @@ Use this loop:
 2. The babysitter automatically detects two types of issues:
    - **Unresolved review threads** from third-party agents (actionable feedback)
    - **Base branch out-of-sync** state (PR branch behind, conflicting, or dirty relative to base branch)
-3. When the high-level goal is "get this PR green", "make mergeable", "address all feedback", or equivalent, treat it as an iterative loop the *agent owns* (the "Full PR Green / Make Mergeable Loop" — see quiet_operations guidance in agent_guidance.py and the pr-babysit skill):
+3. When the high-level goal is "get this PR green", "make mergeable", "address all feedback", or equivalent, treat it as an iterative loop the *agent owns* (the "Full PR Green / Make Mergeable Loop" — see quiet_operations guidance in agent_guidance.py and the pr-babysit skill). **Always start with "CI diagnosis first" (addresses #527):** before *any* broad/expensive local command (e.g. full pytest in worktree), do cheap GitHub inspection first:
+   - `gh pr checks <N>` (or `gh plate pr babysit` / MCP) for current gates.
+   - `gh run list --branch <head> --limit 5` + `gh run view <run-id> --job <job-id> --log-failed` (or --log) on the *specific* failing job to get the exact current error (e.g. labels? unresolved threads? specific test?).
+   - Only then decide minimal local scope (targeted -k, single file, or just metadata fix). Use/document one-liners for the gh run view flags.
    - Comprehensively inspect *all* current failing gates at the start and after every push (`gh pr checks`, review threads, labels, mergeStateStatus, title/doc checks, etc.) to build/maintain a model of the "current failing gates". Do not fix one category then wait for the user to diagnose the next.
    - Address everything the agent can autonomously in the worktree (rebase/resolve conflicts per strategy, apply safe suggestions, fix labels/metadata within scope, resolve addressed threads via `plate_resolve_review_thread`, fix locally reproducible test failures preferring cheap targeted runs, etc.).
    - Push all changes to the *existing* PR branch (never open a new PR for feedback response).
-   - Re-inspect all gates.
+   - Re-inspect all gates (always re-starting with CI diagnosis).
    - Repeat until no more agent-actionable items remain (only human judgment items like actual owner CHANGES_REQUESTED, credentials, high-risk decisions, or security changes are left).
    - Only then report the one-sentence summary of what is left for the human + current state. Use quiet terse bullets for the loop.
 4. Review all open inline comments and the overall review body from the named reviewer on the linked PR

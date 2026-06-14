@@ -432,6 +432,23 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("one-sentence summary for the human of what is left", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
 
+    def test_ci_diagnosis_first_protocol_in_guidance(self):
+        """Regression test for #527: the 'CI Diagnosis First Protocol' (always start
+        with cheap GitHub inspection via gh pr checks + gh run view on the *specific*
+        failing job *before* any broad/expensive local verification like multi-hour
+        pytest in worktrees; only then decide minimal targeted scope) must be present
+        in shipped guidance (and pr-babysit skill / persona / AGENTS.md babysit examples).
+        This prevents wasted runs and ensures diagnosis is based on current CI state.
+        """
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        protocol = "CI Diagnosis First Protocol"
+        self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("always begin with cheap, precise GitHub-side diagnosis", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("gh pr checks <N>", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("gh run view <run-id> --job <job-id> --log-failed", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("before *any* broad or long-running local command", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
+
 
 if __name__ == "__main__":
     unittest.main()

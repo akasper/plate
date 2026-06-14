@@ -2,17 +2,19 @@
 
 The pr-babysit skill/MCP surface (`gh plate pr babysit` or `plate_pr_babysit`) is the dedicated tool for PR feedback and health work. Agents must default to it (rather than hand-rolling git/gh commands) for "babysit", "get CI passing", "address feedback", or "make PR green" instructions (addresses #524 and related).
 
-During babysit or green-loop work, own the *full* "current failing gates" model and "make mergeable" loop (per agent_guidance "Full PR Green / Make Mergeable Loop" and AGENTS.md babysit section):
-- Start by comprehensively inspecting *all* gates (threads via the tool, base sync, CI via gh pr checks, labels, etc.).
-- Address everything agent-actionable in the worktree (rebase, apply safe suggestions, resolve addressed threads via plate_resolve_review_thread, fix local tests, etc.).
+**Mandatory first step in any verification/babysit/repro flow (addresses #527):** "CI diagnosis first" — *always* fetch `gh pr checks <N>` + identify the exact failing job/run + `gh run view <run> --job <job> --log-failed` (or equivalent structured) *before* any broad/expensive local command (e.g. full pytest in worktree). Only after seeing the real current error (labels? threads? specific test failure?) decide minimal scope or if local repro is even needed. Use cheap GitHub inspection before investing CPU/time.
+
+During babysit or green-loop work, own the *full* "current failing gates" model and "make mergeable" loop (per agent_guidance "Full PR Green / Make Mergeable Loop" + new "CI Diagnosis First Protocol" and AGENTS.md babysit section):
+- Start (and re-start after pushes) by comprehensively inspecting *all* gates, *beginning with* the CI diagnosis one-liners above (threads via the tool, base sync, labels, etc.).
+- Address everything agent-actionable in the worktree (rebase, apply safe suggestions, resolve addressed threads via plate_resolve_review_thread, fix local tests with targeted scope only, etc.).
 - Push to the *existing* PR branch only.
-- Re-inspect.
-- Repeat until only human-judgment items remain (e.g. owner CHANGES_REQUESTED, high-risk decisions). Only then report the one-sentence summary of what is left for the human.
+- Re-inspect (starting again with CI diagnosis).
+- Repeat until only human-judgment items remain (e.g. owner CHANGES_REQUESTED, credentials, high-risk decisions). Only then report the one-sentence summary of what is left for the human.
 - Use quiet terse bullets for looped turns. Escalate with need:human-review for judgment items.
 
-The skill supports (via --act, --branch-update-strategy, and the returned BabysitReport) the inspect-fix-push-reinspect cycle. Prefer or expose "until-green" / comprehensive make-mergeable behavior in future enhancements. Follow long-running command protocol for any backgrounded verification during the loop (record task_id, poll, cheap fallback on kill; see #529).
+The skill supports (via --act, --branch-update-strategy, and the returned BabysitReport) the inspect-fix-push-reinspect cycle. Prefer or expose "until-green" / comprehensive make-mergeable behavior in future enhancements. Follow long-running command protocol for any backgrounded verification during the loop (record task_id, poll, cheap fallback on kill; see #529). Always start verification with CI diagnosis first (see #527).
 
-See quiet_operations guidance, plate.agent.md, and AGENTS.md for the full procedure (addresses #528, #526, #519, #510, etc.).
+See quiet_operations guidance (including new CI Diagnosis First and Full PR Green sections), plate.agent.md, and AGENTS.md for the full procedure (addresses #528, #527, #526, #519, #510, etc.).
 """
 
 from __future__ import annotations

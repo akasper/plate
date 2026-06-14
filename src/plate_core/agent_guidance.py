@@ -207,6 +207,25 @@ When using or encountering backgrounded commands (e.g. `run_terminal_command(...
 
 This protocol prevents wasted compute and ensures partial results from killed tasks are acted upon quickly.
 
+### CI Diagnosis First Protocol (before expensive local verification or repro)
+When the high-level instruction is "get CI passing", "reproduce the failure (in worktree)", "fix the red checks", "address feedback", or any verification/babysit task that might involve local commands (especially broad pytest in worktrees):
+
+- **Always begin with cheap, precise GitHub-side diagnosis *before* launching any broad or long-running local command.** Never default to `python -m pytest ...` or similar without first knowing the exact current failure from CI.
+
+  1. Run `gh pr checks <pr-number>` (or use MCP `plate_pr_babysit` / `gh plate pr babysit`) to see the full current set of gates and which are red (labels, feedback-resolution, test jobs, etc.).
+
+  2. Identify the *specific failing job/run*: use `gh run list --branch <pr-head-branch> --limit 5` (or the equivalent from babysit report).
+
+  3. Fetch the exact failure details with `gh run view <run-id> --job <job-id> --log-failed` (or `--log` for full; add `--json` for structured parsing). This shows the *real* error (often "missing Bug label", "unresolved threads from owner", or a specific test assertion), not an old/stale one.
+
+- Only *after* the precise diagnosis (e.g. "the failure is the labels check, not the tests"), decide the minimal repro scope if local work is needed at all: targeted `pytest -k "exact-test-name"`, single file, or just the metadata fix. Prefer cheap one-liners over multi-hour full suites.
+
+- Use (or document) common one-liners/helpers for the gh run view flags so they don't have to be memorized each time.
+
+- Cross-reference the "Full PR Green / Make Mergeable Loop" (inspect all gates including these) and the long-running protocol (cheap fallback, record task_id if backgrounding any repro).
+
+This is the primary way to avoid wasted expensive local runs and delayed diagnosis. The pr-babysit skill and "reproduce failure" guidance must encode "CI diagnosis first" as the mandatory starting step.
+
 ### Full PR Green / Make Mergeable Loop (for "get CI passing", babysit, address feedback)
 When given instructions like "get this PR green", "make mergeable", "address all feedback", or "resolve CI":
 
