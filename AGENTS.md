@@ -353,7 +353,7 @@ Use this loop:
    - Only then decide minimal local scope (targeted -k, single file, or just metadata fix). Use/document one-liners for the gh run view flags.
    - Comprehensively inspect *all* current failing gates at the start and after every push using the pr-babysit skill's get_pr_merge_gates helper (or equivalent) + gh commands. Common checklist (mental model for "make this PR mergeable"):
      - Labels (Bug/Feature + area:* + risk:* + Epic:* if applicable; check with gh issue view or edit)
-     - Merge state / base sync (BEHIND, CONFLICTING, DIRTY -> use babysit with local-rebase or copilot-request)
+     - Merge state / base sync (mergeStateStatus: BLOCKED, BEHIND, CONFLICTING, DIRTY, UNKNOWN -> use babysit with local-rebase or copilot-request)
      - Feedback-resolution: unresolved review threads (esp. third-party agents) -> use plate_pr_babysit + resolveReviewThread
      - CI / test jobs, title check, issue-link check, feature-change-files (if Feature), audit, deploy, etc. (via gh pr checks)
      - Other: documentation gate, etc.
