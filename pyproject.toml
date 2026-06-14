@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plate-core"
-version = "0.5.6"
+version = "0.6.0"
 description = "PLATE core library, gh extension entrypoint, and MCP server for GitHub project methodology automation"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
   {name = "Andrew Kasper"}
 ]
-license = {text = "MIT"}
+license = {text = "MIT with Commons Clause"}
 dependencies = []
 classifiers = [
   "Development Status :: 4 - Beta",

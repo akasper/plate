@@ -32,11 +32,13 @@ from .release import (
 )
 from .migration import generate_migration_plan, apply_migration_plan
 from .costs import get_cost_report
+from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
     get_plate_config_report,
     init_plate_config,
+    load_plate_config,
 )
 
 
@@ -508,6 +510,81 @@ def cmd_costs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_autonomy(args: argparse.Namespace) -> int:
+    """Autonomy status/run/loop surfaces for Epic #470 (host scheduler integration, --loop for persistent budgeted runs)."""
+    if getattr(args, "status", False):
+        status = get_autonomy_status(args.repo)
+        if args.json:
+            print(json.dumps(status))
+            return 0
+        print(f"Enabled: {status.get('enabled')}")
+        print(f"Risk tolerance: {status.get('risk_tolerance')}")
+        print(f"Autopilot score: {status.get('autopilot_score')}")
+        print(f"Burn rate: {status.get('burn_rate', 0)}%")
+        if status.get("budget_remaining_tokens") is not None:
+            print(f"Budget remaining tokens: {status.get('budget_remaining_tokens')}")
+        print(f"Due procedures: {status.get('due_procedures', [])}")
+        if status.get("throttled_actions"):
+            print(f"Throttled actions: {status.get('throttled_actions')}")
+        print(f"Last cycle: {status.get('last_cycle')}")
+        return 0
+
+    if not getattr(args, "run", False) and not getattr(args, "loop", False):
+        print("No --run or --loop specified; execution skipped (use --status for info only).")
+        return 0
+
+    dry_run = getattr(args, "dry_run", False)
+    max_steps = getattr(args, "max_steps", None)
+    loop = getattr(args, "loop", False)
+    run = getattr(args, "run", False)
+
+    if not run and not loop:
+        print("Usage: gh plate autonomy --status | --run [--dry-run] | --loop [--max-cycles N]", file=sys.stderr)
+        return 1
+
+    if loop:
+        import time
+        from .autonomy import AutonomyEngine
+        max_cycles = getattr(args, "max_cycles", 3) or 3
+        # Create once for persistent in-memory budget/spend across iterations (addresses "recreates each cycle" complaint for budgeted loops)
+        engine = AutonomyEngine(repo=args.repo)
+        sleep_default = engine.autonomy_config.get("loop", {}).get("default_sleep_seconds", 2) if hasattr(engine, "autonomy_config") else 2
+        for i in range(max_cycles):
+            if not args.json:
+                print(f"Cycle {i+1}/{max_cycles} (dry_run={dry_run})...")
+            rep = engine.run_cycle(dry_run=dry_run, max_steps=max_steps)
+            if hasattr(rep, "to_dict"):
+                rep = rep.to_dict()
+            if args.json:
+                print(json.dumps(rep))
+            else:
+                br = rep.get("snapshot", {}).get("cost_report", {}) if isinstance(rep.get("snapshot"), dict) else {}
+                print(f"  status={rep.get('status')} budget={rep.get('budget_decision')} actions={len(rep.get('actions_taken', []))} throttled={len(rep.get('throttled', []))}")
+            if i < max_cycles - 1:
+                sleep_s = getattr(args, "sleep_seconds", None)
+                if sleep_s is None:
+                    try:
+                        acfg = load_plate_config().autonomy or {}
+                        sleep_s = int(acfg.get("loop", {}).get("default_sleep_seconds", 2))
+                    except Exception:
+                        sleep_s = 2
+                time.sleep(sleep_s)
+        return 0
+
+    rep = run_autonomy_cycle(repo=args.repo, dry_run=dry_run, max_steps=max_steps)
+    if args.json:
+        print(json.dumps(rep))
+        return 0
+    print(f"Autonomy cycle: {rep.get('status')}")
+    print(f"Budget decision: {rep.get('budget_decision')}")
+    print(f"Actions taken: {len(rep.get('actions_taken', []))} (throttled {len(rep.get('throttled', []))})")
+    if rep.get('actions_taken'):
+        # terse: only first 2 for quiet ops
+        for a in rep.get('actions_taken', [])[:2]:
+            print(f"  - {a}")
+    return 0
+
+
 def cmd_release_cut(args: argparse.Namespace) -> int:
     """First-class gh plate release cut (see #261 Epic and AGENTS.md Release ceremony).
 
@@ -974,6 +1051,25 @@ def build_parser() -> argparse.ArgumentParser:
     costs.add_argument("--epic-label", dest="epic_label", help="Filter to reports under a specific Epic: label (e.g. Epic: beta-roadmap)")
     costs.add_argument("--json", action="store_true", help="Output JSON")
     costs.set_defaults(func=cmd_costs)
+
+    autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
+    autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    autonomy.add_argument("--status", action="store_true", help="Show autonomy status (risk tolerance, budget, autopilot score)")
+    autonomy.add_argument("--run", action="store_true", help="Run one cycle (or with --loop)")
+    autonomy.add_argument("--loop", action="store_true", help="Run multiple cycles (use --max-cycles)")
+    autonomy.add_argument("--max-cycles", type=int, default=3, help="For --loop")
+    try:
+        autonomy.add_argument("--sleep-seconds", type=int, default=300, help="Sleep seconds between --loop cycles (defaults to .plate autonomy.loop.default_sleep_seconds or 300; use smaller for demo --loop)")
+    except Exception:
+        pass  # tolerate duplicate registration during parser build (post-rebase for #492)
+    autonomy.add_argument("--dry-run", action="store_true", help="Dry run (no side effects)")
+    autonomy.add_argument("--max-steps", type=int, help="Cap actions per cycle")
+    try:
+        autonomy.add_argument("--sleep-seconds", type=int, help="Sleep seconds between --loop cycles (overrides .plate autonomy.loop.default_sleep_seconds; default 300)")
+    except Exception:
+        pass  # tolerate duplicate registration during build_parser (CI fix for #493)
+    autonomy.add_argument("--json", action="store_true", help="Output JSON")
+    autonomy.set_defaults(func=cmd_autonomy)
 
     rel_cut = release_sub.add_parser("cut", help="Cut a release: aggregate fragments to versioned dir (first-class MVP per #261)")
     rel_cut.add_argument("version", nargs="?", help="Explicit version e.g. vX.Y.Z (optional, auto-detect)")

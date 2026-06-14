@@ -1,0 +1,213 @@
+{
+  "version": "0.6.0",
+  "summary": "PLATE v0.6.0 completes the Autonomous PLATE Engine (Epic #470) and bundles related autonomy work plus other features and process improvements. Major themes: full AutonomyEngine runtime (budget governor, risk controls now defaulting to medium/enabled opt-in, procedures, observability, delegation), .plate autonomy schema + migration, quiet agents guidance, default 'plate' persona, risk-aware plan_epic + auto-stubs, release ceremony automation (tagging, hard-reset), explicit licensing, bootstrap fixes, dead-branch cleanup tool, SPEC alignment, and more. See individual fragments for migration details.",
+  "cut_at": "2026-06-14T00:03:21Z",
+  "fragment_count": 13,
+  "fragment_slugs": [
+    "408-release-tag-automation",
+    "add-explicit-licensing",
+    "autonomous-plate-engine-config-procedures",
+    "autonomy-502-review-fixes",
+    "autonomy-default-medium",
+    "bootstrap-nested-path-encoding",
+    "dead-branch-cleanup-fallback-tool",
+    "default-plate-persona",
+    "full-plate-plan-epic-risk-aware-auto-stub",
+    "quiet-agents-guidance",
+    "release-reset-main-and-branch-state-status",
+    "spec-autonomy-align-470",
+    "bootstrap-scaffolding-copy"
+  ],
+  "entries": [
+    {
+      "change_type": "process",
+      "surface": "Release PR validation, merge-triggered tagging workflow, release doctrine, release issue template",
+      "migration_impact": "Repositories adopting this change should update Release PR automation so the versioned release artifact and repository version files stay in sync before merge. The merge workflow now owns initial tag creation, while finalize remains responsible for downstream triggers and rollover/repair.",
+      "agent_notes": "Use the release artifact and synced repository version surfaces as the authoritative release version. This fragment is intentionally patch-level: it improves release ceremony automation without changing the product's semver surface. The merge workflow should refuse to retag a different commit and should treat an existing tag on the same merge commit as a no-op.",
+      "migration_guidance": [
+        "1. Update Release PR CI to resolve the intended release version from synced repository version files plus `.agentic/releases/vX.Y.Z/release.json`.",
+        "2. Fail Release PRs when version files disagree or when `refs/tags/vX.Y.Z` already exists on the remote.",
+        "3. Update the release workflow to tag `pull_request.merge_commit_sha` after a merged Release PR to `main`, succeeding idempotently when the tag already points at that commit.",
+        "4. Update release ceremony docs and templates so Release PR merge creates the tag automatically and finalize only handles downstream triggers / rollover."
+      ],
+      "links": [
+        "#306",
+        "#408"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "LICENSE, README.md, CONTRIBUTING.md, pyproject.toml, plugin/plugin.json, .agentic/releases/unreleased/",
+      "migration_impact": "No immediate changes required for downstream PLATE repositories (per Option C in #390; licensing artifacts are core-only for this release). Template payload propagation is tracked separately in #454.",
+      "agent_notes": "Reference the root LICENSE as the single source of truth for the project's licensing posture (source-available with commercial restriction). The fragment ensures this change is captured in release notes.",
+      "links": [
+        "#390",
+        "#452"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "src/plate_core/autonomy.py (impl + tests/test_autonomy.py), src/plate_core/plate_config.py, src/plate_core/mcp_server.py (plate_autonomy_*), src/plate_core/cli.py (gh plate autonomy), .agentic/procedures/ (initial), docs/research/budget-governor-models-*.md",
+      "migration_impact": "Downstream PLATE repositories control autonomy declaratively via the 'autonomy' object in .plate (risk_tolerance: 'off' to fully disable, 'low'/'medium'/'high' for graduated autonomous operation). This is now the core default philosophy (autonomous unless 'off'). The legacy .github/AUTONOMOUS_MODE marker file is sunset: add the .plate section to enable/configure (health and config surfaces will provide migration guidance for repos that still have the marker file). New .agentic/procedures/ directory and built-in procedures are opt-in via the schedules. Template/bootstrap updates remove the marker file from new scaffolds and seed .plate examples. Agents should route autonomous/long-running work through the new plate_autonomy_* surfaces and respect budget/risk signals in .plate.",
+      "agent_notes": "Autonomy is the default PLATE philosophy and is controlled exclusively via .plate (the autonomy section with risk_tolerance). When present and risk_tolerance != 'off', the plate persona and orchestrator loops should call plate_autonomy_status and plate_what_next first. Use AutonomyEngine (via MCP plate_autonomy_run_cycle or gh plate autonomy run --loop) for continuous operation. Before any heavy step, the governor must be consulted. The legacy .github/AUTONOMOUS_MODE file is ignored for new behavior (migration guidance surfaces it). All engine activity produces PLATE-AUTONOMY-CYCLE or PLATE-PROCEDURE-RUN markers + usage blocks. Procedures run only if their declared risk_level <= configured tolerance. Quiet-operations rules are mandatory for any --loop or scheduled execution. Critical-risk, AGENTS.md/SPEC/credential changes, and need:human-review items are never auto-executed. Agents must not create or rely on the old marker file.",
+      "migration_guidance": [
+        "Add (or ensure) the 'autonomy' section to .plate with desired risk_tolerance ('medium' is a good balanced default for most teams; 'off' fully disables autonomous features). See docs/design/autonomous-plate-engine.md for schema, risk matrix, and examples.",
+        "Commit the updated .plate. (Optional but recommended) seed or create .agentic/procedures/ for any recurring work you want the engine to drive.",
+        "For repos that previously relied on .github/AUTONOMOUS_MODE: this file is now legacy. The engine and health surfaces will detect it and emit migration guidance. Once .plate autonomy is configured, you may safely delete the marker file (it will be removed from future template payloads and is no longer the source of truth).",
+        "Update any custom host scheduler /loop, babysit, or CI invocations to prefer plate_autonomy_status for observability and to respect the risk_tolerance / budget from .plate.",
+        "Review and set token_budget values appropriate to your usage and billing; start conservative (the governor defaults to throttle/pause rather than overspend).",
+        "In a follow-up PR for this Epic, remove any remaining references to the marker file from AGENTS.md, workflows, features detection, template inventory, and tests."
+      ],
+      "links": [
+        "#471",
+        "#472",
+        "#474",
+        "#478",
+        "#479",
+        "#482"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": [
+        "src/plate_core/autonomy.py",
+        "src/plate_core/plate_config.py",
+        "src/plate_core/costs.py",
+        "tests/test_autonomy.py",
+        ".agentic/releases/unreleased/"
+      ],
+      "migration_impact": "none (defaults only affect new/empty .plate or when no autonomy key; engine opt-in logic already documented)",
+      "agent_notes": "Follow-up to #502 (merged without these items); created alongside Bug #503 (Q&A follow-through stub). All changes in isolated worktree on release base per process. py_compile + test_autonomy pass post-edit.",
+      "migration_guidance": "No action for downstream; the autonomy section in .plate (when present) continues to control exactly as before. The DEFAULT change only makes absent sections default to fully off (consistent with engine __init__ comments).",
+      "links": [
+        "#502",
+        "#503",
+        "#474",
+        "#470",
+        "#471",
+        "#472"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/plate_config.py (DEFAULT_CONFIG, _migrate_1_1_to_1_2, MIGRATION_STEPS), tests/test_epic89_plate_config.py",
+      "migration_impact": "After this change, gh plate config upgrade (or new scaffolds) will inject an autonomy section with enabled/medium unless the .plate already has one. Existing explicit .plate autonomy sections are unchanged. Repos without .plate autonomy will now run AutonomyEngine at medium risk (with budget governor). Update any docs or assumptions that the default was always conservative off.",
+      "agent_notes": "The code DEFAULT is now the 'intended' medium/enabled for autonomous operation. The migration copies from DEFAULT_CONFIG. Users who want the old conservative behavior must set it explicitly in .plate (recommended starting point for many teams). This aligns with PLATE's low-touch autonomous goal while preserving human checkpoints and .plate as the control surface. See Epic #470 and review on #522.",
+      "migration_guidance": [
+        "The autonomy section will be added with the current code defaults (enabled + medium).",
+        "To opt-out or start conservative, add or edit your .plate with: \"autonomy\": { \"enabled\": false, \"risk_tolerance\": \"off\" } (or \"low\").",
+        "Review AutonomyEngine behavior in plate_autonomy_status and health after upgrade.",
+        "The previous migration messages have been updated for consistency."
+      ],
+      "links": [
+        "#470",
+        "#502",
+        "#504",
+        "#522"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/bootstrap.py, tests/test_bootstrap.py",
+      "migration_impact": "Downstream bootstrap runs no longer fail on nested scaffold files such as docs/wiki/Goals.md. No manual migration is required; rerun bootstrap to receive the nested template payload files successfully.",
+      "agent_notes": "The GitHub contents API expects path separators to remain literal inside the endpoint path. Preserve '/' when building nested contents endpoints and only encode characters that truly need escaping.",
+      "links": [
+        "#421"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "release CLI/MCP tooling",
+      "migration_impact": "Operators and agents can run a dry-run branch cleanup before applying deletions, reducing orphaned-branch drift after merge automation misses cleanup.",
+      "agent_notes": "The cleanup tool automatically excludes protected/default/release namespace branches and only targets branches merged into base with no open PR.",
+      "migration_guidance": [
+        "1. Use `gh plate release cleanup-branches` to preview dead branch candidates.",
+        "2. Use `gh plate release cleanup-branches --apply` to delete candidates after review.",
+        "3. For MCP workflows, call `plate_release_cleanup_branches` with `apply: false` first, then `apply: true`."
+      ],
+      "links": [
+        "#445",
+        "#436"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "plugin/agents/plate.agent.md, src/plate_core/template_payload/.github/copilot-instructions.md, AGENTS.md, agent guidance and catalog loading, onboarding/template payload",
+      "migration_impact": "Downstream PLATE repositories get stronger defaults out of the box (no more needing to remember '/agent plate' for routine work). Existing explicit invocations continue to work. Opt-out is new and optional. Template updates and AGENTS.md documentation explain the behavior and how to opt out if desired.",
+      "agent_notes": "When PLATE signals are detected (.plate/, AGENTS.md, etc.), assume the plate persona and its full rules/guidance by default. Use the opt-out only when the user explicitly requests fallback to raw host persona. This is the primary mechanism for 'zero special prompting' (see Epic #459). The quiet_operations guidance and all other PLATE rules now apply by default in PLATE repos.",
+      "links": [
+        "#459",
+        "#463"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/plate_config.py, src/plate_core/mcp_server.py, tests/test_autonomy.py, tests/test_epic89_plate_config.py, tests/test_mcp.py, docs/design/autonomous-plate-engine.md (plate_plan_epic + risk-aware auto-stub generation per #477)",
+      "migration_impact": "Downstream repos get risk-aware auto-stub in plate_plan_epic flows (controlled in .plate). Planning changes now require fragments for Feature PRs. Ties to autonomy engine (procedures, quiet).",
+      "agent_notes": "plate persona uses risk-aware plate_plan_epic by default for new Epics. Low/medium for auto-stubs; human for high-risk. Author fragment for Feature planning work. See AGENTS.md for epic-close rules.",
+      "migration_guidance": [
+        "Use plate_plan_epic (interactive or autonomous) for Epics; it auto-stubs per current risk_tolerance.",
+        "Review stubs; promote complex ones.",
+        "For Feature PRs on planning: add .agentic/releases/unreleased/<slug>.json (see README schema).",
+        "Epic-close PRs need Feature label + fragment and target correct release track."
+      ],
+      "links": [
+        "#477",
+        "#470",
+        "#494"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "plugin/agents/plate.agent.md, src/plate_core/agent_guidance.py, src/plate_core/data/baseline_catalog.yml, src/plate_core/mcp_server.py (tool descs + what_next segments), AGENTS.md",
+      "migration_impact": "Downstream repos using the bundled plate persona or vendoring guidance will get quieter default behavior for /loop, babysit watch, and autonomous runs with no manual steps required. If you have custom agent prompts or .agent.md files that extend plate, review them against the new quiet rules in the persona and QUIET_OPERATIONS_GUIDANCE section. No template or workflow changes.",
+      "agent_notes": "The plate persona now requires (Behavior rule 2 + Special modes) that looped/monitoring turns produce only a bullet list of one-brief-sentence items and that GitHub comments are posted only for verifiable forward progress or explicit human checkpoints. See src/plate_core/agent_guidance.py:QUIET_OPERATIONS_GUIDANCE for the full prescriptive text with examples. Catalog constraints and lighter what_next/delegation segments reinforce this for sub-agents. MCP tool descriptions are shorter to reduce context bloat."
+    },
+    {
+      "change_type": "feature",
+      "surface": "release tooling, status surfaces, and release ceremony templates",
+      "migration_impact": "Repositories using legacy release should update release runbooks/checklists to reset release to main (not to a version tag) and can now consume branch mode/warnings from release status JSON.",
+      "agent_notes": "Use release_branch_mode and warnings to detect legacy fallback and branch drift before opening integration PRs.",
+      "migration_guidance": [
+        "1. Replace legacy post-release commands that reset release to vX.Y.Z with: git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease.",
+        "2. If automation parses gh plate release status JSON, read the new fields: release_track_branches, release_branch_mode, release_branch_reset_target, and warnings.",
+        "3. If status reports legacy/hybrid/none warnings, run gh plate bootstrap --apply to repair standing release branch state."
+      ],
+      "links": [
+        "#439",
+        "#436"
+      ]
+    },
+    {
+      "change_type": "documentation",
+      "surface": [
+        "SPEC.md",
+        ".agentic/releases/unreleased/"
+      ],
+      "migration_impact": "none (SPEC is guidance/intent; no runtime or template changes)",
+      "agent_notes": "Documentation follow-on to #470 (per #488). SPEC is the place humans/agents look for north star, roadmap, and architecture claims. Updated after #499 (research #471 land) merge and during #504 (merged) (autonomy feedback fixes) verification (tests exit 0). Fragment added as this changes documented product intent and references process changes from the Epic.",
+      "migration_guidance": "No action required. Future SPEC updates for autonomy or other Epics should continue via Documentation PRs + fragments per AGENTS.md.",
+      "links": [
+        "#488",
+        "#470",
+        "#471",
+        "#472",
+        "#474",
+        "#505",
+        "#503"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "src/plate_core/bootstrap.py, src/plate_core/template_payload/**, docs/bootstrap/new-repository-checklist.md",
+      "migration_impact": "Downstream repositories initialized with `gh plate bootstrap --apply` will now receive the repository-level PLATE scaffold (AGENTS, docs, workflows, scripts, starter assets) in addition to the existing GitHub-side bootstrap work. Rerunning bootstrap leaves existing files untouched.",
+      "agent_notes": "Treat the template payload manifest as the source of truth for repository-scaffold files. The new bootstrap phase uploads the selected payload files through the GitHub contents API and skips any file that already exists. `.plate` remains a separate bootstrap artifact.",
+      "links": [
+        "#413",
+        "#414",
+        "#415",
+        "#416"
+      ]
+    }
+  ]
+}

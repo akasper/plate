@@ -1,0 +1,16 @@
+{
+  "slug": "autonomy-default-medium",
+  "change_type": "feature",
+  "surface": "src/plate_core/plate_config.py (DEFAULT_CONFIG, _migrate_1_1_to_1_2, MIGRATION_STEPS), tests/test_epic89_plate_config.py",
+  "summary": "Flip the AutonomyEngine default in DEFAULT_CONFIG from conservative (enabled=false, risk=off) to enabled at medium risk tolerance. This makes new PLATE setups opt-in to the engine by default (per the autonomous vision in Epic #470), while .plate files and upgrade migration provide explicit control and conservative guidance.",
+  "migration_impact": "After this change, gh plate config upgrade (or new scaffolds) will inject an autonomy section with enabled/medium unless the .plate already has one. Existing explicit .plate autonomy sections are unchanged. Repos without .plate autonomy will now run AutonomyEngine at medium risk (with budget governor). Update any docs or assumptions that the default was always conservative off.",
+  "agent_notes": "The code DEFAULT is now the 'intended' medium/enabled for autonomous operation. The migration copies from DEFAULT_CONFIG. Users who want the old conservative behavior must set it explicitly in .plate (recommended starting point for many teams). This aligns with PLATE's low-touch autonomous goal while preserving human checkpoints and .plate as the control surface. See Epic #470 and review on #522.",
+  "links": ["#470", "#502", "#504", "#522"],
+  "breaking": false,
+  "migration_guidance": [
+    "The autonomy section will be added with the current code defaults (enabled + medium).",
+    "To opt-out or start conservative, add or edit your .plate with: \"autonomy\": { \"enabled\": false, \"risk_tolerance\": \"off\" } (or \"low\").",
+    "Review AutonomyEngine behavior in plate_autonomy_status and health after upgrade.",
+    "The previous migration messages have been updated for consistency."
+  ]
+}

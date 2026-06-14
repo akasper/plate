@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "methodology": {
     "epic_naming_pattern": "Epic: {name}",
     "marker_prefix": "PLATES-CORE",
@@ -14,5 +14,20 @@
   "release": {
     "triggers": [],
     "default_track": null
+  },
+  "autonomy": {
+    "enabled": false,
+    "risk_tolerance": "off",
+    "token_budget": {
+      "daily": 50000,
+      "per_cycle": 8000,
+      "action": "throttle"
+    },
+    "cost_ceiling_usd": 10.0,
+    "schedules_enabled": true,
+    "loop": {
+      "default_sleep_seconds": 300,
+      "max_cycles": null
+    }
   }
 }

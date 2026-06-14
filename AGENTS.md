@@ -16,6 +16,37 @@ The PLATE book explains doctrine and the reasons behind the method. This reposit
 | Documentation | Update per-feature change files under `.agentic/releases/`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
 | Stack selection | Prototype and benchmark candidate stacks per the Research issue. | Final language/runtime choice and distribution format. |
 
+## Default PLATE Persona (Epic #459)
+
+When operating in a repository that has adopted PLATE (signaled locally by `.plate/` or `.plate/config` + `AGENTS.md` / `.agentic/`, or on GitHub by Epic labels, release artifacts, etc.), agents **must default to the `plate` persona** ( `plugin/agents/plate.agent.md` + `src/plate_core/agent_guidance.py` sections + baseline catalog).
+
+- No special user command (e.g. `/agent plate`) is required for normal work.
+- The host should surface or prefer the "plate" persona in pickers / auto-suggest / default loading when PLATE signals are present.
+- Explicit opt-out / fallback to the host's raw/default persona is supported and first-class, e.g. `/plate agent off` (or host equivalent). Persistence priority: **session > user > repo > global default (PLATE)**. Re-enablement is symmetric and low-friction.
+- This default ensures the full PLATE rules (this document), quiet operations, thin surfaces, delegation packets, ceremony flows, human checkpoints, and traceability are applied consistently.
+- Power users and non-PLATE work can still use other agents or the raw host persona; the opt-out is reversible.
+- Template payloads and onboarding ship with this expectation.
+
+### Workarounds for Default Persona and Auto-Discovery Without Host Coordination
+
+Full auto-activation (host TUI automatically loading the plate persona on repo open without any user action) requires changes in the host agent implementations (Grok Build, Copilot CLI, etc.). However, we can achieve a strong "default in practice" using only artifacts in this repo:
+
+- **AGENTS.md as the contract**: This file (and the Quiet Agents fast-follow #456) is the single source of truth for process. The plate persona and shipped copilot-instructions.md explicitly tell agents: "If PLATE signals are present, follow the rules in AGENTS.md by default."
+- **Auto-discovery of persona**: TUI-based agents (Copilot, this Grok Build environment) have baked-in support for discovering custom personas via:
+  - `plugin/agents/plate.agent.md` (and the plugin.json manifest) in the repo root.
+  - `.github/copilot-instructions.md` (and custom agents in `.github/agents/`) for Copilot.
+  - Local MCP/plugin loading for Grok TUI when the repo contains the plate structure.
+  Once an agent session loads the plate persona materials (encouraged as default by the instructions for any repo with AGENTS.md or .plate/), the behavior is "PLATE on" without further prompting.
+- **Opt-out convention (easy/reliable switch, no specific command required)**: To fall back to raw host persona or non-PLATE behavior for a task/session:
+  - Use the host's default/raw persona explicitly.
+  - Or prefix chat with a clear instruction like "Use non-PLATE / host default behavior for this" or "Ignore PLATE rules and AGENTS.md for this task."
+  - The persona file and AGENTS.md instruct agents to respect such explicit opt-outs.
+  - For session-persistent, the host command (if/when wired) or just staying in the non-plate persona.
+  This matches the priority (session > user > repo > PLATE) and provides the "easy reliable way" without depending on a particular command name.
+- **Quiet Agents as fast follow (#456)**: The quiet rules (terse summaries, no do-nothing comments, minimal Q&A front-matter) from that epic are now part of the default persona. Include #456 work as fast follow so the default persona is "quiet by default."
+
+These changes (in the persona, AGENTS.md, and template copilot-instructions) mean that in practice, agents in PLATE repos will use PLATE behaviors by default once they engage with the local materials. No external host coordination is required for the *behavioral* default and opt-out convention.
+
 ## Autopilot Doctrine
 
 PLATE defaults to an **autopilot posture**: agents should proceed autonomously through a task queue and pause only at defined human checkpoints, rather than asking permission at each step. This posture is only safe when work is structured so that any step can be cheaply reviewed and reversed.
@@ -194,25 +225,29 @@ See Feature #351 for the discussion that produced this definition. The two Epic 
 
 ## Autonomous Mode
 
-Autonomous mode is an opt-in operating posture for unattended sessions (overnight runs, long-running autopilot, `/delegate` tasks) where no human reviewer is available interactively. It selectively lifts the self-merge prohibition for lightweight, low-risk PRs.
+Autonomous mode is the default operating posture for unattended sessions (overnight runs, long-running autopilot via `/loop` or scheduler, `/delegate` tasks) where no human reviewer is available interactively. It is driven by `.plate` config (see Epic #470) rather than a marker file. The engine (AutonomyEngine) introspects state and delegates/executes at the user's budgeted token rate and chosen `risk_tolerance` (off/low/medium/high), with scheduled/recurring procedures (`.agentic/procedures/`) for audits, drift detection, feedback integration, etc.
 
-**Toggle:** Create `.github/AUTONOMOUS_MODE` on the default branch to enable. Delete it to return to normal human-in-the-loop operation. The file content is ignored; its presence is the signal.
+**Configuration (single source of truth):** Use the `autonomy` section in `.plate` (added in #473, engine in #474):
+- `risk_tolerance`: "off" (fully manual), "low", "medium", or "high". Higher tolerance enables broader autonomous progress (e.g., auto-merge up to that risk level, apply-mode for procedures/audits, auto-stub generation in planning).
+- `enabled`, `token_budget` (daily/per_cycle/action: throttle|pause|warn), `schedules_enabled`, etc.
+- Legacy `.github/AUTONOMOUS_MODE` (file presence) is supported for transition/compat but is sunset in favor of `.plate` (generalized in #476 PR; health/config surfaces emit migration guidance). Delete the marker file after configuring `.plate`.
 
-**When autonomous mode is active:**
+**When autonomous mode is active (risk_tolerance != "off" and enabled):**
 
 | Rule | Normal Mode | Autonomous Mode |
 |---|---|---|
-| Agent may merge own PRs | Never | Permitted for eligible `risk:low` PRs only |
+| Agent may merge own PRs | Never | Permitted for eligible `risk:low` (or higher per tolerance) PRs only |
 | Must wait for human merge | Always | May call `gh pr merge --auto --squash` on eligible PRs |
 | May add `auto-merge` label | No | Yes, for eligible PRs |
 
-**Eligibility criteria — all must be true for a PR to qualify:**
+**Eligibility criteria — all must be true for a PR to qualify (generalized from legacy marker; see #476):**
 
-- Labeled `risk:low`
+- Effective risk (from label or config tolerance) allows it (e.g., `risk:low` for low tolerance; up to `risk:high` for high, never critical)
 - Does not modify `AGENTS.md`, `SPEC.md`, `.github/CODEOWNERS`, or any workflow file
 - Does not add, remove, or alter credential handling, payment logic, authentication, or security controls
 - Does not carry `need:human-review` or `need:security-review`
 - Does not change public-facing claims in `README.md` or marketing documentation
+- Feedback-resolution check passes; base in sync (babysit handles via copilot-request/local-rebase/none)
 
 **How to auto-merge an eligible PR in autonomous mode:**
 
@@ -222,7 +257,7 @@ gh pr create --base <base> --label "risk:low" --label "auto-merge" [other requir
 gh pr merge --auto --squash <PR_NUMBER>
 ```
 
-The `.github/workflows/auto-merge.yml` workflow also triggers on the `auto-merge` label and verifies the marker file before proceeding — providing a second gate.
+The `.github/workflows/auto-merge.yml` workflow triggers on `auto-merge` label and checks `.plate` autonomy.risk_tolerance (with legacy AUTONOMOUS_MODE fallback) — providing the gate (generalized in #487).
 
 **GitHub settings required** (one-time per repository):
 
@@ -236,7 +271,9 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
   -F can_approve_pull_request_reviews=false
 ```
 
-**Security posture:** Autonomous mode intentionally cannot self-escalate. An agent operating in autonomous mode may not create, modify, or delete `.github/AUTONOMOUS_MODE` itself, and may not relax branch protection rules or modify the eligibility criteria in this file.
+**Security posture:** Autonomous mode intentionally cannot self-escalate. An agent operating autonomously may not bypass `.plate` autonomy config (or create/modify/delete legacy `.github/AUTONOMOUS_MODE` during transition), and may not relax branch protection rules or modify the eligibility criteria. Use `risk:off` or remove permissive config for full manual control. The AutonomyEngine enforces budgets, risk, and quiet rules (terse bullets in loops; see quiet_operations guidance added in #480).
+
+See `docs/design/autonomous-plate-engine.md`, the autonomy fragment in `.agentic/releases/unreleased/`, Epic #470 (and children #471–482), and the generalized auto-merge/babysit PRs for full details. The engine + scheduled procedures enable the "very long time" budgeted autonomous operation that is the heart of the PLATE vision.
 
 ## Branch Model and Ceremonies
 
@@ -306,7 +343,7 @@ Use this loop:
 
 1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance).
 
-Information Audits (#218) are now part of the core capability: agents should use `plate_perform_information_audit` (dry_run first) to discover gaps against the Goals page (#224) and generate Questions. Guidance in plugin/agents/plate.agent.md and agent_guidance.py (INFORMATION_AUDIT_GUIDANCE). Catalog defaults (#222) and extensibility (#226) apply.
+**Quiet Agents note:** For looped or long-running babysitting/monitoring, the supervising agent must follow the quiet_operations rules (see `plugin/agents/plate.agent.md` Behavior rules + Special modes, and `src/plate_core/agent_guidance.py` QUIET_OPERATIONS_GUIDANCE): only terse bullet-list one-sentence turn summaries in the terminal; post GitHub comments on the PR only for meaningful forward progress (not "checked, 0 actionable" no-ops). The persona and catalog constraints are the primary enforcement surface. Information Audits (#218) are now part of the core capability: agents should use `plate_perform_information_audit` (dry_run first) to discover gaps against the Goals page (#224) and generate Questions. Guidance in plugin/agents/plate.agent.md and agent_guidance.py (INFORMATION_AUDIT_GUIDANCE, plus the new quiet section). Catalog defaults (#222) and extensibility (#226) apply.
 2. The babysitter automatically detects two types of issues:
    - **Unresolved review threads** from third-party agents (actionable feedback)
    - **Base branch out-of-sync** state (PR branch behind, conflicting, or dirty relative to base branch)

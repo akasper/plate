@@ -1,0 +1,10 @@
+{
+  "slug": "quiet-agents-guidance",
+  "change_type": "process",
+  "surface": "plugin/agents/plate.agent.md, src/plate_core/agent_guidance.py, src/plate_core/data/baseline_catalog.yml, src/plate_core/mcp_server.py (tool descs + what_next segments), AGENTS.md",
+  "summary": "Adds Quiet Operations guidance and persona rules for dramatically quieter long-running autonomous agents: terse bullet-list turn summaries in loops/terminal, GitHub comments only on meaningful forward progress (not no-op monitoring), minimal front matter for Q&A questions. Light context trims and catalog constraints. Includes audit doc as reference.",
+  "migration_impact": "Downstream repos using the bundled plate persona or vendoring guidance will get quieter default behavior for /loop, babysit watch, and autonomous runs with no manual steps required. If you have custom agent prompts or .agent.md files that extend plate, review them against the new quiet rules in the persona and QUIET_OPERATIONS_GUIDANCE section. No template or workflow changes.",
+  "agent_notes": "The plate persona now requires (Behavior rule 2 + Special modes) that looped/monitoring turns produce only a bullet list of one-brief-sentence items and that GitHub comments are posted only for verifiable forward progress or explicit human checkpoints. See src/plate_core/agent_guidance.py:QUIET_OPERATIONS_GUIDANCE for the full prescriptive text with examples. Catalog constraints and lighter what_next/delegation segments reinforce this for sub-agents. MCP tool descriptions are shorter to reduce context bloat.",
+  "links": [],
+  "breaking": false
+}

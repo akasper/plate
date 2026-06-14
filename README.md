@@ -10,6 +10,10 @@
 
 All surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
 
+**Licensing**
+
+This project is licensed under a source-available model (MIT base + Commons Clause License Condition v1.0). Free for non-commercial/personal/internal use and modification. Commercial use, resale, or SaaS offerings require a separate license. See the [LICENSE](LICENSE) file for the full text.
+
 ## What It Does
 
 `plate_core` surfaces the live state of a PLATE project by querying the GitHub API and applying PLATE methodology rules:

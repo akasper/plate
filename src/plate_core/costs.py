@@ -51,8 +51,8 @@ class CostReport:
 
 
 USAGE_BLOCK_RE = re.compile(
-    r"===\s*USAGE REPORT\s*===\s*([\s\S]*?)(?:\n===\s*END USAGE REPORT\s*===|$)",
-    re.IGNORECASE,
+    r"===\s*USAGE REPORT\s*===\s*\n?(.*?)(?:\n?===\s*END USAGE REPORT\s*===|$)",
+    re.IGNORECASE | re.DOTALL,
 )
 TOKENS_RE = re.compile(r"tokens\s*:\s*(\d+)", re.IGNORECASE)
 COST_RE = re.compile(r"cost\s*:\s*([^\n\r]+)", re.IGNORECASE)
