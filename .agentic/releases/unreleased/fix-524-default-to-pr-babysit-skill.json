@@ -1,0 +1,10 @@
+{
+  "slug": "fix-524-default-to-pr-babysit-skill",
+  "change_type": "fix",
+  "surface": "plugin/agents/plate.agent.md (strengthen default to skill for babysit work), src/plate_core/agent_guidance.py (Full PR Green section), src/plate_core/pr_babysit.py (docstring), tests/test_pr_babysit.py (new regression test), AGENTS.md (babysit section examples)",
+  "summary": "Strengthen plate persona, agent guidance, and pr-babysit instructions to explicitly default to the dedicated pr-babysit skill/MCP surface (plate_pr_babysit / gh plate pr babysit) for 'babysit', 'get CI passing', 'address feedback', or 'make PR green' instructions instead of hand-rolling raw git + gh commands. Add regression test anchoring the instruction and update examples.",
+  "migration_impact": "Agents using the plate persona or updated guidance will now prefer the higher-level pr-babysit skill for PR health work, leading to more consistent behavior, better isolation, and less duplication of low-level logic. The skill surface is already present; no template changes required.",
+  "agent_notes": "When the high-level goal is babysit/get-green/address-feedback/make-mergeable: invoke the pr-babysit skill first (gh plate pr babysit or MCP plate_pr_babysit) rather than raw commands. Only fall back to git/gh when the skill doesn't cover (and note why). See the strengthened language in persona/guidance and the default instruction now in pr_babysit.py docstring. (Addresses #524.)",
+  "links": ["#524"],
+  "breaking": false
+}

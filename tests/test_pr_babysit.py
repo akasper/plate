@@ -522,6 +522,19 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("do not wait for system reminders", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
 
+    def test_default_to_pr_babysit_skill_in_pr_babysit_instructions(self):
+        """Regression test for #524: instructions must direct agents to default to the dedicated pr-babysit skill/MCP rather than hand-rolling raw git/gh for babysit/get-green/etc. instructions."""
+        import plate_core.pr_babysit as mod
+        doc = getattr(mod, "__doc__", "") or ""
+        self.assertIn("must default to it (rather than hand-rolling git/gh commands)", doc)
+        self.assertIn("addresses #524", doc)
+
+        # Anchor in persona
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("start with the dedicated pr-babysit skill", persona)
+        self.assertIn("instead of hand-rolling git/gh", persona)
+
 
 if __name__ == "__main__":
     unittest.main()
