@@ -535,6 +535,20 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("start with the dedicated pr-babysit skill", persona)
         self.assertIn("instead of hand-rolling git/gh", persona)
 
+    def test_verification_strategy_in_guidance(self):
+        """Regression test for #523: verification strategy (narrow/targeted first with check-work skill, warn before long runs >5-10min, cross-ref to CI Diagnosis/long-running) must be present in shipped guidance and persona."""
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("Verification Strategy (local test runs, reproduction, and check-work)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("use the `check-work` skill", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("warn the user before starting", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn(">5-10 minutes", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("targeted command possible", QUIET_OPERATIONS_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("use check-work or targeted pytest", persona)
+        self.assertIn("warn before long runs (see guidance)", persona)
+
 
 if __name__ == "__main__":
     unittest.main()

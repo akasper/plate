@@ -226,6 +226,15 @@ When the high-level instruction is "get CI passing", "reproduce the failure (in 
 
 This is the primary way to avoid wasted expensive local runs and delayed diagnosis. The pr-babysit skill and "reproduce failure" guidance must encode "CI diagnosis first" as the mandatory starting step.
 
+### Verification Strategy (local test runs, reproduction, and check-work)
+When the task involves local verification, reproducing a failure in the worktree, or running tests:
+- Start narrow: use the `check-work` skill (or equivalent) for self-verification when available; otherwise use the most targeted command possible (specific test files, `pytest -k "exact-failing-test-or-module" --tb=line`, or single module from CI log). Never default to a full `python -m pytest` or broad suite.
+- For anything expected to take >5-10 minutes: explicitly warn the user before starting ("This may take 10-60+ minutes; ok to proceed?").
+- Combine with long-running protocol (background + proactive polling with get_/monitor, cheap fallback on kill) and CI Diagnosis First (always start with `gh pr checks` + `gh run view ... --log-failed` before any local command).
+- Prefer skills/MCP surfaces over raw shell commands for reproducibility and structure.
+
+This prevents long-running waste, improves responsiveness, and ensures the user has visibility.
+
 ### Full PR Green / Make Mergeable Loop (for "get CI passing", babysit, address feedback)
 When given instructions like "get this PR green", "make mergeable", "address all feedback", or "resolve CI":
 
