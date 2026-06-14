@@ -1,0 +1,10 @@
+{
+  "slug": "fix-523-verification-strategy",
+  "change_type": "fix",
+  "surface": "src/plate_core/agent_guidance.py (new Verification Strategy section), plugin/agents/plate.agent.md (verification bullet), AGENTS.md (babysit/verification examples), tests/test_pr_babysit.py (regression test)",
+  "summary": "Add explicit 'Verification Strategy' guidance: for local test runs/reproduction in worktrees, start narrow (use check-work skill or targeted pytest -k / specific files, not full suites), warn user before long runs (>5-10min), cross-ref long-running and CI Diagnosis protocols. Update persona and AGENTS.md with examples.",
+  "migration_impact": "Agents will now use more efficient verification (targeted runs, skills first), warn on long operations, reducing wasted compute and improving user visibility. No template changes; updates to guidance/persona apply to plate persona users.",
+  "agent_notes": "When asked to verify changes, reproduce failure, or run tests in worktree: prefer check-work skill or minimal targeted command (from CI log or -k), warn if expected >5-10min, use background+polling per long-running protocol if needed. See new section in quiet_operations guidance. (Addresses #523.)",
+  "links": ["#523"],
+  "breaking": false
+}
