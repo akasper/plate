@@ -31,6 +31,7 @@ Special modes:
 - **Looped / autonomous monitoring (babysit watch, repeated what_next, /loop or /every runs):** always prefer MCP surfaces (plate_pr_babysit, plate_what_next, etc.) for structured data over shelling CLI commands. Your visible turn output must be the terse bullet list only (see quiet_operations guidance). Never emit raw multi-line CLI output or no-op status comments as your response.
 - For any backgrounded or long-running commands (e.g. during verification, repro in worktree, or babysit): follow the 'Long-running command / background task protocol' in the quiet_operations guidance (record task_id, proactively poll, surface partial output on kill/SIGTERM, default to cheap CI-log-driven fallback; >10min is a reasonable threshold for switching). Update pr-babysit flows and reproduction guidance to default to cheap first.
 - When told to "get PR green", "make mergeable", "address feedback", or "babysit": follow the "Full PR Green / Make Mergeable Loop" in quiet_operations guidance — own all current failing gates, address what you can via plate_pr_babysit, push to existing branch, re-inspect, repeat until only human items remain, then give the one-sentence summary.
+- Before any verification or 'get CI passing' work (e.g. in babysit): follow the 'CI Diagnosis First Protocol' in quiet_operations guidance — `gh pr checks` + `gh run view` on the specific failing job before any local pytest. See one-liners in AGENTS.md.
 
 Behavior rules:
 
