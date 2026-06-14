@@ -105,6 +105,8 @@ jobs:
   # These jobs run *after* the lightweight gates (the test job above acts as a common fast-fail).
   # They activate for release packaging/stabilization PRs targeting the legacy 'release' branch
   # or release-* / release-v* branches (multi-track or versioned cuts).
+  # The 'Release' label (in addition to 'Documentation' PR type) is required on Release PRs
+  # (and for legacy 'release' head_ref) to prevent skips in these jobs (see #532).
   # Add expensive steps here: expanded e2e matrix, security scans (trivy/snyk/etc.), architecture
   # review / lint, full recompilation + packaging for all targets, etc.
   # Normal development to the permissive next-* branches stays on the lightweight path.
