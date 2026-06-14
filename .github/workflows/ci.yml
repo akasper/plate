@@ -109,7 +109,8 @@ jobs:
 
   # Release ceremony refinement: differentiated heavy CI for Release PRs / stabilization contexts.
   # These jobs run *after* the lightweight gates (the test job above acts as a common fast-fail).
-  # They activate for release packaging/stabilization PRs targeting release-* / release-v* branches.
+  # They activate for release packaging/stabilization PRs targeting the legacy 'release' branch
+  # or release-* / release-v* branches (multi-track or versioned cuts).
   # Add expensive steps here: expanded e2e matrix, security scans (trivy/snyk/etc.), architecture
   # review / lint, full recompilation + packaging for all targets, etc.
   # Normal development to the permissive next-* branches stays on the lightweight path.
@@ -118,6 +119,7 @@ jobs:
       - test
       - validate-release-pr
     if: |
+      github.head_ref == 'release' ||
       startsWith(github.head_ref, 'release-') ||
       startsWith(github.base_ref, 'release-')
     runs-on: ubuntu-latest

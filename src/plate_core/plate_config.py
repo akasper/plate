@@ -12,9 +12,9 @@ from typing import Any
 import yaml
 
 
-CURRENT_CONFIG_VERSION = "1.1"
-ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release"}
-ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release"}
+CURRENT_CONFIG_VERSION = "1.2"
+ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release", "autonomy"}
+ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release", "autonomy"}
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -34,6 +34,21 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "triggers": [],
         "default_track": None,
     },
+    "autonomy": {
+        "enabled": True,
+        "risk_tolerance": "medium",
+        "token_budget": {
+            "daily": 50000,
+            "per_cycle": 8000,
+            "action": "throttle",
+        },
+        "cost_ceiling_usd": 10.0,
+        "schedules_enabled": True,
+        "loop": {
+            "default_sleep_seconds": 300,
+            "max_cycles": None,
+        },
+    },
 }
 
 
@@ -44,6 +59,7 @@ class PlateConfig:
     extensions: dict[str, Any] = field(default_factory=dict)
     overrides: dict[str, Any] = field(default_factory=dict)
     release: dict[str, Any] = field(default_factory=dict)
+    autonomy: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -56,6 +72,7 @@ class PlateConfig:
             extensions=data.get("extensions", {}),
             overrides=data.get("overrides", {}),
             release=data.get("release", {}),
+            autonomy=data.get("autonomy", {}),
         )
 
 
@@ -249,9 +266,32 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
         if unknown:
             raise PlateConfigError(f"unknown top-level keys: {', '.join(unknown)}")
 
-    for key in ("methodology", "extensions", "overrides", "release"):
+    for key in ("methodology", "extensions", "overrides", "release", "autonomy"):
         if key in config and not isinstance(config[key], dict):
             raise PlateConfigError(f"'{key}' must be an object if present")
+
+    # Autonomy-specific validation (v1.2 schema; rejects invalid risk, non-numeric budget, unknown keys per test and reviews)
+    auto = config.get("autonomy", {})
+    if isinstance(auto, dict):
+        rt = auto.get("risk_tolerance")
+        if rt is not None and rt not in ("off", "low", "medium", "high"):
+            raise PlateConfigError(f"invalid autonomy.risk_tolerance: {rt!r} (allowed: off/low/medium/high)")
+        tb = auto.get("token_budget", {})
+        if isinstance(tb, dict):
+            for k in ("daily", "per_cycle"):
+                v = tb.get(k)
+                if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
+                    raise PlateConfigError(f"autonomy.token_budget.{k} must be integer number, got {v!r}")
+            allowed_tb = {"daily", "per_cycle", "action"}
+            unk_tb = set(tb) - allowed_tb
+            if unk_tb:
+                raise PlateConfigError(f"unknown autonomy.token_budget keys: {', '.join(sorted(unk_tb))}")
+        allowed_auto = {"enabled", "risk_tolerance", "token_budget", "cost_ceiling_usd", "schedules_enabled", "loop"}
+        unk_auto = set(auto) - allowed_auto
+        if unk_auto:
+            raise PlateConfigError(f"unknown autonomy keys: {', '.join(sorted(unk_auto))}")
+    elif "autonomy" in config:
+        raise PlateConfigError("'autonomy' must be an object if present")
 
     extensions = config.get("extensions", {})
     if isinstance(extensions, dict):
@@ -277,6 +317,15 @@ def _migrate_1_0_to_1_1(config: dict[str, Any]) -> dict[str, Any]:
     return upgraded
 
 
+def _migrate_1_1_to_1_2(config: dict[str, Any]) -> dict[str, Any]:
+    """Add autonomy section (code DEFAULT is enabled/medium per the autonomous engine vision in #470; migration injects the current DEFAULT_CONFIG values for forward compatibility)."""
+    upgraded = copy.deepcopy(config)
+    if "autonomy" not in upgraded or not upgraded.get("autonomy"):
+        upgraded["autonomy"] = copy.deepcopy(DEFAULT_CONFIG.get("autonomy", {}))
+    upgraded["version"] = "1.2"
+    return upgraded
+
+
 MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
     "1.0": (
         "1.1",
@@ -284,6 +333,14 @@ MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
         [
             "Upgrade `.plate` to schema v1.1 so root config files always carry the `release` section and normalized extension settings.",
             "Review any enabled extensions after upgrade with `gh plate config show --json`; built-in extension manifests now contribute config before local overrides.",
+        ],
+    ),
+    "1.1": (
+        "1.2",
+        _migrate_1_1_to_1_2,
+        [
+            "Add the 'autonomy' section (code DEFAULT is enabled at 'medium' risk tolerance per Epic #470 autonomous vision; the migration copies the live DEFAULT_CONFIG so new behavior is forward-compatible).",
+            "To keep conservative behavior, explicitly set 'enabled: false' and/or 'risk_tolerance: off' (or 'low') in your .plate file. The section is now added with the current code defaults on upgrade.",
         ],
     ),
 }

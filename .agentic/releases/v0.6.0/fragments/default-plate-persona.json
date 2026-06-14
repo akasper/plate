@@ -1,0 +1,10 @@
+{
+  "slug": "default-plate-persona",
+  "change_type": "process",
+  "surface": "plugin/agents/plate.agent.md, src/plate_core/template_payload/.github/copilot-instructions.md, AGENTS.md, agent guidance and catalog loading, onboarding/template payload",
+  "summary": "Establishes the 'plate' persona (and associated PLATE guidance, catalog, thin surfaces, and ceremony support) as the automatic default for agents operating in PLATE-adopting repositories. Hosts should prefer it when PLATE signals are present. Explicit, reversible opt-out (e.g. `/plate agent off`) is supported with clear priority (session > user > repo > global PLATE default).",
+  "migration_impact": "Downstream PLATE repositories get stronger defaults out of the box (no more needing to remember '/agent plate' for routine work). Existing explicit invocations continue to work. Opt-out is new and optional. Template updates and AGENTS.md documentation explain the behavior and how to opt out if desired.",
+  "agent_notes": "When PLATE signals are detected (.plate/, AGENTS.md, etc.), assume the plate persona and its full rules/guidance by default. Use the opt-out only when the user explicitly requests fallback to raw host persona. This is the primary mechanism for 'zero special prompting' (see Epic #459). The quiet_operations guidance and all other PLATE rules now apply by default in PLATE repos.",
+  "links": ["#459", "#463"],
+  "breaking": false
+}

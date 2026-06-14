@@ -1,0 +1,15 @@
+{
+  "slug": "dead-branch-cleanup-fallback-tool",
+  "change_type": "feature",
+  "surface": "release CLI/MCP tooling",
+  "summary": "Adds a dead-branch cleanup fallback tool for agents to detect and optionally delete merged remote branches with no open PR.",
+  "migration_impact": "Operators and agents can run a dry-run branch cleanup before applying deletions, reducing orphaned-branch drift after merge automation misses cleanup.",
+  "migration_guidance": [
+    "1. Use `gh plate release cleanup-branches` to preview dead branch candidates.",
+    "2. Use `gh plate release cleanup-branches --apply` to delete candidates after review.",
+    "3. For MCP workflows, call `plate_release_cleanup_branches` with `apply: false` first, then `apply: true`."
+  ],
+  "agent_notes": "The cleanup tool automatically excludes protected/default/release namespace branches and only targets branches merged into base with no open PR.",
+  "breaking": false,
+  "links": ["#445", "#436"]
+}

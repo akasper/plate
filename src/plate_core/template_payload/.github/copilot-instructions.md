@@ -31,6 +31,21 @@ Start with `gh plate context list/show` or the matching MCP tools `plate_context
 
 Then use the lightest surface that can answer the question:
 
+## PLATE Persona as Default (Epic #459)
+
+In a PLATE repository (signaled by the presence of a `.plate/` directory or `.plate/config`, `AGENTS.md`, `.agentic/` structure, or equivalent GitHub repo state such as Epic labels or release artifacts), the `plate` agent persona (from `plugin/agents/plate.agent.md`) **must be the default**.
+
+- Hosts (Copilot, Grok Build, etc.) should automatically prefer or surface the "plate" persona / MCP surfaces for repository work.
+- No explicit `/agent plate` or special command is required for normal operation.
+- Explicit opt-out is supported (e.g. `/plate agent off` or host UI equivalent) to fall back to the raw host/default persona for the session (priority: session > user > repo > global PLATE default).
+- Re-enablement is the normal persona activation or removal of override.
+- This default ensures consistent use of PLATE rules, quiet operations guidance, thin surfaces, delegation, ceremony flows, and safety gates.
+- Power users can still choose other agents when desired; the opt-out is reversible and low-friction.
+
+See the root `AGENTS.md` "Default PLATE Persona" section (including the "Workarounds for Default Persona and Auto-Discovery Without Host Coordination" subsection), `plugin/agents/plate.agent.md`, and Epic #459 for details and the opt-out UX contract. This is a core part of making PLATE "just work" without special prompting.
+
+To the extent of what we can achieve without external host coordination: the AGENTS.md + persona + these instructions make PLATE the default *behavioral assumption* (including Quiet Agents #456 rules as fast follow) once the agent engages the local materials. TUI agents discover personas via plugin/ and .github/. Opt-out via explicit host persona or chat prefix (documented in AGENTS.md) provides the reliable switch. See AGENTS.md for full workaround details.
+
 - process / ceremony / PR rules -> `AGENTS.md`
 - intended goal state -> `SPEC.md`
 - implemented behavior / release evidence -> `.agentic/releases/`

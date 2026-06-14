@@ -187,7 +187,7 @@ class McpTests(unittest.TestCase):
             _handle_tools_call(14, {"name": "plate_config_upgrade", "arguments": {"repo_root": tmp}})
             payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
             self.assertTrue(payload["changed"])
-            self.assertEqual(payload["current_version"], "1.1")
+            self.assertEqual(payload["current_version"], "1.2")
 
     @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_plan_epic(self, mock_write):
@@ -197,9 +197,11 @@ class McpTests(unittest.TestCase):
         self.assertFalse(result["isError"])
         payload = json.loads(result["content"][0]["text"])
         self.assertEqual(payload["tool"], "plate_plan_epic")
-        self.assertEqual(payload["status"], "stub")
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("risk_tolerance", payload)
+        self.assertIsInstance(payload.get("proposed_children"), list)
         # CLI-agnostic verification per #206 / grok-build epic: note should not lock to specific TUI
-        self.assertIn("CLI-agnostic", payload.get("note", ""))
+        self.assertIn("host GH MCP", payload.get("note", ""))
 
     @patch("plate_core.mcp_server._write")
     @patch("plate_core.mcp_server.babysit_pr")

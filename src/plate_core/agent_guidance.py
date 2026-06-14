@@ -129,6 +129,7 @@ def get_agent_guidance_sections() -> dict[str, str]:
         "playwright_e2e": PLAYWRIGHT_E2E_GUIDANCE,
         "qanda_curiosity": QANDA_CURIOSITY_GUIDANCE,
         "information_audit": INFORMATION_AUDIT_GUIDANCE,
+        "quiet_operations": QUIET_OPERATIONS_GUIDANCE,
     }
 
 
@@ -144,4 +145,54 @@ PLATE supports structured Information Audits (Epic #218 / #221, cross-cutting be
 - Human approval boundaries preserved for public claims/vision/SPEC changes.
 
 Use when drift is suspected or after landing beta Epics. See docs/research/ and the 257/221 fragments for details. Ties into Goals page bootstrap (#224) and extension goals.
+"""
+
+
+QUIET_OPERATIONS_GUIDANCE = """
+## Quiet Operations, Brevity, and Comment Discipline (Long-Running / Looped Agents)
+
+PLATE supports long-running autonomous operation (e.g. Copilot CLI `/every`, Grok Build `/loop`, babysit watch, repeated what_next cycles). The default posture must be quiet: protect both the human reader's attention and every agent's context window.
+
+### Terminal / loop turn summaries (highest priority)
+- When operating in any looped or long-running session, your *final visible response* (the part the /loop orchestrator, watch mode, or human tailing the terminal will see) **MUST** be a bullet-point list.
+- Each bullet is **one brief sentence**.
+- No introductory paragraphs, no "Summary of this turn:", no "I did X because...", no closing zinger or sign-off.
+- If the turn produced multiple observations, use 1-5 (max ~7) bullets.
+- Pure no-op / monitoring example (clean babysit turn):
+  - Babysit PR #123: 0 actionable threads, base branch in sync (UP TO DATE).
+  - No GitHub comment posted (quiet rule: only on meaningful forward progress).
+  - Used MCP plate_pr_babysit for structured data; any CLI output was collapsed internally.
+- True nothing example: "- No-op turn: state unchanged, 0 progress items."
+- Prefer MCP surfaces (plate_pr_babysit, plate_health, plate_epic_status, plate_what_next, etc.) that return clean dicts. When you must invoke a CLI command that produces multi-line human output, collapse or ignore the raw text and emit only the terse bullets.
+
+### GitHub comments on Issues, PRs, and Questions
+- Post a comment **only** when the turn produces verifiable forward progress that creates or updates a durable repository artifact, resolves a blocker, or satisfies a defined human checkpoint.
+- Progress examples (allowed/encouraged):
+  - Code change committed locally and pushed to the PR branch.
+  - Review thread resolved via `plate_resolve_review_thread` (or equivalent GraphQL).
+  - New or updated `.agentic/releases/unreleased/*.json` fragment, wiki source, or other required artifact.
+  - New child issue (Feature/Research/Design/Question) created from contemplation that advances Epic scope.
+  - Blocking Question created as a deliberate last resort (#147), with pause status on the original.
+  - Unblock report posted on an original issue after a blocking Question is answered (#148).
+  - Answer that newly satisfies one or more Answer signal checklist items, making the Question PR-ready (the closure report with usage block is the required artifact).
+- Do-not examples (forbidden in loops / routine turns):
+  - Pure monitoring: babysit_pr report shows 0 actionable_threads and no sync change.
+  - Routine contemplation: evaluated Answer signal, no new criteria satisfied, no artifacts created.
+  - "Re-checked health / release status / epic status."
+  - Status updates or "still working" notes in a watch/loop.
+- The engine's own PLATE-ANSWER / PLATE-CONTEMPLATION / PLATE-BLOCKING-DUMP markers and required usage-report blocks on closure are **exempt** (they are the auditable record per Issue Artifact Rules). Do not add your own prose comments around routine ones.
+- Human checkpoints remain (e.g. "Post a summary comment on the Epic issue when all child issues are resolved"). These are explicit, not routine.
+
+### Q&A / Curiosity question presentation
+- When invoking native interactive primitives (ask_user_question or host TUI forms) or falling back: transmit **only** the question text, the Answer signal checklist (if present), and the absolute minimum options or context required for the decision.
+- Omit all front matter except when the question is *itself about* process rationale or vision: no "As the PLATE agent working on Epic #N...", no "To make progress toward the Goals page...", no "Per the QANDA_CURIOSITY_GUIDANCE...".
+- The host session already carries full context (current Epic, recent artifacts, prior answers). Extra framing wastes human attention and inflates context for any agent that later reads the transcript.
+
+### General rules
+- Briefer is better for humans *and* for any downstream agent or orchestrator that ingests this turn's output.
+- "Update the artifact, not chat history" (echoes copilot-instructions and layered context design).
+- Resource consciousness (AGENTS.md) + Atomic PR discipline still apply; quiet rules make them practical for overnight / multi-hour autonomous runs.
+- These rules are enforced primarily through the plate persona, catalog constraints on delegated agents, and what_next / delegation prompt segments. See also AGENTS.md §Resource consciousness, §Human checkpoints, §Issue Artifact Rules, and the babysit / Curiosity sections.
+
+Use this section for any monitoring, babysitting, contemplation, or repeated what_next work. The goal is dramatically less noise in Issues and terminals while preserving every required traceable artifact.
 """

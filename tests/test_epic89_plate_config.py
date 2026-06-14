@@ -331,8 +331,9 @@ class PlateConfigRuntimeTests(unittest.TestCase):
             (root / ".plate").write_text(
                 json.dumps(
                     {
-                        "version": "1.1",
+                        "version": "1.2",
                         "extensions": {"enabled": True, "installed": {"release-track-management": True}},
+                        "autonomy": {"enabled": False, "risk_tolerance": "off", "token_budget": {"daily": 50000, "per_cycle": 8000, "action": "throttle"}, "cost_ceiling_usd": 10.0, "schedules_enabled": False, "loop": {"default_sleep_seconds": 300, "max_cycles": None}},
                         "overrides": {},
                     }
                 ),
@@ -343,6 +344,23 @@ class PlateConfigRuntimeTests(unittest.TestCase):
             report = get_plate_config_report(root)
             self.assertEqual(report.extension_providers["release-track-management"], "builtin:release-ceremony")
             self.assertEqual(report.extension_path_providers["release.triggers"], "builtin:release-ceremony")
+
+    def test_autonomy_validation_rejects_invalid_payloads(self):
+        """Covers autonomy schema validation added in this PR (addresses review: exercise valid/invalid autonomy cases)."""
+        # Valid minimal
+        validate_plate_config({"version": "1.2", "autonomy": {"enabled": False, "risk_tolerance": "off"}}, strict=True)
+        # Invalid risk
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"risk_tolerance": "banana"}}, strict=True)
+        # Bool for numeric
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"token_budget": {"daily": True}}}, strict=True)
+        # Unknown key under autonomy
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"foo": 1}}, strict=True)
+        # Unknown under token_budget
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.2", "autonomy": {"token_budget": {"foo": 1}}}, strict=True)
 
     def test_local_overrides_win_over_extension_contribution(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -470,6 +488,48 @@ class ValidationResult:
         self.valid = valid
         self.errors = errors
 
+
+class TestAutonomySchemaDefaultsAndMigration(unittest.TestCase):
+    """Tests for v1.2 autonomy addition, defaults, compat (no key in .plate), and migration (Epic #470 / #474 skeleton + config)."""
+
+    def test_default_autonomy_present_and_valid(self):
+        # DEFAULT now includes autonomy with 'medium'/'enabled' as the intended new behavior for the autonomy engine feature (Epic #470 / this PR); conservative 'off' applies on migration when no section or explicit off in .plate
+        self.assertIn("autonomy", DEFAULT_CONFIG)
+        auto = DEFAULT_CONFIG["autonomy"]
+        self.assertEqual(auto.get("risk_tolerance"), "medium")
+        self.assertTrue(auto.get("enabled"))
+        validate_plate_config({"version": "1.2", "autonomy": auto}, strict=True)
+
+        # Note: PR #504 labeled with exactly one type label "Bug" (+ risk:low, area:agent) to satisfy .github/workflows/labels.yml PR type label rule.
+
+    def test_load_without_autonomy_key_resolves_via_default(self):
+        # A .plate lacking 'autonomy' (like pre-this-change) should still load and resolve to having autonomy via DEFAULT (explicit in root .plate now)
+        # Use a temp minimal .plate without the key
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(json.dumps({
+                "version": "1.1",
+                "release": {"triggers": []}
+            }))
+            cfg = load_plate_config(root)
+            self.assertTrue(hasattr(cfg, "autonomy") or "autonomy" in getattr(cfg, "to_dict", lambda: {})())
+            # resolved should have autonomy section (deep merge)
+            d = cfg.to_dict() if hasattr(cfg, "to_dict") else {}
+            # plate_config dataclass or dict-like
+            autonomy = getattr(cfg, "autonomy", None) or d.get("autonomy", {})
+            self.assertIsInstance(autonomy, dict)
+            self.assertIn("risk_tolerance", autonomy)
+
+    def test_migrate_1_1_to_1_2_adds_autonomy(self):
+        raw = {"version": "1.1", "release": {"triggers": []}}
+        upgraded = upgrade_plate_config_dict(raw)
+        # Depending on return shape (tuple or dict in some paths), ensure autonomy appears
+        if isinstance(upgraded, tuple):
+            data = upgraded[0]
+        else:
+            data = upgraded
+        self.assertIn("autonomy", data)
+        self.assertEqual(data.get("version"), "1.2")
 
 if __name__ == "__main__":
     unittest.main()

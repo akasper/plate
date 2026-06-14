@@ -20,7 +20,7 @@ This design documents the final generic state and the (minimal) rationale. No la
   "version": "0.1.0",
   "author": { "name": "PLATE / akasper" },
   "repository": "https://github.com/akasper/plate",
-  "license": "MIT",
+  "license": "MIT with Commons Clause", // See root LICENSE for full source-available terms (MIT base + Commons Clause restriction)
   "agents": "agents/",
   "mcpServers": ".mcp.json"
 }
