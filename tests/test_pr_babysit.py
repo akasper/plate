@@ -565,6 +565,14 @@ class PrBabysitTests(unittest.TestCase):
             agents = f.read()
         self.assertIn("always use native TUI (ask_user_question) and enforce full follow-through on answers", agents)
 
+    def test_human_review_required_before_merge_for_certain_prs(self):
+        """Regression test for #549: AGENTS.md must explicitly require human review/approval before merge for Bug/Feature/Documentation PRs (and at least one review for Epics/Releases), separate from feedback-resolution for agent threads."""
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("do not self-merge", agents)
+        self.assertIn("Epics and Releases require at least one review as well", agents)
+        self.assertIn("This gate is *not* a substitute for the separate human review/approval requirement", agents)
+
 
 if __name__ == "__main__":
     unittest.main()
