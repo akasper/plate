@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 import unittest
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -261,6 +263,21 @@ class CutReleaseAutoVersionTests(unittest.TestCase):
             data = json.loads((d / "v0.2.0" / "release.json").read_text())
             self.assertEqual(data["version"], "0.2.0")
             _assert_version_files(d, "0.2.0")
+
+    def test_cut_prints_release_pr_creation_guidance_with_both_labels(self):
+        """Regression test for #532: cut_release next-steps must instruct to use BOTH
+        Documentation + Release labels on the Release PR (for heavy CI + legacy support).
+        The printed gh pr create example and "BOTH labels" / see #532 note anchor the fix.
+        """
+        with TemporaryDirectory() as tmp:
+            d = self._make_releases_dir(tmp)
+            buf = StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = cut_release(version=None, releases_dir=d)
+            self.assertEqual(rc, 0)
+            out = buf.getvalue()
+            self.assertIn('--label "Documentation" --label "Release"', out)
+            self.assertIn("Use BOTH labels so heavy CI runs (see #532)", out)
 
     def test_auto_patch_bump_when_only_docs(self):
         with TemporaryDirectory() as tmp:

@@ -1,0 +1,10 @@
+{
+  "slug": "fix-513-require-proactive-gh-plate-release-status",
+  "change_type": "fix",
+  "surface": "plugin/agents/plate.agent.md (default workflow + routing strengthened), src/plate_core/agent_guidance.py (new Release Status Protocol subsection in QUIET_OPERATIONS_GUIDANCE), AGENTS.md (branch model, PR creation, babysit, documentation rules sections strengthened with 'MUST run proactively as very first step'), src/plate_core/pr_babysit.py (docstring update requiring it before calls + surface base/fragments), tests/test_pr_babysit.py (regression test)",
+  "summary": "Strengthen plate persona, agent_guidance, AGENTS.md, and pr_babysit docs to require running `gh plate release status` *proactively as the very first step* (not after deciding branch) before any branch targeting, PR creation, base determination, or babysit-related work for Bug/Feature. Add mandatory checklist/protocol. Enhance pr-babysit docstring to assume/enforce it and surface context. Add regression test. (Addresses #513.)",
+  "migration_impact": "Agents will now always run `gh plate release status` first for correct --base, pending fragments, and release context before any PR or branch action. This prevents wrong-base PRs, re-targeting, and ceremony misalignment. Updates apply via plate persona/guidance; no template changes needed. Downstream repos following plate will see more reliable PR targeting in agent flows.",
+  "agent_notes": "For *any* Bug/Feature work, babysit, or PR health: run `gh plate release status` *immediately as the very first action* before thinking about branches, --base, gh pr create, rebase, or calling babysit_pr. Use its output for the correct target (release for legacy; release-* for multi-track), to see pending fragments in .agentic/releases/unreleased/, the active Next Release #530, etc. In pr-babysit flows, confirm alignment first. See new Release Status Protocol in guidance, strengthened 'For agents opening PRs' and work loops in AGENTS.md, and pr_babysit docstring. (Addresses #513; aligns with Branch Model, Documentation Rules, and previous 'always run before PR' guidance.)",
+  "links": ["#513"],
+  "breaking": false
+}
