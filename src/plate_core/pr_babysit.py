@@ -1,11 +1,18 @@
 """Local PR feedback babysitting helpers.
 
-During babysit (or "get CI passing"/repro flows), follow the long-running command / background task protocol from agent guidance:
-- Record task_ids for any backgrounded work.
-- Proactively poll with get_command_or_subagent_output / monitor.
-- On kill (SIGTERM etc.) or timeout: surface the partial output and immediately switch to cheap, CI-log-driven, targeted reproduction (gh run view for exact job + -k / file; never full re-backgrounded suites).
-- Default to cheap log-first reproduction rather than expensive worktree full runs.
-See quiet_operations guidance and plate.agent.md for the full protocol (addresses #529 and related Bugs).
+The pr-babysit skill/MCP surface (`gh plate pr babysit` or `plate_pr_babysit`) is the dedicated tool for PR feedback and health work. Agents must default to it (rather than hand-rolling git/gh commands) for "babysit", "get CI passing", "address feedback", or "make PR green" instructions (addresses #524 and related).
+
+During babysit or green-loop work, own the *full* "current failing gates" model and "make mergeable" loop (per agent_guidance "Full PR Green / Make Mergeable Loop" and AGENTS.md babysit section):
+- Start by comprehensively inspecting *all* gates (threads via the tool, base sync, CI via gh pr checks, labels, etc.).
+- Address everything agent-actionable in the worktree (rebase, apply safe suggestions, resolve addressed threads via plate_resolve_review_thread, fix local tests, etc.).
+- Push to the *existing* PR branch only.
+- Re-inspect.
+- Repeat until only human-judgment items remain (e.g. owner CHANGES_REQUESTED, high-risk decisions). Only then report the one-sentence summary of what is left for the human.
+- Use quiet terse bullets for looped turns. Escalate with need:human-review for judgment items.
+
+The skill supports (via --act, --branch-update-strategy, and the returned BabysitReport) the inspect-fix-push-reinspect cycle. Prefer or expose "until-green" / comprehensive make-mergeable behavior in future enhancements. Follow long-running command protocol for any backgrounded verification during the loop (record task_id, poll, cheap fallback on kill; see #529).
+
+See quiet_operations guidance, plate.agent.md, and AGENTS.md for the full procedure (addresses #528, #526, #519, #510, etc.).
 """
 
 from __future__ import annotations
