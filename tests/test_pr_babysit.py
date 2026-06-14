@@ -708,8 +708,29 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("worktree: verify_isolated + cleanup_locks before ops (no main checkout)", persona)
-        self.assertIn("(#514)", persona)
+        self.assertIn("Follow Full PR Green + worktree verify/cleanup (#514)", persona)
+
+    def test_proactive_release_status_before_targeting_513(self):
+        """Regression test for #513: persona, agent_guidance, AGENTS.md, and pr_babysit docs must require running `gh plate release status` *proactively as the very first step* before any branch targeting, PR creation, or base determination for Bug/Feature work (and before babysit calls)."""
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("Before any branch/PR/base for Bug/Feature: run `gh plate release status` *first* to get correct --base + fragments", persona)
+        self.assertIn("(Addresses #513.)", persona)
+
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("Release Status Protocol (mandatory first step for any PR/branch/targeting work)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Run `gh plate release status` (or equivalent MCP/CLI surface) *immediately as the very first action*", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("(Addresses #513.)", QUIET_OPERATIONS_GUIDANCE)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("MUST run `gh plate release status` (or inspect the issue's semver track label) *proactively as the very first step before any targeting, branch decision, or `gh pr create`*", agents)
+        self.assertIn("MUST run `gh plate release status` *proactively as the very first step* before any targeting/branch/PR decision", agents)
+        self.assertIn("(Addresses #513.)", agents)
+
+        import plate_core.pr_babysit as pbmod
+        doc = getattr(pbmod, "__doc__", "") or ""
+        self.assertIn("Per #513: agents MUST run `gh plate release status` *proactively as the very first step* before calling babysit_pr", doc)
 
 
 if __name__ == "__main__":

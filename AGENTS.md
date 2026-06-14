@@ -316,7 +316,7 @@ PLATE uses a **multi-track release-oriented branch model** (refined in the Relea
 
 **Legacy single `release` branch** remains supported during transition for repos not yet adopting the multi-track model. See the design doc and migration guidance in the release-ceremony-refinement fragment for adoption steps. The persistent `release` (when present) continues to point at the tip that will become (or most recently became) a tag.
 
-**For agents opening PRs:** Always run `gh plate release status` (or inspect the issue's semver track label) immediately before `gh pr create`. Include `--base <base>` explicitly (where <base> is the value reported by `gh plate release status`, e.g. `release` for legacy or `release-minor` etc. for multi-track). Defaulting to `main` is incorrect for ongoing Feature/Bug work and will require manual retargeting. The "Open a PR" steps in the Feature and Bug work loops above take precedence for execution.
+**For agents opening PRs:** MUST run `gh plate release status` (or inspect the issue's semver track label) *proactively as the very first step before any targeting, branch decision, or `gh pr create`*. Include `--base <base>` explicitly (where <base> is the value reported by `gh plate release status`, e.g. `release` for legacy or `release-minor` etc. for multi-track). Defaulting to `main` is incorrect for ongoing Feature/Bug work and will require manual retargeting. The "Open a PR" steps in the Feature and Bug work loops above take precedence for execution. (Addresses #513.)
 
 ### Epic-close ceremony
 
@@ -367,7 +367,7 @@ Preferred flow is now **local babysitting** driven by `gh plate pr babysit <numb
 
 Use this loop:
 
-1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance).
+1. Before babysitting (or any PR-related work), run `gh plate release status` *proactively first* to confirm the track/base and pending fragments. Then start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance). (Addresses #513.)
 
 **Quiet Agents note:** For looped or long-running babysitting/monitoring, the supervising agent must follow the quiet_operations rules (see `plugin/agents/plate.agent.md` Behavior rules + Special modes, and `src/plate_core/agent_guidance.py` QUIET_OPERATIONS_GUIDANCE): only terse bullet-list one-sentence turn summaries in the terminal; post GitHub comments on the PR only for meaningful forward progress (not "checked, 0 actionable" no-ops). The persona and catalog constraints are the primary enforcement surface. Information Audits (#218) are now part of the core capability: agents should use `plate_perform_information_audit` (dry_run first) to discover gaps against the Goals page (#224) and generate Questions. Guidance in plugin/agents/plate.agent.md and agent_guidance.py (INFORMATION_AUDIT_GUIDANCE, plus the new quiet section). Catalog defaults (#222) and extensibility (#226) apply.
 2. The babysitter automatically detects two types of issues:
@@ -451,7 +451,7 @@ Every Feature pull request that changes PLATE process, templates, or agent surfa
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
-When opening pull requests through GitHub CLI, first run `gh plate release status` to discover the correct integration base branch (`release` for legacy single-release setups; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base <base> --label "Feature"` (or `--base release-minor --label "Feature"`, etc., where <base> is from `gh plate release status`) or the Documentation equivalent. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never rely on the repository's default branch implicitly; always pass `--base` explicitly (sometimes that will be `main`, e.g. for Release PRs).
+When opening pull requests through GitHub CLI, MUST run `gh plate release status` *proactively as the very first step* before any targeting/branch/PR decision to discover the correct integration base branch (`release` for legacy single-release setups; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base <base> --label "Feature"` (or `--base release-minor --label "Feature"`, etc., where <base> is from `gh plate release status`) or the Documentation equivalent. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never rely on the repository's default branch implicitly; always pass `--base` explicitly (sometimes that will be `main`, e.g. for Release PRs). (Addresses #513.)
 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 
