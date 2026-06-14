@@ -197,7 +197,7 @@ PLATE supports long-running autonomous operation (e.g. Copilot CLI `/every`, Gro
 ### Long-running command / background task protocol
 When using or encountering backgrounded commands (e.g. `run_terminal_command(..., background=true)`, host-initiated long pytest in worktree, babysit repro, or any long-running verification):
 - **Immediately record the task_id** (or identifier) returned by the backgrounding call or system reminder.
-- Maintain an explicit monitoring plan: proactively and periodically call `get_command_or_subagent_output` (or the `monitor` tool) with the task_id. Surface partial stdout/stderr, progress, and any early failure signals in your (terse) responses. Do not wait passively for "the task ended" reminders.
+- **Schedule proactive polling**: do not wait for system reminders. Explicitly plan and invoke `get_command_or_subagent_output` (or the `monitor` tool) at intervals (e.g., after 30s, 2m, 5m, 10m) to surface partial output, progress, and early failures in your (terse) responses. Consider using or defining a lightweight "monitor" helper that the agent can invoke to handle scheduling and reporting for background tasks.
 - If the task is killed by the system (e.g. SIGTERM / signal 15 after hours, timeout, OOM), or exceeds a practical threshold (e.g. >10min for verification), **treat the kill as data, not "the end"**:
   - Immediately retrieve the final/partial output via the get/monitor tool.
   - Analyze it (often the useful work/failure was completed before the kill).
@@ -205,7 +205,7 @@ When using or encountering backgrounded commands (e.g. `run_terminal_command(...
 - In "pr-babysit", "get CI passing", "reproduce the failure (in worktree)", or equivalent flows: **default to cheap, CI-log-driven reproduction first** (use `gh run view` on the specific failing job to extract the exact -k filter, file, or error; run only that). Reserve broad backgrounded commands for last resort, and always with the monitoring + fallback plan above.
 - The pr-babysit skill, "reproduce failure in worktree" guidance, and any verification instructions must encode this preference for log-first, kill-aware, cheap fallbacks over expensive long runs.
 
-This protocol prevents wasted compute and ensures partial results from killed tasks are acted upon quickly.
+This protocol prevents wasted compute and ensures partial results from killed tasks are acted upon quickly. Agents must proactively use `get_command_or_subagent_output` / `monitor` rather than reacting to reminders.
 
 ### CI Diagnosis First Protocol (before expensive local verification or repro)
 When the high-level instruction is "get CI passing", "reproduce the failure (in worktree)", "fix the red checks", "address feedback", or any verification/babysit task that might involve local commands (especially broad pytest in worktrees):

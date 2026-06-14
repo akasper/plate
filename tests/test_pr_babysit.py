@@ -478,6 +478,17 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("actionable_agent_threads", result)
         self.assertIn("note", result)
 
+    def test_long_running_background_task_protocol_in_guidance(self):
+        """Regression test for #525: the long-running/background task protocol (record task_id, proactively schedule/polling with get_command_or_subagent_output or monitor at intervals rather than waiting for reminders, consider lightweight monitor helper) must be present in shipped guidance (and thus in the plate persona and pr-babysit flows)."""
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        protocol = "Long-running command / background task protocol"
+        self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Immediately record the task_id", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Schedule proactive polling", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("proactively and periodically call `get_command_or_subagent_output` (or the `monitor` tool)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("lightweight \"monitor\" helper", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
+
 
 if __name__ == "__main__":
     unittest.main()
