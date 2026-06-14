@@ -584,6 +584,20 @@ class PrBabysitTests(unittest.TestCase):
         doc = getattr(mod, "__doc__", "") or ""
         self.assertIn("explicitly resolve the corresponding review threads", doc)
 
+    def test_complete_babysit_make_green_from_single_high_level_prompt(self):
+        """Regression test for #519: guidance and AGENTS must describe a complete 'turn PR green' / full babysit flow from a *single high-level prompt* (not category-by-category), where the agent handles all agent-actionable gates (conflicts, labels, threads, tests) comprehensively using the skill + helpers, reporting summary only at end."""
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("single high-level instruction", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("atomic \"complete babysit / turn green\" flow", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("one comprehensive pass (conflicts, labels, threads, tests, etc.)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("from a single high-level prompt instead of sequential single-category fixes", QUIET_OPERATIONS_GUIDANCE)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("From a *single high-level prompt* (\"get this PR green\", \"make mergeable\", \"address all feedback\")", agents)
+        self.assertIn("handle *all* agent-actionable categories (base sync/conflicts, labels, review threads, tests, etc.) in one or minimal comprehensive passes", agents)
+        self.assertIn("(Addresses #519, #528, #526.)", agents)
+
 
 if __name__ == "__main__":
     unittest.main()

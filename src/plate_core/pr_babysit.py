@@ -12,7 +12,7 @@ During babysit or green-loop work, own the *full* "current failing gates" model 
 - Repeat until only human-judgment items remain (e.g. owner CHANGES_REQUESTED, credentials, high-risk decisions). Only then report the one-sentence summary of what is left for the human.
 - Use quiet terse bullets for looped turns. Escalate with need:human-review for judgment items.
 
-The skill supports (via --act, --branch-update-strategy, and the returned BabysitReport) the inspect-fix-push-reinspect cycle. Prefer or expose "until-green" / comprehensive make-mergeable behavior in future enhancements. Follow long-running command protocol for any backgrounded verification during the loop (record task_id, poll, cheap fallback on kill; see #529). Always start verification with CI diagnosis first (see #527).
+The skill supports (via --act, --branch-update-strategy, and the returned BabysitReport) the inspect-fix-push-reinspect cycle for a *single high-level "turn this PR green" prompt*. The agent should handle all agent-actionable gates (conflicts, labels, threads, tests) comprehensively without category-by-category user prompting. Prefer or expose "until-green" / comprehensive make-mergeable behavior. Follow long-running command protocol for any backgrounded verification during the loop (record task_id, poll, cheap fallback on kill; see #529). Always start verification with CI diagnosis first (see #527). (Addresses #519, #528, #526, etc.)
 
 See quiet_operations guidance (including new CI Diagnosis First and Full PR Green sections), plate.agent.md, and AGENTS.md for the full procedure (addresses #528, #527, #526, #519, #510, etc.).
 """
