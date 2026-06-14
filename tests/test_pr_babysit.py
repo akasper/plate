@@ -429,7 +429,7 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("current failing gates", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("inspect-fix-push-reinspect cycle", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("only human-judgment items remain", QUIET_OPERATIONS_GUIDANCE)
-        self.assertIn("one-sentence summary of what is left for the human", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("one-sentence summary for the human of what is left", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
 
 
