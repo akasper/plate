@@ -351,7 +351,14 @@ Use this loop:
    - `gh pr checks <N>` (or `gh plate pr babysit` / MCP) for current gates.
    - `gh run list --branch <head> --limit 5` + `gh run view <run-id> --job <job-id> --log-failed` (or --log) on the *specific* failing job to get the exact current error (e.g. labels? unresolved threads? specific test?). Note: `--log-failed` returns only the failing step output (much smaller/cheaper than full `--log`).
    - Only then decide minimal local scope (targeted -k, single file, or just metadata fix). Use/document one-liners for the gh run view flags.
-   - Comprehensively inspect *all* current failing gates at the start and after every push (`gh pr checks`, review threads, labels, mergeStateStatus, title/doc checks, etc.) to build/maintain a model of the "current failing gates". Do not fix one category then wait for the user to diagnose the next.
+   - Comprehensively inspect *all* current failing gates at the start and after every push using the pr-babysit skill's get_pr_merge_gates helper (or equivalent) + gh commands. Common checklist (mental model for "make this PR mergeable"):
+     - Labels (Bug/Feature + area:* + risk:* + Epic:* if applicable; check with gh issue view or edit)
+     - Merge state / base sync (BEHIND, CONFLICTING, DIRTY -> use babysit with local-rebase or copilot-request)
+     - Feedback-resolution: unresolved review threads (esp. third-party agents) -> use plate_pr_babysit + resolveReviewThread
+     - CI / test jobs, title check, issue-link check, feature-change-files (if Feature), audit, deploy, etc. (via gh pr checks)
+     - Other: documentation gate, etc.
+     Use plate_pr_babysit + gh pr checks + gh run view on specific failing jobs (see CI Diagnosis First) + gh issue view for labels. Fix what you can, push, re-inspect, repeat until only human items (e.g. owner CHANGES_REQUESTED, high-risk) remain. Report one-sentence summary only then. (Addresses #526.)
+   - Do not fix one category then wait for the user to diagnose the next.
    - Address everything the agent can autonomously in the worktree (rebase/resolve conflicts per strategy, apply safe suggestions, fix labels/metadata within scope, resolve addressed threads via `plate_resolve_review_thread`, fix locally reproducible test failures preferring cheap targeted runs, etc.).
    - Push all changes to the *existing* PR branch (never open a new PR for feedback response).
    - Re-inspect all gates (always re-starting with CI diagnosis).
