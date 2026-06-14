@@ -451,8 +451,10 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("Always begin with cheap, precise GitHub-side diagnosis", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("gh pr checks <pr-number>", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("gh run list --branch <pr-head-branch> --limit 5", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("gh run view <run-id> --job <job-id> --log-failed", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("*before* launching any broad or long-running local command", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Only *after* the precise diagnosis", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
 
     def test_get_pr_merge_gates_returns_expected_keys(self):
