@@ -469,7 +469,25 @@ class PrBabysitTests(unittest.TestCase):
                         "mergeStateStatus": "BEHIND",
                         "baseRefName": "main",
                         "headRefName": "feature-branch",
-                        "reviewThreads": {"nodes": []},
+                        "reviewThreads": {
+                            "nodes": [
+                                {
+                                    "id": "T1",
+                                    "isResolved": False,
+                                    "isOutdated": False,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 101,
+                                                "body": "fix this",
+                                                "url": "https://example.com/t1",
+                                                "author": {"login": "devin-ai"},
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        },
                     }
                 }
             }
@@ -485,6 +503,12 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("unresolved_review_threads", result)
         self.assertIn("actionable_agent_threads", result)
         self.assertIn("note", result)
+        self.assertEqual(result["merge_state"], "BEHIND")
+        self.assertTrue(result["out_of_sync"])
+        self.assertEqual(result["unresolved_review_threads"], 1)
+        self.assertEqual(result["actionable_agent_threads"], 1)
+        self.assertIn("comprehensively", result["note"])
+        self.assertIn("full gates", result["note"])
 
     def test_long_running_background_task_protocol_in_guidance(self):
         """Regression test for #525: the long-running/background task protocol (record task_id, proactively schedule/polling with get_command_or_subagent_output or monitor at intervals rather than waiting for reminders, consider lightweight monitor helper) must be present in shipped guidance (and thus in the plate persona and pr-babysit flows)."""
