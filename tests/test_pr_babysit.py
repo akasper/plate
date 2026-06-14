@@ -573,6 +573,17 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("Epics and Releases require at least one review as well", agents)
         self.assertIn("This gate is *not* a substitute for the separate human review/approval requirement", agents)
 
+    def test_resolve_review_threads_after_feedback_for_check(self):
+        """Regression test for #520: AGENTS.md and pr_babysit instructions must require explicitly resolving review threads (via resolveReviewThread) after addressing feedback to clear the feedback-resolution check."""
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("explicitly marked resolved via the `resolveReviewThread` mutation", agents)
+        self.assertIn("agents must invoke it without additional prompting", agents)
+
+        import plate_core.pr_babysit as mod
+        doc = getattr(mod, "__doc__", "") or ""
+        self.assertIn("explicitly resolve the corresponding review threads", doc)
+
 
 if __name__ == "__main__":
     unittest.main()
