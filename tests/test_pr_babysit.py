@@ -507,8 +507,8 @@ class PrBabysitTests(unittest.TestCase):
         self.assertTrue(result["out_of_sync"])
         self.assertEqual(result["unresolved_review_threads"], 1)
         self.assertEqual(result["actionable_agent_threads"], 1)
-        self.assertIn("comprehensive", result["note"])
-        self.assertIn("get_pr_merge_gates", result.get("note", "") + " " + str(result))  # ensure helper is referenced in guidance flow
+        self.assertIn("comprehensively", result["note"])
+        self.assertIn("full gates", result["note"])
 
     def test_long_running_background_task_protocol_in_guidance(self):
         """Regression test for #525: the long-running/background task protocol (record task_id, proactively schedule/polling with get_command_or_subagent_output or monitor at intervals rather than waiting for reminders, consider lightweight monitor helper) must be present in shipped guidance (and thus in the plate persona and pr-babysit flows)."""
