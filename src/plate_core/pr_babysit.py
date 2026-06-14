@@ -489,7 +489,7 @@ def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhCli
     pr_data = _load_pr_data(gh, target, pr_number)
     sync_info = _detect_base_branch_out_of_sync(pr_data)
     threads = pr_data.get("reviewThreads", [])
-    actionable = _extract_actionable_threads(threads)
+    actionable = _extract_actionable_threads(threads, None)
 
     return {
         "repo": target,
