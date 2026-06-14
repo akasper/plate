@@ -558,8 +558,8 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("consistently default to ask_user_question (native TUI arrow-key forms) for PLATE Q&A", persona)
-        self.assertIn("follow through on answers (artifacts per ACs)", persona)
+        self.assertIn("default to ask_user_question (native TUI); if option promises review/babysit", persona)
+        self.assertIn("Follow guidance.", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
@@ -608,12 +608,12 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("consistently default to ask_user_question (native TUI arrow-key forms)", persona)
+        self.assertIn("default to ask_user_question (native TUI); if option promises review/babysit", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
-        self.assertIn("consistently default to native TUI (ask_user_question arrow-key forms)", agents)
-        self.assertIn("(Addresses #518, #517, #521.)", agents)
+        self.assertIn("consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers", agents)
+        self.assertIn("(Addresses #503, #518, #517, #521.)", agents)
 
     def test_qanda_follow_through_enforced_in_this_turn_517(self):
         """Regression test for #517: guidance and AGENTS enforce that interactive Q&A options (ask_user_question) only offer actions whose full follow-through (artifacts, execution) will complete in this turn; no advance until done."""
@@ -668,7 +668,7 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("start with todo_write; mark completed immediately (never batch)", persona)
+        self.assertIn("start with todo_write; mark done immediately (no batch)", persona)
         self.assertIn("(Addresses #515.)", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
@@ -708,7 +708,7 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("Follow Full PR Green + worktree verify/cleanup (#514)", persona)
+        self.assertIn("Follow Full PR Green + worktree verify (#514)", persona)
 
     def test_proactive_release_status_before_targeting_513(self):
         """Regression test for #513: persona, agent_guidance, AGENTS.md, and pr_babysit docs must require running `gh plate release status` *proactively as the very first step* before any branch targeting, PR creation, or base determination for Bug/Feature work (and before babysit calls)."""
@@ -731,6 +731,21 @@ class PrBabysitTests(unittest.TestCase):
         import plate_core.pr_babysit as pbmod
         doc = getattr(pbmod, "__doc__", "") or ""
         self.assertIn("Per #513: agents MUST run `gh plate release status` *proactively as the very first step* before calling babysit_pr", doc)
+
+    def test_qanda_follow_through_inconsistency_503(self):
+        """Regression test for #503: persona, guidance, and AGENTS must enforce that Q&A options promising 'review the PR'/'babysit'/'address feedback' result in *full execution* (pr-babysit skill, isolated worktree, push to same branch, resolve threads) before next question or progress/done; never merge or advance unaddressed. (Builds on #517/#503 stub.)"""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("If a choice promises \"review the PR\", \"babysit\", \"address feedback\", or similar, the agent *must* fully execute that work using the dedicated pr-babysit skill", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Never merge or advance with unaddressed feedback. (Addresses #503, #517.)", QANDA_CURIOSITY_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("if option promises review/babysit, fully execute via pr-babysit before next (Addresses #503, #517)", persona)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed.", agents)
+        self.assertIn("(Addresses #503, #518, #517, #521.)", agents)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,10 @@
+{
+  "slug": "fix-503-qanda-follow-through-inconsistency",
+  "change_type": "fix",
+  "surface": "plugin/agents/plate.agent.md (Q&A bullet), src/plate_core/agent_guidance.py (QANDA_CURIOSITY_GUIDANCE enforcement), AGENTS.md (Q&A para + Task Management example), tests/test_pr_babysit.py (regression test)",
+  "summary": "Strengthen persona, QANDA guidance, and AGENTS.md to explicitly enforce that if a Q&A option/choice promises 'review the PR', 'babysit', 'address feedback', or similar, the agent must *fully execute* that work (using dedicated pr-babysit skill/MCP, isolated worktree, push to *existing* PR branch, resolve addressed threads) before offering the next question or declaring progress/done. Never merge or advance with unaddressed feedback. Document past inconsistency from #470 sessions. Add regression test. (Addresses #503; builds on #517/#521 cluster.)",
+  "migration_impact": "Agents under the plate persona will more reliably complete promised review/babysit/address steps (via pr-babysit + worktree discipline) before advancing in Q&A or Epic refinement flows. Reduces drift between Q&A promises and executed work; improves human checkpoints and repository-as-truth. No template/config changes; persona/guidance updates are automatic for PLATE adopters.",
+  "agent_notes": "When presenting ask_user_question options for PLATE (e.g. during Epic #470 refinement): if an option includes review/babysit/address feedback, *do not* offer it unless you will fully execute the work in this turn/session using the pr-babysit skill (or MCP plate_pr_babysit + plate_resolve_review_thread), isolated worktree for changes, push to the *same* PR branch, and resolve threads. Use todo_write for the steps. Complete before next Q&A or summary. On mismatch with past behavior, document and correct immediately. See updated Enforcement in guidance and persona Q&A bullet. (Addresses #503 and related Q&A stubs #517, #508; aligns with atomic PR discipline, no self-merge, feedback-resolution.)",
+  "links": ["#503"],
+  "breaking": false
+}
