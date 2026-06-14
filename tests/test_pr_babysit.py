@@ -409,8 +409,8 @@ class PrBabysitTests(unittest.TestCase):
         from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
         protocol = "Long-running command / background task protocol"
         self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
-        self.assertIn("record the task_id", QUIET_OPERATIONS_GUIDANCE)
-        self.assertIn("proactively and periodically call `get_command_or_subagent_output`", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Immediately record the task_id", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("plan and invoke `get_command_or_subagent_output` (or the `monitor` tool) at intervals", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("cheap, targeted fallback", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("default to cheap, CI-log-driven reproduction first", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
@@ -485,7 +485,7 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("Immediately record the task_id", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("Schedule proactive polling", QUIET_OPERATIONS_GUIDANCE)
-        self.assertIn("proactively and periodically call `get_command_or_subagent_output` (or the `monitor` tool)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("plan and invoke `get_command_or_subagent_output` (or the `monitor` tool) at intervals", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("lightweight \"monitor\" helper", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
 
