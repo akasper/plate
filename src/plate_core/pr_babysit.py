@@ -1,4 +1,12 @@
-"""Local PR feedback babysitting helpers."""
+"""Local PR feedback babysitting helpers.
+
+During babysit (or "get CI passing"/repro flows), follow the long-running command / background task protocol from agent guidance:
+- Record task_ids for any backgrounded work.
+- Proactively poll with get_command_or_subagent_output / monitor.
+- On kill (SIGTERM etc.) or timeout: surface the partial output and immediately switch to cheap, CI-log-driven, targeted reproduction (gh run view for exact job + -k / file; never full re-backgrounded suites).
+- Default to cheap log-first reproduction rather than expensive worktree full runs.
+See quiet_operations guidance and plate.agent.md for the full protocol (addresses #529 and related Bugs).
+"""
 
 from __future__ import annotations
 
