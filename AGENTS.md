@@ -93,11 +93,14 @@ Follow the loop that matches the issue type.
 | 5 | Update per-feature change files in `.agentic/releases/` to describe implemented behavior and verification evidence. |
 | 6 | Add or update `.agentic/releases/` when the change affects PLATE process or templates. |
 | 7 | Determine the correct base branch using `gh plate release status` (or by inspecting any Major/Minor/Patch label on the issue and the Branch Model below). For repositories on the legacy single-`release` model (the current state of this repo), target `release`. For multi-track, target the matching `release-major` / `release-minor` / `release-patch`. Open a PR labeled `Feature` **targeting that base branch** (`--base <base>` or equivalent in `gh pr create`, where <base> comes from the status command) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
-| 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
+| 8 | After the PR is green (including feedback-resolution for agent threads), wait for human review/approval (at minimum one `Approved` review or explicit human merge). Do not self-merge. Use `need:human-review` for escalation. See authority table, human checkpoints, and autonomous section. |
+| 9 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
 **Bug**
 
 Reproduce the failure or document why reproduction is not yet possible. Add a regression test. Include `Closes #N` in the PR body. Label missing information with `need:reproduction`, `need:tests`, or `need:human-review`.
+
+After making the PR green (including feedback-resolution for any agent threads), **do not self-merge**. Wait for human review/approval (at minimum one `Approved` review from a human, or explicit human `gh pr merge`). Epics and Releases require at least one review as well. Use `need:human-review` for escalation. See "Human checkpoints", authority table, and autonomous mode section.
 
 **Research**
 
@@ -129,6 +132,28 @@ Reproduce the failure or document why reproduction is not yet possible. Add a re
 | 4 | When the answer changes operating guidance, update `AGENTS.md` and `.agentic/skills.yml` in the same PR. |
 | 5 | Open a Documentation PR with `Closes #N` in the body. |
 
+For PLATE Q&A: consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers (artifacts per ACs) without reminder. Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress. If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed. See persona/guidance. (Addresses #503, #518, #517, #521.)
+
+## Task Management (for agents)
+
+The plate persona and all delegated agents **must** use the `todo_write` tool (or host equivalent) for any complex multi-step PLATE work with 3+ steps. This includes:
+
+- Babysit / "get this PR green" / full feedback resolution sessions (inspect gates, address threads via encapsulated helpers, targeted fixes, re-babysit, merge, release sync).
+- Interactive Q&A, contemplation, or Epic refinement rounds.
+- Delegation packets, subagent work, information audits, or autonomy procedures.
+- Any release ceremony step or long ceremony.
+
+**Rules:**
+- Invoke `todo_write` **at the very start** of the effort with a clear list (id, content, status).
+- Mark each item `completed` **immediately** when that step finishes. **Never batch** multiple completions.
+- Use statuses and content to give the user live visibility and to record blockers (e.g. `need:human-review`).
+
+**Examples in context:**
+- For babysit of a PR: list items like "run CI diagnosis + get_pr_merge_gates", "use plate_get_actionable_review_threads + resolve addressed via plate_resolve_review_thread", "push to existing branch", "re-babysit until CLEAN", "merge + reset release".
+- For Q&A: "present via native ask_user_question", "record answer + create artifacts per AC", "complete chosen option follow-through before offering more" (if option promises review/babysit/address feedback, use pr-babysit skill in worktree to execute fully before next; never advance unaddressed). (Addresses #503.)
+
+This is now part of the plate default persona (see Special modes) and agent_guidance TASK_MANAGEMENT_GUIDANCE. Failure to use it for qualifying work is a drift from #515.
+
 **Task**
 
 | Step | Required Behavior |
@@ -155,7 +180,7 @@ Commit progress to `docs/migration/`. Update completion status in `docs/migratio
 | 1 | Confirm a standing "Next Release" issue exists (titled "Next Release" by default; created at the end of the prior release's finalization or explicitly). Epics and other work declare Major/Minor/Patch track via label and link to it via Development sidebar for negotiation / targeting. |
 | 2 | During active development, work lands on the permissive track-specific next- branch (`release-major` / `release-minor` / `release-patch`) matching its label (Epic-close PRs funnel through the track). Run `gh plate release status` regularly to see pending fragments, extension release_checks, linked/targeted Epics, and on-hold work (Epics with a semver label but no link to an active Next Release). |
 | 3 | When ready to commit to a release (packaging phase): freeze non-bug merges (ceremony + status + human gates), determine/lock the final semver (cut_release inference from fragments + track labels + Release issue signals), create the concrete versioned branch (`release-vX.Y.Z`, combining tracks as needed for minor/major), rename the standing issue title from "Next Release" to the specific version (e.g. "v0.1.1"), and *immediately create a fresh "Next Release" issue*. |
-| 4 | Commit any release notes directory (via `gh plate release cut` or equivalent), then open the Release PR from the versioned branch → `main` (labeled Documentation, body contains `Closes #N` for the now-versioned Release issue). This is a "Release PR" and receives differentiated heavy CI (e2e, security, architecture review, full packaging, etc. after fast-fail gates). |
+| 4 | Commit any release notes directory (via `gh plate release cut` or equivalent), then open the Release PR from the versioned branch → `main` (labeled `Documentation` and `Release`, body contains `Closes #N` for the now-versioned Release issue). The `Release` label (in addition to the Documentation PR type) ensures the differentiated heavy CI jobs (`validate-release-pr`, `heavy-release`) execute rather than skipping (see #532). This is a "Release PR" and receives differentiated heavy CI (e2e, security, architecture review, full packaging, etc. after fast-fail gates). |
 | 5 | After human approval and merge of the Release PR, GitHub Actions creates and pushes `vX.Y.Z` from the merged Release PR commit. Finalization (`gh plate release finalize` or equivalent) then handles downstream triggers (declared under `.plate/` with common ones in core + others via extensions/release_checks), rollover/repair, and ensuring the next "Next Release" issue exists. |
 | 6 | Create the GitHub Release from the tag (populated from `.agentic/releases/vX.Y.Z/release.json`). |
 | 7 | Hard-reset the appropriate branch (the versioned one or the originating next- track) to the tag as needed for the next cycle: e.g. `git checkout release-vX.Y.Z && git reset --hard vX.Y.Z && git push --force-with-lease` (or the legacy single `release` equivalent). |
@@ -248,6 +273,7 @@ Autonomous mode is the default operating posture for unattended sessions (overni
 - Does not carry `need:human-review` or `need:security-review`
 - Does not change public-facing claims in `README.md` or marketing documentation
 - Feedback-resolution check passes; base in sync (babysit handles via copilot-request/local-rebase/none)
+- For Bug/Feature/Documentation PRs: human review/approval is obtained (per the explicit requirement clarified in this fix; the check is separate from feedback-resolution for agent threads)
 
 **How to auto-merge an eligible PR in autonomous mode:**
 
@@ -290,7 +316,7 @@ PLATE uses a **multi-track release-oriented branch model** (refined in the Relea
 
 **Legacy single `release` branch** remains supported during transition for repos not yet adopting the multi-track model. See the design doc and migration guidance in the release-ceremony-refinement fragment for adoption steps. The persistent `release` (when present) continues to point at the tip that will become (or most recently became) a tag.
 
-**For agents opening PRs:** Always run `gh plate release status` (or inspect the issue's semver track label) immediately before `gh pr create`. Include `--base <base>` explicitly (where <base> is the value reported by `gh plate release status`, e.g. `release` for legacy or `release-minor` etc. for multi-track). Defaulting to `main` is incorrect for ongoing Feature/Bug work and will require manual retargeting. The "Open a PR" steps in the Feature and Bug work loops above take precedence for execution.
+**For agents opening PRs:** MUST run `gh plate release status` (or inspect the issue's semver track label) *proactively as the very first step before any targeting, branch decision, or `gh pr create`*. Include `--base <base>` explicitly (where <base> is the value reported by `gh plate release status`, e.g. `release` for legacy or `release-minor` etc. for multi-track). Defaulting to `main` is incorrect for ongoing Feature/Bug work and will require manual retargeting. The "Open a PR" steps in the Feature and Bug work loops above take precedence for execution. (Addresses #513.)
 
 ### Epic-close ceremony
 
@@ -306,7 +332,7 @@ See the detailed steps in the **Release** work loop table above and the full mod
 
 1. Standing "Next Release" issue exists and is the target for Epics (via sidebar links) and track-labeled work (Major/Minor/Patch labels drive landing on the matching `release-major` / `release-minor` / `release-patch` permissive next- branches).
 2. Packaging (the decision + freeze + version lock point): determine semver, create versioned `release-vX.Y.Z` branch (combining tracks for minor/major as appropriate), rename the issue to the concrete version, immediately spawn a fresh "Next Release" issue.
-3. Release PR from the versioned branch → `main` (this PR uses the `Documentation` PR type label, and its release branch context triggers heavy CI).
+3. Release PR from the versioned branch → `main` (this PR uses the `Documentation` PR type label **and** the `Release` label; the latter plus the `release-v*` / legacy `release` branch context triggers the differentiated heavy CI jobs and prevents the skip described in #532).
 4. Human merge.
 5. GitHub Actions tags the merged Release PR commit (`vX.Y.Z`), then finalization handles configurable downstream triggers (`.plate/` + extensions), ensures next Next Release exists, and hard-resets the relevant branch as needed.
 6. GitHub Release created from the aggregated notes.
@@ -341,29 +367,47 @@ Preferred flow is now **local babysitting** driven by `gh plate pr babysit <numb
 
 Use this loop:
 
-1. Start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance).
+1. Before babysitting (or any PR-related work), run `gh plate release status` *proactively first* to confirm the track/base and pending fragments. Then start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance). (Addresses #513.)
 
 **Quiet Agents note:** For looped or long-running babysitting/monitoring, the supervising agent must follow the quiet_operations rules (see `plugin/agents/plate.agent.md` Behavior rules + Special modes, and `src/plate_core/agent_guidance.py` QUIET_OPERATIONS_GUIDANCE): only terse bullet-list one-sentence turn summaries in the terminal; post GitHub comments on the PR only for meaningful forward progress (not "checked, 0 actionable" no-ops). The persona and catalog constraints are the primary enforcement surface. Information Audits (#218) are now part of the core capability: agents should use `plate_perform_information_audit` (dry_run first) to discover gaps against the Goals page (#224) and generate Questions. Guidance in plugin/agents/plate.agent.md and agent_guidance.py (INFORMATION_AUDIT_GUIDANCE, plus the new quiet section). Catalog defaults (#222) and extensibility (#226) apply.
 2. The babysitter automatically detects two types of issues:
    - **Unresolved review threads** from third-party agents (actionable feedback)
    - **Base branch out-of-sync** state (PR branch behind, conflicting, or dirty relative to base branch)
-3. Review all open inline comments and the overall review body from the named reviewer on the linked PR
-4. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
-5. For all other actionable comments: push a code change or reply explaining why no change is needed
-6. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the GitHub GraphQL `resolveReviewThread` mutation:
-   ```graphql
-   mutation { resolveReviewThread(input: { threadId: "THREAD_NODE_ID" }) { thread { isResolved } } }
-   ```
-   To find `THREAD_NODE_ID` for a given comment, query `repository.pullRequest.reviewThreads` and match on `comments.nodes.databaseId`.
-7. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
-8. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
+3. When the high-level goal is "get this PR green", "make mergeable", "address all feedback", or equivalent, treat it as an iterative loop the *agent owns* (the "Full PR Green / Make Mergeable Loop" — see quiet_operations guidance in agent_guidance.py and the pr-babysit skill). **Always start with "CI diagnosis first" (addresses #527):** before *any* broad/expensive local command (e.g. full pytest in worktree), do cheap GitHub inspection first:
+   - `gh pr checks <N>` (or `gh plate pr babysit` / MCP) for current gates.
+   - `gh run list --branch <head> --limit 5` + `gh run view <run-id> --job <job-id> --log-failed` (or --log) on the *specific* failing job to get the exact current error (e.g. labels? unresolved threads? specific test?). Note: `--log-failed` returns only the failing step output (much smaller/cheaper than full `--log`).
+   - Only then decide minimal local scope (targeted -k, single file, or just metadata fix). Use/document one-liners for the gh run view flags.
+   - For backgrounded/long-running tasks started during babysit (e.g. pytest): immediately record task_id and proactively schedule/polling with `get_command_or_subagent_output` or `monitor` at intervals (30s/2m/5m/10m); at each poll emit terse one-bullet status to user (e.g. 'still running after 2m, last output: ...'); surface partial output/status in terse responses. Do not wait for system reminders. Consider a lightweight "monitor" helper. (Addresses #525.)
+   - For verification / local test runs in worktree: follow verification strategy — use check-work skill or targeted commands first (not full suites); warn before long runs (>5-10min). (Addresses #523.)
+   - Comprehensively inspect *all* current failing gates at the start and after every push using the pr-babysit skill's get_pr_merge_gates helper (or equivalent) + gh commands. Common checklist (mental model for "make this PR mergeable"):
+     - Labels (Bug/Feature + area:* + risk:* + Epic:* if applicable; check with gh issue view or edit)
+     - Merge state / base sync (mergeStateStatus: BLOCKED, BEHIND, CONFLICTING, DIRTY, UNKNOWN -> use babysit with local-rebase or copilot-request)
+     - Feedback-resolution: unresolved review threads (esp. third-party agents) -> use plate_pr_babysit + plate_get_actionable_review_threads + plate_resolve_review_thread (encapsulated; handles pagination/DBID/ANSI internally; addresses #516). Do not hand-roll GraphQL/jq/mktemp/sed.
+     - CI / test jobs, title check, issue-link check, feature-change-files (if Feature), audit, deploy, etc. (via gh pr checks)
+     - Other: documentation gate, etc.
+     Use plate_pr_babysit + gh pr checks + gh run view on specific failing jobs (see CI Diagnosis First) + gh issue view for labels. Fix what you can, push, re-inspect, repeat until only human items (e.g. owner CHANGES_REQUESTED, high-risk) remain. Report one-sentence summary only then. (Addresses #526.)
+   - From a *single high-level prompt* ("get this PR green", "make mergeable", "address all feedback"), the agent should handle *all* agent-actionable categories (base sync/conflicts, labels, review threads, tests, etc.) in one or minimal comprehensive passes using the pr-babysit skill + get_pr_merge_gates + resolveReviewThread, without requiring category-by-category diagnosis or prompting from the user. Do not fix one category then wait for the user to diagnose the next. (Addresses #519, #528, #526.)
+   - Address everything the agent can autonomously in the worktree (rebase/resolve conflicts per strategy, apply safe suggestions, fix labels/metadata within scope, resolve addressed threads via `plate_resolve_review_thread`, fix locally reproducible test failures preferring cheap targeted runs, etc.). **Verify isolation (git rev-parse --show-toplevel or pr-babysit verify_worktree_is_isolated) and cleanup locks (cleanup_git_locks or rm -f .git/index.lock) before every git op in worktree. (Addresses #514.)**
+   - Push all changes to the *existing* PR branch (never open a new PR for feedback response).
+   - Re-inspect all gates (always re-starting with CI diagnosis).
+   - Repeat until no more agent-actionable items remain (only human judgment items like actual owner CHANGES_REQUESTED, credentials, high-risk decisions, or security changes are left).
+   - Only then report the one-sentence summary of what is left for the human + current state. Use quiet terse bullets for the loop.
+4. Review all open inline comments and the overall review body from the named reviewer on the linked PR
+5. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
+6. For all other actionable comments: push a code change or reply explaining why no change is needed
+7. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the encapsulated helper: `plate_resolve_review_thread` (MCP) / `resolve_review_thread` (Python) / `gh plate pr babysit` (which detects + reports). The helpers encapsulate the GraphQL mutation, node IDs, pagination, and extraction.
+   (The raw mutation + `repository.pullRequest.reviewThreads` + databaseId matching is implementation detail only; agents must not construct it manually with jq/mktemp/sed/etc. See pr_babysit.get_actionable_review_threads and plate_get_actionable_review_threads. Addresses #516.)
+8. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
+9. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
+
+The pr-babysit skill (and `gh plate pr babysit`) should be used by default for these flows and ideally support a " --until-green" / comprehensive make-mergeable mode that implements the loop above with appropriate quiet output and escalation. See the updated skill docstring and guidance for details (addresses #528 and the cluster of related PR-green / gates Bugs).
 
 **Base Branch Sync Handling:**
 
 The babysitter detects when a PR branch is out of sync with its base branch (via `mergeStateStatus`: BEHIND, CONFLICTING, or DIRTY). The default behavior is controlled by `--branch-update-strategy`:
 
 - **copilot-request** (default): Post a `@copilot` trigger comment requesting native GitHub/Copilot branch update assistance. This is safe, auditable, and reversible.
-- **local-rebase**: Local worktree rebase and push (implemented using isolated git worktree; reports success/conflict/error via BabysitReport fields; raises only on non-git env or fatal error).
+- **local-rebase**: Local worktree rebase and push (implemented using isolated git worktree via pr-babysit helpers; reports success/conflict/error via BabysitReport fields; raises only on non-git env or fatal error). **Before any worktree/rebase/push: call cleanup_git_locks() + verify_worktree_is_isolated() (or raw `git rev-parse --show-toplevel` + rm -f .git/index.lock). Use isolated worktree for *all* PR changes during babysit/fixes (never main checkout). Cleanup: git worktree remove --force + rm -rf the temp dir. Subagent and main agent must not collide on same repo dir. (Addresses #514.)**
 - **none**: Detect and report only, take no action
 
 When `--act` is specified and the PR is out of sync, the babysitter posts a merge trigger comment (deduplicated by marker) to prompt resolution. This ensures the babysitting loop can continue without manual branch update intervention.
@@ -383,7 +427,7 @@ When `--act` is specified and the PR is out of sync, the babysitter posts a merg
 
 **Configuration:** Set the `PLATE_PR_FEEDBACK_AGENTS` repository variable to a comma-separated list of GitHub logins whose feedback should be babysat by default (e.g., `devin-ai-integration[bot],openhands-agent`).
 
-**Merge safety gate:** Require `.github/workflows/feedback-resolution-check.yml` (`feedback-resolution`) in branch protection for `main` so merge/auto-merge waits until all active review threads are resolved.
+**Merge safety gate:** Require `.github/workflows/feedback-resolution-check.yml` (`feedback-resolution`) in branch protection for `main` (and integration branches) so merge/auto-merge waits until all active *agent* review threads are resolved. This gate is *not* a substitute for the separate human review/approval requirement for Bug/Feature/Documentation PRs (see above and authority table). Human approval (Approved review or explicit human merge) is required in addition.
 
 ## Label Rules
 
@@ -407,7 +451,7 @@ Every Feature pull request that changes PLATE process, templates, or agent surfa
 
 See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
 
-When opening pull requests through GitHub CLI, first run `gh plate release status` to discover the correct integration base branch (`release` for legacy single-release setups; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base <base> --label "Feature"` (or `--base release-minor --label "Feature"`, etc., where <base> is from `gh plate release status`) or the Documentation equivalent. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never rely on the repository's default branch implicitly; always pass `--base` explicitly (sometimes that will be `main`, e.g. for Release PRs).
+When opening pull requests through GitHub CLI, MUST run `gh plate release status` *proactively as the very first step* before any targeting/branch/PR decision to discover the correct integration base branch (`release` for legacy single-release setups; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base <base> --label "Feature"` (or `--base release-minor --label "Feature"`, etc., where <base> is from `gh plate release status`) or the Documentation equivalent. If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never rely on the repository's default branch implicitly; always pass `--base` explicitly (sometimes that will be `main`, e.g. for Release PRs). (Addresses #513.)
 
 **Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
 

@@ -1,0 +1,10 @@
+{
+  "slug": "fix-527-ci-diagnosis-first",
+  "change_type": "fix",
+  "surface": "src/plate_core/agent_guidance.py (new 'CI Diagnosis First Protocol' subsection), src/plate_core/pr_babysit.py (docstring), AGENTS.md (babysit section examples), plugin/agents/plate.agent.md, tests/test_pr_babysit.py",
+  "summary": "Add explicit 'CI Diagnosis First Protocol': in any verification, babysit, or 'get CI passing' work, *always* start with cheap GitHub inspection (`gh pr checks`, `gh run list --branch`, `gh run view <specific-job> --log-failed`) *before* launching broad/expensive local commands (e.g. full pytest in worktrees). Only after seeing the exact current failure decide minimal repro scope. Updates to pr-babysit skill, persona, and AGENTS.md babysit examples.",
+  "migration_impact": "Agents will now default to cheap CI-side diagnosis first (via gh pr checks + targeted run view on the failing job) before any expensive local verification. This avoids wasted multi-hour runs on stale or irrelevant failures (labels/threads instead of tests) and speeds diagnosis. No change to templates or downstream behavior unless they customize guidance; the protocol improves efficiency of PR health work.",
+  "agent_notes": "For 'get CI passing', 'reproduce the failure', babysit, or green work: *mandatory first step* is CI diagnosis (gh pr checks + run view on exact failing job) before any `python -m pytest` or broad local cmd. Use the output to pick cheap targeted repro only if needed. See new subsection in quiet_operations guidance, updated pr_babysit docstring, and AGENTS.md examples (addresses #527 and complements the full green loop from #528 and long-running protocol from #529).",
+  "links": ["#527"],
+  "breaking": false
+}

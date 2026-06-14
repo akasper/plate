@@ -398,6 +398,355 @@ class PrBabysitTests(unittest.TestCase):
         self.assertFalse(report.local_rebase_success)
         self.assertTrue(report.local_rebase_conflict)
 
+    def test_long_running_command_protocol_in_guidance(self):
+        """Regression test for #529: the long-running/background command protocol
+        (record task_id, proactive poll, surface on kill/SIGTERM, cheap fallback)
+        must be present in the shipped agent guidance (and thus in the plate persona
+        and pr-babysit flows). This ensures agents automatically follow the expected
+        behavior instead of ignoring killed background tasks or defaulting to expensive
+        full re-runs.
+        """
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        protocol = "Long-running command / background task protocol"
+        self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Immediately record the task_id", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("plan and invoke `get_command_or_subagent_output` (or the `monitor` tool) at intervals", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("treat the kill as data", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Immediately retrieve the final/partial output via the get/monitor tool", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Switch *immediately* to a cheap, targeted fallback", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("cheap, targeted fallback", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("default to cheap, CI-log-driven reproduction first", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
+
+    def test_full_pr_green_make_mergeable_loop_in_guidance(self):
+        """Regression test for #528: the 'Full PR Green / Make Mergeable Loop'
+        (systematic 'current failing gates' model, own the inspect-fix-push-reinspect
+        cycle, comprehensive ownership instead of single-category fixes waiting for
+        user diagnosis, report summary only after exhausting agent actions) must be
+        present in shipped guidance (and pr-babysit skill / persona / AGENTS.md).
+        This ensures agents treat "get PR green" as an agent-owned loop.
+        """
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        loop = "Full PR Green / Make Mergeable Loop"
+        self.assertIn(loop, QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("current failing gates", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("inspect-fix-push-reinspect cycle", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("comprehensively inspect *all* current failing gates", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Push all changes to the *existing* PR branch", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Repeat the inspect-fix-push-reinspect cycle until no more agent-actionable items remain", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("only human-judgment items remain", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("one-sentence summary for the human of what is left", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
+
+    def test_ci_diagnosis_first_protocol_in_guidance(self):
+        """Regression test for #527: the 'CI Diagnosis First Protocol' (always start
+        with cheap GitHub inspection via gh pr checks + gh run view on the *specific*
+        failing job *before* any broad/expensive local verification like multi-hour
+        pytest in worktrees; only then decide minimal targeted scope) must be present
+        in shipped guidance (and pr-babysit skill / persona / AGENTS.md babysit examples).
+        This prevents wasted runs and ensures diagnosis is based on current CI state.
+        """
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        protocol = "CI Diagnosis First Protocol"
+        self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Always begin with cheap, precise GitHub-side diagnosis", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("gh pr checks <pr-number>", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("gh run list --branch <pr-head-branch> --limit 5", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("gh run view <run-id> --job <job-id> --log-failed", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("*before* launching any broad or long-running local command", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Only *after* the precise diagnosis", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
+
+    def test_get_pr_merge_gates_returns_expected_keys(self):
+        """Regression test for #526: get_pr_merge_gates helper returns the expected keys (merge_state, out_of_sync, unresolved_review_threads, actionable_agent_threads, note)."""
+        from plate_core.pr_babysit import get_pr_merge_gates
+        repo = "akasper/plate"
+        pr = 112
+        pr_data_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "BEHIND",
+                        "baseRefName": "main",
+                        "headRefName": "feature-branch",
+                        "reviewThreads": {
+                            "nodes": [
+                                {
+                                    "id": "T1",
+                                    "isResolved": False,
+                                    "isOutdated": False,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 101,
+                                                "body": "fix this",
+                                                "url": "https://example.com/t1",
+                                                "author": {"login": "devin-ai"},
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                }
+            }
+        }
+        fake = _FakeClient(
+            responses={
+                ("graphql", "POST"): pr_data_payload,
+            }
+        )
+        result = get_pr_merge_gates(pr_number=pr, repo=repo, client=fake)
+        self.assertIn("merge_state", result)
+        self.assertIn("out_of_sync", result)
+        self.assertIn("unresolved_review_threads", result)
+        self.assertIn("actionable_agent_threads", result)
+        self.assertIn("note", result)
+        self.assertEqual(result["merge_state"], "BEHIND")
+        self.assertTrue(result["out_of_sync"])
+        self.assertEqual(result["unresolved_review_threads"], 1)
+        self.assertEqual(result["actionable_agent_threads"], 1)
+        self.assertIn("comprehensively", result["note"])
+        self.assertIn("full gates", result["note"])
+
+    def test_long_running_background_task_protocol_in_guidance(self):
+        """Regression test for #525: the long-running/background task protocol (record task_id, proactively schedule/polling with get_command_or_subagent_output or monitor at intervals rather than waiting for reminders, consider lightweight monitor helper) must be present in shipped guidance (and thus in the plate persona and pr-babysit flows)."""
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        protocol = "Long-running command / background task protocol"
+        self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Immediately record the task_id", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Schedule proactive polling", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("plan and invoke `get_command_or_subagent_output` (or the `monitor` tool) at intervals", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("lightweight \"monitor\" helper", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("do not wait for system reminders", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
+
+    def test_default_to_pr_babysit_skill_in_pr_babysit_instructions(self):
+        """Regression test for #524: instructions must direct agents to default to the dedicated pr-babysit skill/MCP rather than hand-rolling raw git/gh for babysit/get-green/etc. instructions."""
+        import plate_core.pr_babysit as mod
+        doc = getattr(mod, "__doc__", "") or ""
+        self.assertIn("must default to it (rather than hand-rolling git/gh commands)", doc)
+        self.assertIn("addresses #524", doc)
+
+        # Anchor in persona
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("start with pr-babysit skill", persona)
+        self.assertIn("not hand-rolling", persona)
+
+    def test_verification_strategy_in_guidance(self):
+        """Regression test for #523: verification strategy (narrow/targeted first with check-work skill, warn before long runs >5-10min, cross-ref to CI Diagnosis/long-running) must be present in shipped guidance and persona."""
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("Verification Strategy (local test runs, reproduction, and check-work)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("use the `check-work` skill", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("warn the user before starting", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn(">5-10 minutes", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("targeted command possible", QUIET_OPERATIONS_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("use check-work or targeted pytest", persona)
+        self.assertIn("warn before long runs (see guidance)", persona)
+
+    def test_gaps_in_docs_for_qanda_and_pr_health_fixed_in_guidance(self):
+        """Regression test for #521: guidance, persona, and AGENTS must explicitly require native TUI (ask_user_question) for PLATE Q&A and integrated full PR health/babysit follow-through without repeated corrections."""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("Mandatory use of native TUI forms for Q&A in PLATE contexts", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Enforcement of Q&A option follow-through", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("ask_user_question (or host native TUI)", QANDA_CURIOSITY_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("default to ask_user_question (native TUI); if option promises review/babysit", persona)
+        self.assertIn("Follow guidance.", persona)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers", agents)
+
+    def test_human_review_required_before_merge_for_certain_prs(self):
+        """Regression test for #549: AGENTS.md must explicitly require human review/approval before merge for Bug/Feature/Documentation PRs (and at least one review for Epics/Releases), separate from feedback-resolution for agent threads."""
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("do not self-merge", agents)
+        self.assertIn("Epics and Releases require at least one review as well", agents)
+        self.assertIn("This gate is *not* a substitute for the separate human review/approval requirement", agents)
+
+    def test_resolve_review_threads_after_feedback_for_check(self):
+        """Regression test for #520: AGENTS.md and pr_babysit instructions must require explicitly resolving review threads (via resolveReviewThread) after addressing feedback to clear the feedback-resolution check."""
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("resolve addressed threads via `plate_resolve_review_thread`", agents)
+        self.assertIn("encapsulated helper", agents)
+
+        import plate_core.pr_babysit as mod
+        doc = getattr(mod, "__doc__", "") or ""
+        self.assertIn("explicitly resolve the corresponding review threads", doc)
+
+    def test_complete_babysit_make_green_from_single_high_level_prompt(self):
+        """Regression test for #519: guidance and AGENTS must describe a complete 'turn PR green' / full babysit flow from a *single high-level prompt* (not category-by-category), where the agent handles all agent-actionable gates (conflicts, labels, threads, tests) comprehensively using the skill + helpers, reporting summary only at end."""
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("single high-level instruction", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("atomic \"complete babysit / turn green\" flow", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("one comprehensive pass (conflicts, labels, threads, tests, etc.)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("from a single high-level prompt instead of sequential single-category fixes", QUIET_OPERATIONS_GUIDANCE)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("From a *single high-level prompt* (\"get this PR green\", \"make mergeable\", \"address all feedback\")", agents)
+        self.assertIn("handle *all* agent-actionable categories (base sync/conflicts, labels, review threads, tests, etc.) in one or minimal comprehensive passes", agents)
+        self.assertIn("(Addresses #519, #528, #526.)", agents)
+
+    def test_agent_consistently_defaults_to_native_tui_for_qanda_518(self):
+        """Regression test for #518: guidance, persona, and AGENTS must require agents to *consistently default to or use Grok Build native TUI interactive configurator (arrow-key forms)* for Q&A (without user reminder; with detection/fallback note)."""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("consistently default to or use", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Grok Build native TUI interactive configurator (arrow-key forms)", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("detection/fallback", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("do not require user reminders", QANDA_CURIOSITY_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("default to ask_user_question (native TUI); if option promises review/babysit", persona)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers", agents)
+        self.assertIn("(Addresses #503, #518, #517, #521.)", agents)
+
+    def test_qanda_follow_through_enforced_in_this_turn_517(self):
+        """Regression test for #517: guidance and AGENTS enforce that interactive Q&A options (ask_user_question) only offer actions whose full follow-through (artifacts, execution) will complete in this turn; no advance until done."""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("Offer *only* options/actions in ask_user_question whose full follow-through", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("will be completed in this turn before any further progress or new Q&A", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("do not declare done or offer next until prior chosen option is fully executed", QANDA_CURIOSITY_GUIDANCE)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress", agents)
+
+    def test_review_thread_handling_encapsulated_516(self):
+        """Regression test for #516: pr_babysit skill + MCP + guidance + AGENTS + persona require use of encapsulated high-level helpers (get_actionable_review_threads / plate_get_actionable_review_threads + resolve_review_thread / plate_resolve...) for review threads; pagination, DBID, ANSI, mutation handled internally. Forbid hand-rolling GraphQL/jq/mktemp/sed."""
+        import plate_core.pr_babysit as pbmod
+        doc = getattr(pbmod, "__doc__", "") or ""
+        self.assertIn("fully encapsulated in the high-level helpers", doc)
+        self.assertIn("**must not** manually construct raw `gh api graphql`, jq filters", doc)
+        self.assertIn("get_actionable_review_threads", doc)
+        self.assertIn("(addresses #516)", doc)
+
+        # Public helper exists and is importable
+        self.assertTrue(hasattr(pbmod, "get_actionable_review_threads"))
+
+        with open("src/plate_core/agent_guidance.py", encoding="utf-8") as f:
+            guidance = f.read()
+        self.assertIn("encapsulated helpers (get_actionable_review_threads", guidance)
+        self.assertIn("Do not hand-roll raw GraphQL, jq, mktemp, sed/NO_COLOR", guidance)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("use plate_pr_babysit + plate_get_actionable_review_threads + plate_resolve_review_thread (encapsulated", agents)
+        self.assertIn("Do not hand-roll GraphQL/jq/mktemp/sed", agents)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("Use encapsulated review helpers (no raw GraphQL/jq)", persona)
+
+        import plate_core.pr_babysit as pbmod
+        doc = getattr(pbmod, "__doc__", "") or ""
+        self.assertIn("(addresses #516)", doc)
+
+    def test_todo_write_required_for_complex_multi_step_515(self):
+        """Regression test for #515: persona, agent_guidance, and AGENTS must require `todo_write` (mark completed immediately, never batch) for all 3+ step PLATE work (babysit sessions, Q&A refinement, full PR green, ceremonies)."""
+        from plate_core.agent_guidance import TASK_MANAGEMENT_GUIDANCE
+        self.assertIn("Task Management for Complex Multi-Step Work", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("**immediately** use the `todo_write` tool", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("Mark items completed as soon as the atomic step is done", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("babysit/\"get PR green\"", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("interactive Q&A or contemplation/refinement rounds", TASK_MANAGEMENT_GUIDANCE)
+        self.assertIn("(Addresses #515.)", TASK_MANAGEMENT_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("start with todo_write; mark done immediately (no batch)", persona)
+        self.assertIn("(Addresses #515.)", persona)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("## Task Management (for agents)", agents)
+        self.assertIn("**must** use the `todo_write` tool (or host equivalent) for any complex multi-step PLATE work with 3+ steps", agents)
+        self.assertIn("Mark each item `completed` **immediately** when that step finishes. **Never batch**", agents)
+        self.assertIn("Examples in context:", agents)
+
+    def test_worktree_isolation_robustness_514(self):
+        """Regression test for #514: pr_babysit exposes cleanup_git_locks + verify_worktree_is_isolated; rebase and babysit local-rebase paths use them; guidance/AGENTS/persona require verify + lock cleanup before worktree ops (no main checkout pollution)."""
+        import plate_core.pr_babysit as pbmod
+        self.assertTrue(hasattr(pbmod, "cleanup_git_locks"))
+        self.assertTrue(hasattr(pbmod, "verify_worktree_is_isolated"))
+        doc = getattr(pbmod, "__doc__", "") or ""
+        self.assertIn("Worktree isolation for local-rebase (and general PR fix/babysit flows) is now more robust", doc)
+        self.assertIn("(Addresses #514.)", doc)
+
+        # Helpers are callable and return expected shape
+        c = pbmod.cleanup_git_locks()
+        self.assertIn("cleaned", c)
+        self.assertIn("errors", c)
+        v = pbmod.verify_worktree_is_isolated()
+        self.assertIn("is_isolated", v)
+        self.assertIn("toplevel", v)
+
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("verify_worktree_is_isolated", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("cleanup_git_locks", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("(Addresses #514.)", QUIET_OPERATIONS_GUIDANCE)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("call cleanup_git_locks() + verify_worktree_is_isolated()", agents)
+        self.assertIn("Use isolated worktree for *all* PR changes during babysit/fixes (never main checkout)", agents)
+        self.assertIn("(Addresses #514.)", agents)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("Follow Full PR Green + worktree verify (#514)", persona)
+
+    def test_proactive_release_status_before_targeting_513(self):
+        """Regression test for #513: persona, agent_guidance, AGENTS.md, and pr_babysit docs must require running `gh plate release status` *proactively as the very first step* before any branch targeting, PR creation, or base determination for Bug/Feature work (and before babysit calls)."""
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("Before any branch/PR/base for Bug/Feature: run `gh plate release status` *first* to get correct --base + fragments", persona)
+        self.assertIn("(Addresses #513.)", persona)
+
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("Release Status Protocol (mandatory first step for any PR/branch/targeting work)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Run `gh plate release status` (or equivalent MCP/CLI surface) *immediately as the very first action*", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("(Addresses #513.)", QUIET_OPERATIONS_GUIDANCE)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("MUST run `gh plate release status` (or inspect the issue's semver track label) *proactively as the very first step before any targeting, branch decision, or `gh pr create`*", agents)
+        self.assertIn("MUST run `gh plate release status` *proactively as the very first step* before any targeting/branch/PR decision", agents)
+        self.assertIn("(Addresses #513.)", agents)
+
+        import plate_core.pr_babysit as pbmod
+        doc = getattr(pbmod, "__doc__", "") or ""
+        self.assertIn("Per #513: agents MUST run `gh plate release status` *proactively as the very first step* before calling babysit_pr", doc)
+
+    def test_qanda_follow_through_inconsistency_503(self):
+        """Regression test for #503: persona, guidance, and AGENTS must enforce that Q&A options promising 'review the PR'/'babysit'/'address feedback' result in *full execution* (pr-babysit skill, isolated worktree, push to same branch, resolve threads) before next question or progress/done; never merge or advance unaddressed. (Builds on #517/#503 stub.)"""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("If a choice promises \"review the PR\", \"babysit\", \"address feedback\", or similar, the agent *must* fully execute that work using the dedicated pr-babysit skill", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Never merge or advance with unaddressed feedback. (Addresses #503, #517.)", QANDA_CURIOSITY_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("if option promises review/babysit, fully execute via pr-babysit before next (Addresses #503, #517)", persona)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed.", agents)
+        self.assertIn("(Addresses #503, #518, #517, #521.)", agents)
+
 
 if __name__ == "__main__":
     unittest.main()

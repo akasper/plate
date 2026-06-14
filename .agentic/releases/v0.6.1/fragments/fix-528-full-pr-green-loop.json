@@ -1,0 +1,10 @@
+{
+  "slug": "fix-528-full-pr-green-loop",
+  "change_type": "fix",
+  "surface": "src/plate_core/agent_guidance.py (new Full PR Green section in QUIET_OPERATIONS_GUIDANCE), src/plate_core/pr_babysit.py (docstring + skill), plugin/agents/plate.agent.md, AGENTS.md (babysit section), tests/test_pr_babysit.py",
+  "summary": "Add explicit 'Full PR Green / Make Mergeable Loop' procedure (and 'own the current failing gates' model) to agent guidance, pr-babysit skill, plate persona, and AGENTS.md babysit section. Agent now comprehensively inspects all gates, addresses what it can, pushes to existing branch, re-inspects, and repeats until only human items remain — instead of fixing one category and waiting for user diagnosis.",
+  "migration_impact": "Agents using the plate persona or updated guidance will now own the full 'make PR green' / babysit loop with systematic gate inspection and agent-driven iteration (fewer micro-cycles of user prompting). Downstream repos get the improved behavior when they adopt the updated guidance/persona/skill; no template changes required beyond guidance refresh.",
+  "agent_notes": "For any 'get PR green', 'make mergeable', 'address feedback', or babysit instruction: build 'current failing gates' model via comprehensive inspection (plate_pr_babysit + gh pr checks + labels + threads), address actionable items in worktree (rebase, suggestions, labels, resolve threads, cheap tests), push to *existing* branch, re-inspect, repeat. Report one-sentence human summary *only* after exhausting agent actions. Escalate judgment items with need:human-review. Default to the pr-babysit skill surface. See new guidance subsection and updated AGENTS.md (addresses #528 and cluster of PR-green Bugs like #526/#519/#510).",
+  "links": ["#528"],
+  "breaking": false
+}

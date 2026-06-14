@@ -1,0 +1,10 @@
+{
+  "slug": "fix-521-gaps-in-agent-docs-for-qanda-pr-health",
+  "change_type": "fix",
+  "surface": "plugin/agents/plate.agent.md (Q&A bullet), src/plate_core/agent_guidance.py (QANDA section), AGENTS.md (Question handling), tests/test_pr_babysit.py (regression test)",
+  "summary": "Strengthen persona, guidance, and AGENTS.md to explicitly require native TUI forms (ask_user_question) for Q&A in PLATE, integrated full PR health/babysit flow, and follow-through on answers/options. Add regression test for the phrases.",
+  "migration_impact": "Agents will more reliably use native TUI for Q&A and complete PR health flows end-to-end with less correction. Updates to guidance/persona apply via plate persona. No template changes.",
+  "agent_notes": "For Q&A: always use ask_user_question native TUI forms for interactive prompts in PLATE (not raw text); follow through by creating/updating artifacts (Questions, issues, etc.) per answer_signal and ACs. For PR health: use the full integrated babysit flow (pr_babysit + gates + verification). See strengthened sections in persona/guidance/AGENTS. (Addresses #521 and related gaps from Q&A/babysit sessions.)",
+  "links": ["#521"],
+  "breaking": false
+}

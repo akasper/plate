@@ -23,6 +23,7 @@ jobs:
       - name: Install Copilot CLI
         run: |
           set -euo pipefail
+          # Pinned to 1.0.60+ for non-interactive deprecation handling (direct/local installs deprecated by Copilot CLI; see #375).
           COPILOT_VERSION="1.0.60"
           curl -fsSL -o copilot-linux-x64.tar.gz "https://github.com/github/copilot-cli/releases/download/v${COPILOT_VERSION}/copilot-linux-x64.tar.gz"
           tar -xzf copilot-linux-x64.tar.gz
@@ -30,14 +31,7 @@ jobs:
           sudo mv copilot /usr/local/bin/copilot
           copilot --version
 
-      - name: Plugin install smoke test (workspace path)
-        run: |
-          set -euo pipefail
-          copilot plugin install "$GITHUB_WORKSPACE"
-          copilot plugin uninstall plate-core
-
       - name: Plugin install smoke test (pre-launch marketplace surface)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
           copilot plugin marketplace add akasper/plate
@@ -111,6 +105,8 @@ jobs:
   # These jobs run *after* the lightweight gates (the test job above acts as a common fast-fail).
   # They activate for release packaging/stabilization PRs targeting the legacy 'release' branch
   # or release-* / release-v* branches (multi-track or versioned cuts).
+  # The 'Release' label (in addition to 'Documentation' PR type) is required on Release PRs
+  # (and for legacy 'release' head_ref) to prevent skips in these jobs (see #532).
   # Add expensive steps here: expanded e2e matrix, security scans (trivy/snyk/etc.), architecture
   # review / lint, full recompilation + packaging for all targets, etc.
   # Normal development to the permissive next-* branches stays on the lightweight path.

@@ -1,0 +1,10 @@
+{
+  "slug": "fix-549-require-human-review-before-merge",
+  "change_type": "fix",
+  "surface": "AGENTS.md (Authority Model, Bug/Feature work loops, PR discipline, autonomous mode, human checkpoints, feedback-resolution notes), .github/workflows/feedback-resolution-check.yml (note that it is for agent threads, not human approval)",
+  "summary": "Clarify and codify the PLATE requirement for human review/approval before merge for Bug, Feature, and Documentation PRs (at minimum one Approved review or explicit human `gh pr merge`), and at least one review for Epics/Releases. Update work loops, authority table references, autonomous eligibility, and notes that feedback-resolution is for agent threads only (human approval is separate). Add/update need:human-review handling.",
+  "migration_impact": "Agents will no longer self-merge Bug/Feature/Doc PRs after green; they must pause for human review/approval (add need:human-review if blocked, or wait for human to merge). This aligns agent behavior with the written doctrine ('human keeps judgment', 'Must wait for human merge' in normal mode, 'merge approval' under human must decide). No template changes; downstream repos should set branch protection for required reviews on integration branches if not already. Autonomous mode eligibility already excludes PRs with need:human-review.",
+  "agent_notes": "After making a Bug/Feature/Doc PR green (including feedback-resolution for agent threads), do not merge yourself. Post a summary, add any needed labels, and wait for human review/approval (Approved review or human performs the merge). Use 'need:human-review' if escalation needed. For Epics/Releases, ensure at least one review. See updated sections in AGENTS.md. (Addresses #549 and the user request for explicit review gates.)",
+  "links": ["#549"],
+  "breaking": false
+}

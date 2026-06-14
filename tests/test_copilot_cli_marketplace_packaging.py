@@ -50,7 +50,9 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         workflow = read_text(".github/workflows/ci.yml")
 
         self.assertIn("Plugin install smoke test (pre-launch marketplace surface)", workflow)
-        self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main'", workflow)
+        # Note: the conditional if (only on main push) was removed in #375 to run the
+        # supported marketplace smoke unconditionally on all PRs (prevents hangs from
+        # deprecated direct installs and provides early validation).
         self.assertIn("copilot plugin marketplace add akasper/plate", workflow)
         self.assertIn("copilot plugin install plate-core@plate-marketplace", workflow)
         self.assertIn("copilot plugin marketplace remove plate-marketplace --force", workflow)

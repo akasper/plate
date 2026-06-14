@@ -1,0 +1,10 @@
+{
+  "slug": "fix-520-require-resolve-review-threads-after-feedback",
+  "change_type": "fix",
+  "surface": "AGENTS.md (babysit section, explicit thread resolution guidance), src/plate_core/pr_babysit.py (docstring emphasis on resolve step), tests/test_pr_babysit.py (regression test)",
+  "summary": "Add explicit guidance in AGENTS.md on discovering review threads and using resolveReviewThread mutation after addressing feedback (for owner and third-party), to clear the feedback-resolution check. Update pr-babysit skill docstring. Add regression test.",
+  "migration_impact": "Agents babysitting PRs will now explicitly resolve addressed threads (via plate_resolve_review_thread or GraphQL) as part of the standard flow, ensuring feedback-resolution passes without extra prompting. The resolve function and usage in babysit already existed; this makes the expectation and mechanics documented and tested. No template changes.",
+  "agent_notes": "After addressing a review comment (code or reply), query the threads if needed, then call resolveReviewThread (or plate_resolve_review_thread) for the threadId (from reviewThreads nodes). Do this for all addressed threads to satisfy the check. Escalate owner reviews with need:human-review if unsure. See new section in AGENTS.md §babysit and updated pr_babysit docstring. (Addresses #520.)",
+  "links": ["#520"],
+  "breaking": false
+}

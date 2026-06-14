@@ -1,0 +1,10 @@
+{
+  "slug": "fix-525-background-task-protocol",
+  "change_type": "fix",
+  "surface": "src/plate_core/agent_guidance.py (enhanced Long-running command / background task protocol), plugin/agents/plate.agent.md (updated background bullet), AGENTS.md (babysit section example for background tasks), tests/test_pr_babysit.py (regression test)",
+  "summary": "Strengthen 'Long-running command / background task protocol' in guidance to explicitly require immediate task_id recording + proactive scheduling of get_command_or_subagent_output / monitor polling at intervals (instead of waiting for system reminders); surface partial output; consider lightweight 'monitor' helper. Update persona and AGENTS.md examples accordingly.",
+  "migration_impact": "Agents will now proactively poll background tasks (e.g. long pytest) using scheduled get_ or monitor calls rather than reacting to reminders, providing timely partial output and status to users. Improves visibility and reduces session waste during babysit/verification. No template changes required; updated guidance/persona will be adopted by agents using the plate persona.",
+  "agent_notes": "For any background:true or known long-running cmd (e.g. in pr-babysit repros): record task_id immediately, then proactively schedule and call get_command_or_subagent_output or monitor at intervals (30s/2m/5m) to poll and surface partial results in terse bullets. Do not wait for 'task ended' system messages. Consider invoking a lightweight monitor helper if available. Ties into CI Diagnosis First and Full PR Green loop. (Addresses #525 and related long-running Bugs like #529.)",
+  "links": ["#525"],
+  "breaking": false
+}

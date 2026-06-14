@@ -335,7 +335,11 @@ def cut_release(
     print("Next steps:")
     print(f"  1. Review {versioned_dir / 'release.json'} and adjust the summary if needed.")
     print(f"  2. Commit the new {versioned_dir}/ directory.")
-    print( "  3. Open a PR: release -> main.")
+    print( "  3. Open the Release PR from the versioned branch (or legacy 'release') to main.")
+    print( "     Use BOTH labels so heavy CI runs (see #532):")
+    print(f"     gh pr create --base main --head release --label \"Documentation\" --label \"Release\" \\")
+    print( "       --title \"Release v{0}\" --body-file /tmp/release-body.md".format(version))
+    print( "     Body must contain `Closes #<now-versioned Release issue>` (e.g. the issue that was 'Next Release' and got renamed to v{0}).".format(version))
     print(f"  4. Ensure the Release PR passes version-sync and remote tag-conflict validation for v{version}.")
     print(f"  5. After merge, the release workflow will create/push tag v{version} from the merged Release PR commit.")
     print(

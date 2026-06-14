@@ -70,6 +70,10 @@ PLATE supports a Curiosity-driven workflow where informational goals are tracked
 - **Direct `gh plate qanda` usage or fallback:** Use lightweight custom TUI tools (e.g. gum/huh) or simple prompts.
 - The goal is the most seamless possible experience for the user in their primary interface.
 
+### Enforcement and follow-through for PLATE Q&A
+- **Mandatory use of native TUI forms for Q&A in PLATE contexts:** Agents must *consistently default to or use* Grok Build native TUI interactive configurator (arrow-key forms) via ask_user_question (or host native TUI) for interactive Q&A; include detection/fallback note; do not require user reminders. Do not use raw text prompts unless native is unavailable.
+- **Enforcement of Q&A option follow-through:** After answers, explicitly create/update artifacts (issues, fragments, docs) per Answer signal checklist and contemplation contract. Use explicit checklist in turns or session state to ensure complete follow-through without mid-stream corrections. Offer *only* options/actions in ask_user_question whose full follow-through (artifacts + execution) will be completed in this turn before any further progress or new Q&A; do not declare done or offer next until prior chosen option is fully executed. If a choice promises "review the PR", "babysit", "address feedback", or similar, the agent *must* fully execute that work using the dedicated pr-babysit skill (or MCP), isolated worktree, push to the *existing* PR branch, resolve addressed threads, before offering the next question or declaring progress/done. Never merge or advance with unaddressed feedback. (Addresses #503, #517.)
+
 ### Question handling flow
 1. Use available MCP tools (or future equivalents such as `plate_list_questions`, `plate_get_question`) to discover and prioritize open Questions.
 2. Present the question using the native preference above.
@@ -122,6 +126,22 @@ This completes the loop started by #147 creation. Dogfood the full create → an
 - Always prefer the most native user experience the host environment (Copilot CLI) can provide.
 """
 
+TASK_MANAGEMENT_GUIDANCE = """
+## Task Management for Complex Multi-Step Work
+
+For **any** PLATE work with 3 or more steps — including babysit/"get PR green"/address feedback sessions (multiple gates/threads/tests/re-inspects), interactive Q&A or contemplation/refinement rounds, delegation or subagent flows, information audits, autonomy cycles, or release ceremonies — **immediately** use the `todo_write` tool (or host equivalent) at the start of the effort.
+
+Rules (mandatory per plate persona):
+- Call `todo_write` with a list of structured todos (each with id, content, status: "pending" | "in_progress" | "completed").
+- **Mark items completed as soon as the atomic step is done.** Do not batch multiple completions before marking.
+- Use it to track progress visibly for the user, surface blockers (e.g. "need:human-review before merge"), and prevent skipping steps or losing context across turns.
+
+Examples:
+- Babysit a PR to green: todos for "ci-diagnosis + list all gates", "address actionable review threads via helpers", "targeted test fix if needed", "babysit re-inspect to CLEAN", "merge + release reset".
+- Q&A refinement: ["present question via ask_user_question", "capture answer + provenance", "create/update artifacts per ACs", "follow-through on chosen option before next"].
+
+See AGENTS.md (new Task Management section + work loop examples), the host system prompt, and the `todo_write` tool contract. (Addresses #515.)
+"""
 
 def get_agent_guidance_sections() -> dict[str, str]:
     """Return guidance sections for agents."""
@@ -130,6 +150,7 @@ def get_agent_guidance_sections() -> dict[str, str]:
         "qanda_curiosity": QANDA_CURIOSITY_GUIDANCE,
         "information_audit": INFORMATION_AUDIT_GUIDANCE,
         "quiet_operations": QUIET_OPERATIONS_GUIDANCE,
+        "task_management": TASK_MANAGEMENT_GUIDANCE,
     }
 
 
@@ -194,5 +215,82 @@ PLATE supports long-running autonomous operation (e.g. Copilot CLI `/every`, Gro
 - Resource consciousness (AGENTS.md) + Atomic PR discipline still apply; quiet rules make them practical for overnight / multi-hour autonomous runs.
 - These rules are enforced primarily through the plate persona, catalog constraints on delegated agents, and what_next / delegation prompt segments. See also AGENTS.md §Resource consciousness, §Human checkpoints, §Issue Artifact Rules, and the babysit / Curiosity sections.
 
+### Long-running command / background task protocol
+When using or encountering backgrounded commands (e.g. `run_terminal_command(..., background=true)`, host-initiated long pytest in worktree, babysit repro, or any long-running verification):
+- **Immediately record the task_id** (or identifier) returned by the backgrounding call or system reminder.
+- **Schedule proactive polling**: do not wait for system reminders. Explicitly plan and invoke `get_command_or_subagent_output` (or the `monitor` tool) at intervals (e.g., after 30s, 2m, 5m, 10m) to surface partial output, progress, and early failures in your (terse) responses. At each poll, emit a terse one-bullet status update to the user (e.g., "still running after 2m, last output: ...") to close the visibility loop. Consider using or defining a lightweight "monitor" helper that the agent can invoke to handle scheduling and reporting for background tasks.
+- If the task is killed by the system (e.g. SIGTERM / signal 15 after hours, timeout, OOM), or exceeds a practical threshold (e.g. >10min for verification), **treat the kill as data, not "the end"**:
+  - Immediately retrieve the final/partial output via the get/monitor tool.
+  - Analyze it (often the useful work/failure was completed before the kill).
+  - Switch *immediately* to a cheap, targeted fallback (e.g. `pytest -k "exact failing test from CI log or partial output" --tb=line`, single file, or the minimal repro from the original CI job). Never blindly re-background a full expensive suite.
+- In "pr-babysit", "get CI passing", "reproduce the failure (in worktree)", or equivalent flows: **default to cheap, CI-log-driven reproduction first** (use `gh run view` on the specific failing job to extract the exact -k filter, file, or error; run only that). Reserve broad backgrounded commands for last resort, and always with the monitoring + fallback plan above.
+- The pr-babysit skill, "reproduce failure in worktree" guidance, and any verification instructions must encode this preference for log-first, kill-aware, cheap fallbacks over expensive long runs.
+
+This protocol prevents wasted compute and ensures partial results from killed tasks are acted upon quickly. Agents must proactively use `get_command_or_subagent_output` / `monitor` rather than reacting to reminders.
+
+### CI Diagnosis First Protocol (before expensive local verification or repro)
+When the high-level instruction is "get CI passing", "reproduce the failure (in worktree)", "fix the red checks", "address feedback", or any verification/babysit task that might involve local commands (especially broad pytest in worktrees):
+
+- **Always begin with cheap, precise GitHub-side diagnosis *before* launching any broad or long-running local command.** Never default to `python -m pytest ...` or similar without first knowing the exact current failure from CI.
+
+  1. Run `gh pr checks <pr-number>` (or use MCP `plate_pr_babysit` / `gh plate pr babysit`) to see the full current set of gates and which are red (labels, feedback-resolution, test jobs, etc.).
+
+  2. Identify the *specific failing job/run*: use `gh run list --branch <pr-head-branch> --limit 5` (or the equivalent from babysit report).
+
+  3. Fetch the exact failure details with `gh run view <run-id> --job <job-id> --log-failed` (or `--log` for full; add `--json` for structured parsing). This shows the *real* error (often "missing Bug label", "unresolved threads from owner", or a specific test assertion), not an old/stale one.
+
+- Only *after* the precise diagnosis (e.g. "the failure is the labels check, not the tests"), decide the minimal repro scope if local work is needed at all: targeted `pytest -k "exact-test-name"`, single file, or just the metadata fix. Prefer cheap one-liners over multi-hour full suites.
+
+- Use (or document) common one-liners/helpers for the gh run view flags so they don't have to be memorized each time.
+
+- Cross-reference the "Full PR Green / Make Mergeable Loop" (inspect all gates including these) and the long-running protocol (cheap fallback, record task_id if backgrounding any repro).
+
+This is the primary way to avoid wasted expensive local runs and delayed diagnosis. The pr-babysit skill and "reproduce failure" guidance must encode "CI diagnosis first" as the mandatory starting step.
+
+### Verification Strategy (local test runs, reproduction, and check-work)
+When the task involves local verification, reproducing a failure in the worktree, or running tests:
+- Start narrow: use the `check-work` skill (or equivalent) for self-verification when available; otherwise use the most targeted command possible (specific test files, `pytest -k "exact-failing-test-or-module" --tb=line`, or single module from CI log). Never default to a full `python -m pytest` or broad suite.
+- For anything expected to take >5-10 minutes: explicitly warn the user before starting ("This may take 10-60+ minutes; ok to proceed?").
+- Combine with long-running protocol (background + proactive polling with get_/monitor, cheap fallback on kill) and CI Diagnosis First (always start with `gh pr checks` + `gh run view ... --log-failed` before any local command).
+- Prefer skills/MCP surfaces over raw shell commands for reproducibility and structure.
+
+This prevents long-running waste, improves responsiveness, and ensures the user has visibility.
+
+### Full PR Green / Make Mergeable Loop (for "get CI passing", babysit, address feedback)
+When given a *single high-level instruction* like "get this PR green", "make mergeable", "address all feedback", or "resolve CI" (not category-by-category prompting), treat it as an atomic "complete babysit / turn green" flow the *agent owns*:
+
+1. At the start and after *every* push, comprehensively inspect *all* current failing gates using available surfaces (MCP plate_pr_babysit or `gh plate pr babysit` + plate_get_actionable_review_threads, `gh pr checks`, labels, mergeStateStatus, title/doc checks, etc.). **Review thread listing and resolution must use the encapsulated helpers (get_actionable_review_threads / plate_get_actionable_review_threads + plate_resolve_review_thread / resolve_review_thread); the skill handles GraphQL pagination, databaseId, body, author matching, and mutation internally. Do not hand-roll raw GraphQL, jq, mktemp, sed/NO_COLOR ANSI stripping, or the resolveReviewThread mutation.** Build and maintain an internal model of the "current failing gates" (do not rely on user to diagnose the next one). (Addresses #516.)
+
+2. Address everything the agent can autonomously in the worktree in one comprehensive pass (conflicts, labels, threads, tests, etc.):
+   - Base sync / merge conflicts (rebase or request copilot update per strategy, using isolated worktree). **Always verify with `verify_worktree_is_isolated()` (or `git rev-parse --show-toplevel`) before edits/rebase; call `cleanup_git_locks()` before git ops in worktree flows (pr-babysit helpers). Never edit main checkout; cleanup on exit. (Addresses #514.)**
+   - Apply safe code suggestions from reviews.
+   - Fix labels, title, or other metadata issues within scope (e.g. correct type + area:* + risk:*).
+   - Resolve review threads that have been addressed (via the encapsulated `plate_resolve_review_thread` / `resolve_review_thread` + `plate_get_actionable_review_threads` for discovery; for *all* unresolved after addressing. Never raw commands).
+   - Reproduce and fix test/CI failures that are locally actionable (prefer cheap targeted runs per verification strategy + long-running protocol; use check-work skill where possible).
+   - (and any other gate surfaced by the comprehensive inspection at step 1)
+
+3. Push all changes to the *existing* PR branch (never open a new PR for feedback response).
+
+4. Re-inspect all gates.
+
+5. Repeat the inspect-fix-push-reinspect cycle until no more agent-actionable items remain (only human-judgment items remain, e.g. credentials, high-risk decisions, or owner CHANGES_REQUESTED).
+
+6. Only then produce the one-sentence summary for the human of what is left + current state. Use terse quiet output for loops.
+
+For any PR health / conflict / feedback / 'get green' work, start by using the dedicated pr-babysit skill (gh plate pr babysit or plate_pr_babysit MCP) rather than hand-rolling raw git + gh commands. Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit` + get_pr_merge_gates) surface by default. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state from a single high-level prompt instead of sequential single-category fixes waiting for user diagnosis. (Addresses #519, #528, #526, etc.)
+
+The pr-babysit skill should support (or be used in) a "until green" / comprehensive make-mergeable flow with the above loop, appropriate quiet reporting, and clear human escalation points.
+
 Use this section for any monitoring, babysitting, contemplation, or repeated what_next work. The goal is dramatically less noise in Issues and terminals while preserving every required traceable artifact.
+
+### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
+Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
+
+- Run `gh plate release status` (or equivalent MCP/CLI surface) *immediately as the very first action*.
+- Use the output to discover the correct --base (`release` for legacy; `release-major`/`release-minor`/`release-patch` for multi-track), pending unreleased fragments, active Next Release #, extension checks, and on-hold Epics.
+- This must be *proactive* (not after deciding the branch or after creating the PR). Defaulting to `main` or guessing is forbidden for ongoing work and will require manual re-targeting.
+- In babysit or PR health flows (per #513), confirm the PR context aligns before proceeding with fixes.
+- Enhance pr-babysit and planning surfaces to surface/release status output and the determined base automatically where possible.
+
+See AGENTS.md §Branch Model and Ceremonies, §Documentation Rules, Feature/Bug work loops. (Addresses #513.)
 """

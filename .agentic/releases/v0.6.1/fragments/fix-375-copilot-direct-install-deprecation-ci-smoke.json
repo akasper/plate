@@ -1,0 +1,10 @@
+{
+  "slug": "fix-375-copilot-direct-install-deprecation-ci-smoke",
+  "change_type": "fix",
+  "surface": ".github/workflows/ci.yml (removed deprecated direct workspace-path smoke; unconditional marketplace smoke), tests/e2e/copilot-plugin.spec.ts (added deprecation note referencing #375), docs (various references to direct install smoke updated or noted in follow-up)",
+  "summary": "Address deprecation of direct/local path Copilot plugin installs in CI smoke tests (the root cause of >3h hangs on deprecation prompt in headless CI). Removed the 'Plugin install smoke test (workspace path)' step (direct `$GITHUB_WORKSPACE` install). Made the supported 'pre-launch marketplace surface' smoke unconditional (runs on PRs for ongoing validation). Updated COPILOT_VERSION comment. Added deprecation note to e2e copilot-plugin.spec.ts. (Addresses #375; builds on temp bump in prior Epic close.)",
+  "migration_impact": "CI no longer exercises or depends on the deprecated direct `copilot plugin install <local-path>`. Plugin install validation continues via the marketplace @ syntax smoke (now always-on) + structure/e2e tests + gh plate manifest/features checks. Downstream repos using similar Copilot plugin smokes should migrate to marketplace syntax or non-install validation to avoid hangs. No breaking change to the plate plugin itself (still supports copilot-plugin surface).",
+  "agent_notes": "The direct workspace path smoke (`copilot plugin install \"$GITHUB_WORKSPACE\"`) was removed from CI because Copilot CLI deprecates direct/local installs (only @marketplace supported long-term). Use the marketplace smoke or `gh plate` / manifest validation for plugin health. If running copilot plugin install locally for dev, expect deprecation warnings; prefer `copilot plugin install plate-core@...` after marketplace add. See updated ci.yml, e2e note, and #375. (Addresses #375 follow-up from Epic #282.)",
+  "links": ["#375"],
+  "breaking": false
+}

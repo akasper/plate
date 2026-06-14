@@ -22,7 +22,7 @@ from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .github_client import GhApiError
 from .health import get_health
-from .pr_babysit import babysit_pr
+from .pr_babysit import babysit_pr, get_pr_merge_gates
 from .release import (
     cleanup_dead_branches,
     cut_release as core_cut_release,
@@ -354,6 +354,26 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
     else:
         print(f"\nBase branch sync: UP TO DATE ({report.merge_state})")
 
+    return 0
+
+
+def cmd_pr_health(args: argparse.Namespace) -> int:
+    result = get_pr_merge_gates(
+        pr_number=args.pr_number,
+        repo=args.repo,
+    )
+    if args.json:
+        print(json.dumps(result))
+        return 0
+
+    print(f"Repo: {result['repo']}")
+    print(f"PR: #{result['pr_number']}")
+    print(f"Merge state: {result.get('merge_state')}")
+    print(f"Out of sync: {result.get('out_of_sync')}")
+    print(f"Unresolved review threads: {result.get('unresolved_review_threads')}")
+    print(f"Actionable agent threads: {result.get('actionable_agent_threads')}")
+    if result.get('note'):
+        print(f"Note: {result['note']}")
     return 0
 
 
@@ -1010,6 +1030,15 @@ def build_parser() -> argparse.ArgumentParser:
     babysit.add_argument("--interval", type=int, default=60, help="Polling interval in seconds for --watch mode")
     babysit.add_argument("--json", action="store_true", help="Output JSON")
     babysit.set_defaults(func=cmd_pr_babysit)
+
+    pr_health = pr_sub.add_parser(
+        "health",
+        help="Get comprehensive merge gates status for a PR (labels, threads, CI, etc.) using the get_pr_merge_gates helper",
+    )
+    pr_health.add_argument("pr_number", type=int, help="Pull request number")
+    pr_health.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    pr_health.add_argument("--json", action="store_true", help="Output JSON")
+    pr_health.set_defaults(func=cmd_pr_health)
 
     release = sub.add_parser("release", help="Release status and notes diff (read-only MVP)")
     release_sub = release.add_subparsers(dest="release_command", required=True)

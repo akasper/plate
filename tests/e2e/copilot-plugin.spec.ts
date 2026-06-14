@@ -6,6 +6,14 @@
  * workspace and cleanly removed using the Copilot CLI — exercising one
  * standards-compliant agentic CLI surface.
  *
+ * NOTE: Direct/local path installs (e.g. `copilot plugin install $WORKSPACE`)
+ * are deprecated by Copilot CLI ("Only plugin@marketplace installs will be
+ * supported in a future release."). See #375. The workspace-path smoke was
+ * removed from CI (see ci.yml); validation now relies on the marketplace
+ * surface smoke + plugin-structure tests + gh plate commands. These e2e
+ * tests may warn or require updates in the future; they are retained for
+ * local dev compatibility but are not the primary CI smoke.
+ *
  * The plugin itself is designed to be CLI-agnostic (see plugin-structure.spec.ts
  * for verification that no vendor-specific language remains in manifests/agent
  * files, and the research/design artifacts in the grok-build epic).

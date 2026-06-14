@@ -1,0 +1,10 @@
+{
+  "slug": "fix-518-consistently-default-native-tui-qanda",
+  "change_type": "fix",
+  "surface": "plugin/agents/plate.agent.md (Q&A bullet), src/plate_core/agent_guidance.py (QANDA_CURIOSITY_GUIDANCE enforcement), AGENTS.md (Question handling), tests/test_pr_babysit.py (regression test for #518)",
+  "summary": "Strengthen default persona, QANDA guidance, and AGENTS.md to require agents to *consistently default to or use* Grok Build native TUI interactive configurator (arrow-key forms) via ask_user_question for PLATE Q&A, with detection/fallback note and no user reminder required. Add dedicated regression test anchoring the phrases from #518 ACs.",
+  "migration_impact": "Agents operating under the plate persona will more reliably and consistently use the host's native TUI (arrow-key forms) for interactive Q&A flows in PLATE contexts, with less need for user corrections or reminders. Follow-through rules reinforced. No template or downstream config changes required.",
+  "agent_notes": "Always prefer/ default to ask_user_question (native TUI arrow-key configurator) for Q&A/Curiosity in PLATE; surface detection/fallback only if native unavailable; never require user reminder to use it. After answer, follow through by creating/updating artifacts per ACs/answer_signal. See updated Enforcement section and persona bullet. (Addresses #518 and related Q&A stubs #517, #509, #508, #503; builds on #521.)",
+  "links": ["#518"],
+  "breaking": false
+}
