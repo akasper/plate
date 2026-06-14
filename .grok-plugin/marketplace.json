@@ -1,0 +1,33 @@
+{
+  "name": "plate-marketplace",
+  "description": "Public GitHub Grok Build marketplace for PLATE plugin installs.",
+  "owner": {
+    "name": "PLATE / akasper"
+  },
+  "plugins": [
+    {
+      "name": "plate-core",
+      "description": "PLATE core plugin — context-first agent + MCP wiring for any compatible CLI agent.",
+      "version": "0.6.1",
+      "repository": "https://github.com/akasper/plate",
+      "license": "MIT",
+      "source": {
+        "type": "local",
+        "path": "./.plugin"
+      },
+      "homepage": "https://github.com/akasper/plate",
+      "keywords": [
+        "plate",
+        "grok",
+        "mcp",
+        "github",
+        "agent"
+      ],
+      "tags": [
+        "marketplace",
+        "agent",
+        "workflow"
+      ]
+    }
+  ]
+}
