@@ -443,7 +443,7 @@ class PrBabysitTests(unittest.TestCase):
         from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
         protocol = "CI Diagnosis First Protocol"
         self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
-        self.assertIn("always begin with cheap, precise GitHub-side diagnosis", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("Always begin with cheap, precise GitHub-side diagnosis", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("gh pr checks <N>", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("gh run view <run-id> --job <job-id> --log-failed", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("before *any* broad or long-running local command", QUIET_OPERATIONS_GUIDANCE)
