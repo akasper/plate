@@ -444,7 +444,7 @@ class PrBabysitTests(unittest.TestCase):
         protocol = "CI Diagnosis First Protocol"
         self.assertIn(protocol, QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("Always begin with cheap, precise GitHub-side diagnosis", QUIET_OPERATIONS_GUIDANCE)
-        self.assertIn("gh pr checks <N>", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("gh pr checks <pr-number>", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("gh run view <run-id> --job <job-id> --log-failed", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("before *any* broad or long-running local command", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
