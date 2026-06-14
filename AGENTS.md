@@ -93,11 +93,14 @@ Follow the loop that matches the issue type.
 | 5 | Update per-feature change files in `.agentic/releases/` to describe implemented behavior and verification evidence. |
 | 6 | Add or update `.agentic/releases/` when the change affects PLATE process or templates. |
 | 7 | Determine the correct base branch using `gh plate release status` (or by inspecting any Major/Minor/Patch label on the issue and the Branch Model below). For repositories on the legacy single-`release` model (the current state of this repo), target `release`. For multi-track, target the matching `release-major` / `release-minor` / `release-patch`. Open a PR labeled `Feature` **targeting that base branch** (`--base <base>` or equivalent in `gh pr create`, where <base> comes from the status command) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
-| 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
+| 8 | After the PR is green (including feedback-resolution for agent threads), wait for human review/approval (at minimum one `Approved` review or explicit human merge). Do not self-merge. Use `need:human-review` for escalation. See authority table, human checkpoints, and autonomous section. |
+| 9 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
 **Bug**
 
 Reproduce the failure or document why reproduction is not yet possible. Add a regression test. Include `Closes #N` in the PR body. Label missing information with `need:reproduction`, `need:tests`, or `need:human-review`.
+
+After making the PR green (including feedback-resolution for any agent threads), **do not self-merge**. Wait for human review/approval (at minimum one `Approved` review from a human, or explicit human `gh pr merge`). Epics and Releases require at least one review as well. Use `need:human-review` for escalation. See "Human checkpoints", authority table, and autonomous mode section.
 
 **Research**
 
@@ -250,6 +253,7 @@ Autonomous mode is the default operating posture for unattended sessions (overni
 - Does not carry `need:human-review` or `need:security-review`
 - Does not change public-facing claims in `README.md` or marketing documentation
 - Feedback-resolution check passes; base in sync (babysit handles via copilot-request/local-rebase/none)
+- For Bug/Feature/Documentation PRs: human review/approval is obtained (per the explicit requirement clarified in this fix; the check is separate from feedback-resolution for agent threads)
 
 **How to auto-merge an eligible PR in autonomous mode:**
 
@@ -406,7 +410,7 @@ When `--act` is specified and the PR is out of sync, the babysitter posts a merg
 
 **Configuration:** Set the `PLATE_PR_FEEDBACK_AGENTS` repository variable to a comma-separated list of GitHub logins whose feedback should be babysat by default (e.g., `devin-ai-integration[bot],openhands-agent`).
 
-**Merge safety gate:** Require `.github/workflows/feedback-resolution-check.yml` (`feedback-resolution`) in branch protection for `main` so merge/auto-merge waits until all active review threads are resolved.
+**Merge safety gate:** Require `.github/workflows/feedback-resolution-check.yml` (`feedback-resolution`) in branch protection for `main` (and integration branches) so merge/auto-merge waits until all active *agent* review threads are resolved. This gate is *not* a substitute for the separate human review/approval requirement for Bug/Feature/Documentation PRs (see above and authority table). Human approval (Approved review or explicit human merge) is required in addition.
 
 ## Label Rules
 
