@@ -362,7 +362,7 @@ Use this loop:
    - Comprehensively inspect *all* current failing gates at the start and after every push using the pr-babysit skill's get_pr_merge_gates helper (or equivalent) + gh commands. Common checklist (mental model for "make this PR mergeable"):
      - Labels (Bug/Feature + area:* + risk:* + Epic:* if applicable; check with gh issue view or edit)
      - Merge state / base sync (mergeStateStatus: BLOCKED, BEHIND, CONFLICTING, DIRTY, UNKNOWN -> use babysit with local-rebase or copilot-request)
-     - Feedback-resolution: unresolved review threads (esp. third-party agents) -> use plate_pr_babysit + resolveReviewThread
+     - Feedback-resolution: unresolved review threads (esp. third-party agents) -> use plate_pr_babysit + plate_get_actionable_review_threads + plate_resolve_review_thread (encapsulated; handles pagination/DBID/ANSI internally; addresses #516). Do not hand-roll GraphQL/jq/mktemp/sed.
      - CI / test jobs, title check, issue-link check, feature-change-files (if Feature), audit, deploy, etc. (via gh pr checks)
      - Other: documentation gate, etc.
      Use plate_pr_babysit + gh pr checks + gh run view on specific failing jobs (see CI Diagnosis First) + gh issue view for labels. Fix what you can, push, re-inspect, repeat until only human items (e.g. owner CHANGES_REQUESTED, high-risk) remain. Report one-sentence summary only then. (Addresses #526.)
@@ -375,11 +375,8 @@ Use this loop:
 4. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 5. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
 6. For all other actionable comments: push a code change or reply explaining why no change is needed
-7. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the GitHub GraphQL `resolveReviewThread` mutation:
-   ```graphql
-   mutation { resolveReviewThread(input: { threadId: "THREAD_NODE_ID" }) { thread { isResolved } } }
-   ```
-   To find `THREAD_NODE_ID` for a given comment, query `repository.pullRequest.reviewThreads` and match on `comments.nodes.databaseId`.
+7. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the encapsulated helper: `plate_resolve_review_thread` (MCP) / `resolve_review_thread` (Python) / `gh plate pr babysit` (which detects + reports). The helpers encapsulate the GraphQL mutation, node IDs, pagination, and extraction.
+   (The raw mutation + `repository.pullRequest.reviewThreads` + databaseId matching is implementation detail only; agents must not construct it manually with jq/mktemp/sed/etc. See pr_babysit.get_actionable_review_threads and plate_get_actionable_review_threads. Addresses #516.)
 8. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
 9. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
 

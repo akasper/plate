@@ -242,13 +242,13 @@ This prevents long-running waste, improves responsiveness, and ensures the user 
 ### Full PR Green / Make Mergeable Loop (for "get CI passing", babysit, address feedback)
 When given a *single high-level instruction* like "get this PR green", "make mergeable", "address all feedback", or "resolve CI" (not category-by-category prompting), treat it as an atomic "complete babysit / turn green" flow the *agent owns*:
 
-1. At the start and after *every* push, comprehensively inspect *all* current failing gates using available surfaces (MCP plate_pr_babysit or `gh plate pr babysit`, `gh pr checks`, review threads via GraphQL or tool, labels, mergeStateStatus, title/doc checks, etc.). Build and maintain an internal model of the "current failing gates" (do not rely on user to diagnose the next one).
+1. At the start and after *every* push, comprehensively inspect *all* current failing gates using available surfaces (MCP plate_pr_babysit or `gh plate pr babysit` + plate_get_actionable_review_threads, `gh pr checks`, labels, mergeStateStatus, title/doc checks, etc.). **Review thread listing and resolution must use the encapsulated helpers (get_actionable_review_threads / plate_get_actionable_review_threads + plate_resolve_review_thread / resolve_review_thread); the skill handles GraphQL pagination, databaseId, body, author matching, and mutation internally. Do not hand-roll raw GraphQL, jq, mktemp, sed/NO_COLOR ANSI stripping, or the resolveReviewThread mutation.** Build and maintain an internal model of the "current failing gates" (do not rely on user to diagnose the next one). (Addresses #516.)
 
 2. Address everything the agent can autonomously in the worktree in one comprehensive pass (conflicts, labels, threads, tests, etc.):
    - Base sync / merge conflicts (rebase or request copilot update per strategy, using isolated worktree).
    - Apply safe code suggestions from reviews.
    - Fix labels, title, or other metadata issues within scope (e.g. correct type + area:* + risk:*).
-   - Resolve review threads that have been addressed (via `plate_resolve_review_thread` / GraphQL for *all* unresolved after addressing).
+   - Resolve review threads that have been addressed (via the encapsulated `plate_resolve_review_thread` / `resolve_review_thread` + `plate_get_actionable_review_threads` for discovery; for *all* unresolved after addressing. Never raw commands).
    - Reproduce and fix test/CI failures that are locally actionable (prefer cheap targeted runs per verification strategy + long-running protocol; use check-work skill where possible).
    - (and any other gate surfaced by the comprehensive inspection at step 1)
 

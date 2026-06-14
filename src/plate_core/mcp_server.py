@@ -23,7 +23,7 @@ from .epics import get_epic_status
 from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
-from .pr_babysit import babysit_pr, get_pr_merge_gates, resolve_review_thread
+from .pr_babysit import babysit_pr, get_actionable_review_threads, get_pr_merge_gates, resolve_review_thread
 from .plate_config import apply_plate_config_upgrade, get_plate_config_report, init_plate_config
 from .release import (
     cleanup_dead_branches,
@@ -249,6 +249,18 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 thread_id=thread_id,
                 repo=args.get("repo"),
             )
+        elif name == "plate_get_actionable_review_threads":
+            # High-level listing helper (encapsulates GraphQL pagination, DBID, filtering).
+            # Part of review thread encapsulation for #516.
+            payload = {
+                "repo": args.get("repo"),
+                "pr_number": args.get("pr_number"),
+                "threads": get_actionable_review_threads(
+                    pr_number=args.get("pr_number"),
+                    repo=args.get("repo"),
+                    agent_logins=args.get("agent_logins"),
+                ),
+            }
         elif name == "plate_what_next":
             # What Next? (Epic #282 / #285 v1 static)
             # Uses live state (health, epics, fragments, labels) to pick next PLATE step and prompt segment.
@@ -741,6 +753,28 @@ def run() -> None:
                                         },
                                     },
                                     "required": ["thread_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_get_actionable_review_threads",
+                                "description": "List actionable (unresolved, non-outdated, from target agents) review threads for a PR. High-level encapsulated helper: handles GraphQL (reviewThreads first:100 + nodes), databaseId, author filtering, body extraction internally. Use with plate_resolve_review_thread (or via plate_pr_babysit) instead of raw GraphQL/jq/mktemp/ANSI. Addresses #516.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "pr_number": {
+                                            "type": "integer",
+                                            "description": "Pull request number.",
+                                        },
+                                        "agent_logins": {
+                                            "type": "string",
+                                            "description": "Comma-separated logins to match (optional; defaults to known third-party agent patterns).",
+                                        },
+                                    },
+                                    "required": ["pr_number"],
                                 },
                             },
                             {
