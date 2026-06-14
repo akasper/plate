@@ -487,6 +487,7 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("Schedule proactive polling", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("plan and invoke `get_command_or_subagent_output` (or the `monitor` tool) at intervals", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("lightweight \"monitor\" helper", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("do not wait for system reminders", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
 
 

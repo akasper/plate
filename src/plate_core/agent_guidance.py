@@ -197,7 +197,7 @@ PLATE supports long-running autonomous operation (e.g. Copilot CLI `/every`, Gro
 ### Long-running command / background task protocol
 When using or encountering backgrounded commands (e.g. `run_terminal_command(..., background=true)`, host-initiated long pytest in worktree, babysit repro, or any long-running verification):
 - **Immediately record the task_id** (or identifier) returned by the backgrounding call or system reminder.
-- **Schedule proactive polling**: do not wait for system reminders. Explicitly plan and invoke `get_command_or_subagent_output` (or the `monitor` tool) at intervals (e.g., after 30s, 2m, 5m, 10m) to surface partial output, progress, and early failures in your (terse) responses. Consider using or defining a lightweight "monitor" helper that the agent can invoke to handle scheduling and reporting for background tasks.
+- **Schedule proactive polling**: do not wait for system reminders. Explicitly plan and invoke `get_command_or_subagent_output` (or the `monitor` tool) at intervals (e.g., after 30s, 2m, 5m, 10m) to surface partial output, progress, and early failures in your (terse) responses. At each poll, emit a terse one-bullet status update to the user (e.g., "still running after 2m, last output: ...") to close the visibility loop. Consider using or defining a lightweight "monitor" helper that the agent can invoke to handle scheduling and reporting for background tasks.
 - If the task is killed by the system (e.g. SIGTERM / signal 15 after hours, timeout, OOM), or exceeds a practical threshold (e.g. >10min for verification), **treat the kill as data, not "the end"**:
   - Immediately retrieve the final/partial output via the get/monitor tool.
   - Analyze it (often the useful work/failure was completed before the kill).
