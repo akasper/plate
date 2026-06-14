@@ -558,12 +558,12 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("use ask_user_question (native TUI) for PLATE Q&A", persona)
+        self.assertIn("consistently default to ask_user_question (native TUI arrow-key forms) for PLATE Q&A", persona)
         self.assertIn("follow through on answers (artifacts per ACs)", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
-        self.assertIn("always use native TUI (ask_user_question) and enforce full follow-through on answers", agents)
+        self.assertIn("consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers", agents)
 
     def test_human_review_required_before_merge_for_certain_prs(self):
         """Regression test for #549: AGENTS.md must explicitly require human review/approval before merge for Bug/Feature/Documentation PRs (and at least one review for Epics/Releases), separate from feedback-resolution for agent threads."""
@@ -597,6 +597,23 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("From a *single high-level prompt* (\"get this PR green\", \"make mergeable\", \"address all feedback\")", agents)
         self.assertIn("handle *all* agent-actionable categories (base sync/conflicts, labels, review threads, tests, etc.) in one or minimal comprehensive passes", agents)
         self.assertIn("(Addresses #519, #528, #526.)", agents)
+
+    def test_agent_consistently_defaults_to_native_tui_for_qanda_518(self):
+        """Regression test for #518: guidance, persona, and AGENTS must require agents to *consistently default to or use Grok Build native TUI interactive configurator (arrow-key forms)* for Q&A (without user reminder; with detection/fallback note)."""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("consistently default to or use", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Grok Build native TUI interactive configurator (arrow-key forms)", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("detection/fallback", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("do not require user reminders", QANDA_CURIOSITY_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("consistently default to ask_user_question (native TUI arrow-key forms)", persona)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("consistently default to native TUI (ask_user_question arrow-key forms)", agents)
+        self.assertIn("(Addresses #518, #517, #521.)", agents)
 
 
 if __name__ == "__main__":

@@ -132,7 +132,7 @@ After making the PR green (including feedback-resolution for any agent threads),
 | 4 | When the answer changes operating guidance, update `AGENTS.md` and `.agentic/skills.yml` in the same PR. |
 | 5 | Open a Documentation PR with `Closes #N` in the body. |
 
-For PLATE Q&A: always use native TUI (ask_user_question) and enforce full follow-through on answers (artifacts per ACs) with minimal corrections. See persona/guidance.
+For PLATE Q&A: consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers (artifacts per ACs) without reminder. See persona/guidance. (Addresses #518, #517, #521.)
 
 **Task**
 

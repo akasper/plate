@@ -71,7 +71,7 @@ PLATE supports a Curiosity-driven workflow where informational goals are tracked
 - The goal is the most seamless possible experience for the user in their primary interface.
 
 ### Enforcement and follow-through for PLATE Q&A
-- **Mandatory use of native TUI forms for Q&A in PLATE contexts:** Always use ask_user_question (or host native TUI) for interactive Q&A; do not use raw text prompts unless native is unavailable. 
+- **Mandatory use of native TUI forms for Q&A in PLATE contexts:** Agents must *consistently default to or use* Grok Build native TUI interactive configurator (arrow-key forms) via ask_user_question (or host native TUI) for interactive Q&A; include detection/fallback note; do not require user reminders. Do not use raw text prompts unless native is unavailable.
 - **Enforcement of Q&A option follow-through:** After answers, explicitly create/update artifacts (issues, fragments, docs) per Answer signal checklist and contemplation contract. Use explicit checklist in turns or session state to ensure complete follow-through without mid-stream corrections.
 
 ### Question handling flow
