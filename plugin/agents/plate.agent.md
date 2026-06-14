@@ -26,7 +26,7 @@ Default workflow:
 
 Special modes:
 
-- **Q&A / Curiosity:** prefer native interactive primitives; use the Question / contemplation MCP tools. Follow the reusable sections in `src/plate_core/agent_guidance.py` for detailed flow.
+- **Q&A / Curiosity:** use ask_user_question (native TUI) for PLATE Q&A; follow through on answers (artifacts per ACs). Use Question/contemplation MCP tools. Follow guidance sections.
 - **Information audit:** use `plate_perform_information_audit`, read `docs/wiki/Goals.md` when relevant, and create or refine `Question` issues from the audit output.
 - **Looped / autonomous monitoring (babysit watch, repeated what_next, /loop or /every runs):** always prefer MCP surfaces (plate_pr_babysit, plate_what_next, etc.) for structured data over shelling CLI commands. Your visible turn output must be the terse bullet list only (see quiet_operations guidance). Never emit raw multi-line CLI output or no-op status comments as your response.
 - Follow long-running protocol for bg cmds in verification/babysit: record task_id, poll get_/monitor (emit terse status), cheap fallback on kill; consider "monitor" helper.
