@@ -678,6 +678,39 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("Mark each item `completed` **immediately** when that step finishes. **Never batch**", agents)
         self.assertIn("Examples in context:", agents)
 
+    def test_worktree_isolation_robustness_514(self):
+        """Regression test for #514: pr_babysit exposes cleanup_git_locks + verify_worktree_is_isolated; rebase and babysit local-rebase paths use them; guidance/AGENTS/persona require verify + lock cleanup before worktree ops (no main checkout pollution)."""
+        import plate_core.pr_babysit as pbmod
+        self.assertTrue(hasattr(pbmod, "cleanup_git_locks"))
+        self.assertTrue(hasattr(pbmod, "verify_worktree_is_isolated"))
+        doc = getattr(pbmod, "__doc__", "") or ""
+        self.assertIn("Worktree isolation for local-rebase (and general PR fix/babysit flows) is now more robust", doc)
+        self.assertIn("(Addresses #514.)", doc)
+
+        # Helpers are callable and return expected shape
+        c = pbmod.cleanup_git_locks()
+        self.assertIn("cleaned", c)
+        self.assertIn("errors", c)
+        v = pbmod.verify_worktree_is_isolated()
+        self.assertIn("is_isolated", v)
+        self.assertIn("toplevel", v)
+
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("verify_worktree_is_isolated", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("cleanup_git_locks", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("(Addresses #514.)", QUIET_OPERATIONS_GUIDANCE)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("call cleanup_git_locks() + verify_worktree_is_isolated()", agents)
+        self.assertIn("Use isolated worktree for *all* PR changes during babysit/fixes (never main checkout)", agents)
+        self.assertIn("(Addresses #514.)", agents)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("worktree: verify_isolated + cleanup_locks before ops (no main checkout)", persona)
+        self.assertIn("(#514)", persona)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,8 @@ The pr-babysit skill/MCP surface (`gh plate pr babysit` or `plate_pr_babysit`) i
 
 Review thread handling (GraphQL pagination via reviewThreads first:100 + nodes, exact databaseId from comments, author filtering, isResolved/isOutdated, body, resolveReviewThread mutation) is fully encapsulated in the high-level helpers: babysit_pr (for detection + report), get_actionable_review_threads (for listing), resolve_review_thread (for safe resolution), and get_pr_merge_gates. Agents and calling code **must not** manually construct raw `gh api graphql`, jq filters, mktemp tempfiles, sed/NO_COLOR ANSI stripping, or the mutation. Use the Python/MCP/CLI surfaces instead (addresses #516).
 
+Worktree isolation for local-rebase (and general PR fix/babysit flows) is now more robust: helpers for lock cleanup, verification (git rev-parse --show-toplevel), and the rebase uses isolated worktree with better cleanup on errors/locks. Agents must use/verify isolated worktrees for any local changes during babysit or fixes; never pollute main checkout. (Addresses #514.)
+
 **Mandatory first step in any verification/babysit/repro flow (addresses #527):** "CI diagnosis first" — *always* fetch `gh pr checks <N>` + identify the exact failing job/run + `gh run view <run> --job <job> --log-failed` (or equivalent structured) *before* any broad/expensive local command (e.g. full pytest in worktree). Only after seeing the real current error (labels? threads? specific test failure?) decide minimal scope or if local repro is even needed. Use cheap GitHub inspection before investing CPU/time.
 
 During babysit or green-loop work, own the *full* "current failing gates" model and "make mergeable" loop (per agent_guidance "Full PR Green / Make Mergeable Loop" + new "CI Diagnosis First Protocol" and AGENTS.md babysit section):
@@ -292,6 +294,13 @@ def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = N
 
     worktree_path = None
     try:
+        # Robust lock cleanup before any git ops (addresses #514 lock incidents from prior failed babysits/subagents)
+        cleanup_git_locks(repo_dir)
+        # Verify we are (or will operate) in appropriate tree context
+        v = verify_worktree_is_isolated()
+        if not v["is_isolated"]:
+            # still proceed for rebase (which creates its own worktree) but surface warning
+            pass
         # fresh fetch
         subprocess.check_call(["git", "-C", repo_dir, "fetch", "origin", base_ref, head_ref], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -344,6 +353,61 @@ def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = N
             except Exception:
                 pass
             shutil.rmtree(worktree_path, ignore_errors=True)
+
+
+def cleanup_git_locks(repo_dir: str | None = None) -> dict:
+    """Remove common git lock files (index.lock etc.) that block rebase/push/worktree ops after prior failures, unclean exits, or main/worktree collisions (addresses #514 incidents).
+
+    Call before git operations in babysit local-rebase or any PR fix flow.
+
+    Returns: {"cleaned": [removed paths], "errors": [error msgs]}
+
+    Robust: safe if no locks or no repo.
+    """
+    if repo_dir is None:
+        try:
+            repo_dir = subprocess.check_output(
+                ["git", "rev-parse", "--show-toplevel"], text=True, cwd="."
+            ).strip()
+        except Exception as e:
+            return {"cleaned": [], "errors": [f"cannot detect repo_dir: {e}"]}
+
+    locks = [os.path.join(repo_dir, ".git", "index.lock")]
+    cleaned: list[str] = []
+    errors: list[str] = []
+    for lock_path in locks:
+        if os.path.exists(lock_path):
+            try:
+                os.unlink(lock_path)
+                cleaned.append(lock_path)
+            except Exception as e:
+                errors.append(f"{lock_path}: {e}")
+    return {"cleaned": cleaned, "errors": errors}
+
+
+def verify_worktree_is_isolated() -> dict:
+    """Verification step recommended for all worktree use during babysit/fixes (addresses #514).
+
+    Checks that current checkout appears to be an isolated worktree (not the main clone).
+    Looks for typical signals from our flows (temp dirs, 'worktree' or 'plate-' in path).
+
+    Returns: {"is_isolated": bool, "toplevel": str, "warning": str | None}
+    Use in guidance/persona: always run `git rev-parse --show-toplevel` (or this helper) before edits/rebase in worktree; abort if not isolated.
+    """
+    try:
+        toplevel = subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"], text=True, cwd="."
+        ).strip()
+        is_isolated = (
+            "worktree" in toplevel.lower()
+            or "plate-" in toplevel
+            or tempfile.gettempdir() in toplevel
+            or "/tmp/" in toplevel
+        )
+        warning = None if is_isolated else "Current toplevel does not look like an isolated worktree (locks, wrong CWD, or main checkout risk). Use worktree for all PR changes/babysit local-rebase; verify before git ops."
+        return {"is_isolated": is_isolated, "toplevel": toplevel, "warning": warning}
+    except Exception as e:
+        return {"is_isolated": False, "toplevel": "", "warning": f"git rev-parse --show-toplevel failed: {e}"}
 
 
 def babysit_pr(
@@ -406,6 +470,9 @@ def babysit_pr(
             merge_trigger_url = _post_merge_trigger(gh, target, pr_number, sync_info)
             merge_trigger_posted = True
     elif act and sync_info["out_of_sync"] and strategy == "local-rebase":
+        # Pre-clean locks and verify isolation for robustness (#514)
+        cleanup_git_locks()
+        v = verify_worktree_is_isolated()
         rebase_res = _perform_local_rebase(sync_info.get("base_ref"), sync_info.get("head_ref"))
         local_rebase_performed = True
         local_rebase_success = rebase_res.get("success", False)
