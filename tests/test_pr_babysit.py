@@ -532,8 +532,8 @@ class PrBabysitTests(unittest.TestCase):
         # Anchor in persona
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("start by using the dedicated pr-babysit skill", persona)
-        self.assertIn("rather than hand-rolling raw git + gh commands", persona)
+        self.assertIn("start with the dedicated pr-babysit skill", persona)
+        self.assertIn("instead of hand-rolling git/gh", persona)
 
 
 if __name__ == "__main__":
