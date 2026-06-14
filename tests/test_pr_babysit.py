@@ -549,6 +549,22 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("use check-work or targeted pytest", persona)
         self.assertIn("warn before long runs (see guidance)", persona)
 
+    def test_gaps_in_docs_for_qanda_and_pr_health_fixed_in_guidance(self):
+        """Regression test for #521: guidance, persona, and AGENTS must explicitly require native TUI (ask_user_question) for PLATE Q&A and integrated full PR health/babysit follow-through without repeated corrections."""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("Mandatory use of native TUI forms for Q&A in PLATE contexts", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Enforcement of Q&A option follow-through", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("ask_user_question (or host native TUI)", QANDA_CURIOSITY_GUIDANCE)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("use ask_user_question (native TUI) for PLATE Q&A", persona)
+        self.assertIn("follow through on answers (artifacts per ACs)", persona)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("always use native TUI (ask_user_question) and enforce full follow-through on answers", agents)
+
 
 if __name__ == "__main__":
     unittest.main()
