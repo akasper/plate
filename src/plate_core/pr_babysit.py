@@ -2,6 +2,8 @@
 
 The pr-babysit skill/MCP surface (`gh plate pr babysit` or `plate_pr_babysit`) is the dedicated tool for PR feedback and health work. Agents must default to it (rather than hand-rolling git/gh commands) for "babysit", "get CI passing", "address feedback", or "make PR green" instructions (addresses #524 and related). After addressing feedback, explicitly resolve the corresponding review threads (via resolveReviewThread) to satisfy the feedback-resolution check (addresses #520).
 
+Review thread handling (GraphQL pagination via reviewThreads first:100 + nodes, exact databaseId from comments, author filtering, isResolved/isOutdated, body, resolveReviewThread mutation) is fully encapsulated in the high-level helpers: babysit_pr (for detection + report), get_actionable_review_threads (for listing), resolve_review_thread (for safe resolution), and get_pr_merge_gates. Agents and calling code **must not** manually construct raw `gh api graphql`, jq filters, mktemp tempfiles, sed/NO_COLOR ANSI stripping, or the mutation. Use the Python/MCP/CLI surfaces instead (addresses #516).
+
 **Mandatory first step in any verification/babysit/repro flow (addresses #527):** "CI diagnosis first" — *always* fetch `gh pr checks <N>` + identify the exact failing job/run + `gh run view <run> --job <job> --log-failed` (or equivalent structured) *before* any broad/expensive local command (e.g. full pytest in worktree). Only after seeing the real current error (labels? threads? specific test failure?) decide minimal scope or if local repro is even needed. Use cheap GitHub inspection before investing CPU/time.
 
 During babysit or green-loop work, own the *full* "current failing gates" model and "make mergeable" loop (per agent_guidance "Full PR Green / Make Mergeable Loop" + new "CI Diagnosis First Protocol" and AGENTS.md babysit section):
@@ -458,6 +460,37 @@ mutation($threadId: ID!) {
         .get("thread", {})
     )
     return {"repo": target, "thread_id": thread.get("id", thread_id), "resolved": bool(thread.get("isResolved"))}
+
+
+def get_actionable_review_threads(
+    pr_number: int,
+    repo: str | None = None,
+    agent_logins: str | None = None,
+    *,
+    client: GhClient | None = None,
+) -> list[dict]:
+    """High-level encapsulated helper for listing actionable review threads.
+
+    Returns list of dicts (thread_id, comment_id=databaseId, author, url, body) for
+    unresolved, non-outdated threads from configured or default third-party agents.
+
+    Internally uses the exact GraphQL load (reviewThreads(first:100), comments, databaseId,
+    author login) + extraction + filtering. Pagination stub (first:100 sufficient for typical
+    PR feedback volume; extend with pageInfo cursors in future if >100 needed).
+
+    **Agents must use this (or the counts/actionables from babysit_pr / get_pr_merge_gates)
+    + resolve_review_thread (or the plate_pr_babysit + plate_resolve_review_thread MCP/CLI surfaces)
+    instead of any raw GraphQL, jq, mktemp, sed, NO_COLOR=1, or manual mutation construction.**
+    This fully addresses #516 (encapsulation of review thread handling).
+
+    See pr-babysit docstring, agent_guidance QUIET_OPERATIONS_GUIDANCE (Full PR Green), and
+    AGENTS.md babysit section.
+    """
+    target = resolve_repo(repo)
+    gh = client or GhClient()
+    pr_data = _load_pr_data(gh, target, pr_number)
+    threads = pr_data.get("reviewThreads", [])
+    return _extract_actionable_threads(threads, agent_logins)
 
 
 def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhClient | None = None) -> dict:

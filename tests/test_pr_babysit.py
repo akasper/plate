@@ -533,7 +533,7 @@ class PrBabysitTests(unittest.TestCase):
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
         self.assertIn("start with the dedicated pr-babysit skill", persona)
-        self.assertIn("instead of hand-rolling git/gh", persona)
+        self.assertIn("instead of hand-rolling", persona)
 
     def test_verification_strategy_in_guidance(self):
         """Regression test for #523: verification strategy (narrow/targeted first with check-work skill, warn before long runs >5-10min, cross-ref to CI Diagnosis/long-running) must be present in shipped guidance and persona."""
@@ -577,8 +577,8 @@ class PrBabysitTests(unittest.TestCase):
         """Regression test for #520: AGENTS.md and pr_babysit instructions must require explicitly resolving review threads (via resolveReviewThread) after addressing feedback to clear the feedback-resolution check."""
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
-        self.assertIn("resolve its review thread using the GitHub GraphQL `resolveReviewThread` mutation", agents)
         self.assertIn("resolve addressed threads via `plate_resolve_review_thread`", agents)
+        self.assertIn("encapsulated helper", agents)
 
         import plate_core.pr_babysit as mod
         doc = getattr(mod, "__doc__", "") or ""
@@ -625,6 +625,33 @@ class PrBabysitTests(unittest.TestCase):
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
         self.assertIn("Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress", agents)
+
+    def test_review_thread_handling_encapsulated_516(self):
+        """Regression test for #516: pr_babysit skill + MCP + guidance + AGENTS + persona require use of encapsulated high-level helpers (get_actionable_review_threads / plate_get_actionable_review_threads + resolve_review_thread / plate_resolve...) for review threads; pagination, DBID, ANSI, mutation handled internally. Forbid hand-rolling GraphQL/jq/mktemp/sed."""
+        import plate_core.pr_babysit as pbmod
+        doc = getattr(pbmod, "__doc__", "") or ""
+        self.assertIn("fully encapsulated in the high-level helpers", doc)
+        self.assertIn("**must not** manually construct raw `gh api graphql`, jq filters", doc)
+        self.assertIn("get_actionable_review_threads", doc)
+        self.assertIn("(addresses #516)", doc)
+
+        # Public helper exists and is importable
+        self.assertTrue(hasattr(pbmod, "get_actionable_review_threads"))
+
+        with open("src/plate_core/agent_guidance.py", encoding="utf-8") as f:
+            guidance = f.read()
+        self.assertIn("encapsulated helpers (get_actionable_review_threads", guidance)
+        self.assertIn("Do not hand-roll raw GraphQL, jq, mktemp, sed/NO_COLOR", guidance)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("use plate_pr_babysit + plate_get_actionable_review_threads + plate_resolve_review_thread (encapsulated", agents)
+        self.assertIn("Do not hand-roll GraphQL/jq/mktemp/sed", agents)
+
+        with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
+            persona = f.read()
+        self.assertIn("Use encapsulated review thread helpers (plate_get_actionable", persona)
+        self.assertIn("#516", persona)
 
 
 if __name__ == "__main__":
