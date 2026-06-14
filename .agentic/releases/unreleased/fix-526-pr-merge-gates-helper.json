@@ -1,0 +1,10 @@
+{
+  "slug": "fix-526-pr-merge-gates-helper",
+  "change_type": "fix",
+  "surface": "src/plate_core/pr_babysit.py (new get_pr_merge_gates helper + docstring updates), plugin/agents/plate.agent.md (example), AGENTS.md (explicit checklist in babysit section), src/plate_core/agent_guidance.py (references)",
+  "summary": "Enhance pr-babysit skill with get_pr_merge_gates helper (enumerates common merge gates like labels, feedback threads, CI, base sync for comprehensive 'make this PR mergeable'). Document checklist in AGENTS.md and add one high-level goal -> comprehensive fix example in persona. Reinforces the Full PR Green loop to address sequential single-fix behavior.",
+  "migration_impact": "Agents will now use the get_pr_merge_gates helper (via skill docs) + plate_pr_babysit for a single comprehensive pass over all gates instead of sequential fixes. Improves efficiency for PR health work. No template changes; downstream agents get better behavior via updated guidance/persona/skill.",
+  "agent_notes": "When given 'get this PR green' or 'address feedback': call/use the get_pr_merge_gates helper from pr-babysit skill (or equivalent inspection) to get the full checklist of gates (labels, threads, CI via gh pr checks, etc.), fix what you can autonomously, push to existing branch, re-inspect, repeat until only human items. See Full PR Green loop in guidance, checklist in AGENTS.md, and example in persona. Use plate_pr_babysit by default. (Addresses #526 and related PR-green Bugs.)",
+  "links": ["#526"],
+  "breaking": false
+}

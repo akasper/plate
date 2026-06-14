@@ -23,7 +23,7 @@ from .epics import get_epic_status
 from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
-from .pr_babysit import babysit_pr, resolve_review_thread
+from .pr_babysit import babysit_pr, get_pr_merge_gates, resolve_review_thread
 from .plate_config import apply_plate_config_upgrade, get_plate_config_report, init_plate_config
 from .release import (
     cleanup_dead_branches,
@@ -230,6 +230,17 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 act=bool(args.get("act", False)),
                 branch_update_strategy=args.get("branch_update_strategy"),
             ).to_dict()
+        elif name == "plate_get_pr_merge_gates":
+            pr_number = args.get("pr_number")
+            if pr_number is None:
+                raise ValueError("pr_number is required")
+            pr_number = int(pr_number)
+            if pr_number <= 0:
+                raise ValueError("pr_number must be > 0")
+            payload = get_pr_merge_gates(
+                pr_number=pr_number,
+                repo=args.get("repo"),
+            )
         elif name == "plate_resolve_review_thread":
             thread_id = args.get("thread_id")
             if not thread_id:
@@ -691,6 +702,24 @@ def run() -> None:
                                                 "How to handle out-of-sync base branch: copilot-request (default, triggers Copilot merge assist), "
                                                 "local-rebase (local worktree rebase+push), or none (detect only)."
                                             ),
+                                        },
+                                    },
+                                    "required": ["pr_number"],
+                                },
+                            },
+                            {
+                                "name": "plate_get_pr_merge_gates",
+                                "description": "Get comprehensive merge gates status for a PR using the get_pr_merge_gates helper (merge state, threads, note with checklist). Complements plate_pr_babysit for full 'make mergeable' ownership per #526.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "pr_number": {
+                                            "type": "integer",
+                                            "description": "Pull request number.",
                                         },
                                     },
                                     "required": ["pr_number"],

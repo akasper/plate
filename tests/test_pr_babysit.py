@@ -449,6 +449,35 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("*before* launching any broad or long-running local command", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
 
+    def test_get_pr_merge_gates_returns_expected_keys(self):
+        """Regression test for #526: get_pr_merge_gates helper returns the expected keys (merge_state, out_of_sync, unresolved_review_threads, actionable_agent_threads, note)."""
+        from plate_core.pr_babysit import get_pr_merge_gates
+        repo = "akasper/plate"
+        pr = 112
+        pr_data_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "BEHIND",
+                        "baseRefName": "main",
+                        "headRefName": "feature-branch",
+                        "reviewThreads": {"nodes": []},
+                    }
+                }
+            }
+        }
+        fake = _FakeClient(
+            responses={
+                ("graphql", "POST"): pr_data_payload,
+            }
+        )
+        result = get_pr_merge_gates(pr_number=pr, repo=repo, client=fake)
+        self.assertIn("merge_state", result)
+        self.assertIn("out_of_sync", result)
+        self.assertIn("unresolved_review_threads", result)
+        self.assertIn("actionable_agent_threads", result)
+        self.assertIn("note", result)
+
 
 if __name__ == "__main__":
     unittest.main()

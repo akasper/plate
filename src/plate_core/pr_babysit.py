@@ -355,6 +355,8 @@ def babysit_pr(
 ) -> BabysitReport:
     """Babysit a pull request for actionable third-party agent feedback and base branch sync.
 
+    Use get_pr_merge_gates for the comprehensive 'make this PR mergeable' helper (enumerates common gates like labels, CI, threads, etc., per #526).
+
     Args:
         pr_number: Pull request number
         repo: Repository identifier (owner/name), defaults to git remote
@@ -456,3 +458,45 @@ mutation($threadId: ID!) {
         .get("thread", {})
     )
     return {"repo": target, "thread_id": thread.get("id", thread_id), "resolved": bool(thread.get("isResolved"))}
+
+
+def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhClient | None = None) -> dict:
+    """Helper in the pr-babysit skill (or small procedure) to enumerate and address common merge gates for a comprehensive 'make this PR mergeable' operation.
+
+    This addresses the core issue in #526: instead of sequential single fixes, use this to inspect all at once.
+
+    Common gates (from PLATE + GitHub):
+    - Labels (type like Bug/Feature, area:*, risk:*, Epic: if applicable)
+    - Merge state / base sync (BEHIND/CONFLICTING/DIRTY -> use babysit rebase or copilot-request)
+    - Feedback-resolution: unresolved review threads (esp. from agents) -> use plate_pr_babysit + resolve
+    - CI/test jobs, title check, issue-link check, feature-change-files (fragments), audit, deploy, etc.
+    - Other: documentation gate if applicable.
+
+    Usage (agent procedure):
+    1. Call plate_pr_babysit (or this if exposed) + gh pr checks <N> + gh issue view <N> for labels.
+    2. Fix what you can in worktree (rebase, labels via gh pr edit, resolve threads, apply suggestions, fix tests).
+    3. Push once (or minimal).
+    4. Re-inspect all.
+    5. Repeat until only human items (e.g. actual CHANGES_REQUESTED from owner, high-risk) remain.
+    6. Report one-sentence summary of remaining.
+
+    See Full PR Green / Make Mergeable Loop in agent_guidance.py QUIET_OPERATIONS_GUIDANCE, the checklist in AGENTS.md babysit section, and persona example.
+
+    Returns dict with key statuses from babysit logic + note on full checklist.
+    """
+    target = resolve_repo(repo)
+    gh = client or GhClient()
+    pr_data = _load_pr_data(gh, target, pr_number)
+    sync_info = _detect_base_branch_out_of_sync(pr_data)
+    threads = pr_data.get("reviewThreads", [])
+    actionable = _extract_actionable_threads(threads, None)
+
+    return {
+        "repo": target,
+        "pr_number": pr_number,
+        "merge_state": sync_info.get("state"),
+        "out_of_sync": sync_info.get("out_of_sync"),
+        "unresolved_review_threads": len([t for t in threads if not t.get("isResolved") and not t.get("isOutdated")]),
+        "actionable_agent_threads": len(actionable),
+        "note": "Use plate_pr_babysit + gh pr checks + gh issue view for full gates (labels, CI, title, docs, etc.). Fix comprehensively in one loop per the guidance. Escalate only human items with need:human-review.",
+    }
