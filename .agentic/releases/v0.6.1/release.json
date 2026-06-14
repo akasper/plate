@@ -1,0 +1,223 @@
+{
+  "version": "0.6.1",
+  "summary": "PLATE 0.6.1 -- 21 change(s): fix-375-copilot-direct-install-deprecation-ci-smoke, fix-503-qanda-follow-through-inconsistency, fix-513-require-proactive-gh-plate-release-status, fix-514-robust-worktree-isolation-pr-babysit, fix-515-require-todo-write-for-complex-tasks....",
+  "cut_at": "2026-06-14T16:52:42Z",
+  "fragment_count": 21,
+  "fragment_slugs": [
+    "fix-375-copilot-direct-install-deprecation-ci-smoke",
+    "fix-503-qanda-follow-through-inconsistency",
+    "fix-513-require-proactive-gh-plate-release-status",
+    "fix-514-robust-worktree-isolation-pr-babysit",
+    "fix-515-require-todo-write-for-complex-tasks",
+    "fix-516-encapsulate-review-thread-handling",
+    "fix-517-qanda-follow-through-enforce-in-turn",
+    "fix-518-consistently-default-native-tui-qanda",
+    "fix-519-complete-babysit-make-green",
+    "fix-520-require-resolve-review-threads-after-feedback",
+    "fix-521-gaps-in-agent-docs-for-qanda-pr-health",
+    "fix-523-verification-strategy",
+    "fix-524-default-to-pr-babysit-skill",
+    "fix-525-background-task-protocol",
+    "fix-526-pr-merge-gates-helper",
+    "fix-527-ci-diagnosis-first",
+    "fix-528-full-pr-green-loop",
+    "fix-529-long-running-command-protocol",
+    "fix-532-release-pr-labels-and-guidance",
+    "fix-549-require-human-review-before-merge",
+    "bootstrap-scaffolding-copy"
+  ],
+  "entries": [
+    {
+      "change_type": "fix",
+      "surface": ".github/workflows/ci.yml (removed deprecated direct workspace-path smoke; unconditional marketplace smoke), tests/e2e/copilot-plugin.spec.ts (added deprecation note referencing #375), docs (various references to direct install smoke updated or noted in follow-up)",
+      "migration_impact": "CI no longer exercises or depends on the deprecated direct `copilot plugin install <local-path>`. Plugin install validation continues via the marketplace @ syntax smoke (now always-on) + structure/e2e tests + gh plate manifest/features checks. Downstream repos using similar Copilot plugin smokes should migrate to marketplace syntax or non-install validation to avoid hangs. No breaking change to the plate plugin itself (still supports copilot-plugin surface).",
+      "agent_notes": "The direct workspace path smoke (`copilot plugin install \"$GITHUB_WORKSPACE\"`) was removed from CI because Copilot CLI deprecates direct/local installs (only @marketplace supported long-term). Use the marketplace smoke or `gh plate` / manifest validation for plugin health. If running copilot plugin install locally for dev, expect deprecation warnings; prefer `copilot plugin install plate-core@...` after marketplace add. See updated ci.yml, e2e note, and #375. (Addresses #375 follow-up from Epic #282.)",
+      "links": [
+        "#375"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plugin/agents/plate.agent.md (Q&A bullet), src/plate_core/agent_guidance.py (QANDA_CURIOSITY_GUIDANCE enforcement), AGENTS.md (Q&A para + Task Management example), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents under the plate persona will more reliably complete promised review/babysit/address steps (via pr-babysit + worktree discipline) before advancing in Q&A or Epic refinement flows. Reduces drift between Q&A promises and executed work; improves human checkpoints and repository-as-truth. No template/config changes; persona/guidance updates are automatic for PLATE adopters.",
+      "agent_notes": "When presenting ask_user_question options for PLATE (e.g. during Epic #470 refinement): if an option includes review/babysit/address feedback, *do not* offer it unless you will fully execute the work in this turn/session using the pr-babysit skill (or MCP plate_pr_babysit + plate_resolve_review_thread), isolated worktree for changes, push to the *same* PR branch, and resolve threads. Use todo_write for the steps. Complete before next Q&A or summary. On mismatch with past behavior, document and correct immediately. See updated Enforcement in guidance and persona Q&A bullet. (Addresses #503 and related Q&A stubs #517, #508; aligns with atomic PR discipline, no self-merge, feedback-resolution.)",
+      "links": [
+        "#503"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plugin/agents/plate.agent.md (default workflow + routing strengthened), src/plate_core/agent_guidance.py (new Release Status Protocol subsection in QUIET_OPERATIONS_GUIDANCE), AGENTS.md (branch model, PR creation, babysit, documentation rules sections strengthened with 'MUST run proactively as very first step'), src/plate_core/pr_babysit.py (docstring update requiring it before calls + surface base/fragments), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents will now always run `gh plate release status` first for correct --base, pending fragments, and release context before any PR or branch action. This prevents wrong-base PRs, re-targeting, and ceremony misalignment. Updates apply via plate persona/guidance; no template changes needed. Downstream repos following plate will see more reliable PR targeting in agent flows.",
+      "agent_notes": "For *any* Bug/Feature work, babysit, or PR health: run `gh plate release status` *immediately as the very first action* before thinking about branches, --base, gh pr create, rebase, or calling babysit_pr. Use its output for the correct target (release for legacy; release-* for multi-track), to see pending fragments in .agentic/releases/unreleased/, the active Next Release #530, etc. In pr-babysit flows, confirm alignment first. See new Release Status Protocol in guidance, strengthened 'For agents opening PRs' and work loops in AGENTS.md, and pr_babysit docstring. (Addresses #513; aligns with Branch Model, Documentation Rules, and previous 'always run before PR' guidance.)",
+      "links": [
+        "#513"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pr_babysit.py (cleanup_git_locks + verify_worktree_is_isolated public helpers; integrated into _perform_local_rebase + local-rebase path in babysit_pr + docstring), src/plate_core/agent_guidance.py (worktree verify/cleanup in Full PR Green), AGENTS.md (babysit section: patterns, lock cleanup, verify, no main checkout), plugin/agents/plate.agent.md (worktree note in babysit bullet), tests/test_pr_babysit.py (regression test for helpers + docs requirement)",
+      "migration_impact": "Agents must now proactively verify isolation and cleanup locks when using worktrees for PR fixes or babysit local-rebase (via the new pr-babysit helpers or equivalent git commands). This prevents lock collisions, wrong-CWD edits, and main checkout pollution. Downstream agents following the plate persona/guidance will be more reliable in worktree scenarios. No breaking changes to existing call sites; helpers are additive.",
+      "agent_notes": "Before any rebase, push, edit, or test run in a babysit/fix context: call cleanup_git_locks() (or rm -f .git/index.lock) and verify_worktree_is_isolated() (or git rev-parse --show-toplevel and check for worktree/temp/plate- indicators). Always operate in fresh isolated worktree for the PR branch (git worktree add ...); cd to it or use -C; verify toplevel; cleanup with git worktree remove --force + rm -rf on exit. Use the pr-babysit skill's local-rebase strategy or the helpers for encapsulation. See updated pr_babysit docstring, guidance Full PR Green, and AGENTS babysit details. (Addresses #514; complements local-rebase in #520-era babysit work.)",
+      "links": [
+        "#514"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plugin/agents/plate.agent.md (new Special mode bullet), src/plate_core/agent_guidance.py (TASK_MANAGEMENT_GUIDANCE + export in get_agent_guidance_sections), AGENTS.md (new ## Task Management section with rules + babysit/Q&A examples), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents using the plate persona will now automatically create and maintain visible todo lists for any qualifying multi-step work (babysits, Q&A, PR health, release steps). This improves user visibility, step discipline, and auditability. No template or config changes required for downstream repos; the persona/guidance updates apply automatically when the plate persona is active.",
+      "agent_notes": "At the beginning of babysit, 'get PR #N green', Q&A refinement, or any 3+ step flow: call todo_write with the plan. Mark each todo completed right after the step (e.g. after a successful targeted pytest or after resolving a thread and pushing). Never wait to batch completions. Use to record 'need:human-review' items. See the new TASK_MANAGEMENT_GUIDANCE, AGENTS.md Task Management section, and persona Special modes bullet. (Addresses #515; aligns with host system prompt Task Management and the todo_write contract.)",
+      "links": [
+        "#515"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pr_babysit.py (new get_actionable_review_threads helper + docstring), src/plate_core/mcp_server.py (plate_get_actionable_review_threads MCP tool + import), src/plate_core/agent_guidance.py (Full PR Green + review thread bullets), AGENTS.md (babysit section + steps), plugin/agents/plate.agent.md (babysit bullet), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents must now route all review thread discovery + resolution through pr-babysit skill surfaces (babysit_pr, get_actionable_review_threads, resolve_review_thread, plate_pr_babysit, plate_get_actionable_review_threads, plate_resolve_review_thread). Raw low-level GraphQL recipes are no longer to be used or taught in agent flows. Downstream repos get more reliable, less error-prone feedback resolution in babysit/green loops. No other config changes.",
+      "agent_notes": "For any PR feedback, babysit, or 'get green': use plate_pr_babysit (or Python babysit_pr) to detect actionable threads, plate_get_actionable_review_threads (or get_actionable_review_threads) to list them with full details, and plate_resolve_review_thread / resolve_review_thread to mark resolved after fixes. The helpers manage pagination (first:100), databaseId from comments.nodes, author matching (default third-party patterns or provided), safe bodies. Never emit or execute your own gh api graphql + jq + mktemp + sed for threads. See updated pr_babysit docstring, guidance Full PR Green section, and AGENTS babysit steps. (Addresses #516, builds on #520 resolve requirement and #519/#526 full-green loop.)",
+      "links": [
+        "#516"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/agent_guidance.py (QANDA_CURIOSITY_GUIDANCE follow-through bullet), AGENTS.md (Question work loop), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents will more strictly limit Q&A options to in-turn executable+documented work, preventing the 'offer review then proceed without doing it' drift. Reduces need for user corrections in planning/Q&A sessions. No template changes.",
+      "agent_notes": "When presenting ask_user_question options for PLATE (e.g. review PR / babysit / address feedback), only offer those you will *fully execute in this turn* (including push to same branch, resolve threads via plate_resolve_review_thread or GraphQL, update artifacts per ACs). Use checklist; after answer, complete before new Q&A or summary. See updated Enforcement bullet. (Addresses #517 and related #503, #508, #521 cluster.)",
+      "links": [
+        "#517"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plugin/agents/plate.agent.md (Q&A bullet), src/plate_core/agent_guidance.py (QANDA_CURIOSITY_GUIDANCE enforcement), AGENTS.md (Question handling), tests/test_pr_babysit.py (regression test for #518)",
+      "migration_impact": "Agents operating under the plate persona will more reliably and consistently use the host's native TUI (arrow-key forms) for interactive Q&A flows in PLATE contexts, with less need for user corrections or reminders. Follow-through rules reinforced. No template or downstream config changes required.",
+      "agent_notes": "Always prefer/ default to ask_user_question (native TUI arrow-key configurator) for Q&A/Curiosity in PLATE; surface detection/fallback only if native unavailable; never require user reminder to use it. After answer, follow through by creating/updating artifacts per ACs/answer_signal. See updated Enforcement section and persona bullet. (Addresses #518 and related Q&A stubs #517, #509, #508, #503; builds on #521.)",
+      "links": [
+        "#518"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/agent_guidance.py (Full PR Green loop), AGENTS.md (babysit section), src/plate_core/pr_babysit.py (docstring), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents will now treat 'turn PR green' as an atomic, comprehensive flow rather than sequential fixes requiring user diagnosis for each gate. Improves efficiency for PR health. The underlying skill and helper already support it; this makes the end-to-end procedure explicit in docs and tested. No template changes.",
+      "agent_notes": "For high-level 'get this PR green', 'make mergeable', 'address all feedback': use the pr-babysit skill + get_pr_merge_gates to inspect ALL gates at once (conflicts, labels, threads, CI, etc.), address what you can (rebase with strategy, edit labels, resolve threads, targeted test fixes), push to existing, re-inspect, repeat until only human items. Report one-sentence summary only at end. See updated Full PR Green loop and babysit section. (Addresses #519 and related incomplete procedure Bugs.)",
+      "links": [
+        "#519"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "AGENTS.md (babysit section, explicit thread resolution guidance), src/plate_core/pr_babysit.py (docstring emphasis on resolve step), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents babysitting PRs will now explicitly resolve addressed threads (via plate_resolve_review_thread or GraphQL) as part of the standard flow, ensuring feedback-resolution passes without extra prompting. The resolve function and usage in babysit already existed; this makes the expectation and mechanics documented and tested. No template changes.",
+      "agent_notes": "After addressing a review comment (code or reply), query the threads if needed, then call resolveReviewThread (or plate_resolve_review_thread) for the threadId (from reviewThreads nodes). Do this for all addressed threads to satisfy the check. Escalate owner reviews with need:human-review if unsure. See new section in AGENTS.md \u00a7babysit and updated pr_babysit docstring. (Addresses #520.)",
+      "links": [
+        "#520"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plugin/agents/plate.agent.md (Q&A bullet), src/plate_core/agent_guidance.py (QANDA section), AGENTS.md (Question handling), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents will more reliably use native TUI for Q&A and complete PR health flows end-to-end with less correction. Updates to guidance/persona apply via plate persona. No template changes.",
+      "agent_notes": "For Q&A: always use ask_user_question native TUI forms for interactive prompts in PLATE (not raw text); follow through by creating/updating artifacts (Questions, issues, etc.) per answer_signal and ACs. For PR health: use the full integrated babysit flow (pr_babysit + gates + verification). See strengthened sections in persona/guidance/AGENTS. (Addresses #521 and related gaps from Q&A/babysit sessions.)",
+      "links": [
+        "#521"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/agent_guidance.py (new Verification Strategy section), plugin/agents/plate.agent.md (verification bullet), AGENTS.md (babysit/verification examples), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents will now use more efficient verification (targeted runs, skills first), warn on long operations, reducing wasted compute and improving user visibility. No template changes; updates to guidance/persona apply to plate persona users.",
+      "agent_notes": "When asked to verify changes, reproduce failure, or run tests in worktree: prefer check-work skill or minimal targeted command (from CI log or -k), warn if expected >5-10min, use background+polling per long-running protocol if needed. See new section in quiet_operations guidance. (Addresses #523.)",
+      "links": [
+        "#523"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plugin/agents/plate.agent.md (strengthen default to skill for babysit work), src/plate_core/agent_guidance.py (Full PR Green section), src/plate_core/pr_babysit.py (docstring), tests/test_pr_babysit.py (new regression test), AGENTS.md (babysit section examples)",
+      "migration_impact": "Agents using the plate persona or updated guidance will now prefer the higher-level pr-babysit skill for PR health work, leading to more consistent behavior, better isolation, and less duplication of low-level logic. The skill surface is already present; no template changes required.",
+      "agent_notes": "When the high-level goal is babysit/get-green/address-feedback/make-mergeable: invoke the pr-babysit skill first (gh plate pr babysit or MCP plate_pr_babysit) rather than raw commands. Only fall back to git/gh when the skill doesn't cover (and note why). See the strengthened language in persona/guidance and the default instruction now in pr_babysit.py docstring. (Addresses #524.)",
+      "links": [
+        "#524"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/agent_guidance.py (enhanced Long-running command / background task protocol), plugin/agents/plate.agent.md (updated background bullet), AGENTS.md (babysit section example for background tasks), tests/test_pr_babysit.py (regression test)",
+      "migration_impact": "Agents will now proactively poll background tasks (e.g. long pytest) using scheduled get_ or monitor calls rather than reacting to reminders, providing timely partial output and status to users. Improves visibility and reduces session waste during babysit/verification. No template changes required; updated guidance/persona will be adopted by agents using the plate persona.",
+      "agent_notes": "For any background:true or known long-running cmd (e.g. in pr-babysit repros): record task_id immediately, then proactively schedule and call get_command_or_subagent_output or monitor at intervals (30s/2m/5m) to poll and surface partial results in terse bullets. Do not wait for 'task ended' system messages. Consider invoking a lightweight monitor helper if available. Ties into CI Diagnosis First and Full PR Green loop. (Addresses #525 and related long-running Bugs like #529.)",
+      "links": [
+        "#525"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pr_babysit.py (new get_pr_merge_gates helper + docstring updates), plugin/agents/plate.agent.md (example), AGENTS.md (explicit checklist in babysit section), src/plate_core/agent_guidance.py (references)",
+      "migration_impact": "Agents will now use the get_pr_merge_gates helper (via skill docs) + plate_pr_babysit for a single comprehensive pass over all gates instead of sequential fixes. Improves efficiency for PR health work. No template changes; downstream agents get better behavior via updated guidance/persona/skill.",
+      "agent_notes": "When given 'get this PR green' or 'address feedback': call/use the get_pr_merge_gates helper from pr-babysit skill (or equivalent inspection) to get the full checklist of gates (labels, threads, CI via gh pr checks, etc.), fix what you can autonomously, push to existing branch, re-inspect, repeat until only human items. See Full PR Green loop in guidance, checklist in AGENTS.md, and example in persona. Use plate_pr_babysit by default. (Addresses #526 and related PR-green Bugs.)",
+      "links": [
+        "#526"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/agent_guidance.py (new 'CI Diagnosis First Protocol' subsection), src/plate_core/pr_babysit.py (docstring), AGENTS.md (babysit section examples), plugin/agents/plate.agent.md, tests/test_pr_babysit.py",
+      "migration_impact": "Agents will now default to cheap CI-side diagnosis first (via gh pr checks + targeted run view on the failing job) before any expensive local verification. This avoids wasted multi-hour runs on stale or irrelevant failures (labels/threads instead of tests) and speeds diagnosis. No change to templates or downstream behavior unless they customize guidance; the protocol improves efficiency of PR health work.",
+      "agent_notes": "For 'get CI passing', 'reproduce the failure', babysit, or green work: *mandatory first step* is CI diagnosis (gh pr checks + run view on exact failing job) before any `python -m pytest` or broad local cmd. Use the output to pick cheap targeted repro only if needed. See new subsection in quiet_operations guidance, updated pr_babysit docstring, and AGENTS.md examples (addresses #527 and complements the full green loop from #528 and long-running protocol from #529).",
+      "links": [
+        "#527"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/agent_guidance.py (new Full PR Green section in QUIET_OPERATIONS_GUIDANCE), src/plate_core/pr_babysit.py (docstring + skill), plugin/agents/plate.agent.md, AGENTS.md (babysit section), tests/test_pr_babysit.py",
+      "migration_impact": "Agents using the plate persona or updated guidance will now own the full 'make PR green' / babysit loop with systematic gate inspection and agent-driven iteration (fewer micro-cycles of user prompting). Downstream repos get the improved behavior when they adopt the updated guidance/persona/skill; no template changes required beyond guidance refresh.",
+      "agent_notes": "For any 'get PR green', 'make mergeable', 'address feedback', or babysit instruction: build 'current failing gates' model via comprehensive inspection (plate_pr_babysit + gh pr checks + labels + threads), address actionable items in worktree (rebase, suggestions, labels, resolve threads, cheap tests), push to *existing* branch, re-inspect, repeat. Report one-sentence human summary *only* after exhausting agent actions. Escalate judgment items with need:human-review. Default to the pr-babysit skill surface. See new guidance subsection and updated AGENTS.md (addresses #528 and cluster of PR-green Bugs like #526/#519/#510).",
+      "links": [
+        "#528"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/agent_guidance.py (QUIET_OPERATIONS_GUIDANCE), plugin/agents/plate.agent.md, src/plate_core/pr_babysit.py (docstring), tests/test_pr_babysit.py",
+      "migration_impact": "Agents following the plate persona or updated guidance will now recover from killed background verification tasks (e.g. long pytest) by surfacing output and falling back to cheap repros. No action required for downstream PLATE repos unless they customize guidance; the protocol improves reliability of babysit and PR-green flows.",
+      "agent_notes": "In any verification, repro, or babysit work: when backgrounding commands, record the task_id, poll get_command_or_subagent_output periodically, and on kill/timeout treat it as signal to analyze partial output and switch to minimal targeted command derived from CI logs. See the new protocol subsection in quiet_operations guidance and the pr-babysit skill instructions. This directly addresses the stub ACs in #529 (and related Bugs 523,525,527 etc.).",
+      "links": [
+        "#529"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "AGENTS.md (Release work loop + ceremony details), scripts/cut_release.py (next-steps guidance), .github/workflows/ci.yml (heavy-release legacy 'release' activation)",
+      "migration_impact": "Repos following the updated AGENTS.md or the printed 'Next steps' from cut_release.py will now include the complete label set on Release PRs. No change for repos that already applied the Release label manually.",
+      "agent_notes": "The root cause of #532 was following the literal (but incomplete) text in the Release work loop. Always run gh plate release status before the final PR, use both --label \"Documentation\" --label \"Release\" (the latter is required for heavy CI and ceremony validation even in legacy mode), and include Closes for the versioned Release issue (the one renamed from 'Next Release').",
+      "links": [
+        "#532"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "AGENTS.md (Authority Model, Bug/Feature work loops, PR discipline, autonomous mode, human checkpoints, feedback-resolution notes), .github/workflows/feedback-resolution-check.yml (note that it is for agent threads, not human approval)",
+      "migration_impact": "Agents will no longer self-merge Bug/Feature/Doc PRs after green; they must pause for human review/approval (add need:human-review if blocked, or wait for human to merge). This aligns agent behavior with the written doctrine ('human keeps judgment', 'Must wait for human merge' in normal mode, 'merge approval' under human must decide). No template changes; downstream repos should set branch protection for required reviews on integration branches if not already. Autonomous mode eligibility already excludes PRs with need:human-review.",
+      "agent_notes": "After making a Bug/Feature/Doc PR green (including feedback-resolution for agent threads), do not merge yourself. Post a summary, add any needed labels, and wait for human review/approval (Approved review or human performs the merge). Use 'need:human-review' if escalation needed. For Epics/Releases, ensure at least one review. See updated sections in AGENTS.md. (Addresses #549 and the user request for explicit review gates.)",
+      "links": [
+        "#549"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "src/plate_core/bootstrap.py, src/plate_core/template_payload/**, docs/bootstrap/new-repository-checklist.md",
+      "migration_impact": "Downstream repositories initialized with `gh plate bootstrap --apply` will now receive the repository-level PLATE scaffold (AGENTS, docs, workflows, scripts, starter assets) in addition to the existing GitHub-side bootstrap work. Rerunning bootstrap leaves existing files untouched.",
+      "agent_notes": "Treat the template payload manifest as the source of truth for repository-scaffold files. The new bootstrap phase uploads the selected payload files through the GitHub contents API and skips any file that already exists. `.plate` remains a separate bootstrap artifact.",
+      "links": [
+        "#413",
+        "#414",
+        "#415",
+        "#416"
+      ]
+    }
+  ]
+}
