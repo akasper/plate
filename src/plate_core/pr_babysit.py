@@ -1,6 +1,6 @@
 """Local PR feedback babysitting helpers.
 
-The pr-babysit skill/MCP surface (`gh plate pr babysit` or `plate_pr_babysit`) is the dedicated tool for PR feedback and health work. Agents must default to it (rather than hand-rolling git/gh commands) for "babysit", "get CI passing", "address feedback", or "make PR green" instructions (addresses #524 and related).
+The pr-babysit skill/MCP surface (`gh plate pr babysit` or `plate_pr_babysit`) is the dedicated tool for PR feedback and health work. Agents must default to it (rather than hand-rolling git/gh commands) for "babysit", "get CI passing", "address feedback", or "make PR green" instructions (addresses #524 and related). After addressing feedback, explicitly resolve the corresponding review threads (via resolveReviewThread) to satisfy the feedback-resolution check (addresses #520).
 
 **Mandatory first step in any verification/babysit/repro flow (addresses #527):** "CI diagnosis first" — *always* fetch `gh pr checks <N>` + identify the exact failing job/run + `gh run view <run> --job <job> --log-failed` (or equivalent structured) *before* any broad/expensive local command (e.g. full pytest in worktree). Only after seeing the real current error (labels? threads? specific test failure?) decide minimal scope or if local repro is even needed. Use cheap GitHub inspection before investing CPU/time.
 
