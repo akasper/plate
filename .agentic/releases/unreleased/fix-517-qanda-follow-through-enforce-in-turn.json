@@ -1,0 +1,10 @@
+{
+  "slug": "fix-517-qanda-follow-through-enforce-in-turn",
+  "change_type": "fix",
+  "surface": "src/plate_core/agent_guidance.py (QANDA_CURIOSITY_GUIDANCE follow-through bullet), AGENTS.md (Question work loop), tests/test_pr_babysit.py (regression test)",
+  "summary": "Strengthen Q&A follow-through enforcement in guidance and AGENTS: options offered via ask_user_question must only include actions whose full follow-through (artifact creation + execution) will complete in the current turn; do not advance/offer next or declare done until prior is done. Add regression test for the #517 AC phrases.",
+  "migration_impact": "Agents will more strictly limit Q&A options to in-turn executable+documented work, preventing the 'offer review then proceed without doing it' drift. Reduces need for user corrections in planning/Q&A sessions. No template changes.",
+  "agent_notes": "When presenting ask_user_question options for PLATE (e.g. review PR / babysit / address feedback), only offer those you will *fully execute in this turn* (including push to same branch, resolve threads via plate_resolve_review_thread or GraphQL, update artifacts per ACs). Use checklist; after answer, complete before new Q&A or summary. See updated Enforcement bullet. (Addresses #517 and related #503, #508, #521 cluster.)",
+  "links": ["#517"],
+  "breaking": false
+}

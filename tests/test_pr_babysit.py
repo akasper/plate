@@ -615,6 +615,17 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("consistently default to native TUI (ask_user_question arrow-key forms)", agents)
         self.assertIn("(Addresses #518, #517, #521.)", agents)
 
+    def test_qanda_follow_through_enforced_in_this_turn_517(self):
+        """Regression test for #517: guidance and AGENTS enforce that interactive Q&A options (ask_user_question) only offer actions whose full follow-through (artifacts, execution) will complete in this turn; no advance until done."""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("Offer *only* options/actions in ask_user_question whose full follow-through", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("will be completed in this turn before any further progress or new Q&A", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("do not declare done or offer next until prior chosen option is fully executed", QANDA_CURIOSITY_GUIDANCE)
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress", agents)
+
 
 if __name__ == "__main__":
     unittest.main()
