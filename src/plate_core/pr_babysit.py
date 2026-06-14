@@ -2,6 +2,8 @@
 
 The pr-babysit skill/MCP surface (`gh plate pr babysit` or `plate_pr_babysit`) is the dedicated tool for PR feedback and health work. Agents must default to it (rather than hand-rolling git/gh commands) for "babysit", "get CI passing", "address feedback", or "make PR green" instructions (addresses #524 and related). After addressing feedback, explicitly resolve the corresponding review threads (via resolveReviewThread) to satisfy the feedback-resolution check (addresses #520).
 
+**Per #513: agents MUST run `gh plate release status` *proactively as the very first step* before calling babysit_pr, creating related PRs, or any targeting/base decision. This function assumes the caller has done so to confirm the correct track/base and pending fragments; use the output to set context.**
+
 Review thread handling (GraphQL pagination via reviewThreads first:100 + nodes, exact databaseId from comments, author filtering, isResolved/isOutdated, body, resolveReviewThread mutation) is fully encapsulated in the high-level helpers: babysit_pr (for detection + report), get_actionable_review_threads (for listing), resolve_review_thread (for safe resolution), and get_pr_merge_gates. Agents and calling code **must not** manually construct raw `gh api graphql`, jq filters, mktemp tempfiles, sed/NO_COLOR ANSI stripping, or the mutation. Use the Python/MCP/CLI surfaces instead (addresses #516).
 
 Worktree isolation for local-rebase (and general PR fix/babysit flows) is now more robust: helpers for lock cleanup, verification (git rev-parse --show-toplevel), and the rebase uses isolated worktree with better cleanup on errors/locks. Agents must use/verify isolated worktrees for any local changes during babysit or fixes; never pollute main checkout. (Addresses #514.)

@@ -20,7 +20,7 @@ Default workflow:
 
 1. If repository or Epic context is missing, ask for it.
 2. Call only the live-state tools needed for the current request; do not mechanically run every tool.
-3. Use `gh plate release status` when PR base or release targeting is relevant.
+3. **Before any branch/PR/base for Bug/Feature: run `gh plate release status` *first* to get correct --base + fragments. (Addresses #513.)**
 4. If `playwright-e2e` is missing on a UI-facing project, recommend `init_playwright`, `record_e2e_gif`, and `validate_e2e_tests`.
 5. For bootstrapping or convention adoption, recommend `gh plate bootstrap --apply` and surface the Goals page if present.
 
@@ -30,7 +30,7 @@ Special modes:
 - **Information audit:** use `plate_perform_information_audit`, read `docs/wiki/Goals.md` when relevant, and create or refine `Question` issues from the audit output.
 - **Looped / autonomous monitoring (babysit watch, repeated what_next, /loop or /every runs):** always prefer MCP surfaces (plate_pr_babysit, plate_what_next, etc.) for structured data over shelling CLI commands. Your visible turn output must be the terse bullet list only (see quiet_operations guidance). Never emit raw multi-line CLI output or no-op status comments as your response.
 - Follow long-running protocol for bg cmds in verification/babysit: record task_id, poll get_/monitor (emit terse status), cheap fallback on kill; consider "monitor" helper.
-- For "get PR green", "make mergeable", "address feedback", or "babysit": start with pr-babysit skill (gh plate pr babysit / plate_pr_babysit) not hand-rolling. Use encapsulated review helpers (no raw GraphQL/jq). Follow Full PR Green; worktree: verify_isolated + cleanup_locks before ops (no main checkout). (#514)
+- For "get PR green", "make mergeable", "address feedback", or "babysit": start with pr-babysit skill not hand-rolling. Use encapsulated review helpers (no raw GraphQL/jq). Follow Full PR Green + worktree verify/cleanup (#514).
 - **Complex multi-step (babysit, Q&A, PR green, ceremonies):** start with todo_write; mark completed immediately (never batch). See guidance/AGENTS Task Management. (Addresses #515.)
 - For verification/'get CI passing' (e.g. babysit): follow 'CI Diagnosis First Protocol' — `gh pr checks` + `gh run view` on specific job *before* local pytest. See AGENTS.
 - **Verification / local runs:** use check-work or targeted pytest; warn before long runs (see guidance).

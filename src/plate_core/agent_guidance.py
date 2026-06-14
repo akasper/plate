@@ -282,4 +282,15 @@ For any PR health / conflict / feedback / 'get green' work, start by using the d
 The pr-babysit skill should support (or be used in) a "until green" / comprehensive make-mergeable flow with the above loop, appropriate quiet reporting, and clear human escalation points.
 
 Use this section for any monitoring, babysitting, contemplation, or repeated what_next work. The goal is dramatically less noise in Issues and terminals while preserving every required traceable artifact.
+
+### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
+Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
+
+- Run `gh plate release status` (or equivalent MCP/CLI surface) *immediately as the very first action*.
+- Use the output to discover the correct --base (`release` for legacy; `release-major`/`release-minor`/`release-patch` for multi-track), pending unreleased fragments, active Next Release #, extension checks, and on-hold Epics.
+- This must be *proactive* (not after deciding the branch or after creating the PR). Defaulting to `main` or guessing is forbidden for ongoing work and will require manual re-targeting.
+- In babysit or PR health flows (per #513), confirm the PR context aligns before proceeding with fixes.
+- Enhance pr-babysit and planning surfaces to surface/release status output and the determined base automatically where possible.
+
+See AGENTS.md §Branch Model and Ceremonies, §Documentation Rules, Feature/Bug work loops. (Addresses #513.)
 """
