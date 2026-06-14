@@ -1,0 +1,10 @@
+{
+  "slug": "fix-532-release-pr-labels-and-guidance",
+  "change_type": "fix",
+  "surface": "AGENTS.md (Release work loop + ceremony details), scripts/cut_release.py (next-steps guidance), .github/workflows/ci.yml (heavy-release legacy 'release' activation)",
+  "summary": "Make Release PR label requirements explicit (Documentation + Release) in doctrine and cut guidance; strengthen legacy single-release support in heavy CI job to prevent skips on v0.6.0-style cuts.",
+  "migration_impact": "Repos following the updated AGENTS.md or the printed 'Next steps' from cut_release.py will now include the complete label set on Release PRs. No change for repos that already applied the Release label manually.",
+  "agent_notes": "The root cause of #532 was following the literal (but incomplete) text in the Release work loop. Always run gh plate release status before the final PR, use both --label \"Documentation\" --label \"Release\" (the latter is required for heavy CI and ceremony validation even in legacy mode), and include Closes for the versioned Release issue (the one renamed from 'Next Release').",
+  "links": ["#532"],
+  "breaking": false
+}
