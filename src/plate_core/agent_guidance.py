@@ -247,7 +247,7 @@ When given instructions like "get this PR green", "make mergeable", "address all
 
 6. Only then produce the one-sentence summary for the human of what is left + current state. Use terse quiet output for loops.
 
-Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit`) surface by default rather than hand-rolling git/gh. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state instead of sequential single-category fixes waiting for user prompts.
+For any PR health / conflict / feedback / 'get green' work, start by using the dedicated pr-babysit skill (gh plate pr babysit or plate_pr_babysit MCP) rather than hand-rolling raw git + gh commands. Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit`) surface by default. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state instead of sequential single-category fixes waiting for user prompts.
 
 The pr-babysit skill should support (or be used in) a "until green" / comprehensive make-mergeable flow with the above loop, appropriate quiet reporting, and clear human escalation points.
 
