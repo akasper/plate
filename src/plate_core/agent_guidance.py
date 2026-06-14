@@ -218,7 +218,7 @@ When given instructions like "get this PR green", "make mergeable", "address all
    - Fix labels, title, or other metadata issues within scope.
    - Resolve review threads that have been addressed (via `plate_resolve_review_thread`).
    - Reproduce and fix test/CI failures that are locally actionable (prefer cheap targeted runs per long-running protocol).
-   - etc.
+   - (and any other gate surfaced by the comprehensive inspection at step 1)
 
 3. Push all changes to the *existing* PR branch (never open a new PR for feedback response).
 
