@@ -577,8 +577,8 @@ class PrBabysitTests(unittest.TestCase):
         """Regression test for #520: AGENTS.md and pr_babysit instructions must require explicitly resolving review threads (via resolveReviewThread) after addressing feedback to clear the feedback-resolution check."""
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
-        self.assertIn("explicitly marked resolved via the `resolveReviewThread` mutation", agents)
-        self.assertIn("agents must invoke it without additional prompting", agents)
+        self.assertIn("resolve its review thread using the GitHub GraphQL `resolveReviewThread` mutation", agents)
+        self.assertIn("resolve addressed threads via `plate_resolve_review_thread`", agents)
 
         import plate_core.pr_babysit as mod
         doc = getattr(mod, "__doc__", "") or ""
