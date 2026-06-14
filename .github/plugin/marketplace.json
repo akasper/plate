@@ -5,13 +5,21 @@
   },
   "metadata": {
     "description": "Public GitHub Copilot CLI marketplace for PLATE plugin installs.",
+<<<<<<< HEAD
     "version": "0.5.3"
+=======
+    "version": "0.5.6"
+>>>>>>> origin/main
   },
   "plugins": [
     {
       "name": "plate-core",
       "description": "PLATE core plugin \u2014 context-first agent + MCP wiring for compatible CLI agents.",
+<<<<<<< HEAD
       "version": "0.5.3",
+=======
+      "version": "0.5.6",
+>>>>>>> origin/main
       "repository": "https://github.com/akasper/plate",
       "license": "MIT",
       "source": "plugin",

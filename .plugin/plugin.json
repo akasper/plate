@@ -1,7 +1,11 @@
 {
   "name": "plate-core",
   "description": "PLATE core plugin \u2014 context-first agent + MCP wiring for any compatible CLI agent.",
+<<<<<<< HEAD
   "version": "0.6.0",
+=======
+  "version": "0.5.6",
+>>>>>>> origin/main
   "author": {
     "name": "PLATE / akasper"
   },
