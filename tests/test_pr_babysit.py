@@ -415,6 +415,23 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("default to cheap, CI-log-driven reproduction first", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
 
+    def test_full_pr_green_make_mergeable_loop_in_guidance(self):
+        """Regression test for #528: the 'Full PR Green / Make Mergeable Loop'
+        (systematic 'current failing gates' model, own the inspect-fix-push-reinspect
+        cycle, comprehensive ownership instead of single-category fixes waiting for
+        user diagnosis, report summary only after exhausting agent actions) must be
+        present in shipped guidance (and pr-babysit skill / persona / AGENTS.md).
+        This ensures agents treat "get PR green" as an agent-owned loop.
+        """
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        loop = "Full PR Green / Make Mergeable Loop"
+        self.assertIn(loop, QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("current failing gates", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("inspect-fix-push-reinspect cycle", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("only human-judgment items remain", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("one-sentence summary for the human of what is left", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -207,5 +207,30 @@ When using or encountering backgrounded commands (e.g. `run_terminal_command(...
 
 This protocol prevents wasted compute and ensures partial results from killed tasks are acted upon quickly.
 
+### Full PR Green / Make Mergeable Loop (for "get CI passing", babysit, address feedback)
+When given instructions like "get this PR green", "make mergeable", "address all feedback", or "resolve CI":
+
+1. At the start and after *every* push, comprehensively inspect *all* current failing gates using available surfaces (MCP plate_pr_babysit or `gh plate pr babysit`, `gh pr checks`, review threads via GraphQL or tool, labels, mergeStateStatus, title/doc checks, etc.). Build and maintain an internal model of the "current failing gates" (do not rely on user to diagnose the next one).
+
+2. Address everything the agent can autonomously in the worktree:
+   - Base sync (rebase or request copilot update per strategy).
+   - Apply safe code suggestions from reviews.
+   - Fix labels, title, or other metadata issues within scope.
+   - Resolve review threads that have been addressed (via `plate_resolve_review_thread`).
+   - Reproduce and fix test/CI failures that are locally actionable (prefer cheap targeted runs per long-running protocol).
+   - (and any other gate surfaced by the comprehensive inspection at step 1)
+
+3. Push all changes to the *existing* PR branch (never open a new PR for feedback response).
+
+4. Re-inspect all gates.
+
+5. Repeat the inspect-fix-push-reinspect cycle until no more agent-actionable items remain (only human-judgment items remain, e.g. credentials, high-risk decisions, or owner CHANGES_REQUESTED).
+
+6. Only then produce the one-sentence summary for the human of what is left + current state. Use terse quiet output for loops.
+
+Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit`) surface by default rather than hand-rolling git/gh. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state instead of sequential single-category fixes waiting for user prompts.
+
+The pr-babysit skill should support (or be used in) a "until green" / comprehensive make-mergeable flow with the above loop, appropriate quiet reporting, and clear human escalation points.
+
 Use this section for any monitoring, babysitting, contemplation, or repeated what_next work. The goal is dramatically less noise in Issues and terminals while preserving every required traceable artifact.
 """

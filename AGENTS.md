@@ -347,16 +347,25 @@ Use this loop:
 2. The babysitter automatically detects two types of issues:
    - **Unresolved review threads** from third-party agents (actionable feedback)
    - **Base branch out-of-sync** state (PR branch behind, conflicting, or dirty relative to base branch)
-3. Review all open inline comments and the overall review body from the named reviewer on the linked PR
-4. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
-5. For all other actionable comments: push a code change or reply explaining why no change is needed
-6. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the GitHub GraphQL `resolveReviewThread` mutation:
+3. When the high-level goal is "get this PR green", "make mergeable", "address all feedback", or equivalent, treat it as an iterative loop the *agent owns* (the "Full PR Green / Make Mergeable Loop" — see quiet_operations guidance in agent_guidance.py and the pr-babysit skill):
+   - Comprehensively inspect *all* current failing gates at the start and after every push (`gh pr checks`, review threads, labels, mergeStateStatus, title/doc checks, etc.) to build/maintain a model of the "current failing gates". Do not fix one category then wait for the user to diagnose the next.
+   - Address everything the agent can autonomously in the worktree (rebase/resolve conflicts per strategy, apply safe suggestions, fix labels/metadata within scope, resolve addressed threads via `plate_resolve_review_thread`, fix locally reproducible test failures preferring cheap targeted runs, etc.).
+   - Push all changes to the *existing* PR branch (never open a new PR for feedback response).
+   - Re-inspect all gates.
+   - Repeat until no more agent-actionable items remain (only human judgment items like actual owner CHANGES_REQUESTED, credentials, high-risk decisions, or security changes are left).
+   - Only then report the one-sentence summary of what is left for the human + current state. Use quiet terse bullets for the loop.
+4. Review all open inline comments and the overall review body from the named reviewer on the linked PR
+5. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
+6. For all other actionable comments: push a code change or reply explaining why no change is needed
+7. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the GitHub GraphQL `resolveReviewThread` mutation:
    ```graphql
    mutation { resolveReviewThread(input: { threadId: "THREAD_NODE_ID" }) { thread { isResolved } } }
    ```
    To find `THREAD_NODE_ID` for a given comment, query `repository.pullRequest.reviewThreads` and match on `comments.nodes.databaseId`.
-7. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
-8. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
+8. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
+9. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
+
+The pr-babysit skill (and `gh plate pr babysit`) should be used by default for these flows and ideally support a " --until-green" / comprehensive make-mergeable mode that implements the loop above with appropriate quiet output and escalation. See the updated skill docstring and guidance for details (addresses #528 and the cluster of related PR-green / gates Bugs).
 
 **Base Branch Sync Handling:**
 
