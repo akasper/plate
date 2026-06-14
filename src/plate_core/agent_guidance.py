@@ -240,16 +240,16 @@ When the task involves local verification, reproducing a failure in the worktree
 This prevents long-running waste, improves responsiveness, and ensures the user has visibility.
 
 ### Full PR Green / Make Mergeable Loop (for "get CI passing", babysit, address feedback)
-When given instructions like "get this PR green", "make mergeable", "address all feedback", or "resolve CI":
+When given a *single high-level instruction* like "get this PR green", "make mergeable", "address all feedback", or "resolve CI" (not category-by-category prompting), treat it as an atomic "complete babysit / turn green" flow the *agent owns*:
 
 1. At the start and after *every* push, comprehensively inspect *all* current failing gates using available surfaces (MCP plate_pr_babysit or `gh plate pr babysit`, `gh pr checks`, review threads via GraphQL or tool, labels, mergeStateStatus, title/doc checks, etc.). Build and maintain an internal model of the "current failing gates" (do not rely on user to diagnose the next one).
 
-2. Address everything the agent can autonomously in the worktree:
-   - Base sync (rebase or request copilot update per strategy).
+2. Address everything the agent can autonomously in the worktree in one comprehensive pass (conflicts, labels, threads, tests, etc.):
+   - Base sync / merge conflicts (rebase or request copilot update per strategy, using isolated worktree).
    - Apply safe code suggestions from reviews.
-   - Fix labels, title, or other metadata issues within scope.
-   - Resolve review threads that have been addressed (via `plate_resolve_review_thread`).
-   - Reproduce and fix test/CI failures that are locally actionable (prefer cheap targeted runs per long-running protocol).
+   - Fix labels, title, or other metadata issues within scope (e.g. correct type + area:* + risk:*).
+   - Resolve review threads that have been addressed (via `plate_resolve_review_thread` / GraphQL for *all* unresolved after addressing).
+   - Reproduce and fix test/CI failures that are locally actionable (prefer cheap targeted runs per verification strategy + long-running protocol; use check-work skill where possible).
    - (and any other gate surfaced by the comprehensive inspection at step 1)
 
 3. Push all changes to the *existing* PR branch (never open a new PR for feedback response).
@@ -260,7 +260,7 @@ When given instructions like "get this PR green", "make mergeable", "address all
 
 6. Only then produce the one-sentence summary for the human of what is left + current state. Use terse quiet output for loops.
 
-For any PR health / conflict / feedback / 'get green' work, start by using the dedicated pr-babysit skill (gh plate pr babysit or plate_pr_babysit MCP) rather than hand-rolling raw git + gh commands. Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit`) surface by default. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state instead of sequential single-category fixes waiting for user prompts.
+For any PR health / conflict / feedback / 'get green' work, start by using the dedicated pr-babysit skill (gh plate pr babysit or plate_pr_babysit MCP) rather than hand-rolling raw git + gh commands. Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit` + get_pr_merge_gates) surface by default. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state from a single high-level prompt instead of sequential single-category fixes waiting for user diagnosis. (Addresses #519, #528, #526, etc.)
 
 The pr-babysit skill should support (or be used in) a "until green" / comprehensive make-mergeable flow with the above loop, appropriate quiet reporting, and clear human escalation points.
 

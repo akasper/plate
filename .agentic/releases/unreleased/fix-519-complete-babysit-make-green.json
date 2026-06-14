@@ -1,0 +1,10 @@
+{
+  "slug": "fix-519-complete-babysit-make-green",
+  "change_type": "fix",
+  "surface": "src/plate_core/agent_guidance.py (Full PR Green loop), AGENTS.md (babysit section), src/plate_core/pr_babysit.py (docstring), tests/test_pr_babysit.py (regression test)",
+  "summary": "Strengthen the 'full babysit' / 'turn PR green' procedure in guidance and AGENTS.md so that a single high-level prompt like 'get this PR green / address all feedback' results in the agent systematically handling all agent-actionable categories (base sync/conflicts, labels, review threads, tests) in one comprehensive pass using pr-babysit + get_pr_merge_gates + resolve, without category-by-category prompting. Update pr_babysit docstring and add regression test.",
+  "migration_impact": "Agents will now treat 'turn PR green' as an atomic, comprehensive flow rather than sequential fixes requiring user diagnosis for each gate. Improves efficiency for PR health. The underlying skill and helper already support it; this makes the end-to-end procedure explicit in docs and tested. No template changes.",
+  "agent_notes": "For high-level 'get this PR green', 'make mergeable', 'address all feedback': use the pr-babysit skill + get_pr_merge_gates to inspect ALL gates at once (conflicts, labels, threads, CI, etc.), address what you can (rebase with strategy, edit labels, resolve threads, targeted test fixes), push to existing, re-inspect, repeat until only human items. Report one-sentence summary only at end. See updated Full PR Green loop and babysit section. (Addresses #519 and related incomplete procedure Bugs.)",
+  "links": ["#519"],
+  "breaking": false
+}

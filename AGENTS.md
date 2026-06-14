@@ -366,7 +366,7 @@ Use this loop:
      - CI / test jobs, title check, issue-link check, feature-change-files (if Feature), audit, deploy, etc. (via gh pr checks)
      - Other: documentation gate, etc.
      Use plate_pr_babysit + gh pr checks + gh run view on specific failing jobs (see CI Diagnosis First) + gh issue view for labels. Fix what you can, push, re-inspect, repeat until only human items (e.g. owner CHANGES_REQUESTED, high-risk) remain. Report one-sentence summary only then. (Addresses #526.)
-   - Do not fix one category then wait for the user to diagnose the next.
+   - From a *single high-level prompt* ("get this PR green", "make mergeable", "address all feedback"), the agent should handle *all* agent-actionable categories (base sync/conflicts, labels, review threads, tests, etc.) in one or minimal comprehensive passes using the pr-babysit skill + get_pr_merge_gates + resolveReviewThread, without requiring category-by-category diagnosis or prompting from the user. Do not fix one category then wait for the user to diagnose the next. (Addresses #519, #528, #526.)
    - Address everything the agent can autonomously in the worktree (rebase/resolve conflicts per strategy, apply safe suggestions, fix labels/metadata within scope, resolve addressed threads via `plate_resolve_review_thread`, fix locally reproducible test failures preferring cheap targeted runs, etc.).
    - Push all changes to the *existing* PR branch (never open a new PR for feedback response).
    - Re-inspect all gates (always re-starting with CI diagnosis).
