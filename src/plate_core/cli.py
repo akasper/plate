@@ -412,7 +412,7 @@ def cmd_release_status(args: argparse.Namespace) -> int:
     if getattr(report, "on_hold_epics", None):
         print(f"On-hold Epics (track label but no target link): {len(report.on_hold_epics)}")
         for e in report.on_hold_epics[:5]:
-            print(f"  - #{e['number']}: {e.get('title', '')} {e.get('labels', [])})")
+            print(f"  - #{e['number']}: {e.get('title', '')} {e.get('labels', [])}")
     if getattr(report, "release_track_summary", None):
         print(f"Release track summary (open work with labels): {report.release_track_summary}")
     print(f"Pending unreleased fragments: {report.pending_fragment_count}")
@@ -682,8 +682,10 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     # For now emit the commands the user (or automation) can run.
     print("\nRecommended commands (execute after confirming tag on origin):")
     print(f"  git checkout release && git fetch origin && git reset --hard origin/{version} && git push --force-with-lease")
-    print("  # Portable (POSIX sh) variant per review feedback:")
-    print(f"  python3 -c \"import json; print(json.load(open('.agentic/releases/v{version}/release.json'))['summary'])\" > /tmp/release-notes-{version}.md")
+    print("  # Safe (sh-compatible) notes file instead of process substitution:")
+    print(f"  cat > /tmp/release-notes-{version}.md << 'EON'")
+    print(f"  $(python -c \"import json; print(json.load(open('.agentic/releases/v{version}/release.json'))['summary']) \")")
+    print("  EON")
     print(f"  gh release create {version} --title \"PLATE {version}\" --notes-file /tmp/release-notes-{version}.md")
     print("  gh issue create --label Release --title \"Next Release\" --body \"Standing target (auto-created by finalize).\"")
     print("Finalize guidance + commands emitted. Wire full automation in core_finalize (release.py) in a follow-up atomic PR.")
@@ -875,6 +877,15 @@ def cmd_migrate_apply(args: argparse.Namespace) -> int:
         print(f"  {r}")
     print("Checkpoint/rollback available via MigrationApplier.")
     return 0
+    print(f"Task: {result.task_description}")
+    print()
+    print("Delegation prompt:")
+    for line in result.delegation_prompt.splitlines():
+        print(f"  {line}")
+    print()
+    print(f"To use in Copilot: {result.invocation_hints['copilot_plugin']}")
+    print(f"To query via CLI:  {result.invocation_hints['gh_plate']}")
+    return 0
 
 
 def cmd_agents_list(args: argparse.Namespace) -> int:
@@ -1014,6 +1025,11 @@ def build_parser() -> argparse.ArgumentParser:
     cfg_validate.set_defaults(func=cmd_config_validate)
     cfg_init = config_sub.add_parser("init", help="Create a baseline .plate file if missing")
     cfg_init.add_argument("--repo-root", default=".", help="Repository root containing .plate (default: current directory)")
+    cfg_init.add_argument(
+        "--apply",
+        action="store_true",
+        help="Accepted for parity with bootstrap flows; config init always writes the file.",
+    )
     cfg_init.add_argument("--force", action="store_true", help="Overwrite an existing .plate file")
     cfg_init.add_argument("--json", action="store_true", help="Output JSON")
     cfg_init.set_defaults(func=cmd_config_init)
@@ -1084,33 +1100,66 @@ def build_parser() -> argparse.ArgumentParser:
     rel_cleanup.add_argument(
         "--limit",
         type=int,
-        help="Max number of candidates to consider (default: all).",
+        help="Optional maximum number of candidate branches to delete/report.",
     )
     rel_cleanup.add_argument("--json", action="store_true", help="Output JSON")
     rel_cleanup.set_defaults(func=cmd_release_cleanup_branches)
-    rel_notes = release_sub.add_parser("notes", help="Show release notes diff (aggregated migration from fragments)")
-    rel_notes.add_argument("--from-version", dest="from_version", help="Starting version (semver or vX.Y.Z)")
-    rel_notes.add_argument("--to-version", dest="to_version", help="Ending version (semver or vX.Y.Z)")
+    rel_notes = release_sub.add_parser("notes", help="Show release notes diff between versions")
+    rel_notes.add_argument("--from", dest="from_version", help="Start version (exclusive)")
+    rel_notes.add_argument("--to", dest="to_version", help="End version (inclusive)")
     rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_notes.add_argument("--json", action="store_true", help="Output JSON")
     rel_notes.set_defaults(func=cmd_release_notes)
-    rel_cut = release_sub.add_parser("cut", help="Cut a new release (aggregate fragments, sync versions, write vX.Y.Z/)")
-    rel_cut.add_argument("version", nargs="?", help="Target version (e.g. 0.7.0 or v0.7.0); auto-detected if omitted")
-    rel_cut.add_argument("--version-type", dest="version_type", choices=["major", "minor", "patch"], help="Force bump type instead of inference")
-    rel_cut.add_argument("--dry-run", dest="dry_run", action="store_true", help="Preview only (no writes, no version sync)")
+
+    costs = sub.add_parser("costs", help="Harvest and aggregate USAGE REPORTs for observability/cost tracking (Epic #265)")
+    costs.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    costs.add_argument("--epic-label", dest="epic_label", help="Filter to reports under a specific Epic: label (e.g. Epic: beta-roadmap)")
+    costs.add_argument("--json", action="store_true", help="Output JSON")
+    costs.set_defaults(func=cmd_costs)
+
+    autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
+    autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    autonomy.add_argument("--status", action="store_true", help="Show autonomy status (risk tolerance, budget, autopilot score)")
+    autonomy.add_argument("--run", action="store_true", help="Run one cycle (or with --loop)")
+    autonomy.add_argument("--loop", action="store_true", help="Run multiple cycles (use --max-cycles)")
+    autonomy.add_argument("--max-cycles", type=int, default=3, help="For --loop")
+    try:
+        autonomy.add_argument("--sleep-seconds", type=int, default=300, help="Sleep seconds between --loop cycles (defaults to .plate autonomy.loop.default_sleep_seconds or 300; use smaller for demo --loop)")
+    except Exception:
+        pass  # tolerate duplicate registration during parser build (post-rebase for #492)
+    autonomy.add_argument("--dry-run", action="store_true", help="Dry run (no side effects)")
+    autonomy.add_argument("--max-steps", type=int, help="Cap actions per cycle")
+    try:
+        autonomy.add_argument("--sleep-seconds", type=int, help="Sleep seconds between --loop cycles (overrides .plate autonomy.loop.default_sleep_seconds; default 300)")
+    except Exception:
+        pass  # tolerate duplicate registration during build_parser (CI fix for #493)
+    autonomy.add_argument("--json", action="store_true", help="Output JSON")
+    autonomy.set_defaults(func=cmd_autonomy)
+
+    rel_cut = release_sub.add_parser("cut", help="Cut a release: aggregate fragments to versioned dir (first-class MVP per #261)")
+    rel_cut.add_argument("version", nargs="?", help="Explicit version e.g. vX.Y.Z (optional, auto-detect)")
     rel_cut.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
-    rel_cut.add_argument("--json", action="store_true", help="Output JSON")
+    rel_cut.add_argument("--version-type", dest="version_type", choices=["major", "minor", "patch"], help="Override bump type for auto-detect")
+    rel_cut.add_argument("--dry-run", action="store_true", help="Do not write files (dry-run)")
+    rel_cut.add_argument("--json", action="store_true", help="Output JSON (future)")
     rel_cut.set_defaults(func=cmd_release_cut)
-    rel_finalize = release_sub.add_parser("finalize", help="Post-merge finalize steps (hard-reset, gh release, next issue)")
-    rel_finalize.add_argument("version", nargs="?", help="Version tag (e.g. v0.7.0)")
-    rel_finalize.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show steps without side effects")
+
+    # Finalize stub (plan step 8 for #313 / Epic #306): performs tag + triggers from .plate + spawn next Next Release.
+    # MVP: prints guidance + invokes a couple core actions if configured; full in follow-ups.
+    rel_finalize = release_sub.add_parser("finalize", help="Finalize a release: tag, kick .plate-configured downstream triggers, ensure next 'Next Release' issue (per refined ceremony)")
+    rel_finalize.add_argument("version", nargs="?", help="The version being finalized (e.g. vX.Y.Z)")
     rel_finalize.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
-    rel_finalize.add_argument("--json", action="store_true", help="Output JSON")
+    rel_finalize.add_argument("--dry-run", action="store_true", help="Do not execute side effects (dry-run)")
+    rel_finalize.add_argument("--json", action="store_true", help="Output JSON (future)")
     rel_finalize.set_defaults(func=cmd_release_finalize)
-    rel_target = release_sub.add_parser("target-epic", help="Validate an Epic against the active Next Release and print the manual issue-link step required by GitHub UI (#313)")
+
+    rel_target = release_sub.add_parser(
+        "target-epic",
+        help="Validate an Epic against the active Next Release and print the manual issue-link step required by GitHub UI (#313)",
+    )
     rel_target.add_argument("epic", help="Epic issue number to target to the current Next Release")
     rel_target.add_argument("--repo", help="owner/name")
-    rel_target.add_argument("--json", action="store_true", help="Output JSON")
+    rel_target.add_argument("--json", action="store_true", help="Output JSON guidance")
     rel_target.set_defaults(func=cmd_release_target_epic)
 
     migrate = sub.add_parser("migrate", help="Migration plan/apply for template-to-plate cutover (Issue #131 / Epic #126)")
@@ -1133,47 +1182,12 @@ def build_parser() -> argparse.ArgumentParser:
     qanda.add_argument("--record", type=int, help="Record an answer to this Question number")
     qanda.add_argument("--answer", help="Answer text when using --record")
     qanda.add_argument("--by", help="Who is answering (for provenance)", default="cli-user")
+    qanda.add_argument("--limit", type=int, default=5, help="Max results for synthesize")
     qanda.set_defaults(func=cmd_qanda)
-
-    autonomy = sub.add_parser("autonomy", help="Autonomy status / run / loop (Epic #470)")
-    autonomy.add_argument("--status", action="store_true", help="Show autonomy status")
-    autonomy.add_argument("--run", action="store_true", help="Run one autonomy cycle")
-    autonomy.add_argument("--loop", action="store_true", help="Run multiple cycles (persistent budget)")
-    autonomy.add_argument("--max-cycles", type=int, dest="max_cycles", help="Number of cycles for --loop")
-    autonomy.add_argument("--max-steps", type=int, dest="max_steps", help="Max steps per cycle")
-    autonomy.add_argument("--dry-run", dest="dry_run", action="store_true", help="Dry-run (no actions, no spend)")
-    autonomy.add_argument("--sleep-seconds", type=int, dest="sleep_seconds", help="Sleep between --loop cycles (default from config)")
-    autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")
-    autonomy.add_argument("--json", action="store_true", help="Output JSON")
-    autonomy.set_defaults(func=cmd_autonomy)
-
-    costs = sub.add_parser("costs", help="Show cost/usage report")
-    costs.add_argument("--repo", help="owner/name; defaults to git remote origin")
-    costs.add_argument("--epic-label", dest="epic_label", help="Optional Epic:* label to filter (e.g. Epic: my-epic)")
-    costs.add_argument("--json", action="store_true", help="Output JSON")
-    costs.set_defaults(func=cmd_costs)
-
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    if argv is None:
-        argv = sys.argv[1:]
     parser = build_parser()
     args = parser.parse_args(argv)
-    func = getattr(args, "func", None)
-    if not func:
-        parser.print_help()
-        return 1
-    try:
-        return func(args) or 0
-    except KeyboardInterrupt:
-        print("Interrupted", file=sys.stderr)
-        return 130
-    except Exception as exc:  # pragma: no cover - top level guard
-        print(f"Unexpected error: {exc}", file=sys.stderr)
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return args.func(args)

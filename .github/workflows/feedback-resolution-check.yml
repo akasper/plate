@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Ensure review feedback is fully resolved
         uses: actions/github-script@v8
+        env:
+          PLATE_PR_FEEDBACK_AGENTS: ${{ vars.PLATE_PR_FEEDBACK_AGENTS }}
         with:
           script: |
             const owner = context.repo.owner;
@@ -88,10 +90,18 @@ jobs:
                   }
                 }
 
-                // Author-filter: only treat third-party agent threads as blocking for this gate
-                // (matches pr_babysit._DEFAULT_AGENT_PATTERNS + PLATE_PR_FEEDBACK_AGENTS convention).
+                // Author-filter: only treat third-party agent threads as blocking for this gate.
+                // Supports PLATE_PR_FEEDBACK_AGENTS repo var (comma-separated custom logins) for
+                // downstream customization; falls back to known defaults (matches pr_babysit).
                 // Humans use explicit CHANGES_REQUESTED / need:human-review.
-                const agentPatterns = [/^devin/i, /^openhands/i, /^codegen/i, /^swe-agent/i, /^aide-agent/i, /^mentat-bot/i];
+                const customAgentsEnv = process.env.PLATE_PR_FEEDBACK_AGENTS || '';
+                const customAgents = customAgentsEnv.split(',').map(s => s.trim()).filter(Boolean);
+                let agentPatterns;
+                if (customAgents.length > 0) {
+                  agentPatterns = customAgents.map(c => new RegExp('^' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+                } else {
+                  agentPatterns = [/^devin/i, /^openhands/i, /^codegen/i, /^swe-agent/i, /^aide-agent/i, /^mentat-bot/i];
+                }
                 const actionableUnresolved = unresolved.filter((author) =>
                   agentPatterns.some((p) => p.test(author))
                 );
