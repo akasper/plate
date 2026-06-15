@@ -75,8 +75,11 @@ copilot plugin install plate-core@plate-marketplace
 
 # Grok Build (TUI / CLI):
 grok plugin marketplace add akasper/plate
-grok plugin install plate-core@plate-marketplace
-# Then (after enable/trust + reload): grok inspect, Ctrl+L → Agents / Marketplace, or /agent plate
+grok plugin install plate-core@plate-marketplace --trust
+# Then enable the plugin, reload the TUI (`r` in Plugins), and verify:
+#   grok inspect   # expect plate-core skills, plate agent, and plate-core (stdio) MCP
+# Or reinstall from a local checkout during development:
+#   grok plugin install /absolute/path/to/plate/.plugin --trust
 
 # In a new session with your CLI agent, invoke the plate agent (see your agent's docs for the exact command, e.g. /agent plate)
 ```
