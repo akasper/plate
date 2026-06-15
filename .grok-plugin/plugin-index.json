@@ -14,6 +14,112 @@
             "name": "plate-core",
             "description": "stdio"
           }
+        ],
+        "skills": [
+          {
+            "name": "Audit SPEC.md and CURRENT.md",
+            "description": "Compare intended product state with implemented state and flag drift."
+          },
+          {
+            "name": "Audit Security Posture",
+            "description": "Review code, deps, configs, and workflows for security vulnerabilities, secret leaks, and compliance issues."
+          },
+          {
+            "name": "CRUD Projects",
+            "description": "Create, update, and summarize PLATE projects and their metadata."
+          },
+          {
+            "name": "Calculate Costs",
+            "description": "Estimate the cost impact of feature work, CI runs, projects, or agent activity. Use plate_costs MCP / gh plate costs to…"
+          },
+          {
+            "name": "Create Blocking Question on Obstacle",
+            "description": "As deliberate last resort, create a linked blocking Question with structured information dump when hitting a hard infor…"
+          },
+          {
+            "name": "Create Wireframe Demo",
+            "description": "Produce a wireframe-style demonstration for a proposed interaction flow."
+          },
+          {
+            "name": "Define Epic",
+            "description": "Frame a coherent epic with scope, outcomes, and child issue boundaries."
+          },
+          {
+            "name": "Define Feature Requirements",
+            "description": "Convert a product goal into implementation-ready requirements."
+          },
+          {
+            "name": "Define Release",
+            "description": "Turn project progress into a release-ready plan with clear scope and constraints."
+          },
+          {
+            "name": "Define or Unify Design Theme",
+            "description": "Align product visuals and interaction patterns around one consistent design theme."
+          },
+          {
+            "name": "Deploy Project, Marketing Site, or Docs Site",
+            "description": "Prepare or execute delivery of project-facing sites and docs assets."
+          },
+          {
+            "name": "Design Data Pipelines",
+            "description": "Design reliable ETL, schemas, and storage solutions with quality and privacy in mind."
+          },
+          {
+            "name": "Document New Feature in Wiki",
+            "description": "Write wiki content for a newly shipped feature."
+          },
+          {
+            "name": "Fix Broken Build",
+            "description": "Diagnose and repair failing builds or test runs."
+          },
+          {
+            "name": "GitHub Discussions",
+            "description": "Read, list (with category filters e.g. Ideas), get full content, comment on, and create GitHub Discussions. Encapsulate…"
+          },
+          {
+            "name": "Groom Backlog",
+            "description": "Review backlog items, identify gaps, and keep work ordered by value and readiness."
+          },
+          {
+            "name": "Identify Market Gaps and Opportunities",
+            "description": "Gather evidence about user needs, gaps, and product opportunities."
+          },
+          {
+            "name": "Mockup UI",
+            "description": "Produce lightweight UI mockups or interaction sketches for a feature."
+          },
+          {
+            "name": "Profile and Benchmark",
+            "description": "Instrument, measure, and report on performance bottlenecks with actionable optimizations."
+          },
+          {
+            "name": "Research Synthesis",
+            "description": "Consolidate findings from multiple sources into a decision-ready summary."
+          },
+          {
+            "name": "Resume from Answered (Blocking) Question",
+            "description": "After a blocking Question is answered, retrieve the full answer + provenance, merge into the original Issue via unblock…"
+          },
+          {
+            "name": "Review Discussions",
+            "description": "Read issue and PR discussions to extract actionable signals and concerns."
+          },
+          {
+            "name": "Review Test Coverage",
+            "description": "Assess whether a change has sufficient automated test coverage."
+          },
+          {
+            "name": "Run Q&A Session",
+            "description": "Discover, prioritize, present (via native or fallback), and record answers to open Question issues, triggering contempl…"
+          },
+          {
+            "name": "Update Wiki to Match Project State",
+            "description": "Sync the wiki with the current repository state and ongoing work."
+          },
+          {
+            "name": "What Next? (PLATE Process Guidance)",
+            "description": "Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment based on current repo state…"
+          }
         ]
       }
     }

@@ -35,6 +35,7 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         self.assertEqual(plugin_manifest["version"], __version__)
         self.assertEqual(root_plugin_manifest["version"], __version__)
         self.assertEqual(plugin_manifest["repository"], plugin_entry["repository"])
+        self.assertEqual(plugin_manifest.get("skills"), "skills/")
 
     def test_grok_marketplace_manifest_and_index_exist(self):
         # Grok uses .grok-plugin/ at repo root (distinct from Copilot's .github/plugin/)
@@ -57,6 +58,8 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         self.assertIn("mcpServers", components)
         self.assertTrue(any(a["name"] == "plate" for a in components["agents"]))
         self.assertTrue(any(m["name"] == "plate-core" for m in components["mcpServers"]))
+        self.assertIn("skills", components)
+        self.assertGreaterEqual(len(components["skills"]), 18)
 
     def test_grok_generator_check_passes(self):
         # The generator must be deterministic and match the committed index.
@@ -99,6 +102,7 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         # download yet; the generator + unit tests cover the .grok-plugin/ surface for #570).
         self.assertIn("Grok marketplace packaging check (generator + committed index)", workflow)
         self.assertIn("generate-grok-plugin-index.py --check", workflow)
+        self.assertIn("generate-plugin-skills.py --check", workflow)
 
 
 if __name__ == "__main__":
