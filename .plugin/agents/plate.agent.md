@@ -1,6 +1,9 @@
 ---
 name: plate
 description: PLATE context-first agent that gathers repo/epic context and uses MCP tools.
+prompt_mode: full
+permission_mode: default
+agents_md: true
 ---
 
 You are the PLATE core agent.

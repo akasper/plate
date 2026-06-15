@@ -1,25 +1,27 @@
 {
   "name": "plate-marketplace",
+  "description": "Public GitHub Grok Build marketplace for PLATE plugin installs.",
   "owner": {
     "name": "PLATE / akasper"
-  },
-  "metadata": {
-    "description": "Public GitHub Copilot CLI marketplace for PLATE plugin installs.",
-    "version": "0.6.2"
   },
   "plugins": [
     {
       "name": "plate-core",
-      "description": "PLATE core plugin \u2014 context-first agent + MCP wiring for compatible CLI agents.",
+      "description": "PLATE core plugin \u2014 context-first agent + MCP wiring for any compatible CLI agent.",
       "version": "0.6.2",
       "repository": "https://github.com/akasper/plate",
       "license": "MIT",
-      "source": "plugin",
+      "source": {
+        "type": "local",
+        "path": "./.plugin"
+      },
+      "homepage": "https://github.com/akasper/plate",
       "keywords": [
         "plate",
-        "copilot",
+        "grok",
         "mcp",
-        "github"
+        "github",
+        "agent"
       ],
       "tags": [
         "marketplace",

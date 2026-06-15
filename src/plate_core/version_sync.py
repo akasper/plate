@@ -21,6 +21,7 @@ def repository_version_targets(repo_root: Path) -> list[Path]:
         root / "plugin" / "plugin.json",
         root / ".plugin" / "plugin.json",
         root / ".github" / "plugin" / "marketplace.json",
+        root / ".grok-plugin" / "marketplace.json",
     ]
 
 
@@ -82,27 +83,42 @@ def read_repository_versions(repo_root: Path) -> dict[str, str]:
     """Read the current version from each canonical repository version file."""
     root = repo_root.resolve()
     targets = repository_version_targets(root)
-    marketplace_manifest = json.loads(targets[4].read_text(encoding="utf-8"))
-    metadata = marketplace_manifest.get("metadata") or {}
-    plugins = marketplace_manifest.get("plugins") or []
-    if not isinstance(metadata.get("version"), str) or not metadata["version"]:
+    # Copilot marketplace (targets[4]) uses metadata + plugins[0]
+    copilot_market = json.loads(targets[4].read_text(encoding="utf-8"))
+    copilot_meta = copilot_market.get("metadata") or {}
+    copilot_plugins = copilot_market.get("plugins") or []
+    if not isinstance(copilot_meta.get("version"), str) or not copilot_meta["version"]:
         raise RuntimeError(f"Missing string 'metadata.version' field in {targets[4]}")
-    if len(plugins) != 1 or not isinstance(plugins[0], dict):
+    if len(copilot_plugins) != 1 or not isinstance(copilot_plugins[0], dict):
         raise RuntimeError(f"Expected exactly one plugin entry in {targets[4]}")
-    plugin_version = plugins[0].get("version")
-    if not isinstance(plugin_version, str) or not plugin_version:
+    copilot_plugin_version = copilot_plugins[0].get("version")
+    if not isinstance(copilot_plugin_version, str) or not copilot_plugin_version:
         raise RuntimeError(f"Missing string 'plugins[0].version' field in {targets[4]}")
-    if plugin_version != metadata["version"]:
+    if copilot_plugin_version != copilot_meta["version"]:
         raise RuntimeError(
             f"Marketplace manifest version mismatch in {targets[4]}: "
-            f"metadata.version={metadata['version']!r}, plugins[0].version={plugin_version!r}"
+            f"metadata.version={copilot_meta['version']!r}, plugins[0].version={copilot_plugin_version!r}"
+        )
+    # Grok marketplace (targets[5]) uses plugins[0].version directly (no metadata wrapper)
+    grok_market = json.loads(targets[5].read_text(encoding="utf-8"))
+    grok_plugins = grok_market.get("plugins") or []
+    if len(grok_plugins) != 1 or not isinstance(grok_plugins[0], dict):
+        raise RuntimeError(f"Expected exactly one plugin entry in {targets[5]}")
+    grok_plugin_version = grok_plugins[0].get("version")
+    if not isinstance(grok_plugin_version, str) or not grok_plugin_version:
+        raise RuntimeError(f"Missing string 'plugins[0].version' field in {targets[5]}")
+    if grok_plugin_version != copilot_meta["version"]:
+        raise RuntimeError(
+            f"Grok/Copilot marketplace version drift in {targets[5]} vs {targets[4]}: "
+            f"grok={grok_plugin_version!r}, copilot={copilot_meta['version']!r}"
         )
     return {
         targets[0].relative_to(root).as_posix(): _extract_pattern_value(targets[0], _INIT_VERSION_RE, "__version__"),
         targets[1].relative_to(root).as_posix(): _extract_pattern_value(targets[1], _PYPROJECT_VERSION_RE, "project"),
         targets[2].relative_to(root).as_posix(): _read_json_version(targets[2]),
         targets[3].relative_to(root).as_posix(): _read_json_version(targets[3]),
-        targets[4].relative_to(root).as_posix(): metadata["version"],
+        targets[4].relative_to(root).as_posix(): copilot_meta["version"],
+        targets[5].relative_to(root).as_posix(): grok_plugin_version,
     }
 
 
@@ -115,13 +131,12 @@ def sync_repository_version(version: str, repo_root: Path, *, dry_run: bool = Fa
     for path in targets[2:]:
         if path.name == "marketplace.json":
             data = json.loads(path.read_text(encoding="utf-8"))
-            metadata = data.get("metadata")
             plugins = data.get("plugins")
-            if not isinstance(metadata, dict):
-                raise RuntimeError(f"Missing object 'metadata' in {path}")
             if not isinstance(plugins, list) or len(plugins) != 1 or not isinstance(plugins[0], dict):
                 raise RuntimeError(f"Expected exactly one plugin entry in {path}")
-            data["metadata"]["version"] = version
+            # Copilot style has metadata wrapper; Grok style (and future) only updates the plugin entry
+            if isinstance(data.get("metadata"), dict):
+                data["metadata"]["version"] = version
             data["plugins"][0]["version"] = version
             if not dry_run:
                 path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
