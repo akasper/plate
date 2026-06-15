@@ -928,6 +928,24 @@ def build_release(version: str, fragments: list[dict]) -> dict:
     }
 
 
+def collect_closes_block(fragments: list[dict]) -> str:
+    """Collect unique Closes links from fragment 'links' arrays for Release PR body.
+    Enables one merge-to-main to auto-close the addressed issues (fixes GitHub Closes limitation
+    for work landed on release branches). Part of #569 Closes auto-collection.
+
+    Note: links referencing PRs (e.g. #577) rather than issues will be included; GitHub handles
+    gracefully on merge (closes the PR if still open; no-op if merged/closed). See review on #584.
+    """
+    seen = []
+    for f in fragments:
+        for link in (f.get("links") or []):
+            if link and isinstance(link, str) and link.startswith("#") and link not in seen:
+                seen.append(link)
+    if not seen:
+        return ""
+    return "Closes " + ", ".join(seen)
+
+
 def cut_release(
     version: str | None,
     releases_dir: Path,
@@ -987,6 +1005,12 @@ def cut_release(
     fragments_dir = versioned_dir / "fragments"
     release_data = build_release(version, fragments)
 
+    # #569: auto-collect Closes block from fragment links so Release PR merge to main
+    # auto-closes the addressed Bugs/Features (one merge closes everything).
+    closes_block = collect_closes_block(fragments)
+    if closes_block:
+        release_data["closes_block"] = closes_block
+
     if dry_run:
         print("\n[DRY RUN] Would create:")
         print(f"  {versioned_dir / 'release.json'}")
@@ -998,6 +1022,8 @@ def cut_release(
             print(f"  {path.relative_to(repo_root)} -> {version}")
         print("\n[DRY RUN] release.json preview:")
         print(json.dumps(release_data, indent=2))
+        if closes_block:
+            print(f"\n[DRY RUN] Recommended Closes block for Release PR body:\n{closes_block}")
         return 0
 
     versioned_dir.mkdir(parents=True, exist_ok=True)
@@ -1031,11 +1057,14 @@ def cut_release(
     print("Next steps:")
     print(f"  1. Review {versioned_dir / 'release.json'} and adjust the summary if needed.")
     print(f"  2. Commit the new {versioned_dir}/ directory.")
-    print("  3. Open a PR: release -> main.")
+    print("  3. Open a PR: release -> main (use the 'Closes' block below in the body if present).")
+    if closes_block:
+        print(f"\nRecommended Closes block for Release PR body (enables one merge to main closing addressed issues):\n{closes_block}\n")
     print(f"  4. Ensure the Release PR passes version-sync and remote tag-conflict validation for v{version}.")
     print(f"  5. After merge, the release workflow will create/push tag v{version} from the merged Release PR commit.")
+    print(f"  6. Run `gh plate release finalize {version}` (or equivalent) for hard-reset + gh release create + next-Release spawn.")
     print(
-        f"  6. Hard-reset release branch: "
+        f"  7. (Legacy) Hard-reset release branch: "
         f"git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease"
     )
     return 0

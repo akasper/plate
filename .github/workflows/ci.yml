@@ -121,9 +121,11 @@ jobs:
   # or release-* / release-v* branches (multi-track or versioned cuts).
   # The 'Release' label (in addition to 'Documentation' PR type) is required on Release PRs
   # (and for legacy 'release' head_ref) to prevent skips in these jobs (see #532).
-  # Add expensive steps here: expanded e2e matrix, security scans (trivy/snyk/etc.), architecture
-  # review / lint, full recompilation + packaging for all targets, etc.
+  # For review/stabilization pushes (small feedback fixes, thread resolves, docs/metadata on a
+  # release-v* PR): use label 'stabilization' (or rely on non-code changes) to keep CI cost low.
+  # Add expensive steps here: expanded e2e matrix, security scans, architecture review, packaging...
   # Normal development to the permissive next-* branches stays on the lightweight path.
+  # Addresses #569 stabilization CI path.
   heavy-release:
     needs:
       - test
@@ -140,5 +142,14 @@ jobs:
           echo "This PR is in release packaging/stabilization context via release-*/release-v* branches."
           echo "Run expensive steps here (full builds, security, extra e2e, architecture review, packaging...)."
           echo "Remember common gateway fast-fails earlier in the job or previous jobs."
-      # TODO in implementation slices: add real heavy steps (matrix, security action, etc.)
+      - name: Skip full heavy for stabilization/review responses (if labeled)
+        if: contains(github.event.pull_request.labels.*.name, 'stabilization') || contains(github.event.pull_request.labels.*.name, 'Documentation')
+        run: |
+          echo "Stabilization or Documentation-only push on release context: skipping expensive steps to reduce CI waste (#569)."
+          # Note: no 'exit 0' here; when real heavy steps are added below, they must be individually
+          # conditioned with if: ${{ ! (contains(github.event.pull_request.labels.*.name, 'stabilization') || contains(github.event.pull_request.labels.*.name, 'Documentation')) }}
+          # (or the job-level if extended) so the skip actually prevents them from running.
+          # The exit 0 would only exit *this step*, not the job (per review feedback on #584).
+      # TODO in implementation slices: add real heavy steps (matrix, security action, etc.) under the non-stabilization path.
       # Keep this job fast-failing and clearly separated so normal CI remains cheap.
+      # Feedback-resolution check itself is already lightweight and re-runnable on review/comment events.

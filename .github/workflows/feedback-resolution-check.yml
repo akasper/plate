@@ -1,8 +1,10 @@
 name: PR Feedback Resolution Check
 
 # Ensures auto-merge does not complete while actionable PR commentary is still
-# open. This check fails when the PR has unresolved review threads or is still
-# in CHANGES_REQUESTED state.
+# open. This check fails when the PR has unresolved review threads *from third-party agents*
+# (see PLATE_PR_FEEDBACK_AGENTS and default patterns) or is still in CHANGES_REQUESTED state.
+# Human reviews only block via explicit CHANGES_REQUESTED or need:human-review label.
+# (Addresses #569 feedback gate author-filter requirement.)
 
 on:
   pull_request:
@@ -22,6 +24,8 @@ jobs:
     steps:
       - name: Ensure review feedback is fully resolved
         uses: actions/github-script@v8
+        env:
+          PLATE_PR_FEEDBACK_AGENTS: ${{ vars.PLATE_PR_FEEDBACK_AGENTS }}
         with:
           script: |
             const owner = context.repo.owner;
@@ -86,6 +90,22 @@ jobs:
                   }
                 }
 
+                // Author-filter: only treat third-party agent threads as blocking for this gate.
+                // Supports PLATE_PR_FEEDBACK_AGENTS repo var (comma-separated custom logins) for
+                // downstream customization; falls back to known defaults (matches pr_babysit).
+                // Humans use explicit CHANGES_REQUESTED / need:human-review.
+                const customAgentsEnv = process.env.PLATE_PR_FEEDBACK_AGENTS || '';
+                const customAgents = customAgentsEnv.split(',').map(s => s.trim()).filter(Boolean);
+                let agentPatterns;
+                if (customAgents.length > 0) {
+                  agentPatterns = customAgents.map(c => new RegExp('^' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+                } else {
+                  agentPatterns = [/^devin/i, /^openhands/i, /^codegen/i, /^swe-agent/i, /^aide-agent/i, /^mentat-bot/i];
+                }
+                const actionableUnresolved = unresolved.filter((author) =>
+                  agentPatterns.some((p) => p.test(author))
+                );
+
                 const pageInfo = pr.reviewThreads.pageInfo;
                 cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
               } while (cursor);
@@ -97,10 +117,10 @@ jobs:
                 return;
               }
 
-              if (unresolved.length > 0) {
-                const sample = unresolved.slice(0, 8).join(', ');
+              if (actionableUnresolved.length > 0) {
+                const sample = actionableUnresolved.slice(0, 8).join(', ');
                 core.setFailed(
-                  `Found ${unresolved.length} unresolved active review thread(s). Resolve all threads before merge. Authors: ${sample}`
+                  `Found ${actionableUnresolved.length} unresolved active review thread(s) from third-party agents. Resolve agent threads (or use need:human-review for human judgment items) before merge. Authors: ${sample}`
                 );
                 return;
               }

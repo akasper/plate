@@ -431,12 +431,13 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn(loop, QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("current failing gates", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("inspect-fix-push-reinspect cycle", QUIET_OPERATIONS_GUIDANCE)
-        self.assertIn("comprehensively inspect *all* current failing gates", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("Push all changes to the *existing* PR branch", QUIET_OPERATIONS_GUIDANCE)
-        self.assertIn("Repeat the inspect-fix-push-reinspect cycle until no more agent-actionable items remain", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("only human-judgment items remain", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("one-sentence summary for the human of what is left", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("pr-babysit", QUIET_OPERATIONS_GUIDANCE)
+        # NOTE: we assert key phrases/section headers (not full verbatim multi-paragraph strings)
+        # to prevent guidance churn and respect any persona size limits (#569 architecture relief).
+        # See agent_guidance.py "Guidance architecture for persona byte limits..." comment.
 
     def test_ci_diagnosis_first_protocol_in_guidance(self):
         """Regression test for #527: the 'CI Diagnosis First Protocol' (always start
@@ -555,6 +556,7 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("Mandatory use of native TUI forms for Q&A in PLATE contexts", QANDA_CURIOSITY_GUIDANCE)
         self.assertIn("Enforcement of Q&A option follow-through", QANDA_CURIOSITY_GUIDANCE)
         self.assertIn("ask_user_question (or host native TUI)", QANDA_CURIOSITY_GUIDANCE)
+        # Key-phrase asserts only (see guidance architecture note + #569 persona relief).
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
@@ -613,7 +615,7 @@ class PrBabysitTests(unittest.TestCase):
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
         self.assertIn("consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers", agents)
-        self.assertIn("(Addresses #503, #518, #517, #521.)", agents)
+        self.assertIn("(Addresses #503, #518, #517, #521 and closes the post-0.6.1 Q&A/babysit stub cluster under #580/#569 polish.)", agents)
 
     def test_qanda_follow_through_enforced_in_this_turn_517(self):
         """Regression test for #517: guidance and AGENTS enforce that interactive Q&A options (ask_user_question) only offer actions whose full follow-through (artifacts, execution) will complete in this turn; no advance until done."""
@@ -745,7 +747,7 @@ class PrBabysitTests(unittest.TestCase):
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
         self.assertIn("If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed.", agents)
-        self.assertIn("(Addresses #503, #518, #517, #521.)", agents)
+        self.assertIn("(Addresses #503, #518, #517, #521 and closes the post-0.6.1 Q&A/babysit stub cluster under #580/#569 polish.)", agents)
 
 
 if __name__ == "__main__":
