@@ -131,6 +131,7 @@ def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
     (repo_root / "plugin").mkdir(parents=True, exist_ok=True)
     (repo_root / ".plugin").mkdir(parents=True, exist_ok=True)
     (repo_root / ".github" / "plugin").mkdir(parents=True, exist_ok=True)
+    (repo_root / ".grok-plugin").mkdir(parents=True, exist_ok=True)
     (repo_root / "src" / "plate_core" / "__init__.py").write_text(
         f'"""plate_core runtime package."""\n\n__version__ = "{version}"\n',
         encoding="utf-8",
@@ -159,6 +160,15 @@ def _seed_version_files(repo_root: Path, version: str = "0.1.4") -> None:
                 "name": "plate-marketplace",
                 "metadata": {"version": version},
                 "plugins": [{"name": "plate-core", "source": "plugin", "version": version}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (repo_root / ".grok-plugin" / "marketplace.json").write_text(
+        json.dumps(
+            {
+                "name": "plate-marketplace",
+                "plugins": [{"name": "plate-core", "source": {"type": "local", "path": "./.plugin"}, "version": version}],
             }
         ),
         encoding="utf-8",
@@ -284,6 +294,8 @@ class CutReleaseVersionSyncTests(unittest.TestCase):
             marketplace = json.loads((d / ".github" / "plugin" / "marketplace.json").read_text(encoding="utf-8"))
             self.assertEqual(marketplace["metadata"]["version"], "0.2.0")
             self.assertEqual(marketplace["plugins"][0]["version"], "0.2.0")
+            grok_marketplace = json.loads((d / ".grok-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+            self.assertEqual(grok_marketplace["plugins"][0]["version"], "0.2.0")
 
 
 class VersionSyncReadTests(unittest.TestCase):
@@ -387,6 +399,15 @@ class ReleaseWorkspaceValidationTests(unittest.TestCase):
                         "name": "plate-marketplace",
                         "metadata": {"version": "../oops"},
                         "plugins": [{"name": "plate-core", "source": "plugin", "version": "../oops"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (repo_root / ".grok-plugin" / "marketplace.json").write_text(
+                json.dumps(
+                    {
+                        "name": "plate-marketplace",
+                        "plugins": [{"name": "plate-core", "source": {"type": "local", "path": "./.plugin"}, "version": "../oops"}],
                     }
                 ),
                 encoding="utf-8",
@@ -516,6 +537,19 @@ class ReleaseWorkspaceValidationTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            (repo_root / ".grok-plugin" / "marketplace.json").write_text(
+                json.dumps(
+                    {
+                        "plugins": [
+                            {
+                                "name": "plate-core",
+                                "version": "../oops",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
             (repo_root / "src" / "plate_core" / "__init__.py").write_text(
                 '"""plate_core runtime package."""\n\n__version__ = "../oops"\n',
                 encoding="utf-8",
@@ -631,6 +665,15 @@ class ReleaseWorkspaceValidationTests(unittest.TestCase):
                         "name": "plate-marketplace",
                         "metadata": {"version": "../oops"},
                         "plugins": [{"name": "plate-core", "source": "plugin", "version": "../oops"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (repo_root / ".grok-plugin" / "marketplace.json").write_text(
+                json.dumps(
+                    {
+                        "name": "plate-marketplace",
+                        "plugins": [{"name": "plate-core", "source": {"type": "local", "path": "./.plugin"}, "version": "../oops"}],
                     }
                 ),
                 encoding="utf-8",

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "plugins": {
+    "plate-core": {
+      "components": {
+        "agents": [
+          {
+            "name": "plate",
+            "description": "PLATE context-first agent that gathers repo/epic context and uses MCP tools."
+          }
+        ],
+        "mcpServers": [
+          {
+            "name": "plate-core",
+            "description": "stdio"
+          }
+        ]
+      }
+    }
+  }
+}

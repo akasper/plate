@@ -73,6 +73,11 @@ pip install plate-core
 copilot plugin marketplace add akasper/plate
 copilot plugin install plate-core@plate-marketplace
 
+# Grok Build (TUI / CLI):
+grok plugin marketplace add akasper/plate
+grok plugin install plate-core@plate-marketplace
+# Then (after enable/trust + reload): grok inspect, Ctrl+L → Agents / Marketplace, or /agent plate
+
 # In a new session with your CLI agent, invoke the plate agent (see your agent's docs for the exact command, e.g. /agent plate)
 ```
 
@@ -82,25 +87,28 @@ For local development or direct-source installation, these equivalent commands a
 copilot plugin install /absolute/path/to/plate
 # or
 copilot plugin install akasper/plate:plugin
+# Grok equivalent: grok plugin install /absolute/path/to/plate --trust
 ```
 
-The marketplace flow is the supported public install path. The plugin still expects the `plate-mcp` command to be available on `PATH`, which is why `pip install plate-core` remains a prerequisite until publication/runtime provisioning is further automated. There is no separate GitHub-run submission process for Copilot CLI marketplaces: this repository itself becomes the marketplace once the manifest is merged to the default branch and you treat that path as the supported public install channel.
+The marketplace flow is the supported public install path. The plugin still expects the `plate-mcp` command to be available on `PATH`, which is why `pip install plate-core` remains a prerequisite until publication/runtime provisioning is further automated. There is no separate GitHub-run submission process for Copilot CLI or Grok Build marketplaces: this repository itself becomes the marketplace once the manifest is merged to the default branch and you treat that path as the supported public install channel.
 
 #### Marketplace release checklist
 
 Before cutting the release that includes this marketplace path:
 
-1. Confirm `.github/plugin/marketplace.json` still points at the intended plugin source (`plugin/`).
-2. Verify the runtime prerequisite is available with `pip install plate-core`.
-3. Smoke-test the pre-launch install flow:
+1. Confirm `.github/plugin/marketplace.json` (Copilot) and `.grok-plugin/marketplace.json` (Grok) still point at the intended plugin source (`.plugin/` for the committed payload used by generator + e2e).
+2. Re-run `python3 scripts/generate-grok-plugin-index.py` (and commit) if `plugin/agents/` or `.mcp.json` or manifest keys changed; then `python3 scripts/generate-grok-plugin-index.py --check`.
+3. Verify the runtime prerequisite is available with `pip install plate-core`.
+4. Smoke-test the pre-launch install flows (Copilot + generator for Grok):
    ```sh
    copilot plugin marketplace add akasper/plate
    copilot plugin install plate-core@plate-marketplace
+   python3 scripts/generate-grok-plugin-index.py --check
    ```
-4. Complete the human-owned publication tasks tracked in #380 and #381.
-5. Fold the finished Epic into the active release issue (#376) and cut the release through the normal PLATE release ceremony.
+5. Complete the human-owned publication tasks tracked in #380 and #381.
+6. Fold the finished Epic into the active release issue (#376) and cut the release through the normal PLATE release ceremony.
 
-See the grok-build epic for full CLI-agnostic details and verification that no vendor-specific language remains in the plugin files.
+See the grok-build epic for full CLI-agnostic details and verification that no vendor-specific language remains in the plugin files. (This release also closes the Grok marketplace discovery gap reported in #570.)
 
 
 ## Playwright E2E Testing

@@ -1,0 +1,27 @@
+{
+  "version": "0.6.2",
+  "summary": "PLATE 0.6.2 -- 1 change(s): grok-marketplace-packaging.",
+  "cut_at": "2026-06-14T22:07:54Z",
+  "fragment_count": 1,
+  "fragment_slugs": [
+    "grok-marketplace-packaging"
+  ],
+  "entries": [
+    {
+      "change_type": "fix",
+      "surface": ".grok-plugin/ + scripts/generate-grok-plugin-index.py + version_sync + packaging tests + README + agent frontmatter",
+      "migration_impact": "Downstream repos using the plate marketplace for Grok will now see plate-core with agent + MCP previews in the Marketplace tab (Ctrl+L). Existing Copilot flow and pip install plate-core are unchanged. After this ships, Grok users should `grok plugin update` (or re-add the marketplace source) + reload (r in Plugins) or restart TUI to pick up the new catalog + updated agent guidance.",
+      "agent_notes": "This was a packaging + discovery gap between the Copilot-only .github/plugin/ surface and Grok's .grok-plugin/ + plugin-index.json requirement. The vendored generator + dual marketplace manifests + version sync now keep both in lockstep. plate.agent.md frontmatter extended with prompt_mode/permission_mode/agents_md for full Grok menu integration. #570 is the driver; the CLI-agnostic work (Epic #202) is now complete for Grok TUI.",
+      "migration_guidance": [
+        "1. `grok plugin marketplace add akasper/plate` (or re-add if already configured under a 'plate' source) now lists plate-core with rich component summaries (1 agent, 1 MCP).",
+        "2. `grok plugin install plate-core@plate-marketplace --trust` (or via TUI i/d) + enable in config.",
+        "3. Use `grok inspect`, Plugins tab (Ctrl+L), or `/agent plate` (or host picker) to confirm the plate persona and plate-core MCP tools are active.",
+        "4. `grok plugin validate .plugin` (or installed copy) continues to pass.",
+        "5. For local dev: the generator can be run with `python3 scripts/generate-grok-plugin-index.py` after editing agents/ or .mcp.json inside the payload."
+      ],
+      "links": [
+        "#570"
+      ]
+    }
+  ]
+}
