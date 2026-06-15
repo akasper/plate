@@ -228,6 +228,13 @@ When using or encountering backgrounded commands (e.g. `run_terminal_command(...
 
 This protocol prevents wasted compute and ensures partial results from killed tasks are acted upon quickly. Agents must proactively use `get_command_or_subagent_output` / `monitor` rather than reacting to reminders.
 
+### Guidance architecture for persona byte limits and churn reduction (#569)
+The shipped `plugin/agents/plate.agent.md` (and .plugin/ mirror) is intentionally a *thin high-level summary + routing table* (default persona, special modes for Q&A/babysit, key "MUST" rules like release status first).
+Detailed protocols, loops, and examples live here in agent_guidance.py (QUIET_OPERATIONS_GUIDANCE, QANDA..., Release Status Protocol, etc.) and in AGENTS.md.
+Tests should assert *key phrases or section headers* (e.g. "Full PR Green / Make Mergeable Loop", "CI Diagnosis First Protocol") rather than long verbatim multi-sentence blocks. This eliminates repeated trim/sync/re-test churn when guidance is extended.
+Persona size limits (if any in host) are respected by keeping the .md file focused on invocation, not full docs.
+See also: tests/test_pr_babysit.py (guidance/persona assertions), AGENTS.md §Agent-specific naming guardrail and Task Management.
+
 ### CI Diagnosis First Protocol (before expensive local verification or repro)
 When the high-level instruction is "get CI passing", "reproduce the failure (in worktree)", "fix the red checks", "address feedback", or any verification/babysit task that might involve local commands (especially broad pytest in worktrees):
 

@@ -2,7 +2,10 @@ name: PLATE PR Issue Link Check
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened, labeled, unlabeled, milestoned, demilestoned]
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled, milestoned, demilestoned, closed]
+  push:
+    branches: [release, 'release-*', 'release-v*']
+    # For post-merge 'implemented' labeling on release track branches (#556)
 
 permissions:
   contents: read
@@ -144,3 +147,61 @@ jobs:
             ].join('\n');
 
             core.setFailed(message);
+
+  # Minimal implementation for PLATE Issue states (#556): on merge of a PR to a release/next track
+  # branch (not main), mark linked issues with status:implemented (distinguishes "in this RC" from
+  # fully released on main+tag). Uses the same linked-issue detection logic as the check job.
+  # Run on PR closed+merged or direct push to release-*.
+  mark-implemented-on-release-merge:
+    if: |
+      (github.event_name == 'pull_request' &&
+       github.event.action == 'closed' &&
+       github.event.pull_request.merged == true &&
+       (startsWith(github.event.pull_request.base.ref, 'release') || github.event.pull_request.base.ref == 'release')) ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Mark linked issues as status:implemented (release branch merge)
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const isPR = !!context.payload.pull_request;
+            const pr = context.payload.pull_request;
+            const baseRef = isPR ? pr.base.ref : (context.ref || '').replace('refs/heads/', '');
+            if (!baseRef || !baseRef.startsWith('release')) {
+              core.info('Not a release-track merge; skipping implemented state.');
+              return;
+            }
+            // Collect linked issue numbers (reuse pattern from check job)
+            let linked = new Set();
+            if (isPR) {
+              const body = pr.body || '';
+              const closingPattern = /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(#\d+)/gi;
+              let m;
+              while ((m = closingPattern.exec(body)) !== null) {
+                linked.add(parseInt(m[2].replace('#', '')));
+              }
+              // For full fidelity, a GraphQL step could be added; this covers the common Closes case for now.
+            }
+            if (linked.size === 0) {
+              core.info('No linked issues found via body Closes; skipping status:implemented label.');
+              return;
+            }
+            const label = 'status:implemented';
+            for (const num of linked) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: num,
+                  labels: [label]
+                });
+                core.info(`Added ${label} to #${num} (merged to ${baseRef}).`);
+              } catch (e) {
+                core.warning(`Failed to label #${num}: ${e.message}`);
+              }
+            }
