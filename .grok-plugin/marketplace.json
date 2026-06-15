@@ -8,7 +8,7 @@
     {
       "name": "plate-core",
       "description": "PLATE core plugin \u2014 context-first agent + MCP wiring for any compatible CLI agent.",
-      "version": "0.6.2",
+      "version": "0.6.3",
       "repository": "https://github.com/akasper/plate",
       "license": "MIT",
       "source": {

@@ -1,0 +1,15 @@
+{
+  "slug": "grok-plugin-mcp-skills-surface",
+  "change_type": "fix",
+  "surface": "plugin/.mcp.json + .plugin/.mcp.json + README + packaging tests",
+  "summary": "Fix Grok Build post-activation surfacing for plate-core MCP and bundled skills by adopting the mcpServers wrapper in .mcp.json.",
+  "migration_impact": "Grok users must reinstall or update plate-core after this ships (`grok plugin install plate-core@plate-marketplace --trust` or `grok plugin update`) and reload the TUI. Bundled skills require the #577 payload (skills/ + SKILLS.md) in the installed copy.",
+  "agent_notes": "Grok runtime ignores flat .mcp.json server maps even though grok plugin validate passes. Official marketplace plugins (vercel, neon, mongodb) all wrap servers under mcpServers. Pair with --trust at install for stdio MCP execution.",
+  "migration_guidance": [
+    "1. Ensure pip install plate-core so plate-mcp is on PATH.",
+    "2. grok plugin install plate-core@plate-marketplace --trust (or reinstall from .plugin).",
+    "3. Enable plugin + reload TUI; run grok inspect and confirm plate-core (stdio) MCP and plugin: plate-core skills.",
+    "4. If an older marketplace install remains, uninstall duplicates and reinstall once."
+  ],
+  "links": ["#576", "#577"]
+}

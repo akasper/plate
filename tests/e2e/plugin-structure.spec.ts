@@ -30,6 +30,7 @@ test.describe("Plugin structure", () => {
     expect(typeof manifest.version).toBe("string");
     expect(manifest.agents).toBeTruthy();
     expect(manifest.mcpServers).toBeTruthy();
+    expect(manifest.skills).toBe("skills/");
   });
 
   test("plugin.json repository points to akasper/plate", () => {
@@ -85,9 +86,20 @@ test.describe("Plugin structure", () => {
     }
   });
 
-  test(".mcp.json wires up the plate-core MCP server", () => {
+  test(".mcp.json wires up the plate-core MCP server for Grok runtime", () => {
     const raw = readFileSync(join(PLUGIN_ROOT, ".mcp.json"), "utf-8");
     const config = JSON.parse(raw) as Record<string, unknown>;
-    expect(config["plate-core"]).toBeTruthy();
+    const servers = config.mcpServers as Record<string, Record<string, unknown>>;
+    expect(servers).toBeTruthy();
+    expect(servers["plate-core"]).toBeTruthy();
+    expect(servers["plate-core"].command).toBe("plate-mcp");
+  });
+
+  test("skills directory contains generated SKILL.md payloads", () => {
+    const skillsRoot = join(PLUGIN_ROOT, "skills");
+    expect(existsSync(skillsRoot)).toBe(true);
+    const entries = readFileSync(join(PLUGIN_ROOT, "SKILLS.md"), "utf-8");
+    expect(entries).toContain("PLATE-GENERATED:BEGIN skills-surface");
+    expect(existsSync(join(skillsRoot, "crud-projects", "SKILL.md"))).toBe(true);
   });
 });

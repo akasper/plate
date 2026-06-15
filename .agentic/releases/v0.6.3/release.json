@@ -1,0 +1,44 @@
+{
+  "version": "0.6.3",
+  "summary": "PLATE 0.6.3 -- 2 change(s): grok-plugin-mcp-skills-surface, plugin-skills-md-sync.",
+  "cut_at": "2026-06-15T13:51:00Z",
+  "fragment_count": 2,
+  "fragment_slugs": [
+    "grok-plugin-mcp-skills-surface",
+    "plugin-skills-md-sync"
+  ],
+  "entries": [
+    {
+      "change_type": "fix",
+      "surface": "plugin/.mcp.json + .plugin/.mcp.json + README + packaging tests",
+      "migration_impact": "Grok users must reinstall or update plate-core after this ships (`grok plugin install plate-core@plate-marketplace --trust` or `grok plugin update`) and reload the TUI. Bundled skills require the #577 payload (skills/ + SKILLS.md) in the installed copy.",
+      "agent_notes": "Grok runtime ignores flat .mcp.json server maps even though grok plugin validate passes. Official marketplace plugins (vercel, neon, mongodb) all wrap servers under mcpServers. Pair with --trust at install for stdio MCP execution.",
+      "migration_guidance": [
+        "1. Ensure pip install plate-core so plate-mcp is on PATH.",
+        "2. grok plugin install plate-core@plate-marketplace --trust (or reinstall from .plugin).",
+        "3. Enable plugin + reload TUI; run grok inspect and confirm plate-core (stdio) MCP and plugin: plate-core skills.",
+        "4. If an older marketplace install remains, uninstall duplicates and reinstall once."
+      ],
+      "links": [
+        "#576",
+        "#577"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plugin/ + .plugin/ + scripts/generate-plugin-skills.py + src/plate_core/skills_surface.py + CI",
+      "migration_impact": "Baseline catalog edits must run `python3 scripts/generate-plugin-skills.py` before merge. Plugin manifests now declare `skills: skills/`. Grok marketplace index will list bundled skills after regenerating plugin-index.json.",
+      "agent_notes": "Never hand-edit `plugin/SKILLS.md`, `.plugin/SKILLS.md`, or `skills/*/SKILL.md`. Edit `src/plate_core/data/baseline_catalog.yml`, run the generator, commit outputs, and let CI enforce sync.",
+      "migration_guidance": [
+        "1. Edit skills only in `src/plate_core/data/baseline_catalog.yml`.",
+        "2. Run `python3 scripts/generate-plugin-skills.py` to refresh `plugin/` and `.plugin/` skill surfaces.",
+        "3. Run `python3 scripts/generate-grok-plugin-index.py` if marketplace previews should include the new skills.",
+        "4. Commit generated files; CI runs `generate-plugin-skills.py --check` on every PR."
+      ],
+      "links": [
+        "#578",
+        "#576"
+      ]
+    }
+  ]
+}

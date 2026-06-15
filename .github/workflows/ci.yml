@@ -39,6 +39,12 @@ jobs:
           copilot plugin uninstall plate-core
           copilot plugin marketplace remove plate-marketplace --force
 
+      - name: Plugin skill surface sync check (SKILLS.md + SKILL.md)
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          python3 scripts/generate-plugin-skills.py --check
+
       - name: Grok marketplace packaging check (generator + committed index)
         run: |
           set -euo pipefail
