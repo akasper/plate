@@ -40,6 +40,7 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
     def test_plugin_mcp_manifest_uses_grok_runtime_wrapper(self):
         for surface in ("plugin", ".plugin"):
             mcp = read_json(f"{surface}/.mcp.json")
+            self.assertEqual(set(mcp.keys()), {"mcpServers"}, msg=f"{surface}/.mcp.json must only declare mcpServers")
             servers = mcp.get("mcpServers")
             self.assertIsInstance(servers, dict, msg=f"{surface}/.mcp.json must wrap servers under mcpServers")
             self.assertIn("plate-core", servers)
