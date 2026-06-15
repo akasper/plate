@@ -8,5 +8,6 @@
   "repository": "https://github.com/akasper/plate",
   "license": "MIT",
   "agents": "agents/",
+  "skills": "skills/",
   "mcpServers": ".mcp.json"
 }
