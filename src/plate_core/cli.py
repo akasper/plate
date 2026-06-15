@@ -682,7 +682,11 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     # For now emit the commands the user (or automation) can run.
     print("\nRecommended commands (execute after confirming tag on origin):")
     print(f"  git checkout release && git fetch origin && git reset --hard origin/{version} && git push --force-with-lease")
-    print(f"  gh release create {version} --title \"PLATE {version}\" --notes-file <(python -c \"import json; print(json.load(open('.agentic/releases/v{version}/release.json'))['summary']) \") ")
+    print("  # Safe (sh-compatible) notes file instead of process substitution:")
+    print(f"  cat > /tmp/release-notes-{version}.md << 'EON'")
+    print(f"  $(python -c \"import json; print(json.load(open('.agentic/releases/v{version}/release.json'))['summary']) \")")
+    print("  EON")
+    print(f"  gh release create {version} --title \"PLATE {version}\" --notes-file /tmp/release-notes-{version}.md")
     print("  gh issue create --label Release --title \"Next Release\" --body \"Standing target (auto-created by finalize).\"")
     print("Finalize guidance + commands emitted. Wire full automation in core_finalize (release.py) in a follow-up atomic PR.")
     return 0
