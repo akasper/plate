@@ -15,7 +15,7 @@ description: Read, list (with category filters e.g. Ideas), get full content, co
 
 Read, list (with category filters e.g. Ideas), get full content, comment on, and create GitHub Discussions. Encapsulates the gh api + GraphQL strategy for reliable agent/orchestrator use (Ideas capture, inter-agent comms/logs per
 
-**Owning agents:** research-agent, project-manager, dev-relations-expert, project-manager, software-engineer
+**Owning agents:** research-agent, project-manager, dev-relations-expert, software-engineer
 
 ## Inputs
 

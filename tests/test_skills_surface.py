@@ -66,16 +66,17 @@ class SkillsSurfaceTests(unittest.TestCase):
             self.assertTrue(ok, msg="\n".join(errors))
 
     def test_plugin_skills_surfaces_in_sync_detects_drift(self):
-        repo_root = Path(__file__).resolve().parents[1]
-        skills_md = repo_root / "plugin" / "SKILLS.md"
-        original = skills_md.read_text(encoding="utf-8")
-        try:
-            skills_md.write_text(original + "\n# stale edit\n", encoding="utf-8")
-            ok, errors = plugin_skills_surfaces_in_sync(repo_root)
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            (repo_root / "plugin").mkdir()
+            (repo_root / ".plugin").mkdir()
+            with patch("plate_core.skills_surface.load_baseline_catalog", load_baseline_catalog):
+                write_plugin_skills_surfaces(repo_root)
+                skills_md = repo_root / "plugin" / "SKILLS.md"
+                skills_md.write_text(skills_md.read_text(encoding="utf-8") + "\n# stale edit\n", encoding="utf-8")
+                ok, errors = plugin_skills_surfaces_in_sync(repo_root)
             self.assertFalse(ok)
             self.assertTrue(any("plugin/SKILLS.md" in error for error in errors))
-        finally:
-            skills_md.write_text(original, encoding="utf-8")
 
     def test_generate_script_check_passes_in_repo(self):
         import subprocess

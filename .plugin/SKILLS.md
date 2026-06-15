@@ -31,7 +31,7 @@ Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same director
 | `design-data-pipelines` | Design Data Pipelines | `data-engineer` |
 | `document-new-feature-in-wiki` | Document New Feature in Wiki | `wiki-editor`, `dev-relations-expert` |
 | `fix-broken-build` | Fix Broken Build | `software-engineer`, `ci-engineer`, `devops-engineer` |
-| `github-discussions` | GitHub Discussions | `research-agent`, `project-manager`, `dev-relations-expert`, `project-manager`, `software-engineer` |
+| `github-discussions` | GitHub Discussions | `research-agent`, `project-manager`, `dev-relations-expert`, `software-engineer` |
 | `groom-backlog` | Groom Backlog | `project-manager` |
 | `identify-market-gaps-and-opportunities` | Identify Market Gaps and Opportunities | `market-researcher`, `research-agent` |
 | `mockup-ui` | Mockup UI | `user-experience-engineer`, `user-interface-designer` |
@@ -372,7 +372,7 @@ Diagnose and repair failing builds or test runs.
 
 Read, list (with category filters e.g. Ideas), get full content, comment on, and create GitHub Discussions. Encapsulates the gh api + GraphQL strategy for reliable agent/orchestrator use (Ideas capture, inter-agent comms/logs per
 
-**Owning agents:** `research-agent`, `project-manager`, `dev-relations-expert`, `project-manager`, `software-engineer`
+**Owning agents:** `research-agent`, `project-manager`, `dev-relations-expert`, `software-engineer`
 
 **Inputs**
 
