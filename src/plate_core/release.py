@@ -932,6 +932,9 @@ def collect_closes_block(fragments: list[dict]) -> str:
     """Collect unique Closes links from fragment 'links' arrays for Release PR body.
     Enables one merge-to-main to auto-close the addressed issues (fixes GitHub Closes limitation
     for work landed on release branches). Part of #569 Closes auto-collection.
+
+    Note: links referencing PRs (e.g. #577) rather than issues will be included; GitHub handles
+    gracefully on merge (closes the PR if still open; no-op if merged/closed). See review on #584.
     """
     seen = []
     for f in fragments:
