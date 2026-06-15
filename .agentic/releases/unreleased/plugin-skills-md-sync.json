@@ -11,5 +11,5 @@
     "3. Run `python3 scripts/generate-grok-plugin-index.py` if marketplace previews should include the new skills.",
     "4. Commit generated files; CI runs `generate-plugin-skills.py --check` on every PR."
   ],
-  "links": ["#576"]
+  "links": ["#578", "#576"]
 }
