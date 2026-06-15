@@ -1,5 +1,7 @@
 {
-  "plate-core": {
-    "command": "plate-mcp"
+  "mcpServers": {
+    "plate-core": {
+      "command": "plate-mcp"
+    }
   }
 }
