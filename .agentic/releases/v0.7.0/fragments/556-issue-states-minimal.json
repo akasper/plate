@@ -12,6 +12,12 @@
   ],
   "agent_notes": "When all children for an Epic are merged to the epic/ or release branch, they become 'implemented'. The final epic-close PR to main releases them. Use in planning: plate_epic_status will surface the distinction over time. Update release ceremony comments to reference the state.",
   "breaking": false,
-  "links": ["#556", "#580", "#569"],
-  "requires": ["0.6.3"]
+  "links": [
+    "#556",
+    "#580",
+    "#569"
+  ],
+  "requires": [
+    "0.7.0"
+  ]
 }

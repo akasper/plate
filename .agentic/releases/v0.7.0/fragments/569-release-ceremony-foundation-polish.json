@@ -12,6 +12,12 @@
   ],
   "agent_notes": "Use gh plate release status first. After cut, the Closes block is available for the Release PR. Finalize now provides concrete commands and will grow full automation. Feedback gate will no longer block on human review comments (only agent threads + explicit CHANGES_REQUESTED).",
   "breaking": false,
-  "links": ["#569", "#580", "#112"],
-  "requires": ["0.6.3"]
+  "links": [
+    "#569",
+    "#580",
+    "#112"
+  ],
+  "requires": [
+    "0.7.0"
+  ]
 }

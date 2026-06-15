@@ -21,7 +21,7 @@ This is the source-controlled home page for the repository wiki (synced from `do
 | Planning complete (user/agent finished)        | general-purpose              | `gh issue create` (child tickets), `plate_what_next` |
 | Work item ready (Feature / standalone)         | implement                    | `plate_what_next`, `gh plate release status`, `gh pr create` |
 | PR opened or feedback received                 | pr-babysit, review           | `pr-babysit`, `gh plate pr babysit`, `plate_pr_babysit` (MCP) |
-| (Polish note: new status:implemented on release-branch merge for RC tracking before main release; see #556/#582 + ceremony children under #580) | - | - |
+| Issue merged to release branch | lifecycle-state | pr-issue-link-check (auto-labels status:implemented) |
 | Work item / child complete (PR merged + evidence) | orchestrator (re-eval)     | `plate_what_next`, `gh` (status checks) |
 | All Epic children resolved                     | orchestrator                 | `plate_what_next`, `gh pr create` (Epic-close PR) |
 | Epic-close PR human-merged                     | general-purpose (finalize)   | `git tag` / `git push --tags`, `gh release`, hard-reset scripts, `gh plate release finalize` |

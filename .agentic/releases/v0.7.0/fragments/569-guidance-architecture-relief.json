@@ -10,6 +10,11 @@
   ],
   "agent_notes": "When extending QUIET or QANDA guidance, add only to the .py module and AGENTS; update persona.md with a one-line reference if the new rule is a 'MUST' for routing. Tests will not break on wording tweaks inside the detailed guidance.",
   "breaking": false,
-  "links": ["#569", "#580"],
-  "requires": ["0.6.3"]
+  "links": [
+    "#569",
+    "#580"
+  ],
+  "requires": [
+    "0.7.0"
+  ]
 }
