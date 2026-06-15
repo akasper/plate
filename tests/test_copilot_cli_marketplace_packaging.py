@@ -37,6 +37,15 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         self.assertEqual(plugin_manifest["repository"], plugin_entry["repository"])
         self.assertEqual(plugin_manifest.get("skills"), "skills/")
 
+    def test_plugin_mcp_manifest_uses_grok_runtime_wrapper(self):
+        for surface in ("plugin", ".plugin"):
+            mcp = read_json(f"{surface}/.mcp.json")
+            self.assertEqual(set(mcp.keys()), {"mcpServers"}, msg=f"{surface}/.mcp.json must only declare mcpServers")
+            servers = mcp.get("mcpServers")
+            self.assertIsInstance(servers, dict, msg=f"{surface}/.mcp.json must wrap servers under mcpServers")
+            self.assertIn("plate-core", servers)
+            self.assertEqual(servers["plate-core"].get("command"), "plate-mcp")
+
     def test_grok_marketplace_manifest_and_index_exist(self):
         # Grok uses .grok-plugin/ at repo root (distinct from Copilot's .github/plugin/)
         grok_manifest = read_json(".grok-plugin/marketplace.json")
@@ -82,7 +91,7 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         self.assertIn("copilot plugin marketplace add akasper/plate", readme)
         self.assertIn("copilot plugin install plate-core@plate-marketplace", readme)
         self.assertIn("grok plugin marketplace add akasper/plate", readme)
-        self.assertIn("grok plugin install plate-core@plate-marketplace", readme)
+        self.assertIn("grok plugin install plate-core@plate-marketplace --trust", readme)
         self.assertIn("pip install plate-core", readme)
         self.assertIn("There is no separate GitHub-run submission process for Copilot CLI or Grok Build marketplaces", readme)
         self.assertIn("Marketplace release checklist", readme)

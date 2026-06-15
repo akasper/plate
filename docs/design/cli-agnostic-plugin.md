@@ -40,13 +40,15 @@ This design documents the final generic state and the (minimal) rationale. No la
 ### plugin/.mcp.json
 ```json
 {
-  "plate-core": {
-    "command": "plate-mcp"
+  "mcpServers": {
+    "plate-core": {
+      "command": "plate-mcp"
+    }
   }
 }
 ```
 
-**Changes:** None needed. This is the standard portable MCP server declaration.
+**Changes:** Use the `mcpServers` wrapper shape required by Grok Build runtime registration (and used by official xAI marketplace plugins). The flat `{ "plate-core": { ... } }` form still validates in previews but does not register MCP servers in `grok inspect` after activation (#576).
 
 ## What Does NOT Change (by design)
 - The `plate-mcp` binary and all MCP tool implementations (already CLI-agnostic).
