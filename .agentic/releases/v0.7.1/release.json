@@ -1,0 +1,163 @@
+{
+  "version": "0.7.1",
+  "summary": "PLATE 0.7.1 -- 7 change(s): 556-issue-states-minimal, 569-580-guidance-cluster-closure, 569-ci-stabilization-path, 569-guidance-architecture-relief, 569-release-ceremony-foundation-polish....",
+  "cut_at": "2026-06-16T16:30:05Z",
+  "fragment_count": 7,
+  "fragment_slugs": [
+    "556-issue-states-minimal",
+    "569-580-guidance-cluster-closure",
+    "569-ci-stabilization-path",
+    "569-guidance-architecture-relief",
+    "569-release-ceremony-foundation-polish",
+    "592-finalize-automation",
+    "593-workflow-auto-release-object"
+  ],
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": ".github/labels.yml, .github/workflows/pr-issue-link-check.yml, src/plate_core/epics.py, AGENTS.md, plugin/agents/plate.agent.md",
+      "migration_impact": "Downstream repos get a status:implemented label and automatic labeling on release-branch merges for Features/Bugs. Issues now have clearer lifecycle: open -> implemented (on release merge) -> closed/released (on main merge + tag). Update any custom queries or dashboards.",
+      "agent_notes": "When all children for an Epic are merged to the epic/ or release branch, they become 'implemented'. The final epic-close PR to main releases them. Use in planning: plate_epic_status will surface the distinction over time. Update release ceremony comments to reference the state.",
+      "migration_guidance": [
+        "1. Sync the new status:implemented label (or let bootstrap create it on next apply).",
+        "2. The pr-issue-link-check (or equivalent) will auto-apply the label on merges to your release branches.",
+        "3. Use gh issue list --label status:implemented or gh plate epic status to see RC-ready work.",
+        "4. When the final Release PR merges to main, the issues will naturally close via their original Closes links."
+      ],
+      "links": [
+        "#556",
+        "#580",
+        "#569"
+      ],
+      "requires": [
+        "0.7.0"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "AGENTS.md, plugin/agents/plate.agent.md, src/plate_core/agent_guidance.py (via prior slices + this)",
+      "migration_impact": "Agents operating under the plate persona will follow stricter (but already partially landed) rules for Q&A follow-through, pr-babysit full ownership, release status first, and quiet ops with no repeated user corrections needed. No config changes for downstream.",
+      "agent_notes": "The cluster of bugs that required repeated prompting for Q&A/babysit completion, release status, worktree discipline, etc. is now closed. Always start with release status (tool or gh plate), use pr-babysit skill for green loops, offer only in-turn executable Q&A options, use todo_write, etc. Per AGENTS and guidance.",
+      "migration_guidance": [
+        "1. Re-install or reload the plate persona / MCP after the release to pick up any persona.md tweaks.",
+        "2. Existing long-running autonomous or Q&A sessions will benefit from the clarified 'complete before advance' and 'CI first' protocols."
+      ],
+      "links": [
+        "#569",
+        "#580",
+        "#509",
+        "#510",
+        "#511",
+        "#512",
+        "#521",
+        "#503",
+        "#517",
+        "#518",
+        "#519",
+        "#523",
+        "#525",
+        "#526",
+        "#527",
+        "#528"
+      ],
+      "requires": [
+        "0.7.0"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": ".github/workflows/ci.yml",
+      "migration_impact": "Repos with custom CI can adopt a 'stabilization' label (or Documentation) to keep review pushes cheap on release branches. The heavy jobs remain for true packaging Release PRs.",
+      "agent_notes": "For Release PR review rounds or thread resolve pushes, prefer stabilization label to keep velocity high. Still run gh plate release status first and use pr-babysit for the loop.",
+      "migration_guidance": [
+        "1. When responding to review on a Release PR / release-v branch, apply 'stabilization' label (or keep Documentation) to avoid full heavy matrix.",
+        "2. Update any local branch protection or status checks expectations if you rely on heavy steps always running."
+      ],
+      "links": [
+        "#569",
+        "#580",
+        "#532"
+      ],
+      "requires": [
+        "0.7.0"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "src/plate_core/agent_guidance.py, tests/test_pr_babysit.py, plugin/agents/plate.agent.md",
+      "migration_impact": "Downstream agent prompt surfaces following plate persona will see no behavior change (rules were already documented). Custom tests that pinned full guidance strings may need update to phrase checks.",
+      "agent_notes": "When extending QUIET or QANDA guidance, add only to the .py module and AGENTS; update persona.md with a one-line reference if the new rule is a 'MUST' for routing. Tests will not break on wording tweaks inside the detailed guidance.",
+      "migration_guidance": [
+        "1. If you maintain copies of plate.agent.md or guidance excerpts, keep them as summaries only.",
+        "2. Update any local tests of agent output to check for section names or key sentences rather than entire paragraphs."
+      ],
+      "links": [
+        "#569",
+        "#580"
+      ],
+      "requires": [
+        "0.7.0"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": ".github/workflows/feedback-resolution-check.yml, src/plate_core/release.py, src/plate_core/cli.py, AGENTS.md",
+      "migration_impact": "Downstream repos using custom feedback gates or release scripts should adopt the agent-only semantics (set PLATE_PR_FEEDBACK_AGENTS var) and prefer gh plate release cut/finalize over manual scripts. Release PR bodies can now include the generated Closes block for automatic issue closure on merge to main.",
+      "agent_notes": "Use gh plate release status first. After cut, the Closes block is available for the Release PR. Finalize now provides concrete commands and will grow full automation. Feedback gate will no longer block on human review comments (only agent threads + explicit CHANGES_REQUESTED).",
+      "migration_guidance": [
+        "1. Update branch protection to reference the updated feedback-resolution-check (agent-only behavior is now enforced in CI).",
+        "2. When cutting releases, review the printed 'Recommended Closes block' and include it in the Release PR body to main.",
+        "3. Run `gh plate release finalize <ver>` (or the commands it emits) post-merge instead of manual hard-reset + gh release create.",
+        "4. Set PLATE_PR_FEEDBACK_AGENTS repo variable (comma list) if you use non-default third-party agent logins for babysit/gate."
+      ],
+      "links": [
+        "#569",
+        "#580",
+        "#112"
+      ],
+      "requires": [
+        "0.7.0"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "src/plate_core/cli.py, src/plate_core/release.py, tests/test_release.py, tests/test_cli.py, .agentic/releases/unreleased/",
+      "migration_impact": "Downstream PLATE repos running `gh plate release finalize` after a Release PR merge will now automatically populate the GitHub Releases tab (latest + notes) instead of requiring manual gh release create. --apply is required for the destructive reset step (still prints the command and errors clearly if guards fail). Add the new fragment on cut.",
+      "agent_notes": "This closes the main automation gap from #591 (post #569 MVP). The helpers are designed to be called from release.yml too. Use --apply deliberately. Tests cover dry, exists, assets convention, guard messages. See #592 body for full ACs and planning decisions (both create+reset automated, workflow auto in follow-up, explicit simple assets).",
+      "migration_guidance": [
+        "After upgrading, re-run `gh plate release finalize <last-ver>` with --apply if you want the branch reset (otherwise just the release object will be created).",
+        "The vX.Y.Z/assets/ convention is new and optional for attaching extra release artifacts.",
+        "Update any local scripts that parsed the old 'Recommended commands' output from finalize.",
+        "Status (sibling #594) will soon surface GitHub release state to detect/create success."
+      ],
+      "links": [
+        "#592",
+        "#591",
+        "#569"
+      ],
+      "requires": [
+        "0.7.0"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": ".github/workflows/release.yml",
+      "migration_impact": "Downstream PLATE repos will now have the GitHub Release object (UI, latest, rich notes from release.json) automatically created as part of the tag job for Release PRs (best-effort). The explicit `gh plate release finalize` path remains available for repair/manual use or older flows. The helper and convention are shared with the finalize path from #592.",
+      "agent_notes": "Reuses create_github_release + _render_release_notes + assets logic exactly (DRY). Best-effort wrapper (set +e + try/except) per #593 refinement decisions under #591. Idempotent via helper. See full refined ACs and impl notes in #593 body. Complements #592 (finalize explicit path).",
+      "migration_guidance": [
+        "If you have a customized release.yml, port the new step (modeled on the validate step; uses PYTHONPATH + the plate_core.release helper).",
+        "No changes needed to .plate config or extension checks for this.",
+        "The fragment ensures this is documented in the next release notes.",
+        "Test locally with a dry Release PR merge if possible."
+      ],
+      "links": [
+        "#593",
+        "#591",
+        "#592"
+      ],
+      "requires": [
+        "0.7.0"
+      ]
+    }
+  ]
+}

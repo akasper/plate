@@ -11,5 +11,5 @@
   "agent_notes": "The cluster of bugs that required repeated prompting for Q&A/babysit completion, release status, worktree discipline, etc. is now closed. Always start with release status (tool or gh plate), use pr-babysit skill for green loops, offer only in-turn executable Q&A options, use todo_write, etc. Per AGENTS and guidance.",
   "breaking": false,
   "links": ["#569", "#580", "#509", "#510", "#511", "#512", "#521", "#503", "#517", "#518", "#519", "#523", "#525", "#526", "#527", "#528"],
-  "requires": ["0.6.3"]
+  "requires": ["0.7.0"]
 }
