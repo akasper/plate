@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import subprocess
+import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1068,3 +1071,252 @@ def cut_release(
         f"git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease"
     )
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Finalize automation (Epic #591 / Feature #592): actual gh release create,
+# guarded hard-reset (opt-in via --apply), and simple assets support.
+# Core helpers are reusable (CLI today; workflow/MCP slices later).
+# ---------------------------------------------------------------------------
+
+
+def _render_release_notes(release_data: dict, version: str) -> str:
+    """Render a markdown release body from the structured release.json data."""
+    summary = release_data.get("summary") or f"PLATE {version}"
+    lines = [summary, ""]
+    entries = release_data.get("entries", []) or []
+    if entries:
+        lines.append("## Changes")
+        for e in entries:
+            ct = e.get("change_type", "change")
+            surface = e.get("surface", "")
+            impact = e.get("migration_impact", "") or e.get("agent_notes", "")
+            lines.append(f"- **{ct}** {surface}: {impact}".strip())
+        lines.append("")
+    if closes := release_data.get("closes_block"):
+        lines.append(closes)
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def _find_simple_assets(versioned_dir: Path) -> list[Path]:
+    """Simple convention for #592: any files under <versioned>/assets/ (non-recursive).
+    Documented in fragment + finalize help. Notes body is primary; these are extras.
+    """
+    assets_dir = versioned_dir / "assets"
+    if not assets_dir.is_dir():
+        return []
+    found = [p for p in sorted(assets_dir.iterdir()) if p.is_file()]
+    return found
+
+
+def create_github_release(
+    version: str,
+    releases_dir: Path | None = None,
+    repo: str | None = None,
+    dry_run: bool = False,
+    client: GhClient | None = None,
+) -> dict:
+    """Ensure a GitHub Release object exists for the given tag/version.
+
+    - Idempotent: checks /releases/tags/{tag} first.
+    - Uses release.json for rich notes (summary + entries).
+    - Simple assets: attaches files from v{ver}/assets/ if present.
+    - Prefers `gh release create` (reliable notes + --asset handling) for execution.
+    - Safe for re-run; returns info including created/existed.
+    """
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    effective = releases_dir or Path(".agentic/releases")
+    ver = version.lstrip("v")
+    tag = f"v{ver}"
+    versioned_dir = effective / f"v{ver}"
+    release_data = _load_release(effective, ver) or {}
+
+    # Existence check (graceful 404)
+    try:
+        existing = gh.api(f"repos/{target}/releases/tags/{tag}")
+        if existing and isinstance(existing, dict) and existing.get("id"):
+            return {
+                "tag": tag,
+                "exists": True,
+                "created": False,
+                "release": {"id": existing.get("id"), "url": existing.get("html_url")},
+            }
+    except GhApiError as exc:
+        if "404" not in str(exc).lower() and "not found" not in str(exc).lower():
+            raise
+
+    notes_body = _render_release_notes(release_data, ver)
+    assets = _find_simple_assets(versioned_dir)
+
+    if dry_run:
+        asset_names = [a.name for a in assets]
+        return {
+            "tag": tag,
+            "exists": False,
+            "created": False,
+            "would_create": True,
+            "notes_preview": notes_body[:300] + ("..." if len(notes_body) > 300 else ""),
+            "assets": asset_names,
+            "command_preview": f"gh release create {tag} --title 'PLATE {ver}' --notes-file <tmp> " + (" ".join(f"--asset {a}" for a in asset_names) if asset_names else ""),
+        }
+
+    # Write temp notes for gh release create (handles newlines reliably)
+    notes_fd, notes_path = tempfile.mkstemp(suffix=".md", text=True)
+    try:
+        with os.fdopen(notes_fd, "w", encoding="utf-8") as f:
+            f.write(notes_body)
+
+        cmd = [
+            "gh", "release", "create", tag,
+            "--title", f"PLATE {ver}",
+            "--notes-file", notes_path,
+        ]
+        for asset in assets:
+            cmd.extend(["--asset", str(asset)])
+
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if proc.returncode != 0:
+            try:
+                rel = gh.api(f"repos/{target}/releases/tags/{tag}")
+                if rel:
+                    return {"tag": tag, "exists": True, "created": False, "release": rel, "note": "existed after race"}
+            except Exception:
+                pass
+            raise RuntimeError(f"gh release create failed for {tag}: {proc.stderr or proc.stdout}")
+
+        rel = gh.api(f"repos/{target}/releases/tags/{tag}") or {}
+        return {
+            "tag": tag,
+            "exists": True,
+            "created": True,
+            "release": {"id": rel.get("id"), "url": rel.get("html_url")},
+            "assets_attached": [a.name for a in assets],
+        }
+    finally:
+        try:
+            os.unlink(notes_path)
+        except Exception:
+            pass
+
+
+def perform_guarded_hard_reset(
+    version: str,
+    releases_dir: Path | None = None,
+    repo: str | None = None,
+    dry_run: bool = False,
+    apply: bool = False,
+    client: GhClient | None = None,
+) -> dict:
+    """Guarded hard-reset of the (legacy) release branch to the release tag.
+
+    Strong guards per #592 planning:
+    - Only mutates when apply=True (and not dry_run).
+    - Verifies the tag exists on origin before any reset.
+    - Uses --force-with-lease.
+    - On failure or guard fail: clear error + recommended command, no mutation.
+    - Reusable; called from CLI finalize with --apply.
+    """
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    effective = releases_dir or Path(".agentic/releases")
+    ver = version.lstrip("v")
+    tag = f"v{ver}"
+
+    # Basic validation (non-fatal; main guard is the tag existence check below)
+    # validate_release_workspace is available in this module at runtime.
+
+    # Guard 1: tag must exist on remote
+    try:
+        ls = subprocess.run(
+            ["git", "ls-remote", "--tags", "origin", f"refs/tags/{tag}"],
+            capture_output=True, text=True, check=False
+        )
+        if not ls.stdout.strip():
+            ls = subprocess.run(
+                ["git", "ls-remote", "--tags", "origin", tag],
+                capture_output=True, text=True, check=False
+            )
+        if not ls.stdout.strip():
+            return {
+                "error": "tag_not_found_on_origin",
+                "recommended": f"Confirm tag {tag} exists (release workflow or manual). Then re-run finalize.",
+            }
+    except Exception as e:
+        return {"error": f"tag_check_failed: {e}"}
+
+    target_branch = "release"
+
+    cmd = [
+        "git", "checkout", target_branch,
+        "&&", "git", "fetch", "origin",
+        "&&", "git", "reset", "--hard", tag,
+        "&&", "git", "push", "--force-with-lease",
+    ]
+    shell_cmd = " ".join(cmd)
+
+    if dry_run or not apply:
+        return {
+            "would_reset": True,
+            "target_branch": target_branch,
+            "tag": tag,
+            "command": shell_cmd,
+            "note": "Hard reset skipped (dry_run or --apply not passed). This is destructive; use --apply only after confirming the tag.",
+        }
+
+    try:
+        root = find_repo_root(Path("."))
+        proc = subprocess.run(
+            shell_cmd,
+            shell=True,
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return {
+                "error": "reset_command_failed",
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+                "command": shell_cmd,
+            }
+        return {
+            "reset": True,
+            "target_branch": target_branch,
+            "tag": tag,
+            "command": shell_cmd,
+        }
+    except Exception as e:
+        return {"error": f"reset_exception: {e}", "command": shell_cmd}
+
+
+def ensure_next_release_issue(
+    repo: str | None = None,
+    client: GhClient | None = None,
+) -> dict:
+    """Ensure a standing 'Next Release' issue (label: Release, title containing Next) exists.
+    Low-risk; used by finalize for ceremony completeness.
+    """
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    q = quote_plus(f'repo:{target} is:issue is:open label:Release "Next Release"')
+    try:
+        search = gh.api(f"search/issues?q={q}") or {}
+        for item in (search.get("items") or []):
+            if "next" in (item.get("title") or "").lower():
+                return {"exists": True, "issue": {"number": item.get("number"), "url": item.get("html_url")}}
+    except Exception:
+        pass
+
+    fields = {
+        "title": "Next Release",
+        "body": "Standing target for the next PLATE release (auto-created by finalize). Use the Development sidebar to link Epics and work targeting this release.",
+        "labels": ["Release"],
+    }
+    try:
+        created = gh.api(f"repos/{target}/issues", method="POST", fields=fields) or {}
+        return {"created": True, "issue": {"number": created.get("number"), "url": created.get("html_url")}}
+    except Exception as e:
+        return {"error": f"create_failed: {e}"}
