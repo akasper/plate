@@ -80,6 +80,46 @@ jobs:
           echo "${RELEASE_TAG} already exists on ${existing_sha}, not ${MERGE_SHA}."
           exit 1
 
+      - name: Create GitHub Release (best-effort happy path for Releases tab / latest / notes)
+        # Per #593 (child of #591): after tag step, create the release object using the shared
+        # helper from #592. Best-effort/non-blocking so tag creation (the authoritative step)
+        # cannot be impacted. Reuses create_github_release + rendering + assets logic (DRY).
+        # Same v{ver}/assets/ convention. Idempotent. See refined ACs in #593.
+        env:
+          RELEASE_TAG: ${{ steps.release-version.outputs.release_tag }}
+        run: |
+          set +e  # best-effort: continue even if this fails (tag is critical)
+          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from plate_core.release import create_github_release
+
+          tag = os.environ.get("RELEASE_TAG", "")
+          ver = tag.lstrip("v") if tag else ""
+          if not ver:
+              print("WARNING: No RELEASE_TAG; skipping GitHub Release creation")
+              exit(0)
+          try:
+              info = create_github_release(
+                  version=ver,
+                  releases_dir=Path(".agentic/releases"),
+                  # repo=None -> resolves from git remote (the checkout is at the merge sha)
+              )
+              print(f"GitHub Release created/verified: {info}")
+          except Exception as exc:
+              print(f"WARNING: GitHub Release creation failed (best-effort, non-blocking): {exc}")
+              print("The git tag is reliable. Use 'gh plate release finalize <ver>' for repair if needed.")
+          PY
+
+      # GitHub Release object creation (happy path for the UI tab / latest badge / notes).
+      # See Epic #591 + children #592 (explicit finalize path + shared helper) and #593 (this step).
+      # Best-effort / non-blocking per refinement: tag creation is the critical path.
+      # Reuses create_github_release + _render_release_notes from plate_core.release (DRY with CLI).
+      # Same simple assets convention (v{ver}/assets/ if present in the checked-out artifact).
+      # Added in #593; idempotent via the helper; graceful on 404/exists/rate/etc.
+      # (The explicit `gh plate release finalize` path remains available for repair/manual runs.)
+
   deploy:
     if: github.event_name == 'push'
     permissions:
