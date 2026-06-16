@@ -1,0 +1,65 @@
+{
+  "version": "0.7.2",
+  "summary": "PLATE 0.7.2 -- 3 change(s): 592-finalize-automation, 593-workflow-auto-release-object, 608-repo-name-dot-parsing.",
+  "cut_at": "2026-06-16T20:37:54Z",
+  "fragment_count": 3,
+  "fragment_slugs": [
+    "592-finalize-automation",
+    "593-workflow-auto-release-object",
+    "608-repo-name-dot-parsing"
+  ],
+  "entries": [
+    {
+      "change_type": "process",
+      "surface": "src/plate_core/cli.py, src/plate_core/release.py, tests/test_release.py, tests/test_cli.py, .agentic/releases/unreleased/",
+      "migration_impact": "Downstream PLATE repos running `gh plate release finalize` after a Release PR merge will now automatically populate the GitHub Releases tab (latest + notes) instead of requiring manual gh release create. --apply is required for the destructive reset step (still prints the command and errors clearly if guards fail). Add the new fragment on cut.",
+      "agent_notes": "This closes the main automation gap from #591 (post #569 MVP). The helpers are designed to be called from release.yml too. Use --apply deliberately. Tests cover dry, exists, assets convention, guard messages. See #592 body for full ACs and planning decisions (both create+reset automated, workflow auto in follow-up, explicit simple assets).",
+      "migration_guidance": [
+        "After upgrading, re-run `gh plate release finalize <last-ver>` with --apply if you want the branch reset (otherwise just the release object will be created).",
+        "The vX.Y.Z/assets/ convention is new and optional for attaching extra release artifacts.",
+        "Update any local scripts that parsed the old 'Recommended commands' output from finalize.",
+        "Status (sibling #594) will soon surface GitHub release state to detect/create success."
+      ],
+      "links": [
+        "#592",
+        "#591",
+        "#569",
+        "#599"
+      ],
+      "requires": [
+        "0.7.0"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": ".github/workflows/release.yml",
+      "migration_impact": "Downstream PLATE repos will now have the GitHub Release object (UI, latest, rich notes from release.json) automatically created as part of the tag job for Release PRs (best-effort). The explicit `gh plate release finalize` path remains available for repair/manual use or older flows. The helper and convention are shared with the finalize path from #592.",
+      "agent_notes": "Reuses create_github_release + _render_release_notes + assets logic exactly (DRY). Best-effort wrapper (set +e + try/except) per #593 refinement decisions under #591. Idempotent via helper. See full refined ACs and impl notes in #593 body. Complements #592 (finalize explicit path).",
+      "migration_guidance": [
+        "If you have a customized release.yml, port the new step (modeled on the validate step; uses PYTHONPATH + the plate_core.release helper).",
+        "No changes needed to .plate config or extension checks for this.",
+        "The fragment ensures this is documented in the next release notes.",
+        "Test locally with a dry Release PR merge if possible."
+      ],
+      "links": [
+        "#593",
+        "#591",
+        "#592"
+      ],
+      "requires": [
+        "0.7.0"
+      ]
+    },
+    {
+      "change_type": "bug",
+      "surface": "src/plate_core/health.py, tests/test_health.py",
+      "migration_impact": "None for downstream: auto repo detection (gh plate health, bootstrap, release, etc without --repo) now works for valid dotted repo names. No behavior change for standard names.",
+      "agent_notes": "",
+      "links": [
+        "#608",
+        "#609"
+      ]
+    }
+  ],
+  "closes_block": "Closes #592, #591, #569, #599, #593, #608, #609"
+}
