@@ -1227,17 +1227,16 @@ def perform_guarded_hard_reset(
     # Basic validation (non-fatal; main guard is the tag existence check below)
     # validate_release_workspace is available in this module at runtime.
 
-    # Guard 1: tag must exist on remote
+    # Guard 1: tag must exist on remote.
+    # Use bare tag name (not refs/tags/ prefix) because PLATE releases use
+    # lightweight tags (git tag vX.Y.Z, not annotated). The refs/tags/ form
+    # only matches annotated tags and would cause the first lookup to always
+    # fail for our tags, falling back silently. See review on #601.
     try:
         ls = subprocess.run(
-            ["git", "ls-remote", "--tags", "origin", f"refs/tags/{tag}"],
+            ["git", "ls-remote", "--tags", "origin", tag],
             capture_output=True, text=True, check=False
         )
-        if not ls.stdout.strip():
-            ls = subprocess.run(
-                ["git", "ls-remote", "--tags", "origin", tag],
-                capture_output=True, text=True, check=False
-            )
         if not ls.stdout.strip():
             return {
                 "error": "tag_not_found_on_origin",
@@ -1248,11 +1247,15 @@ def perform_guarded_hard_reset(
 
     target_branch = "release"
 
+    # Safer reset using update-ref + push --force-with-lease.
+    # This updates the remote ref directly without requiring a local checkout
+    # of the target_branch or a clean working tree. Addresses review feedback
+    # on #601 (dirty tree would cause generic checkout failure).
+    # Still fetches first to ensure the tag is known locally.
     cmd = [
-        "git", "checkout", target_branch,
-        "&&", "git", "fetch", "origin",
-        "&&", "git", "reset", "--hard", tag,
-        "&&", "git", "push", "--force-with-lease",
+        "git", "fetch", "origin", tag,
+        "&&", "git", "update-ref", f"refs/heads/{target_branch}", f"refs/tags/{tag}",
+        "&&", "git", "push", "--force-with-lease", "origin", target_branch,
     ]
     shell_cmd = " ".join(cmd)
 
@@ -1262,7 +1265,7 @@ def perform_guarded_hard_reset(
             "target_branch": target_branch,
             "tag": tag,
             "command": shell_cmd,
-            "note": "Hard reset skipped (dry_run or --apply not passed). This is destructive; use --apply only after confirming the tag.",
+            "note": "Hard reset skipped (dry_run or --apply not passed). This is destructive; use --apply only after confirming the tag. Uses update-ref (no local branch checkout required).",
         }
 
     try:
