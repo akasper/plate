@@ -114,8 +114,15 @@ jobs:
 
           # Create (or move) a lightweight tag on the thin repo for discoverability.
           # Users can still just `gh extension install akasper/gh-plate` (latest).
-          git tag -f "${{ steps.version.outputs.version }}"
-          git push origin -f "${{ steps.version.outputs.version }}"
+          # Guard against silent overwrite if re-triggered for the same version
+          # (non-blocking review feedback on #601). Check first; only force if absent.
+          VER="${{ steps.version.outputs.version }}"
+          if git ls-remote --tags origin "refs/tags/${VER}" | grep -q . || git ls-remote --tags origin "${VER}" | grep -q .; then
+            echo "Tag ${VER} already exists on thin repo; skipping force tag push to protect immutability. (Existing tag points to prior commit for this version.)"
+          else
+            git tag -f "${VER}"
+            git push origin -f "${VER}"
+          fi
 
           echo "Thin shim updated and tagged for ${{ steps.version.outputs.version }}"
 
