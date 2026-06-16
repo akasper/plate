@@ -1,8 +1,9 @@
 import json
 import unittest
+from unittest.mock import patch
 
 from plate_core.github_client import GhApiError
-from plate_core.health import HealthReport, get_health
+from plate_core.health import HealthReport, _parse_repo_from_remote_url, get_health, _repo_from_git_remote
 
 
 class FakeClient:
@@ -132,6 +133,49 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.plate_config_resolved_version, "1.2")
         self.assertTrue(report.plate_config_upgrade_available)
         self.assertTrue(report.curiosity_answers_present)
+
+
+class RemoteParseTests(unittest.TestCase):
+    """Regression tests for git remote auto-detection (Bug #603).
+
+    Covers repositories whose names contain dots (e.g. u.ai), which previously
+    caused "Remote origin is not a GitHub repository URL." in bootstrap, health,
+    release status, etc. when --repo was omitted.
+    """
+
+    def test_parse_repo_from_remote_url_supports_dotted_repo_names(self):
+        cases = [
+            # The exact case reported for u.ai (and https variants)
+            ("git@github.com:akasper/u.ai.git", "akasper/u.ai"),
+            ("https://github.com/akasper/u.ai.git", "akasper/u.ai"),
+            ("https://github.com/akasper/u.ai", "akasper/u.ai"),
+            # Other dotted / compound names that are valid on GitHub
+            ("git@github.com:foo/my.project.name.git", "foo/my.project.name"),
+            ("https://github.com/org/repo.with.multiple.dots.git", "org/repo.with.multiple.dots"),
+            ("git@github.com:owner/repo-with-dash.and.dot.git", "owner/repo-with-dash.and.dot"),
+            # Classic non-dotted cases must continue to work
+            ("git@github.com:akasper/plate.git", "akasper/plate"),
+            ("https://github.com/akasper/plate", "akasper/plate"),
+            ("https://github.com/akasper/plate.git", "akasper/plate"),
+        ]
+        for remote, expected in cases:
+            self.assertEqual(_parse_repo_from_remote_url(remote), expected)
+
+    def test_repo_from_git_remote_uses_parser_and_handles_dots(self):
+        """Ensure the subprocess wrapper path exercises the fixed parser."""
+        remote = "git@github.com:akasper/u.ai.git"
+        with patch("plate_core.health.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = remote + "\n"
+            self.assertEqual(_repo_from_git_remote(), "akasper/u.ai")
+
+    def test_repo_from_git_remote_raises_on_non_github(self):
+        with patch("plate_core.health.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "git@gitlab.com:owner/repo.git\n"
+            with self.assertRaises(RuntimeError) as ctx:
+                _repo_from_git_remote()
+            self.assertIn("not a GitHub repository URL", str(ctx.exception))
 
 
 if __name__ == "__main__":

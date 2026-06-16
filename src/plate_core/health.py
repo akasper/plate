@@ -41,6 +41,20 @@ class HealthReport:
         return d
 
 
+def _parse_repo_from_remote_url(remote: str) -> str:
+    """Parse owner/repo from a GitHub remote URL (SSH or HTTPS form).
+
+    Pure function, easily unit-testable. Supports dots and other valid characters
+    in the repository name segment (e.g. owner/u.ai, owner/my.project.name).
+    """
+    # Supports both git@github.com:owner/repo.git and https://github.com/owner/repo(.git)
+    # Use [^/]+? for repo so that dots (.) are allowed; GitHub permits them in repo names.
+    m = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$", remote)
+    if not m:
+        raise RuntimeError("Remote origin is not a GitHub repository URL.")
+    return f"{m.group('owner')}/{m.group('repo')}"
+
+
 def _repo_from_git_remote() -> str:
     proc = subprocess.run(
         ["git", "config", "--get", "remote.origin.url"],
@@ -51,11 +65,7 @@ def _repo_from_git_remote() -> str:
     if proc.returncode != 0:
         raise RuntimeError("Could not determine repo from git remote; pass --repo owner/name.")
     remote = proc.stdout.strip()
-    # Supports both git@github.com:owner/repo.git and https://github.com/owner/repo(.git)
-    m = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?$", remote)
-    if not m:
-        raise RuntimeError("Remote origin is not a GitHub repository URL.")
-    return f"{m.group('owner')}/{m.group('repo')}"
+    return _parse_repo_from_remote_url(remote)
 
 
 def resolve_repo(repo: str | None) -> str:
