@@ -49,12 +49,25 @@ def _repo_from_git_remote() -> str:
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError("Could not determine repo from git remote; pass --repo owner/name.")
+        raise RuntimeError(
+            "Could not determine repo from git remote origin.\n"
+            "Run from inside the target project's checkout, or pass --repo owner/name."
+        )
     remote = proc.stdout.strip()
     # Supports both git@github.com:owner/repo.git and https://github.com/owner/repo(.git)
-    m = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?$", remote)
+    # Note: repo name may contain dots (e.g. "u.ai"), so capture allows [^/]+ (non-greedy before optional .git)
+    # .git ambiguity note (per review of #609/#608): the optional (?:\.git)?$ trailer means repo names
+    # legitimately ending in ".git" (e.g. "myrepo.git" remote) will have the suffix stripped from capture
+    # (treated as remote trailer). "foo.git.git" parses as "foo.git" (non-greedy prefers trailer match).
+    # This is a known limitation for the rare case of .git-suffixed repo names; common dotted names
+    # (u.ai etc) now work. Parametrized regression test added.
+    m = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$", remote)
     if not m:
-        raise RuntimeError("Remote origin is not a GitHub repository URL.")
+        raise RuntimeError(
+            f"Remote origin is not a GitHub repository URL: {remote!r}\n"
+            "Run from inside the target project's checkout (with a github.com origin remote), "
+            "or pass --repo owner/name explicitly."
+        )
     return f"{m.group('owner')}/{m.group('repo')}"
 
 
@@ -64,6 +77,9 @@ def resolve_repo(repo: str | None) -> str:
 
 def get_health(repo: str | None = None, client: GhClient | None = None) -> HealthReport:
     gh = client or GhClient()
+    # resolve_repo (and _repo_from_git_remote) raise RuntimeError with clear messages on failure;
+    # the previous try/except wrapper added no value (unnecessary per review of #609).
+    # Propagate directly so original error (with its guidance about --repo) is surfaced.
     target = resolve_repo(repo)
     errors: list[str] = []
 

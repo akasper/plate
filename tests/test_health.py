@@ -1,8 +1,9 @@
 import json
 import unittest
+from unittest.mock import MagicMock, patch
 
 from plate_core.github_client import GhApiError
-from plate_core.health import HealthReport, get_health
+from plate_core.health import HealthReport, _repo_from_git_remote, get_health, resolve_repo
 
 
 class FakeClient:
@@ -132,6 +133,34 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.plate_config_resolved_version, "1.2")
         self.assertTrue(report.plate_config_upgrade_available)
         self.assertTrue(report.curiosity_answers_present)
+
+    def test_repo_from_git_remote_parses_dotted_names(self):
+        """Regression test for #608 (PR #609): _repo_from_git_remote / resolve_repo regex
+        now supports dots in GitHub repo names (e.g. u.ai in git remote).
+
+        Uses parametrized cases including dotted names, trailing .git, and .git.git
+        ambiguity cases from the issue and Release Risk Review feedback.
+        Mocks subprocess.run to avoid real git calls (per review guidance).
+        """
+        cases = [
+            ("git@github.com:akasper/u.ai.git", "akasper/u.ai"),
+            ("https://github.com/akasper/my.dotted.repo.git", "akasper/my.dotted.repo"),
+            ("git@github.com:owner/plate.git", "owner/plate"),
+            ("https://github.com/foo/foo.git.git", "foo/foo.git"),  # .git.git ambiguity: non-greedy + optional trailer -> foo.git (see regex comment)
+            ("git@github.com:bar/myrepo.git", "bar/myrepo"),  # repo name ends .git: stripped (known X.git ambiguity)
+            ("https://github.com/baz/repo.with.dot", "baz/repo.with.dot"),  # no .git trailer in remote; dots preserved
+            ("git@github.com:quux/u.ai", "quux/u.ai"),  # dotted without .git suffix in remote url
+        ]
+        for remote_url, expected in cases:
+            with patch("plate_core.health.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(
+                    returncode=0, stdout=remote_url + "\n", stderr=""
+                )
+                # test both the internal and public resolve path
+                self.assertEqual(_repo_from_git_remote(), expected)
+                self.assertEqual(resolve_repo(None), expected)
+                # also ensure resolve_repo passthrough still works
+                self.assertEqual(resolve_repo("explicit/owner"), "explicit/owner")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+{
+  "slug": "592-finalize-automation",
+  "change_type": "process",
+  "surface": "src/plate_core/cli.py, src/plate_core/release.py, tests/test_release.py, tests/test_cli.py, .agentic/releases/unreleased/",
+  "summary": "Automate GitHub Release creation (notes + simple assets) + guarded hard-reset (opt-in --apply) inside `gh plate release finalize`. Core helpers added for reusability (workflow slice #593 will call them). Idempotent create, dry-run first-class, existence guards before reset.",
+  "migration_impact": "Downstream PLATE repos running `gh plate release finalize` after a Release PR merge will now automatically populate the GitHub Releases tab (latest + notes) instead of requiring manual gh release create. --apply is required for the destructive reset step (still prints the command and errors clearly if guards fail). Add the new fragment on cut.",
+  "migration_guidance": [
+    "After upgrading, re-run `gh plate release finalize <last-ver>` with --apply if you want the branch reset (otherwise just the release object will be created).",
+    "The vX.Y.Z/assets/ convention is new and optional for attaching extra release artifacts.",
+    "Update any local scripts that parsed the old 'Recommended commands' output from finalize.",
+    "Status (sibling #594) will soon surface GitHub release state to detect/create success."
+  ],
+  "agent_notes": "This closes the main automation gap from #591 (post #569 MVP). The helpers are designed to be called from release.yml too. Use --apply deliberately. Tests cover dry, exists, assets convention, guard messages. See #592 body for full ACs and planning decisions (both create+reset automated, workflow auto in follow-up, explicit simple assets).",
+  "breaking": false,
+  "links": ["#592", "#591", "#569", "#599"],
+  "requires": ["0.7.0"]
+}
