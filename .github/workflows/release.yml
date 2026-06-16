@@ -90,6 +90,10 @@ jobs:
         run: |
           set +e  # best-effort: continue even if this fails (tag is critical)
           export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          # Cheap sanity check before the heredoc (per review feedback on set +e scope).
+          # In a controlled runner this is unlikely to be the failure mode, but makes
+          # early problems visible rather than silent under set +e.
+          python --version >&2 || echo "WARNING: python --version sanity check failed (best-effort block continues)"
           python - <<'PY'
           import os
           from pathlib import Path
