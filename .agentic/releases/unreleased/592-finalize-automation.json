@@ -12,6 +12,6 @@
   ],
   "agent_notes": "This closes the main automation gap from #591 (post #569 MVP). The helpers are designed to be called from release.yml too. Use --apply deliberately. Tests cover dry, exists, assets convention, guard messages. See #592 body for full ACs and planning decisions (both create+reset automated, workflow auto in follow-up, explicit simple assets).",
   "breaking": false,
-  "links": ["#592", "#591", "#569"],
+  "links": ["#592", "#591", "#569", "#599"],
   "requires": ["0.7.0"]
 }

@@ -6,6 +6,37 @@ from __future__ import annotations
 import os
 import sys
 
+
+def _ensure_plate_core() -> None:
+    """Best-effort ensure for the published gh extension case (thin shim).
+
+    When this script is installed via `gh extension install akasper/gh-plate`,
+    plate_core may not yet be on the PYTHONPATH or installed. We try a
+    non-destructive `pip install --user` so first-run UX is good.
+
+    This is a no-op when the package is already importable (dev, pip-installed,
+    or already auto-installed on a previous run).
+    """
+    try:
+        import importlib.util
+        if importlib.util.find_spec("plate_core") is not None:
+            return
+    except Exception:
+        pass  # If the check itself fails we still attempt the import below.
+
+    try:
+        import subprocess
+        print("plate-core not found; attempting `pip install --user plate-core` ...", file=sys.stderr)
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--user", "plate-core"]
+        )
+    except Exception as exc:
+        # Do not hard-fail here; the subsequent import will give the real error.
+        print(f"Warning: could not auto-install plate-core: {exc}", file=sys.stderr)
+
+
+_ensure_plate_core()
+
 try:
     # Prefer installed package
     from plate_core.cli import main
