@@ -1,0 +1,133 @@
+name: Publish gh-plate thin shim (PLATE-CORE-PUBLISHING-ONLY)
+
+# PLATE-CORE-PUBLISHING-ONLY
+# ============================================================
+# This workflow maintains the separate akasper/gh-plate thin repository
+# so that `gh extension install akasper/gh-plate` works and satisfies
+# GitHub CLI's "extension name must start with gh-" rule.
+#
+# THIS IS SPECIFIC INFRASTRUCTURE FOR PUBLISHING THE OFFICIAL
+# plate_core / akasper/plate gh CLI extension surface.
+#
+# IT IS NOT PART OF THE PLATE METHODOLOGY.
+# IT IS NOT PART OF AGENTS.md, THE GENERAL RELEASE CEREMONY,
+# OR ANYTHING DOWNSTREAM PLATE ADOPTERS SHOULD COPY OR CARE ABOUT.
+#
+# Do not sync this file (or the logic it contains) into
+# src/plate_core/template_payload/.github/workflows/
+# or treat it as reusable PLATE process or template content.
+#
+# The thin repo (akasper/gh-plate) is a minimal shim whose only job
+# is to host the launcher script. All real code, the plate-core PyPI
+# package, MCP, plugins, etc. live in the main akasper/plate repo.
+# ============================================================
+
+on:
+  # Trigger after the normal release ceremony has produced a tag on main.
+  # Adjust as needed once the exact release cut + tag flow is finalized.
+  push:
+    tags:
+      - 'v*'
+  # Also allow manual trigger for recovery / initial seed.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. v0.1.2). If omitted, derived from tag or current checkout.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  sync-shim:
+    # Only run on the real main repo, not forks.
+    if: github.repository == 'akasper/plate'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo at the release ref
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            # Prefer the tag name when triggered by tag push.
+            VER="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VER" >> $GITHUB_OUTPUT
+          echo "Publishing shim for $VER"
+
+      - name: Checkout the thin shim repo (using deploy token with write to the thin repo only)
+        uses: actions/checkout@v4
+        with:
+          repository: akasper/gh-plate
+          token: ${{ secrets.THIN_SHIM_DEPLOY_TOKEN }}   # Fine-grained PAT or GitHub App token scoped only to the gh-plate repo, contents:write
+          path: thin-shim
+          fetch-depth: 0
+
+      - name: Copy canonical launcher from this release into the thin repo
+        run: |
+          set -euo pipefail
+          # The root gh-plate in this repo is the source of truth for the launcher.
+          # It already prefers the installed plate_core package.
+          cp gh-plate thin-shim/gh-plate
+          chmod +x thin-shim/gh-plate
+
+          # Write / update a simple VERSION marker so versions are explicit and auditable.
+          echo "${{ steps.version.outputs.version }}" > thin-shim/VERSION
+          echo "Synced launcher + VERSION for ${{ steps.version.outputs.version }}"
+
+      - name: Verify executable bit (critical for gh extension runtime)
+        run: |
+          set -euo pipefail
+          if [ ! -x thin-shim/gh-plate ]; then
+            echo "ERROR: gh-plate is not executable after copy+chmod. This will cause 'permission denied' on 'gh plate' after install."
+            ls -l thin-shim/gh-plate
+            exit 1
+          fi
+          echo "Verified: thin-shim/gh-plate is executable"
+
+      - name: Commit and push to the thin repo + create matching tag
+        working-directory: thin-shim
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Force the executable bit in the index (defensive; checkout + chmod + cp should already have it)
+          git add --chmod=+x gh-plate
+          git add VERSION
+          if git diff --cached --quiet; then
+            echo "No changes to the launcher for this version; nothing to do."
+            exit 0
+          fi
+
+          git commit -m "Sync gh-plate launcher for ${{ steps.version.outputs.version }} (matches plate-core ${{ steps.version.outputs.version }})"
+
+          git push origin HEAD:main
+
+          # Create (or move) a lightweight tag on the thin repo for discoverability.
+          # Users can still just `gh extension install akasper/gh-plate` (latest).
+          # Guard against silent overwrite if re-triggered for the same version
+          # (non-blocking review feedback on #601). Check first; only force if absent.
+          VER="${{ steps.version.outputs.version }}"
+          if git ls-remote --tags origin "refs/tags/${VER}" | grep -q . || git ls-remote --tags origin "${VER}" | grep -q .; then
+            echo "Tag ${VER} already exists on thin repo; skipping force tag push to protect immutability. (Existing tag points to prior commit for this version.)"
+          else
+            git tag -f "${VER}"
+            git push origin -f "${VER}"
+          fi
+
+          echo "Thin shim updated and tagged for ${{ steps.version.outputs.version }}"
+
+      - name: Summary
+        run: |
+          echo "gh-plate thin shim sync complete for version ${{ steps.version.outputs.version }}."
+          echo "Users can now: gh extension install akasper/gh-plate"
+          echo "See Epic #596 (and children #597/#598/#599) for context and isolation rules."

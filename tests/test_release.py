@@ -24,8 +24,12 @@ from plate_core.release import (
     get_release_target_epic_guidance,
     validate_release_workspace,
     collect_closes_block,
+    create_github_release,
+    perform_guarded_hard_reset,
+    ensure_next_release_issue,
 )
 from plate_core.github_client import GhApiError
+import plate_core.release as release_mod
 
 
 class ListVersionsTests(unittest.TestCase):
@@ -1138,6 +1142,76 @@ class CleanupDeadBranchesTests(unittest.TestCase):
         self.assertEqual(report.deleted, ["feature-merged-a"])
         self.assertEqual(len(report.failed), 1)
         self.assertEqual(report.failed[0]["branch"], "feature-merged-b")
+
+
+class FinalizeAutomationTests(unittest.TestCase):
+    """Tests for #592: create_github_release (notes + assets + idempotent), guarded reset, ensure next issue.
+    Mocks GhClient + subprocess to keep tests hermetic.
+    """
+
+    def _make_versioned_release(self, tmp: str, ver: str = "0.7.1", summary: str = "Test finalize") -> Path:
+        d = Path(tmp)
+        vdir = d / f"v{ver}"
+        vdir.mkdir(parents=True)
+        data = {
+            "version": ver,
+            "summary": summary,
+            "entries": [
+                {"change_type": "process", "surface": "finalize", "migration_impact": "see #592"},
+            ],
+            "closes_block": "Closes #592",
+        }
+        (vdir / "release.json").write_text(json.dumps(data), encoding="utf-8")
+        assets = vdir / "assets"
+        assets.mkdir()
+        (assets / "notes.md").write_text("# extra", encoding="utf-8")
+        return d
+
+    @patch("plate_core.release.GhClient")
+    def test_create_skips_when_exists(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.return_value = {"id": 123, "html_url": "https://example/releases/tag/v0.7.1"}
+        with TemporaryDirectory() as tmp:
+            d = self._make_versioned_release(tmp, "0.7.1")
+            info = create_github_release("v0.7.1", releases_dir=d, client=mock_client)
+            self.assertTrue(info["exists"])
+            self.assertFalse(info.get("created", False))
+
+    @patch("plate_core.release.GhClient")
+    @patch.object(release_mod, "subprocess")
+    def test_create_dry_run_and_assets(self, mock_subprocess, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = GhApiError("404 not found")
+        with TemporaryDirectory() as tmp:
+            d = self._make_versioned_release(tmp, "0.7.1")
+            info = create_github_release("0.7.1", releases_dir=d, dry_run=True, client=mock_client)
+            self.assertTrue(info["would_create"])
+            self.assertIn("assets", info)
+            self.assertIn("notes.md", info.get("assets", []))
+            # the patch.object replaces the bound 'subprocess' name in the release module for duration of test.
+
+    @patch("plate_core.release.GhClient")
+    @patch.object(release_mod, "subprocess")
+    def test_guarded_reset_dry_or_no_apply_prints_command(self, mock_subprocess, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        # Make ls-remote (the git call inside perform) succeed for the guard so we reach would_reset
+        mock_subprocess.run.return_value = type("P", (), {"stdout": "abc123 refs/tags/v0.7.1", "returncode": 0})()
+        with TemporaryDirectory() as tmp:
+            d = self._make_versioned_release(tmp, "0.7.1")
+            info = perform_guarded_hard_reset("0.7.1", releases_dir=d, dry_run=True, apply=False, client=mock_client)
+            self.assertTrue(info.get("would_reset"))
+            self.assertIn("command", info)
+            self.assertIn("release", info["command"])
+
+    @patch("plate_core.release.GhClient")
+    def test_ensure_next_issue_creates_when_missing(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = [
+            {"items": []},
+            {"number": 999, "html_url": "https://ex/999"},
+        ]
+        info = ensure_next_release_issue(client=mock_client)
+        self.assertTrue(info.get("created") or info.get("exists"))
 
 
 if __name__ == "__main__":

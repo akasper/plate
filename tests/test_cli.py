@@ -261,5 +261,22 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["candidates"], ["feature-merged"])
 
 
+    @patch("plate_core.release.create_github_release")
+    @patch("plate_core.release.perform_guarded_hard_reset")
+    @patch("plate_core.release.ensure_next_release_issue")
+    def test_release_finalize_dry_run_and_apply(self, mock_ensure, mock_reset, mock_create):
+        """#592: finalize now calls core automation (create always, reset only on --apply)."""
+        mock_create.return_value = {"tag": "v0.7.1", "exists": True, "created": False}
+        mock_reset.return_value = {"would_reset": True, "command": "git ..."}
+        mock_ensure.return_value = {"exists": True}
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["release", "finalize", "v0.7.1", "--dry-run"])
+        self.assertEqual(code, 0)
+        mock_create.assert_called()
+        args, kwargs = mock_reset.call_args
+        self.assertFalse(kwargs.get("apply", False))
+
+
 if __name__ == "__main__":
     unittest.main()

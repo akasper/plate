@@ -1,0 +1,9 @@
+{
+  "slug": "608-repo-name-dot-parsing",
+  "change_type": "bug",
+  "surface": "src/plate_core/health.py, tests/test_health.py",
+  "summary": "Fix regex in _repo_from_git_remote (used by resolve_repo) to support GitHub repo names containing dots (e.g. \"u.ai\" from remotes like git@github.com:akasper/u.ai.git). Previously [^/.]+ stopped at first dot. Added parametrized regression test covering u.ai, dotted repos, plate.git, foo.git.git etc per #608 review feedback. Also documented .git trailer ambiguity in code comment and removed unnecessary RuntimeError wrapper in get_health.",
+  "migration_impact": "None for downstream: auto repo detection (gh plate health, bootstrap, release, etc without --repo) now works for valid dotted repo names. No behavior change for standard names.",
+  "breaking": false,
+  "links": ["#608", "#609"]
+}
