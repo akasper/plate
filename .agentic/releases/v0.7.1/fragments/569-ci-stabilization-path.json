@@ -11,5 +11,5 @@
   "agent_notes": "For Release PR review rounds or thread resolve pushes, prefer stabilization label to keep velocity high. Still run gh plate release status first and use pr-babysit for the loop.",
   "breaking": false,
   "links": ["#569", "#580", "#532"],
-  "requires": ["0.6.3"]
+  "requires": ["0.7.0"]
 }
