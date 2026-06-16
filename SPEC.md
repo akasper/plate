@@ -27,7 +27,7 @@ The project ships in three primary forms from one codebase:
 
 | Surface              | Install command                          | Target user                  | Invocation style                          |
 |----------------------|------------------------------------------|------------------------------|-------------------------------------------|
-| `gh plate` extension | `gh extension install akasper/plate`    | Human developers & scripts   | Terminal commands (`gh plate health`)     |
+| `gh plate` extension | `gh extension install akasper/gh-plate`    | Human developers & scripts   | Terminal commands (`gh plate health`)     |
 | `plate-mcp` server   | Binary or `npx plate-mcp`                | AI agents                    | Structured tool calls via `/mcp`          |
 | Copilot CLI plugin   | `copilot plugin install akasper/plate`   | Conversational users         | Agent chat (`/agent plate`)               |
 

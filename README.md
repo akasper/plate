@@ -4,7 +4,7 @@
 
 | Surface | Target User | How to Install |
 |---|---|---|
-| `gh plate` extension | Humans and scripts — terminal PLATE health checks | `gh extension install akasper/plate` |
+| `gh plate` extension | Humans and scripts — terminal PLATE health checks | `gh extension install akasper/gh-plate` |
 | `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in supported CLIs | `pip install plate-core` then `plate-mcp` (or `python -m plate_core.mcp_server`) |
 | CLI agent plugin (e.g. Copilot CLI, Grok Build, other standards-compliant CLIs) | Interactive sessions — `/agent plate` + MCP wiring (see grok-build epic for CLI-agnostic details) | `pip install plate-core` then `copilot plugin marketplace add akasper/plate` and `copilot plugin install plate-core@plate-marketplace` |
 
@@ -41,7 +41,7 @@ python -c "import plate_core; print(plate_core.__version__)"
 ### As a `gh` extension (v1 baseline)
 
 ```sh
-gh extension install akasper/plate
+gh extension install akasper/gh-plate
 gh plate health                   # PLATE health check for the current repo
 gh plate health --repo akasper/plate --json
 gh plate epic status --repo akasper/plate --json
@@ -54,6 +54,8 @@ gh plate bootstrap --repo akasper/plate --json     # dry-run plan
 gh plate bootstrap --repo akasper/plate --apply    # apply supported steps
 gh plate pr babysit 112 --repo akasper/plate --json
 ```
+
+The `gh plate` extension is published from a dedicated thin repository (`akasper/gh-plate`) to satisfy GitHub CLI's requirement that extension repository names start with `gh-`. The complete implementation, the `plate-core` Python package on PyPI, the MCP server entrypoint, the plugin assets, and all source live in this repository (`akasper/plate`). Users and scripts install the extension with `gh extension install akasper/gh-plate`.
 
 ### As an MCP server (v1 baseline; works in Copilot CLI, Grok Build, and other compatible agents)
 
