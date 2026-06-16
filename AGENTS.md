@@ -132,7 +132,7 @@ After making the PR green (including feedback-resolution for any agent threads),
 | 4 | When the answer changes operating guidance, update `AGENTS.md` and `.agentic/skills.yml` in the same PR. |
 | 5 | Open a Documentation PR with `Closes #N` in the body. |
 
-For PLATE Q&A: consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers (artifacts per ACs) without reminder. Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress. If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed. See persona/guidance. (Addresses #503, #518, #517, #521.)
+For PLATE Q&A: consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers (artifacts per ACs) without reminder. Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress. If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed. See persona/guidance. (Addresses #503, #518, #517, #521 and closes the post-0.6.1 Q&A/babysit stub cluster under #580/#569 polish.)
 
 ## Task Management (for agents)
 
@@ -361,6 +361,8 @@ Every Feature (or process-changing) PR that changes PLATE process, templates, or
 
 The canonical design artifact for Release ceremony changes lives in `docs/design/release-ceremony-refinement.md`.
 
+**Note from velocity polish (Q&A #580 / #569 / #556, fragments):** New support for PLATE Issue states (status:implemented auto-set on merge to release/next track; see children #582, workflow, labels). Ceremony foundation includes agent-only feedback gate, auto Closes block from fragments in cut (one merge to main closes addressed), enhanced finalize. Guidance architecture enforced (thin persona; see #536 updates). See updated children #535/#583 etc and pending fragments for details. Update this section on future ceremony changes. (Autonomous append per drafts.)
+
 
 
 Preferred flow is now **local babysitting** driven by `gh plate pr babysit <number>`. CI is intentionally narrowed to enforcement-only (`feedback-resolution` check). The `plate` agent persona (plugin/agents/plate.agent.md and mirror) no longer includes babysitting steps (deprecated in favor of the dedicated local CLI/MCP flow; see PR #120 and this PR's Q&A/Curiosity updates).
@@ -427,11 +429,11 @@ When `--act` is specified and the PR is out of sync, the babysitter posts a merg
 
 **Configuration:** Set the `PLATE_PR_FEEDBACK_AGENTS` repository variable to a comma-separated list of GitHub logins whose feedback should be babysat by default (e.g., `devin-ai-integration[bot],openhands-agent`).
 
-**Merge safety gate:** Require `.github/workflows/feedback-resolution-check.yml` (`feedback-resolution`) in branch protection for `main` (and integration branches) so merge/auto-merge waits until all active *agent* review threads are resolved. This gate is *not* a substitute for the separate human review/approval requirement for Bug/Feature/Documentation PRs (see above and authority table). Human approval (Approved review or explicit human merge) is required in addition.
+**Merge safety gate:** Require `.github/workflows/feedback-resolution-check.yml` (`feedback-resolution`) in branch protection for `main` (and integration branches) so merge/auto-merge waits until all active *agent* (third-party) review threads are resolved. The gate now author-filters to PLATE_PR_FEEDBACK_AGENTS + default patterns (devin, openhands, etc.); human review comments do not block unless CHANGES_REQUESTED or explicit need:human-review. This gate is *not* a substitute for the separate human review/approval requirement for Bug/Feature/Documentation PRs (see above and authority table). Human approval (Approved review or explicit human merge) is required in addition. (Addresses #569 gate filter.)
 
 ## Label Rules
 
-Use labels as stable process metadata. Do not create ad hoc labels unless they change routing, enforcement, reporting, auditing, review burden, or agent behavior. Use GitHub Projects fields for frequently changing planning state such as priority, owner, rank, iteration, target date, or release target. The `status:blocked` and `status:ready-to-work` labels are the explicit exception used by PLATES native trigger workflows.
+Use labels as stable process metadata. Do not create ad hoc labels unless they change routing, enforcement, reporting, auditing, review burden, or agent behavior. Use GitHub Projects fields for frequently changing planning state such as priority, owner, rank, iteration, target date, or release target. The `status:blocked`, `status:ready-to-work`, and `status:implemented` (auto-set on release-branch merge per #556; means landed in RC but not yet shipped to main+tag) labels are the explicit exception used by PLATES native trigger workflows.
 
 | Label Family | Usage |
 |---|---|

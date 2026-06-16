@@ -23,6 +23,7 @@ from plate_core.release import (
     get_release_status,
     get_release_target_epic_guidance,
     validate_release_workspace,
+    collect_closes_block,
 )
 from plate_core.github_client import GhApiError
 
@@ -296,6 +297,29 @@ class CutReleaseVersionSyncTests(unittest.TestCase):
             self.assertEqual(marketplace["plugins"][0]["version"], "0.2.0")
             grok_marketplace = json.loads((d / ".grok-plugin" / "marketplace.json").read_text(encoding="utf-8"))
             self.assertEqual(grok_marketplace["plugins"][0]["version"], "0.2.0")
+
+
+class ClosesBlockHelperTests(unittest.TestCase):
+    """Simple unit test for collect_closes_block (added per Q&A drive on fragment 569-release-ceremony-foundation-polish and #535/#580 polish)."""
+
+    def test_basic_unique_closes_block(self):
+        frags = [
+            {"slug": "a", "links": ["#569", "#580"]},
+            {"slug": "b", "links": ["#569", "#111"]},
+            {"slug": "c", "links": []},
+            {"slug": "d"},  # no links key
+        ]
+        block = collect_closes_block(frags)
+        self.assertTrue(block.startswith("Closes "))
+        self.assertIn("#569", block)
+        self.assertIn("#580", block)
+        self.assertIn("#111", block)
+        # unique
+        self.assertEqual(block.count("#569"), 1)
+
+    def test_empty(self):
+        self.assertEqual(collect_closes_block([]), "")
+        self.assertEqual(collect_closes_block([{"links": []}]), "")
 
 
 class VersionSyncReadTests(unittest.TestCase):

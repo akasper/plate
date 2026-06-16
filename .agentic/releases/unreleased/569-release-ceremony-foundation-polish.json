@@ -1,0 +1,17 @@
+{
+  "slug": "569-release-ceremony-foundation-polish",
+  "change_type": "process",
+  "surface": ".github/workflows/feedback-resolution-check.yml, src/plate_core/release.py, src/plate_core/cli.py, AGENTS.md",
+  "summary": "Release ceremony polish foundation for #569: author-filter feedback-resolution gate (agent threads only), auto-collect Closes block from fragment links in cut_release (enables one merge to main closing addressed issues), enhance cut output + finalize surface with hard-reset/gh-release/next-Release guidance and wiring.",
+  "migration_impact": "Downstream repos using custom feedback gates or release scripts should adopt the agent-only semantics (set PLATE_PR_FEEDBACK_AGENTS var) and prefer gh plate release cut/finalize over manual scripts. Release PR bodies can now include the generated Closes block for automatic issue closure on merge to main.",
+  "migration_guidance": [
+    "1. Update branch protection to reference the updated feedback-resolution-check (agent-only behavior is now enforced in CI).",
+    "2. When cutting releases, review the printed 'Recommended Closes block' and include it in the Release PR body to main.",
+    "3. Run `gh plate release finalize <ver>` (or the commands it emits) post-merge instead of manual hard-reset + gh release create.",
+    "4. Set PLATE_PR_FEEDBACK_AGENTS repo variable (comma list) if you use non-default third-party agent logins for babysit/gate."
+  ],
+  "agent_notes": "Use gh plate release status first. After cut, the Closes block is available for the Release PR. Finalize now provides concrete commands and will grow full automation. Feedback gate will no longer block on human review comments (only agent threads + explicit CHANGES_REQUESTED).",
+  "breaking": false,
+  "links": ["#569", "#580", "#112"],
+  "requires": ["0.6.3"]
+}

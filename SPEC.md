@@ -184,6 +184,10 @@ Completion of the active Information Audit Epic #218 plus the items above (plus 
 - Business outcome tracking linked to features.
 - Voice/multimodal agent interfaces.
 
+
+
+**Update from velocity polish (fragments + Q&A #580/#569/#556):** Added minimal support for PLATE Issue states (status:implemented on release-branch merge before final to main; see #556, #582, workflow in pr-issue-link-check, label in labels.yml). Ceremony polish (Closes block, agent-only gate, CI stabilization, finalize enhancements) landed; see children #535/#583 etc and fragments. Update this section and epic guidance when new Epics created (per #537).
+
 ---
 
 **Agent Instruction**: Always align work against this SPEC.md. Proactively update `CURRENT.md` to reflect reality. This document serves as the guiding vision. Use it ruthlessly to drive decisions.
