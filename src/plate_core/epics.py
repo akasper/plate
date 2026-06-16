@@ -47,6 +47,12 @@ def get_epic_status(
 
     If project_number provided, attaches basic project item info to summaries
     (read via GraphQL). Write via add_issue_to_project_v2.
+
+    Note on Issue states (#556): child issues merged to a release/next track branch
+    (but not yet to main) should carry status:implemented (set by pr-issue-link-check
+    workflow or equivalent on release-branch merges). The open/closed child counts
+    here reflect GitHub native state; 'implemented' is additional process metadata
+    surfaced via labels and future enhancements to summaries/health.
     """
     gh = client or GhClient()
     target = resolve_repo(repo)

@@ -1,0 +1,21 @@
+{
+  "slug": "569-ci-stabilization-path",
+  "change_type": "process",
+  "surface": ".github/workflows/ci.yml",
+  "summary": "#569: add stabilization label + early skip in heavy-release job for review-response / docs-only pushes on release-v* branches (reduce CI waste during finalization and feedback addressing). Feedback gate already lightweight/re-runnable.",
+  "migration_impact": "Repos with custom CI can adopt a 'stabilization' label (or Documentation) to keep review pushes cheap on release branches. The heavy jobs remain for true packaging Release PRs.",
+  "migration_guidance": [
+    "1. When responding to review on a Release PR / release-v branch, apply 'stabilization' label (or keep Documentation) to avoid full heavy matrix.",
+    "2. Update any local branch protection or status checks expectations if you rely on heavy steps always running."
+  ],
+  "agent_notes": "For Release PR review rounds or thread resolve pushes, prefer stabilization label to keep velocity high. Still run gh plate release status first and use pr-babysit for the loop.",
+  "breaking": false,
+  "links": [
+    "#569",
+    "#580",
+    "#532"
+  ],
+  "requires": [
+    "0.7.0"
+  ]
+}
