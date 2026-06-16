@@ -361,7 +361,7 @@ Every Feature (or process-changing) PR that changes PLATE process, templates, or
 
 The canonical design artifact for Release ceremony changes lives in `docs/design/release-ceremony-refinement.md`.
 
-**Note from velocity polish (Q&A #580 / #569 / #556, fragments):** New support for PLATE Issue states (status:implemented auto-set on merge to release/next track; see children #582, workflow, labels). Ceremony foundation includes agent-only feedback gate, auto Closes block from fragments in cut (one merge to main closes addressed), enhanced finalize. Guidance architecture enforced (thin persona; see #536 updates). See updated children #535/#583 etc and pending fragments for details. Update this section on future ceremony changes.
+**Note from velocity polish (Q&A #580 / #569 / #556, fragments):** New support for PLATE Issue states (status:implemented auto-set on merge to release/next track; see children #582, workflow, labels). Ceremony foundation includes agent-only feedback gate, auto Closes block from fragments in cut (one merge to main closes addressed), enhanced finalize (#592 wires the gh release create + guarded reset + assets into finalize + core helpers). Guidance architecture enforced (thin persona; see #536 updates). See updated children #535/#583 etc and pending fragments for details. Update this section on future ceremony changes.
 
 
 
