@@ -17,6 +17,42 @@ GitHub is the default single source of truth: Issues for planning, Milestones fo
 
 **North Star**: Any repository (new or existing) can adopt PLATE in <15 minutes and achieve **70-90% agent-driven SDLC** with minimal human toil, while remaining lightweight, GitHub-native, and evolvable. Success metric: Widespread adoption as the de facto standard for agentic teams.
 
+## v1.0.0 Target State (End-User Experience)
+
+**Far-future maturity target (tracked primarily in Release #654 and related vision stubs).**
+
+The defining end-user experience: The system *endlessly feeds* the user Questions and Tasks. By engaging in Q&A and completing (or delegating) these items, a product owner or founder can fully specify, develop, deploy, monitor, and market their software product. The internal details of planning, implementation, testing, releases, and operations are, as much as possible, *opaque but accessible*.
+
+Key characteristics that must be true at v1.0.0:
+- Planning (product, feature, release, epic) is driven almost entirely by structured Q&A.
+- The system proactively surfaces the right Questions and Tasks via native surfaces.
+- Designs, Research, and high-impact autonomous actions surface for approval with rich context (including simulation/shadow results, cost/risk, and media).
+- Explanatory videos/GIFs (from automated tests) are generated and approved for releases and Features.
+- Users set budgets; the AutonomyEngine (multi-agent capable, with simulation and strong checkpoints) safely operates within them for long periods.
+- Full autonomous loops exist for bugs, features, epics, releases, deployments, marketing sites, marketplace packaging, scheduled maintenance, discussion review, and market monitoring.
+- The system plays cleanly with human collaborators on GitHub.
+- Onboarding (new or existing repo) is <30 minutes.
+
+See the full readiness checklist and child stubs in #654 (primary Roadmap/Release). This section added during v1.0.0 vision Q&A refinement (2026-06-17).
+
+The **Project Manager (PM) / Orchestrator** (#660) is the core deliverable for v1.0.0: a long-running system that polls "What's Next?", coordinates a team of specialized sub-agents (with pre-defined personas), serves a unified Q&A API for TUI/browser clients, enforces budgets, handles webhooks for real-time, and uses driving labels (agent/human/collaborative) on issues. It makes the endless feed and autonomous capabilities (planning, impl, releases, deploys, monitoring, etc.) scalable and orchestrated while keeping GitHub as the source of truth.
+
+This directly enables the adoption goals: PM-orchestrated bootstrap for new projects (<15m to healthy state + first Q&A in feed) and guided adoption for existing repos (<30m with simulation, phased import, checkpoints). See #633 for metrics (time-to-green, % automated, latency, budget, driver labels) and #641/#633 for PM-coordinated stories.
+
+### Endless Feed UX Principles & Interaction Model
+
+The primary way users experience PLATE at v1.0.0 is through the endless, proactive surfacing of Questions and Tasks (the "feed"). Key principles:
+
+- **Native first**: Prefer host-native interactive forms (ask_user_question in Grok/Copilot TUI, GitHub comments with reactions, etc.) over custom UIs.
+- **Proactive but controllable**: The system suggests via what-next + autonomy procedures, but users can pull (gh plate qanda), pause, or set risk/budgets to tune volume.
+- **Rich context on surface**: Every surfaced item includes provenance, cost/risk estimate, related artifacts (designs, GIFs, shadow results), and clear next actions/approvals.
+- **Traceable & auditable**: Answers and decisions produce durable artifacts (docs/curiosity/, comments, SPEC/AGENTS updates) with USAGE REPORTs.
+- **Escalation is seamless**: From feed item → full Q&A session → stub creation/refinement → implementation handoff without leaving the flow.
+- **Human judgment preserved**: High-impact or ambiguous items always surface for approval; low-risk can auto-proceed per .plate config.
+- **Observable progress**: Dashboards and feed show velocity, open items by impact, budget burn, and how work maps to vision/SPEC.
+
+These principles ensure the "opaque but accessible" experience while enabling high autonomy. (Refined during 2026-06-17 Q&A session; see #631 for detailed feed stories.)
+
 ---
 
 ## Vision
@@ -47,6 +83,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 | PLATE platform maintainer      | Single codebase for all surfaces                          | Changes flow seamlessly to gh, MCP, and plugin |
 | PLATE new-project operator     | Frictionless bootstrap                                    | New repo fully scaffolded in minutes |
 | Solo indie hacker / founder    | Fast autonomous velocity                                  | Zero-to-production features in days |
+| End User (product owner / founder) | Mostly high-level direction + occasional approvals via natural language / Q&A; very little direct editing of issues or code | Sees steady, verifiable progress with minimal toil while retaining control via the endless Questions/Tasks feed and clear checkpoints |
 | Agentic engineering team lead  | Minimal review burden                                     | >70% agent-authored & auto-merged PRs |
 | Enterprise platform team       | Compliance, auditability, scale                           | Centralized health + policy enforcement |
 
