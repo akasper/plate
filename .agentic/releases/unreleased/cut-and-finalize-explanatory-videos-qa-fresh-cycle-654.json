@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced 'Cut and finalize a release' and 'Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves' under #654 (open checklist items). Tests-first update + fresh cycle in tests/test_cut_release.py (test_auto_minor_bump_from_flat_baseline). Added reinforcement assert for media in notes_preview.",
+  "evidence": [
+    "tests/test_cut_release.py:307-330: added self.assertTrue(\"gifs\" in notes_content and \"videos\" in notes_content) # reinforces explanatory media in cut notes preview under #654. Fresh cycle. Explicit active sketch comment: 'tests-first update for #654: Every new Feature has explanatory videos... + generates release notes with videos; active sketch here'.",
+    "plate_what_next: advance open Epic child with tests sketched, no need:refinement",
+    "gh plate release status: legacy, 70 pending, cut-and-finalize-a-release-654 [] and every-new-feature-explanatory-videos-654 []",
+    "0 open PRs confirmed",
+    "ties to release notes media, cut/finalize, #654"
+  ],
+  "advances": [
+    "Cut and finalize a release",
+    "Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "Plan a release / release planning Q&A",
+    "release notes with videos/GIFs"
+  ]
+}
