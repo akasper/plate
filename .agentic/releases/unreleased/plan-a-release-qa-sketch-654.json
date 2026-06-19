@@ -1,0 +1,17 @@
+{
+  "summary": "Advanced 'Plan a release' Q&A driven entirely by Q&A under #654. Tests-first update to test_mcp.py plan_epic for plan_release qa. Evidence from asserts for extension checks, github_release_state. Ties to plan a release, cut/finalize, #654.",
+  "evidence": [
+    "plate_what_next: advance an open Epic: pick child with tests sketched; picked Plan a release (active sketch in plan_release qa)",
+    "tests/test_mcp.py (updated): test_tools_call_plate_plan_epic added assert + tests-first comment update for plan a release under #654",
+    "src/plate_core/mcp_server.py: planning_schema plan_release qa includes REQUIRED extension checks, release_context with github_release_state",
+    "0 PRs; local edit + new frag + #654 comment",
+    "prior: plan-a-release-qa-654.json , plan-release-qa-extension-checks-654.json ; this advances the sketch"
+  ],
+  "advances": [
+    "Plan a release",
+    "#654 v1.0 roadmap (Q&A planning + release ceremony)",
+    "release planning with extension checks and GH state"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_plan_epic (plan_release qa + release_context + github_release_state)",
+  "related": ["#654", "#612", "plan a release", "cut/finalize", "release planning"]
+}
