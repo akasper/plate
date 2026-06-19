@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'The system can bootstrap brand new projects' under #654. Tests-first update to test_bootstrap.py brand new test. Evidence from test_apply_fails_with_actionable_error_when_default_branch_ref_missing (brand-new repo steps, gh create, seed .plate/Goals, checklist link). Ties to integrate under 30m, Goals seeding, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked bootstrap brand new (still [ ] in #654; active sketch in test_bootstrap)",
+    "tests/test_bootstrap.py (updated): test_apply_fails... with tests-first comment for bootstrap brand new projects under #654",
+    "bootstrap-brand-new-support.json prior: enhanced error, test assert, updated doc",
+    "bootstrap-brand-new-projects-654 prior: advanced brand new",
+    "0 PRs; progress via test update + new frag + #654 comment only",
+    "test run: bootstrap test passes"
+  ],
+  "advances": [
+    "The system can bootstrap brand new projects",
+    "#654 v1.0 roadmap checklist (bootstrap & adoption)",
+    "integrate under 30m (paired)"
+  ],
+  "test_sketch": "test_bootstrap.py::test_apply_fails_with_actionable_error_when_default_branch_ref_missing (brand-new steps, gh create, seed Goals/.plate, checklist)",
+  "related": ["#654", "bootstrap", "15-minute-adoption"]
+}
