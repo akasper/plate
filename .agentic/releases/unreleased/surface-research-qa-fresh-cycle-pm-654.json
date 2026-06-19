@@ -1,0 +1,12 @@
+{
+  "summary": "Advanced 'The system can surface Research results for user approval' under #654 (still open checklist item with active sketch).",
+  "evidence": [
+    "tests/test_mcp.py: added self.assertIn(\"documents\", research_approvals[0]) with Fresh cycle. in pm_feed research_approvals (still [ ] kept); reinforces research_results, documents, example_documents, sources, decision, provenance, first_class, example",
+    "plate_what_next: 'advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement' (research surface still marked still [ ])",
+    "gh plate release status (pre): legacy, 0 open PRs, 70 pending 654 frags, #654 open",
+    "local-first: grep/read test_mcp.py surfaces, list_dir unreleased before naming/edit",
+    "MCP create_or_update_file on main (new)"
+  ],
+  "advances": "surface Research results for user approval under #654 (pm feed research_approvals; active sketch reinforced)",
+  "ties_to": ["#654", "#647 (provenance/decision ledger)"]
+}
