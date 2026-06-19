@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced 'The system can surface Design visualizations and documents for user approval' under #654 (still open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (pm_feed design_feed test). Added reinforcement assert for example on design surface.",
+  "evidence": [
+    "tests/test_mcp.py: pm_feed design_feed (visualizations, documents, first_class, visual_contracts, interaction_contracts, validation_required, example). Added self.assertIn('example', design_feed) + Fresh cycle.",
+    "active sketch comments: 'tests-first for \"The system can surface Design visualizations and documents for user approval\" under #654 (still [ ]; active sketch in pm_feed design_feed with visualizations, documents, first_class, visual_contracts, interaction_contracts, validation_required)'",
+    "plate_what_next: advance open Epic child with tests sketched",
+    "gh plate release status: 70 pending, surfaces pending",
+    "0 open PRs",
+    "ties to #646, PM feed, #654"
+  ],
+  "advances": [
+    "The system can surface Design visualizations and documents for user approval (still [ ] in #654)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "first-class design validation #646",
+    "PM feed qa_driven + approvals"
+  ]
+}
