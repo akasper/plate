@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'Plan a release' under #654 (core open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (planning_schema plan_release test). Added reinforcement assert for GH release state in plan_release qa.",
+  "evidence": [
+    "tests/test_mcp.py: planning_schema qa plan_release (release-notes-complete, Next Release, github_release, extension checks). Added assert for github release state + Fresh cycle.",
+    "active sketch: '# tests-first update for \"Plan a release\" checklist item under #654; active sketch in plan_release qa asserts + release_context + proposed children. Fresh cycle.'",
+    "plate_what_next: advance open Epic child with tests sketched, no need:refinement",
+    "gh plate release status: 70 pending, plan-a-release-qa-*-654 pending",
+    "0 open PRs confirmed",
+    "ties to cut/finalize, release ceremony, #654"
+  ],
+  "advances": [
+    "Plan a release"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "cut and finalize a release",
+    "release planning Q&A",
+    "github release fields #594"
+  ]
+}
