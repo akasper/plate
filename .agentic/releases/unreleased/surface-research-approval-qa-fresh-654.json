@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced 'The system can surface Research results for user approval' under #654 (still open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (pm_feed research_feed + research_approvals). Added first_class reinforcement assert.",
+  "evidence": [
+    "tests/test_mcp.py: research_feed (research_results, documents, first_class, example_documents, sources, decision, provenance) + research_approvals (first_class, example, etc.). Fresh cycle.",
+    "plate_what_next: advance open epic item with tests sketched",
+    "release status: 55 pending fragments, #654 open for research surface",
+    "active sketch comments: multiple 'still [ ]; active sketch in pm_feed research_feed' in test"
+  ],
+  "advances": [
+    "The system can surface Research results for user approval (open [ ] in #654 user-facing surfaces)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "PM feed + approvals (#632)",
+    "provenance/decision (#647)",
+    "design visualizations surface",
+    "user-facing surfaces checklist"
+  ]
+}
