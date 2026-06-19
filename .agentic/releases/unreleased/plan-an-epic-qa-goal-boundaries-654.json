@@ -1,0 +1,17 @@
+{
+  "summary": "Advanced 'Plan an epic' under #654. Tests-first update to test_mcp.py plan_epic epic_planning asserts (epic goal and child boundaries). Evidence from epic_planning qa. Ties to epic_planning, tests sketched, release tie, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic child w/ tests sketched; picked Plan an epic (active sketch in epic_planning qa in test_mcp)",
+    "tests/test_mcp.py (updated): test_tools_call_plate_plan_epic added assert for 'epic goal' or 'child boundaries' in epic_planning qa + tests-first comment for Plan an epic under #654. Fresh cycle.",
+    "src/plate_core/mcp_server.py: planning_schema epic_planning qa includes 'What is the epic goal and child boundaries?', 'How will Q&A drive the epic breakdown...', 'What child Features/Bugs have tests sketched?'",
+    "0 PRs; progress via local test edit + new frag + #654 comment only",
+    "prior: plan-an-epic-qa-654.json, plan-an-epic-qa-tests-sketch-654.json; this advances the goal/boundaries reinforcement"
+  ],
+  "advances": [
+    "Plan an epic",
+    "#654 v1.0 roadmap (planning workflows + tests sketched in children)",
+    "Q&A driven epic planning with goal and child boundaries"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_plan_epic (epic_planning qa: epic goal and child boundaries)",
+  "related": ["#654", "epic_planning", "tests sketched", "release planning"]
+}
