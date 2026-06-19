@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'The system can surface Research results for user approval' under #654. Tests-first update to test_mcp.py pm_feed research_feed asserts. Evidence from research_feed (research_results, documents, first_class, example_documents, sources, decision, provenance). Ties to #647, PM feed, approvals, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked surface Research results (still [ ] in #654; active sketch in test_mcp research_feed)",
+    "tests/test_mcp.py (updated): pm_feed_for_661 test with tests-first comment for surface Research under #654",
+    "src/plate_core/mcp_server.py: _pm_feed research item with research_results, documents, first_class, example_documents, sources, decision, provenance; approvals research entry",
+    "surface-design-research-approval-654 prior: advanced surfaces in feed and approvals",
+    "0 PRs; progress via test update + new frag + #654 comment only",
+    "test run: pm_feed test passes"
+  ],
+  "advances": [
+    "The system can surface Research results for user approval",
+    "#654 v1.0 roadmap checklist (user-facing surfaces)",
+    "provenance + decision ledger #647"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_pm_feed_for_661 (research_feed asserts for research_results/documents/provenance)",
+  "related": ["#654", "#647", "#661", "PM feed"]
+}
