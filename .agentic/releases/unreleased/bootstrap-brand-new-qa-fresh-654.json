@@ -1,0 +1,21 @@
+{
+  "summary": "Advanced 'The system can bootstrap brand new projects' under #654. Tests-first update + fresh cycle in tests/test_bootstrap.py (test_apply_fails_with_actionable_error_when_default_branch_ref_missing). Strengthened assert for .plate/Goals seeding guidance in brand-new error path.",
+  "evidence": [
+    "tests/test_bootstrap.py: test_apply_fails... for brand-new repo (default_branch ref missing, actionable error with gh create --add-readme, seed .plate config, Goals page, starter Questions, new-repository-checklist.md, brand-new repo steps)",
+    "active sketch comment: 'tests-first for \"The system can bootstrap brand new projects\" under #654 (open checklist; active sketch ...). Fresh cycle.'",
+    "new assert: 'seed .plate config, Goals page' for bootstrap guidance",
+    "plate_what_next: advance open epic child/feature with tests sketched",
+    "release status: 53 pending fragments (legacy release, #654 + #612)"
+  ],
+  "advances": [
+    "The system can bootstrap brand new projects (open [ ] in #654 readiness)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "integrate under 30m onboarding",
+    "Goals page seeding",
+    ".plate config",
+    "adoption/bootstrap stories",
+    "new-repository-checklist.md"
+  ]
+}
