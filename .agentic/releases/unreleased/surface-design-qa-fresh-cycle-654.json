@@ -1,0 +1,12 @@
+{
+  "summary": "Advanced 'The system can surface Design visualizations and documents for user approval' under #654 (still open checklist item with active sketch).",
+  "evidence": [
+    "tests/test_mcp.py: added self.assertIn(\"interaction_contracts\", design_feed) with Fresh cycle. in pm_feed design_feed (still [ ] kept); reinforces visualizations, documents, first_class, visual_contracts, interaction_contracts, validation_required, example, example_documents",
+    "plate_what_next: 'advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement' (surfaces still marked still [ ] in test)",
+    "gh plate release status (pre): legacy, 0 open PRs, 70 pending 654 frags, #654 open",
+    "local-first: grep/read test_mcp.py surfaces, list_dir unreleased before naming/ edit",
+    "MCP create_or_update_file on main (new)"
+  ],
+  "advances": "surface Design visualizations and documents for user approval under #654 (pm feed design_feed + approvals; active sketch reinforced)",
+  "ties_to": ["#654", "#646 (first-class design validation)"]
+}
