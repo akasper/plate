@@ -1,0 +1,17 @@
+{
+  "summary": "Advanced 'There is a \"feature planning\" workflow, driven entirely by Q&A' under #654. Tests-first update to test_mcp.py pm_feed feat_plan asserts (delegation packet + explanatory video/GIF). Evidence from feat_plan qa_questions + qa_driven. Ties to feature planning, delegation, videos/GIFs, #646, #654.",
+  "evidence": [
+    "plate_what_next: advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement; picked feature planning Q&A (core open checklist item; active sketch in pm_feed feat_plan)",
+    "tests/test_mcp.py (updated): pm_feed_for_661 test added assert for 'delegation packet' or 'explanatory video or GIF' in feat_plan qa_questions + updated tests-first comment for feature planning under #654",
+    "src/plate_core/mcp_server.py: _pm_feed + planning_schema feature_planning qa_questions incl. 'What tests and delegation are needed?', 'What explanatory video or GIF will be generated from automated tests and approved?', 'How will first-class design validation and visual/interaction contracts be defined and tested (per #646)'",
+    "0 PRs; progress via local test edit + new frag + #654 comment (MCP push only)",
+    "prior: feature-planning-qa-workflow-654.json, feature-planning-qa-cost-risk-schedule-654.json; this advances video/delegation depth in the Q&A sketch"
+  ],
+  "advances": [
+    "There is a \"feature planning\" workflow, driven entirely by Q&A",
+    "#654 v1.0 roadmap (core Q&A workflows)",
+    "feature planning Q&A with delegation packet + explanatory video/GIF requirements"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_pm_feed_for_661 (feat_plan qa_driven + qa_questions for delegation + explanatory video or GIF)",
+  "related": ["#654", "feature planning", "delegation", "explanatory videos", "#646"]
+}
