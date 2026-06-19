@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'integrate into existing repository with minimal friction (under 30m of onboarding)' under #654 (open checklist item). Tests-first update + fresh cycle in tests/test_bootstrap.py (test_dry_run_reports_planned_actions). Added reinforcement assert for Goals seeding.",
+  "evidence": [
+    "tests/test_bootstrap.py: test_dry_run... added self.assertIn(\"Goals\", goals_action.detail) # reinforces Goals seeding for <30m integrate under #654. Fresh cycle. Active sketch: 'tests-first for \"integrate into existing repository with minimal friction (under 30m of onboarding)\" under #654; active sketch in test_dry_run_reports_planned_actions. Fresh cycle.'",
+    "plate_what_next: advance open Epic child with tests sketched, no need:refinement",
+    "gh plate release status: legacy, 70 pending, integrate-under-30m pending",
+    "0 open PRs",
+    "ties to bootstrap brand new, Goals, checklist, #654"
+  ],
+  "advances": [
+    "integrate into existing repository with minimal friction (under 30m of onboarding)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "bootstrap brand new projects",
+    "Goals adoption, .plate config, starter Questions"
+  ]
+}
