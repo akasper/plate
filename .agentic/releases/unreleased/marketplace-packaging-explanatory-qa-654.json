@@ -1,0 +1,17 @@
+{
+  "summary": "Advanced 'Package software and deploy to a marketplace' under #652/#654. Tests-first update to test_copilot_cli_marketplace_packaging.py (record_e2e_gif + first-class media). Evidence from packaging test + readme asserts. Ties to explanatory videos, cut/finalize, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic child w/ tests sketched; picked marketplace packaging (active sketch in test_copilot_cli_marketplace_packaging.py)",
+    "tests/test_copilot_cli_marketplace_packaging.py (updated): test_grok_marketplace_manifest_and_index_exist + tests-first comment update for marketplace under #654 + record_e2e_gif",
+    "README and agent.md assert record_e2e_gif, first-class media + adoption proof, explanatory for new Feature, github_release state",
+    "0 PRs; local edit + new frag + #654 comment",
+    "prior: marketplace-packaging-652-654.json, marketplace-packaging-first-class-media-652-654.json; this advances the active sketch for packaging + videos"
+  ],
+  "advances": [
+    "Package software and deploy to a marketplace",
+    "Every new Feature has explanatory videos or animated GIFs",
+    "#654 v1.0 roadmap (marketplace + first-class media)"
+  ],
+  "test_sketch": "test_copilot_cli_marketplace_packaging.py::test_grok_marketplace_manifest_and_index_exist (record_e2e_gif in agent_md + packaging for #654)",
+  "related": ["#654", "#652", "marketplace", "record_e2e_gif", "explanatory videos", "cut/finalize"]
+}
