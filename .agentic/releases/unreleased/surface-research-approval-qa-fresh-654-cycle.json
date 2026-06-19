@@ -1,0 +1,21 @@
+{
+  "summary": "Advanced 'The system can surface Research results for user approval' under #654 (still open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (pm_feed research_feed test). Added reinforcement assert for provenance on research surface.",
+  "evidence": [
+    "tests/test_mcp.py: research_feed (research_results, documents, first_class, example_documents, sources, decision, provenance). Added self.assertIn('provenance', research_feed) + Fresh cycle.",
+    "active sketch comments: 'tests-first for \"The system can surface Research results for user approval\" under #654 (still [ ]; active sketch in pm_feed research_feed ...)' (multiple)",
+    "plate_what_next: advance open Epic child with tests sketched, no need:refinement",
+    "gh plate release status: legacy, 70 pending frags, #654 v1.0.0 Roadmap active",
+    "gh pr list: 0 open PRs",
+    "ties: prior surface-design cycle, #647 provenance/decision, PM feed approvals, surfaces"
+  ],
+  "advances": [
+    "The system can surface Research results for user approval (still [ ] in #654 user-facing surfaces)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "provenance decision ledger #647",
+    "PM feed + research approvals + first_class",
+    "surface Design (paired)",
+    "feature/release planning Q&A"
+  ]
+}
