@@ -1,0 +1,17 @@
+{
+  "summary": "Advanced 'There is a \"feature planning\" workflow, driven entirely by Q&A' under #654. Tests-first update to test_mcp.py pm_feed feat_plan asserts (problem statement and ACs). Evidence from feat_plan qa_questions. Ties to feature planning, delegation, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic child w/ tests sketched; picked feature planning (active sketch in pm_feed feat_plan + plan_epic)",
+    "tests/test_mcp.py (updated): pm_feed_for_661 test added assert for 'problem statement' or 'ACs' in feat_plan qa_questions + tests-first comment for feature planning under #654. Fresh cycle.",
+    "src/plate_core/mcp_server.py: _pm_feed + planning_schema feature_planning qa_questions incl. 'What is the problem statement and ACs?', 'What tests and delegation are needed?'",
+    "0 PRs; progress via local test edit + new frag + #654 comment only",
+    "prior: feature-planning-qa-workflow-654.json, feature-planning-qa-video-delegation-654.json, feature-planning-qa-cost-risk-schedule-654.json; this advances the problem/ACs depth in the Q&A sketch"
+  ],
+  "advances": [
+    "There is a \"feature planning\" workflow, driven entirely by Q&A",
+    "#654 v1.0 roadmap (core Q&A workflows)",
+    "feature planning Q&A with problem statement and ACs"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_pm_feed_for_661 (feat_plan qa_driven + qa_questions for problem statement and ACs)",
+  "related": ["#654", "feature planning", "delegation", "plan a release"]
+}
