@@ -1,0 +1,12 @@
+{
+  "summary": "Advanced 'The system can surface Design visualizations and documents for user approval' under #654 (still open checklist item with active sketch).",
+  "evidence": [
+    "tests/test_mcp.py: added self.assertIn(\"example_documents\", design_feed) + self.assertIn(\"documents\", design_feed) with Fresh cycle. in pm_feed design_feed (still [ ] kept); prior asserts for visualizations, first_class, visual_contracts, interaction_contracts, validation_required, example.",
+    "plate_what_next: 'advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement'",
+    "gh plate release status (pre): legacy single-release, 0 open PRs, ~70 pending unreleased frags incl. prior surface-research + cut/deploy/plan/654 items",
+    "MCP grok_com_github__create_or_update_file on main for unique frag (no sha for new file)",
+    "local-first: grep + read_file on test_mcp.py + list_dir unreleased before naming"
+  ],
+  "advances": "surface Design visualizations/documents for user approval (design-feed surface + approvals) under #654; active sketch reinforced with example_documents + documents coverage",
+  "ties_to": ["#654", "#646 (first-class design validation + visual/interaction contracts)"]
+}
