@@ -1,0 +1,12 @@
+{
+  "summary": "Advanced 'Plan an epic' Q&A driven entirely by Q&A under #654 (open checklist item with active sketch).",
+  "evidence": [
+    "tests/test_mcp.py: added self.assertTrue(any(\"tests sketched\" in q.lower() for q in qa.get(\"epic_planning\", []))) with Fresh cycle. in planning_schema test (plate_plan_epic); reinforces tests sketched, child Features/Bugs have tests sketched, sketched tests map, epic goal, child boundaries, release track/Next Release",
+    "plate_what_next: 'advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement'",
+    "gh plate release status (pre): legacy single-release, 0 open PRs, 70 pending unreleased 654 frags, #654 Epic open",
+    "local-first: list_dir .agentic/releases/unreleased, grep tests/ for sketches + 'tests sketched', read_file test_mcp.py before edit",
+    "MCP grok_com_github__create_or_update_file on main (new file, no sha)"
+  ],
+  "advances": "Plan an epic checklist item under #654 (Q&A driven, tests sketched for children, sketched tests map to ACs, release tie)",
+  "ties_to": ["#654", "epic planning / release ceremony"]
+}
