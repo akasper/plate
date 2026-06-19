@@ -1,0 +1,21 @@
+{
+  "summary": "Advanced 'The system can surface Design visualizations and documents for user approval' under #654 (still open checklist item, active sketch). Tests-first update + fresh cycle in tests/test_mcp.py (pm_feed design_feed). Added reinforcement assert for visual_contracts on design surface.",
+  "evidence": [
+    "plate_what_next: advance an open Epic: pick a child Feature/Bug with tests sketched...; picked design surface (still [ ] active sketch in pm_feed design_feed per test_mcp.py)",
+    "tests/test_mcp.py: design_feed + 'still [ ]; active sketch' comments. New assert: self.assertIn('visual_contracts', design_feed) # ... (still [ ]; active sketch) ... Fresh cycle.",
+    "0 open PRs verified; gh plate release status: legacy single-release, #654 Epic active (70 pending frags), #612 Next Release",
+    "local-first: ls/grep/read test_mcp.py + unreleased/*design* before MCP; no broad scans",
+    "MCP: grok_com_github__create_or_update_file on main for frag; no PR opened (dirty tree tolerated)",
+    "ties to prior surface-design-qa-pm-fresh-cycle-654-14.json + research surface"
+  ],
+  "advances": [
+    "The system can surface Design visualizations and documents for user approval (still [ ] active sketch in #654 user-facing surfaces + PM feed approvals)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 Roadmap (Endless Q&A-driven autonomous product lifecycle)",
+    "PM feed / plate_pm_feed surface approvals",
+    "first-class design validation #646",
+    "surface Research (parallel)",
+    "feature planning / tests sketched"
+  ]
+}
