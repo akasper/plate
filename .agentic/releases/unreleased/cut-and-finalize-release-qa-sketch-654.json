@@ -1,0 +1,15 @@
+{
+  "summary": "Advanced 'Cut and finalize a release' under #654. Tests-first update to test_release.py render test. Evidence from test_render_includes_media_gifs with media, github, closes. Ties to cut/finalize, videos, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic child w/ tests sketched; picked Cut and finalize a release (active sketch in test_release.py and test_cut_release.py)",
+    "tests/test_release.py (updated): test_render_includes_media_gifs + tests-first comment update for cut/finalize under #654. Fresh cycle.",
+    "prior: cut-and-finalize-a-release-654.json, cut-finalize-videos-qa-654.json; this reinforces the render sketch with github_release_state and closes_block.",
+    "0 PRs; progress via local test edit + new frag + #654 comment only"
+  ],
+  "advances": [
+    "Cut and finalize a release",
+    "#654 v1.0 roadmap (cut/finalize + release notes with videos/GIFs)"
+  ],
+  "test_sketch": "test_release.py::test_render_includes_media_gifs (media/gifs/videos + github_release + closes_block for cut/finalize)",
+  "related": ["#654", "cut/finalize", "explanatory videos", "github_release"]
+}
