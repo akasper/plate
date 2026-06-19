@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'There is a \"feature planning\" workflow, driven entirely by Q&A' under #654. Tests-first update to test_mcp.py pm_feed feat_plan asserts. Evidence from _pm_feed feature_planning item (qa_driven, qa_questions incl. tests sketched, design validation #646), test asserts for qa_driven + qa_questions presence + specific content. Ties to plan a release, release planning, implement feature, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked feature planning Q&A workflow (still [ ] in #654 body; active sketch in test_mcp pm_feed test with 'tests sketched')",
+    "tests/test_mcp.py (updated): pm_feed_for_661 test asserts feat_plan qa_driven, qa_questions (incl. design validation/#646/tests sketched) + tests-first comment for feature planning workflow Q&A under #654",
+    "src/plate_core/mcp_server.py: _pm_feed includes feature_planning item with qa_driven, qa_questions (problem/ACs, tests/delegation, drive scope/cost, video/GIF, design validation #646), qa_session",
+    "feature-planning-qa-cost-risk-schedule-654.json prior + planning-qa-feed-workflows-654: enriched qa and feed for feature_planning",
+    "0 PRs; progress via test update + new frag + #654 comment only",
+    "test run: pm_feed test passes"
+  ],
+  "advances": [
+    "There is a \"feature planning\" workflow, driven entirely by Q&A",
+    "#654 v1.0 roadmap checklist (planning Q&A workflows)",
+    "PM feed visibility for feature planning"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_pm_feed_for_661 (feat_plan qa_driven + qa_questions + 'tests sketched')",
+  "related": ["#654", "#660", "#661", "plan a release", "implement feature", "#646"]
+}
