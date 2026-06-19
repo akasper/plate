@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'Cut and finalize a release' and 'Every new Feature has explanatory videos or animated GIFs' under #654. Tests-first update to test_cut_release.py for media/gifs/videos in cut. Evidence from collect + render asserts. Ties to cut/finalize, videos/GIFs, record_e2e, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic child w/ tests sketched; picked cut + finalize + videos (active sketch in test_cut_release + test_release)",
+    "tests/test_cut_release.py (updated): test_collects_media_gifs_videos_for_cut_release_notes + tests-first comment update for #654 videos/GIFs + new assert",
+    "test_release.py: render tests with media, github_release_state, explanatory for new Feature under #654",
+    "0 PRs; local edit + new frag + #654 comment",
+    "prior frags: cut-and-finalize-*.json, every-new-feature-explanatory-videos-654.json; this strengthens the active sketch"
+  ],
+  "advances": [
+    "Cut and finalize a release",
+    "Every new Feature has explanatory videos or animated GIFs (generated from automated test runs)",
+    "The system generates release notes with videos or animated GIFs",
+    "#654 v1.0 roadmap"
+  ],
+  "test_sketch": "test_cut_release.py::test_collects_media_gifs_videos_for_cut_release_notes (media/gifs/videos + _render + record_e2e tie)",
+  "related": ["#654", "cut/finalize", "explanatory videos", "record_e2e_gif", "marketplace"]
+}
