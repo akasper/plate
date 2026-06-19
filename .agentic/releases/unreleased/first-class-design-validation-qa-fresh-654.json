@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'First-class design validation + visual/interaction contracts (#646)' under #654 (open checklist item). Tests-first update in tests/test_delegation.py (design delegation packets). Marked fresh cycle on active sketch comment for design_validation_contracts, visual_contracts, interaction_contracts, validation_required, first_class.",
+  "evidence": [
+    "tests/test_delegation.py: test_delegation_result_for_project_manager (design_validation_required, design_validation_contracts), test_delegation_result_agent_id_matches_request (visual_contracts, interaction_contracts, validation_rules, validation_required, first_class, documents, visualizations for design surface). Fresh cycle comment.",
+    "tests/test_mcp.py: feature_planning qa includes 'design validation' / '#646' / 'contracts'; design_feed and approvals have visual_contracts, interaction_contracts, first_class.",
+    "plate_what_next: advance open epic child with tests sketched (used to select this)",
+    "release status: 56 pending fragments",
+    "ties to implement feature checklist, surface Design, #654"
+  ],
+  "advances": [
+    "First-class design validation + visual/interaction contracts (#646) (open [ ] in #654 additional must-haves)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "feature impl delegation",
+    "surface Design visualizations/documents",
+    "PM feed approvals",
+    "implement feature stories"
+  ]
+}
