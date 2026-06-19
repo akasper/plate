@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'The system can surface Design visualizations and documents for user approval' under #654 (still open checklist item; still [ ]; active sketch). Tests-first smallest update + fresh cycle in tests/test_mcp.py (pm_feed design_approvals). Added reinforcement assert for documents. Picked via plate_what_next.",
+  "evidence": [
+    "tests/test_mcp.py::test_tools_call_plate_pm_feed_for_661: added assertIn documents + 'Fresh cycle.' comment in design_approvals[0]; all prior 'still [ ]; active sketch' + reinforcement retained.",
+    "plate_what_next result: 'advance an open Epic: pick a child Feature/Bug with tests sketched'.",
+    "gh plate release status: legacy single-release, 70 pending frags, active Next #612, #654 Epic.",
+    "0 open PRs confirmed; git dirty tolerated (MCP direct to main for artifact).",
+    "ties to design surface, pm_feed #661, approvals, #646, #654 roadmap."
+  ],
+  "advances": [
+    "The system can surface Design visualizations and documents for user approval (still [ ]; active sketch) under #654 v1.0 roadmap"
+  ],
+  "ties_to": [
+    "#654",
+    "#661 PM feed / surfaces",
+    "#646 first-class design",
+    "research surface (related)",
+    "plan epic / tests sketched"
+  ]
+}
