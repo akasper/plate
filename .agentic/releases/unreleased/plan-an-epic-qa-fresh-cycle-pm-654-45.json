@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'Plan an epic' Q&A driven entirely by Q&A + tests sketched under #654. Tests-first smallest update + fresh cycle in tests/test_mcp.py (plate_plan_epic test). Added reinforcement assert for 'tests sketched'. Picked via plate_what_next.",
+  "evidence": [
+    "tests/test_mcp.py::test_tools_call_plate_plan_epic: added assert any('tests sketched' in ...) + 'Fresh cycle.' in epic_planning qa; retained priors.",
+    "plate_what_next result: 'advance an open Epic: pick a child Feature/Bug with tests sketched'.",
+    "gh plate release status: legacy single-release, 70 pending frags, active Next #612, #654 Epic.",
+    "0 open PRs confirmed; git dirty tolerated (MCP direct to main for artifact).",
+    "ties to epic_planning, tests sketched, child Features/Bugs, release tie, #654 roadmap."
+  ],
+  "advances": [
+    "Plan an epic (tests sketched, sketched tests map to ACs) under #654 v1.0 roadmap"
+  ],
+  "ties_to": [
+    "#654",
+    "epic_planning / plan an epic",
+    "tests sketched",
+    "release planning / plan a release",
+    "feature planning"
+  ]
+}
