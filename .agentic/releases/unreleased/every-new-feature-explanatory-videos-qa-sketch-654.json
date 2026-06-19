@@ -1,0 +1,16 @@
+{
+  "summary": "Advanced 'Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves' and 'The system generates release notes with videos or animated GIFs' under #654. Tests-first update to test_cut_release.py. Evidence from test_auto_minor_bump... with media/gifs/videos + notes. Ties to cut/finalize, record_e2e_gif, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic child w/ tests sketched; picked Every new Feature has explanatory videos (active sketch in test_cut_release.py and test_release.py)",
+    "tests/test_cut_release.py (updated): test_auto_minor_bump_from_flat_baseline + reinforcement assert + comment for videos/GIFs under #654. Fresh cycle.",
+    "prior: every-new-feature-explanatory-videos-654.json, cut-finalize-videos-qa-654.json; this advances the active sketch for explanatory videos in notes.",
+    "0 PRs; progress via local test edit + new frag + #654 comment only"
+  ],
+  "advances": [
+    "Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves",
+    "The system generates release notes with videos or animated GIFs",
+    "#654 v1.0 roadmap (marketplace + cut/finalize + videos)"
+  ],
+  "test_sketch": "test_cut_release.py::test_auto_minor_bump_from_flat_baseline (gifs/videos in cut + Media Evidence in notes for explanatory videos)",
+  "related": ["#654", "cut/finalize", "explanatory videos", "record_e2e_gif", "marketplace"]
+}
