@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'First-class design validation + visual/interaction contracts (#646)' under #654 (open checklist item). Tests-first update + fresh cycle in tests/test_delegation.py (designer delegation). Added reinforcement assert for visual_contracts.",
+  "evidence": [
+    "tests/test_delegation.py: test_delegation_result_agent_id_matches_request (approval_required, validation_required, visual_contracts, interaction_contracts, validation_rules, documents, example_documents, visualizations, first_class, example). Fresh cycle.",
+    "active sketch: 'tests-first update for #646: first-class design validation + visual/interaction contracts (sketched via design_validation_contracts, visual_contracts etc in packet + \"tests sketched\" in qa); advances #654 checklist item. Fresh cycle.'",
+    "plate_what_next used",
+    "release status: 69 pending",
+    "ties to implement feature, surface Design, #654, delegation"
+  ],
+  "advances": [
+    "First-class design validation + visual/interaction contracts (#646) (open [ ] in #654)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "feature impl delegation",
+    "surface Design visualizations/documents",
+    "PM feed approvals",
+    "implement feature checklist"
+  ]
+}
