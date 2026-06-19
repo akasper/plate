@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'The system can surface Design visualizations and documents for user approval' under #654. Tests-first update to test_mcp.py pm_feed design_feed asserts. Evidence from design_feed (visualizations, documents, first_class, visual_contracts, interaction_contracts, validation_required, example). Ties to #646, PM feed, approvals, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked surface Design visualizations/documents (still [ ] in #654; active sketch in test_mcp design_feed)",
+    "tests/test_mcp.py (updated): pm_feed_for_661 test with tests-first comment for surface Design under #654",
+    "src/plate_core/mcp_server.py: _pm_feed design item with visualizations, documents, first_class, visual_contracts etc.; approvals design entry",
+    "surface-design-research-approval-654 prior: advanced surfaces in feed and approvals",
+    "0 PRs; progress via test update + new frag + #654 comment only",
+    "test run: pm_feed test passes"
+  ],
+  "advances": [
+    "The system can surface Design visualizations and documents for user approval",
+    "#654 v1.0 roadmap checklist (user-facing surfaces)",
+    "first-class contracts #646"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_pm_feed_for_661 (design_feed asserts for visualizations/documents/contracts)",
+  "related": ["#654", "#646", "#661", "PM feed"]
+}
