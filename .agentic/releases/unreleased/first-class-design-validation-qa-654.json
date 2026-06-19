@@ -1,0 +1,17 @@
+{
+  "summary": "Advanced 'first-class design validation + visual/interaction contracts (#646)' under #654. Tests-first update to test_delegation.py for implement feature case. Evidence from design_validation_contracts assert + #646 comment. Ties to #646, feature impl, delegation packet, #654.",
+  "evidence": [
+    "plate_what_next: advance an open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked first-class design validation #646 (active sketch in delegation test)",
+    "tests/test_delegation.py (updated): test_delegation_result_has_required_fields added assert for design_validation_contracts + tests-first comment update for #646 under #654",
+    "Delegation packet for 'Implement the feature' includes design_validation_contracts, visual_contracts, first_class per #646 sketch + 'tests sketched' in qa",
+    "prior: first-class-design-validation-646-654.json; this strengthens tests-first coverage for design validation in impl",
+    "0 PRs; local edit + new frag + #654 comment only"
+  ],
+  "advances": [
+    "first-class design validation + visual/interaction contracts (#646)",
+    "#654 v1.0 roadmap (design validation + contracts in feature impl)",
+    "delegation for features with #646 first-class + record_e2e tie"
+  ],
+  "test_sketch": "test_delegation.py::test_delegation_result_has_required_fields (implement feature: design_validation_contracts + #646 tests-first sketch)",
+  "related": ["#654", "#646", "implement feature", "delegation", "design validation", "record_e2e_gif"]
+}
