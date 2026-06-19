@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'Cut and finalize a release' under #654 (open checklist item). Tests-first update + fresh cycle in tests/test_cut_release.py (test_auto_minor_bump_from_flat_baseline). Added reinforcement assert for walkthrough.mp4 in notes_content for cut.",
+  "evidence": [
+    "tests/test_cut_release.py: test_auto_minor_bump_from_flat_baseline (gifs/videos in entry, Media Evidence in notes and preview, demo.gif, walkthrough.mp4). Fresh cycle.",
+    "active sketch comments for cut/finalize and videos.",
+    "plate_what_next used",
+    "release status: 67 pending",
+    "ties to cut and finalize, explanatory videos, record_e2e_gif"
+  ],
+  "advances": [
+    "Cut and finalize a release (open [ ] in #654)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "generates release notes with videos or animated GIFs",
+    "Every new Feature has explanatory videos",
+    "record_e2e_gif",
+    "marketplace packaging"
+  ]
+}
