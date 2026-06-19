@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'Cut and finalize a release' checklist item under #654. Tests-first update to render test. Evidence from RenderReleaseNotesTests (media/gifs/videos, ## Media Evidence, github_release_state, closes_block), CutReleaseVersionSyncTests, FinalizeAutomationTests, test_cut_release media support, cut_release.py, render scripts. Ties to release notes videos/GIFs, first-class media #652, github release fields #594, extension checks.",
+  "evidence": [
+    "plate_what_next: advance open Epic child Feature/Bug with tests sketched, no need:refinement; picked 'Cut and finalize a release' (open in #654; active sketches in test_release.py render + cut tests, test_cut_release.py)",
+    "tests/test_release.py (updated): test_render_includes_media_gifs docstring + comment for cut/finalize support per #654; asserts for Media Evidence, explanatory labels from record_e2e_gif, GitHub Release state, Closes",
+    "tests/test_cut_release.py: test_collects_media..., test_auto_minor_bump media/gifs/videos in cut + notes_preview; advances cut+finalize + videos item under #654",
+    "tests/test_cli.py: finalize tests wire github_release_* for post-create verification (#594, supports cut/finalize under #654)",
+    "src/plate_core/release.py + scripts/cut_release.py + render: media/gifs/videos copy, _render_release_notes with Media Evidence + github state + closes_block",
+    "frags: cut-finalize-media-support-654, release-notes-media-videos, every-new-feature-explanatory-videos-654 claim related advances; pending 18+ now includes this",
+    "0 PRs; progress via test touch + new frag pushed + #654 comment"
+  ],
+  "advances": [
+    "Cut and finalize a release",
+    "#654 v1.0 roadmap checklist",
+    "release notes with media/videos/GIFs",
+    "github_release_state in ceremony (#594)"
+  ],
+  "test_sketch": "test_release.py::RenderReleaseNotesTests.test_render_includes_media_gifs (media + state + closes); test_cut_release.py media cut tests; test_cli finalize",
+  "related": ["#654", "#652", "#594", "#532", "record_e2e_gif"]
+}
