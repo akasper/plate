@@ -1,0 +1,16 @@
+{
+  "summary": "Advanced 'The system can be easily integrated into an existing repository with minimal friction (under 30m of onboarding)' under #654. Tests-first update to test_bootstrap.py for integrate test. Evidence from test_dry_run_reports_planned_actions (planned <=8, manual branch-protection). Ties to bootstrap, <30m integrate, Goals, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic child w/ tests sketched; picked integrate under 30m (active sketch in test_bootstrap.py)",
+    "tests/test_bootstrap.py (updated): test_dry_run_reports_planned_actions + tests-first comment + assert reinforcement for manual branch-protection under #654. Fresh cycle.",
+    "prior: integrate-under-30m-qa-654.json, integrate-existing-under-30m-654.json; this strengthens low-friction signals (planned<=8, manual bp, Goals seeding).",
+    "0 PRs; progress via local test edit + new frag + #654 comment only"
+  ],
+  "advances": [
+    "The system can be easily integrated into an existing repository with minimal friction (under 30m of onboarding)",
+    "#654 v1.0 roadmap (adoption & bootstrap)",
+    "low-friction onboarding + Goals adoption target"
+  ],
+  "test_sketch": "test_bootstrap.py::test_dry_run_reports_planned_actions (planned <=8, manual branch-protection for under 30m integrate)",
+  "related": ["#654", "bootstrap", "integrate under 30m", "Goals"]
+}
