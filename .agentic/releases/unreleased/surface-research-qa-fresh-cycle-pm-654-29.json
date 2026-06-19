@@ -1,0 +1,21 @@
+{
+  "summary": "Advanced 'The system can surface Research results for user approval' under #654 (still open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (pm_feed research_approvals). Added reinforcement assert for decision on research surface (still [ ] retained). Picked via plate_what_next (child Feature/Bug with tests sketched).",
+  "evidence": [
+    "tests/test_mcp.py: research_approvals added self.assertIn('decision', research_approvals[0]) # reinforces decision for research surface (still [ ]; active sketch) under #654. Fresh cycle.",
+    "plate_what_next: advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement",
+    "gh plate release status: legacy release, 70 pending frags, #654 epic + #612 next",
+    "0 open PRs (gh pr list); local-first ls/grep/read before MCP",
+    "still [ ] active sketch retained on research_results, first_class, sources, decision, provenance in research_approvals + feed",
+    "frag written direct to main via MCP (no PR)"
+  ],
+  "advances": [
+    "The system can surface Research results for user approval (still [ ] in #654 user-facing surfaces)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "PM feed + approvals surfaces (research)",
+    "plate_what_next + tests-first + fresh cycle pattern",
+    "provenance decision ledger #647",
+    "design surface (related)"
+  ]
+}
