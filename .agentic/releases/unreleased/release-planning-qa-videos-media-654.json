@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'There is a \"release planning\" workflow, driven entirely by Q&A' under #654. Tests-first update to test_mcp.py pm_feed rel_plan asserts (media/videos/scope coverage). Evidence from rel_plan qa_questions + qa_session + passed bg test. Ties to plan a release, cut/finalize, explanatory media, #654.",
+  "evidence": [
+    "plate_what_next: advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement (adapted to #654 core 'release planning' item still [ ] in body)",
+    "tests/test_mcp.py (updated): pm_feed_for_661 test now asserts videos/media/target version in rel_plan qa_questions; added tests-first comment for release planning under #654",
+    "src/plate_core/mcp_server.py: planning_schema release_planning qa_questions + _pm_feed item with qa_driven, qa_questions (target/fragments/cut/ceremony/videos/media), qa_session driven_entirely_by_qanda",
+    "bg verification: pytest tests/test_mcp.py tests/test_autonomy.py -k \"pm_feed_for_661 or ... or deploy\" : 2 passed (1356s run)",
+    "0 PRs confirmed via gh pr list; prior related: release-planning-qa-workflow-654.json + plan-release-qa-* + feature-planning-qa-* + deploy-to-production-qa-654.json",
+    "progress reflected via local test edit + new frag creation + #654 comment (no PRs)"
+  ],
+  "advances": [
+    "There is a \"release planning\" workflow, driven entirely by Q&A",
+    "#654 v1.0 roadmap (Core workflows)",
+    "release notes with videos/media evidence"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_pm_feed_for_661 (rel_plan qa_driven + qa_questions including 'How will videos and media evidence be included in the release notes?')",
+  "related": ["#654", "#612", "PM feed", "#661", "cut-and-finalize", "every-new-feature-explanatory-videos"]
+}
