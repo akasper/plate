@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'The system can bootstrap brand new projects' under #654 (open checklist item). Tests-first update + fresh cycle in tests/test_bootstrap.py (test_apply_fails_with_actionable_error_when_default_branch_ref_missing). Added reinforcement assert for new-repository-checklist.md link.",
+  "evidence": [
+    "tests/test_bootstrap.py: test_apply_fails... added self.assertIn(\"new-repository-checklist.md\", msg) # reinforces checklist link for brand new bootstrap under #654. Fresh cycle. Active sketch: 'tests-first for \"The system can bootstrap brand new projects\" under #654 (open checklist; active sketch in test_apply_fails... for brand-new steps). Fresh cycle.'",
+    "plate_what_next: advance open Epic child with tests sketched, no need:refinement",
+    "gh plate release status: legacy, 70 pending, bootstrap-brand-new-projects-654 []",
+    "0 open PRs confirmed",
+    "ties to integrate under 30m, Goals seeding, starter Questions, #654"
+  ],
+  "advances": [
+    "The system can bootstrap brand new projects"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "integrate under 30m of onboarding",
+    ".plate/Goals seeding, checklist, starter Questions"
+  ]
+}
