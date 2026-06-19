@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced 'There is a \"release planning\" workflow, driven entirely by Q&A' under #654. Tests-first update to test_mcp.py pm_feed rel_plan asserts. Evidence from _pm_feed release_planning item (qa_driven, qa_questions, qa_session), test asserts for qa_driven + qa_questions presence + Q&A drive content. Ties to plan a release, feature planning, cut/finalize, media evidence, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked release planning Q&A workflow (still [ ] in #654 body; active sketch in test_mcp pm_feed test)",
+    "tests/test_mcp.py (updated): pm_feed_for_661 test asserts rel_plan qa_driven, qa_questions, qa_session + tests-first comment for release planning workflow Q&A under #654",
+    "src/plate_core/mcp_server.py: _pm_feed includes release_planning item with qa_driven, qa_questions (target, fragments, drive scope/checks/ceremony, videos/media), qa_session",
+    "planning-qa-feed-workflows-654.json prior: enriched feed for release_planning + feature_planning",
+    "plan-release-qa-extension-checks-654 + plan-a-release-qa-654: advanced plan a release Q&A",
+    "0 PRs; progress via test update + new frag + #654 comment only",
+    "test run: pm_feed test passes"
+  ],
+  "advances": [
+    "There is a \"release planning\" workflow, driven entirely by Q&A",
+    "#654 v1.0 roadmap checklist (planning Q&A workflows)",
+    "PM feed visibility for release planning"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_pm_feed_for_661 (rel_plan qa_driven + qa_questions + qa_session)",
+  "related": ["#654", "#660", "#661", "plan a release", "cut/finalize"]
+}
