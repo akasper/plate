@@ -1,0 +1,13 @@
+{
+  "summary": "Advanced 'Cut and finalize a release' + 'Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves' + 'The system generates release notes with videos or animated GIFs' under #654 (open checklist items with active sketch).",
+  "evidence": [
+    "tests/test_cut_release.py: fixed erroneous 'notes_content' forward ref (was NameError before assignment) to 'notes' (defined) + Fresh cycle. reinforcement in CutReleaseAutoVersionTests.test_auto_minor_bump_from_flat_baseline (Media Evidence, walkthrough.mp4, gifs/videos in cut data + notes_preview)",
+    "Active sketch comments: 'Every new Feature has explanatory videos...' + 'Cut and finalize a release'; record_e2e_gif + Media Evidence ties",
+    "plate_what_next: advance Epic child with tests sketched, no need:refinement",
+    "gh plate release status: legacy, 0 open PRs confirmed, 70 pending 654 frags, #654 still open",
+    "local-first: list_dir unreleased, grep for 'active sketch|explanatory videos|Media Evidence', read_file test_cut_release.py before edit",
+    "MCP grok_com_github__create_or_update_file (new file, no sha) on main"
+  ],
+  "advances": "cut-and-finalize-a-release + explanatory videos/GIFs in notes + per-feature media under #654 (test sketch reinforced + made correct for preview notes)",
+  "ties_to": ["#654", "#652 (first-class media/GIFs/videos)", "release ceremony / cut_finalize"]
+}
