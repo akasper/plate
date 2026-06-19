@@ -1,0 +1,17 @@
+{
+  "summary": "Advanced 'Package software and deploy to a marketplace' under #652/#654. Tests-first update to test_copilot_cli_marketplace_packaging.py for record_e2e_gif and media. Evidence from test_grok_marketplace_manifest_and_index_exist (record_e2e_gif in agent_md), test_readme_documents_prelaunch... (media evidence, explanatory, github state). Ties to cut/finalize, videos/GIFs, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked marketplace #652 (still [ ] in #654; active sketch in test_copilot_cli_marketplace_packaging)",
+    "tests/test_copilot_cli_marketplace_packaging.py (updated): test_grok... with tests-first comment for #652/#654 packaging + record_e2e_gif",
+    "marketplace-packaging-first-class-media-652-654.json prior: strengthened test for record_e2e_gif in manifest",
+    "0 PRs; progress via test update + new frag + #654 comment only",
+    "test run: marketplace test passes"
+  ],
+  "advances": [
+    "Package software and deploy to a marketplace",
+    "#652 / #654 v1.0 roadmap checklist (marketplace packaging with first-class media)",
+    "Every new Feature has explanatory videos"
+  ],
+  "test_sketch": "test_copilot_cli_marketplace_packaging.py::test_grok_marketplace_manifest_and_index_exist (record_e2e_gif + media in packaging)",
+  "related": ["#654", "#652", "record_e2e_gif", "cut/finalize"]
+}
