@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'Plan an epic' under #654 (open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (planning_schema epic_planning test). Added reinforcement assert for child Features/Bugs have tests sketched.",
+  "evidence": [
+    "tests/test_mcp.py:449-455 planning_schema qa epic_planning (tests sketched, child Features/Bugs have tests sketched, sketched tests map, release tie). Added assert for child tests sketched + Fresh cycle.",
+    "active sketch comment: 'tests-first for \"Plan an epic\" under #654 (open checklist; active sketch with \"tests sketched\" + ... )'",
+    "plate_what_next: advance open Epic child with tests sketched, no need:refinement",
+    "gh plate release status: legacy, 70 pending frags, #654 v1.0 Roadmap (plan-an-epic-qa-*-654 pending)",
+    "gh pr list: 0 open PRs",
+    "ties to epic children tests sketched, release ceremony, #654"
+  ],
+  "advances": [
+    "Plan an epic"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "Plan a release / release planning",
+    "cut and finalize ceremony",
+    "child Features/Bugs have tests sketched"
+  ]
+}
