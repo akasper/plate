@@ -1,0 +1,21 @@
+{
+  "summary": "Advanced 'feature planning' workflow driven entirely by Q&A under #654 (core open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (pm_feed feat_plan test). Added reinforcement assert for explanatory video/GIF in qa_questions.",
+  "evidence": [
+    "tests/test_mcp.py: pm_feed feat_plan (qa_driven, qa_questions with 'tests sketched', 'explanatory video or GIF', delegation, problem/ACs). Added assert for explanatory video/GIF + Fresh cycle.",
+    "active sketch: 'tests-first for \"feature planning\" workflow, driven entirely by Q&A under #654 (core open checklist item; active sketch in pm_feed feat_plan qa_driven + qa_questions incl. \"tests sketched\" + delegation + explanatory video/GIF + qa_session)'",
+    "plate_what_next: advance open Epic child with tests sketched, no need:refinement",
+    "gh plate release status: 70 pending, #654 v1.0 Roadmap, legacy release",
+    "gh pr list: 0 open PRs",
+    "ties to explanatory videos, delegation, release planning, cut/finalize, #654"
+  ],
+  "advances": [
+    "There is a \"feature planning\" workflow, driven entirely by Q&A under #654"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "Every new Feature has explanatory videos or animated GIFs",
+    "delegation packets #646",
+    "release planning workflow",
+    "cut and finalize a release"
+  ]
+}
