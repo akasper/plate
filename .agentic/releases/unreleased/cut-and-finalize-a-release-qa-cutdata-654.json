@@ -1,0 +1,16 @@
+{
+  "summary": "Advanced 'Cut and finalize a release' under #654. Tests-first update to test_cut_release.py for cut data in auto minor bump test. Evidence from cut data with gifs/videos. Ties to cut/finalize, #654.",
+  "evidence": [
+    "plate_what_next: advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement; picked Cut and finalize a release (active sketch in test_cut_release.py and test_release.py)",
+    "tests/test_cut_release.py (updated): test_auto_minor_bump_from_flat_baseline + reinforcement for cut and finalize under #654. Fresh cycle.",
+    "prior: cut-and-finalize-a-release-654.json, cut-and-finalize-a-release-qa-render-654.json; this advances the cut data sketch.",
+    "0 PRs; progress via local test edit + new frag + #654 comment only",
+    "bg task verified deploy test pass and frag, but continuing on cut item"
+  ],
+  "advances": [
+    "Cut and finalize a release",
+    "#654 v1.0 roadmap (cut/finalize + release notes)"
+  ],
+  "test_sketch": "test_cut_release.py::test_auto_minor_bump_from_flat_baseline (cut data with gifs/videos for cut and finalize)",
+  "related": ["#654", "cut/finalize", "videos/GIFs"]
+}
