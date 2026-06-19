@@ -1,0 +1,21 @@
+{
+  "summary": "Advanced 'Package software and deploy to a marketplace' under #654 (ties to #652). Tests-first update + fresh cycle in tests/test_copilot_cli_marketplace_packaging.py (test_grok_marketplace_manifest_and_index_exist). Added reinforcement assert for skills/components and record_e2e_gif packaging sketch.",
+  "evidence": [
+    "tests/test_copilot_cli_marketplace_packaging.py: test_grok_marketplace_manifest_and_index_exist (record_e2e_gif in agent_md, skills count, marketplace manifest/index), test_readme... (first-class media + explanatory for features). Fresh cycle verification.",
+    "active sketch: 'tests-first for \"Package software and deploy to a marketplace\" under #652/#654; active sketch exercised here + record_e2e_gif in packaging + readme asserts. Fresh cycle verification.'",
+    "plate_what_next: advance open epic child with tests sketched",
+    "release status: 58 pending fragments (marketplace packaging listed in pending)",
+    "ties to explanatory videos, cut/finalize media, first-class media in packaging"
+  ],
+  "advances": [
+    "Package software and deploy to a marketplace (open in #654)",
+    "Every new Feature has explanatory videos or animated GIFs (tied via record_e2e_gif)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "#652 marketplace packaging",
+    "explanatory videos/GIFs in release notes and features",
+    "cut and finalize",
+    "PM feed / approvals"
+  ]
+}
