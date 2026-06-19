@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced 'integrate into existing repository with minimal friction (under 30m of onboarding)' under #654. Tests-first update + fresh cycle reinforcement in tests/test_bootstrap.py (test_dry_run_reports_planned_actions). Added assert for low planned actions count.",
+  "evidence": [
+    "tests/test_bootstrap.py: test_dry_run_reports_planned_actions (planned actions <=8, branch-protection manual-required, seed-goals, .plate, Goals). Fresh cycle comment + new assert.",
+    "active sketch: 'tests-first for \"integrate into existing repository with minimal friction (under 30m of onboarding)\" under #654; active sketch in test_dry_run_reports_planned_actions. Fresh cycle.'",
+    "plate_what_next used; release status 57 pending frags",
+    "ties to Goals adoption, 15-minute-adoption.md, bootstrap brand new"
+  ],
+  "advances": [
+    "The system can be easily integrated into an existing repository with minimal friction (under 30m of onboarding) (open [ ] in #654)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "bootstrap brand new projects",
+    "Goals page seeding",
+    ".plate config",
+    "adoption <30m stories"
+  ]
+}
