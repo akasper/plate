@@ -35,6 +35,18 @@ Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable
 | Seed a baseline root `.plate` config | Gives the repo a durable local configuration surface that `gh plate config show/validate` and MCP tools can inspect or repair later. | Yes |
 | Apply conservative baseline branch protection | Provides immediate protection against force-pushes and branch deletion while requiring conversation resolution. | Yes, when `--protect-branch BRANCH` / `-ProtectBranch BRANCH` is passed |
 
+## Post-bootstrap verification (v1.0 features)
+
+After `gh plate bootstrap --apply`:
+
+- `gh plate release status` (now surfaces github_release_exists/is_latest/url for packaging/cut/finalize verification under #654).
+- `gh plate what-next` or `plate_pm_feed` to see Design/Research surfaces (with visualizations/documents/research_results/first_class) for user approval, media approvals via record_e2e_gif for explanatory videos/GIFs, and planning Q&A items.
+- Verify release notes/fragments include ## Media Evidence section with videos/GIFs labeled from record_e2e_gif (advances "generates release notes with videos" and "Every new Feature has explanatory videos" items).
+- Use PM feed for first-class Design/Research approval and feature explanatory videos.
+- Confirm brand-new bootstrap seeds starter Questions, Goals page, .plate config, and links to new-repository-checklist.md (advances "The system can bootstrap brand new projects" under #654).
+
+These tie brand-new bootstrap to #654 adoption, surfaces, evidence, and ceremony items.
+
 ## Human Decisions Still Required
 
 | Step | Why Human Review Is Still Needed |
