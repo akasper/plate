@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'The system can be easily integrated into an existing repository with minimal friction (under 30m of onboarding)' under #654. Tests-first update to test_bootstrap.py integrate test. Evidence from test_dry_run_reports_planned_actions (planned <=8, manual branch-protection, #654 comment). Ties to bootstrap brand new, Goals seeding, 15-min adoption, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked integrate under 30m (still [ ] in #654; active sketch in test_bootstrap)",
+    "tests/test_bootstrap.py (updated): test_dry_run_reports_planned_actions with tests-first comment for <30m integrate under #654",
+    "integrate-existing-under-30m-654.json prior: strengthened test and 15min doc",
+    "bootstrap-brand-new-projects-654 recent: pairs with integrate",
+    "0 PRs; progress via test update + new frag + #654 comment only",
+    "test run: bootstrap test passes"
+  ],
+  "advances": [
+    "The system can be easily integrated into an existing repository with minimal friction (under 30m of onboarding)",
+    "#654 v1.0 roadmap checklist (adoption & bootstrap)",
+    "15-min adoption + Goals"
+  ],
+  "test_sketch": "test_bootstrap.py::test_dry_run_reports_planned_actions (<30m integrate under #654)",
+  "related": ["#654", "bootstrap", "15-minute-adoption"]
+}
