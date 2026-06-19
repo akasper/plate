@@ -1,0 +1,16 @@
+{
+  "summary": "Advanced 'Cut and finalize a release' (open) + 'The system generates release notes with videos or animated GIFs' + 'Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves' (open) under #654. Tests-first update + fresh cycle reinforcement in tests/test_release.py RenderReleaseNotesTests.test_render_includes_media_gifs. Added asserts for 'explanatory for new Feature' and media data carry-through.",
+  "evidence": [
+    "tests/test_release.py test_render_includes_media_gifs: Media Evidence, gifs/videos per entry, 'explanatory for new Feature' text, github_release_state, closes_block, fresh asserts on data",
+    "tests/test_cut_release.py: test_collects_media_gifs_videos_for_cut_release_notes + cut data to notes (gifs/videos preserved, Media Evidence)",
+    "release status: 52 pending fragments (accumulating for release-notes-complete check)",
+    "plate_what_next: advance child with tests sketched (used to select this open item)",
+    "ties to record_e2e_gif, pm feed approvals for media, feature planning qa, marketplace packaging #652"
+  ],
+  "advances": [
+    "Cut and finalize a release",
+    "generates release notes with videos or animated GIFs",
+    "Every new Feature has explanatory videos or animated GIFs that the user approves"
+  ],
+  "ties_to": ["#654 v1.0.0 roadmap", "release planning workflow", "feature planning Q&A", "PM feed + approvals", "#652", "cut_release + _render_release_notes"]
+}
