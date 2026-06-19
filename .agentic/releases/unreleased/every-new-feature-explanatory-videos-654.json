@@ -1,0 +1,21 @@
+{
+  "summary": "Advanced evidence and test sketch for 'Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves' and 'The system generates release notes with videos or animated GIFs'. Tests-first update in cut_release media tests. Ties to record_e2e_gif, Media Evidence section, explanatory labels, cut/finalize, marketplace packaging (#652), delegation packets, mcp qa, pm feed approvals. Advances open #654 checklist items for videos/GIFs in notes and per-feature explanatory media.",
+  "evidence": [
+    "plate_what_next: advance open Epic child Feature/Bug with tests sketched, no need:refinement; picked videos/GIFs explanatory for features + release notes (open [ ] in #654; active sketches in test_cut_release + delegation + mcp + marketplace test)",
+    "tests/test_cut_release.py (updated): Media/GIFs/videos asserts in cut + notes (## Media Evidence, demo.gif, walkthrough.mp4, notes_preview.md); comments tie to 'generates release notes with videos' + 'explanatory for features' under #654; tests-first comment added for the per-Feature videos item",
+    "tests/test_delegation.py: asserts explanatory_video via record_e2e_gif, e2e_gif_required for 'Every new Feature has explanatory videos' under #654; steps include record e2e GIF",
+    "tests/test_mcp.py: pm_feed test for 661 asserts media/GIF approvals, deploy with expected_gif; feature_planning qa includes 'What explanatory video or GIF will be generated from automated tests and approved?'; design/research approvals include media",
+    "src/plate_core/baseline_catalog.py: for feature includes 'explanatory_video' via record_e2e_gif, e2e_gif_required, steps with 'record e2e GIF for explanatory video'",
+    "src/plate_core/mcp_server.py: qa questions reference explanatory video/GIF from tests, videos and media evidence in release notes; approvals include media/GIF",
+    "frags: cut-finalize-media-support-654, release-notes-media-videos, marketplace-packaging-first-class-media-652-654 claim related; release notes render has Media Evidence + explanatory labels from record_e2e_gif",
+    "0 PRs; progress via test touch + new frag + #654 comment"
+  ],
+  "advances": [
+    "Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves",
+    "The system generates release notes with videos or animated GIFs",
+    "#654 v1.0 roadmap checklist (media/GIFs section)",
+    "first-class media + #652 packaging"
+  ],
+  "test_sketch": "test_cut_release.py (media/gifs/videos in cut + Media Evidence in notes + explanatory); test_delegation.py (record_e2e_gif + e2e_gif_required); test_mcp.py (qa + approvals for media/GIF)",
+  "related": ["#654", "#652", "#636", "#661", "record_e2e_gif"]
+}
