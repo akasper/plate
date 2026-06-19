@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced 'Deploy to production' under #654 (open checklist item). Tests-first update + fresh cycle in tests/test_autonomy.py (test_run_shadow_simulation_for_645). Added reinforcement assert for recommendation in production_deploy.",
+  "evidence": [
+    "tests/test_autonomy.py: test_run_shadow_simulation_for_645 added self.assertIn('recommendation', res_deploy['production_deploy']) # ... Fresh cycle. Active sketch: 'tests-first for \"Deploy to production\" under #654 (open checklist; active sketch in test_run_shadow_simulation_for_645 + deploy_approvals + pm_feed)'",
+    "plate_what_next: advance open Epic child with tests sketched, no need:refinement",
+    "gh plate release status: legacy, 70 pending, deploy-to-production-654 []",
+    "0 open PRs",
+    "ties to #645 sim, #648 checkpoint, pm_feed, #654"
+  ],
+  "advances": [
+    "Deploy to production"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "simulation-shadow-645",
+    "checkpoint-primitive-648",
+    "PM feed approvals"
+  ]
+}
