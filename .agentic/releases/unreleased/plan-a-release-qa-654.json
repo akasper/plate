@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced 'Plan a release' Q&A driven entirely by Q&A + release ceremony checks under #654. Tests-first update to test_mcp.py plate_plan_epic test. Evidence from planning_schema qa for plan_release (Q&A drive, REQUIRED extension checks, github_release_state from release_context), proposed_children, pm_feed release_planning, mcp_server release_context. Ties to cut/finalize, media/GIFs, extension checks, #612 Next Release.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked 'Plan a release' (open [ ] in #654 checklist; active sketch in test_mcp.py plan_release/epic_planning qa asserts + 'tests sketched' + release_context)",
+    "tests/test_mcp.py (updated): test_tools_call_plate_plan_epic asserts for plan_release qa 'Q&A drive', 'REQUIRED extension release checks', github_release state, 'plan a release' in children; tests-first comment added; also pm_feed release_planning qa_driven",
+    "src/plate_core/mcp_server.py: plan_release qa includes target semver, GH release state, release checks/media/ceremony; release_planning in feed with qa_questions for videos/media; release_context from get_release_status for real data under #654",
+    "prior frag plan-release-qa-extension-checks-654 added the extension checks Q; planning-qa-feed-workflows for release planning Q&A",
+    "0 PRs; progress via test update + new frag + #654 comment only",
+    "test run: targeted mcp plan_epic test passes"
+  ],
+  "advances": [
+    "Plan a release",
+    "There is a \"release planning\" workflow, driven entirely by Q&A",
+    "#654 v1.0 roadmap checklist (planning Q&A + ceremony)",
+    "release_context / extension checks in Q&A"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_plan_epic (plan_release qa, release_context, children); pm_feed release_planning asserts",
+  "related": ["#654", "#612", "#532", "release notes media", "cut/finalize"]
+}
