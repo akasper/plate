@@ -1,0 +1,17 @@
+{
+  "summary": "Advanced 'Plan an epic' under #654. Tests-first update to test_mcp.py plate_plan_epic epic_planning asserts (child tests sketch + mapping). Evidence from epic_planning qa (Q&A drive, tests sketched, child Features/Bugs have tests sketched, sketched tests map to ACs, release tie). Ties to epic_planning, tests sketched, release ceremony, #654.",
+  "evidence": [
+    "plate_what_next: advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement; picked 'Plan an epic' (open checklist item in #654 body; active sketch in plate_plan_epic test)",
+    "tests/test_mcp.py (updated): test_tools_call_plate_plan_epic strengthened with assert 'child Features/Bugs have tests sketched' + updated tests-first comment under #654",
+    "src/plate_core/mcp_server.py: epic_planning qa_questions include 'What child Features/Bugs have tests sketched?', 'How do sketched tests map to child acceptance criteria and reduce risk?', release track tie",
+    "0 PRs confirmed; progress via local tests-first edit + new frag push via MCP + #654 comment (no PRs)",
+    "prior related: plan-an-epic-qa-654.json, plan-epic-qa-release-tie-654.json, feature-planning-qa-*; this deepens the tests sketched mapping for epic children"
+  ],
+  "advances": [
+    "Plan an epic",
+    "#654 v1.0 roadmap (Q&A-driven planning + tests sketched in children)",
+    "Epic planning Q&A with sketched tests mapping to ACs and release tie"
+  ],
+  "test_sketch": "test_mcp.py::test_tools_call_plate_plan_epic (epic_planning qa: tests sketched + child Features/Bugs + sketched tests map to acceptance criteria)",
+  "related": ["#654", "#612", "epic_planning", "feature planning", "tests sketched", "release planning"]
+}
