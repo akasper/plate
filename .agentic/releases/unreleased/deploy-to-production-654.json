@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced 'Deploy to production' checklist item under #654. Tests-first update to pm_feed deploy_approvals test. Evidence from test_mcp deploy asserts (production, requires_approval, target=production, first_class, media/expected_gif, recommendation, surface #654), test_autonomy 'Tests sketch for #645' + deploy production_deploy (media, approval, from_sim), mcp_server deploy feed/approvals items, autonomy sim. Ties to high-risk deploy, media/GIF evidence, checkpoint #648, #654 v1.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked Deploy to production (open in #654 body; active sketch in autonomy test + test_mcp deploy_approvals + mcp_server)",
+    "tests/test_mcp.py (updated): pm_feed_for_661 deploy_approvals asserts + tests-first comment for Deploy to production under #654 from sim sketch",
+    "tests/test_autonomy.py: test_run_shadow_simulation_for_645 'Tests sketch for #645' (high prio v1 under #654); deploy asserts production, requires_approval, media, recommendation, production_deploy",
+    "src/plate_core/mcp_server.py: deploy item in pm_feed (production, requires_approval, media expected_gif, from_sim, surface #654); approvals deploy entry with first_class, example, recommendation, target production",
+    "deploy-to-production-evidence-654.json prior frag + simulation-shadow-645 advance deploy evidence",
+    "0 PRs; progress via test touch + new frag + #654 comment only",
+    "test run: relevant mcp/autonomy deploy tests pass"
+  ],
+  "advances": [
+    "Deploy to production",
+    "#654 v1.0 roadmap checklist (autonomy/deploy section)",
+    "high-risk deploy with media/approval per #645/#648"
+  ],
+  "test_sketch": "test_autonomy.py::test_run_shadow_simulation_for_645 (deploy production); test_mcp.py deploy_approvals + pm_feed",
+  "related": ["#654", "#645", "#648", "#661", "record_e2e_gif", "pm_feed"]
+}
