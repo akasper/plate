@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'Plan a release' Q&A driven entirely by Q&A + 'Plan a release' open checklist item under #654. Tests-first update + fresh cycle in tests/test_mcp.py (planning_schema test for plan_release qa). Added reinforcement assert for Next Release + pending fragments from release_context.",
+  "evidence": [
+    "tests/test_mcp.py: plan_release qa asserts (Q&A drive, REQUIRED extension checks incl. release-notes-complete + marketing-copy-reviewed, github_release state, Next Release/pending fragments). Fresh cycle comment on active sketch.",
+    "release status: 54 pending unreleased fragments, active Next Release #612, legacy release",
+    "plate_what_next: advance open epic child with tests sketched (used to select this)",
+    "ties to release_planning workflow, cut/finalize, media evidence in notes, extension release checks"
+  ],
+  "advances": [
+    "Plan a release",
+    "There is a \"release planning\" workflow, driven entirely by Q&A (core open checklist item in #654)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "#612 Next Release",
+    "release ceremony / cut and finalize",
+    "release-notes-complete REQUIRED check",
+    "feature planning + epic planning Q&A"
+  ]
+}
