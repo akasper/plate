@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'Cut and finalize a release' under #654 (open checklist item). Tests-first update + fresh cycle in tests/test_release.py (RenderReleaseNotesTests.test_render_includes_media_gifs). Added reinforcement assert for Media/GIFs (explanatory for new Feature in cut data.",
+  "evidence": [
+    "tests/test_release.py: test_render_includes_media_gifs (Media Evidence, gifs/videos per entry, explanatory for new Feature, github_release_state, closes_block, fresh asserts). Fresh cycle.",
+    "active sketch: 'tests-first update for \"Cut and finalize a release\" checklist item under #654; active sketch in render + cut sync + finalize tests + media/gifs + github_release_state + closes_block. Fresh cycle.'",
+    "plate_what_next used",
+    "release status: 64 pending",
+    "ties to cut_release, render, explanatory videos, github release fields #594"
+  ],
+  "advances": [
+    "Cut and finalize a release (open [ ] in #654)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "generates release notes with videos or animated GIFs",
+    "Every new Feature has explanatory videos",
+    "first-class media in packaging",
+    "release planning"
+  ]
+}
