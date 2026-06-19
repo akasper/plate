@@ -1,0 +1,18 @@
+{
+  "summary": "Advanced 'Deploy to production' under #654. Tests-first update + fresh verification of test_autonomy.py deploy sketch (bg run pass). Evidence from test_run_shadow_simulation_for_645 (production_deploy target=production, requires_approval, media, recommendation; 1 passed 637s). Ties to #645 sim, #648 checkpoint, pm_feed, #654.",
+  "evidence": [
+    "plate_what_next: advance open Epic: pick child Feature/Bug with tests sketched, no need:refinement; picked Deploy to production (still [ ] in #654 body; active sketch in autonomy)",
+    "tests/test_autonomy.py (updated): test_run_shadow_simulation_for_645 tests-first comment + verification of this 637s bg pass for production deploy under #654",
+    "src/plate_core/autonomy.py: run_shadow_simulation('deploy') sets production=True + full production_deploy packet (target/requires_approval/media/recommendation)",
+    "bg verification: pytest tests/test_autonomy.py -q -k 'run_shadow_simulation_for_645' : 1 passed (637.2s)",
+    "prior related frags: deploy-to-production-qa-654.json, deploy-to-production-evidence-654.json, simulation-shadow-645; 0 PRs maintained",
+    "progress reflected via local edit + new frag + #654 comment (no PRs, no direct main except MCP artifacts)"
+  ],
+  "advances": [
+    "Deploy to production",
+    "#654 v1.0 roadmap checklist (autonomy/deploy section + high-risk actions)",
+    "shadow simulation for production deploy (#645 under #654)"
+  ],
+  "test_sketch": "test_autonomy.py::test_run_shadow_simulation_for_645 (production_deploy full packet asserts + verified pass)",
+  "related": ["#654", "#645", "#648", "pm_feed", "deploy-to-production"]
+}
