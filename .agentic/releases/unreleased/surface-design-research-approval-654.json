@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced surfacing of Design visualizations and documents + Research results for user approval in PM feed (first_class + visual/interaction contracts per #646, provenance/decision per #647, approvals list). Smallest tests-first update to exercise sketch. Advances the two open user-facing surfaces checklist items in #654.",
+  "evidence": [
+    "plate_what_next: next_action='advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement'; picked surfaces Design/Research (tied to 661 feed + #654, #660)",
+    "tests/test_mcp.py:test_tools_call_plate_pm_feed_for_661 (updated): asserts design_feed (visualizations, documents, first_class, visual_contracts, interaction_contracts, validation_required, validation_rules), research_feed (research_results, provenance, first_class), approvals list (design/research/media/checkpoint/deploy)",
+    "src/plate_core/mcp_server.py:_pm_feed + approvals: includes dedicated 'design' and 'research' items + first_class surfaces for PM feed / qanda / checkpoint under #654",
+    "docs/design/ (multiple .md incl. pm-orchestrator-architecture-and-browser.md, baseline-agents-surfaces.md) and docs/research/ exist as sources for real content",
+    "gh plate release status (pre): 15 pending frags many advancing #654 items; new frag will be picked up",
+    "0 PRs maintained; progress via doc/frag + #654 comment only"
+  ],
+  "advances": [
+    "user-facing surfaces: Design visualizations/documents for approval",
+    "user-facing surfaces: Research results for approval",
+    "#654 v1.0 roadmap checklist (surfaces section)",
+    "first-class contracts #646"
+  ],
+  "test_sketch": "test_mcp.py pm_feed_for_661 + design_approvals/research_approvals asserts",
+  "related": ["#661", "#660", "#646", "#647", "#654"]
+}
