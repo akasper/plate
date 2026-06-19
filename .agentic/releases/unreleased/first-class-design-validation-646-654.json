@@ -1,0 +1,19 @@
+{
+  "summary": "Advanced first-class design validation + visual/interaction contracts (#646) support. Tests-first update to delegation test exercising the sketch. Ties to feature impl delegation, qa questions with 'tests sketched', PM feed approvals, baseline packet artifacts. Advances #654 checklist item for #646 under v1.0 roadmap.",
+  "evidence": [
+    "plate_what_next: advance open Epic child Feature/Bug with tests sketched, no need:refinement (picked #646 design validation as it has explicit test sketches)",
+    "tests/test_delegation.py (updated): asserts design_validation_required, design_validation_contracts, visual_contracts, interaction_contracts, validation_rules, first_class for #646; comments tie to #654 implement feature + surfaces + Every new Feature videos",
+    "tests/test_mcp.py: plate_plan_epic test asserts 'design validation' or '#646' or 'tests sketched' in feature_planning qa_questions; design approvals include visual_contracts for #646",
+    "src/plate_core/baseline_catalog.py: build_delegation_packet for feature/design sets design_validation_contracts, visual_contracts, first_class, e2e_gif_required, explanatory_video via record_e2e_gif (ties #646 + #654 videos/approvals)",
+    "src/plate_core/mcp_server.py: feature_planning qa includes 'How will first-class design validation and visual/interaction contracts be defined and tested (per #646)?'; release/feature qa reference videos/media",
+    "0 PRs; progress via test touch + new frag pushed to main + #654 comment"
+  ],
+  "advances": [
+    "First-class design validation + visual/interaction contracts (#646)",
+    "#654 v1.0 roadmap checklist",
+    "feature impl design validation tests",
+    "surfaces + approvals for design (#654)"
+  ],
+  "test_sketch": "test_delegation.py (design_validation_contracts, visual_contracts asserts) + test_mcp.py (qa 'tests sketched' + #646)",
+  "related": ["#646", "#654", "#660", "#661", "#639", "#632"]
+}
