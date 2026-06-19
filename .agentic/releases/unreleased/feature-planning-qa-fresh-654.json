@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'There is a \"feature planning\" workflow, driven entirely by Q&A' under #654 (core open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (pm_feed feat_plan test). Added reinforcement assert for 'tests sketched' in qa_questions.",
+  "evidence": [
+    "tests/test_mcp.py: pm_feed feat_plan (qa_driven, qa_questions incl. 'tests sketched', delegation, explanatory video/GIF, problem/ACs, design validation). Fresh cycle on new assert.",
+    "active sketch comment: 'tests-first for \"feature planning\" workflow, driven entirely by Q&A under #654 (core open checklist item; active sketch in pm_feed feat_plan qa_driven + qa_questions incl. \"tests sketched\" + delegation + explanatory video/GIF + qa_session)'",
+    "plate_what_next: advance open epic child with tests sketched",
+    "release status: 59 pending fragments",
+    "ties to #654, delegation, videos, design validation #646, cost/risk/schedule"
+  ],
+  "advances": [
+    "There is a \"feature planning\" workflow, driven entirely by Q&A (open [ ] in #654 core workflows)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "feature impl delegation",
+    "explanatory videos/GIFs",
+    "first-class design validation #646",
+    "PM feed qa_driven workflows"
+  ]
+}
