@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'There is a \"release planning\" workflow, driven entirely by Q&A' under #654 (core open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (pm_feed rel_plan test). Added reinforcement assert for qa_driven on release planning.",
+  "evidence": [
+    "tests/test_mcp.py: pm_feed rel_plan (qa_driven, qa_questions incl. video/media/target version, qa_session driven_entirely_by_qanda). Fresh cycle on new assert.",
+    "active sketch comment: 'tests-first for \"release planning\" workflow, driven entirely by Q&A under #654 (core open checklist item; active sketch in pm_feed rel_plan qa_questions incl. videos/media/scope + qa_session; verified via bg pytest pass)'",
+    "plate_what_next: advance open epic child with tests sketched",
+    "release status: 60 pending fragments",
+    "ties to #654, videos/media in notes, ceremony, cut/finalize, feature planning"
+  ],
+  "advances": [
+    "There is a \"release planning\" workflow, driven entirely by Q&A (open [ ] in #654 core workflows)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "release planning Q&A + videos/media/scope",
+    "cut and finalize + explanatory media",
+    "feature planning workflow",
+    "PM feed qa_driven"
+  ]
+}
