@@ -1,0 +1,20 @@
+{
+  "summary": "Advanced 'The system can surface Research results for user approval' under #654 (still open checklist item). Tests-first update + fresh cycle in tests/test_mcp.py (pm_feed research_feed + approvals). Added reinforcement assert for decision on research surface.",
+  "evidence": [
+    "tests/test_mcp.py: pm_feed research_feed (research_results, documents, first_class, example_documents, sources, decision, provenance) + research_approvals. Fresh cycle on new assert.",
+    "active sketch comments: multiple 'tests-first for \"The system can surface Research results for user approval\" under #654 (still [ ]; active sketch in pm_feed research_feed with research_results, documents, first_class, example_documents, sources, decision, provenance)'",
+    "plate_what_next used",
+    "release status: 68 pending",
+    "ties to #654, #647 provenance, PM feed approvals, design surface"
+  ],
+  "advances": [
+    "The system can surface Research results for user approval (still [ ] in #654 user-facing surfaces)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "provenance + decision ledger #647",
+    "PM feed approvals",
+    "surface Design (related)",
+    "feature planning"
+  ]
+}
