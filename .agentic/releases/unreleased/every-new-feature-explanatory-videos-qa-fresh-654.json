@@ -1,0 +1,21 @@
+{
+  "summary": "Advanced 'Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves' + 'The system generates release notes with videos or animated GIFs' under #654. Tests-first update + fresh cycle in tests/test_cut_release.py (test_auto_minor_bump_from_flat_baseline). Added reinforcement assert for walkthrough.mp4 in notes.",
+  "evidence": [
+    "tests/test_cut_release.py: test_auto_minor_bump_from_flat_baseline (gifs/videos in entry, Media Evidence in notes and preview, demo.gif, walkthrough.mp4). Fresh cycle.",
+    "active sketch: 'tests-first update for #654: \"Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves\" + \"generates release notes with videos or animated GIFs\"; active sketch here + record_e2e_gif labels + Media Evidence. Fresh cycle.'",
+    "plate_what_next used",
+    "release status: 63 pending",
+    "ties to cut and finalize, record_e2e_gif, marketplace packaging, explanatory media"
+  ],
+  "advances": [
+    "Every new Feature has explanatory videos or animated GIFs (generated from automated test runs) that the user approves (open [ ] in #654)",
+    "The system generates release notes with videos or animated GIFs (open [ ] in #654)"
+  ],
+  "ties_to": [
+    "#654 v1.0.0 roadmap",
+    "cut and finalize a release",
+    "record_e2e_gif in packaging/tests",
+    "PM feed approvals for media",
+    "marketplace packaging"
+  ]
+}
