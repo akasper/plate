@@ -338,7 +338,8 @@ When PLATE signals are present (`.plate/`, `AGENTS.md`, Epic labels, release art
 - Same discipline as PLATE-ANSWER / PLATE-CONTEMPLATION: these *are* the record; do not add surrounding chit-chat.
 
 ### Coordination with what_next and PM/orchestrator vision
-- `plate_what_next` chooses the next *process* step from health/epics/fragments.
+- `plate_what_next` chooses the next *process* step from health/epics/fragments. For end-user Q+Task surfacing use `plate_feed` / `gh plate feed` (#631).
+- `plate_what_next` remains the agent process router;
 - Autonomy engine enforces *budget/risk/schedule* around executing steps and built-in procedures.
 - Future PM/Orchestrator (#660) builds on these surfaces; until then, the plate persona + these tools are the supported autonomy path.
 
