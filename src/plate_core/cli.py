@@ -36,7 +36,6 @@ from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle, s
 from .checkpoint import create_checkpoint, decide_checkpoint, get_checkpoint, list_checkpoints, list_open_checkpoints
 from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
 from .feed import get_user_feed
-from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle
 from .planning import (
     apply_planning_answer,
     build_plan_from_session,
@@ -44,7 +43,6 @@ from .planning import (
     start_planning_session,
 )
 from .plate_config import (
-
     PlateConfigError,
     apply_plate_config_upgrade,
     get_plate_config_report,
