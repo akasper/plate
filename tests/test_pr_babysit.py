@@ -1054,3 +1054,43 @@ class PrBabysitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AutonomyGuidance480Tests(unittest.TestCase):
+    """Feature #480: persona + autonomy_loops guidance + catalog skill."""
+
+    def test_autonomy_loops_section_registered(self):
+        from plate_core.agent_guidance import get_agent_guidance_sections, AUTONOMY_LOOPS_GUIDANCE
+
+        sections = get_agent_guidance_sections()
+        self.assertIn("autonomy_loops", sections)
+        self.assertIn("plate_autonomy_status", AUTONOMY_LOOPS_GUIDANCE)
+        self.assertIn("PLATE-AUTONOMY-CYCLE", AUTONOMY_LOOPS_GUIDANCE)
+        self.assertIn("PLATE-PROCEDURE-RUN", AUTONOMY_LOOPS_GUIDANCE)
+        self.assertIn("risk_tolerance", AUTONOMY_LOOPS_GUIDANCE)
+
+    def test_quiet_exempts_autonomy_markers(self):
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+
+        self.assertIn("PLATE-AUTONOMY-CYCLE", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("PLATE-PROCEDURE-RUN", QUIET_OPERATIONS_GUIDANCE)
+
+    def test_plate_persona_routes_autonomy_status(self):
+        from pathlib import Path
+
+        for rel in ("plugin/agents/plate.agent.md", ".plugin/agents/plate.agent.md"):
+            text = Path(rel).read_text()
+            self.assertIn("plate_autonomy_status", text)
+            self.assertIn("autonomy_loops", text)
+            self.assertIn("#480", text)
+
+    def test_catalog_run_autonomy_cycle_skill(self):
+        from pathlib import Path
+        import yaml
+
+        data = yaml.safe_load(Path("src/plate_core/data/baseline_catalog.yml").read_text())
+        skill_ids = {s["id"] for s in data["skills"]}
+        self.assertIn("run-autonomy-cycle", skill_ids)
+        pm = next(a for a in data["agents"] if a["id"] == "project-manager")
+        self.assertIn("run-autonomy-cycle", pm["primary_skill_ids"])
+        self.assertEqual(len(data["agents"]), 15)
