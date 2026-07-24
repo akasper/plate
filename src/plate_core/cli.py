@@ -48,6 +48,13 @@ from .epic_release_planning import (
     get_er_script,
     start_er_session,
 )
+from .design_research_approval import (
+    decide_artifact,
+    get_artifact,
+    list_artifacts,
+    list_pending_artifacts,
+    surface_artifact,
+)
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -739,6 +746,70 @@ def cmd_er_plan(args: argparse.Namespace) -> int:
     print(f"Next: [{nq.get('id')}] {nq.get('prompt')}")
     return 0
 
+
+def cmd_artifact(args: argparse.Namespace) -> int:
+    """Design/Research artifact approval CLI (#632)."""
+    if getattr(args, "propose", False):
+        out = propose_artifact(
+            kind=getattr(args, "kind", None) or "design",
+            title=getattr(args, "title", None) or "Artifact",
+            summary=getattr(args, "summary", None) or "",
+            content_path=getattr(args, "content_path", None) or "",
+            related_issue=getattr(args, "related_issue", None),
+            related_epic=getattr(args, "related_epic", None),
+            originating_question=getattr(args, "originating_question", None),
+            actor=getattr(args, "by", None) or "cli-user",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"proposed {out.get('id')} [{out.get('kind')}] {out.get('title')}")
+        print(out.get("approval_prompt"))
+        return 0
+    if getattr(args, "decide", None):
+        if not getattr(args, "decision", None):
+            print("--decision required with --decide", file=sys.stderr)
+            return 1
+        out = decide_proposal(
+            args.decide,
+            args.decision,
+            decided_by=getattr(args, "by", None) or "cli-user",
+            note=getattr(args, "note", None) or "",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "failed", file=sys.stderr)
+            return 1
+        print(f"{out.get('id')} -> {out.get('status')}")
+        return 0
+    if getattr(args, "get", None):
+        rec = get_proposal(args.get)
+        if args.json:
+            print(json.dumps(rec or {"error": "not found"}))
+            return 0 if rec else 1
+        if not rec:
+            print("not found", file=sys.stderr)
+            return 1
+        print(f"{rec.get('id')} [{rec.get('status')}] {rec.get('title')}")
+        return 0
+    if getattr(args, "authoritative", False):
+        rows = list_authoritative(kind=getattr(args, "kind", None))
+    else:
+        rows = list_proposals(
+            status=getattr(args, "status", None) or "pending",
+            kind=getattr(args, "kind", None),
+        )
+    if args.json:
+        print(json.dumps({"proposals": rows}))
+        return 0
+    if not rows:
+        print("No proposals.")
+        return 0
+    for r in rows:
+        print(f"{r.get('id')} [{r.get('status')}] {r.get('kind')}: {r.get('title')}")
+    return 0
 
 def cmd_autonomy(args: argparse.Namespace) -> int:
     """Autonomy status/run/loop surfaces for Epic #470 (host scheduler integration, --loop for persistent budgeted runs)."""
@@ -1509,6 +1580,29 @@ def build_parser() -> argparse.ArgumentParser:
     er_plan.add_argument("--answers-file", dest="answers_file", help="JSON array of answers")
     er_plan.add_argument("--json", action="store_true")
     er_plan.set_defaults(func=cmd_er_plan)
+
+    artifact = sub.add_parser(
+        "artifact",
+        help="Design/Research artifact approval (#632): propose, decide, list, get",
+    )
+    artifact.add_argument("--propose", action="store_true")
+    artifact.add_argument("--kind", choices=["design", "research"], default="design")
+    artifact.add_argument("--title")
+    artifact.add_argument("--summary", default="")
+    artifact.add_argument("--content-path", dest="content_path", default="")
+    artifact.add_argument("--related-issue", dest="related_issue", type=int)
+    artifact.add_argument("--related-epic", dest="related_epic", type=int)
+    artifact.add_argument("--originating-question", dest="originating_question", type=int)
+    artifact.add_argument("--decide", metavar="ID")
+    artifact.add_argument("--decision", choices=["approve", "revise", "reject"])
+    artifact.add_argument("--note", default="")
+    artifact.add_argument("--get", metavar="ID")
+    artifact.add_argument("--list", action="store_true")
+    artifact.add_argument("--status", default="pending")
+    artifact.add_argument("--authoritative", action="store_true")
+    artifact.add_argument("--by", default="cli-user")
+    artifact.add_argument("--json", action="store_true")
+    artifact.set_defaults(func=cmd_artifact)
 
     autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
     autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")
