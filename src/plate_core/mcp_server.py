@@ -42,6 +42,7 @@ from .checkpoint import (
     list_checkpoints,
     list_open_checkpoints,
 )
+from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -334,6 +335,46 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 ).to_dict()
         elif name == "plate_autonomy_status":
             payload = get_autonomy_status(args.get("repo"))
+        elif name == "plate_ledger_record":
+            payload = record_decision(
+                action_kind=str(args.get("action_kind") or "unknown"),
+                decision=str(args.get("decision") or "proceed"),
+                reason=str(args.get("reason") or ""),
+                sources=list(args.get("sources") or []),
+                cost_estimate_tokens=args.get("cost_estimate_tokens"),
+                risk_tolerance=str(args.get("risk_tolerance") or ""),
+                impact=str(args.get("impact") or ""),
+                related_issue=args.get("related_issue"),
+                related_pr=args.get("related_pr"),
+                shadow_id=args.get("shadow_id"),
+                checkpoint_id=args.get("checkpoint_id"),
+                artifact_links=list(args.get("artifact_links") or []),
+                actor=str(args.get("actor") or "agent"),
+                session=str(args.get("session") or ""),
+                metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
+            )
+        elif name == "plate_ledger_list":
+            payload = {
+                "decisions": list_decisions(
+                    action_kind=args.get("action_kind"),
+                    decision=args.get("decision"),
+                    related_issue=args.get("related_issue"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_ledger_query":
+            payload = {
+                "decisions": query_decisions(
+                    str(args.get("query") or ""),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_ledger_get":
+            payload = get_decision(str(args.get("decision_id") or args.get("id") or "")) or {
+                "error": "not found"
+            }
+        elif name == "plate_ledger_summary":
+            payload = ledger_summary(limit=int(args.get("limit") or 20))
         elif name == "plate_autonomy_run_cycle":
             max_steps = args.get("max_steps")
             if max_steps is not None:
@@ -1132,6 +1173,77 @@ def run() -> None:
                                     "type": "object",
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_record",
+                                "description": "Append an inspectable PLATE-DECISION provenance entry for an autonomous action (#647). Durable under .agentic/ledger/.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "action_kind": {"type": "string"},
+                                        "decision": {"type": "string", "description": "proceed|throttle|pause|warn|skip|approve|reject|..."},
+                                        "reason": {"type": "string"},
+                                        "sources": {"type": "array", "items": {"type": "string"}},
+                                        "cost_estimate_tokens": {"type": "integer"},
+                                        "risk_tolerance": {"type": "string"},
+                                        "impact": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "related_pr": {"type": "integer"},
+                                        "shadow_id": {"type": "string"},
+                                        "checkpoint_id": {"type": "string"},
+                                        "artifact_links": {"type": "array", "items": {"type": "string"}},
+                                        "actor": {"type": "string"},
+                                        "session": {"type": "string"},
+                                        "metadata": {"type": "object"},
+                                    },
+                                    "required": ["action_kind", "decision", "reason"],
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_list",
+                                "description": "List recent decision ledger entries (#647), optional filters.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "action_kind": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_query",
+                                "description": "Substring search over decision ledger reason/sources/metadata (#647).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "query": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                    "required": ["query"],
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_get",
+                                "description": "Get one decision ledger entry by id (#647).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "decision_id": {"type": "string"},
+                                    },
+                                    "required": ["decision_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_summary",
+                                "description": "Compact decision ledger summary counts (#647).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "limit": {"type": "integer"},
                                     },
                                 },
                             },
