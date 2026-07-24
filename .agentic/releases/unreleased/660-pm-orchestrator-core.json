@@ -1,0 +1,25 @@
+{
+  "slug": "660-pm-orchestrator-core",
+  "change_type": "feature",
+  "surface": "src/plate_core/pm.py, mcp_server.py, cli.py",
+  "summary": "Project Manager orchestrator first slice (#660): persona team catalog, budget-aware assign_work, run_cycle (what_next+feed → assignments), checkpoint pause, MCP plate_pm_* + gh plate pm.",
+  "migration_impact": "New plate_pm_status/team/assign/run_cycle tools and gh plate pm. State under .agentic/pm/last_cycle.json. Does not replace AutonomyEngine; coordinates above it.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate pm --status / plate_pm_status for budget+team visibility.",
+    "3. gh plate pm --run (dry-run default) to propose persona assignments; --apply to attempt delegate.",
+    "4. Full multi-agent runtime, webhooks, driver: labels remain follow-ups on Epic #660."
+  ],
+  "agent_notes": "Prefer plate_pm_run_cycle dry_run before long loops. Pause when open_human_checkpoints > 0. Epic #660 stays open for full team runtime.",
+  "breaking": false,
+  "links": [
+    "#660",
+    "#654",
+    "#470",
+    "#631",
+    "#648"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

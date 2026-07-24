@@ -55,6 +55,7 @@ from .design_research_approval import (
     list_proposals,
     propose_artifact,
 )
+from .pm import get_pm_status, list_team, run_pm_cycle
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -810,6 +811,41 @@ def cmd_artifact(args: argparse.Namespace) -> int:
     for r in rows:
         print(f"{r.get('id')} [{r.get('status')}] {r.get('kind')}: {r.get('title')}")
     return 0
+
+def cmd_pm(args: argparse.Namespace) -> int:
+    """Project Manager orchestrator CLI (#660)."""
+    if getattr(args, "team", False):
+        team = list_team()
+        if args.json:
+            print(json.dumps({"team": team}))
+            return 0
+        for p in team:
+            print(f"{p['id']}: {p['name']} ({p['role']}) — {p['style']}")
+        return 0
+    if getattr(args, "run", False):
+        rep = run_pm_cycle(
+            repo=getattr(args, "repo", None),
+            dry_run=not getattr(args, "apply", False),
+            max_assignments=int(getattr(args, "max_assignments", 5) or 5),
+        )
+        if args.json:
+            print(json.dumps(rep))
+            return 0
+        print(f"PM cycle: {rep.get('status')} dry_run={rep.get('dry_run')}")
+        print(f"  assignments={len(rep.get('assignments') or [])} blocked={len(rep.get('blocked') or [])}")
+        for a in (rep.get("assignments") or [])[:5]:
+            print(f"  - {a.get('agent_id')} ← {a.get('work_type')}: {a.get('work_title')}")
+        return 0
+    # default status
+    st = get_pm_status(getattr(args, "repo", None))
+    if args.json:
+        print(json.dumps(st))
+        return 0
+    print(f"PM enabled (autonomy): {st.get('enabled')} risk={st.get('risk_tolerance')}")
+    print(f"Budget remaining: {st.get('budget_remaining_tokens')} burn={st.get('burn_rate')}%")
+    print(f"Team size: {st.get('team_size')} open_checkpoints={st.get('open_checkpoints')}")
+    return 0
+
 
 def cmd_autonomy(args: argparse.Namespace) -> int:
     """Autonomy status/run/loop surfaces for Epic #470 (host scheduler integration, --loop for persistent budgeted runs)."""
@@ -1603,6 +1639,19 @@ def build_parser() -> argparse.ArgumentParser:
     artifact.add_argument("--by", default="cli-user")
     artifact.add_argument("--json", action="store_true")
     artifact.set_defaults(func=cmd_artifact)
+
+    pm = sub.add_parser(
+        "pm",
+        help="Project Manager orchestrator (#660): status, team personas, run assignment cycle",
+    )
+    pm.add_argument("--repo", help="owner/name")
+    pm.add_argument("--status", action="store_true", help="Show PM status (default)")
+    pm.add_argument("--team", action="store_true", help="List personas")
+    pm.add_argument("--run", action="store_true", help="Run one orchestration cycle")
+    pm.add_argument("--apply", action="store_true", help="With --run: attempt delegation (default dry-run)")
+    pm.add_argument("--max-assignments", dest="max_assignments", type=int, default=5)
+    pm.add_argument("--json", action="store_true")
+    pm.set_defaults(func=cmd_pm)
 
     autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
     autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")

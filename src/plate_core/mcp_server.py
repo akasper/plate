@@ -63,6 +63,7 @@ from .design_research_approval import (
     list_proposals,
     propose_artifact,
 )
+from .pm import assign_work, get_pm_status, list_team, run_pm_cycle
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -445,6 +446,29 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 ).to_dict()
         elif name == "plate_autonomy_status":
             payload = get_autonomy_status(args.get("repo"))
+        elif name == "plate_pm_status":
+            payload = get_pm_status(args.get("repo"))
+        elif name == "plate_pm_team":
+            payload = {"team": list_team()}
+        elif name == "plate_pm_assign":
+            item = args.get("item") or {}
+            if isinstance(item, str):
+                try:
+                    item = json.loads(item)
+                except Exception:
+                    item = {"title": item}
+            st = get_autonomy_status(args.get("repo"))
+            payload = assign_work(
+                item if isinstance(item, dict) else {"title": str(item)},
+                risk_tolerance=str(st.get("risk_tolerance") or "medium"),
+                budget_remaining=st.get("budget_remaining_tokens"),
+            )
+        elif name == "plate_pm_run_cycle":
+            payload = run_pm_cycle(
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+                max_assignments=int(args.get("max_assignments") or 5),
+            )
         elif name == "plate_ledger_record":
             payload = record_decision(
                 action_kind=str(args.get("action_kind") or "unknown"),
@@ -1442,6 +1466,43 @@ def run() -> None:
                                     "type": "object",
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_pm_status",
+                                "description": "Project Manager orchestrator status: budget, team size, open assignments/checkpoints (#660).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"repo": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_pm_team",
+                                "description": "List pre-defined PM sub-agent personas (dev/design/research/release) (#660).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_pm_assign",
+                                "description": "Budget-aware assignment of one work item to a persona (#660).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "item": {"type": "object"},
+                                    },
+                                    "required": ["item"],
+                                },
+                            },
+                            {
+                                "name": "plate_pm_run_cycle",
+                                "description": "Run one PM orchestration cycle: collect work, assign personas, respect budget/checkpoints (#660). Default dry_run=true.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "max_assignments": {"type": "integer"},
                                     },
                                 },
                             },
