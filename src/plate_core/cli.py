@@ -295,6 +295,7 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                     agent_logins=args.agents,
                     act=args.act,
                     branch_update_strategy=args.branch_update_strategy,
+                    pr_review_scope=getattr(args, "scope", None),
                 )
                 if args.json:
                     print(json.dumps(report.to_dict()))
@@ -302,6 +303,7 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                     print(f"Repo: {report.repo} | PR #{report.pr_number}")
                     print(
                         f"Detected threads: {report.detected_threads}, actionable: {report.actionable_threads}, "
+                        f"scope: {report.pr_review_scope}, "
                         f"trigger posted: {'yes' if report.trigger_comment_posted else 'no'}"
                     )
                     if report.trigger_comment_url:
@@ -321,6 +323,7 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
         agent_logins=args.agents,
         act=args.act,
         branch_update_strategy=args.branch_update_strategy,
+        pr_review_scope=getattr(args, "scope", None),
     )
     if args.json:
         print(json.dumps(report.to_dict()))
@@ -329,7 +332,11 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
     print(f"Repo: {report.repo}")
     print(f"PR: #{report.pr_number}")
     print(f"Detected threads: {report.detected_threads}")
-    print(f"Actionable third-party threads: {report.actionable_threads}")
+    print(f"Actionable review threads: {report.actionable_threads} (scope={report.pr_review_scope})")
+    if report.threads_with_suggestions:
+        print(f"Threads with ```suggestion``` blocks: {report.threads_with_suggestions}")
+    if report.high_risk_suggestion_threads:
+        print(f"High-risk path suggestions (do not auto-apply): {report.high_risk_suggestion_threads}")
     if report.auto_resolved_threads:
         print(f"Auto-resolved outdated threads: {report.auto_resolved_threads}")
         if report.auto_resolved_thread_ids:
@@ -1074,13 +1081,19 @@ def build_parser() -> argparse.ArgumentParser:
     pr_sub = pr.add_subparsers(dest="pr_command", required=True)
     babysit = pr_sub.add_parser(
         "babysit",
-        help="Monitor a PR for actionable third-party feedback and optionally post a local babysit trigger",
+        help="Monitor a PR for actionable review feedback and optionally post a local babysit trigger",
     )
     babysit.add_argument("pr_number", type=int, help="Pull request number")
     babysit.add_argument("--repo", help="owner/name; defaults to git remote origin")
     babysit.add_argument(
         "--agents",
-        help="Comma-separated GitHub logins to treat as third-party agents. Defaults to known patterns.",
+        help="Comma-separated GitHub login allowlist (overrides --scope / autonomy.pr_review_scope).",
+    )
+    babysit.add_argument(
+        "--scope",
+        choices=["all", "bot-only", "human-only"],
+        default=None,
+        help="Who counts as actionable (#496): all (default), bot-only, or human-only. Overrides .plate autonomy.pr_review_scope.",
     )
     babysit.add_argument("--act", action="store_true", help="Post a babysit trigger comment when actionable feedback exists")
     babysit.add_argument(

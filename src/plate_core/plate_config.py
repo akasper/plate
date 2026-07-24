@@ -37,6 +37,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "autonomy": {
         "enabled": True,
         "risk_tolerance": "medium",
+        # #496: who babysit treats as actionable review feedback (all | bot-only | human-only)
+        "pr_review_scope": "all",
         "token_budget": {
             "daily": 50000,
             "per_cycle": 8000,
@@ -276,6 +278,11 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
         rt = auto.get("risk_tolerance")
         if rt is not None and rt not in ("off", "low", "medium", "high"):
             raise PlateConfigError(f"invalid autonomy.risk_tolerance: {rt!r} (allowed: off/low/medium/high)")
+        prs = auto.get("pr_review_scope")
+        if prs is not None and prs not in ("all", "bot-only", "human-only"):
+            raise PlateConfigError(
+                f"invalid autonomy.pr_review_scope: {prs!r} (allowed: all/bot-only/human-only)"
+            )
         tb = auto.get("token_budget", {})
         if isinstance(tb, dict):
             for k in ("daily", "per_cycle"):
@@ -286,7 +293,15 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
             unk_tb = set(tb) - allowed_tb
             if unk_tb:
                 raise PlateConfigError(f"unknown autonomy.token_budget keys: {', '.join(sorted(unk_tb))}")
-        allowed_auto = {"enabled", "risk_tolerance", "token_budget", "cost_ceiling_usd", "schedules_enabled", "loop"}
+        allowed_auto = {
+            "enabled",
+            "risk_tolerance",
+            "pr_review_scope",
+            "token_budget",
+            "cost_ceiling_usd",
+            "schedules_enabled",
+            "loop",
+        }
         unk_auto = set(auto) - allowed_auto
         if unk_auto:
             raise PlateConfigError(f"unknown autonomy keys: {', '.join(sorted(unk_auto))}")
