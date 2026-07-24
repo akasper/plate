@@ -1,0 +1,24 @@
+{
+  "slug": "645-durable-shadow-checkpoint-bridge",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, tests/test_autonomy.py",
+  "summary": "Harden #645 shadow gates: durable .agentic/shadow previews so shadow_ack survives process restart; gate_high_impact auto-opens #648 checkpoints on block; run_procedure returns checkpoint_id with shadow_required.",
+  "migration_impact": "New on-disk previews under .agentic/shadow/<shadow_id>.json (repo-local, similar to checkpoints/ledger). Blocked high-impact gates may create pending checkpoints under .agentic/checkpoints/. No config schema change.",
+  "migration_guidance": [
+    "1. Upgrade plate_core so plate_autonomy_simulate persists shadow_id durably.",
+    "2. After simulate in one process/session, pass the same shadow_id + approved to gate/run_procedure in another process.",
+    "3. On shadow_required, read checkpoint_id and decide via plate_checkpoint_decide / gh plate checkpoint decide.",
+    "4. Optionally gitignore .agentic/shadow/ and .agentic/checkpoints/ if local-only (ledger/checkpoint conventions already apply)."
+  ],
+  "agent_notes": "Prefer durable shadow_ack over re-simulate (re-simulate mints a new id). When status=shadow_required, surface checkpoint in feed and pause unsupervised cycles. Full worktree/fork shadow diffs remain a later #645 slice.",
+  "breaking": false,
+  "links": [
+    "#645",
+    "#648",
+    "#654",
+    "#470"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
