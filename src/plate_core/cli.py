@@ -33,6 +33,7 @@ from .release import (
 from .migration import generate_migration_plan, apply_migration_plan
 from .costs import get_cost_report
 from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle, simulate_autonomy_action
+from .checkpoint import create_checkpoint, decide_checkpoint, get_checkpoint, list_checkpoints, list_open_checkpoints
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -652,6 +653,82 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_checkpoint(args: argparse.Namespace) -> int:
+    """Unified human checkpoint/approval CLI (#648)."""
+    if getattr(args, "get", None):
+        rec = get_checkpoint(args.get)
+        if args.json:
+            print(json.dumps(rec or {"error": "not found"}))
+            return 0 if rec else 1
+        if not rec:
+            print(f"checkpoint not found: {args.get}", file=sys.stderr)
+            return 1
+        print(f"{rec.get('id')} status={rec.get('status')} impact={rec.get('impact')}")
+        print(f"  title: {rec.get('title')}")
+        print(f"  reason: {rec.get('reason')}")
+        if rec.get("resume_hint"):
+            print(f"  resume: {rec.get('resume_hint')}")
+        return 0
+
+    if getattr(args, "decide", None):
+        if not getattr(args, "decision", None):
+            print("--decision required with --decide (approve|revise|reject|cancel)", file=sys.stderr)
+            return 1
+        out = decide_checkpoint(
+            args.decide,
+            args.decision,
+            decided_by=getattr(args, "decided_by", None) or "cli-user",
+            note=getattr(args, "note", "") or "",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "decide failed", file=sys.stderr)
+            return 1
+        print(f"decided {out.get('id')} -> {out.get('status')}")
+        return 0
+
+    if getattr(args, "create", False):
+        title = getattr(args, "title", None) or "Human checkpoint"
+        reason = getattr(args, "reason", None) or "Human judgment required"
+        eng = AutonomyEngine(repo=getattr(args, "repo", None))
+        out = create_checkpoint(
+            title,
+            reason,
+            impact=getattr(args, "impact", None) or "medium",
+            action_kind=getattr(args, "action_kind", None) or "",
+            shadow_id=getattr(args, "shadow_id", None),
+            related_issue=getattr(args, "related_issue", None),
+            related_pr=getattr(args, "related_pr", None),
+            created_by=getattr(args, "decided_by", None) or "cli-user",
+            risk_tolerance=eng.risk_tolerance,
+            autonomy_enabled=eng.enabled,
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"created {out.get('id')} status={out.get('status')} impact={out.get('impact')}")
+        print(f"  pause_autonomy={out.get('pause_autonomy')} resume_hint={out.get('resume_hint')}")
+        return 0
+
+    # default list
+    if getattr(args, "open_only", False):
+        rows = list_open_checkpoints(limit=50)
+    else:
+        st = getattr(args, "status", None) or "pending"
+        rows = list_checkpoints(status=None if st == "all" else st, limit=50)
+    if args.json:
+        print(json.dumps({"checkpoints": rows}))
+        return 0
+    if not rows:
+        print("No checkpoints.")
+        return 0
+    for c in rows:
+        print(f"{c.get('id')} [{c.get('status')}] {c.get('impact')}: {c.get('title')}")
+    return 0
+
+
 def cmd_release_cut(args: argparse.Namespace) -> int:
     """First-class gh plate release cut (see #261 Epic and AGENTS.md Release ceremony).
 
@@ -1220,6 +1297,34 @@ def build_parser() -> argparse.ArgumentParser:
         pass  # tolerate duplicate registration during build_parser (CI fix for #493)
     autonomy.add_argument("--json", action="store_true", help="Output JSON")
     autonomy.set_defaults(func=cmd_autonomy)
+
+    checkpoint = sub.add_parser(
+        "checkpoint",
+        help="Unified human checkpoint/approval primitive (#648): create, decide, list, get",
+    )
+    checkpoint.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    checkpoint.add_argument("--json", action="store_true", help="Output JSON")
+    checkpoint.add_argument("--create", action="store_true", help="Create a checkpoint")
+    checkpoint.add_argument("--title", help="Checkpoint title (with --create)")
+    checkpoint.add_argument("--reason", help="Why judgment is required (with --create)")
+    checkpoint.add_argument("--impact", default="medium", help="low|medium|high|critical")
+    checkpoint.add_argument("--action-kind", dest="action_kind", default="", help="Gated action kind")
+    checkpoint.add_argument("--shadow-id", dest="shadow_id", help="Optional #645 shadow_id")
+    checkpoint.add_argument("--related-issue", dest="related_issue", type=int)
+    checkpoint.add_argument("--related-pr", dest="related_pr", type=int)
+    checkpoint.add_argument("--decide", metavar="ID", help="Decide on checkpoint id")
+    checkpoint.add_argument(
+        "--decision",
+        choices=["approve", "revise", "reject", "cancel"],
+        help="Decision for --decide",
+    )
+    checkpoint.add_argument("--note", default="", help="Decision note")
+    checkpoint.add_argument("--by", dest="decided_by", default="cli-user", help="Actor for create/decide")
+    checkpoint.add_argument("--list", action="store_true", help="List checkpoints (default pending)")
+    checkpoint.add_argument("--open-only", dest="open_only", action="store_true", help="Only pausing open checkpoints")
+    checkpoint.add_argument("--status", default="pending", help="Filter for --list (pending|all|approved|...)")
+    checkpoint.add_argument("--get", metavar="ID", help="Get one checkpoint by id")
+    checkpoint.set_defaults(func=cmd_checkpoint)
 
     rel_cut = release_sub.add_parser("cut", help="Cut a release: aggregate fragments to versioned dir (first-class MVP per #261)")
     rel_cut.add_argument("version", nargs="?", help="Explicit version e.g. vX.Y.Z (optional, auto-detect)")

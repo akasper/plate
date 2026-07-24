@@ -585,6 +585,17 @@ class AutonomyEngine:
         autopilot = max(0, min(100, autopilot))
 
         due_ids = [p.id for p in self.procedures if p.enabled and self._risk_rank(p.risk_level) <= self._risk_rank(self.risk_tolerance)]
+        # #648: surface open pausing checkpoints (plus any health errors as soft checkpoints)
+        open_cps: list[str] = []
+        try:
+            from .checkpoint import list_open_checkpoints
+            for c in list_open_checkpoints(limit=20):
+                open_cps.append(f"{c.get('id')}: {c.get('title')}")
+        except Exception:
+            pass
+        if isinstance(health, dict):
+            for err in health.get("errors", []) or []:
+                open_cps.append(str(err))
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
@@ -594,7 +605,7 @@ class AutonomyEngine:
             autopilot_score=autopilot,
             burn_rate=round(burn_rate, 1),
             due_procedures=due_ids,
-            open_human_checkpoints=health.get("errors", []) if isinstance(health, dict) else [],
+            open_human_checkpoints=open_cps,
             throttled_actions=getattr(self, "throttled_actions", 0),
         )
 
@@ -714,6 +725,7 @@ class AutonomyEngine:
         Introspect -> enforce (real est from #471 estimate_cost) -> decide (budget wired) -> execute (delegate support) -> log markers + USAGE REPORT.
         Quiet enforcement: only append progress actions (executed/delegated/markers) to report; no non-progress/no-op comments (per quiet ops #456 + AGENTS.md).
         References #471/#472; ties to #478 procedures, #479 obs, #482 tests. Delegation via plate_delegate_to_agent + trigger markers.
+        #648: open pausing checkpoints short-circuit the cycle (paused) before decide/execute.
         """
         ts = datetime.now(timezone.utc).isoformat()
         # Do not unconditionally zero _spent_this_cycle here: daily rollover + carry across --loop cycles (reused engine) is handled inside enforce_budget's date check. Per-cycle accounting starts from instance init (new engine) or accumulated (loop reuse). Addresses review feedback on daily budget enforcement in long-running loops.
@@ -723,6 +735,24 @@ class AutonomyEngine:
         paused = False
         budget_dec = Decision.PROCEED.value
         total_est = 0
+
+        # #648 hard pause when open human checkpoints exist
+        try:
+            from .checkpoint import autonomy_is_paused_by_checkpoints
+            pause_info = autonomy_is_paused_by_checkpoints()
+            if pause_info.get("paused"):
+                ids = ", ".join(pause_info.get("checkpoint_ids") or []) or "(unknown)"
+                return CycleReport(
+                    status="paused",
+                    actions_taken=[f"paused: open human checkpoint(s) {ids}"],
+                    throttled=["checkpoint"],
+                    paused=True,
+                    budget_decision="pause",
+                    snapshot=snap.to_dict(),
+                    timestamp=ts,
+                )
+        except Exception:
+            pass
 
         self._spent_this_cycle = 0  # fresh per cycle
         decided = self.decide_next(snap)
