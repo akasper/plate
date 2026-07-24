@@ -278,64 +278,120 @@ class TestShadowSimulation645(unittest.TestCase):
         self.assertTrue(d["risk_allowed"])
 
     def test_high_impact_blocked_without_shadow_ack_at_low_risk(self):
+        import tempfile
+        from pathlib import Path
         from plate_core.autonomy import AutonomyEngine
-        engine = AutonomyEngine(repo=None)
-        engine.enabled = True
-        engine.risk_tolerance = "low"
-        engine.autonomy_config = {
-            "enabled": True,
-            "risk_tolerance": "low",
-            "token_budget": {"daily": 50000, "per_cycle": 8000},
-        }
-        blocked = engine.gate_high_impact("auto_merge", shadow_ack=None)
-        self.assertTrue(blocked["blocked"])
-        self.assertEqual(blocked["mode"], "shadow_required")
-        self.assertIn("shadow_report", blocked)
-        shadow = engine.simulate_action("auto_merge")
-        still = engine.gate_high_impact("auto_merge", shadow_ack=shadow.shadow_id, approved=False)
-        self.assertTrue(still["blocked"])
-        ok = engine.gate_high_impact("auto_merge", shadow_ack=shadow.shadow_id, approved=True)
-        self.assertFalse(ok["blocked"])
+        with tempfile.TemporaryDirectory() as tmp:
+            shadow_dir = Path(tmp) / "shadow"
+            cp_dir = Path(tmp) / "cp"
+            engine = AutonomyEngine(repo=None)
+            engine.enabled = True
+            engine.risk_tolerance = "low"
+            engine.shadow_base_dir = shadow_dir
+            engine.checkpoint_base_dir = cp_dir
+            engine.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "low",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            blocked = engine.gate_high_impact("auto_merge", shadow_ack=None)
+            self.assertTrue(blocked["blocked"])
+            self.assertEqual(blocked["mode"], "shadow_required")
+            self.assertIn("shadow_report", blocked)
+            self.assertIn("checkpoint_id", blocked)
+            shadow = engine.simulate_action("auto_merge")
+            still = engine.gate_high_impact("auto_merge", shadow_ack=shadow.shadow_id, approved=False)
+            self.assertTrue(still["blocked"])
+            ok = engine.gate_high_impact("auto_merge", shadow_ack=shadow.shadow_id, approved=True)
+            self.assertFalse(ok["blocked"])
 
     def test_critical_always_requires_approval(self):
+        import tempfile
+        from pathlib import Path
         from plate_core.autonomy import AutonomyEngine
-        engine = AutonomyEngine(repo=None)
-        engine.enabled = True
-        engine.risk_tolerance = "high"
-        engine.autonomy_config = {
-            "enabled": True,
-            "risk_tolerance": "high",
-            "token_budget": {"daily": 50000, "per_cycle": 8000},
-        }
-        shadow = engine.simulate_action("deploy")
-        self.assertTrue(shadow.to_dict()["requires_approval"])
-        blocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=False)
-        self.assertTrue(blocked["blocked"])
-        unblocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=True)
-        self.assertFalse(unblocked["blocked"])
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.enabled = True
+            engine.risk_tolerance = "high"
+            engine.shadow_base_dir = Path(tmp) / "shadow"
+            engine.checkpoint_base_dir = Path(tmp) / "cp"
+            engine.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "high",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            shadow = engine.simulate_action("deploy")
+            self.assertTrue(shadow.to_dict()["requires_approval"])
+            blocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=False)
+            self.assertTrue(blocked["blocked"])
+            unblocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=True)
+            self.assertFalse(unblocked["blocked"])
 
     def test_run_procedure_high_risk_shadow_default_when_low_tolerance(self):
+        import tempfile
+        from pathlib import Path
         from plate_core.autonomy import AutonomyEngine, ProcedureDef
-        engine = AutonomyEngine(repo=None)
-        engine.enabled = True
-        engine.risk_tolerance = "low"
-        engine.autonomy_config = {
-            "enabled": True,
-            "risk_tolerance": "low",
-            "token_budget": {"daily": 5e4, "per_cycle": 8e3},
-        }
-        engine.procedures = [
-            ProcedureDef(
-                id="risky-proc",
-                cadence="manual",
-                risk_level="high",
-                enabled=True,
-                description="high impact",
-            ),
-        ]
-        result = engine.run_procedure("risky-proc", dry_run=False)
-        self.assertEqual(result.get("status"), "shadow_required")
-        self.assertIn("shadow_report", result)
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.enabled = True
+            engine.risk_tolerance = "low"
+            engine.shadow_base_dir = Path(tmp) / "shadow"
+            engine.checkpoint_base_dir = Path(tmp) / "cp"
+            engine.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "low",
+                "token_budget": {"daily": 5e4, "per_cycle": 8e3},
+            }
+            engine.procedures = [
+                ProcedureDef(
+                    id="risky-proc",
+                    cadence="manual",
+                    risk_level="high",
+                    enabled=True,
+                    description="high impact",
+                ),
+            ]
+            result = engine.run_procedure("risky-proc", dry_run=False)
+            self.assertEqual(result.get("status"), "shadow_required")
+            self.assertIn("shadow_report", result)
+            self.assertIn("checkpoint_id", result)
+
+    def test_durable_shadow_ack_across_engine_instances(self):
+        """#645 harden: shadow_ack must resolve from .agentic/shadow after process restart."""
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine, load_shadow_report
+
+        with tempfile.TemporaryDirectory() as tmp:
+            shadow_dir = Path(tmp) / "shadow"
+            cp_dir = Path(tmp) / "cp"
+            eng1 = AutonomyEngine(repo=None)
+            eng1.enabled = True
+            eng1.risk_tolerance = "low"
+            eng1.shadow_base_dir = shadow_dir
+            eng1.checkpoint_base_dir = cp_dir
+            eng1.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "low",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            shadow = eng1.simulate_action("auto_merge")
+            sid = shadow.shadow_id
+            self.assertIsNotNone(load_shadow_report(sid, base_dir=shadow_dir))
+
+            # Fresh engine (no in-memory previews) must still accept durable ack
+            eng2 = AutonomyEngine(repo=None)
+            eng2.enabled = True
+            eng2.risk_tolerance = "low"
+            eng2.shadow_base_dir = shadow_dir
+            eng2.checkpoint_base_dir = cp_dir
+            eng2.autonomy_config = eng1.autonomy_config
+            self.assertEqual(eng2._shadow_previews, {})
+            still = eng2.gate_high_impact("auto_merge", shadow_ack=sid, approved=False)
+            self.assertTrue(still["blocked"])
+            ok = eng2.gate_high_impact("auto_merge", shadow_ack=sid, approved=True)
+            self.assertFalse(ok["blocked"])
+            self.assertEqual(ok["mode"], "approved")
 
     def test_module_level_simulate_helper(self):
         from plate_core.autonomy import simulate_autonomy_action

@@ -158,3 +158,6 @@ Thumbs.db
 tests/e2e/node_modules/
 tests/e2e/test-results/
 tests/e2e/package-lock.json
+
+# Ephemeral #645 shadow previews (durable ack; not release artifacts)
+.agentic/shadow/
