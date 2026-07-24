@@ -770,6 +770,18 @@ class AutonomyEngine:
             # Use decision from decide_next (which already enforced + charged) to eliminate double-spend risk flagged in #502 review.
             # Only the initial probe (when no decided actions) may call enforce.
             dec = Decision[act.get("decision", "PROCEED").upper()] if act.get("decision") else Decision.PROCEED
+            # #647: durable provenance for each decided action (even dry-run / pause)
+            try:
+                from .ledger import record_from_autonomy_action
+                led = record_from_autonomy_action(
+                    {**act, "type": kind, "est": est, "decision": dec.value},
+                    risk_tolerance=self.risk_tolerance,
+                    session=ts,
+                    actor="autonomy",
+                )
+                actions.append(f"ledger: {led.get('id')} decision={dec.value}")
+            except Exception:
+                pass
             if dec == Decision.PAUSE:
                 throttled.append(kind)
                 paused = True
