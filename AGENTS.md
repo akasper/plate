@@ -269,8 +269,14 @@ Autonomous mode is the default operating posture for unattended sessions (overni
 
 **Configuration (single source of truth):** Use the `autonomy` section in `.plate` (added in #473, engine in #474):
 - `risk_tolerance`: "off" (fully manual), "low", "medium", or "high". Higher tolerance enables broader autonomous progress (e.g., auto-merge up to that risk level, apply-mode for procedures/audits, auto-stub generation in planning).
-- `enabled`, `token_budget` (daily/per_cycle/action: throttle|pause|warn), `schedules_enabled`, etc.
+- `enabled`, `token_budget` (daily/per_cycle/action: throttle|pause|warn), `schedules_enabled`, `pr_review_scope` (#496), etc.
 - Legacy `.github/AUTONOMOUS_MODE` (file presence) is supported for transition/compat but is sunset in favor of `.plate` (generalized in #476 PR; health/config surfaces emit migration guidance). Delete the marker file after configuring `.plate`.
+
+**Agent routing for autonomy loops (#480):** When PLATE signals are present, the **plate** persona prefers AutonomyEngine thin surfaces for long-running work:
+1. `plate_what_next` for the next *process* step (still first for ordinary "what should I do?").
+2. `plate_autonomy_status` / `gh plate autonomy --status` **before** unsupervised cycles — honor risk, budget, due procedures.
+3. `plate_autonomy_run_cycle` / `gh plate autonomy --run|--loop` (dry-run first when risk unknown); procedures via list/run tools.
+4. Quiet rules: terminal = terse bullets only; GitHub comments only on progress or exempt markers (`PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`, USAGE REPORT). Full protocol: `autonomy_loops` in `agent_guidance.py` + catalog skill `run-autonomy-cycle`.
 
 **When autonomous mode is active (risk_tolerance != "off" and enabled):**
 
