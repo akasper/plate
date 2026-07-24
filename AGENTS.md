@@ -16,6 +16,21 @@ The PLATE book explains doctrine and the reasons behind the method. This reposit
 | Documentation | Update per-feature change files under `.agentic/releases/`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
 | Stack selection | Prototype and benchmark candidate stacks per the Research issue. | Final language/runtime choice and distribution format. |
 
+
+## Real-world / external human Tasks (Epic planning requirement)
+
+When planning or refining an Epic or Feature, the agent and human must explicitly identify any steps that require actions the AI development partner cannot safely or permissibly perform "in the real world" (external accounts, credential provisioning, manual deploys on third-party services, billing, legal, physical access, or any action requiring human identity/ownership on an external system such as PyPI trusted publisher setup, API key creation for CI, account creation, or initial manual publishes to unblock pins).
+
+For each such step:
+- Create a dedicated `Task` issue (labeled `Task`).
+- Follow the standard human-only template in the body: "Human action required", "Why the agent cannot safely proceed", "Context and affected artifacts", "Best-effort instructions / next steps", and "Done signal" (the human leaves a short completion comment containing `<!-- PLATE-TASK-CLOSED -->`; the comment must not include secrets/credentials).
+- Link the Task to the parent Epic (via sub-issue sidebar or milestone) and reference it from PR bodies, release checklists, Epic success criteria, and AGENTS.md notes.
+- The Epic (and any dependent release) remains open until the human owner confirms completion of the real-world Task(s).
+
+This makes the human dependencies first-class, visible, auditable, and part of the formal PLATE plan. The AI must not attempt to complete these Tasks. Examples from the PyPI deployment work: #625 (PyPI account + trusted publisher config for the publish workflow), #626 (initial back-publish of v0.7.2 via dispatch to unblock version-locked gh-plate installs), and the earlier #380 (marketplace package publish).
+
+Planners must treat this as a required part of Epic scoping, not an afterthought in a PR description checklist. The guidance also applies to new-project templates (see template_payload/AGENTS.md) and the release ceremony packaging phase.
+
 ## Default PLATE Persona (Epic #459)
 
 When operating in a repository that has adopted PLATE (signaled locally by `.plate/` or `.plate/config` + `AGENTS.md` / `.agentic/`, or on GitHub by Epic labels, release artifacts, etc.), agents **must default to the `plate` persona** ( `plugin/agents/plate.agent.md` + `src/plate_core/agent_guidance.py` sections + baseline catalog).
@@ -397,7 +412,7 @@ Use this loop:
 4. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 5. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
 6. For all other actionable comments: push a code change or reply explaining why no change is needed
-7. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the encapsulated helper: `plate_resolve_review_thread` (MCP) / `resolve_review_thread` (Python) / `gh plate pr babysit` (which detects + reports). The helpers encapsulate the GraphQL mutation, node IDs, pagination, and extraction.
+7. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the encapsulated helper: `plate_resolve_review_thread` (MCP) / `resolve_review_thread` (Python) / `gh plate pr babysit --act` (which detects + reports, and **auto-resolves outdated unresolved threads** per #605). The helpers encapsulate the GraphQL mutation, node IDs, pagination, and extraction. Prefer `--act` after pushes so outdated threads are closed without a separate resolve pass.
    (The raw mutation + `repository.pullRequest.reviewThreads` + databaseId matching is implementation detail only; agents must not construct it manually with jq/mktemp/sed/etc. See pr_babysit.get_actionable_review_threads and plate_get_actionable_review_threads. Addresses #516.)
 8. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
 9. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked

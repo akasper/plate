@@ -2,6 +2,8 @@
 
 The pr-babysit skill/MCP surface (`gh plate pr babysit` or `plate_pr_babysit`) is the dedicated tool for PR feedback and health work. Agents must default to it (rather than hand-rolling git/gh commands) for "babysit", "get CI passing", "address feedback", or "make PR green" instructions (addresses #524 and related). After addressing feedback, explicitly resolve the corresponding review threads (via resolveReviewThread) to satisfy the feedback-resolution check (addresses #520).
 
+**Auto-resolve on act (addresses #605):** When `act=True`, `babysit_pr` automatically resolves unresolved review threads that are **outdated** (typically after code was pushed that addresses the comment lines). This closes the gap where threads stayed `isResolved: false` after fixes, blocking the feedback-resolution gate even though the tool reported 0 actionable (outdated) threads. Explicit `resolve_review_thread` remains available for non-outdated threads and manual cases.
+
 **Per #513: agents MUST run `gh plate release status` *proactively as the very first step* before calling babysit_pr, creating related PRs, or any targeting/base decision. This function assumes the caller has done so to confirm the correct track/base and pending fragments; use the output to set context.**
 
 Review thread handling (GraphQL pagination via reviewThreads first:100 + nodes, exact databaseId from comments, author filtering, isResolved/isOutdated, body, resolveReviewThread mutation) is fully encapsulated in the high-level helpers: babysit_pr (for detection + report), get_actionable_review_threads (for listing), resolve_review_thread (for safe resolution), and get_pr_merge_gates. Agents and calling code **must not** manually construct raw `gh api graphql`, jq filters, mktemp tempfiles, sed/NO_COLOR ANSI stripping, or the mutation. Use the Python/MCP/CLI surfaces instead (addresses #516).
@@ -69,6 +71,10 @@ class BabysitReport:
     local_rebase_success: bool | None = None
     local_rebase_conflict: bool = False
     local_rebase_error: str | None = None
+    # #605: threads auto-resolved because they were outdated + unresolved when act=True
+    auto_resolved_threads: int = 0
+    auto_resolved_thread_ids: list[str] | None = None
+    auto_resolve_errors: list[str] | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -133,6 +139,37 @@ def _extract_actionable_threads(threads: list[dict], agent_logins: str | None) -
             }
         )
     return actionable
+
+
+def _extract_outdated_unresolved_threads(threads: list[dict]) -> list[dict]:
+    """Threads that are still open but outdated (code moved) — candidates for auto-resolve (#605).
+
+    Outdated + unresolved is the common post-fix state: agent addressed the line(s) and pushed,
+    so GitHub marks the thread outdated, but feedback-resolution CI still fails until
+    resolveReviewThread is called.
+    """
+    candidates: list[dict] = []
+    for thread in threads:
+        if thread.get("isResolved"):
+            continue
+        if not thread.get("isOutdated"):
+            continue
+        thread_id = thread.get("id")
+        if not thread_id:
+            continue
+        comments = (thread.get("comments") or {}).get("nodes") or []
+        last = comments[-1] if comments else {}
+        author = ((last.get("author") or {}).get("login") or "").strip()
+        candidates.append(
+            {
+                "thread_id": thread_id,
+                "comment_id": last.get("databaseId"),
+                "author": author,
+                "url": last.get("url"),
+                "body": (last.get("body") or "").strip(),
+            }
+        )
+    return candidates
 
 
 def _load_review_threads(client: GhClient, repo: str, pr_number: int) -> list[dict]:
@@ -460,6 +497,23 @@ def babysit_pr(
         trigger_url = _post_babysit_trigger(gh, target, pr_number, actionable)
         posted = True
 
+    # #605: auto-resolve outdated unresolved threads when acting (post-fix state)
+    auto_resolved_ids: list[str] = []
+    auto_resolve_errors: list[str] = []
+    if act:
+        for item in _extract_outdated_unresolved_threads(threads):
+            tid = item.get("thread_id")
+            if not tid:
+                continue
+            try:
+                result = resolve_review_thread(thread_id=tid, repo=target, client=gh)
+                if result.get("resolved"):
+                    auto_resolved_ids.append(tid)
+                else:
+                    auto_resolve_errors.append(f"{tid}: resolve returned resolved=false")
+            except Exception as exc:  # noqa: BLE001 — best-effort; report errors, continue
+                auto_resolve_errors.append(f"{tid}: {exc}")
+
     # Handle base branch sync
     merge_trigger_posted = False
     merge_trigger_url = None
@@ -497,6 +551,9 @@ def babysit_pr(
         local_rebase_success=local_rebase_success,
         local_rebase_conflict=local_rebase_conflict,
         local_rebase_error=local_rebase_error,
+        auto_resolved_threads=len(auto_resolved_ids),
+        auto_resolved_thread_ids=auto_resolved_ids or None,
+        auto_resolve_errors=auto_resolve_errors or None,
     )
 
 
