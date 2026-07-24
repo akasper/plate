@@ -50,6 +50,12 @@ from .planning import (
     get_planning_script,
     start_planning_session,
 )
+from .epic_release_planning import (
+    apply_er_answer,
+    build_er_plan_from_session,
+    get_er_script,
+    start_er_session,
+)
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -255,6 +261,30 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = build_plan_from_session(session if isinstance(session, dict) else {})
         elif name == "plate_planning_script":
             payload = get_planning_script(str(args.get("kind") or "feature"))
+        elif name == "plate_er_planning_start":
+            payload = start_er_session(str(args.get("kind") or "epic"))
+        elif name == "plate_er_planning_answer":
+            session = args.get("session") or {}
+            if isinstance(session, str):
+                try:
+                    session = json.loads(session)
+                except Exception:
+                    session = {}
+            payload = apply_er_answer(
+                session if isinstance(session, dict) else {},
+                str(args.get("answer") or args.get("answer_text") or ""),
+                question_id=args.get("question_id"),
+            )
+        elif name == "plate_er_planning_build":
+            session = args.get("session") or {}
+            if isinstance(session, str):
+                try:
+                    session = json.loads(session)
+                except Exception:
+                    session = {}
+            payload = build_er_plan_from_session(session if isinstance(session, dict) else {})
+        elif name == "plate_er_planning_script":
+            payload = get_er_script(str(args.get("kind") or "epic"))
         elif name == "plate_pr_babysit":
             pr_number = args.get("pr_number")
             if pr_number is None:
@@ -881,6 +911,44 @@ def run() -> None:
                                 },
                             },
                             {
+
+                            {
+                                "name": "plate_er_planning_start",
+                                "description": "Start Q&A epic (#640) or release (#629) planning session. Returns first ask_user_question prompt.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "description": "epic | release"},
+                                    },
+
+                            {
+                                "name": "plate_er_planning_answer",
+                                "description": "Record one epic/release planning answer; return next question or complete.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "session": {"type": "object"},
+                                        "answer": {"type": "string"},
+                                        "question_id": {"type": "string"},
+                                    },
+
+                            {
+                                "name": "plate_er_planning_build",
+                                "description": "Build Epic tree or Release plan from session for human approval (#640/#629).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "session": {"type": "object"},
+                                    },
+
+                            {
+                                "name": "plate_er_planning_script",
+                                "description": "Return ordered epic or release planning questions.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
+                                    },
                                 "name": "plate_pr_babysit",
                                 "description": (
                                     "Inspect a pull request for unresolved review feedback (scope: all|bot-only|human-only per #496) "
