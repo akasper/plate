@@ -56,6 +56,13 @@ from .epic_release_planning import (
     get_er_script,
     start_er_session,
 )
+from .design_research_approval import (
+    decide_artifact,
+    get_artifact,
+    list_artifacts,
+    list_pending_artifacts,
+    surface_artifact,
+)
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -285,6 +292,41 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = build_er_plan_from_session(session if isinstance(session, dict) else {})
         elif name == "plate_er_planning_script":
             payload = get_er_script(str(args.get("kind") or "epic"))
+        elif name == "plate_artifact_propose":
+            payload = propose_artifact(
+                kind=str(args.get("kind") or "design"),
+                title=str(args.get("title") or "Artifact"),
+                summary=str(args.get("summary") or ""),
+                content_path=str(args.get("content_path") or ""),
+                content_excerpt=str(args.get("content_excerpt") or ""),
+                related_issue=args.get("related_issue"),
+                related_epic=args.get("related_epic"),
+                originating_question=args.get("originating_question"),
+                media_links=list(args.get("media_links") or []),
+                actor=str(args.get("actor") or "agent"),
+            )
+        elif name == "plate_artifact_decide":
+            payload = decide_proposal(
+                str(args.get("proposal_id") or args.get("id") or ""),
+                str(args.get("decision") or ""),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_artifact_list":
+            if args.get("authoritative"):
+                payload = {"proposals": list_authoritative(kind=args.get("kind"))}
+            else:
+                payload = {
+                    "proposals": list_proposals(
+                        status=args.get("status") or "pending",
+                        kind=args.get("kind"),
+                        limit=int(args.get("limit") or 50),
+                    )
+                }
+        elif name == "plate_artifact_get":
+            payload = get_proposal(str(args.get("proposal_id") or args.get("id") or "")) or {
+                "error": "not found"
+            }
         elif name == "plate_pr_babysit":
             pr_number = args.get("pr_number")
             if pr_number is None:
@@ -952,6 +994,64 @@ def run() -> None:
                                     "properties": {
                                         "kind": {"type": "string"},
                                     },
+                                },
+                            },
+{
+                                "name": "plate_artifact_propose",
+                                "description": "Propose a Design or Research artifact for human approval (#632). Durable under .agentic/approvals/.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "description": "design | research"},
+                                        "title": {"type": "string"},
+                                        "summary": {"type": "string"},
+                                        "content_path": {"type": "string"},
+                                        "content_excerpt": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "related_epic": {"type": "integer"},
+                                        "originating_question": {"type": "integer"},
+                                        "media_links": {"type": "array", "items": {"type": "string"}},
+                                        "actor": {"type": "string"},
+                                    },
+                                    "required": ["kind", "title", "summary"],
+                                },
+                            },
+{
+                                "name": "plate_artifact_decide",
+                                "description": "Approve, revise, or reject a Design/Research proposal (#632).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "proposal_id": {"type": "string"},
+                                        "decision": {"type": "string", "description": "approve|revise|reject"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["proposal_id", "decision"],
+                                },
+                            },
+{
+                                "name": "plate_artifact_list",
+                                "description": "List pending (or authoritative) Design/Research approval proposals (#632).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "kind": {"type": "string"},
+                                        "authoritative": {"type": "boolean"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+{
+                                "name": "plate_artifact_get",
+                                "description": "Get one artifact approval proposal by id (#632).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "proposal_id": {"type": "string"},
+                                    },
+                                    "required": ["proposal_id"],
                                 },
                             },
                             {
