@@ -229,6 +229,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 agent_logins=args.get("agents"),
                 act=bool(args.get("act", False)),
                 branch_update_strategy=args.get("branch_update_strategy"),
+                pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
             ).to_dict()
         elif name == "plate_get_pr_merge_gates":
             pr_number = args.get("pr_number")
@@ -259,6 +260,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     pr_number=args.get("pr_number"),
                     repo=args.get("repo"),
                     agent_logins=args.get("agent_logins"),
+                    pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
                 ),
             }
         elif name == "plate_what_next":
@@ -685,8 +687,8 @@ def run() -> None:
                             {
                                 "name": "plate_pr_babysit",
                                 "description": (
-                                    "Inspect a pull request for unresolved third-party agent feedback and base branch sync state. "
-                                    "Optionally post trigger comments for the plate agent to address issues."
+                                    "Inspect a pull request for unresolved review feedback (scope: all|bot-only|human-only per #496) "
+                                    "and base branch sync state. Optionally post trigger comments and auto-resolve outdated threads (--act / act=true)."
                                 ),
                                 "inputSchema": {
                                     "type": "object",
@@ -701,11 +703,16 @@ def run() -> None:
                                         },
                                         "agents": {
                                             "type": "string",
-                                            "description": "Optional comma-separated GitHub logins treated as third-party agents.",
+                                            "description": "Optional comma-separated login allowlist (overrides scope).",
+                                        },
+                                        "scope": {
+                                            "type": "string",
+                                            "enum": ["all", "bot-only", "human-only"],
+                                            "description": "pr_review_scope (#496). Default all (from .plate or built-in).",
                                         },
                                         "act": {
                                             "type": "boolean",
-                                            "description": "When true, post trigger comments if issues detected.",
+                                            "description": "When true, post trigger comments if issues detected and auto-resolve outdated threads.",
                                         },
                                         "branch_update_strategy": {
                                             "type": "string",
@@ -757,7 +764,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_get_actionable_review_threads",
-                                "description": "List actionable (unresolved, non-outdated, from target agents) review threads for a PR. High-level encapsulated helper: handles GraphQL (reviewThreads first:100 + nodes), databaseId, author filtering, body extraction internally. Use with plate_resolve_review_thread (or via plate_pr_babysit) instead of raw GraphQL/jq/mktemp/ANSI. Addresses #516.",
+                                "description": "List actionable (unresolved, non-outdated) review threads for a PR under pr_review_scope (#496: all|bot-only|human-only; default all includes Copilot). High-level helper: GraphQL reviewThreads, databaseId, suggestion metadata. Use with plate_resolve_review_thread / plate_pr_babysit. Addresses #516/#496.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -771,7 +778,12 @@ def run() -> None:
                                         },
                                         "agent_logins": {
                                             "type": "string",
-                                            "description": "Comma-separated logins to match (optional; defaults to known third-party agent patterns).",
+                                            "description": "Comma-separated login allowlist (optional; overrides scope).",
+                                        },
+                                        "scope": {
+                                            "type": "string",
+                                            "enum": ["all", "bot-only", "human-only"],
+                                            "description": "pr_review_scope (#496). Default all.",
                                         },
                                     },
                                     "required": ["pr_number"],
