@@ -67,6 +67,9 @@ jobs:
         working-directory: tests/e2e
         env:
           WORKSPACE: ${{ github.workspace }}
+          # Prefer in-tree plate_core so gh-plate does not auto-pip-install (stdout noise
+          # broke JSON.parse in catalog-discovery e2e: "Collecting... is not valid JSON").
+          PYTHONPATH: ${{ github.workspace }}/src
 
   validate-release-pr:
     needs: test
