@@ -14,7 +14,7 @@ Routing order:
 1. Next step → `plate_what_next` when available.
 2. Long-running/looped/budgeted work → `plate_autonomy_status` (or `gh plate autonomy --status`) **before** unsupervised cycles (#480); see `autonomy_loops` guidance.
 3. Where first? → `gh plate context list/show` or MCP `plate_contexts` / `plate_context`.
-4. Live state → MCP/CLI (`plate_health`, `plate_epic_status`, `plate_features`, `gh plate release status`, agents/skills list).
+4. Live state → MCP/CLI: `plate_health`, `plate_epic_status`, `plate_features`, `gh plate release status`, `gh plate agents list`, `gh plate skills list`.
 5. Delegation → `plate_delegate_to_agent` with `agent_id` + short `task_description`.
 6. Authority: process → `AGENTS.md`, intent → `SPEC.md`, shipped → `.agentic/releases/`. Deeper docs only if thin surfaces insufficient.
 
