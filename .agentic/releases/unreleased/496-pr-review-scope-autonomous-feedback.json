@@ -1,0 +1,23 @@
+{
+  "slug": "496-pr-review-scope-autonomous-feedback",
+  "change_type": "feature",
+  "surface": "src/plate_core/pr_babysit.py, plate_config.py, cli.py, mcp_server.py, AGENTS.md",
+  "summary": "Configurable PR review response scope (all|bot-only|human-only) so babysit treats Copilot and human threads as actionable by default, with suggestion metadata and high-risk path guards (#496).",
+  "migration_impact": "Default pr_review_scope is all: more review threads may appear actionable than the old bot-only filter. Set autonomy.pr_review_scope to bot-only for conservative behavior. New CLI --scope and MCP scope parameters available.",
+  "migration_guidance": [
+    "1. Optionally set autonomy.pr_review_scope in .plate (all|bot-only|human-only); default all.",
+    "2. Prefer gh plate pr babysit --scope and plate_get_actionable_review_threads with scope.",
+    "3. Apply suggestion blocks when prefer_apply_suggestion; skip high-risk paths.",
+    "4. Do not re-request Copilot review in a loop; work existing threads first."
+  ],
+  "agent_notes": "Default scope=all includes Copilot. Use plate_pr_babysit / --act; resolve outdated via #605 auto-resolve. High-risk paths need need:human-review.",
+  "breaking": false,
+  "links": [
+    "#496",
+    "#605",
+    "#612"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
