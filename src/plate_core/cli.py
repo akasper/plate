@@ -330,6 +330,15 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
     print(f"PR: #{report.pr_number}")
     print(f"Detected threads: {report.detected_threads}")
     print(f"Actionable third-party threads: {report.actionable_threads}")
+    if report.auto_resolved_threads:
+        print(f"Auto-resolved outdated threads: {report.auto_resolved_threads}")
+        if report.auto_resolved_thread_ids:
+            for tid in report.auto_resolved_thread_ids:
+                print(f"  - {tid}")
+    if report.auto_resolve_errors:
+        print(f"Auto-resolve errors: {len(report.auto_resolve_errors)}")
+        for err in report.auto_resolve_errors:
+            print(f"  - {err}")
     if report.trigger_comment_posted:
         print("Babysit trigger posted.")
         if report.trigger_comment_url:

@@ -26,9 +26,13 @@ def _ensure_plate_core() -> None:
 
     try:
         import subprocess
+        # Keep pip noise off stdout so `gh plate ... --json` stays machine-parseable
+        # (e2e catalog-discovery and other consumers JSON.parse stdout).
         print("plate-core not found; attempting `pip install --user plate-core` ...", file=sys.stderr)
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--user", "plate-core"]
+            [sys.executable, "-m", "pip", "install", "--user", "plate-core"],
+            stdout=sys.stderr,
+            stderr=subprocess.STDOUT,
         )
     except Exception as exc:
         # Do not hard-fail here; the subsequent import will give the real error.
