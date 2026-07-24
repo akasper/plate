@@ -346,6 +346,21 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = engine.run_procedure(
                 proc_id=args.get("proc_id"),
                 dry_run=bool(args.get("dry_run", False)),
+                shadow_ack=args.get("shadow_ack"),
+                approved=bool(args.get("approved", False)),
+            )
+        elif name == "plate_autonomy_simulate":
+            from .autonomy import simulate_autonomy_action
+            scope = args.get("scope") or {}
+            if isinstance(scope, str):
+                try:
+                    scope = json.loads(scope)
+                except Exception:
+                    scope = {"raw": scope}
+            payload = simulate_autonomy_action(
+                action_kind=str(args.get("action_kind") or args.get("action") or "unknown"),
+                repo=args.get("repo"),
+                scope=scope if isinstance(scope, dict) else {},
             )
         elif name == "plate_migrate_plan":
             plan = generate_migration_plan()
@@ -1082,15 +1097,36 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_autonomy_run_procedure",
-                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run.",
+                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run. High-risk procedures may return shadow_required (#645) unless approved after plate_autonomy_simulate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "proc_id": {"type": "string", "description": "Procedure id e.g. nightly-drift-detection"},
                                         "dry_run": {"type": "boolean", "description": "Default false."},
+                                        "shadow_ack": {"type": "string", "description": "shadow_id from plate_autonomy_simulate (#645)."},
+                                        "approved": {"type": "boolean", "description": "Explicit human approval after shadow preview (#645)."},
                                     },
                                     "required": ["proc_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_autonomy_simulate",
+                                "description": "Shadow/simulate a high-impact autonomous action without side effects (#645). Returns impact, cost/duration estimates, predicted side effects, gate preview, requires_approval, and shadow_id for later approval + execute.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "action_kind": {
+                                            "type": "string",
+                                            "description": "Action to simulate e.g. release_cut, deploy, auto_merge, run_procedure, plan_epic.",
+                                        },
+                                        "scope": {
+                                            "type": "object",
+                                            "description": "Optional context (version, pr_number, risk_level, etc.).",
+                                        },
+                                    },
+                                    "required": ["action_kind"],
                                 },
                             },
                             {
