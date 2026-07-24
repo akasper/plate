@@ -537,6 +537,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 dry_run=bool(args.get("dry_run", False)),
                 shadow_ack=args.get("shadow_ack"),
                 approved=bool(args.get("approved", False)),
+                checkpoint_id=args.get("checkpoint_id"),
             )
         elif name == "plate_autonomy_simulate":
             from .autonomy import simulate_autonomy_action
@@ -1601,7 +1602,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_autonomy_run_procedure",
-                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run. High-risk procedures may return shadow_required (#645) unless approved after plate_autonomy_simulate.",
+                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run. High-risk procedures may return shadow_required (#645) unless approved after plate_autonomy_simulate or an approved #648 checkpoint_id.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -1610,6 +1611,7 @@ def run() -> None:
                                         "dry_run": {"type": "boolean", "description": "Default false."},
                                         "shadow_ack": {"type": "string", "description": "shadow_id from plate_autonomy_simulate (#645)."},
                                         "approved": {"type": "boolean", "description": "Explicit human approval after shadow preview (#645)."},
+                                        "checkpoint_id": {"type": "string", "description": "Approved #648 checkpoint id; supplies approval (+ shadow_id when present)."},
                                     },
                                     "required": ["proc_id"],
                                 },

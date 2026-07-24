@@ -175,12 +175,71 @@ def fetch_open_tasks(
     return list((data or {}).get("items") or [])
 
 
+def _checkpoint_to_feed_item(cp: str | dict[str, Any], index: int) -> FeedItem:
+    """Normalize string or structured checkpoint into a FeedItem (#648)."""
+    if isinstance(cp, dict):
+        cid = str(cp.get("id") or f"checkpoint-{index}")
+        title = str(cp.get("title") or cp.get("id") or "Human checkpoint")
+        impact = str(cp.get("impact") or "high")
+        action = str(cp.get("action_kind") or "")
+        shadow = cp.get("shadow_id") or ""
+        reason_txt = str(cp.get("reason") or "Open autonomy checkpoint")
+        prompt = (
+            f"Open human checkpoint id={cid}: {title}. "
+            f"Present via ask_user_question (approve|revise|reject). "
+            f"Then: plate_checkpoint_decide / gh plate checkpoint --decide {cid} --decision approve|revise|reject. "
+            f"After approve, resume gate with checkpoint_id={cid}"
+            + (f" shadow_ack={shadow}" if shadow else "")
+            + (f" action_kind={action}" if action else "")
+            + ". Do not bypass."
+        )
+        return FeedItem(
+            id=cid,
+            item_type="checkpoint",
+            number=None,
+            title=title,
+            rank=10 + index,
+            impact=impact if impact in ("low", "medium", "high", "critical") else "high",
+            badges=["checkpoint", impact or "high"],
+            prompt_segment=prompt,
+            reason=reason_txt,
+            source="checkpoint_ledger",
+            body_excerpt=str(cp.get("reason") or "")[:240],
+        )
+    # Legacy string form from autonomy_status open_human_checkpoints
+    text = str(cp)
+    # Prefer "id: title" parsing when present
+    cid = f"checkpoint-{index}"
+    title = text
+    if ":" in text:
+        left, right = text.split(":", 1)
+        if left.strip():
+            cid = left.strip()
+            title = right.strip() or text
+    return FeedItem(
+        id=cid,
+        item_type="checkpoint",
+        number=None,
+        title=title,
+        rank=12 + index,
+        impact="high",
+        badges=["checkpoint", "high"],
+        prompt_segment=(
+            f"Open human checkpoint: {text}. Use plate_checkpoint_decide / gh plate checkpoint "
+            f"--decide {cid} after user judgment; do not bypass."
+        ),
+        reason="Open autonomy checkpoint",
+        source="autonomy_status",
+    )
+
+
 def build_feed_items(
     *,
     questions: list[dict[str, Any]] | None = None,
     tasks: list[dict[str, Any]] | None = None,
     process_items: list[dict[str, Any]] | None = None,
-    checkpoints: list[str] | None = None,
+    checkpoints: list[str | dict[str, Any]] | None = None,
+    signal_items: list[dict[str, Any]] | None = None,
 ) -> list[FeedItem]:
     items: list[FeedItem] = []
     for iss in questions or []:
@@ -188,21 +247,24 @@ def build_feed_items(
     for iss in tasks or []:
         items.append(issue_to_feed_item(iss, "task"))
     for i, cp in enumerate(checkpoints or []):
+        items.append(_checkpoint_to_feed_item(cp, i))
+    for i, sig in enumerate(signal_items or []):
+        stype = str(sig.get("type") or "signal")
         items.append(
             FeedItem(
-                id=f"checkpoint-{i}",
-                item_type="checkpoint",
-                number=None,
-                title=str(cp),
-                rank=12 + i,
-                impact="high",
-                badges=["checkpoint", "high"],
-                prompt_segment=(
-                    f"Open human checkpoint: {cp}. Use plate_checkpoint_decide / gh plate checkpoint "
-                    "after user judgment; do not bypass."
+                id=str(sig.get("id") or f"signal-{i}"),
+                item_type="signal" if stype in ("drift", "cost_hotspot", "signal") else stype,
+                number=sig.get("issue_number"),
+                title=str(sig.get("title") or "signal"),
+                rank=int(sig.get("rank") or (45 + i)),
+                impact=str(sig.get("impact") or "medium"),
+                badges=[stype, str(sig.get("impact") or "medium")],
+                prompt_segment=str(
+                    sig.get("prompt_segment")
+                    or f"{sig.get('reason') or stype}: {sig.get('title')}"
                 ),
-                reason="Open autonomy checkpoint",
-                source="autonomy_status",
+                reason=str(sig.get("reason") or "cost/risk dashboard"),
+                source=str(sig.get("source") or "cost_dashboard"),
             )
         )
     for i, p in enumerate(process_items or []):
@@ -280,22 +342,53 @@ def get_user_feed(
         except Exception:
             pass
 
-    checkpoints: list[str] = []
+    checkpoints: list[str | dict[str, Any]] = []
+    signal_items: list[dict[str, Any]] = []
     autonomy_snap: dict[str, Any] = {}
     if include_autonomy:
         try:
-            from .autonomy import get_autonomy_status
+            from .checkpoint import list_open_checkpoints
 
-            autonomy_snap = get_autonomy_status(target)
-            checkpoints = list(autonomy_snap.get("open_human_checkpoints") or [])
+            rich = list_open_checkpoints(limit=20)
+            if rich:
+                checkpoints = rich
+            else:
+                from .autonomy import get_autonomy_status
+
+                autonomy_snap = get_autonomy_status(target)
+                checkpoints = list(autonomy_snap.get("open_human_checkpoints") or [])
         except Exception:
-            autonomy_snap = {}
+            try:
+                from .autonomy import get_autonomy_status
+
+                autonomy_snap = get_autonomy_status(target)
+                checkpoints = list(autonomy_snap.get("open_human_checkpoints") or [])
+            except Exception:
+                autonomy_snap = {}
+        # #653: merge cost/risk dashboard signals into endless feed (skip duplicate checkpoints)
+        try:
+            from .costs import get_cost_dashboard
+
+            dash = get_cost_dashboard(repo=target, autonomy_status=autonomy_snap or None)
+            for fi in dash.get("feed_items") or []:
+                if fi.get("type") == "checkpoint":
+                    continue  # already from list_open_checkpoints
+                signal_items.append({**fi, "source": "cost_dashboard"})
+            if not autonomy_snap:
+                autonomy_snap = {
+                    "burn_rate": (dash.get("projections") or {}).get("burn_rate_pct"),
+                    "autopilot_score": (dash.get("risk") or {}).get("autopilot_score"),
+                    "budget_remaining_tokens": (dash.get("budget") or {}).get("remaining_tokens"),
+                }
+        except Exception:
+            pass
 
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,
         process_items=process_items,
         checkpoints=checkpoints,
+        signal_items=signal_items,
     )
     top = items[: max(1, limit)]
     presentation = [
@@ -323,6 +416,7 @@ def get_user_feed(
             "questions": len(q_items or []),
             "tasks": len(t_items or []),
             "checkpoints": len(checkpoints),
+            "signals": len(signal_items),
             "process": len(process_items),
             "returned": len(top),
         },
