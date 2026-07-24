@@ -1,0 +1,25 @@
+{
+  "slug": "632-design-research-approval",
+  "change_type": "feature",
+  "surface": "src/plate_core/design_research_approval.py, mcp_server.py, cli.py",
+  "summary": "Design/Research artifact approval surface (#632): propose pending artifacts, approve/revise/reject with version history, authoritative pointers under .agentic/approvals/, MCP plate_artifact_* + gh plate artifact, feed presentation helper.",
+  "migration_impact": "New plate_artifact_* tools and gh plate artifact. Approvals ledger under .agentic/approvals/. Artifacts are not authoritative until approved.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. After generating design/research docs, call plate_artifact_propose then present via ask_user_question.",
+    "3. On Approve: plate_artifact_decide decision=approve; link approved path into Feature/Epic.",
+    "4. Optionally gitignore .agentic/approvals/ for local-only, or commit for audit."
+  ],
+  "agent_notes": "Never treat Design/Research as planning authority until status=approved. Integrates with #631 feed via presentation_for_feed.",
+  "breaking": false,
+  "links": [
+    "#632",
+    "#654",
+    "#656",
+    "#631",
+    "#648"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
