@@ -97,6 +97,146 @@ class Decision(Enum):
     WARN = "warn"
 
 
+# Impact catalog for #645 shadow/simulation gates (low → critical).
+# Unknown kinds default to medium (fail closed vs silent low).
+_ACTION_IMPACT: dict[str, str] = {
+    "what_next": "low",
+    "health": "low",
+    "plate_health": "low",
+    "cost_rollup": "low",
+    "plate_costs": "low",
+    "status": "low",
+    "babysit": "medium",
+    "feedback_integration": "medium",
+    "run_procedure": "medium",
+    "info_audit": "medium",
+    "perform_information_audit": "medium",
+    "plan_epic": "medium",
+    "delegate": "medium",
+    "plate_delegate_to_agent": "medium",
+    "drift": "medium",
+    "nightly_drift_detection": "medium",
+    "auto_merge": "high",
+    "merge_to_main": "high",
+    "open_pr": "high",
+    "apply_migration": "high",
+    "release_cut": "critical",
+    "release_finalize": "critical",
+    "deploy": "critical",
+    "force_push": "critical",
+    "marketplace_publish": "critical",
+    "secret_change": "critical",
+}
+
+_SIDE_EFFECTS: dict[str, list[str]] = {
+    "release_cut": [
+        "Create versioned release branch / notes under .agentic/releases/vX.Y.Z/",
+        "Rename Next Release issue; open fresh Next Release",
+        "Aggregate unreleased fragments into release.json",
+    ],
+    "release_finalize": [
+        "Create GitHub Release + tag assets",
+        "Hard-reset release track branch to tag (force-with-lease)",
+        "Fire downstream extension release_checks",
+    ],
+    "deploy": [
+        "Push or promote artifacts to production environment",
+        "May update live services / marketplace listings",
+    ],
+    "force_push": [
+        "Rewrite remote branch history (force-with-lease or force)",
+        "Can disrupt open PRs and collaborator clones",
+    ],
+    "marketplace_publish": [
+        "Publish package/extension to external marketplace",
+        "Requires human account ownership (Task gate)",
+    ],
+    "auto_merge": [
+        "Enable auto-merge or merge eligible PR to integration branch",
+        "May land code without interactive human click",
+    ],
+    "merge_to_main": [
+        "Merge Release PR into main (tagged history)",
+        "Triggers tag/finalization workflows",
+    ],
+    "open_pr": [
+        "Open pull request on GitHub",
+        "Triggers CI and review notifications",
+    ],
+    "apply_migration": [
+        "Mutate repository files / config for template cutover",
+        "Creates rollback checkpoint tags when supported",
+    ],
+    "plan_epic": [
+        "Create Epic + child stub issues and labels",
+        "May auto-stub at high risk_tolerance",
+    ],
+    "info_audit": [
+        "Scan Goals/wiki/issues; may open Question issues",
+        "Write audit proposals (dry_run skips creation)",
+    ],
+    "run_procedure": [
+        "Execute allow-listed procedure steps (audit/babysit/costs)",
+        "Post PLATE-PROCEDURE-RUN marker when applied",
+    ],
+    "babysit": [
+        "Inspect PR gates; may resolve threads / post trigger comments",
+        "Optional local-rebase push when strategy allows",
+    ],
+    "what_next": [
+        "Read-only process recommendation (no mutations)",
+    ],
+    "health": [
+        "Read-only health report",
+    ],
+}
+
+
+def classify_action_impact(action_kind: str, scope: dict[str, Any] | None = None) -> str:
+    """Return impact level for an action kind (#645).
+
+    Scope may raise impact (e.g. procedure risk_level=high → at least high).
+    """
+    scope = scope or {}
+    kind = (action_kind or "unknown").lower().replace("-", "_")
+    impact = _ACTION_IMPACT.get(kind, "medium")
+    # Procedure risk can escalate impact
+    proc_risk = (scope.get("risk_level") or scope.get("procedure_risk") or "").lower()
+    if proc_risk in ("high", "critical"):
+        order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        if order.get(proc_risk, 0) > order.get(impact, 0):
+            impact = proc_risk if proc_risk != "high" else "high"
+            if proc_risk == "critical":
+                impact = "critical"
+    # Explicit critical flags in scope
+    if scope.get("touches_secrets") or scope.get("force") is True and kind in ("push", "reset"):
+        impact = "critical"
+    return impact
+
+
+@dataclass
+class ShadowReport:
+    """Structured shadow/simulation preview for high-impact actions (#645)."""
+    action_kind: str
+    impact: str  # low | medium | high | critical
+    mode: str = "shadow"
+    estimated_tokens: int = 0
+    estimated_duration_seconds: int = 0
+    estimated_cost_usd: float = 0.0
+    predicted_side_effects: list[str] = field(default_factory=list)
+    requires_approval: bool = False
+    approval_reasons: list[str] = field(default_factory=list)
+    risk_allowed: bool = False
+    would_execute: bool = False
+    gate_preview: list[str] = field(default_factory=list)
+    shadow_id: str = ""
+    timestamp: str = ""
+    scope: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 class AutonomyEngine:
     """The core engine for long-running autonomous PLATE operation.
 
@@ -125,6 +265,173 @@ class AutonomyEngine:
         self._spent_today: int = 0
         self._last_reset = datetime.now(timezone.utc).date()
         self.throttled_actions: int = 0  # for #479 autopilot calc and status
+        # #645: in-memory shadow previews (shadow_id -> ShadowReport); host may re-simulate for durable ack
+        self._shadow_previews: dict[str, ShadowReport] = {}
+
+    def simulate_action(
+        self, action_kind: str, scope: dict[str, Any] | None = None
+    ) -> ShadowReport:
+        """Produce a shadow/simulation preview for an action without side effects (#645).
+
+        Returns cost/risk/side-effect estimates and whether human approval is required
+        before a real run. Call gate_high_impact(..., shadow_ack=report.shadow_id, approved=...)
+        before executing high/critical actions.
+        """
+        scope = dict(scope or {})
+        kind = (action_kind or "unknown").lower().replace("-", "_")
+        impact = classify_action_impact(kind, scope)
+        est = self.estimate_cost(kind, scope)
+        # Rough duration + USD (heuristic; observability not billing)
+        duration = max(5, min(3600, int(est / 80)))
+        usd_per_1k = 0.002  # conservative placeholder for projections
+        est_usd = round((est / 1000.0) * usd_per_1k, 4)
+
+        side_effects = list(_SIDE_EFFECTS.get(kind, [
+            f"Would attempt autonomous action '{kind}'",
+            "May create/update GitHub issues, PRs, or comments",
+        ]))
+        if scope.get("version"):
+            side_effects.append(f"Target version: {scope['version']}")
+        if scope.get("pr_number"):
+            side_effects.append(f"Target PR: #{scope['pr_number']}")
+
+        impact_rank = self._impact_rank(impact)
+        risk_rank = self._risk_rank(self.risk_tolerance)
+        # Critical always needs human; high needs human at low tolerance; medium+ ok at medium+
+        reasons: list[str] = []
+        requires = False
+        if impact == "critical":
+            requires = True
+            reasons.append("critical impact always requires human approval (deploy/release/force-push/secrets/marketplace)")
+        elif impact == "high" and risk_rank < self._risk_rank("medium"):
+            requires = True
+            reasons.append("high-impact action blocked at risk_tolerance=low without explicit approval")
+        elif impact == "high" and risk_rank < self._risk_rank("high"):
+            # medium tolerance: high still requires approval for safety gate (#645)
+            requires = True
+            reasons.append("high-impact action requires approval at medium risk_tolerance (use shadow then approve)")
+        if not self.enabled or self.risk_tolerance == "off":
+            # preview still useful; live auto would not run
+            if impact_rank >= self._impact_rank("medium"):
+                requires = True
+                reasons.append("autonomy disabled or risk_tolerance=off — live execution not permitted")
+
+        risk_allowed = risk_rank >= impact_rank and self.enabled and self.risk_tolerance != "off"
+        # critical never risk_allowed for unsupervised
+        if impact == "critical":
+            risk_allowed = False
+
+        would_execute = (not requires) and risk_allowed and impact_rank <= risk_rank
+
+        gate_preview = [
+            "budget: enforce_budget(estimate) before real run",
+            f"risk_tolerance={self.risk_tolerance} vs impact={impact}",
+        ]
+        if impact in ("high", "critical"):
+            gate_preview.extend([
+                "human checkpoint / Task if secrets, marketplace, or release ceremony",
+                "feedback-resolution + required checks before merge-class actions",
+                "no mutation of AGENTS.md/SPEC.md/workflows without human",
+            ])
+        if kind in ("release_cut", "release_finalize"):
+            gate_preview.append("release_checks: marketing-copy-reviewed, release-notes-complete, release-issue-open")
+
+        ts = datetime.now(timezone.utc).isoformat()
+        # Stable-enough id for session ack (not a secret)
+        shadow_id = f"shadow-{kind}-{abs(hash((kind, ts, est, impact))) % 10**10}"
+
+        report = ShadowReport(
+            action_kind=kind,
+            impact=impact,
+            mode="shadow",
+            estimated_tokens=est,
+            estimated_duration_seconds=duration,
+            estimated_cost_usd=est_usd,
+            predicted_side_effects=side_effects,
+            requires_approval=requires,
+            approval_reasons=reasons,
+            risk_allowed=risk_allowed,
+            would_execute=would_execute,
+            gate_preview=gate_preview,
+            shadow_id=shadow_id,
+            timestamp=ts,
+            scope=scope,
+        )
+        self._shadow_previews[shadow_id] = report
+        return report
+
+    def gate_high_impact(
+        self,
+        action_kind: str,
+        *,
+        shadow_ack: str | None = None,
+        approved: bool = False,
+        scope: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Hard gate for high-impact live actions (#645).
+
+        Returns {blocked, mode, shadow_report?, reason?}.
+        - critical: blocked unless approved=True and valid shadow_ack
+        - high at low/medium risk: blocked unless approved=True and shadow_ack
+        - low impact: not blocked
+        """
+        scope = scope or {}
+        kind = (action_kind or "unknown").lower().replace("-", "_")
+        impact = classify_action_impact(kind, scope)
+        shadow = None
+        if shadow_ack and shadow_ack in self._shadow_previews:
+            shadow = self._shadow_previews[shadow_ack]
+        elif shadow_ack is None:
+            shadow = self.simulate_action(kind, scope)
+        else:
+            # Unknown ack: re-simulate for report but treat as missing ack
+            shadow = self.simulate_action(kind, scope)
+
+        if impact in ("low", "medium"):
+            # medium may still require approval when autonomy off
+            if shadow.requires_approval and not approved:
+                return {
+                    "blocked": True,
+                    "mode": "shadow_required",
+                    "reason": "; ".join(shadow.approval_reasons) or "approval required",
+                    "shadow_report": shadow.to_dict(),
+                }
+            return {
+                "blocked": False,
+                "mode": "allowed",
+                "shadow_report": shadow.to_dict(),
+            }
+
+        # high / critical
+        ack_ok = bool(shadow_ack) and (
+            shadow_ack in self._shadow_previews
+            or (shadow and shadow.shadow_id == shadow_ack)
+        )
+        if impact == "critical":
+            if approved and ack_ok:
+                return {"blocked": False, "mode": "approved", "shadow_report": shadow.to_dict()}
+            return {
+                "blocked": True,
+                "mode": "shadow_required",
+                "reason": "critical action requires shadow preview + explicit approved=True",
+                "shadow_report": shadow.to_dict(),
+            }
+
+        # high
+        if approved and ack_ok:
+            return {"blocked": False, "mode": "approved", "shadow_report": shadow.to_dict()}
+        if ack_ok and self._risk_rank(self.risk_tolerance) >= self._risk_rank("high") and not shadow.requires_approval:
+            return {"blocked": False, "mode": "shadow_acked", "shadow_report": shadow.to_dict()}
+        return {
+            "blocked": True,
+            "mode": "shadow_required",
+            "reason": "high-impact action requires shadow preview and approval (or high risk_tolerance policy)",
+            "shadow_report": shadow.to_dict(),
+        }
+
+    def _impact_rank(self, level: str) -> int:
+        order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        return order.get((level or "").lower(), 1)
 
     def estimate_cost(self, action_kind: str, scope: dict[str, Any] | None = None) -> int:
         """#471 estimation heuristics wired for #474: tool/scope/historical + 1.5-2x over-est + 20% buffer + cap.
@@ -150,6 +457,15 @@ class AutonomyEngine:
             "cost_rollup": 1800,
             "drift": 5500,
             "nightly_drift_detection": 5500,
+            "auto_merge": 2500,
+            "merge_to_main": 3000,
+            "open_pr": 2000,
+            "release_cut": 9000,
+            "release_finalize": 7000,
+            "deploy": 8000,
+            "force_push": 1500,
+            "marketplace_publish": 6000,
+            "apply_migration": 5000,
             "unknown": 2200,
             "default": 2200,
         }
@@ -174,23 +490,25 @@ class AutonomyEngine:
                 hist_avg = int(cr.get("total_tokens", 0) / max(1, len(reps)))
         if hist_avg <= 0:
             try:
-                # Prefer structured report (already parsed via harvest/TOKENS_RE) over fragile md scrape
-                cr = get_cost_report() if "get_cost_report" in globals() or True else None
-                if cr and getattr(cr, "total_tokens", 0):
-                    reps = getattr(cr, "reports", []) or cr.to_dict().get("reports", []) if hasattr(cr, "to_dict") else []
-                    if reps:
-                        hist_avg = int(getattr(cr, "total_tokens", 0) / max(1, len(reps)))
-                if hist_avg <= 0:
-                    costs_path = Path(".agentic/COSTS.md")
-                    if costs_path.exists():
-                        txt = costs_path.read_text(encoding="utf-8", errors="ignore")
-                        # Robust: use the same USAGE_BLOCK_RE + TOKENS_RE as costs.py (no bare table-col regex)
-                        from .costs import USAGE_BLOCK_RE as _UBR, TOKENS_RE as _TR
-                        for m in _UBR.finditer(txt):
-                            block = m.group(1) or ""
-                            tm = _TR.search(block)
-                            if tm:
-                                hist_avg = max(hist_avg, int(tm.group(1)))
+                # Prefer local COSTS.md scrape (fast) over remote get_cost_report (can hang offline).
+                # Only hit network when repo is set and local file yields nothing.
+                costs_path = Path(".agentic/COSTS.md")
+                if costs_path.exists():
+                    txt = costs_path.read_text(encoding="utf-8", errors="ignore")
+                    from .costs import USAGE_BLOCK_RE as _UBR, TOKENS_RE as _TR
+                    for m in _UBR.finditer(txt):
+                        block = m.group(1) or ""
+                        tm = _TR.search(block)
+                        if tm:
+                            hist_avg = max(hist_avg, int(tm.group(1)))
+                if hist_avg <= 0 and self.repo:
+                    cr = get_cost_report(self.repo)
+                    if cr and getattr(cr, "total_tokens", 0):
+                        reps = getattr(cr, "reports", []) or (
+                            cr.to_dict().get("reports", []) if hasattr(cr, "to_dict") else []
+                        )
+                        if reps:
+                            hist_avg = int(getattr(cr, "total_tokens", 0) / max(1, len(reps)))
             except Exception:
                 pass
         if hist_avg > 100:
@@ -464,12 +782,59 @@ class AutonomyEngine:
         )
         return report
 
-    def run_procedure(self, proc_id: str, *, dry_run: bool = False) -> dict[str, Any]:
-        """Run a named procedure (from .agentic/procedures/ or built-in)."""
-        if dry_run:
-            return {"proc_id": proc_id, "status": "dry-run"}
-        # Find def for logging
+    def run_procedure(
+        self,
+        proc_id: str,
+        *,
+        dry_run: bool = False,
+        shadow_ack: str | None = None,
+        approved: bool = False,
+    ) -> dict[str, Any]:
+        """Run a named procedure (from .agentic/procedures/ or built-in).
+
+        High-risk procedures at low risk_tolerance return status=shadow_required with a
+        shadow_report (#645) instead of executing, unless approved after simulate.
+        """
         pdef = next((p for p in self.procedures if p.id == proc_id), None)
+        scope: dict[str, Any] = {"id": proc_id}
+        if pdef is not None:
+            scope["risk_level"] = pdef.risk_level
+            scope["procedure_risk"] = pdef.risk_level
+        if dry_run:
+            shadow = self.simulate_action("run_procedure", scope)
+            return {
+                "proc_id": proc_id,
+                "status": "dry-run",
+                "shadow_report": shadow.to_dict(),
+            }
+        # #645 gate: high/critical procedure risk under low tolerance → shadow_required
+        impact = classify_action_impact("run_procedure", scope)
+        if impact in ("high", "critical") or (
+            pdef is not None and self._risk_rank(pdef.risk_level) > self._risk_rank(self.risk_tolerance)
+        ):
+            gate = self.gate_high_impact(
+                "run_procedure" if impact != "critical" else "deploy",
+                shadow_ack=shadow_ack,
+                approved=approved,
+                scope=scope,
+            )
+            # Prefer classifying via procedure risk when higher than kind default
+            if pdef is not None and pdef.risk_level == "high" and self._risk_rank(self.risk_tolerance) < self._risk_rank("medium"):
+                if not approved:
+                    shadow = self.simulate_action("run_procedure", scope)
+                    return {
+                        "proc_id": proc_id,
+                        "status": "shadow_required",
+                        "shadow_report": shadow.to_dict(),
+                        "reason": "high-risk procedure requires shadow + approval at current risk_tolerance",
+                    }
+            if gate.get("blocked"):
+                return {
+                    "proc_id": proc_id,
+                    "status": "shadow_required",
+                    "shadow_report": gate.get("shadow_report"),
+                    "reason": gate.get("reason"),
+                }
         # In full impl: dispatch steps using allow-listed MCP calls (e.g. plate_perform_information_audit, plate_pr_babysit, plate_costs)
         # For now, record marker + usage (as required by PLATE for procedures)
         marker = f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence={pdef.cadence if pdef else 'unknown'} risk={pdef.risk_level if pdef else 'unknown'} -->"
@@ -503,3 +868,13 @@ def get_autonomy_status(repo: str | None = None) -> dict[str, Any]:
 def run_autonomy_cycle(repo: str | None = None, dry_run: bool = False, max_steps: int | None = None) -> dict[str, Any]:
     engine = AutonomyEngine(repo=repo)
     return engine.run_cycle(dry_run=dry_run, max_steps=max_steps).to_dict()
+
+
+def simulate_autonomy_action(
+    action_kind: str,
+    repo: str | None = None,
+    scope: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Module helper: shadow/simulate a single action (#645)."""
+    engine = AutonomyEngine(repo=repo)
+    return engine.simulate_action(action_kind, scope=scope).to_dict()

@@ -190,9 +190,159 @@ class TestAutonomyEngine(unittest.TestCase):
         self.assertIn("burn_rate", d)
 
 
+class TestShadowSimulation645(unittest.TestCase):
+    """#645: simulation/shadow mode for high-impact autonomous actions."""
+
+    def setUp(self):
+        self._patches = [
+            patch("plate_core.autonomy.get_cost_report", side_effect=Exception("no network")),
+            patch("plate_core.autonomy.get_health", side_effect=Exception("no network")),
+            patch("plate_core.autonomy.get_epic_status", side_effect=Exception("no network")),
+            patch(
+                "plate_core.autonomy.get_plate_config_report",
+                return_value=type("R", (), {"to_dict": lambda self: {}})(),
+            ),
+            patch(
+                "plate_core.autonomy.load_plate_config",
+                return_value=type(
+                    "C",
+                    (),
+                    {
+                        "to_dict": lambda self: {
+                            "autonomy": {
+                                "enabled": True,
+                                "risk_tolerance": "medium",
+                                "token_budget": {"daily": 50000, "per_cycle": 8000},
+                            }
+                        }
+                    },
+                )(),
+            ),
+        ]
+        for p in self._patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_classify_impact_catalog(self):
+        from plate_core.autonomy import classify_action_impact
+        self.assertEqual(classify_action_impact("what_next"), "low")
+        self.assertEqual(classify_action_impact("health"), "low")
+        self.assertEqual(classify_action_impact("babysit"), "medium")
+        self.assertEqual(classify_action_impact("auto_merge"), "high")
+        self.assertEqual(classify_action_impact("release_cut"), "critical")
+        self.assertEqual(classify_action_impact("deploy"), "critical")
+        self.assertEqual(classify_action_impact("force_push"), "critical")
+        self.assertEqual(classify_action_impact("marketplace_publish"), "critical")
+        self.assertEqual(classify_action_impact("totally_unknown_action"), "medium")
+
+    def test_simulate_action_returns_shadow_report(self):
+        from plate_core.autonomy import AutonomyEngine
+        engine = AutonomyEngine(repo=None)
+        engine.enabled = True
+        engine.risk_tolerance = "low"
+        engine.autonomy_config = {
+            "enabled": True,
+            "risk_tolerance": "low",
+            "token_budget": {"daily": 50000, "per_cycle": 8000, "action": "throttle"},
+            "cost_ceiling_usd": 10.0,
+        }
+        report = engine.simulate_action("release_cut", scope={"version": "1.0.0"})
+        d = report.to_dict()
+        self.assertEqual(d["mode"], "shadow")
+        self.assertEqual(d["action_kind"], "release_cut")
+        self.assertEqual(d["impact"], "critical")
+        self.assertTrue(d["requires_approval"])
+        self.assertFalse(d["would_execute"])
+        self.assertIsInstance(d["predicted_side_effects"], list)
+        self.assertGreater(len(d["predicted_side_effects"]), 0)
+        self.assertGreater(d["estimated_tokens"], 0)
+        self.assertTrue(d["shadow_id"])
+        self.assertIsInstance(d["approval_reasons"], list)
+        self.assertIsInstance(d["gate_preview"], list)
+
+    def test_simulate_low_impact_no_approval(self):
+        from plate_core.autonomy import AutonomyEngine
+        engine = AutonomyEngine(repo=None)
+        engine.enabled = True
+        engine.risk_tolerance = "medium"
+        engine.autonomy_config = {
+            "enabled": True,
+            "risk_tolerance": "medium",
+            "token_budget": {"daily": 50000, "per_cycle": 8000},
+        }
+        report = engine.simulate_action("what_next")
+        d = report.to_dict()
+        self.assertEqual(d["impact"], "low")
+        self.assertFalse(d["requires_approval"])
+        self.assertTrue(d["would_execute"])
+        self.assertTrue(d["risk_allowed"])
+
+    def test_high_impact_blocked_without_shadow_ack_at_low_risk(self):
+        from plate_core.autonomy import AutonomyEngine
+        engine = AutonomyEngine(repo=None)
+        engine.enabled = True
+        engine.risk_tolerance = "low"
+        engine.autonomy_config = {
+            "enabled": True,
+            "risk_tolerance": "low",
+            "token_budget": {"daily": 50000, "per_cycle": 8000},
+        }
+        blocked = engine.gate_high_impact("auto_merge", shadow_ack=None)
+        self.assertTrue(blocked["blocked"])
+        self.assertEqual(blocked["mode"], "shadow_required")
+        self.assertIn("shadow_report", blocked)
+        shadow = engine.simulate_action("auto_merge")
+        still = engine.gate_high_impact("auto_merge", shadow_ack=shadow.shadow_id, approved=False)
+        self.assertTrue(still["blocked"])
+        ok = engine.gate_high_impact("auto_merge", shadow_ack=shadow.shadow_id, approved=True)
+        self.assertFalse(ok["blocked"])
+
+    def test_critical_always_requires_approval(self):
+        from plate_core.autonomy import AutonomyEngine
+        engine = AutonomyEngine(repo=None)
+        engine.enabled = True
+        engine.risk_tolerance = "high"
+        engine.autonomy_config = {
+            "enabled": True,
+            "risk_tolerance": "high",
+            "token_budget": {"daily": 50000, "per_cycle": 8000},
+        }
+        shadow = engine.simulate_action("deploy")
+        self.assertTrue(shadow.to_dict()["requires_approval"])
+        blocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=False)
+        self.assertTrue(blocked["blocked"])
+        unblocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=True)
+        self.assertFalse(unblocked["blocked"])
+
+    def test_run_procedure_high_risk_shadow_default_when_low_tolerance(self):
+        from plate_core.autonomy import AutonomyEngine, ProcedureDef
+        engine = AutonomyEngine(repo=None)
+        engine.enabled = True
+        engine.risk_tolerance = "low"
+        engine.autonomy_config = {
+            "enabled": True,
+            "risk_tolerance": "low",
+            "token_budget": {"daily": 5e4, "per_cycle": 8e3},
+        }
+        engine.procedures = [
+            ProcedureDef(
+                id="risky-proc",
+                cadence="manual",
+                risk_level="high",
+                enabled=True,
+                description="high impact",
+            ),
+        ]
+        result = engine.run_procedure("risky-proc", dry_run=False)
+        self.assertEqual(result.get("status"), "shadow_required")
+        self.assertIn("shadow_report", result)
+
+    def test_module_level_simulate_helper(self):
+        from plate_core.autonomy import simulate_autonomy_action
+        d = simulate_autonomy_action("release_finalize", repo=None)
+        self.assertEqual(d["mode"], "shadow")
+        self.assertEqual(d["impact"], "critical")
+
+
 if __name__ == "__main__":
     unittest.main()
-
-
-
-
