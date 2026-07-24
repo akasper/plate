@@ -531,7 +531,15 @@ def cmd_release_notes(args: argparse.Namespace) -> int:
 
 
 def cmd_costs(args: argparse.Namespace) -> int:
-    from .costs import format_cost_markdown, get_cost_report
+    from .costs import format_cost_markdown, get_cost_dashboard, get_cost_report
+
+    if getattr(args, "dashboard", False):
+        dash = get_cost_dashboard(repo=args.repo, epic_label=getattr(args, "epic_label", None))
+        if args.json:
+            print(json.dumps(dash))
+            return 0
+        print(dash.get("markdown") or json.dumps(dash, indent=2))
+        return 0
 
     report = get_cost_report(repo=args.repo, epic_label=getattr(args, "epic_label", None))
     if args.json:
@@ -1154,6 +1162,11 @@ def build_parser() -> argparse.ArgumentParser:
     costs = sub.add_parser("costs", help="Harvest and aggregate USAGE REPORTs for observability/cost tracking (Epic #265)")
     costs.add_argument("--repo", help="owner/name; defaults to git remote origin")
     costs.add_argument("--epic-label", dest="epic_label", help="Filter to reports under a specific Epic: label (e.g. Epic: beta-roadmap)")
+    costs.add_argument(
+        "--dashboard",
+        action="store_true",
+        help="Cost+risk dashboard with budgets, burn, drift signals, ranked feed items (#653/#634)",
+    )
     costs.add_argument("--json", action="store_true", help="Output JSON")
     costs.set_defaults(func=cmd_costs)
 
