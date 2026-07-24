@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.checkpoint import (
+    checkpoint_approval_for_gate,
     CheckpointStatus,
     autonomy_is_paused_by_checkpoints,
     create_checkpoint,
@@ -137,6 +138,29 @@ class TestCheckpoint648(unittest.TestCase):
         info = autonomy_is_paused_by_checkpoints(base_dir=self.base)
         self.assertTrue(info["paused"])
         self.assertGreaterEqual(info["open_count"], 1)
+
+
+
+
+    def test_checkpoint_approval_for_gate(self):
+        shadow = {
+            "action_kind": "deploy",
+            "impact": "critical",
+            "shadow_id": "shadow-deploy-gate-1",
+            "approval_reasons": ["critical"],
+            "estimated_tokens": 1000,
+            "estimated_cost_usd": 0.01,
+            "predicted_side_effects": [],
+            "gate_preview": [],
+        }
+        cp = create_checkpoint_for_shadow(shadow, base_dir=self.base)
+        pending = checkpoint_approval_for_gate(cp["id"], action_kind="deploy", base_dir=self.base)
+        self.assertFalse(pending["approved"])
+        decided = decide_checkpoint(cp["id"], "approve", base_dir=self.base)
+        self.assertTrue(decided["ok"])
+        ok = checkpoint_approval_for_gate(cp["id"], action_kind="deploy", base_dir=self.base)
+        self.assertTrue(ok["approved"])
+        self.assertEqual(ok["shadow_id"], "shadow-deploy-gate-1")
 
 
 class TestAutonomyCheckpointPause(unittest.TestCase):
