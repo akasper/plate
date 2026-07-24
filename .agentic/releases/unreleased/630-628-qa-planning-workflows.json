@@ -1,0 +1,25 @@
+{
+  "slug": "630-628-qa-planning-workflows",
+  "change_type": "feature",
+  "surface": "src/plate_core/planning.py, mcp_server.py, cli.py",
+  "summary": "Q&A-driven feature (#630) and product (#628) planning: question scripts, session start/answer/build, proposed Feature/Epic stubs with ACs/tests/media/approval prompts; MCP plate_planning_* + gh plate plan.",
+  "migration_impact": "New planning MCP tools and gh plate plan. Host still creates GitHub issues after human approval. No breaking changes to plate_plan_epic.",
+  "migration_guidance": [
+    "1. Upgrade plate_core surfaces.",
+    "2. Feature planning: plate_planning_start kind=feature → answer loop → plate_planning_build → present plan for approval.",
+    "3. Product planning: kind=product for multi-Epic stub proposals.",
+    "4. Do not create issues until user approves the plan."
+  ],
+  "agent_notes": "Use native ask_user_question for each next_question. Closes planning stubs for #630/#628 first slice; full define-feature-requirements skill integration is follow-up.",
+  "breaking": false,
+  "links": [
+    "#630",
+    "#628",
+    "#654",
+    "#656",
+    "#631"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
