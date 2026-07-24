@@ -4,6 +4,7 @@ from unittest.mock import patch
 from plate_core.pr_babysit import (
     _default_agent_match,
     _extract_actionable_threads,
+    _extract_outdated_unresolved_threads,
     _detect_base_branch_out_of_sync,
     babysit_pr,
     resolve_review_thread,
@@ -17,6 +18,20 @@ class _FakeClient:
 
     def api(self, endpoint: str, method: str = "GET", fields: dict | None = None):
         self.calls.append((endpoint, method, fields))
+        # Dispatch GraphQL by mutation/query so resolve and load can share POST endpoint (#605)
+        if endpoint == "graphql" and method == "POST" and fields:
+            query = fields.get("query") or ""
+            if "resolveReviewThread" in query:
+                key = ("graphql", "POST", "resolve")
+                if key in self.responses:
+                    return self.responses[key]
+                # default successful resolve
+                tid = fields.get("threadId", "T?")
+                return {"data": {"resolveReviewThread": {"thread": {"id": tid, "isResolved": True}}}}
+            if "pullRequest" in query or "reviewThreads" in query:
+                key = ("graphql", "POST", "load")
+                if key in self.responses:
+                    return self.responses[key]
         key = (endpoint, method)
         return self.responses.get(key, self.responses.get(endpoint, {}))
 
@@ -55,6 +70,159 @@ class PrBabysitTests(unittest.TestCase):
         actionable = _extract_actionable_threads(threads, agent_logins=None)
         self.assertEqual(len(actionable), 1)
         self.assertEqual(actionable[0]["thread_id"], "T1")
+
+    def test_extract_outdated_unresolved_threads_for_605(self):
+        threads = [
+            {
+                "id": "T_fresh",
+                "isResolved": False,
+                "isOutdated": False,
+                "comments": {"nodes": [{"databaseId": 1, "body": "open", "url": "u1", "author": {"login": "devin-ai"}}]},
+            },
+            {
+                "id": "T_outdated",
+                "isResolved": False,
+                "isOutdated": True,
+                "comments": {"nodes": [{"databaseId": 2, "body": "fixed", "url": "u2", "author": {"login": "copilot"}}]},
+            },
+            {
+                "id": "T_resolved_outdated",
+                "isResolved": True,
+                "isOutdated": True,
+                "comments": {"nodes": [{"databaseId": 3, "body": "done", "url": "u3", "author": {"login": "devin-ai"}}]},
+            },
+        ]
+        candidates = _extract_outdated_unresolved_threads(threads)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["thread_id"], "T_outdated")
+
+    def test_babysit_pr_act_auto_resolves_outdated_unresolved_threads_605(self):
+        """#605: act=True must resolve outdated+unresolved threads (post-fix state)."""
+        repo = "akasper/plate"
+        pr = 601
+        threads_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "CLEAN",
+                        "baseRefName": "main",
+                        "headRefName": "feature/x",
+                        "reviewThreads": {
+                            "nodes": [
+                                {
+                                    "id": "PRRT_outdated_1",
+                                    "isResolved": False,
+                                    "isOutdated": True,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 201,
+                                                "body": "please rename",
+                                                "url": "https://example.com/t1",
+                                                "author": {"login": "akasper"},
+                                            }
+                                        ]
+                                    },
+                                },
+                                {
+                                    "id": "PRRT_outdated_2",
+                                    "isResolved": False,
+                                    "isOutdated": True,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 202,
+                                                "body": "nit",
+                                                "url": "https://example.com/t2",
+                                                "author": {"login": "copilot-pull-request-reviewer"},
+                                            }
+                                        ]
+                                    },
+                                },
+                                {
+                                    "id": "PRRT_still_actionable",
+                                    "isResolved": False,
+                                    "isOutdated": False,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 203,
+                                                "body": "still open",
+                                                "url": "https://example.com/t3",
+                                                "author": {"login": "devin-ai"},
+                                            }
+                                        ]
+                                    },
+                                },
+                            ]
+                        },
+                    }
+                }
+            }
+        }
+        fake = _FakeClient(
+            responses={
+                ("graphql", "POST", "load"): threads_payload,
+                (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+                (f"repos/{repo}/issues/{pr}/comments", "POST"): {"html_url": "https://example.com/posted"},
+            }
+        )
+        report = babysit_pr(repo=repo, pr_number=pr, act=True, client=fake)
+        self.assertEqual(report.actionable_threads, 1)
+        self.assertEqual(report.auto_resolved_threads, 2)
+        self.assertEqual(
+            set(report.auto_resolved_thread_ids or []),
+            {"PRRT_outdated_1", "PRRT_outdated_2"},
+        )
+        resolve_calls = [
+            c for c in fake.calls
+            if c[0] == "graphql" and c[1] == "POST" and c[2] and "resolveReviewThread" in (c[2].get("query") or "")
+        ]
+        self.assertEqual(len(resolve_calls), 2)
+        resolved_ids = {c[2]["threadId"] for c in resolve_calls}
+        self.assertEqual(resolved_ids, {"PRRT_outdated_1", "PRRT_outdated_2"})
+
+    def test_babysit_pr_without_act_does_not_auto_resolve_605(self):
+        repo = "akasper/plate"
+        pr = 602
+        threads_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "CLEAN",
+                        "baseRefName": "main",
+                        "headRefName": "feature/y",
+                        "reviewThreads": {
+                            "nodes": [
+                                {
+                                    "id": "PRRT_o",
+                                    "isResolved": False,
+                                    "isOutdated": True,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 1,
+                                                "body": "stale",
+                                                "url": "u",
+                                                "author": {"login": "devin-ai"},
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                }
+            }
+        }
+        fake = _FakeClient(responses={("graphql", "POST", "load"): threads_payload})
+        report = babysit_pr(repo=repo, pr_number=pr, act=False, client=fake)
+        self.assertEqual(report.auto_resolved_threads, 0)
+        resolve_calls = [
+            c for c in fake.calls
+            if c[0] == "graphql" and c[1] == "POST" and c[2] and "resolveReviewThread" in (c[2].get("query") or "")
+        ]
+        self.assertEqual(len(resolve_calls), 0)
 
     def test_babysit_pr_posts_trigger_comment_when_act_true(self):
         repo = "akasper/plate"
