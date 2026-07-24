@@ -318,7 +318,7 @@ When PLATE signals are present (`.plate/`, `AGENTS.md`, Epic labels, release art
 
 ### Routing order for long-running / scheduled work
 1. `gh plate release status` if the work involves branches/PRs/targeting (#513).
-2. `plate_autonomy_status` (or `gh plate autonomy --status`) — read `risk_tolerance`, remaining budget, autopilot_score, due procedures, human checkpoints.
+2. `plate_autonomy_status` (or `gh plate autonomy --status`) — read `risk_tolerance`, remaining budget, autopilot_score, due procedures, human checkpoints (`plate_checkpoint_list` / #648 for open pausing approvals).
 3. If `risk_tolerance` is `off` or autonomy `enabled: false`: do **not** run unsupervised cycles; surface status to the human and fall back to interactive / single-shot work.
 4. If budget is exhausted or throttle action is active: stop or downscope; do not burn more tokens on no-op loops. Prefer one `plate_what_next` + targeted fix.
 5. Otherwise: `plate_autonomy_run_cycle` (prefer `--dry-run` / dry_run first when risk is unknown) or `gh plate autonomy --run`, then `--loop` only when the user/process explicitly wants continuous operation.
