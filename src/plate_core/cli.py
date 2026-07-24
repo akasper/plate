@@ -34,6 +34,7 @@ from .migration import generate_migration_plan, apply_migration_plan
 from .costs import get_cost_report
 from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle, simulate_autonomy_action
 from .checkpoint import create_checkpoint, decide_checkpoint, get_checkpoint, list_checkpoints, list_open_checkpoints
+from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -552,6 +553,65 @@ def cmd_costs(args: argparse.Namespace) -> int:
     print(f"Total cost: {report.total_cost}")
     print()
     print(format_cost_markdown(report))
+    return 0
+
+
+def cmd_ledger(args: argparse.Namespace) -> int:
+    """Provenance / decision ledger CLI (#647)."""
+    if getattr(args, "record", False):
+        out = record_decision(
+            action_kind=getattr(args, "action_kind", None) or "unknown",
+            decision=getattr(args, "decision", None) or "proceed",
+            reason=getattr(args, "reason", None) or "",
+            sources=(getattr(args, "sources", None) or "").split(",") if getattr(args, "sources", None) else [],
+            cost_estimate_tokens=getattr(args, "cost_estimate_tokens", None),
+            risk_tolerance=getattr(args, "risk_tolerance", None) or "",
+            impact=getattr(args, "impact", None) or "",
+            related_issue=getattr(args, "related_issue", None),
+            related_pr=getattr(args, "related_pr", None),
+            shadow_id=getattr(args, "shadow_id", None),
+            checkpoint_id=getattr(args, "checkpoint_id", None),
+            actor=getattr(args, "by", None) or "cli-user",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"recorded {out.get('id')} {out.get('action_kind')} -> {out.get('decision')}")
+        return 0
+    if getattr(args, "get", None):
+        rec = get_decision(args.get)
+        if args.json:
+            print(json.dumps(rec or {"error": "not found"}))
+            return 0 if rec else 1
+        if not rec:
+            print(f"not found: {args.get}", file=sys.stderr)
+            return 1
+        print(f"{rec.get('id')} {rec.get('action_kind')} {rec.get('decision')}: {rec.get('reason')}")
+        return 0
+    if getattr(args, "query", None):
+        rows = query_decisions(args.query, limit=int(getattr(args, "limit", 50) or 50))
+    elif getattr(args, "summary", False):
+        s = ledger_summary(limit=int(getattr(args, "limit", 20) or 20))
+        if args.json:
+            print(json.dumps(s))
+            return 0
+        print(f"ledger entries (recent window): {s.get('count')} by_decision={s.get('by_decision')}")
+        return 0
+    else:
+        rows = list_decisions(
+            action_kind=getattr(args, "action_kind", None),
+            decision=getattr(args, "decision", None),
+            related_issue=getattr(args, "related_issue", None),
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+    if args.json:
+        print(json.dumps({"decisions": rows}))
+        return 0
+    if not rows:
+        print("No ledger entries.")
+        return 0
+    for r in rows:
+        print(f"{r.get('id')} [{r.get('decision')}] {r.get('action_kind')}: {r.get('reason')[:80]}")
     return 0
 
 
@@ -1269,6 +1329,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     costs.add_argument("--json", action="store_true", help="Output JSON")
     costs.set_defaults(func=cmd_costs)
+
+    ledger = sub.add_parser(
+        "ledger",
+        help="Provenance + decision ledger for autonomous actions (#647): record, list, query, get, summary",
+    )
+    ledger.add_argument("--json", action="store_true")
+    ledger.add_argument("--record", action="store_true", help="Record a decision entry")
+    ledger.add_argument("--action-kind", dest="action_kind", help="Action kind for --record or filter")
+    ledger.add_argument("--decision", help="Decision value (proceed|throttle|pause|...)")
+    ledger.add_argument("--reason", help="Why this decision was made")
+    ledger.add_argument("--sources", help="Comma-separated data sources")
+    ledger.add_argument("--cost-estimate-tokens", dest="cost_estimate_tokens", type=int)
+    ledger.add_argument("--risk-tolerance", dest="risk_tolerance")
+    ledger.add_argument("--impact")
+    ledger.add_argument("--related-issue", dest="related_issue", type=int)
+    ledger.add_argument("--related-pr", dest="related_pr", type=int)
+    ledger.add_argument("--shadow-id", dest="shadow_id")
+    ledger.add_argument("--checkpoint-id", dest="checkpoint_id")
+    ledger.add_argument("--by", default="cli-user")
+    ledger.add_argument("--list", action="store_true", help="List recent entries (default)")
+    ledger.add_argument("--query", help="Substring search")
+    ledger.add_argument("--get", metavar="ID", help="Get one entry")
+    ledger.add_argument("--summary", action="store_true", help="Counts by decision")
+    ledger.add_argument("--limit", type=int, default=50)
+    ledger.set_defaults(func=cmd_ledger)
 
     autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
     autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")

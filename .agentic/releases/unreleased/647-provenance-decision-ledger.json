@@ -1,0 +1,25 @@
+{
+  "slug": "647-provenance-decision-ledger",
+  "change_type": "feature",
+  "surface": "src/plate_core/ledger.py, autonomy.py, mcp_server.py, cli.py, agent_guidance.py",
+  "summary": "Provenance + decision ledger (#647): durable .agentic/ledger entries with PLATE-DECISION markers, record/list/query/get/summary MCP+CLI, AutonomyEngine run_cycle writes ledger rows for each decided action.",
+  "migration_impact": "New plate_ledger_* MCP tools and gh plate ledger. Ledger files under .agentic/ledger/ (local durable audit; commit when used as project truth). No breaking config changes.",
+  "migration_guidance": [
+    "1. Upgrade plate_core surfaces.",
+    "2. Optionally gitignore .agentic/ledger/ for local-only, or commit selected entries for audit.",
+    "3. Agents: prefer plate_ledger_record for non-trivial autonomous decisions; query via plate_ledger_query when debugging.",
+    "4. run_cycle now emits ledger: <id> lines in actions_taken."
+  ],
+  "agent_notes": "Complements USAGE REPORT and PLATE-AUTONOMY-CYCLE. Link shadow_id (#645) and checkpoint_id (#648) when present. Full GitHub comment posting of markers is host-side / follow-up.",
+  "breaking": false,
+  "links": [
+    "#647",
+    "#645",
+    "#648",
+    "#654",
+    "#470"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
