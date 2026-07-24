@@ -36,6 +36,13 @@ from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle, s
 from .checkpoint import create_checkpoint, decide_checkpoint, get_checkpoint, list_checkpoints, list_open_checkpoints
 from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
 from .feed import get_user_feed
+from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle
+from .planning import (
+    apply_planning_answer,
+    build_plan_from_session,
+    get_planning_script,
+    start_planning_session,
+)
 from .plate_config import (
 
     PlateConfigError,
@@ -631,6 +638,62 @@ def cmd_feed(args: argparse.Namespace) -> int:
         f"(questions={counts.get('questions')} tasks={counts.get('tasks')} "
         f"returned={counts.get('returned')})"
     )
+def cmd_plan(args: argparse.Namespace) -> int:
+    """Q&A-driven feature/product planning CLI (#628/#630)."""
+    kind = getattr(args, "kind", None) or "feature"
+    if getattr(args, "script", False):
+        out = get_planning_script(kind)
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"Planning script ({out['kind']}): {out['count']} questions")
+        for i, q in enumerate(out["questions"], 1):
+            print(f"  {i}. [{q['id']}] {q['prompt']}")
+        return 0
+
+    if getattr(args, "build_file", None):
+        path = Path(args.build_file)
+        session = json.loads(path.read_text(encoding="utf-8"))
+        out = build_plan_from_session(session)
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "build failed", file=sys.stderr)
+            return 1
+        plan = out["plan"]
+        print(plan.get("title"))
+        print(plan.get("body") or plan.get("summary_body") or "")
+        print(f"requires_approval={plan.get('requires_approval')}")
+        return 0
+
+    # Interactive: start and optionally walk answers from --answers-file
+    start = start_planning_session(kind)
+    if getattr(args, "answers_file", None):
+        answers = json.loads(Path(args.answers_file).read_text(encoding="utf-8"))
+        session = start["session"]
+        if isinstance(answers, list):
+            for a in answers:
+                out = apply_planning_answer(session, str(a))
+                session = out["session"]
+        elif isinstance(answers, dict):
+            session = {**session, "answers": answers, "complete": True, "turn": 99}
+        out = build_plan_from_session(session)
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        plan = out.get("plan") or {}
+        print(plan.get("title"))
+        print(plan.get("body") or plan.get("summary_body") or "")
+        return 0
+
+    if args.json:
+        print(json.dumps(start))
+        return 0
+    nq = start.get("next_question") or {}
+    print(f"Started {kind} planning session.")
+    print(f"Next: [{nq.get('id')}] {nq.get('prompt')}")
+    print("Record answers via MCP plate_planning_answer or --answers-file JSON array, then --build-file session.json")
     return 0
 
 
@@ -1383,6 +1446,16 @@ def build_parser() -> argparse.ArgumentParser:
     feed.add_argument("--no-autonomy", action="store_true", help="Omit autonomy checkpoints")
     feed.add_argument("--json", action="store_true", help="Output JSON")
     feed.set_defaults(func=cmd_feed)
+    plan = sub.add_parser(
+        "plan",
+        help="Q&A-driven feature (#630) or product (#628) planning: script, start session, build stubs",
+    )
+    plan.add_argument("kind", nargs="?", default="feature", choices=["feature", "product"], help="Planning kind")
+    plan.add_argument("--script", action="store_true", help="Print ordered questions")
+    plan.add_argument("--answers-file", dest="answers_file", help="JSON array of answers to walk session offline")
+    plan.add_argument("--build-file", dest="build_file", help="JSON session file to build plan from")
+    plan.add_argument("--json", action="store_true")
+    plan.set_defaults(func=cmd_plan)
 
     autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
     autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")
