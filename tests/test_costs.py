@@ -1,9 +1,14 @@
-"""Tests for costs harvester (Epic #265)."""
+"""Tests for costs harvester (Epic #265) and cost+risk dashboard (#653/#634)."""
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
-from plate_core.costs import get_cost_report, harvest_usage_reports, _parse_usage_block
+from plate_core.costs import (
+    get_cost_dashboard,
+    get_cost_report,
+    harvest_usage_reports,
+    _parse_usage_block,
+)
 
 
 class CostsTests(unittest.TestCase):
@@ -50,6 +55,96 @@ class CostsTests(unittest.TestCase):
         self.assertEqual(rep.total_tokens, 150)
         self.assertIn("0.15", rep.total_cost)
         self.assertEqual(len(rep.reports), 2)
+
+
+class CostDashboard653Tests(unittest.TestCase):
+    def _client_two_reports(self):
+        client = Mock()
+        client.api.side_effect = [
+            {"items": [
+                {"number": 10, "title": "Hot Feature", "labels": [{"name": "Feature"}], "closed_at": "2026-06-01"},
+                {"number": 11, "title": "Cool Q", "labels": [{"name": "Question"}], "closed_at": "2026-06-02"},
+            ]},
+            [{"body": "=== USAGE REPORT ===\ntokens: 5000\ncost: $1.00\nduration: 00:10:00\n=== END ===", "html_url": "u1"}],
+            [{"body": "=== USAGE REPORT ===\ntokens: 200\ncost: $0.05\nduration: 00:01:00\n=== END ===", "html_url": "u2"}],
+        ]
+        return client
+
+    def test_dashboard_budget_risk_feed(self):
+        client = self._client_two_reports()
+        auto = {
+            "enabled": True,
+            "risk_tolerance": "medium",
+            "budget_remaining_tokens": 25000,
+            "budget_remaining_usd": 5.0,
+            "burn_rate": 50.0,
+            "autopilot_score": 70,
+            "open_human_checkpoints": ["cp-1: Approve deploy"],
+            "due_procedures": ["cost-rollup"],
+            "throttled_actions": 1,
+        }
+        health = {
+            "recommendations": ["Add Goals wiki page"],
+            "errors": [],
+        }
+        dash = get_cost_dashboard(
+            repo="akasper/plate",
+            client=client,
+            autonomy_status=auto,
+            health=health,
+        )
+        self.assertEqual(dash["generated_for"], "cost_risk_dashboard")
+        self.assertEqual(dash["cost"]["total_tokens_harvested"], 5200)
+        self.assertIn("budget", dash)
+        self.assertEqual(dash["budget"]["remaining_tokens"], 25000)
+        self.assertTrue(dash["budget"]["enforcement_active"])
+        self.assertEqual(dash["risk"]["risk_tolerance"], "medium")
+        self.assertEqual(dash["risk"]["autopilot_score"], 70)
+        self.assertEqual(dash["projections"]["burn_rate_pct"], 50.0)
+        self.assertEqual(dash["projections"]["projected_days_remaining_at_burn"], 1.0)
+        self.assertTrue(any(i["type"] == "checkpoint" for i in dash["feed_items"]))
+        self.assertTrue(any(i["type"] == "procedure" for i in dash["feed_items"]))
+        self.assertTrue(any(i["type"] == "cost_hotspot" for i in dash["feed_items"]))
+        self.assertTrue(any(s["kind"] == "health_recommendation" for s in dash["drift_signals"]))
+        self.assertIn("Cost + Risk Dashboard", dash["markdown"])
+
+    def test_dashboard_autonomy_off_signal(self):
+        client = self._client_two_reports()
+        dash = get_cost_dashboard(
+            repo="akasper/plate",
+            client=client,
+            autonomy_status={
+                "enabled": False,
+                "risk_tolerance": "off",
+                "budget_remaining_tokens": 50000,
+                "burn_rate": 0.0,
+                "autopilot_score": 20,
+                "open_human_checkpoints": [],
+                "due_procedures": [],
+            },
+            health={},
+        )
+        self.assertFalse(dash["budget"]["enforcement_active"])
+        self.assertTrue(any(s["kind"] == "autonomy_off" for s in dash["drift_signals"]))
+
+    def test_dashboard_high_burn_signal(self):
+        client = self._client_two_reports()
+        dash = get_cost_dashboard(
+            repo="akasper/plate",
+            client=client,
+            autonomy_status={
+                "enabled": True,
+                "risk_tolerance": "high",
+                "budget_remaining_tokens": 5000,
+                "burn_rate": 90.0,
+                "autopilot_score": 40,
+                "open_human_checkpoints": [],
+                "due_procedures": [],
+            },
+            health={},
+        )
+        self.assertTrue(any(s["kind"] == "burn_high" for s in dash["drift_signals"]))
+        self.assertLess(dash["projections"]["projected_days_remaining_at_burn"], 1.0)
 
 
 if __name__ == "__main__":

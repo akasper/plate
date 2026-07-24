@@ -314,10 +314,17 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
             ).to_dict()
         elif name == "plate_costs":
-            payload = get_cost_report(
-                repo=args.get("repo"),
-                epic_label=args.get("epic_label"),
-            ).to_dict()
+            if args.get("dashboard"):
+                from .costs import get_cost_dashboard
+                payload = get_cost_dashboard(
+                    repo=args.get("repo"),
+                    epic_label=args.get("epic_label"),
+                )
+            else:
+                payload = get_cost_report(
+                    repo=args.get("repo"),
+                    epic_label=args.get("epic_label"),
+                ).to_dict()
         elif name == "plate_autonomy_status":
             payload = get_autonomy_status(args.get("repo"))
         elif name == "plate_autonomy_run_cycle":
@@ -1047,7 +1054,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_costs",
-                                "description": "Harvest USAGE REPORT blocks from closed issues (per AGENTS.md), aggregate tokens/cost/duration for observability (Epic #265). Supports epic_label filter. Emits JSON + MD.",
+                                "description": "Harvest USAGE REPORT blocks from closed issues (per AGENTS.md), aggregate tokens/cost/duration for observability (Epic #265). Set dashboard=true for cost+risk dashboard with budgets, burn rate, drift signals, ranked feed items (#653/#634).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -1058,6 +1065,10 @@ def run() -> None:
                                         "epic_label": {
                                             "type": "string",
                                             "description": "Optional 'Epic: foo' label to scope aggregation.",
+                                        },
+                                        "dashboard": {
+                                            "type": "boolean",
+                                            "description": "When true, return cost+risk dashboard (#653/#634) instead of raw aggregate.",
                                         },
                                     },
                                     "required": [],
