@@ -203,7 +203,7 @@ PLATE supports long-running autonomous operation (e.g. Copilot CLI `/every`, Gro
   - "Re-checked health / release status / epic status."
   - Status updates or "still working" notes in a watch/loop.
 - The engine's own PLATE-ANSWER / PLATE-CONTEMPLATION / PLATE-BLOCKING-DUMP markers and required usage-report blocks on closure are **exempt** (they are the auditable record per Issue Artifact Rules). Do not add your own prose comments around routine ones.
-- Autonomy engine markers are likewise **exempt**: `PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`, and required USAGE REPORT blocks produced by `plate_autonomy_run_cycle` / procedure runs (#470 / #480). Do not wrap them in extra "still running" prose.
+- Autonomy engine markers are likewise **exempt**: `PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`, `PLATE-DECISION` ledger markers (#647), and required USAGE REPORT blocks produced by `plate_autonomy_run_cycle` / procedure runs (#470 / #480). Do not wrap them in extra "still running" prose. Use `plate_ledger_record` / `gh plate ledger` for durable decision provenance.
 - Human checkpoints remain (e.g. "Post a summary comment on the Epic issue when all child issues are resolved"). These are explicit, not routine.
 
 ### Q&A / Curiosity question presentation
