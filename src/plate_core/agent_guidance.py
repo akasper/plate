@@ -151,6 +151,7 @@ def get_agent_guidance_sections() -> dict[str, str]:
         "information_audit": INFORMATION_AUDIT_GUIDANCE,
         "quiet_operations": QUIET_OPERATIONS_GUIDANCE,
         "task_management": TASK_MANAGEMENT_GUIDANCE,
+        "autonomy_loops": AUTONOMY_LOOPS_GUIDANCE,
     }
 
 
@@ -202,6 +203,7 @@ PLATE supports long-running autonomous operation (e.g. Copilot CLI `/every`, Gro
   - "Re-checked health / release status / epic status."
   - Status updates or "still working" notes in a watch/loop.
 - The engine's own PLATE-ANSWER / PLATE-CONTEMPLATION / PLATE-BLOCKING-DUMP markers and required usage-report blocks on closure are **exempt** (they are the auditable record per Issue Artifact Rules). Do not add your own prose comments around routine ones.
+- Autonomy engine markers are likewise **exempt**: `PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`, and required USAGE REPORT blocks produced by `plate_autonomy_run_cycle` / procedure runs (#470 / #480). Do not wrap them in extra "still running" prose.
 - Human checkpoints remain (e.g. "Post a summary comment on the Epic issue when all child issues are resolved"). These are explicit, not routine.
 
 ### Q&A / Curiosity question presentation
@@ -300,4 +302,49 @@ Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase d
 - Enhance pr-babysit and planning surfaces to surface/release status output and the determined base automatically where possible.
 
 See AGENTS.md §Branch Model and Ceremonies, §Documentation Rules, Feature/Bug work loops. (Addresses #513.)
+"""
+
+
+AUTONOMY_LOOPS_GUIDANCE = """
+## Autonomy Loops & Engine Surfaces (Epic #470 / Feature #480)
+
+When PLATE signals are present (`.plate/`, `AGENTS.md`, Epic labels, release artifacts), prefer the **AutonomyEngine** surfaces for long-running, scheduled, or budgeted autonomous work instead of ad-hoc shell loops.
+
+### Discoverability (thin surfaces)
+- **MCP:** `plate_autonomy_status`, `plate_autonomy_run_cycle`, `plate_autonomy_list_procedures`, `plate_autonomy_run_procedure`
+- **CLI:** `gh plate autonomy --status | --run [--dry-run] | --loop [--max-cycles N]`
+- **Process next-step:** still call `plate_what_next` first for *what* to do; call `plate_autonomy_status` first for *whether/how* to run a long loop (risk, budget, due procedures).
+- **Config:** `.plate` `autonomy` section — `enabled`, `risk_tolerance` (`off|low|medium|high`), `token_budget`, `cost_ceiling_usd`, `schedules_enabled`, `loop`, `pr_review_scope` (#496).
+
+### Routing order for long-running / scheduled work
+1. `gh plate release status` if the work involves branches/PRs/targeting (#513).
+2. `plate_autonomy_status` (or `gh plate autonomy --status`) — read `risk_tolerance`, remaining budget, autopilot_score, due procedures, human checkpoints.
+3. If `risk_tolerance` is `off` or autonomy `enabled: false`: do **not** run unsupervised cycles; surface status to the human and fall back to interactive / single-shot work.
+4. If budget is exhausted or throttle action is active: stop or downscope; do not burn more tokens on no-op loops. Prefer one `plate_what_next` + targeted fix.
+5. Otherwise: `plate_autonomy_run_cycle` (prefer `--dry-run` / dry_run first when risk is unknown) or `gh plate autonomy --run`, then `--loop` only when the user/process explicitly wants continuous operation.
+6. For procedure-specific work: `plate_autonomy_list_procedures` then `plate_autonomy_run_procedure` within risk cap.
+7. Delegation of coding/review still uses `plate_delegate_to_agent` + pr-babysit (#496 scope, #605 auto-resolve outdated threads). Autonomy coordinates; it does not replace Full PR Green ownership.
+
+### Quiet + budget rules inside autonomy loops
+- Terminal output: **only** terse one-sentence bullets (same as quiet_operations). Never dump full cycle JSON unless the user asked for `--json` / debug.
+- GitHub comments: only on meaningful forward progress or required markers (`PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`, USAGE REPORT). No "cycle N complete, 0 actions" spam.
+- Respect `token_budget.per_cycle` / daily caps and `cost_ceiling_usd`. When status shows throttle or ceiling hit, exit the loop cleanly with one bullet naming the constraint.
+- At `risk_tolerance: low`, prefer dry-run / shadow simulation (#645) and human checkpoints before high-impact actions (deploy, release cut, force-push, secretful ops).
+- At `high`, still never skip human Tasks (real-world credentials, marketplace publish, PyPI) or merge policy gates.
+
+### Markers (auditable record — quiet-exempt)
+- `<!-- PLATE-AUTONOMY-CYCLE -->` … cycle summary + optional USAGE REPORT
+- `<!-- PLATE-PROCEDURE-RUN -->` … procedure id, outcome, risk
+- Same discipline as PLATE-ANSWER / PLATE-CONTEMPLATION: these *are* the record; do not add surrounding chit-chat.
+
+### Coordination with what_next and PM/orchestrator vision
+- `plate_what_next` chooses the next *process* step from health/epics/fragments.
+- Autonomy engine enforces *budget/risk/schedule* around executing steps and built-in procedures.
+- Future PM/Orchestrator (#660) builds on these surfaces; until then, the plate persona + these tools are the supported autonomy path.
+
+### Catalog
+- Skill `run-autonomy-cycle` (owned by project-manager) documents this flow for delegation packets.
+- Keep persona thin; this section is the detailed protocol (#569 guidance architecture).
+
+See `docs/design/autonomous-plate-engine.md`, AGENTS.md Autonomous Mode, quiet_operations, and Epic #470 children. (Addresses #480.)
 """

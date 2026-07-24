@@ -10,7 +10,7 @@
 
 Canonical source: `src/plate_core/data/baseline_catalog.yml`
 
-This catalog defines **26** baseline skills used by PLATE agents.
+This catalog defines **27** baseline skills used by PLATE agents.
 Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same directory.
 
 ## Index
@@ -40,6 +40,7 @@ Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same director
 | `resume-from-answered-question` | Resume from Answered (Blocking) Question | `research-agent`, `project-manager` |
 | `review-discussions` | Review Discussions | `market-researcher`, `dev-relations-expert`, `research-agent` |
 | `review-test-coverage` | Review Test Coverage | `software-engineer`, `ci-engineer` |
+| `run-autonomy-cycle` | Run Autonomy Cycle / Loop | `project-manager` |
 | `run-qanda-session` | Run Q&A Session | `research-agent`, `project-manager` |
 | `update-wiki-to-match-project-state` | Update Wiki to Match Project State | `wiki-editor` |
 | `what-next-plate-process` | What Next? (PLATE Process Guidance) | `research-agent` |
@@ -579,6 +580,31 @@ Assess whether a change has sufficient automated test coverage.
 - Identify missing tests before adding the baseline catalog loader.
 
 **Plugin skill file:** `skills/review-test-coverage/SKILL.md`
+
+### `run-autonomy-cycle` — Run Autonomy Cycle / Loop
+
+Drive long-running PLATE work via AutonomyEngine surfaces: plate_autonomy_status, plate_autonomy_run_cycle, plate_autonomy_list_procedures, plate_autonomy_run_procedure (or gh plate autonomy --status|--run|--loop). Respect .plate autonomy.risk_tolerance, token budgets, and quiet_operations (terse bullets only). Use after plate_what_next when the next step is continuous/scheduled progress. See autonomy_loops guidance (#480 / Epic #470).
+
+**Owning agents:** `project-manager`
+
+**Inputs**
+
+- Live autonomy status (risk_tolerance, budget remaining, due procedures)
+- Optional dry_run flag
+- Optional procedure id
+
+**Outputs**
+
+- Cycle report or status dict
+- Optional PLATE-AUTONOMY-CYCLE / PLATE-PROCEDURE-RUN markers + USAGE REPORT
+- Terse bullet turn summary for loops
+
+**Examples**
+
+- Call plate_autonomy_status; if risk_tolerance is medium and budget remains, plate_autonomy_run_cycle dry_run then live.
+- gh plate autonomy --loop --max-cycles 3 with quiet bullet summaries only.
+
+**Plugin skill file:** `skills/run-autonomy-cycle/SKILL.md`
 
 ### `run-qanda-session` — Run Q&A Session
 
