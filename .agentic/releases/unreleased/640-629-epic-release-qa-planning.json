@@ -1,0 +1,25 @@
+{
+  "slug": "640-629-epic-release-qa-planning",
+  "change_type": "feature",
+  "surface": "src/plate_core/epic_release_planning.py, mcp_server.py, cli.py",
+  "summary": "Q&A epic (#640) and release (#629) planning: scripts, session start/answer/build, risk-aware Epic children, Release notes skeleton + ceremony checklist; MCP plate_er_planning_* + gh plate er-plan.",
+  "migration_impact": "New plate_er_planning_* tools and gh plate er-plan. Independent of feature/product planning surfaces. Host creates issues only after approval.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Epic: plate_er_planning_start kind=epic → answer → build → approve → create Epic+children.",
+    "3. Release: kind=release for scope + notes skeleton; do not cut/tag without ceremony.",
+    "4. high risk auto-adds a second Feature stub; off yields Epic body only."
+  ],
+  "agent_notes": "Use ask_user_question per next_question. Complements plate_plan_epic risk stubs. Approval gate required before GitHub mutations.",
+  "breaking": false,
+  "links": [
+    "#640",
+    "#629",
+    "#654",
+    "#656",
+    "#470"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

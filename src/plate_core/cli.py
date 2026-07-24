@@ -42,6 +42,12 @@ from .planning import (
     get_planning_script,
     start_planning_session,
 )
+from .epic_release_planning import (
+    apply_er_answer,
+    build_er_plan_from_session,
+    get_er_script,
+    start_er_session,
+)
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -692,6 +698,45 @@ def cmd_plan(args: argparse.Namespace) -> int:
     print(f"Started {kind} planning session.")
     print(f"Next: [{nq.get('id')}] {nq.get('prompt')}")
     print("Record answers via MCP plate_planning_answer or --answers-file JSON array, then --build-file session.json")
+    return 0
+
+def cmd_er_plan(args: argparse.Namespace) -> int:
+    """Epic/release Q&A planning CLI (#640/#629)."""
+    kind = getattr(args, "kind", None) or "epic"
+    if getattr(args, "script", False):
+        out = get_er_script(kind)
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"{out['kind']} planning: {out['count']} questions")
+        for i, q in enumerate(out["questions"], 1):
+            print(f"  {i}. [{q['id']}] {q['prompt']}")
+        return 0
+    if getattr(args, "answers_file", None):
+        answers = json.loads(Path(args.answers_file).read_text(encoding="utf-8"))
+        start = start_er_session(kind)
+        session = start["session"]
+        if isinstance(answers, list):
+            for a in answers:
+                out = apply_er_answer(session, str(a))
+                session = out["session"]
+        elif isinstance(answers, dict):
+            session = {**session, "answers": answers, "complete": True}
+        built = build_er_plan_from_session(session)
+        if args.json:
+            print(json.dumps(built))
+            return 0 if built.get("ok") else 1
+        plan = built.get("plan") or {}
+        print(plan.get("title"))
+        print(plan.get("body") or "")
+        return 0
+    start = start_er_session(kind)
+    if args.json:
+        print(json.dumps(start))
+        return 0
+    nq = start.get("next_question") or {}
+    print(f"Started {kind} planning.")
+    print(f"Next: [{nq.get('id')}] {nq.get('prompt')}")
     return 0
 
 
@@ -1454,6 +1499,16 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--build-file", dest="build_file", help="JSON session file to build plan from")
     plan.add_argument("--json", action="store_true")
     plan.set_defaults(func=cmd_plan)
+
+    er_plan = sub.add_parser(
+        "er-plan",
+        help="Q&A epic (#640) or release (#629) planning: script / start / answers-file build",
+    )
+    er_plan.add_argument("kind", nargs="?", default="epic", choices=["epic", "release"])
+    er_plan.add_argument("--script", action="store_true")
+    er_plan.add_argument("--answers-file", dest="answers_file", help="JSON array of answers")
+    er_plan.add_argument("--json", action="store_true")
+    er_plan.set_defaults(func=cmd_er_plan)
 
     autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
     autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")
