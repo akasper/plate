@@ -96,3 +96,23 @@ class TestFeed631(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_structured_checkpoint_feed_item(self):
+        items = build_feed_items(
+            questions=[],
+            tasks=[],
+            checkpoints=[{
+                "id": "cp-abc",
+                "title": "Approve deploy",
+                "impact": "critical",
+                "action_kind": "deploy",
+                "shadow_id": "shadow-x",
+                "reason": "critical impact",
+            }],
+        )
+        self.assertEqual(items[0].id, "cp-abc")
+        self.assertEqual(items[0].item_type, "checkpoint")
+        self.assertIn("plate_checkpoint_decide", items[0].prompt_segment)
+        self.assertIn("checkpoint_id=cp-abc", items[0].prompt_segment)
+        self.assertIn("shadow_ack=shadow-x", items[0].prompt_segment)

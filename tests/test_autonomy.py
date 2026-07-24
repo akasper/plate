@@ -402,3 +402,45 @@ class TestShadowSimulation645(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_gate_honors_approved_checkpoint_id(self):
+        """#648: approved checkpoint_id supplies approved + shadow_ack to gate."""
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine
+        from plate_core.checkpoint import decide_checkpoint
+
+        with tempfile.TemporaryDirectory() as tmp:
+            shadow_dir = Path(tmp) / "shadow"
+            cp_dir = Path(tmp) / "cp"
+            eng = AutonomyEngine(repo=None)
+            eng.enabled = True
+            eng.risk_tolerance = "low"
+            eng.shadow_base_dir = shadow_dir
+            eng.checkpoint_base_dir = cp_dir
+            eng.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "low",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            blocked = eng.gate_high_impact("auto_merge", shadow_ack=None)
+            self.assertTrue(blocked["blocked"])
+            cid = blocked["checkpoint_id"]
+            sid = blocked["shadow_report"]["shadow_id"]
+            decide_checkpoint(cid, "approve", base_dir=cp_dir)
+            # Fresh engine, only checkpoint_id (shadow from durable store + checkpoint)
+            eng2 = AutonomyEngine(repo=None)
+            eng2.enabled = True
+            eng2.risk_tolerance = "low"
+            eng2.shadow_base_dir = shadow_dir
+            eng2.checkpoint_base_dir = cp_dir
+            eng2.autonomy_config = eng.autonomy_config
+            ok = eng2.gate_high_impact(
+                "auto_merge",
+                checkpoint_id=cid,
+                create_checkpoint=False,
+            )
+            self.assertFalse(ok["blocked"], ok)
+            self.assertEqual(ok["mode"], "approved")
+            self.assertEqual(ok["shadow_report"]["shadow_id"], sid)

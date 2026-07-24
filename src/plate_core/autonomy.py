@@ -470,6 +470,7 @@ class AutonomyEngine:
         *,
         shadow_ack: str | None = None,
         approved: bool = False,
+        checkpoint_id: str | None = None,
         scope: dict[str, Any] | None = None,
         create_checkpoint: bool = True,
     ) -> dict[str, Any]:
@@ -481,10 +482,33 @@ class AutonomyEngine:
         - low impact: not blocked
         Durable shadow_ack is resolved from memory or `.agentic/shadow/`.
         When blocked, optionally opens a #648 checkpoint (create_checkpoint=True).
+        Pass checkpoint_id of an *approved* #648 checkpoint to satisfy the human
+        approval leg (shadow_id taken from the checkpoint when shadow_ack omitted).
         """
         scope = scope or {}
         kind = (action_kind or "unknown").lower().replace("-", "_")
         impact = classify_action_impact(kind, scope)
+
+        # #648: approved checkpoint satisfies human leg and can supply shadow_ack
+        if checkpoint_id:
+            try:
+                from .checkpoint import checkpoint_approval_for_gate
+
+                cp_gate = checkpoint_approval_for_gate(
+                    checkpoint_id,
+                    action_kind=kind,
+                    base_dir=self.checkpoint_base_dir,
+                )
+                if cp_gate.get("approved"):
+                    approved = True
+                    if not shadow_ack and cp_gate.get("shadow_id"):
+                        shadow_ack = str(cp_gate["shadow_id"])
+                elif not approved:
+                    # Explicit pending/rejected checkpoint id should not open a new one
+                    create_checkpoint = False
+            except Exception:
+                pass
+
         shadow, ack_ok = self._resolve_shadow(shadow_ack, kind, scope)
 
         def _blocked(mode: str, reason: str) -> dict[str, Any]:
@@ -940,11 +964,13 @@ class AutonomyEngine:
         dry_run: bool = False,
         shadow_ack: str | None = None,
         approved: bool = False,
+        checkpoint_id: str | None = None,
     ) -> dict[str, Any]:
         """Run a named procedure (from .agentic/procedures/ or built-in).
 
         High-risk procedures at low risk_tolerance return status=shadow_required with a
-        shadow_report (#645) instead of executing, unless approved after simulate.
+        shadow_report (#645) instead of executing, unless approved after simulate
+        (or via an approved #648 checkpoint_id).
         """
         pdef = next((p for p in self.procedures if p.id == proc_id), None)
         scope: dict[str, Any] = {"id": proc_id}
@@ -967,6 +993,7 @@ class AutonomyEngine:
                 "run_procedure" if impact != "critical" else "deploy",
                 shadow_ack=shadow_ack,
                 approved=approved,
+                checkpoint_id=checkpoint_id,
                 scope=scope,
                 create_checkpoint=True,
             )
