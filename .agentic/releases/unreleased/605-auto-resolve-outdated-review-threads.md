@@ -22,3 +22,7 @@ links:
 ## Downstream impact
 Agents running `gh plate pr babysit --act` after addressing feedback no longer need a manual
 resolve pass for outdated threads. Non-outdated threads still require explicit resolve or code address.
+
+## Follow-up (PR babysit / CI green)
+- Silence pip auto-install stdout in `gh-plate` so `--json` stays parseable.
+- E2E: set PYTHONPATH to in-tree `src` (CI + catalog-discovery runGhPlate) and tolerate non-JSON prefixes when parsing.
