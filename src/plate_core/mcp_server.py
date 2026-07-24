@@ -44,6 +44,11 @@ from .checkpoint import (
 )
 from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
 from .feed import get_user_feed
+from .planning import (
+    apply_planning_answer,
+    build_plan_from_session,
+    get_planning_script,
+    start_planning_session,
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -225,6 +230,30 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             ).to_dict()
         elif name == "plate_plan_epic":
             payload = _plan_epic_stub(args).to_dict()
+        elif name == "plate_planning_start":
+            payload = start_planning_session(str(args.get("kind") or "feature"))
+        elif name == "plate_planning_answer":
+            session = args.get("session") or {}
+            if isinstance(session, str):
+                try:
+                    session = json.loads(session)
+                except Exception:
+                    session = {}
+            payload = apply_planning_answer(
+                session if isinstance(session, dict) else {},
+                str(args.get("answer") or args.get("answer_text") or ""),
+                question_id=args.get("question_id"),
+            )
+        elif name == "plate_planning_build":
+            session = args.get("session") or {}
+            if isinstance(session, str):
+                try:
+                    session = json.loads(session)
+                except Exception:
+                    session = {}
+            payload = build_plan_from_session(session if isinstance(session, dict) else {})
+        elif name == "plate_planning_script":
+            payload = get_planning_script(str(args.get("kind") or "feature"))
         elif name == "plate_pr_babysit":
             pr_number = args.get("pr_number")
             if pr_number is None:
@@ -803,6 +832,50 @@ def run() -> None:
                                             "type": "object",
                                             "description": "Optional resumption state from a prior planning session.",
                                         },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_planning_start",
+                                "description": "Start Q&A-driven feature (#630) or product (#628) planning session. Returns first question for ask_user_question.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "description": "feature | product"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_planning_answer",
+                                "description": "Record one planning answer and return next question or complete session (#628/#630).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "session": {"type": "object", "description": "Session dict from start/answer."},
+                                        "answer": {"type": "string"},
+                                        "question_id": {"type": "string"},
+                                    },
+                                    "required": ["session", "answer"],
+                                },
+                            },
+                            {
+                                "name": "plate_planning_build",
+                                "description": "Build Feature or product Epic stub plan from completed session answers for human approval (#628/#630).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "session": {"type": "object"},
+                                    },
+                                    "required": ["session"],
+                                },
+                            },
+                            {
+                                "name": "plate_planning_script",
+                                "description": "Return the ordered planning question script for feature or product kind.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
                                     },
                                 },
                             },
