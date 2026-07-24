@@ -35,7 +35,9 @@ from .costs import get_cost_report
 from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle, simulate_autonomy_action
 from .checkpoint import create_checkpoint, decide_checkpoint, get_checkpoint, list_checkpoints, list_open_checkpoints
 from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
+from .feed import get_user_feed
 from .plate_config import (
+
     PlateConfigError,
     apply_plate_config_upgrade,
     get_plate_config_report,
@@ -612,6 +614,23 @@ def cmd_ledger(args: argparse.Namespace) -> int:
         return 0
     for r in rows:
         print(f"{r.get('id')} [{r.get('decision')}] {r.get('action_kind')}: {r.get('reason')[:80]}")
+def cmd_feed(args: argparse.Namespace) -> int:
+    """Endless Q+Task user feed (#631)."""
+    feed = get_user_feed(
+        repo=getattr(args, "repo", None),
+        limit=int(getattr(args, "limit", 10) or 10),
+        include_process=not getattr(args, "no_process", False),
+        include_autonomy=not getattr(args, "no_autonomy", False),
+    )
+    if args.json:
+        print(json.dumps(feed))
+        return 0
+    print(feed.get("markdown") or "")
+    counts = feed.get("counts") or {}
+    print(
+        f"(questions={counts.get('questions')} tasks={counts.get('tasks')} "
+        f"returned={counts.get('returned')})"
+    )
     return 0
 
 
@@ -1354,6 +1373,16 @@ def build_parser() -> argparse.ArgumentParser:
     ledger.add_argument("--summary", action="store_true", help="Counts by decision")
     ledger.add_argument("--limit", type=int, default=50)
     ledger.set_defaults(func=cmd_ledger)
+    feed = sub.add_parser(
+        "feed",
+        help="Endless ranked feed of open Questions + Tasks for user surfacing (#631)",
+    )
+    feed.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    feed.add_argument("--limit", type=int, default=10, help="Max items (default 10)")
+    feed.add_argument("--no-process", action="store_true", help="Omit plate_what_next process item")
+    feed.add_argument("--no-autonomy", action="store_true", help="Omit autonomy checkpoints")
+    feed.add_argument("--json", action="store_true", help="Output JSON")
+    feed.set_defaults(func=cmd_feed)
 
     autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
     autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")

@@ -43,6 +43,7 @@ from .checkpoint import (
     list_open_checkpoints,
 )
 from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
+from .feed import get_user_feed
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -276,6 +277,13 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             # Uses live state (health, epics, fragments, labels) to pick next PLATE step and prompt segment.
             # For v1: simple decision tree over common paths; future data-driven.
             payload = _what_next(args.get("repo"), args.get("agent_type"))
+        elif name == "plate_feed":
+            payload = get_user_feed(
+                repo=args.get("repo"),
+                limit=int(args.get("limit") or 10),
+                include_process=bool(args.get("include_process", True)),
+                include_autonomy=bool(args.get("include_autonomy", True)),
+            )
         elif name == "plate_contemplate":
             # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
             qn = args.get("question_number")
@@ -917,6 +925,19 @@ def run() -> None:
                                             "type": "string",
                                             "description": "Optional hint for specialized guidance (general, coding, docs, etc.).",
                                         },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feed",
+                                "description": "Ranked endless feed of open Questions + Tasks (plus process/autonomy signals) for native TUI/CLI presentation (#631). Prefer this for user-facing Q&A/Task surfacing.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "limit": {"type": "integer", "description": "Max items (default 10)."},
+                                        "include_process": {"type": "boolean", "description": "Include plate_what_next process item (default true)."},
+                                        "include_autonomy": {"type": "boolean", "description": "Include open autonomy checkpoints (default true)."},
                                     },
                                 },
                             },
