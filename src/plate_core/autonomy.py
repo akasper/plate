@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -23,6 +24,69 @@ from .costs import get_cost_report
 from .epics import get_epic_status
 from .health import get_health
 from .plate_config import load_plate_config, get_plate_config_report
+
+# Durable shadow previews (#645 harden): survive process restarts so shadow_ack works
+# across MCP/CLI sessions. Mirrors .agentic/checkpoints and .agentic/ledger layout.
+SHADOW_DIR = Path(".agentic/shadow")
+
+
+def _shadow_path(shadow_id: str, base_dir: Path | None = None) -> Path:
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "_", shadow_id or "unknown")
+    return (base_dir or SHADOW_DIR) / f"{safe}.json"
+
+
+def save_shadow_report(report: "ShadowReport | dict[str, Any]", *, base_dir: Path | None = None) -> Path:
+    """Persist a ShadowReport under .agentic/shadow/ for durable shadow_ack."""
+    data = report.to_dict() if hasattr(report, "to_dict") else dict(report)
+    sid = data.get("shadow_id") or f"shadow-{uuid.uuid4().hex[:12]}"
+    data["shadow_id"] = sid
+    path = _shadow_path(sid, base_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def load_shadow_report(shadow_id: str, *, base_dir: Path | None = None) -> dict[str, Any] | None:
+    """Load a durable ShadowReport by shadow_id, or None if missing."""
+    if not shadow_id:
+        return None
+    path = _shadow_path(shadow_id, base_dir)
+    if not path.is_file():
+        # prefix match (same pattern as checkpoints)
+        d = base_dir or SHADOW_DIR
+        if d.is_dir():
+            matches = sorted(d.glob(f"{re.sub(r'[^a-zA-Z0-9._-]', '_', shadow_id)}*.json"))
+            if matches:
+                path = matches[0]
+            else:
+                return None
+        else:
+            return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def shadow_report_from_dict(data: dict[str, Any]) -> "ShadowReport":
+    """Rehydrate ShadowReport from durable JSON."""
+    return ShadowReport(
+        action_kind=str(data.get("action_kind") or "unknown"),
+        impact=str(data.get("impact") or "medium"),
+        mode=str(data.get("mode") or "shadow"),
+        estimated_tokens=int(data.get("estimated_tokens") or 0),
+        estimated_duration_seconds=int(data.get("estimated_duration_seconds") or 0),
+        estimated_cost_usd=float(data.get("estimated_cost_usd") or 0.0),
+        predicted_side_effects=list(data.get("predicted_side_effects") or []),
+        requires_approval=bool(data.get("requires_approval")),
+        approval_reasons=list(data.get("approval_reasons") or []),
+        risk_allowed=bool(data.get("risk_allowed")),
+        would_execute=bool(data.get("would_execute")),
+        gate_preview=list(data.get("gate_preview") or []),
+        shadow_id=str(data.get("shadow_id") or ""),
+        timestamp=str(data.get("timestamp") or ""),
+        scope=dict(data.get("scope") or {}),
+    )
 
 
 @dataclass
@@ -265,8 +329,48 @@ class AutonomyEngine:
         self._spent_today: int = 0
         self._last_reset = datetime.now(timezone.utc).date()
         self.throttled_actions: int = 0  # for #479 autopilot calc and status
-        # #645: in-memory shadow previews (shadow_id -> ShadowReport); host may re-simulate for durable ack
+        # #645: in-memory + durable (.agentic/shadow/) previews so shadow_ack works across processes
         self._shadow_previews: dict[str, ShadowReport] = {}
+        self.shadow_base_dir: Path | None = None  # tests override; default SHADOW_DIR
+        self.checkpoint_base_dir: Path | None = None  # tests override for #648 bridge
+
+    def _persist_shadow(self, report: ShadowReport) -> None:
+        self._shadow_previews[report.shadow_id] = report
+        try:
+            save_shadow_report(report, base_dir=self.shadow_base_dir)
+        except OSError:
+            pass  # best-effort durable; in-memory still valid for session
+
+    def _resolve_shadow(self, shadow_ack: str | None, kind: str, scope: dict[str, Any]) -> tuple[ShadowReport, bool]:
+        """Return (shadow, ack_valid). ack_valid True only if shadow_ack matches a known preview."""
+        if shadow_ack:
+            if shadow_ack in self._shadow_previews:
+                return self._shadow_previews[shadow_ack], True
+            durable = load_shadow_report(shadow_ack, base_dir=self.shadow_base_dir)
+            if durable and durable.get("shadow_id") == shadow_ack:
+                report = shadow_report_from_dict(durable)
+                self._shadow_previews[shadow_ack] = report
+                return report, True
+            # Unknown ack: produce fresh preview for reporting but ack is invalid
+            return self.simulate_action(kind, scope), False
+        return self.simulate_action(kind, scope), False
+
+    def _maybe_checkpoint_for_blocked(self, shadow: ShadowReport) -> dict[str, Any] | None:
+        """When gate blocks, open a #648 checkpoint so feed/engine pause has a real artifact."""
+        if not shadow.requires_approval and shadow.impact not in ("high", "critical"):
+            return None
+        try:
+            from .checkpoint import create_checkpoint_for_shadow
+
+            return create_checkpoint_for_shadow(
+                shadow.to_dict(),
+                risk_tolerance=self.risk_tolerance,
+                autonomy_enabled=bool(self.enabled),
+                created_by="autonomy-engine",
+                base_dir=self.checkpoint_base_dir,
+            )
+        except Exception:
+            return None
 
     def simulate_action(
         self, action_kind: str, scope: dict[str, Any] | None = None
@@ -275,7 +379,7 @@ class AutonomyEngine:
 
         Returns cost/risk/side-effect estimates and whether human approval is required
         before a real run. Call gate_high_impact(..., shadow_ack=report.shadow_id, approved=...)
-        before executing high/critical actions.
+        before executing high/critical actions. Previews are durable under .agentic/shadow/.
         """
         scope = dict(scope or {})
         kind = (action_kind or "unknown").lower().replace("-", "_")
@@ -337,8 +441,8 @@ class AutonomyEngine:
             gate_preview.append("release_checks: marketing-copy-reviewed, release-notes-complete, release-issue-open")
 
         ts = datetime.now(timezone.utc).isoformat()
-        # Stable-enough id for session ack (not a secret)
-        shadow_id = f"shadow-{kind}-{abs(hash((kind, ts, est, impact))) % 10**10}"
+        # Durable id (uuid) so shadow_ack survives process restart via .agentic/shadow/
+        shadow_id = f"shadow-{kind}-{uuid.uuid4().hex[:12]}"
 
         report = ShadowReport(
             action_kind=kind,
@@ -357,7 +461,7 @@ class AutonomyEngine:
             timestamp=ts,
             scope=scope,
         )
-        self._shadow_previews[shadow_id] = report
+        self._persist_shadow(report)
         return report
 
     def gate_high_impact(
@@ -367,67 +471,72 @@ class AutonomyEngine:
         shadow_ack: str | None = None,
         approved: bool = False,
         scope: dict[str, Any] | None = None,
+        create_checkpoint: bool = True,
     ) -> dict[str, Any]:
         """Hard gate for high-impact live actions (#645).
 
-        Returns {blocked, mode, shadow_report?, reason?}.
+        Returns {blocked, mode, shadow_report?, reason?, checkpoint?}.
         - critical: blocked unless approved=True and valid shadow_ack
         - high at low/medium risk: blocked unless approved=True and shadow_ack
         - low impact: not blocked
+        Durable shadow_ack is resolved from memory or `.agentic/shadow/`.
+        When blocked, optionally opens a #648 checkpoint (create_checkpoint=True).
         """
         scope = scope or {}
         kind = (action_kind or "unknown").lower().replace("-", "_")
         impact = classify_action_impact(kind, scope)
-        shadow = None
-        if shadow_ack and shadow_ack in self._shadow_previews:
-            shadow = self._shadow_previews[shadow_ack]
-        elif shadow_ack is None:
-            shadow = self.simulate_action(kind, scope)
-        else:
-            # Unknown ack: re-simulate for report but treat as missing ack
-            shadow = self.simulate_action(kind, scope)
+        shadow, ack_ok = self._resolve_shadow(shadow_ack, kind, scope)
+
+        def _blocked(mode: str, reason: str) -> dict[str, Any]:
+            out: dict[str, Any] = {
+                "blocked": True,
+                "mode": mode,
+                "reason": reason,
+                "shadow_report": shadow.to_dict(),
+            }
+            if create_checkpoint:
+                cp = self._maybe_checkpoint_for_blocked(shadow)
+                if cp and cp.get("id"):
+                    out["checkpoint"] = {
+                        "id": cp.get("id"),
+                        "status": cp.get("status"),
+                        "title": cp.get("title"),
+                        "pause_autonomy": cp.get("pause_autonomy"),
+                    }
+                    out["checkpoint_id"] = cp.get("id")
+            return out
 
         if impact in ("low", "medium"):
             # medium may still require approval when autonomy off
             if shadow.requires_approval and not approved:
-                return {
-                    "blocked": True,
-                    "mode": "shadow_required",
-                    "reason": "; ".join(shadow.approval_reasons) or "approval required",
-                    "shadow_report": shadow.to_dict(),
-                }
+                return _blocked(
+                    "shadow_required",
+                    "; ".join(shadow.approval_reasons) or "approval required",
+                )
             return {
                 "blocked": False,
                 "mode": "allowed",
                 "shadow_report": shadow.to_dict(),
             }
 
-        # high / critical
-        ack_ok = bool(shadow_ack) and (
-            shadow_ack in self._shadow_previews
-            or (shadow and shadow.shadow_id == shadow_ack)
-        )
+        # high / critical — ack_ok from durable or memory only
         if impact == "critical":
             if approved and ack_ok:
                 return {"blocked": False, "mode": "approved", "shadow_report": shadow.to_dict()}
-            return {
-                "blocked": True,
-                "mode": "shadow_required",
-                "reason": "critical action requires shadow preview + explicit approved=True",
-                "shadow_report": shadow.to_dict(),
-            }
+            return _blocked(
+                "shadow_required",
+                "critical action requires shadow preview + explicit approved=True",
+            )
 
         # high
         if approved and ack_ok:
             return {"blocked": False, "mode": "approved", "shadow_report": shadow.to_dict()}
         if ack_ok and self._risk_rank(self.risk_tolerance) >= self._risk_rank("high") and not shadow.requires_approval:
             return {"blocked": False, "mode": "shadow_acked", "shadow_report": shadow.to_dict()}
-        return {
-            "blocked": True,
-            "mode": "shadow_required",
-            "reason": "high-impact action requires shadow preview and approval (or high risk_tolerance policy)",
-            "shadow_report": shadow.to_dict(),
-        }
+        return _blocked(
+            "shadow_required",
+            "high-impact action requires shadow preview and approval (or high risk_tolerance policy)",
+        )
 
     def _impact_rank(self, level: str) -> int:
         order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -859,24 +968,50 @@ class AutonomyEngine:
                 shadow_ack=shadow_ack,
                 approved=approved,
                 scope=scope,
+                create_checkpoint=True,
             )
             # Prefer classifying via procedure risk when higher than kind default
             if pdef is not None and pdef.risk_level == "high" and self._risk_rank(self.risk_tolerance) < self._risk_rank("medium"):
                 if not approved:
+                    # Reuse gate shadow when present so one durable preview + checkpoint
+                    if gate.get("blocked") and gate.get("shadow_report"):
+                        out = {
+                            "proc_id": proc_id,
+                            "status": "shadow_required",
+                            "shadow_report": gate.get("shadow_report"),
+                            "reason": "high-risk procedure requires shadow + approval at current risk_tolerance",
+                        }
+                        if gate.get("checkpoint_id"):
+                            out["checkpoint_id"] = gate["checkpoint_id"]
+                            out["checkpoint"] = gate.get("checkpoint")
+                        return out
                     shadow = self.simulate_action("run_procedure", scope)
-                    return {
+                    cp = self._maybe_checkpoint_for_blocked(shadow)
+                    out = {
                         "proc_id": proc_id,
                         "status": "shadow_required",
                         "shadow_report": shadow.to_dict(),
                         "reason": "high-risk procedure requires shadow + approval at current risk_tolerance",
                     }
+                    if cp and cp.get("id"):
+                        out["checkpoint_id"] = cp["id"]
+                        out["checkpoint"] = {
+                            "id": cp.get("id"),
+                            "status": cp.get("status"),
+                            "title": cp.get("title"),
+                        }
+                    return out
             if gate.get("blocked"):
-                return {
+                out = {
                     "proc_id": proc_id,
                     "status": "shadow_required",
                     "shadow_report": gate.get("shadow_report"),
                     "reason": gate.get("reason"),
                 }
+                if gate.get("checkpoint_id"):
+                    out["checkpoint_id"] = gate["checkpoint_id"]
+                    out["checkpoint"] = gate.get("checkpoint")
+                return out
         # In full impl: dispatch steps using allow-listed MCP calls (e.g. plate_perform_information_audit, plate_pr_babysit, plate_costs)
         # For now, record marker + usage (as required by PLATE for procedures)
         marker = f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence={pdef.cadence if pdef else 'unknown'} risk={pdef.risk_level if pdef else 'unknown'} -->"
