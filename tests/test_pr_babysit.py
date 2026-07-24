@@ -7,6 +7,8 @@ from plate_core.pr_babysit import (
     _extract_outdated_unresolved_threads,
     _detect_base_branch_out_of_sync,
     babysit_pr,
+    extract_suggestion_blocks,
+    resolve_pr_review_scope,
     resolve_review_thread,
 )
 
@@ -40,7 +42,139 @@ class PrBabysitTests(unittest.TestCase):
     def test_default_agent_match(self):
         self.assertTrue(_default_agent_match("devin-ai-integration[bot]"))
         self.assertTrue(_default_agent_match("OpenHands-Agent"))
+        self.assertTrue(_default_agent_match("copilot-pull-request-reviewer"))
+        self.assertTrue(_default_agent_match("github-copilot[bot]"))
         self.assertFalse(_default_agent_match("octocat"))
+
+    def test_extract_suggestion_blocks_496(self):
+        body = "Please rename this:\n```suggestion\nnew_name = 1\n```\nThanks"
+        blocks = extract_suggestion_blocks(body)
+        self.assertEqual(len(blocks), 1)
+        self.assertIn("new_name = 1", blocks[0])
+        self.assertEqual(extract_suggestion_blocks("no fence"), [])
+
+    def test_pr_review_scope_filters_authors_496(self):
+        threads = [
+            {
+                "id": "T_copilot",
+                "isResolved": False,
+                "isOutdated": False,
+                "path": "src/plate_core/pr_babysit.py",
+                "comments": {
+                    "nodes": [
+                        {
+                            "databaseId": 1,
+                            "body": "```suggestion\nx = 1\n```",
+                            "url": "u1",
+                            "author": {"login": "copilot-pull-request-reviewer"},
+                        }
+                    ]
+                },
+            },
+            {
+                "id": "T_human",
+                "isResolved": False,
+                "isOutdated": False,
+                "path": "src/ok.py",
+                "comments": {
+                    "nodes": [
+                        {
+                            "databaseId": 2,
+                            "body": "please clarify",
+                            "url": "u2",
+                            "author": {"login": "octocat"},
+                        }
+                    ]
+                },
+            },
+        ]
+        all_scope = _extract_actionable_threads(threads, None, scope="all")
+        self.assertEqual(len(all_scope), 2)
+        bot_only = _extract_actionable_threads(threads, None, scope="bot-only")
+        self.assertEqual(len(bot_only), 1)
+        self.assertEqual(bot_only[0]["thread_id"], "T_copilot")
+        self.assertTrue(bot_only[0]["has_suggestion"])
+        self.assertTrue(bot_only[0]["prefer_apply_suggestion"])
+        human_only = _extract_actionable_threads(threads, None, scope="human-only")
+        self.assertEqual(len(human_only), 1)
+        self.assertEqual(human_only[0]["thread_id"], "T_human")
+        # explicit allowlist overrides scope
+        allow = _extract_actionable_threads(threads, "octocat", scope="bot-only")
+        self.assertEqual(len(allow), 1)
+        self.assertEqual(allow[0]["author"], "octocat")
+
+    def test_high_risk_path_blocks_prefer_apply_496(self):
+        threads = [
+            {
+                "id": "T_agents",
+                "isResolved": False,
+                "isOutdated": False,
+                "path": "AGENTS.md",
+                "comments": {
+                    "nodes": [
+                        {
+                            "databaseId": 9,
+                            "body": "```suggestion\n# wipe\n```",
+                            "url": "u",
+                            "author": {"login": "copilot-pull-request-reviewer"},
+                        }
+                    ]
+                },
+            }
+        ]
+        items = _extract_actionable_threads(threads, None, scope="all")
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["high_risk_path"])
+        self.assertFalse(items[0]["prefer_apply_suggestion"])
+
+    def test_babysit_pr_scope_all_includes_copilot_496(self):
+        repo = "akasper/plate"
+        pr = 496
+        threads_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "CLEAN",
+                        "baseRefName": "main",
+                        "headRefName": "feature/496",
+                        "reviewThreads": {
+                            "nodes": [
+                                {
+                                    "id": "PRRT_copilot",
+                                    "isResolved": False,
+                                    "isOutdated": False,
+                                    "path": "src/plate_core/cli.py",
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 42,
+                                                "body": "nit:\n```suggestion\nprint('ok')\n```",
+                                                "url": "https://example.com/c",
+                                                "author": {"login": "copilot-pull-request-reviewer"},
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                }
+            }
+        }
+        fake = _FakeClient(responses={("graphql", "POST", "load"): threads_payload})
+        report = babysit_pr(repo=repo, pr_number=pr, act=False, pr_review_scope="all", client=fake)
+        self.assertEqual(report.pr_review_scope, "all")
+        self.assertEqual(report.actionable_threads, 1)
+        self.assertEqual(report.threads_with_suggestions, 1)
+        # Pre-#496 bot-only without copilot patterns would have been 0; patterns now include copilot
+        report_bot = babysit_pr(repo=repo, pr_number=pr, act=False, pr_review_scope="bot-only", client=fake)
+        self.assertEqual(report_bot.actionable_threads, 1)
+
+    def test_resolve_pr_review_scope_validation_496(self):
+        self.assertEqual(resolve_pr_review_scope("ALL"), "all")
+        self.assertEqual(resolve_pr_review_scope("bot_only"), "bot-only")
+        with self.assertRaises(ValueError):
+            resolve_pr_review_scope("friends-only")
 
     def test_extract_actionable_threads_filters_resolved_and_outdated(self):
         threads = [
