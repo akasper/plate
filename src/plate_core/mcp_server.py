@@ -35,6 +35,13 @@ from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
 from .autonomy import get_autonomy_status, run_autonomy_cycle
+from .checkpoint import (
+    create_checkpoint,
+    decide_checkpoint,
+    get_checkpoint,
+    list_checkpoints,
+    list_open_checkpoints,
+)
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -369,6 +376,50 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 repo=args.get("repo"),
                 scope=scope if isinstance(scope, dict) else {},
             )
+        elif name == "plate_checkpoint_create":
+            from .autonomy import AutonomyEngine
+            eng = AutonomyEngine(args.get("repo"))
+            scope = args.get("scope") or {}
+            if isinstance(scope, str):
+                try:
+                    scope = json.loads(scope)
+                except Exception:
+                    scope = {"raw": scope}
+            payload = create_checkpoint(
+                title=str(args.get("title") or "Human checkpoint"),
+                reason=str(args.get("reason") or "Human judgment required"),
+                impact=str(args.get("impact") or "medium"),
+                action_kind=str(args.get("action_kind") or ""),
+                scope=scope if isinstance(scope, dict) else {},
+                shadow_id=args.get("shadow_id"),
+                related_issue=args.get("related_issue"),
+                related_pr=args.get("related_pr"),
+                created_by=str(args.get("created_by") or "agent"),
+                risk_tolerance=eng.risk_tolerance,
+                autonomy_enabled=eng.enabled,
+            )
+        elif name == "plate_checkpoint_decide":
+            payload = decide_checkpoint(
+                checkpoint_id=str(args.get("checkpoint_id") or args.get("id") or ""),
+                decision=str(args.get("decision") or ""),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_checkpoint_list":
+            st = args.get("status") or "pending"
+            if args.get("open_only"):
+                payload = {"checkpoints": list_open_checkpoints(limit=int(args.get("limit") or 50))}
+            else:
+                payload = {
+                    "checkpoints": list_checkpoints(
+                        status=None if st == "all" else st,
+                        limit=int(args.get("limit") or 50),
+                    )
+                }
+        elif name == "plate_checkpoint_get":
+            payload = get_checkpoint(str(args.get("checkpoint_id") or args.get("id") or "")) or {
+                "error": "not found"
+            }
         elif name == "plate_migrate_plan":
             plan = generate_migration_plan()
             if hasattr(plan, "to_dict"):
@@ -1138,6 +1189,63 @@ def run() -> None:
                                         },
                                     },
                                     "required": ["action_kind"],
+                                },
+                            },
+                            {
+                                "name": "plate_checkpoint_create",
+                                "description": "Create a unified human checkpoint/approval request (#648). Durable under .agentic/checkpoints/; returns marker for GitHub comments. Can auto-approve low impact at medium+ risk_tolerance.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "title": {"type": "string", "description": "Short checkpoint title for the feed."},
+                                        "reason": {"type": "string", "description": "Why human judgment is required."},
+                                        "impact": {"type": "string", "description": "low|medium|high|critical"},
+                                        "action_kind": {"type": "string", "description": "Gated action e.g. release_cut, deploy, design_approve."},
+                                        "scope": {"type": "object", "description": "Optional context payload."},
+                                        "shadow_id": {"type": "string", "description": "Optional #645 shadow_id to attach."},
+                                        "related_issue": {"type": "integer"},
+                                        "related_pr": {"type": "integer"},
+                                        "created_by": {"type": "string"},
+                                    },
+                                    "required": ["title", "reason"],
+                                },
+                            },
+                            {
+                                "name": "plate_checkpoint_decide",
+                                "description": "Record approve|revise|reject|cancel on a checkpoint (#648). Clears pause_autonomy when decided.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "checkpoint_id": {"type": "string"},
+                                        "decision": {"type": "string", "description": "approve|revise|reject|cancel"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["checkpoint_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_checkpoint_list",
+                                "description": "List checkpoints (#648). Default status=pending; open_only=true returns pausing ones.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string", "description": "pending|approved|rejected|auto_approved|all"},
+                                        "open_only": {"type": "boolean"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_checkpoint_get",
+                                "description": "Get one checkpoint by id (#648).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "checkpoint_id": {"type": "string"},
+                                    },
+                                    "required": ["checkpoint_id"],
                                 },
                             },
                             {
