@@ -910,9 +910,7 @@ def run() -> None:
                                     },
                                 },
                             },
-                            {
-
-                            {
+{
                                 "name": "plate_er_planning_start",
                                 "description": "Start Q&A epic (#640) or release (#629) planning session. Returns first ask_user_question prompt.",
                                 "inputSchema": {
@@ -920,8 +918,9 @@ def run() -> None:
                                     "properties": {
                                         "kind": {"type": "string", "description": "epic | release"},
                                     },
-
-                            {
+                                },
+                            },
+{
                                 "name": "plate_er_planning_answer",
                                 "description": "Record one epic/release planning answer; return next question or complete.",
                                 "inputSchema": {
@@ -931,8 +930,10 @@ def run() -> None:
                                         "answer": {"type": "string"},
                                         "question_id": {"type": "string"},
                                     },
-
-                            {
+                                    "required": ["session", "answer"],
+                                },
+                            },
+{
                                 "name": "plate_er_planning_build",
                                 "description": "Build Epic tree or Release plan from session for human approval (#640/#629).",
                                 "inputSchema": {
@@ -940,8 +941,10 @@ def run() -> None:
                                     "properties": {
                                         "session": {"type": "object"},
                                     },
-
-                            {
+                                    "required": ["session"],
+                                },
+                            },
+{
                                 "name": "plate_er_planning_script",
                                 "description": "Return ordered epic or release planning questions.",
                                 "inputSchema": {
@@ -949,6 +952,9 @@ def run() -> None:
                                     "properties": {
                                         "kind": {"type": "string"},
                                     },
+                                },
+                            },
+                            {
                                 "name": "plate_pr_babysit",
                                 "description": (
                                     "Inspect a pull request for unresolved review feedback (scope: all|bot-only|human-only per #496) "
