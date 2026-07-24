@@ -57,11 +57,11 @@ from .epic_release_planning import (
     start_er_session,
 )
 from .design_research_approval import (
-    decide_artifact,
-    get_artifact,
-    list_artifacts,
-    list_pending_artifacts,
-    surface_artifact,
+    decide_proposal,
+    get_proposal,
+    list_authoritative,
+    list_proposals,
+    propose_artifact,
 )
 from .discussions import (
     add_discussion_comment,
