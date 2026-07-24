@@ -323,6 +323,69 @@ def autonomy_is_paused_by_checkpoints(*, base_dir: Path | None = None) -> dict[s
     }
 
 
+def checkpoint_approval_for_gate(
+    checkpoint_id: str,
+    *,
+    action_kind: str | None = None,
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Resolve a decided checkpoint for #645 gate_high_impact (#648 bridge).
+
+    Returns {ok, approved, shadow_id, action_kind, checkpoint?, reason?}.
+    approved=True only when status is approved|auto_approved and (optional)
+    action_kind matches when both sides provide one.
+    """
+    rec = get_checkpoint(checkpoint_id, base_dir=base_dir)
+    if not rec:
+        return {
+            "ok": False,
+            "approved": False,
+            "shadow_id": None,
+            "action_kind": None,
+            "reason": f"checkpoint not found: {checkpoint_id}",
+        }
+    status = str(rec.get("status") or "").lower()
+    approved_statuses = {
+        CheckpointStatus.APPROVED.value,
+        CheckpointStatus.AUTO_APPROVED.value,
+    }
+    if status not in approved_statuses:
+        return {
+            "ok": True,
+            "approved": False,
+            "shadow_id": rec.get("shadow_id"),
+            "action_kind": rec.get("action_kind"),
+            "checkpoint": rec,
+            "reason": f"checkpoint status={status} (need approved)",
+        }
+    cp_kind = (rec.get("action_kind") or "").lower().replace("-", "_")
+    want = (action_kind or "").lower().replace("-", "_")
+    if want and cp_kind and want != cp_kind:
+        # Allow run_procedure / deploy aliases when critical gate uses deploy
+        aliases = {
+            "run_procedure": {"run_procedure", "deploy"},
+            "deploy": {"deploy", "run_procedure", "release_cut", "release_finalize"},
+        }
+        allowed = aliases.get(want, {want})
+        if cp_kind not in allowed and want not in aliases.get(cp_kind, {cp_kind}):
+            return {
+                "ok": True,
+                "approved": False,
+                "shadow_id": rec.get("shadow_id"),
+                "action_kind": rec.get("action_kind"),
+                "checkpoint": rec,
+                "reason": f"checkpoint action_kind={cp_kind} does not match gate {want}",
+            }
+    return {
+        "ok": True,
+        "approved": True,
+        "shadow_id": rec.get("shadow_id"),
+        "action_kind": rec.get("action_kind"),
+        "checkpoint": rec,
+        "reason": rec.get("resume_hint") or "checkpoint approved",
+    }
+
+
 def create_checkpoint_for_shadow(
     shadow_report: dict[str, Any],
     *,
