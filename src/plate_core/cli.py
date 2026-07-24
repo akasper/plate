@@ -32,7 +32,7 @@ from .release import (
 )
 from .migration import generate_migration_plan, apply_migration_plan
 from .costs import get_cost_report
-from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle
+from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle, simulate_autonomy_action
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -565,8 +565,31 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         print(f"Last cycle: {status.get('last_cycle')}")
         return 0
 
+    simulate_kind = getattr(args, "simulate", None)
+    if simulate_kind:
+        scope: dict = {}
+        raw_scope = getattr(args, "scope", None)
+        if raw_scope:
+            try:
+                scope = json.loads(raw_scope)
+            except Exception:
+                scope = {"raw": raw_scope}
+        rep = simulate_autonomy_action(str(simulate_kind), repo=args.repo, scope=scope)
+        if args.json:
+            print(json.dumps(rep))
+            return 0
+        print(f"Shadow mode: {rep.get('action_kind')} impact={rep.get('impact')}")
+        print(f"  requires_approval={rep.get('requires_approval')} would_execute={rep.get('would_execute')}")
+        print(f"  est_tokens={rep.get('estimated_tokens')} est_usd={rep.get('estimated_cost_usd')} duration_s={rep.get('estimated_duration_seconds')}")
+        print(f"  shadow_id={rep.get('shadow_id')}")
+        for fx in (rep.get("predicted_side_effects") or [])[:5]:
+            print(f"  - {fx}")
+        if rep.get("approval_reasons"):
+            print(f"  reasons: {'; '.join(rep['approval_reasons'])}")
+        return 0
+
     if not getattr(args, "run", False) and not getattr(args, "loop", False):
-        print("No --run or --loop specified; execution skipped (use --status for info only).")
+        print("No --run, --loop, or --simulate specified; execution skipped (use --status for info only).")
         return 0
 
     dry_run = getattr(args, "dry_run", False)
@@ -575,7 +598,7 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
     run = getattr(args, "run", False)
 
     if not run and not loop:
-        print("Usage: gh plate autonomy --status | --run [--dry-run] | --loop [--max-cycles N]", file=sys.stderr)
+        print("Usage: gh plate autonomy --status | --simulate ACTION | --run [--dry-run] | --loop [--max-cycles N]", file=sys.stderr)
         return 1
 
     if loop:
@@ -1160,6 +1183,15 @@ def build_parser() -> argparse.ArgumentParser:
     autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
     autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")
     autonomy.add_argument("--status", action="store_true", help="Show autonomy status (risk tolerance, budget, autopilot score)")
+    autonomy.add_argument(
+        "--simulate",
+        metavar="ACTION",
+        help="Shadow-simulate a high-impact action without side effects (#645); prints estimates + shadow_id",
+    )
+    autonomy.add_argument(
+        "--scope",
+        help="Optional JSON scope for --simulate (e.g. '{\"version\":\"1.0.0\"}')",
+    )
     autonomy.add_argument("--run", action="store_true", help="Run one cycle (or with --loop)")
     autonomy.add_argument("--loop", action="store_true", help="Run multiple cycles (use --max-cycles)")
     autonomy.add_argument("--max-cycles", type=int, default=3, help="For --loop")
