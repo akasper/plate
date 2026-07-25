@@ -63,7 +63,8 @@ STAGE_PROMPTS: dict[str, str] = {
         "Author .agentic/releases/unreleased/<slug>.json; update wiki/docs if process-facing."
     ),
     "media_capture": (
-        "Capture explanatory GIF/video from E2E if available (#635/#636); else note skip."
+        "Plan+record explanatory GIF via plate_feature_media_plan + record_e2e_gif (#636); "
+        "register, user-approve, attach to fragment media[] (#635); or skip with reason."
     ),
     "ready_for_review": (
         "gh pr ready; ensure labels, feature-change-files, CI started."
@@ -278,6 +279,11 @@ def stage_packet(run: dict[str, Any]) -> dict[str, Any]:
         steps.append(f"Suggested branch: feature/{feat}-short-slug")
     if stage == "docs_fragment":
         steps.append("Fragment under .agentic/releases/unreleased/<slug>.json required for Feature PRs")
+    if stage == "media_capture":
+        steps.append(
+            f"plate_feature_media_plan feature_number={feat} title={title!r} then record_e2e_gif"
+        )
+        steps.append("plate_feature_media_register + decide approve; attach_fragment to unreleased slug")
     if stage == "babysit" and pr:
         steps.append(f"gh plate pr babysit {pr} --act")
         steps.append(f"plate_get_pr_merge_gates pr_number={pr}")

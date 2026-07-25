@@ -356,6 +356,11 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - Prefer approved media in GitHub Release body; pending items surface for user approval in the feed.
 - Capture via record-e2e-gif / Playwright into `tests/e2e/fixtures/gifs/` then reference path in the fragment.
 
+### Per-Feature media (#636)
+- Every Feature: `plate_feature_media_plan` → `record_e2e_gif` → `plate_feature_media_register` → user approve → `plate_feature_media_attach_fragment`.
+- CLI: `gh plate feature-media --feature N --title "..."`. Skip only with explicit reason.
+- Pairs with feature_loop `media_capture` stage and #635 fragment media[].
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 
