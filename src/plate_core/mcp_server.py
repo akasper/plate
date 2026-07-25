@@ -64,9 +64,12 @@ from .epic_release_planning import (
 from .design_research_approval import (
     decide_proposal,
     get_proposal,
+    get_proposal_history,
+    list_actionable_proposals,
     list_authoritative,
     list_proposals,
     propose_artifact,
+    resubmit_proposal,
 )
 from .pm import (
     assign_work,
@@ -472,10 +475,35 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 str(args.get("decision") or ""),
                 decided_by=str(args.get("decided_by") or "human"),
                 note=str(args.get("note") or ""),
+                open_checkpoint=bool(args.get("open_checkpoint") or False),
             )
+        elif name == "plate_artifact_resubmit":
+            payload = resubmit_proposal(
+                str(args.get("proposal_id") or args.get("id") or ""),
+                summary=args.get("summary"),
+                content_path=args.get("content_path"),
+                content_excerpt=args.get("content_excerpt"),
+                media_links=list(args.get("media_links") or []) if args.get("media_links") is not None else None,
+                title=args.get("title"),
+                actor=str(args.get("actor") or "agent"),
+            )
+        elif name == "plate_artifact_history":
+            payload = {
+                "history": get_proposal_history(
+                    str(args.get("proposal_id") or args.get("id") or ""),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
         elif name == "plate_artifact_list":
             if args.get("authoritative"):
                 payload = {"proposals": list_authoritative(kind=args.get("kind"))}
+            elif args.get("actionable") or (args.get("status") == "actionable"):
+                payload = {
+                    "proposals": list_actionable_proposals(
+                        kind=args.get("kind"),
+                        limit=int(args.get("limit") or 50),
+                    )
+                }
             else:
                 payload = {
                     "proposals": list_proposals(
@@ -2017,24 +2045,64 @@ def run() -> None:
                                         "decision": {"type": "string", "description": "approve|revise|reject"},
                                         "decided_by": {"type": "string"},
                                         "note": {"type": "string"},
+                                        "open_checkpoint": {
+                                            "type": "boolean",
+                                            "description": "On revise, open #648 checkpoint if related_issue set",
+                                        },
                                     },
                                     "required": ["proposal_id", "decision"],
                                 },
                             },
-{
-                                "name": "plate_artifact_list",
-                                "description": "List pending (or authoritative) Design/Research approval proposals (#632).",
+                            {
+                                "name": "plate_artifact_resubmit",
+                                "description": "Resubmit a revised Design/Research proposal after content update (#632).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
-                                        "status": {"type": "string"},
+                                        "proposal_id": {"type": "string"},
+                                        "summary": {"type": "string"},
+                                        "content_path": {"type": "string"},
+                                        "content_excerpt": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "media_links": {"type": "array", "items": {"type": "string"}},
+                                        "actor": {"type": "string"},
+                                    },
+                                    "required": ["proposal_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_artifact_history",
+                                "description": "Decision history for a Design/Research proposal (#632).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "proposal_id": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                    "required": ["proposal_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_artifact_list",
+                                "description": "List pending/actionable/authoritative Design/Research approval proposals (#632).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "description": "pending|revised|approved|rejected|actionable|all",
+                                        },
                                         "kind": {"type": "string"},
                                         "authoritative": {"type": "boolean"},
+                                        "actionable": {
+                                            "type": "boolean",
+                                            "description": "If true, list pending+revised",
+                                        },
                                         "limit": {"type": "integer"},
                                     },
                                 },
                             },
-{
+                            {
                                 "name": "plate_artifact_get",
                                 "description": "Get one artifact approval proposal by id (#632).",
                                 "inputSchema": {

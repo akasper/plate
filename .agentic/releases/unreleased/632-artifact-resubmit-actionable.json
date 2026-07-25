@@ -1,0 +1,25 @@
+{
+  "slug": "632-artifact-resubmit-actionable",
+  "change_type": "feature",
+  "surface": "src/plate_core/design_research_approval.py, feed.py, cli.py, mcp_server.py",
+  "summary": "Harden #632: actionable list (pending+revised), resubmit_proposal + history, feed prioritizes revised with resubmit option, optional checkpoint on revise, MCP/CLI resubmit/history/actionable.",
+  "migration_impact": "New plate_artifact_resubmit / plate_artifact_history; list supports status=actionable. Revised artifacts stay in feed until resubmit+approve. Approve still writes authoritative pointer. No config break.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. On revise: update content then plate_artifact_resubmit id (summary/content_path).",
+    "3. Feed shows revised items with resubmit-first ask_user_question options.",
+    "4. gh plate artifact --actionable | --history ID | --resubmit ID --summary ... --content-path ..."
+  ],
+  "agent_notes": "Never treat revised/rejected as authoritative. list_authoritative remains the source of truth for approved design/research. Optional --open-checkpoint on revise when related_issue set.",
+  "breaking": false,
+  "links": [
+    "#632",
+    "#648",
+    "#647",
+    "#631",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
