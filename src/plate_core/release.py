@@ -1452,3 +1452,227 @@ def ensure_next_release_issue(
         return {"created": True, "issue": {"number": created.get("number"), "url": created.get("html_url")}}
     except Exception as e:
         return {"error": f"create_failed: {e}"}
+
+
+STANDING_TRACK_BRANCHES = ("release-major", "release-minor", "release-patch", "release")
+
+
+def diagnose_release_standing_state(
+    repo: str | None = None,
+    client: GhClient | None = None,
+) -> dict:
+    """Classify standing release state: healthy | never_initialized | drifted (#320)."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+
+    branches: dict[str, bool] = {}
+    for name in STANDING_TRACK_BRANCHES:
+        try:
+            gh.api(f"repos/{target}/branches/{name}")
+            branches[name] = True
+        except Exception:
+            branches[name] = False
+
+    next_issues: list[dict] = []
+    try:
+        q = quote_plus(f'repo:{target} is:issue is:open label:Release')
+        search = gh.api(f"search/issues?q={q}") or {}
+        for item in search.get("items") or []:
+            title = (item.get("title") or "").strip()
+            if title.lower() == "next release" or title.lower().startswith("next release"):
+                next_issues.append(
+                    {
+                        "number": item.get("number"),
+                        "title": title,
+                        "url": item.get("html_url"),
+                    }
+                )
+    except Exception:
+        pass
+
+    missing_branches = [b for b, ok in branches.items() if not ok]
+    n_next = len(next_issues)
+    any_branch = any(branches.values())
+    any_versioned_history = False
+    try:
+        # any v* tag or versioned release dir implies prior release activity
+        tags = subprocess.run(
+            ["git", "tag", "-l", "v*"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tags.stdout.strip():
+            any_versioned_history = True
+    except Exception:
+        pass
+    try:
+        rel_dir = Path(".agentic/releases")
+        if rel_dir.exists():
+            for p in rel_dir.iterdir():
+                if p.is_dir() and p.name.startswith("v"):
+                    any_versioned_history = True
+                    break
+    except Exception:
+        pass
+
+    if not any_branch and n_next == 0 and not any_versioned_history:
+        health = "never_initialized"
+    elif not missing_branches and n_next == 1:
+        health = "healthy"
+    else:
+        health = "drifted"
+
+    return {
+        "repo": target,
+        "health": health,
+        "branches": branches,
+        "missing_branches": missing_branches,
+        "next_release_issues": next_issues,
+        "next_release_count": n_next,
+        "has_version_history": any_versioned_history,
+        "needs_branch_repair": bool(missing_branches),
+        "needs_next_issue": n_next == 0,
+        "needs_dedupe_next": n_next > 1,
+    }
+
+
+def repair_release_standing_state(
+    repo: str | None = None,
+    client: GhClient | None = None,
+    *,
+    dry_run: bool = True,
+    apply: bool = False,
+) -> dict:
+    """Idempotent repair/init for standing release tracks + Next Release issue (#320).
+
+    - Creates missing release-major/minor/patch/release from default branch.
+    - Ensures exactly one open 'Next Release' issue (creates if zero; reports if >1).
+    - Never force-deletes branches; never auto-closes extra Next Release issues
+      (reports need:human for dedupe).
+    """
+    do_apply = bool(apply) and not dry_run
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    diag = diagnose_release_standing_state(repo=target, client=gh)
+    actions: list[dict] = []
+
+    # Branch repair
+    default_branch = "main"
+    default_sha = None
+    if diag["needs_branch_repair"]:
+        try:
+            repo_obj = gh.api(f"repos/{target}") or {}
+            default_branch = str(repo_obj.get("default_branch") or "main")
+            branch_data = gh.api(f"repos/{target}/branches/{default_branch}") or {}
+            default_sha = (branch_data.get("commit") or {}).get("sha")
+        except Exception as exc:
+            actions.append(
+                {
+                    "action": "resolve_default_branch",
+                    "state": "error",
+                    "detail": str(exc),
+                }
+            )
+            default_sha = None
+
+        for name in diag["missing_branches"]:
+            if not default_sha:
+                actions.append(
+                    {
+                        "action": f"create-{name}",
+                        "state": "blocked",
+                        "detail": "cannot create branch without default SHA",
+                    }
+                )
+                continue
+            if do_apply:
+                try:
+                    gh.api(
+                        f"repos/{target}/git/refs",
+                        method="POST",
+                        fields={"ref": f"refs/heads/{name}", "sha": default_sha},
+                    )
+                    actions.append(
+                        {
+                            "action": f"create-{name}",
+                            "state": "applied",
+                            "detail": f"Created {name} from {default_branch} at {str(default_sha)[:7]}",
+                        }
+                    )
+                except Exception as exc:
+                    actions.append(
+                        {
+                            "action": f"create-{name}",
+                            "state": "error",
+                            "detail": str(exc),
+                        }
+                    )
+            else:
+                actions.append(
+                    {
+                        "action": f"create-{name}",
+                        "state": "planned",
+                        "detail": f"Would create {name} from {default_branch}",
+                    }
+                )
+    else:
+        actions.append(
+            {
+                "action": "branches",
+                "state": "already-configured",
+                "detail": "All standing track branches present",
+            }
+        )
+
+    # Next Release issue
+    n_next = diag["next_release_count"]
+    if n_next == 0:
+        if do_apply:
+            created = ensure_next_release_issue(repo=target, client=gh)
+            actions.append(
+                {
+                    "action": "ensure-next-release-issue",
+                    "state": "applied" if created.get("created") or created.get("exists") else "error",
+                    "detail": created,
+                }
+            )
+        else:
+            actions.append(
+                {
+                    "action": "ensure-next-release-issue",
+                    "state": "planned",
+                    "detail": "Would create open Release issue titled 'Next Release'",
+                }
+            )
+    elif n_next == 1:
+        actions.append(
+            {
+                "action": "ensure-next-release-issue",
+                "state": "already-configured",
+                "detail": diag["next_release_issues"][0],
+            }
+        )
+    else:
+        actions.append(
+            {
+                "action": "dedupe-next-release-issues",
+                "state": "need:human",
+                "detail": {
+                    "message": "Multiple open 'Next Release' issues; keep exactly one and close or rename the rest.",
+                    "issues": diag["next_release_issues"],
+                },
+            }
+        )
+
+    # Re-diagnose after apply for result health
+    final = diagnose_release_standing_state(repo=target, client=gh) if do_apply else diag
+    return {
+        "ok": True,
+        "repo": target,
+        "dry_run": not do_apply,
+        "apply": do_apply,
+        "diagnosis": diag,
+        "result_health": final.get("health"),
+        "actions": actions,
+    }

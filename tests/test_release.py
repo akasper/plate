@@ -29,6 +29,8 @@ from plate_core.release import (
     plan_gh_plate_sync,
     perform_guarded_hard_reset,
     ensure_next_release_issue,
+    diagnose_release_standing_state,
+    repair_release_standing_state,
 )
 from plate_core.github_client import GhApiError
 import plate_core.release as release_mod
@@ -1319,6 +1321,109 @@ class GhPlateSyncPlanTests(unittest.TestCase):
         self.assertFalse(plan["ok"])
 
 
+class ReleaseStandingRepairTests(unittest.TestCase):
+    """#320 release init/repair standing state."""
+
+    def test_diagnose_never_initialized(self):
+        client = Mock()
+
+        def api(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+            if "/branches/" in endpoint:
+                raise GhApiError("Not Found")
+            if endpoint.startswith("search/issues"):
+                return {"items": []}
+            raise AssertionError(endpoint)
+
+        client.api.side_effect = api
+        with patch("plate_core.release.resolve_repo", return_value="owner/repo"), patch(
+            "plate_core.release.subprocess.run",
+            return_value=type("P", (), {"stdout": "", "returncode": 0})(),
+        ), patch("plate_core.release.Path") as MockPath:
+            # No local versioned release dirs
+            inst = MockPath.return_value
+            inst.exists.return_value = False
+            d = diagnose_release_standing_state(repo="owner/repo", client=client)
+        self.assertEqual(d["health"], "never_initialized")
+        self.assertEqual(len(d["missing_branches"]), 4)
+        self.assertTrue(d["needs_next_issue"])
+
+    def test_diagnose_healthy(self):
+        client = Mock()
+
+        def api(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+            if "/branches/" in endpoint:
+                return {"name": "ok"}
+            if endpoint.startswith("search/issues"):
+                return {
+                    "items": [
+                        {
+                            "number": 1,
+                            "title": "Next Release",
+                            "html_url": "https://x/1",
+                        }
+                    ]
+                }
+            raise AssertionError(endpoint)
+
+        client.api.side_effect = api
+        with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+            d = diagnose_release_standing_state(repo="owner/repo", client=client)
+        self.assertEqual(d["health"], "healthy")
+        self.assertFalse(d["needs_branch_repair"])
+
+    def test_repair_dry_run_plans_branches(self):
+        client = Mock()
+
+        def api(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+            if "/branches/release" in endpoint or endpoint.endswith("/branches/release-major") or endpoint.endswith("/branches/release-minor") or endpoint.endswith("/branches/release-patch") or endpoint.endswith("/branches/release"):
+                raise GhApiError("Not Found")
+            if "/branches/" in endpoint and method == "GET":
+                # default branch
+                return {"commit": {"sha": "abc1234deadbeef"}}
+            if endpoint == "repos/owner/repo":
+                return {"default_branch": "main"}
+            if endpoint.startswith("search/issues"):
+                return {"items": []}
+            raise AssertionError(endpoint)
+
+        client.api.side_effect = api
+        with patch("plate_core.release.resolve_repo", return_value="owner/repo"), patch(
+            "plate_core.release.subprocess.run",
+            return_value=type("P", (), {"stdout": "", "returncode": 0})(),
+        ):
+            out = repair_release_standing_state(
+                repo="owner/repo", client=client, dry_run=True, apply=False
+            )
+        self.assertTrue(out["dry_run"])
+        states = {a["action"]: a["state"] for a in out["actions"]}
+        self.assertIn("planned", states.values())
+
+    def test_repair_dedupe_need_human(self):
+        client = Mock()
+
+        def api(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+            if "/branches/" in endpoint:
+                return {"name": "ok"}
+            if endpoint.startswith("search/issues"):
+                return {
+                    "items": [
+                        {"number": 1, "title": "Next Release", "html_url": "u1"},
+                        {"number": 2, "title": "Next Release", "html_url": "u2"},
+                    ]
+                }
+            raise AssertionError(endpoint)
+
+        client.api.side_effect = api
+        with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+            out = repair_release_standing_state(
+                repo="owner/repo", client=client, dry_run=True, apply=False
+            )
+        self.assertEqual(out["diagnosis"]["health"], "drifted")
+        dedupe = [a for a in out["actions"] if a["action"] == "dedupe-next-release-issues"]
+        self.assertEqual(dedupe[0]["state"], "need:human")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

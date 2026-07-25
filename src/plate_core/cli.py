@@ -1319,6 +1319,32 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_release_repair(args: argparse.Namespace) -> int:
+    """Init/repair standing release tracks + Next Release issue (#320)."""
+    from plate_core.release import repair_release_standing_state
+
+    apply = bool(getattr(args, "apply", False))
+    dry_run = not apply
+    out = repair_release_standing_state(
+        repo=getattr(args, "repo", None),
+        dry_run=dry_run,
+        apply=apply,
+    )
+    if args.json:
+        print(json.dumps(out))
+        return 0
+    print(f"Release standing repair: health={out.get('diagnosis', {}).get('health')} apply={apply}")
+    print(f"  missing_branches={out.get('diagnosis', {}).get('missing_branches')}")
+    print(f"  next_release_count={out.get('diagnosis', {}).get('next_release_count')}")
+    for a in out.get("actions") or []:
+        print(f"  - [{a.get('state')}] {a.get('action')}: {a.get('detail')}")
+    if out.get("diagnosis", {}).get("needs_dedupe_next"):
+        print("  HUMAN: multiple Next Release issues — keep exactly one.")
+    if not apply:
+        print("  (dry-run; pass --apply to create missing artifacts)")
+    return 0
+
+
 def cmd_release_target_epic(args: argparse.Namespace) -> int:
     """Validate targeting state and print the manual Next Release link steps for an Epic."""
     epic = getattr(args, "epic", None)
@@ -1716,6 +1742,26 @@ def build_parser() -> argparse.ArgumentParser:
     rel_status.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_status.add_argument("--json", action="store_true", help="Output JSON")
     rel_status.set_defaults(func=cmd_release_status)
+    rel_repair = release_sub.add_parser(
+        "repair",
+        help="Init/repair standing release tracks + Next Release issue (#320)",
+    )
+    rel_repair.add_argument("--repo", help="owner/name")
+    rel_repair.add_argument(
+        "--apply",
+        action="store_true",
+        help="Create missing branches/issues (default dry-run)",
+    )
+    rel_repair.add_argument("--json", action="store_true")
+    rel_repair.set_defaults(func=cmd_release_repair)
+    rel_init = release_sub.add_parser(
+        "init",
+        help="Alias for release repair (#320): ensure standing Next Release state",
+    )
+    rel_init.add_argument("--repo", help="owner/name")
+    rel_init.add_argument("--apply", action="store_true")
+    rel_init.add_argument("--json", action="store_true")
+    rel_init.set_defaults(func=cmd_release_repair)
     rel_cleanup = release_sub.add_parser(
         "cleanup-branches",
         help="Find and optionally delete dead remote branches (merged + no open PR).",
