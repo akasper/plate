@@ -1,0 +1,24 @@
+{
+  "slug": "614-gh-plate-core-version-lock",
+  "change_type": "feature",
+  "surface": "gh-plate, .github/workflows/publish-gh-plate-extension.yml",
+  "summary": "Pin plate-core to gh-plate tag version (#614): launcher reads VERSION/PLATE_CORE_VERSION (or env), installs/reinstalls plate-core==X.Y.Z; monorepo dev checkout skips pin; publish workflow writes PLATE_CORE_VERSION marker.",
+  "migration_impact": "After upgrade, `gh plate` from the thin extension enforces matching plate-core. Dev monorepo runs unchanged unless PLATE_CORE_FORCE_PIN=1. Requires PyPI plate-core publish for each tag for pin to resolve.",
+  "migration_guidance": [
+    "1. Upgrade gh-plate extension / plate launcher.",
+    "2. Ensure plate-core==X.Y.Z is published on PyPI for each gh-plate tag (human Task #626 if blocked).",
+    "3. Fresh install: gh extension install akasper/gh-plate@vX.Y.Z should auto-install matching plate-core.",
+    "4. Override pin only with PLATE_CORE_VERSION env or PLATE_CORE_FORCE_PIN for diagnostics."
+  ],
+  "agent_notes": "Human Tasks for PyPI/trusted publisher remain out of scope. Do not claim lock works end-to-end without published plate-core wheels. Closes #614.",
+  "breaking": false,
+  "links": [
+    "#614",
+    "#626",
+    "#654",
+    "#591"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
