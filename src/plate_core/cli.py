@@ -1274,6 +1274,7 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     print("  3. Guarded hard-reset (legacy 'release' branch) ONLY if --apply and all guards pass (tag on origin, artifact match).")
     print("  4. Ensure a fresh 'Next Release' issue (label: Release) exists for the standing target.")
     print("  5. Invoke .plate release triggers + extension release_checks (human approval where required).")
+    print("  6. gh-plate thin-shim sync/tag/release via publish-gh-plate-extension.yml on plate tag push (#613).")
     if release_data.get("closes_block"):
         print(f"  (Closes block from cut is in release.json; post-merge auto-close of linked issues is now supported via PR body.)")
 
@@ -1282,6 +1283,7 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
         create_github_release,
         perform_guarded_hard_reset,
         ensure_next_release_issue,
+        plan_gh_plate_sync,
     )
 
     create_info = create_github_release(
@@ -1301,6 +1303,10 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
 
     next_info = ensure_next_release_issue()
     print(f"Next Release issue: {next_info}")
+
+    gh_plate_plan = plan_gh_plate_sync(version)
+    print(f"gh-plate sync plan (#613): {gh_plate_plan}")
+    print("  (Token-scoped workflow owns live git ops on akasper/gh-plate; re-run via Actions workflow_dispatch if repair needed.)")
 
     if dry_run:
         print("[DRY RUN] No side effects executed (create/reset simulated above).")
