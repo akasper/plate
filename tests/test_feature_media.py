@@ -10,6 +10,7 @@ from pathlib import Path
 from plate_core.feature_media import (
     attach_to_fragment_file,
     decide_feature_media,
+    estimate_feature_media_cost,
     feature_media_feed_items,
     list_feature_media,
     plan_feature_media,
@@ -43,6 +44,7 @@ class TestLifecycle(unittest.TestCase):
             feature_number=42,
             feature_title="AI coach pathway",
             base_dir=self.base,
+            use_live_budget=False,
         )
         self.assertTrue(p["ok"])
         rid = p["record"]["id"]
@@ -88,10 +90,53 @@ class TestLifecycle(unittest.TestCase):
         self.assertEqual(list_feature_media(status="attached", base_dir=self.base)[0]["id"], rid)
 
     def test_skip(self):
-        p = plan_feature_media(feature_title="X", base_dir=self.base)
+        p = plan_feature_media(
+            feature_title="X", base_dir=self.base, use_live_budget=False
+        )
         rid = p["record"]["id"]
         s = skip_feature_media(rid, base_dir=self.base)
         self.assertEqual(s["record"]["status"], "skipped")
+
+
+class TestFeatureMediaBudgetGate(unittest.TestCase):
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.base = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_estimate_cost(self):
+        est = estimate_feature_media_cost(phase="plan", quality="medium")
+        self.assertTrue(est["ok"])
+        self.assertGreater(est["estimated_tokens"], 0)
+        high = estimate_feature_media_cost(phase="plan", quality="high")
+        self.assertGreater(high["estimated_tokens"], est["estimated_tokens"])
+        reg = estimate_feature_media_cost(phase="register")
+        self.assertLess(reg["estimated_tokens"], est["estimated_tokens"])
+
+    def test_budget_gate_blocks_plan(self):
+        blocked = plan_feature_media(
+            feature_title="Blocked media",
+            base_dir=self.base,
+            budget_remaining=0,
+            use_live_budget=False,
+        )
+        self.assertFalse(blocked.get("ok"))
+        self.assertTrue(blocked.get("blocked"))
+        self.assertIn("budget", blocked.get("error") or "")
+        self.assertEqual(list_feature_media(base_dir=self.base), [])
+
+    def test_budget_gate_allows_when_enough(self):
+        ok = plan_feature_media(
+            feature_title="Allowed media",
+            base_dir=self.base,
+            budget_remaining=50_000,
+            use_live_budget=False,
+        )
+        self.assertTrue(ok.get("ok"))
+        self.assertIn("cost_estimate_tokens", ok)
+        self.assertEqual(ok.get("budget_remaining"), 50_000)
 
 
 if __name__ == "__main__":

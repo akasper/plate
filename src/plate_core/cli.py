@@ -145,6 +145,7 @@ from .release_media import (
 from .feature_media import (
     attach_to_fragment_file,
     decide_feature_media,
+    estimate_feature_media_cost,
     feature_media_feed_items,
     get_feature_media,
     list_feature_media,
@@ -1605,7 +1606,20 @@ def cmd_feature_media(args: argparse.Namespace) -> int:
             print(f"{r.get('id')} {r.get('title')}")
         return 0
 
+    if getattr(args, "estimate_cost", False):
+        est = estimate_feature_media_cost(
+            phase=str(getattr(args, "phase", None) or "plan"),
+            quality=str(getattr(args, "quality", None) or "medium"),
+        )
+        if args.json:
+            print(json.dumps(est))
+            return 0
+        print(f"est={est.get('estimated_tokens')} phase={est.get('phase')} quality={est.get('quality')}")
+        return 0
+
     # default plan
+    br = getattr(args, "budget_remaining", None)
+    use_live = not bool(getattr(args, "no_live_budget", False))
     out = plan_feature_media(
         feature_number=getattr(args, "feature", None),
         feature_title=str(getattr(args, "title", None) or ""),
@@ -1613,10 +1627,18 @@ def cmd_feature_media(args: argparse.Namespace) -> int:
         caption=getattr(args, "caption", None) or None,
         fragment_slug=getattr(args, "fragment_slug", None) or None,
         quality=str(getattr(args, "quality", None) or "medium"),
+        budget_remaining=br,
+        use_live_budget=use_live,
     )
     if args.json:
         print(json.dumps(out))
         return 0 if out.get("ok") else 1
+    if out.get("blocked"):
+        print(
+            f"blocked budget est={out.get('cost_estimate_tokens')} "
+            f"remaining={out.get('budget_remaining')}"
+        )
+        return 1
     r = out.get("record") or {}
     print(f"ok={out.get('ok')} id={r.get('id')} test={r.get('test_name')} path={r.get('gif_path')}")
     return 0 if out.get("ok") else 1
@@ -3831,6 +3853,21 @@ def build_parser() -> argparse.ArgumentParser:
     fmedia.add_argument("--attach", metavar="RECORD_ID", help="Attach media to fragment JSON")
     fmedia.add_argument("--fragment", default="", help="Path to fragment JSON for --attach")
     fmedia.add_argument("--feed", action="store_true")
+    fmedia.add_argument("--estimate-cost", dest="estimate_cost", action="store_true")
+    fmedia.add_argument("--phase", default="plan", help="plan|register for --estimate-cost")
+    fmedia.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Override remaining tokens for #634 budget gate",
+    )
+    fmedia.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     fmedia.add_argument("--note", default="")
     fmedia.add_argument("--status", default="all")
     fmedia.add_argument("--limit", type=int, default=50)
