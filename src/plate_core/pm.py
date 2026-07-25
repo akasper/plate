@@ -647,6 +647,123 @@ class ProjectManager:
         )
         return {"ok": True, "assignment": found}
 
+    def tick_delegated_loops(
+        self,
+        *,
+        dry_run: bool = True,
+        fetch_gates: bool = False,
+        limit: int = 10,
+        complete_when_done: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Refresh #638/#639 loop state for delegated PM assignments (#660 deepen).
+
+        - Syncs ``loop_stage`` / packet from durable feature/bug loop runs
+        - On babysit + fetch_gates + not dry_run: may advance when gates clean
+        - When loop reaches ``done``, marks assignment done (if complete_when_done)
+        Does not invent git/PR work; agents still execute stage packets.
+        """
+        results: list[dict[str, Any]] = []
+        changed = False
+        n = 0
+        for asg in self._assignments:
+            if n >= limit:
+                break
+            if asg.get("status") not in ("delegated", "blocked"):
+                continue
+            rid = asg.get("loop_run_id") or (asg.get("packet") or {}).get("loop_run_id")
+            kind = str(
+                asg.get("loop_kind") or (asg.get("packet") or {}).get("loop_kind") or ""
+            ).lower()
+            if not rid or kind not in ("feature", "bug"):
+                continue
+            n += 1
+            tick: dict[str, Any]
+            try:
+                if kind == "feature":
+                    from .feature_loop import run_feature_loop_tick
+
+                    tick = run_feature_loop_tick(
+                        str(rid),
+                        dry_run=dry_run,
+                        base_dir=self.feature_loop_base_dir,
+                        fetch_gates=fetch_gates,
+                        repo=self.repo,
+                    )
+                else:
+                    from .bug_loop import run_bug_loop_tick
+
+                    tick = run_bug_loop_tick(
+                        str(rid),
+                        dry_run=dry_run,
+                        base_dir=self.bug_loop_base_dir,
+                        fetch_gates=fetch_gates,
+                        repo=self.repo,
+                    )
+            except Exception as exc:
+                results.append(
+                    {
+                        "assignment_id": asg.get("assignment_id"),
+                        "loop_run_id": rid,
+                        "loop_kind": kind,
+                        "ok": False,
+                        "error": str(exc),
+                    }
+                )
+                continue
+
+            run = tick.get("run") or {}
+            stage = run.get("stage")
+            run_status = run.get("status")
+            asg["loop_stage"] = stage
+            asg.setdefault("packet", {})["loop_stage"] = stage
+            asg.setdefault("packet", {})["loop_status"] = run_status
+            if tick.get("packet"):
+                asg.setdefault("packet", {})["loop_packet"] = {
+                    k: tick["packet"].get(k)
+                    for k in ("stage", "steps", "gates", "checkpoint_id", "prompt")
+                    if k in (tick.get("packet") or {})
+                }
+            completed = False
+            if complete_when_done and (
+                run_status == "done" or stage == "done"
+            ):
+                asg["status"] = "done"
+                asg["updated_at"] = _now()
+                asg.setdefault("packet", {})["completion_note"] = (
+                    f"loop {kind} {rid} reached done"
+                )
+                completed = True
+                changed = True
+            elif tick.get("advance") and (tick.get("advance") or {}).get("advanced"):
+                changed = True
+                asg["updated_at"] = _now()
+            else:
+                # always persist stage sync
+                asg["updated_at"] = _now()
+                changed = True
+
+            row = {
+                "assignment_id": asg.get("assignment_id"),
+                "loop_run_id": rid,
+                "loop_kind": kind,
+                "ok": bool(tick.get("ok", True)),
+                "stage": stage,
+                "run_status": run_status,
+                "completed_assignment": completed,
+                "advanced": bool((tick.get("advance") or {}).get("advanced")),
+                "dry_run": dry_run,
+            }
+            if tick.get("error"):
+                row["error"] = tick.get("error")
+            results.append(row)
+
+        if changed:
+            try:
+                self._save_queue()
+            except Exception:
+                pass
+        return results
+
     def get_status(self) -> PMStatus:
         auto: dict[str, Any] = {}
         # Prefer local .plate only when repo is unset to avoid offline/network hangs in tests.
@@ -849,6 +966,8 @@ class ProjectManager:
         max_assignments: int = 5,
         dispatch_fleet: bool | None = None,
         dispatch_loops: bool | None = None,
+        tick_loops: bool = True,
+        fetch_loop_gates: bool = False,
     ) -> dict[str, Any]:
         """One PM orchestration cycle; merges new assignments into durable queue.
 
@@ -856,6 +975,8 @@ class ProjectManager:
         assignments also open a #644 fleet handoff via handoff_from_pm_assignment.
         When dry_run is False and dispatch_loops is True (default), implement/bugfix
         assignments also start durable #639/#638 feature/bug loops (budget-aware).
+        When tick_loops is True (default), syncs existing loop stages onto delegated
+        queue rows and completes assignments whose loops reached done.
         """
         ts = _now()
         status = self.get_status()
@@ -1096,6 +1217,19 @@ class ProjectManager:
         except Exception:
             pass
 
+        # #660 deepen: tick existing delegated loops (stage sync + complete-on-done)
+        loop_ticks: list[dict[str, Any]] = []
+        if tick_loops:
+            try:
+                loop_ticks = self.tick_delegated_loops(
+                    dry_run=dry_run,
+                    fetch_gates=bool(fetch_loop_gates and not dry_run),
+                    limit=max(max_assignments * 2, 10),
+                    complete_when_done=True,
+                )
+            except Exception as exc:
+                loop_ticks = [{"ok": False, "error": str(exc)}]
+
         try:
             d = _ensure_pm_dir(self.state_dir)
             (d / LAST_CYCLE_FILE).write_text(
@@ -1106,6 +1240,7 @@ class ProjectManager:
                         "blocked": blocked,
                         "fleet_handoffs": fleet_handoffs,
                         "loop_dispatches": loop_dispatches,
+                        "loop_ticks": loop_ticks,
                         "pm_status": status.to_dict(),
                     },
                     indent=2,
@@ -1122,6 +1257,7 @@ class ProjectManager:
             "blocked": blocked,
             "fleet_handoffs": fleet_handoffs,
             "loop_dispatches": loop_dispatches,
+            "loop_ticks": loop_ticks,
             "human_paused": [
                 {
                     "id": x.get("id") or x.get("number"),
@@ -1136,19 +1272,21 @@ class ProjectManager:
             "dry_run": dry_run,
             "dispatch_fleet": do_fleet and not dry_run,
             "dispatch_loops": do_loops and not dry_run,
+            "tick_loops": bool(tick_loops),
             "queue_size": len(self._assignments),
-            "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'completed', 'n': len(new_assignments), 'fleet': len(fleet_handoffs), 'loops': len(loop_dispatches), 'ts': ts})}\n{MARKER_END}",
+            "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'completed', 'n': len(new_assignments), 'fleet': len(fleet_handoffs), 'loops': len(loop_dispatches), 'ticks': len(loop_ticks), 'ts': ts})}\n{MARKER_END}",
         }
         _ledger_pm(
             "pm_cycle",
             "proceed" if not dry_run else "shadow",
-            f"cycle completed n={len(new_assignments)} blocked={len(blocked)} fleet={len(fleet_handoffs)} loops={len(loop_dispatches)}",
+            f"cycle completed n={len(new_assignments)} blocked={len(blocked)} fleet={len(fleet_handoffs)} loops={len(loop_dispatches)} ticks={len(loop_ticks)}",
             cost=sum(int(a.get("estimated_tokens") or 0) for a in new_assignments),
             risk=status.risk_tolerance,
             metadata={
                 "dry_run": dry_run,
                 "n": len(new_assignments),
                 "n_fleet": len(fleet_handoffs),
+                "n_loop_ticks": len(loop_ticks),
             },
         )
         return report
@@ -1234,6 +1372,8 @@ def run_pm_cycle(
     state_dir: Path | None = None,
     dispatch_fleet: bool = True,
     dispatch_loops: bool = True,
+    tick_loops: bool = True,
+    fetch_loop_gates: bool = False,
     fleet_base_dir: Path | None = None,
     feature_loop_base_dir: Path | None = None,
     bug_loop_base_dir: Path | None = None,
@@ -1251,6 +1391,8 @@ def run_pm_cycle(
         max_assignments=max_assignments,
         dispatch_fleet=dispatch_fleet,
         dispatch_loops=dispatch_loops,
+        tick_loops=tick_loops,
+        fetch_loop_gates=fetch_loop_gates,
     )
 
 
