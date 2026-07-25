@@ -694,7 +694,10 @@ def get_user_feed(
                     "id": ho.get("id"),
                     "type": "fleet_handoff",
                     "title": ho.get("title"),
-                    "rank": 16,
+                    "rank": int(
+                        ho.get("rank")
+                        or (10 if ho.get("status") == "blocked" else 16)
+                    ),
                     "impact": ho.get("impact") or "medium",
                     "reason": ho.get("reason") or "Fleet handoff (#644)",
                     "prompt_segment": (
@@ -703,6 +706,7 @@ def get_user_feed(
                     ),
                     "source": "fleet_handoffs",
                     "ask_user_question": ho.get("ask_user_question"),
+                    "checkpoint_id": ho.get("checkpoint_id"),
                 }
             )
     except Exception:

@@ -13,6 +13,7 @@ from plate_core.fleet import (
     create_handoff,
     fleet_status,
     handoff_feed_items,
+    handoff_from_pm_assignment,
     list_fleet_roles,
     list_handoffs,
     plan_fleet_from_intent,
@@ -103,6 +104,62 @@ class TestBudgetAndPlan(unittest.TestCase):
         feed = handoff_feed_items(base_dir=self.base)
         self.assertTrue(feed)
         self.assertIn("ask_user_question", feed[0])
+
+    def test_budget_gate_and_blocked_high_risk(self):
+        blocked = create_handoff(
+            from_agent="orchestrator",
+            to_agent="implementer",
+            task="big work",
+            budget_tokens=5000,
+            budget_remaining=100,
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        self.assertFalse(blocked["ok"])
+        self.assertTrue(blocked.get("blocked"))
+
+        hi = create_handoff(
+            from_agent="orchestrator",
+            to_agent="deployer",
+            task="Deploy prod",
+            risk="high",
+            requires_human=True,
+            open_checkpoint=True,
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        self.assertTrue(hi["ok"])
+        self.assertEqual(hi["handoff"]["status"], "blocked")
+        # active includes blocked
+        active = list_handoffs(status="active", base_dir=self.base)
+        self.assertTrue(any(h.get("status") == "blocked" for h in active))
+        feed = handoff_feed_items(base_dir=self.base)
+        self.assertTrue(any(f.get("status") == "blocked" for f in feed))
+        acc = update_handoff(
+            hi["handoff"]["handoff_id"],
+            status="accepted",
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        self.assertEqual(acc["handoff"]["status"], "accepted")
+
+    def test_pm_assignment_bridge(self):
+        out = handoff_from_pm_assignment(
+            {
+                "assignment_id": "asg-1",
+                "agent_id": "dev-cautious",
+                "work_title": "Implement auth",
+                "work_type": "implement",
+                "estimated_tokens": 3000,
+                "impact": "medium",
+            },
+            budget_remaining=10000,
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["handoff"]["to_agent"], "implementer")
+        self.assertEqual(out["pm_assignment_id"], "asg-1")
 
 
 if __name__ == "__main__":
