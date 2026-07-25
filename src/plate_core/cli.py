@@ -2103,16 +2103,24 @@ def cmd_bug_loop(args: argparse.Namespace) -> int:
         bug_number=getattr(args, "bug", None),
         bug_title=str(getattr(args, "title", None) or ""),
         risk=str(getattr(args, "risk", None) or "medium"),
+        size=str(getattr(args, "size", None) or "medium"),
         labels=labels or None,
         risk_tolerance=str(getattr(args, "risk_tolerance", None) or "medium"),
         pr_number=getattr(args, "pr", None),
         branch=getattr(args, "branch", None) or None,
+        budget_remaining=getattr(args, "budget_remaining", None),
+        use_live_budget=not bool(getattr(args, "no_live_budget", False)),
     )
     if args.json:
         print(json.dumps(out))
         return 0 if out.get("ok") else 1
     run = out.get("run") or {}
-    print(f"ok={out.get('ok')} id={run.get('id')} stage={run.get('stage')} human={run.get('requires_human')}")
+    print(
+        f"ok={out.get('ok')} id={run.get('id')} stage={run.get('stage')} "
+        f"est={run.get('cost_estimate_tokens')} human={run.get('requires_human')}"
+    )
+    if out.get("blocked"):
+        print(f"blocked: {out.get('error')}")
     return 0 if out.get("ok") else 1
 
 
@@ -3692,6 +3700,25 @@ def build_parser() -> argparse.ArgumentParser:
     bugloop.add_argument("--title", default="", help="Bug title")
     bugloop.add_argument("--risk", default="medium")
     bugloop.add_argument("--risk-tolerance", dest="risk_tolerance", default="medium")
+    bugloop.add_argument(
+        "--size",
+        default="medium",
+        choices=["trivial", "small", "medium", "large"],
+        help="Size for cost estimate (#634/#638)",
+    )
+    bugloop.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit token remaining; omit to live-hydrate when autonomy on",
+    )
+    bugloop.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json",
+    )
     bugloop.add_argument("--labels", default="", help="Comma labels for human-gate assessment")
     bugloop.add_argument("--pr", type=int, help="Existing PR number")
     bugloop.add_argument("--branch", default="")
