@@ -134,6 +134,10 @@ class PMStatus:
     delegated: int = 0
     blocked: int = 0
     done: int = 0
+    # #660 harden: cost dashboard / durable budget gates
+    budget_pressure: str = "ok"  # ok | elevated | critical | exhausted
+    would_pause_next_cycle: bool = False
+    spent_today_durable: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -547,10 +551,79 @@ class ProjectManager:
         except Exception:
             pass
 
+        remaining = auto.get("budget_remaining_tokens")
+        pressure = "ok"
+        would_pause = False
+        spent_durable: int | None = None
+        # Durable spend first (no network) so PM honors #634 rails offline
+        try:
+            from .autonomy import load_budget_spend
+
+            spend = load_budget_spend() or {}
+            if spend.get("spent_today") is not None:
+                spent_durable = int(spend.get("spent_today") or 0)
+                daily = 50000
+                try:
+                    from .plate_config import load_plate_config
+
+                    tb = ((load_plate_config().to_dict() or {}).get("autonomy") or {}).get(
+                        "token_budget"
+                    ) or {}
+                    daily = int(tb.get("daily") or daily)
+                    per_cycle = int(tb.get("per_cycle") or 8000)
+                except Exception:
+                    per_cycle = 8000
+                if remaining is None:
+                    remaining = max(0, daily - spent_durable)
+                # lightweight pressure without harvesting USAGE reports
+                rem_i = int(remaining or 0)
+                if rem_i <= 0:
+                    pressure = "exhausted"
+                    would_pause = True
+                elif rem_i <= per_cycle:
+                    pressure = "critical"
+                    would_pause = True
+                elif rem_i <= int(daily * 0.25):
+                    pressure = "elevated"
+                burn = round(min(100.0, (spent_durable / float(daily)) * 100.0), 1) if daily else 0.0
+                if burn >= 80 and pressure == "ok":
+                    pressure = "critical"
+                auto["burn_rate"] = burn
+        except Exception:
+            pass
+        # Full cost dashboard only when repo is set (may hit GitHub harvest)
+        if self.repo:
+            try:
+                from .costs import get_cost_dashboard
+
+                dash = get_cost_dashboard(
+                    repo=self.repo,
+                    autonomy_status={
+                        "enabled": bool(auto.get("enabled", False)),
+                        "risk_tolerance": str(auto.get("risk_tolerance") or "off"),
+                        "budget_remaining_tokens": remaining,
+                        "burn_rate": auto.get("burn_rate") or 0.0,
+                        "autopilot_score": auto.get("autopilot_score") or 0,
+                        "open_human_checkpoints": auto.get("open_human_checkpoints")
+                        or [],
+                    },
+                )
+                b = dash.get("budget") or {}
+                if b.get("remaining_tokens") is not None:
+                    remaining = b.get("remaining_tokens")
+                pressure = str(b.get("budget_pressure") or pressure)
+                would_pause = bool(b.get("would_pause_next_cycle") or would_pause)
+                if b.get("spent_today_durable") is not None:
+                    spent_durable = int(b.get("spent_today_durable") or 0)
+                if b.get("burn_rate_pct") is not None:
+                    auto["burn_rate"] = float(b.get("burn_rate_pct") or 0.0)
+            except Exception:
+                pass
+
         return PMStatus(
             enabled=bool(auto.get("enabled", False)),
             risk_tolerance=str(auto.get("risk_tolerance") or "off"),
-            budget_remaining_tokens=auto.get("budget_remaining_tokens"),
+            budget_remaining_tokens=remaining if remaining is None else int(remaining),
             burn_rate=float(auto.get("burn_rate") or 0.0),
             autopilot_score=int(auto.get("autopilot_score") or 0),
             team_size=len(TEAM),
@@ -562,6 +635,9 @@ class ProjectManager:
             delegated=by_status["delegated"],
             blocked=by_status["blocked"],
             done=by_status["done"],
+            budget_pressure=pressure,
+            would_pause_next_cycle=would_pause,
+            spent_today_durable=spent_durable,
         )
 
     def collect_work(self, *, limit: int = 10) -> list[dict[str, Any]]:
@@ -646,6 +722,7 @@ class ProjectManager:
             report = {
                 "status": "paused",
                 "reason": "open human checkpoints",
+                "pause_kind": "checkpoints",
                 "assignments": [],
                 "blocked": ["checkpoints"],
                 "pm_status": status.to_dict(),
@@ -660,6 +737,52 @@ class ProjectManager:
                 "open human checkpoints",
                 risk=status.risk_tolerance,
                 metadata={"open_checkpoints": status.open_checkpoints},
+            )
+            try:
+                d = _ensure_pm_dir(self.state_dir)
+                (d / LAST_CYCLE_FILE).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+            except Exception:
+                pass
+            return report
+
+        # #660 harden: pause unsupervised PM when budget pressure is critical/exhausted
+        if (
+            status.enabled
+            and status.risk_tolerance not in ("off", "")
+            and (
+                status.budget_pressure in ("critical", "exhausted")
+                or status.would_pause_next_cycle
+                or (
+                    status.budget_remaining_tokens is not None
+                    and int(status.budget_remaining_tokens) <= 0
+                )
+            )
+        ):
+            report = {
+                "status": "paused",
+                "reason": (
+                    f"budget_pressure={status.budget_pressure} "
+                    f"remaining={status.budget_remaining_tokens} "
+                    f"would_pause={status.would_pause_next_cycle}"
+                ),
+                "pause_kind": "budget",
+                "assignments": [],
+                "blocked": ["budget"],
+                "pm_status": status.to_dict(),
+                "timestamp": ts,
+                "dry_run": dry_run,
+                "queue_size": len(self._assignments),
+                "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'paused', 'kind': 'budget', 'ts': ts})}\n{MARKER_END}",
+            }
+            _ledger_pm(
+                "pm_cycle",
+                "pause",
+                report["reason"],
+                risk=status.risk_tolerance,
+                metadata={
+                    "budget_pressure": status.budget_pressure,
+                    "remaining": status.budget_remaining_tokens,
+                },
             )
             try:
                 d = _ensure_pm_dir(self.state_dir)
@@ -792,12 +915,18 @@ class ProjectManager:
                 }
             )
             if rep.get("status") == "paused" and stop_on_pause:
-                stopped_reason = "paused_checkpoints"
+                kind = str(rep.get("pause_kind") or "checkpoints")
+                stopped_reason = (
+                    "paused_budget" if kind == "budget" else "paused_checkpoints"
+                )
                 break
             st = rep.get("pm_status") or {}
             rem = st.get("budget_remaining_tokens")
             if rem is not None and int(rem) <= 0:
                 stopped_reason = "budget_exhausted"
+                break
+            if str(st.get("budget_pressure") or "") in ("critical", "exhausted"):
+                stopped_reason = "budget_pressure"
                 break
             # no new work
             if not (rep.get("assignments") or []) and not (rep.get("blocked") or []):
@@ -873,3 +1002,116 @@ def complete_pm_assignment(
     return ProjectManager(repo=repo, state_dir=state_dir).complete_assignment(
         assignment_id, status=status, note=note
     )
+
+
+def pm_feed_items(
+    *,
+    state_dir: Path | None = None,
+    repo: str | None = None,
+    limit: int = 15,
+) -> list[dict[str, Any]]:
+    """Feed rows for open PM assignments + pause gates (#660)."""
+    pm = ProjectManager(repo=repo, state_dir=state_dir)
+    items: list[dict[str, Any]] = []
+    st = pm.get_status()
+    if st.open_checkpoints > 0:
+        items.append(
+            {
+                "id": "pm-pause-checkpoints",
+                "item_type": "pm_gate",
+                "title": f"PM paused: {st.open_checkpoints} open checkpoint(s)",
+                "rank": 8,
+                "impact": "high",
+                "status": "paused",
+                "reason": "Open human checkpoints block PM assign/delegate",
+                "prompt_segment": (
+                    "Resolve open checkpoints (plate_checkpoint_decide) before "
+                    "plate_pm_run_cycle --apply."
+                ),
+                "ask_user_question": {
+                    "question": "PM is paused on open checkpoints — next step?",
+                    "options": [
+                        {
+                            "id": "list_checkpoints",
+                            "label": "List open checkpoints",
+                            "description": "gh plate checkpoint --list / plate_checkpoint_list",
+                        },
+                        {
+                            "id": "status",
+                            "label": "PM status",
+                            "description": "gh plate pm --status",
+                        },
+                    ],
+                },
+                "source": "pm",
+            }
+        )
+    if st.enabled and st.risk_tolerance not in ("off", "") and (
+        st.budget_pressure in ("critical", "exhausted") or st.would_pause_next_cycle
+    ):
+        items.append(
+            {
+                "id": "pm-pause-budget",
+                "item_type": "pm_gate",
+                "title": (
+                    f"PM budget gate: pressure={st.budget_pressure} "
+                    f"remaining={st.budget_remaining_tokens}"
+                ),
+                "rank": 7,
+                "impact": "critical" if st.budget_pressure == "exhausted" else "high",
+                "status": "paused",
+                "reason": "Budget rails block unsupervised PM cycles (#634/#660)",
+                "prompt_segment": (
+                    "Raise .plate token_budget / cost_ceiling or wait for UTC day reset; "
+                    "gh plate costs --dashboard."
+                ),
+                "ask_user_question": {
+                    "question": "PM budget pressure high — next step?",
+                    "options": [
+                        {
+                            "id": "dashboard",
+                            "label": "Open cost dashboard",
+                            "description": "gh plate costs --dashboard",
+                        },
+                        {
+                            "id": "raise_budget",
+                            "label": "Raise token_budget in .plate",
+                            "description": "Human edits autonomy.token_budget",
+                        },
+                        {
+                            "id": "pause",
+                            "label": "Keep autonomy off / pause",
+                            "description": "No unsupervised PM cycles",
+                        },
+                    ],
+                },
+                "source": "pm",
+            }
+        )
+    for st_name in ("blocked", "proposed", "delegated"):
+        for row in pm.list_queue(status=st_name, limit=limit):
+            aid = str(row.get("assignment_id") or "")
+            items.append(
+                {
+                    "id": aid,
+                    "item_type": "pm_assignment",
+                    "title": row.get("work_title") or aid,
+                    "rank": 9 if st_name == "blocked" else 17,
+                    "impact": "high" if st_name == "blocked" else "medium",
+                    "status": st_name,
+                    "agent_id": row.get("agent_id"),
+                    "work_type": row.get("work_type"),
+                    "reason": row.get("rationale") or f"PM assignment {st_name}",
+                    "prompt_segment": (
+                        f"PM [{st_name}] {row.get('work_title')}: "
+                        f"persona={row.get('agent_id')}; "
+                        f"plate_pm_complete {aid} when done."
+                    ),
+                    "ask_user_question": row.get("ask_user_question")
+                    or build_assignment_tui(row),
+                    "source": "pm_queue",
+                    "assignment_id": aid,
+                }
+            )
+    items.sort(key=lambda x: (int(x.get("rank") or 99), str(x.get("title") or "")))
+    return items[: max(1, limit)]
