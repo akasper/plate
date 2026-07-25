@@ -637,6 +637,89 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertIn("Budget snapshot", md)
             self.assertIn("4000/10000", md)
 
+    def test_record_budget_spend_public(self):
+        """#634/#775: gated surfaces charge durable spend outside AutonomyEngine."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.autonomy import (
+            get_budget_snapshot,
+            load_budget_spend,
+            record_budget_spend,
+            save_budget_spend,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": __import__("datetime")
+                    .datetime.now(__import__("datetime").timezone.utc)
+                    .date()
+                    .isoformat(),
+                    "spent_today": 100,
+                    "spent_this_cycle": 10,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+            out = record_budget_spend(
+                250,
+                base_dir=bdir,
+                reason="unit-test",
+                action_kind="test_charge",
+            )
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["charged_tokens"], 250)
+            self.assertEqual(out["spent_today"], 350)
+            self.assertEqual(out["spent_this_cycle"], 260)
+            data = load_budget_spend(base_dir=bdir)
+            self.assertEqual(data.get("spent_today"), 350)
+            self.assertEqual(data.get("last_action_kind"), "test_charge")
+            snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["spent_today"], 350)
+
+    def test_get_budget_snapshot_estimate_tokens_alias(self):
+        """Surface gates pass estimate_tokens; alias must hydrate gate reasons."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": __import__("datetime")
+                    .datetime.now(__import__("datetime").timezone.utc)
+                    .date()
+                    .isoformat(),
+                    "spent_today": 9000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 5000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(
+                    base_dir=bdir, estimate_tokens=2000
+                )
+            self.assertTrue(snap["would_pause"])
+            self.assertIn("daily", snap.get("gate_reason") or "")
+
 
 if __name__ == "__main__":
     unittest.main()

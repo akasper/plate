@@ -295,6 +295,86 @@ def save_budget_spend(data: dict[str, Any], *, base_dir: Path | None = None) -> 
     return path
 
 
+def record_budget_spend(
+    tokens: int,
+    *,
+    base_dir: Path | None = None,
+    charge_cycle: bool = True,
+    reason: str | None = None,
+    action_kind: str | None = None,
+) -> dict[str, Any]:
+    """Charge durable #634 spend when a gated surface succeeds (outside AutonomyEngine).
+
+    Surface gates (planning, media plan, packaging, etc.) hydrate/block via
+    ``get_budget_snapshot`` but historically did not deplete remaining tokens.
+    Call this after a successful gated action so spend.json matches reality and
+    subsequent gates see reduced remaining.
+
+    Safe when spend file missing; rolls UTC day; never raises for IO (returns ok=False).
+    """
+    tok = max(0, int(tokens or 0))
+    today = datetime.now(timezone.utc).date().isoformat()
+    try:
+        data = load_budget_spend(base_dir=base_dir) or {}
+        stored_day = str(data.get("date") or data.get("day") or "")
+        if stored_day != today:
+            data = {
+                "date": today,
+                "spent_today": 0,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+                "throttled_actions": int(data.get("throttled_actions") or 0),
+            }
+        else:
+            data = dict(data)
+            data["date"] = today
+        try:
+            spent_today = int(data.get("spent_today") or 0)
+        except (TypeError, ValueError):
+            spent_today = 0
+        try:
+            spent_cycle = int(data.get("spent_this_cycle") or 0)
+        except (TypeError, ValueError):
+            spent_cycle = 0
+        try:
+            spent_usd = float(data.get("spent_usd_today") or 0.0)
+        except (TypeError, ValueError):
+            spent_usd = 0.0
+
+        spent_today += tok
+        if charge_cycle:
+            spent_cycle += tok
+        spent_usd += tokens_to_usd(tok)
+
+        data["spent_today"] = spent_today
+        data["spent_this_cycle"] = spent_cycle
+        data["spent_usd_today"] = round(spent_usd, 6)
+        if reason:
+            data["last_reason"] = str(reason)[:200]
+        if action_kind:
+            data["last_action_kind"] = str(action_kind)[:80]
+        path = save_budget_spend(data, base_dir=base_dir)
+        return {
+            "ok": True,
+            "charged_tokens": tok,
+            "spent_today": spent_today,
+            "spent_this_cycle": spent_cycle,
+            "spent_usd_today": data["spent_usd_today"],
+            "path": str(path),
+            "date": today,
+            "reason": reason,
+            "action_kind": action_kind,
+        }
+    except OSError as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "charged_tokens": 0,
+            "reason": reason,
+            "action_kind": action_kind,
+        }
+
+
 def tokens_to_usd(tokens: int) -> float:
     """Heuristic USD projection for cost_ceiling enforcement (#634)."""
     return round((max(0, int(tokens)) / 1000.0) * _USD_PER_1K_TOKENS, 6)
@@ -1545,6 +1625,7 @@ def get_budget_snapshot(
     *,
     base_dir: Path | None = None,
     estimated_tokens: int | None = None,
+    estimate_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Human-facing #634 budget UX snapshot (CLI/MCP/feature_loop hydrate).
 
@@ -1554,7 +1635,12 @@ def get_budget_snapshot(
 
     Returns dict with limits, spend, remaining, burn, would_pause/throttle for
     an optional estimate, and paths. Safe when config/spend missing.
+
+    ``estimate_tokens`` is accepted as an alias of ``estimated_tokens`` (surface
+    gates historically used the shorter name; both work).
     """
+    if estimated_tokens is None and estimate_tokens is not None:
+        estimated_tokens = estimate_tokens
     try:
         cfg = load_plate_config()
         auto = dict(getattr(cfg, "autonomy", None) or {})
