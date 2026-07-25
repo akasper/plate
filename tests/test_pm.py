@@ -336,9 +336,10 @@ class TestPMCycle(unittest.TestCase):
                     "risk_tolerance": "medium",
                 },
                 bug_loop_base_dir=bdir,
+                budget_remaining=100_000,
                 record_ledger=False,
             )
-            self.assertTrue(out["ok"])
+            self.assertTrue(out["ok"], out)
             self.assertEqual(out["loop_kind"], "bug")
             self.assertTrue(out["run_id"])
 
@@ -353,6 +354,7 @@ class TestPMCycle(unittest.TestCase):
                 bug_number=7,
                 bug_title="done soon",
                 risk="low",
+                use_live_budget=False,
                 base_dir=bdir,
                 record_ledger=False,
             )

@@ -163,6 +163,54 @@ class TestRunLifecycle(unittest.TestCase):
             self.assertTrue(r["blocked"])
             self.assertIn("budget_snapshot", r)
 
+    def test_live_budget_hydrates_when_risk_off(self):
+        """#785: risk_tolerance=off still hydrates remaining for surface gates."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": __import__("datetime")
+                    .datetime.now(__import__("datetime").timezone.utc)
+                    .date()
+                    .isoformat(),
+                    "spent_today": 49000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 50000,
+                        "per_cycle": 8000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                r = start_bug_loop(
+                    bug_number=88,
+                    bug_title="Risk off hydrate",
+                    size="large",
+                    use_live_budget=True,
+                    budget_base_dir=bdir,
+                    base_dir=self.base,
+                    record_ledger=False,
+                )
+            self.assertTrue(r["blocked"], r)
+            self.assertEqual(r["budget_remaining"], 1000)
+            self.assertEqual(r["run"]["metadata"].get("budget_source"), "live")
+
     def test_babysit_gate_blocks_advance(self):
         r = start_bug_loop(
             bug_number=1,
