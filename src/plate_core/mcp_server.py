@@ -1110,6 +1110,15 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_feature_loop_feed":
             payload = {"items": feature_loop_feed_items(limit=int(args.get("limit") or 10))}
         elif name == "plate_design_contract_propose":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = propose_contract(
                 feature_number=args.get("feature_number") or args.get("feature"),
                 feature_title=str(args.get("feature_title") or args.get("title") or ""),
@@ -1119,6 +1128,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 artifact_paths=list(args.get("artifact_paths") or []) or None,
                 has_playwright=bool(args.get("has_playwright") or False),
                 submit_for_approval=bool(args.get("submit_for_approval", True)),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_design_contract_list":
             payload = {
@@ -3398,7 +3409,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_design_contract_propose",
-                                "description": "Propose visual/interaction design contract for a Feature with failing-test scaffold (#646).",
+                                "description": "Propose visual/interaction design contract for a Feature with failing-test scaffold (#646). #634 budget gate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -3411,6 +3422,8 @@ def run() -> None:
                                         "artifact_paths": {"type": "array", "items": {"type": "string"}},
                                         "has_playwright": {"type": "boolean"},
                                         "submit_for_approval": {"type": "boolean"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                 },
                             },

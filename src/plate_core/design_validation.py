@@ -203,6 +203,48 @@ if __name__ == "__main__":
     }
 
 
+# Heuristic design-contract costs (#634/#646).
+_CONTRACT_BASE = 4000
+_CONTRACT_PLAYWRIGHT = 2500
+_CONTRACT_PER_CRITERION = 100
+
+
+def estimate_contract_cost(
+    *,
+    n_visual: int = 0,
+    n_interaction: int = 0,
+    n_a11y: int = 0,
+    has_playwright: bool = False,
+) -> dict[str, Any]:
+    """Advisory token estimate for proposing a design validation contract (#634/#646)."""
+    n_v = max(0, int(n_visual or 0))
+    n_i = max(0, int(n_interaction or 0))
+    n_a = max(0, int(n_a11y or 0))
+    # Defaults fill empty criteria in propose_contract (~2 visual, ~2 interaction, ~default a11y)
+    if n_v == 0:
+        n_v = 2
+    if n_i == 0:
+        n_i = 2
+    if n_a == 0:
+        n_a = len(default_a11y_criteria())
+    tokens = _CONTRACT_BASE + min(4000, (n_v + n_i + n_a) * _CONTRACT_PER_CRITERION)
+    if has_playwright:
+        tokens += _CONTRACT_PLAYWRIGHT
+    return {
+        "ok": True,
+        "estimated_tokens": int(tokens),
+        "breakdown": {
+            "base": _CONTRACT_BASE,
+            "criteria": min(4000, (n_v + n_i + n_a) * _CONTRACT_PER_CRITERION),
+            "playwright": _CONTRACT_PLAYWRIGHT if has_playwright else 0,
+        },
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine enforce hard ceilings.",
+            "propose_contract hydrates remaining via get_budget_snapshot when use_live_budget.",
+        ],
+    }
+
+
 def propose_contract(
     *,
     feature_number: int | None = None,
@@ -214,8 +256,14 @@ def propose_contract(
     has_playwright: bool = False,
     submit_for_approval: bool = True,
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Create a design contract draft (optionally pending_approval)."""
+    """Create a design contract draft (optionally pending_approval).
+
+    #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
+    hydrate remaining tokens from durable budget snapshot and block if est exceeds remaining.
+    """
     title = (feature_title or "").strip() or (
         f"Feature #{feature_number}" if feature_number else "Untitled feature"
     )
@@ -232,6 +280,45 @@ def propose_contract(
             "Primary CTA is visually dominant and labeled",
         ]
     a11y = list(a11y_criteria or default_a11y_criteria())
+
+    cost_est = estimate_contract_cost(
+        n_visual=len(visuals),
+        n_interaction=len(interactions),
+        n_a11y=len(a11y),
+        has_playwright=has_playwright,
+    )
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    effective_remaining = budget_remaining
+    budget_notes: list[str] = []
+    if effective_remaining is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot(estimate_tokens=est_tokens)
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective_remaining = int(rem)
+                budget_notes.append(
+                    f"budget hydrated: remaining_tokens={effective_remaining} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            budget_notes.append(f"budget hydrate skipped: {exc}")
+
+    if effective_remaining is not None and est_tokens > int(effective_remaining):
+        return {
+            "ok": False,
+            "blocked": True,
+            "reason": "budget",
+            "error": (
+                f"budget: est {est_tokens} tokens exceeds remaining {effective_remaining}"
+            ),
+            "cost_estimate_tokens": est_tokens,
+            "budget_remaining": int(effective_remaining),
+            "cost_estimate": cost_est,
+            "notes": budget_notes,
+        }
+
     ts = _now()
     contract = DesignContract(
         id=f"dc-{uuid.uuid4().hex[:10]}",
@@ -246,7 +333,12 @@ def propose_contract(
         test_plan=default_test_plan(has_playwright=has_playwright),
         created_at=ts,
         updated_at=ts,
-        metadata={"has_playwright": has_playwright},
+        metadata={
+            "has_playwright": has_playwright,
+            "cost_estimate_tokens": est_tokens,
+            "budget_remaining": effective_remaining,
+            "budget_notes": budget_notes,
+        },
     )
     data = _load(base_dir)
     data["contracts"].append(contract.to_dict())
@@ -256,8 +348,17 @@ def propose_contract(
         "ok": True,
         "contract": contract.to_dict(),
         "test_scaffold": scaffold,
+        "cost_estimate_tokens": est_tokens,
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
+        "notes": budget_notes,
         "marker": render_contract_marker(
-            {"id": contract.id, "status": contract.status, "feature": feature_number}
+            {
+                "id": contract.id,
+                "status": contract.status,
+                "feature": feature_number,
+                "cost_estimate_tokens": est_tokens,
+            }
         ),
         "ask_user_question": {
             "question": f"Approve design contract for {title}?",
