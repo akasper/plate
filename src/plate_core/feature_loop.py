@@ -412,11 +412,14 @@ def start_feature_loop(
                 base_dir=budget_base_dir,
             )
             # Only enforce live rails when autonomy is enabled (risk != off)
-            if budget_snap.get("enabled"):
+            # Honor durable remaining even when risk_tolerance=off (engine disabled).
+            # risk-off only skips AutonomyEngine cycles; surface gates still apply (#634).
+            if budget_snap.get("remaining_tokens") is not None:
                 effective_budget = int(budget_snap.get("remaining_tokens") or 0)
                 notes.append(
                     f"budget hydrated: remaining_tokens={effective_budget} "
-                    f"pressure={budget_snap.get('budget_pressure')}"
+                    f"pressure={budget_snap.get('budget_pressure')} "
+                    f"enabled={budget_snap.get('enabled')}"
                 )
                 if budget_snap.get("would_pause") or budget_snap.get("would_throttle"):
                     # Mirror engine: pause/throttle both block start of large Features
@@ -470,7 +473,12 @@ def start_feature_loop(
             "budget_source": (
                 "explicit"
                 if budget_remaining is not None
-                else ("live" if budget_snap and budget_snap.get("enabled") else "none")
+                else (
+                    "live"
+                    if budget_snap is not None
+                    and budget_snap.get("remaining_tokens") is not None
+                    else "none"
+                )
             ),
         },
     )
