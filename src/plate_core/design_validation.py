@@ -344,14 +344,14 @@ def propose_contract(
     data["contracts"].append(contract.to_dict())
     _save(data, base_dir)
     scaffold = build_failing_test_scaffold(contract.to_dict())
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "contract": contract.to_dict(),
         "test_scaffold": scaffold,
         "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
         "marker": render_contract_marker(
             {
                 "id": contract.id,
@@ -381,6 +381,19 @@ def propose_contract(
             ],
         },
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="design_contract_propose",
+            reason=f"propose_contract:{contract.id}",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def list_contracts(

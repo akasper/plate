@@ -406,15 +406,29 @@ def author_stub(
         data = _load(base_dir)
         data["drafts"].append(draft.to_dict())
         _save(data, base_dir)
-    return {
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    out: dict[str, Any] = {
         "ok": True,
         "draft": draft.to_dict(),
-        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
         "marker": render_stub_marker(draft.to_dict()),
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="stub_author",
+            reason=f"author_stub:{draft.id}",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def refine_stub(
@@ -571,6 +585,7 @@ def create_stub_issue(
     title = str(found.get("title") or "")
     body = str(found.get("body") or "")
     labels = list(found.get("labels") or default_labels_for_type(str(found.get("issue_type") or "Feature")))
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
     payload: dict[str, Any] = {
         "ok": True,
         "dry_run": dry_run,
@@ -579,10 +594,10 @@ def create_stub_issue(
         "labels": labels,
         "repo": target,
         "draft_id": found.get("id"),
-        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
     }
 
     milestone_num: int | None = None
@@ -592,10 +607,25 @@ def create_stub_issue(
     elif isinstance(milestone, str) and milestone.isdigit():
         milestone_num = int(milestone)
 
+    def _charge(out: dict[str, Any]) -> dict[str, Any]:
+        try:
+            from .autonomy import apply_live_budget_charge
+
+            apply_live_budget_charge(
+                out,
+                tokens=est_tokens,
+                use_live_budget=use_live_budget,
+                action_kind="stub_create",
+                reason=f"create_stub_issue:{found.get('id')}",
+            )
+        except Exception:
+            pass
+        return out
+
     if dry_run:
         payload["would_create"] = True
         payload["milestone"] = milestone_num
-        return payload
+        return _charge(payload)
 
     gh = client or GhClient()
     fields: dict[str, Any] = {
@@ -628,7 +658,7 @@ def create_stub_issue(
                 "status": "created",
             }
         )
-        return payload
+        return _charge(payload)
     except Exception as exc:
         return {"ok": False, "error": str(exc), "dry_run": False, "draft_id": found.get("id")}
 
