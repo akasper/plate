@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -91,7 +92,181 @@ def shadow_report_from_dict(data: dict[str, Any]) -> "ShadowReport":
         shadow_id=str(data.get("shadow_id") or ""),
         timestamp=str(data.get("timestamp") or ""),
         scope=dict(data.get("scope") or {}),
+        predicted_diff=dict(data.get("predicted_diff") or {}),
+        worktree_plan=dict(data.get("worktree_plan") or {}),
     )
+
+
+def collect_git_diff_preview(
+    *,
+    base_ref: str = "origin/release",
+    cwd: Path | str | None = None,
+    max_files: int = 40,
+) -> dict[str, Any]:
+    """Best-effort local git preview for #645 shadow (no network, no mutation).
+
+    Returns structured summary of dirty/working tree + optional base_ref...HEAD
+    range when the base exists. Never raises; on failure returns ok=False.
+    """
+    root = Path(cwd) if cwd else Path.cwd()
+    out: dict[str, Any] = {
+        "ok": False,
+        "base_ref": base_ref,
+        "cwd": str(root),
+        "files": [],
+        "file_count": 0,
+        "insertions": 0,
+        "deletions": 0,
+        "stat": "",
+        "status_short": "",
+        "range": "",
+        "error": None,
+    }
+
+    def _run(args: list[str]) -> tuple[int, str, str]:
+        try:
+            proc = subprocess.run(
+                args,
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            return proc.returncode, proc.stdout or "", proc.stderr or ""
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return 1, "", str(exc)
+
+    # Must be a git worktree
+    code, top, err = _run(["git", "rev-parse", "--show-toplevel"])
+    if code != 0:
+        out["error"] = (err or top or "not a git repository").strip()[:200]
+        return out
+    out["cwd"] = top.strip() or str(root)
+
+    code, status, _ = _run(["git", "status", "--short"])
+    out["status_short"] = status.strip()
+    dirty_files = []
+    for line in status.splitlines():
+        line = line.rstrip()
+        if not line:
+            continue
+        # XY<path> or XY path
+        path = line[3:].strip() if len(line) > 3 else line
+        if " -> " in path:
+            path = path.split(" -> ", 1)[-1].strip()
+        dirty_files.append(path)
+
+    # Prefer range against base when available; else unstaged+staged summary
+    range_spec = ""
+    code, _, _ = _run(["git", "rev-parse", "--verify", base_ref])
+    if code == 0:
+        range_spec = f"{base_ref}...HEAD"
+        out["range"] = range_spec
+        code, stat, _ = _run(["git", "diff", "--stat", range_spec])
+        if code == 0:
+            out["stat"] = stat.strip()
+        code, name_status, _ = _run(["git", "diff", "--name-status", range_spec])
+        files: list[dict[str, str]] = []
+        if code == 0:
+            for line in name_status.splitlines():
+                parts = line.split("\t")
+                if not parts:
+                    continue
+                status_c = parts[0].strip()
+                path = parts[-1].strip() if len(parts) > 1 else parts[0]
+                files.append({"status": status_c, "path": path})
+        # numstat for insert/delete totals
+        code, numstat, _ = _run(["git", "diff", "--numstat", range_spec])
+        ins = dels = 0
+        if code == 0:
+            for line in numstat.splitlines():
+                cols = line.split("\t")
+                if len(cols) >= 2:
+                    try:
+                        if cols[0] != "-":
+                            ins += int(cols[0])
+                        if cols[1] != "-":
+                            dels += int(cols[1])
+                    except ValueError:
+                        pass
+        out["insertions"] = ins
+        out["deletions"] = dels
+        # Merge dirty working tree files not in range
+        seen = {f["path"] for f in files}
+        for p in dirty_files:
+            if p not in seen:
+                files.append({"status": "WT", "path": p})
+        out["files"] = files[: max(1, int(max_files))]
+        out["file_count"] = len(files)
+        out["ok"] = True
+        out["truncated"] = len(files) > max_files
+        return out
+
+    # Fallback: working tree only
+    out["range"] = "WORKTREE"
+    code, stat, _ = _run(["git", "diff", "--stat", "HEAD"])
+    if code == 0:
+        out["stat"] = stat.strip()
+    code, numstat, _ = _run(["git", "diff", "--numstat", "HEAD"])
+    ins = dels = 0
+    if code == 0:
+        for line in numstat.splitlines():
+            cols = line.split("\t")
+            if len(cols) >= 2:
+                try:
+                    if cols[0] != "-":
+                        ins += int(cols[0])
+                    if cols[1] != "-":
+                        dels += int(cols[1])
+                except ValueError:
+                    pass
+    out["insertions"] = ins
+    out["deletions"] = dels
+    out["files"] = [{"status": "WT", "path": p} for p in dirty_files[: max(1, int(max_files))]]
+    out["file_count"] = len(dirty_files)
+    out["ok"] = True
+    out["truncated"] = len(dirty_files) > max_files
+    if not dirty_files and not out["stat"]:
+        out["stat"] = "(clean working tree; base_ref not available)"
+    return out
+
+
+def plan_shadow_worktree(
+    action_kind: str,
+    *,
+    shadow_id: str,
+    base_ref: str = "origin/release",
+    worktree_root: Path | str | None = None,
+) -> dict[str, Any]:
+    """Describe a disposable worktree plan for shadow execution (#645).
+
+    Does not create the worktree — agents/hosts execute when approved.
+    """
+    kind = (action_kind or "unknown").lower().replace("-", "_")
+    root = Path(worktree_root) if worktree_root else Path(".agentic/shadow-worktrees")
+    # short stable folder from shadow_id
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "_", shadow_id or uuid.uuid4().hex[:12])[:40]
+    path = root / f"{kind}-{safe}"
+    return {
+        "enabled": True,
+        "path": str(path),
+        "base_ref": base_ref,
+        "create_commands": [
+            f"git fetch origin {base_ref.replace('origin/', '')} 2>/dev/null || true",
+            f"git worktree add --detach {path} {base_ref}",
+        ],
+        "cleanup_commands": [
+            f"git worktree remove --force {path}",
+            f"rm -rf {path}",
+        ],
+        "notes": [
+            "Create only for high/critical actions that need isolated diffs/tests",
+            "Never run force-push or marketplace publish inside shadow worktree",
+            "Prefer --detach so shadow does not move integration branches",
+        ],
+        "isolation_check": "git -C <path> rev-parse --show-toplevel must equal planned path",
+    }
 
 
 def _budget_spend_path(base_dir: Path | None = None) -> Path:
@@ -332,6 +507,9 @@ class ShadowReport:
     shadow_id: str = ""
     timestamp: str = ""
     scope: dict[str, Any] = field(default_factory=dict)
+    # #645 harden: local git preview + disposable worktree plan (no mutation)
+    predicted_diff: dict[str, Any] = field(default_factory=dict)
+    worktree_plan: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -553,6 +731,37 @@ class AutonomyEngine:
         # Durable id (uuid) so shadow_ack survives process restart via .agentic/shadow/
         shadow_id = f"shadow-{kind}-{uuid.uuid4().hex[:12]}"
 
+        # #645 harden: predicted local diffs + worktree plan for high/critical (skippable)
+        base_ref = str(scope.get("base_ref") or scope.get("base") or "origin/release")
+        predicted_diff: dict[str, Any] = {}
+        worktree_plan: dict[str, Any] = {}
+        if not scope.get("skip_git_preview"):
+            cwd = scope.get("cwd") or scope.get("repo_root")
+            predicted_diff = collect_git_diff_preview(
+                base_ref=base_ref,
+                cwd=cwd,
+                max_files=int(scope.get("max_diff_files") or 40),
+            )
+            if predicted_diff.get("ok") and predicted_diff.get("file_count"):
+                side_effects.append(
+                    f"Predicted local diff vs {predicted_diff.get('range') or base_ref}: "
+                    f"{predicted_diff.get('file_count')} files "
+                    f"(+{predicted_diff.get('insertions')}/-{predicted_diff.get('deletions')})"
+                )
+            if predicted_diff.get("stat"):
+                gate_preview.append("review predicted_diff.stat before approving live run")
+        if impact in ("high", "critical") or scope.get("force_worktree_plan"):
+            worktree_plan = plan_shadow_worktree(
+                kind,
+                shadow_id=shadow_id,
+                base_ref=base_ref,
+                worktree_root=scope.get("worktree_root"),
+            )
+            gate_preview.append(
+                f"optional shadow worktree: {worktree_plan.get('path')} "
+                "(create only when isolation needed; cleanup after)"
+            )
+
         report = ShadowReport(
             action_kind=kind,
             impact=impact,
@@ -569,6 +778,8 @@ class AutonomyEngine:
             shadow_id=shadow_id,
             timestamp=ts,
             scope=scope,
+            predicted_diff=predicted_diff,
+            worktree_plan=worktree_plan,
         )
         self._persist_shadow(report)
         return report
