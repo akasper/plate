@@ -1,0 +1,25 @@
+{
+  "slug": "660-pm-tick-loops-surface",
+  "change_type": "feature",
+  "surface": "src/plate_core/pm.py, feature_loop.py, cli.py, mcp_server.py, tests/",
+  "summary": "#660 dedicated tick_pm_loops surface (CLI --tick-loops, MCP plate_pm_tick_loops) without new assigns; feature_loop tick auto-advances estimate_cost\u2192plan when dry_run=false so PM ticks make safe progress.",
+  "migration_impact": "New CLI/MCP entrypoints. Apply-mode feature loop ticks leave estimate_cost automatically. Other stages still require agent work + advance. No silent merges.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. After PM dispatch: gh plate pm --tick-loops --apply [--fetch-loop-gates].",
+    "3. Or plate_pm_tick_loops dry_run=false.",
+    "4. Full cycles still tick by default via run_cycle."
+  ],
+  "agent_notes": "Use tick_loops for long host loops that only need stage sync. estimate_cost is the only non-gate auto-advance. Babysit still needs gates + fetch.",
+  "breaking": false,
+  "links": [
+    "#749",
+    "#660",
+    "#639",
+    "#638",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
