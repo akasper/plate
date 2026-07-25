@@ -157,6 +157,7 @@ from .release import collect_fragments as collect_release_fragments
 from .feature_media import (
     attach_to_fragment_file,
     decide_feature_media,
+    estimate_feature_media_cost,
     feature_media_feed_items,
     get_feature_media,
     list_feature_media,
@@ -1473,7 +1474,16 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 args.get("version"),
                 releases_dir=_P(str(args.get("releases_dir") or ".agentic/releases")),
             )
+        elif name == "plate_feature_media_estimate_cost":
+            payload = estimate_feature_media_cost(
+                phase=str(args.get("phase") or "plan"),
+                quality=str(args.get("quality") or "medium"),
+            )
         elif name == "plate_feature_media_plan":
+            br = args.get("budget_remaining")
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = plan_feature_media(
                 feature_number=args.get("feature_number") or args.get("feature"),
                 feature_title=str(args.get("feature_title") or args.get("title") or ""),
@@ -1481,6 +1491,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 caption=args.get("caption"),
                 fragment_slug=args.get("fragment_slug"),
                 quality=str(args.get("quality") or "medium"),
+                budget_remaining=int(br) if br is not None else None,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_feature_media_register":
             payload = register_capture(
@@ -3878,8 +3890,22 @@ def run() -> None:
                                 },
                             },
                             {
+                                "name": "plate_feature_media_estimate_cost",
+                                "description": "Advisory token estimate for Feature media plan/register (#634/#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "phase": {
+                                            "type": "string",
+                                            "description": "plan|register",
+                                        },
+                                        "quality": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
                                 "name": "plate_feature_media_plan",
-                                "description": "Plan per-Feature demo GIF capture (test_name + path + steps) (#636).",
+                                "description": "Plan per-Feature demo GIF capture (test_name + path + steps) (#636). Gates on live #634 budget when use_live_budget.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -3890,6 +3916,8 @@ def run() -> None:
                                         "caption": {"type": "string"},
                                         "fragment_slug": {"type": "string"},
                                         "quality": {"type": "string"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                 },
                             },
