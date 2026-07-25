@@ -244,6 +244,87 @@ def build_stub_body(
     return "\n".join(lines)
 
 
+# Heuristic stub costs (#634/#637).
+_STUB_AUTHOR_BASE = 2000
+_STUB_CREATE_APPLY = 1500
+_STUB_CREATE_DRY = 400
+_STUB_AC_EACH = 80
+
+
+def estimate_stub_cost(
+    *,
+    n_acceptance: int = 0,
+    create: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Advisory token estimate for stub author/create (#634/#637)."""
+    n_ac = max(0, int(n_acceptance or 0))
+    tokens = _STUB_AUTHOR_BASE + min(2000, n_ac * _STUB_AC_EACH)
+    if create:
+        tokens += _STUB_CREATE_DRY if dry_run else _STUB_CREATE_APPLY
+    return {
+        "ok": True,
+        "estimated_tokens": int(tokens),
+        "breakdown": {
+            "author": _STUB_AUTHOR_BASE + min(2000, n_ac * _STUB_AC_EACH),
+            "create": (
+                (_STUB_CREATE_DRY if dry_run else _STUB_CREATE_APPLY) if create else 0
+            ),
+        },
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine enforce hard ceilings.",
+            "author_stub / create_stub_issue hydrate remaining when use_live_budget.",
+        ],
+    }
+
+
+def _stub_budget_gate(
+    *,
+    n_acceptance: int = 0,
+    create: bool = False,
+    dry_run: bool = True,
+    budget_remaining: int | None,
+    use_live_budget: bool,
+) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
+    cost_est = estimate_stub_cost(
+        n_acceptance=n_acceptance, create=create, dry_run=dry_run
+    )
+    est = int(cost_est.get("estimated_tokens") or 0)
+    notes: list[str] = []
+    effective = budget_remaining
+    if effective is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot(estimate_tokens=est)
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective = int(rem)
+                notes.append(
+                    f"budget hydrated: remaining_tokens={effective} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            notes.append(f"budget hydrate skipped: {exc}")
+    if effective is not None and est > int(effective):
+        return (
+            cost_est,
+            effective,
+            notes,
+            {
+                "ok": False,
+                "blocked": True,
+                "reason": "budget",
+                "error": f"budget: est {est} tokens exceeds remaining {effective}",
+                "cost_estimate_tokens": est,
+                "budget_remaining": int(effective),
+                "cost_estimate": cost_est,
+                "notes": notes,
+            },
+        )
+    return cost_est, effective, notes, None
+
+
 def author_stub(
     intent: str,
     *,
@@ -258,11 +339,25 @@ def author_stub(
     labels: list[str] | None = None,
     persist: bool = True,
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Author a local stub draft from intent/Q&A text."""
+    """Author a local stub draft from intent/Q&A text.
+
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
+    """
     text = (intent or "").strip()
     if not text and not title:
         return {"ok": False, "error": "intent or title required"}
+    ac = list(acceptance_criteria or [])
+    cost_est, effective_remaining, budget_notes, blocked = _stub_budget_gate(
+        n_acceptance=len(ac),
+        create=False,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        return blocked
     itype = detect_issue_type(text or title or "", hint=issue_type)
     clean_title = (title or "").strip()
     if not clean_title:
@@ -273,7 +368,7 @@ def author_stub(
         issue_type=itype,
         title=clean_title,
         summary=summary or text,
-        acceptance_criteria=acceptance_criteria,
+        acceptance_criteria=ac,
         parent_epic=parent_epic,
         related_links=related_links,
         source=source,
@@ -293,14 +388,19 @@ def author_stub(
         body=body,
         labels=labs,
         status="draft",
-        acceptance_criteria=list(acceptance_criteria or []),
+        acceptance_criteria=ac,
         parent_epic=parent_epic,
         milestone=milestone,
         related_links=list(related_links or []),
         source=source,
         created_at=ts,
         updated_at=ts,
-        metadata={"intent": text[:500]},
+        metadata={
+            "intent": text[:500],
+            "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+            "budget_remaining": effective_remaining,
+            "budget_notes": budget_notes,
+        },
     )
     if persist:
         data = _load(base_dir)
@@ -309,6 +409,10 @@ def author_stub(
     return {
         "ok": True,
         "draft": draft.to_dict(),
+        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
+        "notes": budget_notes,
         "marker": render_stub_marker(draft.to_dict()),
     }
 
@@ -437,13 +541,31 @@ def create_stub_issue(
     client: GhClient | None = None,
     dry_run: bool = True,
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Create GitHub issue from a draft (default dry_run)."""
+    """Create GitHub issue from a draft (default dry_run).
+
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
+    """
     found = draft
     if draft_id and not found:
         found = get_stub(draft_id, base_dir=base_dir)
     if not found:
         return {"ok": False, "error": "draft required", "dry_run": dry_run}
+
+    n_ac = len(list(found.get("acceptance_criteria") or []))
+    cost_est, effective_remaining, budget_notes, blocked = _stub_budget_gate(
+        n_acceptance=n_ac,
+        create=True,
+        dry_run=dry_run,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        blocked["dry_run"] = dry_run
+        blocked["draft_id"] = found.get("id")
+        return blocked
 
     target = resolve_repo(repo)
     title = str(found.get("title") or "")
@@ -457,6 +579,10 @@ def create_stub_issue(
         "labels": labels,
         "repo": target,
         "draft_id": found.get("id"),
+        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
+        "notes": budget_notes,
     }
 
     milestone_num: int | None = None
@@ -515,19 +641,34 @@ def author_and_create(
     dry_run: bool = True,
     repo: str | None = None,
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """One-shot: author draft then optionally create on GitHub."""
+    author_kwargs = {
+        k: v
+        for k, v in kwargs.items()
+        if k
+        in (
+            "summary",
+            "acceptance_criteria",
+            "parent_epic",
+            "milestone",
+            "related_links",
+            "source",
+            "labels",
+        )
+    }
     authored = author_stub(
         intent,
         issue_type=issue_type,
         title=title,
         persist=True,
         base_dir=base_dir,
-        **{k: v for k, v in kwargs.items() if k in (
-            "summary", "acceptance_criteria", "parent_epic", "milestone",
-            "related_links", "source", "labels",
-        )},
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+        **author_kwargs,
     )
     if not authored.get("ok"):
         return authored
@@ -536,12 +677,19 @@ def author_and_create(
         dry_run=dry_run,
         repo=repo,
         base_dir=base_dir,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
     )
     return {
         "ok": created.get("ok", False),
         "draft": authored.get("draft"),
         "create": created,
         "dry_run": dry_run,
+        "cost_estimate_tokens": created.get("cost_estimate_tokens")
+        or authored.get("cost_estimate_tokens"),
+        "budget_remaining": created.get("budget_remaining")
+        if created.get("budget_remaining") is not None
+        else authored.get("budget_remaining"),
     }
 
 
