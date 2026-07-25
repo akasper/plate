@@ -168,6 +168,9 @@ tests/e2e/package-lock.json
 # Ephemeral #647 decision ledger entries (local provenance)
 .agentic/ledger/
 
+# Ephemeral #651 path/branch ownership claims (local collab pauses)
+.agentic/collab/
+
 # Ephemeral #660 PM assignment queue + last_cycle (local runtime)
 .agentic/pm/
 
