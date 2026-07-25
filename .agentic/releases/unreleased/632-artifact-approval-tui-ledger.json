@@ -1,0 +1,26 @@
+{
+  "slug": "632-artifact-approval-tui-ledger",
+  "change_type": "feature",
+  "surface": "src/plate_core/design_research_approval.py, feed.py, tests/test_design_research_approval.py",
+  "summary": "Deepen #632 Design/Research approval: ask_user_question payloads on propose + feed presentation; ledger provenance on decide; feed prefers artifact-shaped TUI options.",
+  "migration_impact": "plate_artifact_propose / list returns ask_user_question. decide may set ledger_id. Feed presentation uses richer artifact approval options. No config schema change.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. After plate_artifact_propose, present ask_user_question payload to the user.",
+    "3. Map approve/revise/reject option ids to plate_artifact_decide.",
+    "4. Treat approved-* pointers under .agentic/approvals/ as authoritative for planning.",
+    "5. plate_feed ranks pending artifacts with other approvals/checkpoints."
+  ],
+  "agent_notes": "Never treat Design/Research content as authoritative until status=approved. Revised requires new content + re-approval. Media links are present on the TUI payload.",
+  "breaking": false,
+  "links": [
+    "#632",
+    "#631",
+    "#647",
+    "#654",
+    "#656"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
