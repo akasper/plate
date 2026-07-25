@@ -625,29 +625,6 @@ def hybrid_feed_items(
                 "profile": prof,
             }
         )
-    elif source != "persisted":
-        items.append(
-            {
-                "id": "hybrid-unset",
-                "item_type": "hybrid_profile",
-                "title": "Project kind not set (defaults to software)",
-                "rank": 22,
-                "impact": "low",
-                "badges": ["hybrid", "optional"],
-                "source": "hybrid",
-                "reason": "Optional hybrid profile for docs/marketing/infra repos (#650)",
-                "prompt_segment": "Optional: plate_hybrid_detect / plate_hybrid_set_kind for non-code repos.",
-                "ask_user_question": {
-                    "question": "Is this repo software-only, or hybrid/docs/marketing/infra?",
-                    "options": [
-                        {"id": "software", "label": "Software only"},
-                        {"id": "detect", "label": "Auto-detect"},
-                        {"id": "hybrid", "label": "Hybrid product"},
-                        {"id": "docs", "label": "Docs / content"},
-                        {"id": "marketing", "label": "Marketing site"},
-                        {"id": "infra", "label": "Infra as code"},
-                    ],
-                },
-            }
-        )
+    # Do not spam the endless feed for software-default repos; only surface
+    # when non-software / multi-surface signals fire (handled above).
     return items[:limit]
