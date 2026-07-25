@@ -842,12 +842,23 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     discussions = json.loads(discussions)
                 except Exception:
                     discussions = None
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             if dry:
                 payload = run_discussion_review_procedure(
                     repo=args.get("repo"),
                     discussions=list(discussions) if discussions else None,
                     dry_run=True,
                     fetch_live=False,
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
                 )
             else:
                 payload = review_discussions(
@@ -857,6 +868,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     fetch_live=bool(args.get("fetch_live", False)),
                     min_score=float(args.get("min_score") or 30),
                     limit=int(args.get("limit") or 10),
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
                 )
         elif name == "plate_monitor_market":
             signals = args.get("signals") or []
@@ -866,14 +879,30 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 except Exception:
                     signals = [{"title": signals}]
             dry = bool(args.get("dry_run", True))
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             if dry:
-                payload = run_market_monitor_procedure(signals=list(signals), dry_run=True)
+                payload = run_market_monitor_procedure(
+                    signals=list(signals),
+                    dry_run=True,
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
+                )
             else:
                 payload = monitor_market_signals(
                     list(signals),
                     persist=bool(args.get("persist", True)),
                     min_score=float(args.get("min_score") or 40),
                     limit=int(args.get("limit") or 10),
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
                 )
         elif name == "plate_monitor_list":
             payload = {
@@ -2946,7 +2975,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_monitor_discussions",
-                                "description": "Review Discussions/Ideas into ranked stub issue proposals (#642). dry_run default true.",
+                                "description": "Review Discussions/Ideas into ranked stub issue proposals (#642). #634 budget gate. dry_run default true.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -2957,12 +2986,14 @@ def run() -> None:
                                         "persist": {"type": "boolean"},
                                         "min_score": {"type": "number"},
                                         "limit": {"type": "integer"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                 },
                             },
                             {
                                 "name": "plate_monitor_market",
-                                "description": "Synthesize host-injected market signals into Question proposals (#642). No outbound network.",
+                                "description": "Synthesize host-injected market signals into Question proposals (#642). #634 budget gate. No outbound network.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -2971,6 +3002,8 @@ def run() -> None:
                                         "persist": {"type": "boolean"},
                                         "min_score": {"type": "number"},
                                         "limit": {"type": "integer"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                 },
                             },
