@@ -160,6 +160,18 @@ from .packaging import (
     plan_marketplace_package_op,
     render_package_markdown,
 )
+from .hybrid import (
+    detect_project_kind,
+    feature_validation_plan,
+    get_kind_contract,
+    hybrid_feed_items,
+    list_artifact_types,
+    list_project_kinds,
+    list_validation_strategies,
+    load_project_profile,
+    planning_template_for_kind,
+    set_project_kind,
+)
 from .scheduled_ops import (
     complete_op_run,
     list_op_runs,
@@ -1010,6 +1022,54 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 url=args.get("url"),
                 decision=str(args.get("decision") or "approve"),
             )
+        elif name == "plate_hybrid_list_kinds":
+            payload = {"kinds": list_project_kinds()}
+        elif name == "plate_hybrid_list_artifacts":
+            payload = {"artifact_types": list_artifact_types()}
+        elif name == "plate_hybrid_list_validation":
+            payload = {
+                "validation": list_validation_strategies(kind=args.get("kind"))
+            }
+        elif name == "plate_hybrid_detect":
+            from pathlib import Path as _P
+
+            payload = detect_project_kind(_P(str(args.get("repo_root") or ".")))
+        elif name == "plate_hybrid_set_kind":
+            from pathlib import Path as _P
+
+            payload = set_project_kind(
+                str(args.get("kind") or ""),
+                base_dir=_P(str(args.get("base_dir") or ".agentic/hybrid")),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_hybrid_profile":
+            from pathlib import Path as _P
+
+            payload = load_project_profile(
+                base_dir=_P(str(args.get("base_dir") or ".agentic/hybrid")),
+                repo_root=_P(str(args.get("repo_root") or ".")),
+            )
+        elif name == "plate_hybrid_contract":
+            c = get_kind_contract(str(args.get("kind") or ""))
+            payload = {"ok": c is not None, "contract": c}
+        elif name == "plate_hybrid_planning_template":
+            payload = planning_template_for_kind(str(args.get("kind") or "software"))
+        elif name == "plate_hybrid_validation_plan":
+            payload = feature_validation_plan(
+                str(args.get("kind") or "software"),
+                feature_title=str(args.get("feature_title") or args.get("title") or ""),
+                artifact_types=args.get("artifact_types"),
+            )
+        elif name == "plate_hybrid_feed":
+            from pathlib import Path as _P
+
+            payload = {
+                "items": hybrid_feed_items(
+                    base_dir=_P(str(args.get("base_dir") or ".agentic/hybrid")),
+                    repo_root=_P(str(args.get("repo_root") or ".")),
+                    limit=int(args.get("limit") or 4),
+                )
+            }
         elif name == "plate_packaging_build":
             from pathlib import Path as _P
 
@@ -3048,6 +3108,101 @@ def run() -> None:
                                         "path": {"type": "string"},
                                         "url": {"type": "string"},
                                         "decision": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_list_kinds",
+                                "description": "List hybrid/non-code project kinds (software, docs, marketing, infra, …) (#650).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_hybrid_list_artifacts",
+                                "description": "List generalized artifact types for hybrid projects (#650).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_hybrid_list_validation",
+                                "description": "List validation strategies (link check, content lint, visual, IaC plan, …) (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"kind": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_detect",
+                                "description": "Detect project kind from filesystem signals (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"repo_root": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_set_kind",
+                                "description": "Persist explicit project kind override (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["kind"],
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_profile",
+                                "description": "Load persisted or detected hybrid project profile (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "base_dir": {"type": "string"},
+                                        "repo_root": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_contract",
+                                "description": "Full contract for a project kind: artifacts, validation, deploy targets (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"kind": {"type": "string"}},
+                                    "required": ["kind"],
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_planning_template",
+                                "description": "Q&A planning template tuned to project kind (#650/#628).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"kind": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_validation_plan",
+                                "description": "Feature-level validation plan for non-code or hybrid work (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
+                                        "feature_title": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "artifact_types": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_feed",
+                                "description": "Feed items for hybrid project profile detection/confirmation (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "base_dir": {"type": "string"},
+                                        "repo_root": {"type": "string"},
+                                        "limit": {"type": "integer"},
                                     },
                                 },
                             },
