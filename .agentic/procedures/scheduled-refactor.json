@@ -1,0 +1,11 @@
+{
+  "id": "scheduled-refactor",
+  "cadence": "weekly",
+  "risk_level": "medium",
+  "description": "Scheduled refactor/rearch opportunity: health/drift → TDD PR → babysit (#641).",
+  "steps": [
+    {"tool": "plate_scheduled_op_run", "args": {"op_id": "scheduled-refactor", "dry_run": true}}
+  ],
+  "enabled": true,
+  "max_tokens_per_run": 12000
+}

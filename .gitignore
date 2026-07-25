@@ -195,5 +195,8 @@ tests/e2e/package-lock.json
 # Ephemeral #636 per-Feature media capture registry (local)
 .agentic/feature_media/
 
+# Ephemeral #641 scheduled op run ledger (local)
+.agentic/scheduled_ops/
+
 # Ephemeral planning sessions + pending plan stubs (#628/#630)
 .agentic/planning/

@@ -804,6 +804,13 @@ class AutonomyEngine:
             {"id": "cost-rollup", "cadence": "weekly", "risk_level": "low", "description": "Aggregate USAGE REPORTs and costs"},
             {"id": "weekly-discussion-review", "cadence": "weekly", "risk_level": "low", "description": "Review Discussions/Ideas into stub issue proposals for the feed (#642)"},
             {"id": "market-condition-monitor", "cadence": "weekly", "risk_level": "low", "description": "Synthesize injected market signals into Question proposals (#642)"},
+            {"id": "scheduled-refactor", "cadence": "weekly", "risk_level": "medium", "description": "Scheduled refactor/rearch PR from health/drift (#641)"},
+            {"id": "release-cut-prep", "cadence": "manual", "risk_level": "high", "description": "Release cut prep: fragments, media, notes, checkpoint (#641)"},
+            {"id": "release-finalize-prep", "cadence": "manual", "risk_level": "high", "description": "Release finalize prep: tag, GH Release, track reset (#641)"},
+            {"id": "deploy-production", "cadence": "manual", "risk_level": "critical", "description": "Production deploy gated by shadow+human (#641)"},
+            {"id": "marketing-site-deploy", "cadence": "manual", "risk_level": "high", "description": "Marketing/docs site deploy with approved media (#641)"},
+            {"id": "marketplace-package", "cadence": "manual", "risk_level": "critical", "description": "Marketplace package; human Task for publish (#641)"},
+            {"id": "implement-epic-slice", "cadence": "manual", "risk_level": "medium", "description": "Implement next ready Feature via feature_loop (#641)"},
         ]:
             if builtin["id"] not in existing:
                 procs.append(ProcedureDef(**builtin))
@@ -1247,6 +1254,22 @@ class AutonomyEngine:
                 return out
             except Exception as exc:
                 return {"proc_id": proc_id, "status": "error", "error": str(exc)}
+
+        # #641 scheduled ops catalog dispatch (dry-run packet by default when called from engine apply path)
+        try:
+            from .scheduled_ops import run_procedure_dispatch
+
+            sop = run_procedure_dispatch(
+                proc_id,
+                dry_run=False,
+                risk_tolerance=self.risk_tolerance,
+                approved=approved,
+                checkpoint_id=checkpoint_id,
+            )
+            if sop is not None:
+                return sop
+        except Exception as exc:
+            return {"proc_id": proc_id, "status": "error", "error": str(exc)}
 
         # In full impl: dispatch steps using allow-listed MCP calls (e.g. plate_perform_information_audit, plate_pr_babysit, plate_costs)
         # For now, record marker + usage (as required by PLATE for procedures)
