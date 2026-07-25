@@ -835,6 +835,31 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #652 marketplace packaging (media + adoption proof) → feed signals
+    try:
+        from .packaging import packaging_feed_items
+
+        for pk in packaging_feed_items(limit=6):
+            signal_items.append(
+                {
+                    "id": pk.get("id"),
+                    "type": pk.get("item_type") or "packaging",
+                    "title": pk.get("title"),
+                    "rank": int(pk.get("rank") or 16),
+                    "impact": pk.get("impact") or "high",
+                    "reason": pk.get("reason") or "Marketplace packaging (#652)",
+                    "prompt_segment": pk.get("prompt_segment")
+                    or (
+                        f"{pk.get('title')}. "
+                        f"plate_packaging_get / plate_packaging_decide {pk.get('package_id')}."
+                    ),
+                    "source": "packaging",
+                    "ask_user_question": pk.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     # #647 decision ledger blocking gates → feed signals (autonomy surfaces only)
     if include_autonomy:
         try:

@@ -366,6 +366,11 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - `plate_scheduled_ops_status` / `gh plate scheduled-ops`; plan packets with `plate_scheduled_op_plan`.
 - High/critical ops need `approved=true` or checkpoint; marketplace publish stays human Task. Dry-run default.
 
+### Marketplace packaging (#652)
+- First-class package builds bundle approved media (#635/#636), end-user narratives from fragments, onboarding proof (install → first Q&A), and planning links.
+- `plate_packaging_build` / `gh plate packaging`; render with `plate_packaging_render`; feed via `plate_packaging_feed`.
+- `plate_packaging_decide approve` only marks approved_for_publish — never publishes. Real marketplace/PyPI stays human Task (#380/#381/#625/#626).
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 

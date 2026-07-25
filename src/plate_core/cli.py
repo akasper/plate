@@ -139,6 +139,15 @@ from .feature_media import (
     register_capture,
     skip_feature_media,
 )
+from .packaging import (
+    build_package,
+    decide_package_publish,
+    get_package,
+    list_packages,
+    packaging_feed_items,
+    plan_marketplace_package_op,
+    render_package_markdown,
+)
 from .scheduled_ops import (
     complete_op_run,
     list_op_runs,
@@ -1321,6 +1330,116 @@ def cmd_feature_media(args: argparse.Namespace) -> int:
         return 0 if out.get("ok") else 1
     r = out.get("record") or {}
     print(f"ok={out.get('ok')} id={r.get('id')} test={r.get('test_name')} path={r.get('gif_path')}")
+    return 0 if out.get("ok") else 1
+
+
+def cmd_packaging(args: argparse.Namespace) -> int:
+    """Marketplace packaging with media + adoption proof (#652)."""
+    from .release import collect_fragments
+
+    releases_dir = Path(getattr(args, "releases_dir", None) or ".agentic/releases")
+    base = Path(getattr(args, "base_dir", None) or ".agentic/packaging")
+
+    if getattr(args, "list", False):
+        rows = list_packages(
+            base_dir=base,
+            status=str(getattr(args, "status", None) or "all"),
+            limit=int(getattr(args, "limit", 20) or 20),
+        )
+        if args.json:
+            print(json.dumps({"packages": rows}))
+            return 0
+        for p in rows:
+            print(f"{p.get('id')} v{p.get('version')} [{p.get('status')}]")
+        return 0
+
+    if getattr(args, "get", None):
+        p = get_package(str(args.get), base_dir=base)
+        if args.json:
+            print(json.dumps({"package": p}))
+            return 0 if p else 1
+        if not p:
+            print("not found")
+            return 1
+        print(f"{p.get('id')} v{p.get('version')} status={p.get('status')}")
+        return 0
+
+    if getattr(args, "render", None) or getattr(args, "render_id", None):
+        pid = getattr(args, "render", None) or getattr(args, "render_id", None)
+        p = get_package(str(pid), base_dir=base) if pid and pid is not True else None
+        if p is None and getattr(args, "version", None):
+            # build ephemeral then render
+            frags = collect_fragments(releases_dir)
+            built = build_package(
+                str(args.version or "unreleased"),
+                frags,
+                base_dir=base,
+                persist=False,
+            )
+            p = built.get("package")
+        if not p:
+            print("package not found; build first or pass --version for ephemeral render")
+            return 1
+        md = render_package_markdown(p)
+        if args.json:
+            print(json.dumps({"markdown": md, "package_id": p.get("id")}))
+            return 0
+        print(md)
+        return 0
+
+    if getattr(args, "decide", None):
+        out = decide_package_publish(
+            str(args.decide),
+            str(getattr(args, "decision", None) or "approve"),
+            decided_by=str(getattr(args, "decided_by", None) or "human"),
+            note=getattr(args, "note", None) or "",
+            base_dir=base,
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} status={(out.get('package') or {}).get('status')} {out.get('error') or out.get('note') or ''}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "feed", False):
+        rows = packaging_feed_items(base_dir=base, limit=int(getattr(args, "limit", 10) or 10))
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    if getattr(args, "plan", False):
+        out = plan_marketplace_package_op(
+            getattr(args, "version", None) or None,
+            releases_dir=releases_dir,
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        prev = out.get("package_preview") or {}
+        print(f"ok={out.get('ok')} version={out.get('version')} status={prev.get('status')} narratives={prev.get('n_narratives')}")
+        return 0 if out.get("ok") else 1
+
+    # default: build
+    version = str(getattr(args, "version", None) or "unreleased")
+    frags = collect_fragments(releases_dir)
+    out = build_package(
+        version,
+        frags,
+        base_dir=base,
+        require_approved_media=bool(getattr(args, "require_approved_media", False)),
+        persist=not bool(getattr(args, "no_persist", False)),
+    )
+    if args.json:
+        print(json.dumps(out))
+        return 0 if out.get("ok") else 1
+    p = out.get("package") or {}
+    print(
+        f"ok={out.get('ok')} id={p.get('id')} v{p.get('version')} status={p.get('status')} "
+        f"narratives={len(p.get('narratives') or [])} ready={(p.get('readiness') or {}).get('ready_for_review')}"
+    )
     return 0 if out.get("ok") else 1
 
 
@@ -3027,6 +3146,29 @@ def build_parser() -> argparse.ArgumentParser:
     fmedia.add_argument("--limit", type=int, default=50)
     fmedia.add_argument("--json", action="store_true")
     fmedia.set_defaults(func=cmd_feature_media)
+
+    packaging = sub.add_parser(
+        "packaging",
+        help="Marketplace packaging with media + adoption proof (#652); never auto-publishes",
+    )
+    packaging.add_argument("--releases-dir", dest="releases_dir", default=".agentic/releases")
+    packaging.add_argument("--base-dir", dest="base_dir", default=".agentic/packaging")
+    packaging.add_argument("--version", default="unreleased", help="Target version label for the package")
+    packaging.add_argument("--list", action="store_true")
+    packaging.add_argument("--get", metavar="PACKAGE_ID")
+    packaging.add_argument("--render", metavar="PACKAGE_ID", nargs="?", const=True, help="Render package markdown (id or ephemeral with --version)")
+    packaging.add_argument("--decide", metavar="PACKAGE_ID")
+    packaging.add_argument("--decision", default="approve", help="approve|reject")
+    packaging.add_argument("--decided-by", dest="decided_by", default="human")
+    packaging.add_argument("--note", default="")
+    packaging.add_argument("--feed", action="store_true")
+    packaging.add_argument("--plan", action="store_true", help="Marketplace-package op packet")
+    packaging.add_argument("--require-approved-media", dest="require_approved_media", action="store_true")
+    packaging.add_argument("--no-persist", dest="no_persist", action="store_true")
+    packaging.add_argument("--status", default="all")
+    packaging.add_argument("--limit", type=int, default=20)
+    packaging.add_argument("--json", action="store_true")
+    packaging.set_defaults(func=cmd_packaging)
 
     rmedia = sub.add_parser(
         "release-media",
