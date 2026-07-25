@@ -1,0 +1,27 @@
+{
+  "slug": "628-630-planning-durable-tui",
+  "change_type": "feature",
+  "surface": "src/plate_core/planning.py, feed.py, tests/test_planning.py",
+  "summary": "Deepen #628/#630 Q&A planning: durable sessions under .agentic/planning/sessions, pending plan stubs for approval, ask_user_question payloads on each turn + build; feed ranks pending plans with Design/Research approvals.",
+  "migration_impact": "New local paths .agentic/planning/{sessions,pending}/ (gitignored). plate_planning_* responses gain session_id and ask_user_question. Feed may include pending plan stubs as approval-class items.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. plate_planning_start → present ask_user_question; keep session_id across turns.",
+    "3. plate_planning_answer with free text; resume via load if process restarts.",
+    "4. plate_planning_build persists pending plan; present approval options before creating GitHub issues.",
+    "5. plate_feed surfaces pending plans alongside #632 artifact approvals."
+  ],
+  "agent_notes": "Never create GitHub Feature/Epic issues until plan approval. Session files are durable memory; do not skip questions. ER planning (#629/#640) remains a separate module.",
+  "breaking": false,
+  "links": [
+    "#628",
+    "#630",
+    "#631",
+    "#632",
+    "#654",
+    "#656"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
