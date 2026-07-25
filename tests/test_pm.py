@@ -15,6 +15,7 @@ from plate_core.pm import (
     get_persona,
     list_team,
     pick_agent,
+    pm_feed_items,
 )
 
 
@@ -101,6 +102,8 @@ class TestPMCycle(unittest.TestCase):
                 "risk_tolerance": "medium",
                 "budget_remaining_tokens": 50000,
                 "open_checkpoints": 0,
+                "budget_pressure": "ok",
+                "would_pause_next_cycle": False,
             },
             "open_checkpoints": 0,
             "risk_tolerance": "medium",
@@ -116,6 +119,9 @@ class TestPMCycle(unittest.TestCase):
             "delegated": 0,
             "blocked": 0,
             "done": 0,
+            "budget_pressure": "ok",
+            "would_pause_next_cycle": False,
+            "spent_today_durable": None,
         }
         base.update(overrides)
         return type("S", (), base)()
@@ -226,6 +232,45 @@ class TestPMCycle(unittest.TestCase):
             )
             st = pm.get_status()
             self.assertGreaterEqual(st.open_checkpoints, 1)
+
+    def test_paused_on_budget_pressure(self):
+        pm = ProjectManager(repo=None)
+        with patch.object(
+            pm,
+            "get_status",
+            return_value=self._fake_status(
+                enabled=True,
+                risk_tolerance="medium",
+                budget_pressure="critical",
+                would_pause_next_cycle=True,
+                budget_remaining_tokens=100,
+                to_dict=lambda self: {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "budget_pressure": "critical",
+                    "budget_remaining_tokens": 100,
+                },
+            ),
+        ):
+            report = pm.run_cycle(dry_run=True)
+        self.assertEqual(report["status"], "paused")
+        self.assertEqual(report.get("pause_kind"), "budget")
+
+    def test_pm_feed_items_gates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo=None, state_dir=Path(tmp))
+            with patch.object(pm, "get_status", return_value=self._fake_status()), patch.object(
+                pm,
+                "collect_work",
+                return_value=[{"id": "w-feed", "title": "Feature Z", "type": "feature"}],
+            ):
+                pm.run_cycle(dry_run=True)
+            # force blocked row
+            pm._assignments[0]["status"] = "blocked"
+            pm._save_queue()
+            items = pm_feed_items(state_dir=Path(tmp))
+            types = {i.get("item_type") for i in items}
+            self.assertIn("pm_assignment", types)
 
 
 if __name__ == "__main__":
