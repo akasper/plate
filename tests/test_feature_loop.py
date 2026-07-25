@@ -64,12 +64,49 @@ class TestLifecycle(unittest.TestCase):
             feature_title="Huge",
             size="large",
             budget_remaining=100,
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
         self.assertFalse(r["ok"])
         self.assertTrue(r["blocked"])
         self.assertEqual(r["run"]["status"], "blocked")
+
+    def test_live_budget_hydrate_blocks(self):
+        """#634: when autonomy enabled, omit budget_remaining and hydrate from snapshot."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {"spent_today": 9500, "spent_this_cycle": 0, "spent_usd_today": 0.0},
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {"daily": 10000, "per_cycle": 8000, "action": "pause"},
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                r = start_feature_loop(
+                    feature_number=99,
+                    feature_title="Live budget",
+                    size="large",
+                    use_live_budget=True,
+                    budget_base_dir=bdir,
+                    base_dir=self.base,
+                    record_ledger=False,
+                )
+            self.assertTrue(r["blocked"])
+            self.assertIn("budget_snapshot", r)
+            self.assertLessEqual(r["budget_remaining"], 500)
 
     def test_advance_low_risk_to_done(self):
         r = start_feature_loop(
