@@ -198,6 +198,58 @@ class TestPlanningDurableTUI(unittest.TestCase):
             # archived under decided — get finds it but not pending_approval
             self.assertFalse(again.get("ok"))
 
+    def test_revise_stays_actionable_and_resubmit(self):
+        from plate_core.planning import (
+            decide_pending_plan,
+            list_actionable_plans,
+            planning_feed_items,
+            resubmit_pending_plan,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sdir = root / "sessions"
+            pdir = root / "pending"
+            start = start_planning_session("feature", base_dir=sdir, persist=True)
+            session = start["session"]
+            for text in [
+                "problem",
+                "behavior",
+                "ac1",
+                "tests",
+                "docs",
+                "none",
+                "risk:low",
+                "none",
+                "none",
+            ]:
+                out = apply_planning_answer(session, text, base_dir=sdir, persist=True)
+                session = out["session"]
+            built = build_plan_from_session(session, planning_root=root, persist_pending=True)
+            pid = built["plan"]["id"]
+            rev = decide_pending_plan(pid, "revise", decided_by="test", base_dir=pdir)
+            self.assertTrue(rev["ok"])
+            self.assertEqual(rev["status"], "revise_requested")
+            # still in pending dir and feed
+            actionable = list_actionable_plans(base_dir=pdir)
+            self.assertTrue(any(p.get("id") == pid for p in actionable))
+            feed = planning_feed_items(pending_dir=pdir, sessions_dir=sdir, limit=10)
+            appr = next(f for f in feed if f.get("id") == pid)
+            self.assertEqual(appr["status"], "revise_requested")
+            self.assertTrue(any(o["id"] == "resubmit" for o in appr["ask_user_question"]["options"]))
+            # cannot approve until resubmit
+            blocked = decide_pending_plan(pid, "approve", base_dir=pdir)
+            self.assertFalse(blocked["ok"])
+            res = resubmit_pending_plan(
+                pid, title="Revised title", note="fixed ACs", base_dir=pdir
+            )
+            self.assertTrue(res["ok"])
+            self.assertEqual(res["status"], "pending_approval")
+            self.assertGreaterEqual(res["version"], 2)
+            ok = decide_pending_plan(pid, "approve", base_dir=pdir, archive=True)
+            self.assertTrue(ok["ok"])
+            self.assertEqual(ok["status"], "approved")
+
 
 if __name__ == "__main__":
     unittest.main()
