@@ -1,0 +1,24 @@
+{
+  "slug": "653-budget-gate-feed",
+  "change_type": "feature",
+  "surface": "src/plate_core/costs.py, feed.py",
+  "summary": "Harden #634/#653: dashboard hydrates durable spend.json, computes budget_pressure + would_pause/throttle next cycle, ranks budget_gate feed items with ask_user_question; feed surfaces cost signal payloads and budget fields on autonomy snap.",
+  "migration_impact": "Additive dashboard fields (budget_pressure, would_pause_next_cycle, spent_today_durable) and feed item type budget_gate. Hosts should present budget_gate ask_user_question before large unsupervised cycles. No config schema break.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate costs --dashboard (or plate_costs dashboard=true) to inspect pressure + durable spend.",
+    "3. plate_feed / gh plate feed includes budget_gate when pressure elevated/critical; honor presentation ask_user_question.",
+    "4. Raise .plate autonomy.token_budget or cost_ceiling_usd when gate fires; keep risk=off to disable enforcement previews that require enabled autonomy."
+  ],
+  "agent_notes": "When feed.autonomy.budget_pressure is critical/exhausted, do not start high-cost unsupervised loops. Prefer small targeted work. Durable counters live under .agentic/budget/spend.json.",
+  "breaking": false,
+  "links": [
+    "#653",
+    "#634",
+    "#631",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
