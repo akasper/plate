@@ -68,6 +68,87 @@ def _path(pid: str, base: Path | None = None) -> Path:
     return _ensure(base) / f"{safe}.json"
 
 
+# Heuristic artifact proposal costs (#634/#632).
+_ARTIFACT_BASE = 3500
+_ARTIFACT_RESEARCH_EXTRA = 1500
+_ARTIFACT_MEDIA_EACH = 200
+_ARTIFACT_RESUBMIT = 2000
+
+
+def estimate_artifact_cost(
+    *,
+    kind: str = "design",
+    n_media: int = 0,
+    resubmit: bool = False,
+) -> dict[str, Any]:
+    """Advisory token estimate for Design/Research artifact propose/resubmit (#634/#632)."""
+    k = "research" if (kind or "").lower().startswith("res") else "design"
+    tokens = _ARTIFACT_RESUBMIT if resubmit else _ARTIFACT_BASE
+    if k == "research" and not resubmit:
+        tokens += _ARTIFACT_RESEARCH_EXTRA
+    media_n = max(0, int(n_media or 0))
+    tokens += min(2000, media_n * _ARTIFACT_MEDIA_EACH)
+    return {
+        "ok": True,
+        "kind": k,
+        "estimated_tokens": int(tokens),
+        "breakdown": {
+            "base": _ARTIFACT_RESUBMIT if resubmit else _ARTIFACT_BASE,
+            "research": _ARTIFACT_RESEARCH_EXTRA if (k == "research" and not resubmit) else 0,
+            "media": min(2000, media_n * _ARTIFACT_MEDIA_EACH),
+        },
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine enforce hard ceilings.",
+            "propose_artifact / resubmit_proposal hydrate remaining when use_live_budget.",
+        ],
+    }
+
+
+def _artifact_budget_gate(
+    *,
+    kind: str,
+    n_media: int = 0,
+    resubmit: bool = False,
+    budget_remaining: int | None,
+    use_live_budget: bool,
+) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
+    cost_est = estimate_artifact_cost(kind=kind, n_media=n_media, resubmit=resubmit)
+    est = int(cost_est.get("estimated_tokens") or 0)
+    notes: list[str] = []
+    effective = budget_remaining
+    if effective is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot(estimate_tokens=est)
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective = int(rem)
+                notes.append(
+                    f"budget hydrated: remaining_tokens={effective} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            notes.append(f"budget hydrate skipped: {exc}")
+    if effective is not None and est > int(effective):
+        return (
+            cost_est,
+            effective,
+            notes,
+            {
+                "ok": False,
+                "blocked": True,
+                "reason": "budget",
+                "error": f"budget: est {est} tokens exceeds remaining {effective}",
+                "cost_estimate_tokens": est,
+                "budget_remaining": int(effective),
+                "cost_estimate": cost_est,
+                "notes": notes,
+            },
+        )
+    return cost_est, effective, notes, None
+
+
 def propose_artifact(
     kind: str,
     title: str,
@@ -81,9 +162,24 @@ def propose_artifact(
     media_links: list[str] | None = None,
     actor: str = "agent",
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Create a pending Design or Research approval proposal."""
+    """Create a pending Design or Research approval proposal.
+
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
+    """
     k = "research" if (kind or "").lower().startswith("res") else "design"
+    media = list(media_links or [])
+    cost_est, effective_remaining, budget_notes, blocked = _artifact_budget_gate(
+        kind=k,
+        n_media=len(media),
+        resubmit=False,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        return blocked
     ts = _now()
     pid = f"art-{uuid.uuid4().hex[:12]}"
     rec = ArtifactProposal(
@@ -96,7 +192,7 @@ def propose_artifact(
         related_issue=related_issue,
         related_epic=related_epic,
         originating_question=originating_question,
-        media_links=list(media_links or []),
+        media_links=media,
         status="pending",
         version=1,
         created_at=ts,
@@ -106,8 +202,13 @@ def propose_artifact(
     path = _path(pid, base_dir)
     path.write_text(json.dumps(rec.to_dict(), indent=2) + "\n", encoding="utf-8")
     out = rec.to_dict()
+    out["ok"] = True
     out["path"] = str(path)
     out["marker"] = render_approval_marker(rec)
+    out["cost_estimate_tokens"] = int(cost_est.get("estimated_tokens") or 0)
+    out["budget_remaining"] = effective_remaining
+    out["cost_estimate"] = cost_est
+    out["notes"] = budget_notes
     out["prompt_segment"] = (
         f"Present {k} artifact '{rec.title}' for approval via ask_user_question. "
         f"Options: Approve | Revise (comment) | Reject. Summary: {rec.summary[:200]}. "
@@ -217,10 +318,13 @@ def resubmit_proposal(
     title: str | None = None,
     actor: str = "agent",
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
     """Update a revised/pending artifact and re-open for approval (#632).
 
     Bumps version, sets status=pending, appends history event 'resubmitted'.
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
     """
     data = get_proposal(proposal_id, base_dir=base_dir)
     if not data:
@@ -233,6 +337,17 @@ def resubmit_proposal(
                 "error": "approved artifact is authoritative; propose a new version as a new proposal",
                 "proposal": rec.to_dict(),
             }
+    media = list(media_links) if media_links is not None else list(rec.media_links or [])
+    cost_est, effective_remaining, budget_notes, blocked = _artifact_budget_gate(
+        kind=str(rec.kind or "design"),
+        n_media=len(media),
+        resubmit=True,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        blocked["proposal_id"] = rec.id
+        return blocked
     path = Path(data["path"])
     if title is not None:
         rec.title = title.strip() or rec.title
@@ -270,6 +385,10 @@ def resubmit_proposal(
     out["ok"] = True
     out["path"] = str(path)
     out["marker"] = render_approval_marker(rec)
+    out["cost_estimate_tokens"] = int(cost_est.get("estimated_tokens") or 0)
+    out["budget_remaining"] = effective_remaining
+    out["cost_estimate"] = cost_est
+    out["notes"] = budget_notes
     out["ask_user_question"] = ask_user_question_payload(out)
     out["prompt_segment"] = (
         f"Resubmitted {rec.kind} v{rec.version} '{rec.title}' for approval via ask_user_question."

@@ -1048,6 +1048,14 @@ def cmd_er_plan(args: argparse.Namespace) -> int:
 
 def cmd_artifact(args: argparse.Namespace) -> int:
     """Design/Research artifact approval CLI (#632)."""
+    br = getattr(args, "budget_remaining", None)
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = not bool(getattr(args, "no_live_budget", False))
+
     if getattr(args, "propose", False):
         out = propose_artifact(
             kind=getattr(args, "kind", None) or "design",
@@ -1058,11 +1066,19 @@ def cmd_artifact(args: argparse.Namespace) -> int:
             related_epic=getattr(args, "related_epic", None),
             originating_question=getattr(args, "originating_question", None),
             actor=getattr(args, "by", None) or "cli-user",
+            budget_remaining=br,
+            use_live_budget=use_live,
         )
         if args.json:
             print(json.dumps(out))
-            return 0
-        print(f"proposed {out.get('id')} [{out.get('kind')}] {out.get('title')}")
+            return 0 if out.get("ok") is not False else 1
+        if out.get("ok") is False:
+            print(out.get("error") or "blocked", file=sys.stderr)
+            return 1
+        print(
+            f"proposed {out.get('id')} [{out.get('kind')}] {out.get('title')} "
+            f"est={out.get('cost_estimate_tokens')} remaining={out.get('budget_remaining')}"
+        )
         print(out.get("approval_prompt"))
         return 0
     if getattr(args, "decide", None):
@@ -1093,6 +1109,8 @@ def cmd_artifact(args: argparse.Namespace) -> int:
             content_path=getattr(args, "content_path", None) or None,
             title=getattr(args, "title", None) or None,
             actor=getattr(args, "by", None) or "cli-user",
+            budget_remaining=br,
+            use_live_budget=use_live,
         )
         if args.json:
             print(json.dumps(out))
@@ -1100,7 +1118,10 @@ def cmd_artifact(args: argparse.Namespace) -> int:
         if not out.get("ok"):
             print(out.get("error") or "failed", file=sys.stderr)
             return 1
-        print(f"resubmitted {out.get('id')} v{out.get('version')} [{out.get('status')}]")
+        print(
+            f"resubmitted {out.get('id')} v{out.get('version')} [{out.get('status')}] "
+            f"est={out.get('cost_estimate_tokens')} remaining={out.get('budget_remaining')}"
+        )
         return 0
     if getattr(args, "history", None):
         rows = get_proposal_history(str(args.history))
@@ -3595,6 +3616,19 @@ def build_parser() -> argparse.ArgumentParser:
     artifact.add_argument("--actionable", action="store_true", help="List pending+revised")
     artifact.add_argument("--authoritative", action="store_true")
     artifact.add_argument("--by", default="cli-user")
+    artifact.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit remaining tokens for #634 gate (overrides live hydrate)",
+    )
+    artifact.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     artifact.add_argument("--json", action="store_true")
     artifact.set_defaults(func=cmd_artifact)
 
