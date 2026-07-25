@@ -789,6 +789,30 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #641 gated scheduled ops → feed signals
+    try:
+        from .scheduled_ops import ops_feed_items
+
+        for so in ops_feed_items(limit=8):
+            signal_items.append(
+                {
+                    "id": so.get("id"),
+                    "type": "scheduled_op",
+                    "title": so.get("title"),
+                    "rank": 15,
+                    "impact": so.get("impact") or "medium",
+                    "reason": so.get("reason") or "Scheduled op (#641)",
+                    "prompt_segment": (
+                        f"{so.get('title')}. "
+                        f"plate_scheduled_op_plan / plate_scheduled_op_run {so.get('op_id')}."
+                    ),
+                    "source": "scheduled_ops",
+                    "ask_user_question": so.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,

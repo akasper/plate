@@ -139,6 +139,14 @@ from .feature_media import (
     register_capture,
     skip_feature_media,
 )
+from .scheduled_ops import (
+    complete_op_run,
+    list_op_runs,
+    list_ops,
+    plan_op,
+    run_scheduled_op,
+    scheduled_ops_status,
+)
 from .tasks import (
     close_task_with_signal,
     create_task,
@@ -1116,6 +1124,95 @@ def cmd_task(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def cmd_scheduled_ops(args: argparse.Namespace) -> int:
+    """Scheduled autonomous operations catalog (#641)."""
+    if getattr(args, "list", False) or not any(
+        [
+            getattr(args, "run", None),
+            getattr(args, "plan", None),
+            getattr(args, "runs", False),
+            getattr(args, "complete", None),
+        ]
+    ):
+        if getattr(args, "status", False) or (
+            not getattr(args, "list", False)
+            and not getattr(args, "run", None)
+            and not getattr(args, "plan", None)
+            and not getattr(args, "runs", False)
+            and not getattr(args, "complete", None)
+        ):
+            st = scheduled_ops_status(
+                risk_tolerance=str(getattr(args, "risk_tolerance", None) or "medium")
+            )
+            if args.json:
+                print(json.dumps(st))
+                return 0
+            print(f"ops={st.get('n_ops')} runnable={len(st.get('runnable_at_tolerance') or [])} gated={len(st.get('gated') or [])}")
+            for o in st.get("ops") or []:
+                print(f"  {o['id']} [{o['risk_level']}/{o['cadence']}] {o['description'][:70]}")
+            return 0
+        rows = list_ops()
+        if args.json:
+            print(json.dumps({"ops": rows}))
+            return 0
+        for o in rows:
+            print(f"{o['id']} [{o['risk_level']}] {o['description'][:80]}")
+        return 0
+
+    if getattr(args, "plan", None):
+        out = plan_op(str(args.plan), dry_run=not getattr(args, "apply", False))
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        pkt = (out.get("packet") or {})
+        print(f"plan ok={out.get('ok')} steps={len(pkt.get('steps') or [])}")
+        for s in pkt.get("steps") or []:
+            print(f"  - {s}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "run", None):
+        out = run_scheduled_op(
+            str(args.run),
+            dry_run=not getattr(args, "apply", False),
+            risk_tolerance=str(getattr(args, "risk_tolerance", None) or "medium"),
+            approved=bool(getattr(args, "approved", False)),
+            checkpoint_id=getattr(args, "checkpoint_id", None) or None,
+            note=getattr(args, "note", None) or "",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} status={out.get('status')} blocked={out.get('blocked')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "runs", False):
+        rows = list_op_runs(
+            op_id=getattr(args, "op", None) or None,
+            status=str(getattr(args, "run_status", None) or "all"),
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+        if args.json:
+            print(json.dumps({"runs": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('op_id')} [{r.get('status')}] dry_run={r.get('dry_run')}")
+        return 0
+
+    if getattr(args, "complete", None):
+        out = complete_op_run(
+            str(args.complete),
+            status=str(getattr(args, "complete_status", None) or "done"),
+            note=getattr(args, "note", None) or "",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"complete ok={out.get('ok')}")
+        return 0 if out.get("ok") else 1
+
+    return 0
 
 
 def cmd_feature_media(args: argparse.Namespace) -> int:
@@ -2869,6 +2966,28 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
+
+    sops = sub.add_parser(
+        "scheduled-ops",
+        help="Scheduled autonomous ops catalog: refactor, release, deploy (#641)",
+    )
+    sops.add_argument("--list", action="store_true", help="List ops catalog")
+    sops.add_argument("--status", action="store_true", help="Status + runnable at tolerance (default)")
+    sops.add_argument("--plan", metavar="OP_ID", help="Emit agent packet for op")
+    sops.add_argument("--run", metavar="OP_ID", help="Record op run (dry-run default)")
+    sops.add_argument("--apply", action="store_true", help="Non-dry-run when risk allows")
+    sops.add_argument("--approved", action="store_true", help="Human approved high/critical op")
+    sops.add_argument("--checkpoint-id", dest="checkpoint_id", default="")
+    sops.add_argument("--risk-tolerance", dest="risk_tolerance", default="medium")
+    sops.add_argument("--runs", action="store_true", help="List recorded runs")
+    sops.add_argument("--op", default="", help="Filter runs by op id")
+    sops.add_argument("--run-status", dest="run_status", default="all")
+    sops.add_argument("--complete", metavar="RUN_ID")
+    sops.add_argument("--complete-status", dest="complete_status", default="done")
+    sops.add_argument("--note", default="")
+    sops.add_argument("--limit", type=int, default=50)
+    sops.add_argument("--json", action="store_true")
+    sops.set_defaults(func=cmd_scheduled_ops)
 
     fmedia = sub.add_parser(
         "feature-media",
