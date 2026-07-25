@@ -1047,9 +1047,25 @@ def cmd_er_plan(args: argparse.Namespace) -> int:
         for step in out.get("next_steps") or []:
             print(f"  - {step}")
         return 0
+    br = getattr(args, "budget_remaining", None)
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = not bool(getattr(args, "no_live_budget", False))
+
     if getattr(args, "answers_file", None):
         answers = json.loads(Path(args.answers_file).read_text(encoding="utf-8"))
-        start = start_er_session(kind)
+        start = start_er_session(
+            kind, budget_remaining=br, use_live_budget=use_live
+        )
+        if start.get("ok") is False:
+            if args.json:
+                print(json.dumps(start))
+                return 1
+            print(start.get("error") or "start blocked", file=sys.stderr)
+            return 1
         session = start["session"]
         if isinstance(answers, list):
             for a in answers:
@@ -1057,20 +1073,34 @@ def cmd_er_plan(args: argparse.Namespace) -> int:
                 session = out["session"]
         elif isinstance(answers, dict):
             session = {**session, "answers": answers, "complete": True}
-        built = build_er_plan_from_session(session)
+        built = build_er_plan_from_session(
+            session, budget_remaining=br, use_live_budget=use_live
+        )
         if args.json:
             print(json.dumps(built))
             return 0 if built.get("ok") else 1
+        if not built.get("ok"):
+            print(built.get("error") or "build failed", file=sys.stderr)
+            return 1
         plan = built.get("plan") or {}
         print(plan.get("title"))
         print(plan.get("body") or "")
         return 0
-    start = start_er_session(kind)
+    start = start_er_session(kind, budget_remaining=br, use_live_budget=use_live)
+    if start.get("ok") is False:
+        if args.json:
+            print(json.dumps(start))
+            return 1
+        print(start.get("error") or "start blocked", file=sys.stderr)
+        return 1
     if args.json:
         print(json.dumps(start))
         return 0
     nq = start.get("next_question") or {}
-    print(f"Started {kind} planning.")
+    print(
+        f"Started {kind} planning. est={start.get('cost_estimate_tokens')} "
+        f"remaining={start.get('budget_remaining')}"
+    )
     print(f"Next: [{nq.get('id')}] {nq.get('prompt')}")
     return 0
 
@@ -3625,6 +3655,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     er_plan.add_argument("--note", default="")
     er_plan.add_argument("--by", default="cli-user")
+    er_plan.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit remaining tokens for #634 gate (overrides live hydrate)",
+    )
+    er_plan.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     er_plan.add_argument("--limit", type=int, default=20)
     er_plan.add_argument("--json", action="store_true")
     er_plan.set_defaults(func=cmd_er_plan)
