@@ -1,0 +1,26 @@
+{
+  "slug": "638-bug-loop-budget-hydrate",
+  "change_type": "feature",
+  "surface": "src/plate_core/bug_loop.py, pm.py, cli.py, mcp_server.py, tests/test_bug_loop.py",
+  "summary": "#638 bug loop budget parity with feature: estimate_bug_cost, cost_estimate_tokens on runs, live #634 budget hydrate (use_live_budget), explicit budget_remaining blocks start; PM dispatch passes budget; CLI --size/--budget-remaining/--no-live-budget; MCP fields.",
+  "migration_impact": "Bug loop start may block when autonomy enabled and estimate exceeds remaining spend. Default use_live_budget=true; pass use_live_budget=false or explicit budget_remaining for isolated starts. Additive fields on runs/feed.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate bug-loop --bug N --size medium [--budget-remaining T | --no-live-budget].",
+    "3. PM bugfix dispatch inherits assignment budget remaining.",
+    "4. Inspect run.cost_estimate_tokens and blocked errors on start."
+  ],
+  "agent_notes": "risk-off repos do not live-block (enabled=false). Mirrors feature_loop hydrate. Does not spend tokens into spend.json on start (estimate only).",
+  "breaking": false,
+  "links": [
+    "#751",
+    "#638",
+    "#634",
+    "#639",
+    "#660",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

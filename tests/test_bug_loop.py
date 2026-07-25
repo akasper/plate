@@ -11,6 +11,7 @@ from plate_core.bug_loop import (
     assess_human_required,
     bug_loop_feed_items,
     cancel_bug_loop,
+    estimate_bug_cost,
     list_bug_loops,
     next_stage,
     run_bug_loop_tick,
@@ -32,6 +33,11 @@ class TestStages(unittest.TestCase):
         c = assess_human_required(risk="low", labels=["need:human-review"])
         self.assertTrue(c["required"])
 
+    def test_estimate_grows(self):
+        base = estimate_bug_cost(size="small", needs_repro=False)
+        rich = estimate_bug_cost(size="small", needs_repro=True, e2e=True)
+        self.assertGreater(rich["estimated_tokens"], base["estimated_tokens"])
+
 
 class TestRunLifecycle(unittest.TestCase):
     def setUp(self):
@@ -47,6 +53,7 @@ class TestRunLifecycle(unittest.TestCase):
             bug_title="Labels flake",
             risk="low",
             risk_tolerance="medium",
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
@@ -75,6 +82,7 @@ class TestRunLifecycle(unittest.TestCase):
             bug_title="Auth bug",
             risk="high",
             labels=["Bug", "need:human-review"],
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
@@ -106,8 +114,64 @@ class TestRunLifecycle(unittest.TestCase):
         self.assertTrue(ok["advanced"])
         self.assertEqual(ok["to_stage"], "merge_eligible")
 
+    def test_budget_blocks(self):
+        r = start_bug_loop(
+            bug_number=5,
+            bug_title="huge",
+            size="large",
+            budget_remaining=100,
+            use_live_budget=False,
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        self.assertFalse(r["ok"])
+        self.assertTrue(r["blocked"])
+        self.assertEqual(r["run"]["status"], "blocked")
+        self.assertIsNotNone(r["run"]["cost_estimate_tokens"])
+
+    def test_live_budget_hydrate_blocks(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {"spent_today": 9800, "spent_this_cycle": 0, "spent_usd_today": 0.0},
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {"daily": 10000, "per_cycle": 8000, "action": "pause"},
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                r = start_bug_loop(
+                    bug_number=6,
+                    bug_title="live",
+                    size="large",
+                    use_live_budget=True,
+                    budget_base_dir=bdir,
+                    base_dir=self.base,
+                    record_ledger=False,
+                )
+            self.assertTrue(r["blocked"])
+            self.assertIn("budget_snapshot", r)
+
     def test_babysit_gate_blocks_advance(self):
-        r = start_bug_loop(bug_number=1, bug_title="x", pr_number=9, base_dir=self.base, record_ledger=False)
+        r = start_bug_loop(
+            bug_number=1,
+            bug_title="x",
+            pr_number=9,
+            use_live_budget=False,
+            base_dir=self.base,
+            record_ledger=False,
+        )
         rid = r["run"]["id"]
         self.assertEqual(r["run"]["stage"], "babysit")
         out = advance_bug_loop(
@@ -128,7 +192,14 @@ class TestRunLifecycle(unittest.TestCase):
 
     def test_babysit_blocks_on_ci_and_changes_requested(self):
         """#638/#639: CI fail + CHANGES_REQUESTED must hold the loop on babysit."""
-        r = start_bug_loop(bug_number=2, bug_title="ci", pr_number=11, base_dir=self.base, record_ledger=False)
+        r = start_bug_loop(
+            bug_number=2,
+            bug_title="ci",
+            pr_number=11,
+            use_live_budget=False,
+            base_dir=self.base,
+            record_ledger=False,
+        )
         rid = r["run"]["id"]
         ci_block = advance_bug_loop(
             rid,
@@ -169,7 +240,13 @@ class TestRunLifecycle(unittest.TestCase):
         self.assertIn("CI pending", pending["reason"])
 
     def test_tick_dry_and_feed(self):
-        r = start_bug_loop(bug_number=3, bug_title="feed me", base_dir=self.base, record_ledger=False)
+        r = start_bug_loop(
+            bug_number=3,
+            bug_title="feed me",
+            use_live_budget=False,
+            base_dir=self.base,
+            record_ledger=False,
+        )
         rid = r["run"]["id"]
         t = run_bug_loop_tick(rid, dry_run=True, base_dir=self.base)
         self.assertTrue(t["ok"])

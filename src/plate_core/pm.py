@@ -375,6 +375,9 @@ def dispatch_loop_from_assignment(
             risk=risk if risk in ("low", "medium", "high") else "medium",
             labels=labels or None,
             risk_tolerance=risk_tol,
+            budget_remaining=budget_remaining,
+            use_live_budget=budget_remaining is None,
+            budget_base_dir=budget_base_dir,
             base_dir=bug_loop_base_dir,
             record_ledger=record_ledger,
         )
@@ -384,8 +387,9 @@ def dispatch_loop_from_assignment(
             "loop_kind": "bug",
             "run_id": run.get("id"),
             "stage": run.get("stage"),
-            "blocked": False,
+            "blocked": bool(out.get("blocked")),
             "error": out.get("error"),
+            "budget_remaining": out.get("budget_remaining"),
             "result": out,
         }
 

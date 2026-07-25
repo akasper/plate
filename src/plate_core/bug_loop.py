@@ -80,6 +80,8 @@ class BugLoopRun:
     pr_number: int | None = None
     branch: str | None = None
     risk: str = "medium"
+    size: str = "medium"
+    cost_estimate_tokens: int | None = None
     requires_human: bool = False
     checkpoint_id: str | None = None
     history: list[dict[str, Any]] = field(default_factory=list)
@@ -264,24 +266,102 @@ def stage_packet(run: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def estimate_bug_cost(
+    *,
+    size: str = "medium",
+    needs_repro: bool = True,
+    e2e: bool = False,
+) -> dict[str, Any]:
+    """Upfront cost estimate for a Bug loop (#638/#634 parity with feature)."""
+    bases = {
+        "trivial": 1500,
+        "small": 2500,
+        "medium": 4000,
+        "large": 7000,
+    }
+    size_key = (size or "medium").lower()
+    if size_key not in bases:
+        size_key = "medium"
+    tokens = bases[size_key]
+    if needs_repro:
+        tokens += 800
+    if e2e:
+        tokens += 1500
+    return {
+        "size": size_key,
+        "estimated_tokens": tokens,
+        "needs_repro": needs_repro,
+        "e2e": e2e,
+        "note": "Estimate is advisory; AutonomyEngine budget still enforces hard ceilings.",
+    }
+
+
 def start_bug_loop(
     *,
     bug_number: int | None = None,
     bug_title: str = "",
     risk: str = "medium",
+    size: str = "medium",
     labels: list[str] | None = None,
     paths: list[str] | None = None,
     risk_tolerance: str = "medium",
     pr_number: int | None = None,
     branch: str | None = None,
+    needs_repro: bool = True,
+    e2e: bool = False,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
+    budget_base_dir: Path | None = None,
     base_dir: Path | None = None,
     record_ledger: bool = True,
 ) -> dict[str, Any]:
-    """Start a durable bug resolution run at plan (or babysit if PR already exists)."""
+    """Start a durable bug resolution run at plan (or babysit if PR already exists).
+
+    When ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
+    hydrate remaining tokens from durable #634 budget snapshot (same rails as feature_loop).
+    """
     title = (bug_title or "").strip() or (f"Bug #{bug_number}" if bug_number else "Untitled bug")
+    est = estimate_bug_cost(size=size, needs_repro=needs_repro, e2e=e2e)
     human = assess_human_required(
         risk=risk, labels=labels, risk_tolerance=risk_tolerance, paths=paths
     )
+    blocked = False
+    notes = list(human.get("reasons") or [])
+    budget_snap: dict[str, Any] | None = None
+    effective_budget = budget_remaining
+    if effective_budget is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            budget_snap = get_budget_snapshot(
+                estimated_tokens=int(est["estimated_tokens"]),
+                base_dir=budget_base_dir,
+            )
+            if budget_snap.get("enabled"):
+                effective_budget = int(budget_snap.get("remaining_tokens") or 0)
+                notes.append(
+                    f"budget hydrated: remaining_tokens={effective_budget} "
+                    f"pressure={budget_snap.get('budget_pressure')}"
+                )
+                if budget_snap.get("would_pause") or budget_snap.get("would_throttle"):
+                    blocked = True
+                    notes.append(
+                        budget_snap.get("gate_reason")
+                        or "blocked: live budget estimate gate"
+                    )
+        except Exception as exc:
+            notes.append(f"budget hydrate skipped: {exc}")
+
+    if (
+        not blocked
+        and effective_budget is not None
+        and est["estimated_tokens"] > effective_budget
+    ):
+        blocked = True
+        notes.append(
+            f"blocked: est {est['estimated_tokens']} > budget remaining {effective_budget}"
+        )
+
     ts = _now()
     stage = "plan"
     if pr_number:
@@ -291,41 +371,66 @@ def start_bug_loop(
         bug_number=bug_number,
         bug_title=title,
         stage=stage,
-        status="active",
+        status="blocked" if blocked else "active",
         pr_number=pr_number,
         branch=branch or (f"bug/{bug_number}-fix" if bug_number else None),
         risk=(risk or "medium").lower(),
+        size=est["size"],
+        cost_estimate_tokens=est["estimated_tokens"],
         requires_human=bool(human["required"]),
-        history=[{"ts": ts, "stage": stage, "event": "started"}],
-        notes=list(human.get("reasons") or []),
+        history=[{"ts": ts, "stage": stage, "event": "started", "estimate": est}],
+        notes=notes,
         created_at=ts,
         updated_at=ts,
-        metadata={"labels": list(labels or []), "paths": list(paths or []), "risk_tolerance": risk_tolerance},
+        metadata={
+            "labels": list(labels or []),
+            "paths": list(paths or []),
+            "risk_tolerance": risk_tolerance,
+            "estimate": est,
+            "budget_remaining": effective_budget,
+            "budget_source": (
+                "explicit"
+                if budget_remaining is not None
+                else ("live" if budget_snap and budget_snap.get("enabled") else "none")
+            ),
+        },
     )
     data = _load(base_dir)
     data["runs"].append(run.to_dict())
     _save(data, base_dir)
     out: dict[str, Any] = {
-        "ok": True,
+        "ok": not blocked,
         "run": run.to_dict(),
         "packet": stage_packet(run.to_dict()),
         "human_assessment": human,
+        "estimate": est,
+        "blocked": blocked,
+        "budget_remaining": effective_budget,
     }
+    if budget_snap is not None:
+        out["budget_snapshot"] = budget_snap
+    if blocked:
+        out["error"] = notes[-1] if notes else "budget blocked"
     if record_ledger:
         try:
             from .ledger import record_decision
 
             rec = record_decision(
                 action_kind="bug_loop_start",
-                decision="proceed",
-                reason=f"start bug loop for #{bug_number}: {title[:80]}",
-                sources=["bug_loop", "#638"],
+                decision="pause" if blocked else "proceed",
+                reason=(
+                    f"start bug loop for #{bug_number}: {title[:80]}"
+                    if not blocked
+                    else f"budget blocked bug loop #{bug_number}: {notes[-1] if notes else 'budget'}"
+                ),
+                sources=["bug_loop", "#638", "#634"],
                 risk_tolerance=risk_tolerance,
                 impact=risk,
                 related_issue=bug_number,
                 related_pr=pr_number,
                 actor="bug_loop",
-                metadata={"run_id": run.id},
+                cost_estimate_tokens=est["estimated_tokens"],
+                metadata={"run_id": run.id, "blocked": blocked},
             )
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:
@@ -668,6 +773,7 @@ def bug_loop_feed_items(
                 "stage": r.get("stage"),
                 "bug_number": r.get("bug_number"),
                 "pr_number": r.get("pr_number"),
+                "cost_estimate_tokens": r.get("cost_estimate_tokens"),
                 "requires_human": r.get("requires_human"),
                 "badges": ["bug_loop", str(r.get("stage")), str(r.get("risk"))],
                 "source": "bug_loop",
