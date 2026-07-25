@@ -291,6 +291,23 @@ def get_cost_dashboard(
             "impact": "high",
         })
 
+    # #647 ledger visibility for dashboard / feed
+    ledger_snap: dict[str, Any] = {}
+    try:
+        from .ledger import ledger_summary, list_decisions
+
+        ledger_snap = ledger_summary(limit=30)
+        for row in list_decisions(decision="pause", limit=5) + list_decisions(
+            decision="shadow_required", limit=5
+        ):
+            drift_signals.append({
+                "kind": f"ledger_{row.get('decision')}",
+                "detail": f"[{row.get('decision')}] {row.get('action_kind')}: {row.get('reason')}",
+                "impact": "high" if row.get("decision") in ("pause", "shadow_required") else "medium",
+            })
+    except Exception:
+        ledger_snap = {}
+
     # Ranked feed items for what-next / #631
     feed_items: list[dict[str, Any]] = []
     for i, cp in enumerate(open_cps[:10]):
@@ -365,6 +382,7 @@ def get_cost_dashboard(
         },
         "open_human_checkpoints": open_cps,
         "due_procedures": due_procs,
+        "ledger": ledger_snap,
         "drift_signals": drift_signals,
         "feed_items": feed_items,
         "markdown": format_dashboard_markdown(
