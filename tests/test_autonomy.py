@@ -60,29 +60,41 @@ class TestAutonomyEngine(unittest.TestCase):
         self.assertNotIn("high-proc", ids)
 
     def test_enforce_budget_throttle(self):
-        engine = AutonomyEngine(repo=None)
-        engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 500, "action": "throttle"}}
-        engine.enabled = True  # test exercises enforcement path (code DEFAULT is now medium/enabled per this PR; tests opt-in explicitly for isolation)
-        engine.risk_tolerance = "high"
-        engine.enabled = True
-        engine._spent_this_cycle = 0
-        # First spend within limits
-        self.assertEqual(engine.enforce_budget(400, "test"), Decision.PROCEED)
-        self.assertEqual(engine._spent_this_cycle, 400)
-        # Over per_cycle -> throttle (partial spend, still proceeds)
-        self.assertEqual(engine.enforce_budget(200, "test"), Decision.THROTTLE)
-        self.assertGreaterEqual(engine._spent_this_cycle, 400)
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 500, "action": "throttle"}}
+            engine.enabled = True  # test exercises enforcement path (code DEFAULT is now medium/enabled per this PR; tests opt-in explicitly for isolation)
+            engine.risk_tolerance = "high"
+            engine.enabled = True
+            engine._spent_this_cycle = 0
+            engine._spent_today = 0
+            engine._spent_usd_today = 0.0
+            # First spend within limits
+            self.assertEqual(engine.enforce_budget(400, "test"), Decision.PROCEED)
+            self.assertEqual(engine._spent_this_cycle, 400)
+            # Over per_cycle -> throttle (partial spend, still proceeds)
+            self.assertEqual(engine.enforce_budget(200, "test"), Decision.THROTTLE)
+            self.assertGreaterEqual(engine._spent_this_cycle, 400)
 
     def test_enforce_budget_pause(self):
-        engine = AutonomyEngine(repo=None)
-        engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 100, "action": "pause"}}
-        engine.risk_tolerance = "high"
-        engine.enabled = True
-        engine._spent_this_cycle = 0
-        # Under limit: proceeds
-        self.assertEqual(engine.enforce_budget(50, "test"), Decision.PROCEED)
-        # Over per_cycle -> pause returns Decision.PAUSE
-        self.assertEqual(engine.enforce_budget(200, "test"), Decision.PAUSE)
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 100, "action": "pause"}}
+            engine.risk_tolerance = "high"
+            engine.enabled = True
+            engine._spent_this_cycle = 0
+            engine._spent_today = 0
+            engine._spent_usd_today = 0.0
+            # Under limit: proceeds
+            self.assertEqual(engine.enforce_budget(50, "test"), Decision.PROCEED)
+            # Over per_cycle -> pause returns Decision.PAUSE
+            self.assertEqual(engine.enforce_budget(200, "test"), Decision.PAUSE)
 
     def test_get_status_and_autopilot(self):
         engine = AutonomyEngine(repo=None)
@@ -103,15 +115,20 @@ class TestAutonomyEngine(unittest.TestCase):
         self.assertIn(report.budget_decision, ("proceed", "throttle", "pause", "warn"))
 
     def test_run_cycle_pause_on_budget_exceeded(self):
-        engine = AutonomyEngine(repo=None)
-        engine.risk_tolerance = "medium"
-        engine.autonomy_config = {"token_budget": {"daily": 1, "per_cycle": 1, "action": "pause"}}
-        engine.enabled = True
-        engine._spent_this_cycle = 100
-        report = engine.run_cycle(dry_run=True, max_steps=5)
-        self.assertEqual(report.status, "paused")
-        self.assertTrue(report.paused)
-        self.assertEqual(report.budget_decision, "pause")
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.risk_tolerance = "medium"
+            engine.autonomy_config = {"token_budget": {"daily": 1, "per_cycle": 1, "action": "pause"}}
+            engine.enabled = True
+            engine._spent_this_cycle = 100
+            engine._spent_today = 100
+            report = engine.run_cycle(dry_run=True, max_steps=5)
+            self.assertEqual(report.status, "paused")
+            self.assertTrue(report.paused)
+            self.assertEqual(report.budget_decision, "pause")
 
     def test_estimate_cost_heuristics(self):
         """#471 wired: base + scope mult + over-est (1.5-2x+20%) + cap; references costs/COSTS for hist (sparse ok)."""
@@ -444,3 +461,58 @@ if __name__ == "__main__":
             self.assertFalse(ok["blocked"], ok)
             self.assertEqual(ok["mode"], "approved")
             self.assertEqual(ok["shadow_report"]["shadow_id"], sid)
+
+
+    def test_durable_budget_spend_across_engines(self):
+        """#634: spend counters persist under .agentic/budget so governor survives restart."""
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine, Decision, load_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            eng1 = AutonomyEngine(repo=None)
+            eng1.enabled = True
+            eng1.risk_tolerance = "high"
+            eng1.budget_base_dir = bdir
+            eng1.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "high",
+                "token_budget": {"daily": 1000, "per_cycle": 800, "action": "pause"},
+            }
+            self.assertEqual(eng1.enforce_budget(400, "test"), Decision.PROCEED)
+            data = load_budget_spend(base_dir=bdir)
+            self.assertEqual(data.get("spent_today"), 400)
+
+            eng2 = AutonomyEngine(repo=None)
+            eng2.enabled = True
+            eng2.risk_tolerance = "high"
+            eng2.budget_base_dir = bdir
+            eng2.autonomy_config = eng1.autonomy_config
+            eng2._load_durable_spend()
+            self.assertEqual(eng2._spent_today, 400)
+            # Remaining room 400; next 500 over daily -> pause
+            self.assertEqual(eng2.enforce_budget(500, "test"), Decision.PAUSE)
+            self.assertEqual(eng2._spent_today, 400)
+
+    def test_cost_ceiling_usd_pauses(self):
+        """#634: cost_ceiling_usd is a hard rail (pause under throttle policy)."""
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine, Decision, tokens_to_usd
+
+        with tempfile.TemporaryDirectory() as tmp:
+            eng = AutonomyEngine(repo=None)
+            eng.enabled = True
+            eng.risk_tolerance = "high"
+            eng.budget_base_dir = Path(tmp) / "budget"
+            # Ceiling near-zero relative to estimate
+            eng.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "high",
+                "token_budget": {"daily": 1_000_000, "per_cycle": 1_000_000, "action": "throttle"},
+                "cost_ceiling_usd": 0.0001,
+            }
+            est = 50_000  # ~0.1 USD at heuristic rate
+            self.assertGreater(tokens_to_usd(est), 0.0001)
+            self.assertEqual(eng.enforce_budget(est, "plan_epic"), Decision.PAUSE)

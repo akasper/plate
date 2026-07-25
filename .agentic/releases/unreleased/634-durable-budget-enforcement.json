@@ -1,0 +1,24 @@
+{
+  "slug": "634-durable-budget-enforcement",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, costs.py, tests/test_autonomy.py",
+  "summary": "Real #634 budget rails: durable .agentic/budget/spend.json for daily/cycle/USD spend across process restarts; cost_ceiling_usd hard pause (unless warn); status remaining_usd from ceiling; gitignore ephemeral spend file.",
+  "migration_impact": "New local file .agentic/budget/spend.json (gitignored). AutonomyEngine.enforce_budget persists spend and enforces cost_ceiling_usd. No .plate schema change (uses existing token_budget + cost_ceiling_usd).",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Set autonomy.token_budget.{daily,per_cycle,action} and optional cost_ceiling_usd in .plate.",
+    "3. Long --loop / multi-process hosts now share durable spend counters for the UTC day.",
+    "4. On PAUSE from budget or ceiling, inspect plate_autonomy_status / cost dashboard before raising caps."
+  ],
+  "agent_notes": "risk_tolerance=off still skips enforcement (manual mode). Prefer pause for production ceilings. Do not delete spend.json mid-day to bypass limits. Pairs with #653 dashboard feed items.",
+  "breaking": false,
+  "links": [
+    "#634",
+    "#653",
+    "#470",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
