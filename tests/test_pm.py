@@ -342,6 +342,92 @@ class TestPMCycle(unittest.TestCase):
             self.assertEqual(out["loop_kind"], "bug")
             self.assertTrue(out["run_id"])
 
+    def test_tick_delegated_loops_completes_when_done(self):
+        from plate_core.bug_loop import start_bug_loop, update_bug_loop
+        from plate_core.pm import ProjectManager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pm_dir = Path(tmp) / "pm"
+            bdir = Path(tmp) / "bugs"
+            started = start_bug_loop(
+                bug_number=7,
+                bug_title="done soon",
+                risk="low",
+                base_dir=bdir,
+                record_ledger=False,
+            )
+            rid = started["run"]["id"]
+            update_bug_loop(rid, stage="done", status="done", base_dir=bdir)
+            pm = ProjectManager(
+                repo=None,
+                state_dir=pm_dir,
+                bug_loop_base_dir=bdir,
+                dispatch_loops=False,
+                dispatch_fleet=False,
+            )
+            pm._assignments = [
+                {
+                    "assignment_id": "asg-tick1",
+                    "work_id": "7",
+                    "work_title": "done soon",
+                    "work_type": "bugfix",
+                    "status": "delegated",
+                    "loop_run_id": rid,
+                    "loop_kind": "bug",
+                    "packet": {},
+                }
+            ]
+            ticks = pm.tick_delegated_loops(dry_run=True, complete_when_done=True)
+            self.assertEqual(len(ticks), 1)
+            self.assertTrue(ticks[0]["completed_assignment"])
+            self.assertEqual(pm._assignments[0]["status"], "done")
+            self.assertEqual(pm._assignments[0]["loop_stage"], "done")
+
+    def test_run_cycle_includes_loop_ticks(self):
+        from plate_core.feature_loop import start_feature_loop
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pm_dir = Path(tmp) / "pm"
+            fdir = Path(tmp) / "feats"
+            started = start_feature_loop(
+                feature_number=3,
+                feature_title="tick me",
+                risk="low",
+                size="trivial",
+                needs_media_approval=False,
+                use_live_budget=False,
+                base_dir=fdir,
+                record_ledger=False,
+            )
+            rid = started["run"]["id"]
+            pm = ProjectManager(
+                repo=None,
+                state_dir=pm_dir,
+                feature_loop_base_dir=fdir,
+                dispatch_fleet=False,
+                dispatch_loops=False,
+            )
+            pm._assignments = [
+                {
+                    "assignment_id": "asg-tick2",
+                    "work_id": "3",
+                    "work_title": "tick me",
+                    "work_type": "implement",
+                    "status": "delegated",
+                    "loop_run_id": rid,
+                    "loop_kind": "feature",
+                    "packet": {},
+                }
+            ]
+            with patch.object(pm, "get_status", return_value=self._fake_status()), patch.object(
+                pm, "collect_work", return_value=[]
+            ):
+                rep = pm.run_cycle(dry_run=True, max_assignments=1, tick_loops=True)
+            self.assertIn("loop_ticks", rep)
+            self.assertGreaterEqual(len(rep["loop_ticks"]), 1)
+            self.assertEqual(rep["loop_ticks"][0]["loop_run_id"], rid)
+            self.assertEqual(rep["loop_ticks"][0]["stage"], "estimate_cost")
+
 
 if __name__ == "__main__":
     unittest.main()

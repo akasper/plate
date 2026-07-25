@@ -670,6 +670,10 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 repo=args.get("repo"),
                 dry_run=bool(args.get("dry_run", True)),
                 max_assignments=int(args.get("max_assignments") or 5),
+                dispatch_fleet=bool(args.get("dispatch_fleet", True)),
+                dispatch_loops=bool(args.get("dispatch_loops", True)),
+                tick_loops=bool(args.get("tick_loops", True)),
+                fetch_loop_gates=bool(args.get("fetch_loop_gates") or False),
             )
         elif name == "plate_pm_run_loop":
             payload = run_pm_loop(
@@ -2570,13 +2574,23 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_pm_run_cycle",
-                                "description": "Run one PM orchestration cycle: collect work, assign personas, respect budget/checkpoints (#660). Default dry_run=true.",
+                                "description": "Run one PM orchestration cycle: collect work, assign personas, respect budget/checkpoints; may dispatch fleet/loops and tick delegated #638/#639 loops (#660). Default dry_run=true.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "repo": {"type": "string"},
                                         "dry_run": {"type": "boolean"},
                                         "max_assignments": {"type": "integer"},
+                                        "dispatch_fleet": {"type": "boolean"},
+                                        "dispatch_loops": {"type": "boolean"},
+                                        "tick_loops": {
+                                            "type": "boolean",
+                                            "description": "Sync loop stages and complete assignments when loops done (default true).",
+                                        },
+                                        "fetch_loop_gates": {
+                                            "type": "boolean",
+                                            "description": "When apply (dry_run=false), fetch PR gates on babysit ticks.",
+                                        },
                                     },
                                 },
                             },

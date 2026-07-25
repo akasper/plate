@@ -2410,14 +2410,26 @@ def cmd_pm(args: argparse.Namespace) -> int:
             repo=getattr(args, "repo", None),
             dry_run=not getattr(args, "apply", False),
             max_assignments=int(getattr(args, "max_assignments", 5) or 5),
+            tick_loops=not getattr(args, "no_tick_loops", False),
+            fetch_loop_gates=bool(getattr(args, "fetch_loop_gates", False)),
         )
         if args.json:
             print(json.dumps(rep))
             return 0
         print(f"PM cycle: {rep.get('status')} dry_run={rep.get('dry_run')}")
-        print(f"  assignments={len(rep.get('assignments') or [])} blocked={len(rep.get('blocked') or [])}")
+        print(
+            f"  assignments={len(rep.get('assignments') or [])} "
+            f"blocked={len(rep.get('blocked') or [])} "
+            f"loops={len(rep.get('loop_dispatches') or [])} "
+            f"ticks={len(rep.get('loop_ticks') or [])}"
+        )
         for a in (rep.get("assignments") or [])[:5]:
             print(f"  - {a.get('agent_id')} ← {a.get('work_type')}: {a.get('work_title')}")
+        for t in (rep.get("loop_ticks") or [])[:5]:
+            print(
+                f"  tick {t.get('loop_kind')} {t.get('loop_run_id')}: "
+                f"stage={t.get('stage')} done={t.get('completed_assignment')}"
+            )
         return 0
     # default status
     st = get_pm_status(getattr(args, "repo", None))
@@ -3693,6 +3705,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pm.add_argument("--note", default="", help="Note for --complete")
     pm.add_argument("--apply", action="store_true", help="With --run/--loop: attempt delegation (default dry-run)")
+    pm.add_argument(
+        "--no-tick-loops",
+        dest="no_tick_loops",
+        action="store_true",
+        help="Skip syncing/completing delegated #638/#639 loops on --run",
+    )
+    pm.add_argument(
+        "--fetch-loop-gates",
+        dest="fetch_loop_gates",
+        action="store_true",
+        help="With --apply: fetch PR merge gates when ticking babysit loops",
+    )
     pm.add_argument("--max-assignments", dest="max_assignments", type=int, default=5)
     pm.add_argument("--max-cycles", dest="max_cycles", type=int, default=3)
     pm.add_argument("--limit", type=int, default=50, help="Queue list limit")
