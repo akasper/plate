@@ -1,0 +1,26 @@
+{
+  "slug": "640-629-er-planning-decide-feed",
+  "change_type": "feature",
+  "surface": "src/plate_core/epic_release_planning.py, planning.py, feed.py, cli.py, mcp_server.py",
+  "summary": "Harden #629/#640: decide_er_plan (approve|revise|reject via shared pending ledger), er_planning_feed_items (pending epic/release + incomplete sessions), feed/CLI/MCP parity with feature planning decide surfaces.",
+  "migration_impact": "New MCP plate_er_planning_decide / plate_er_planning_list_pending; CLI gh plate er-plan --decide/--list-pending/--feed. Feature planning feed excludes epic/release kinds to avoid double-ranking. Approve does not create issues or cut releases.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. After plate_er_planning_build, present ask_user_question from plan or feed.",
+    "3. Decide: plate_er_planning_decide plan_id approve|revise|reject (or gh plate er-plan --decide ID).",
+    "4. On approve epic: create Epic + children stubs; on approve release: link scope + notes skeleton only — no tag/cut."
+  ],
+  "agent_notes": "Never cut/tag on release plan approve. Incomplete ER sessions live under .agentic/planning/er_sessions/. Pending plans shared with feature planning under .agentic/planning/pending/.",
+  "breaking": false,
+  "links": [
+    "#640",
+    "#629",
+    "#630",
+    "#628",
+    "#631",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
