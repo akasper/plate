@@ -62,6 +62,7 @@ from .epic_release_planning import (
     decide_er_plan,
     er_planning_feed_items,
     get_er_script,
+    resubmit_er_plan,
     start_er_session,
 )
 from .design_research_approval import (
@@ -473,6 +474,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 str(args.get("decision") or "approve"),
                 note=str(args.get("note") or ""),
                 decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
+            )
+        elif name == "plate_er_planning_resubmit":
+            payload = resubmit_er_plan(
+                str(args.get("plan_id") or args.get("id") or ""),
+                title=args.get("title"),
+                body=args.get("body"),
+                note=str(args.get("note") or ""),
+                resubmitted_by=str(args.get("resubmitted_by") or args.get("by") or "mcp"),
             )
         elif name == "plate_er_planning_list_pending":
             payload = {
@@ -2057,7 +2066,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_er_planning_decide",
-                                "description": "Approve/revise/reject a pending epic/release plan (#640/#629). Does not create issues or cut releases.",
+                                "description": "Approve/revise/reject a pending epic/release plan (#640/#629). Revise stays actionable until resubmit. Does not create issues or cut releases.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -2073,8 +2082,23 @@ def run() -> None:
                                 },
                             },
                             {
+                                "name": "plate_er_planning_resubmit",
+                                "description": "Resubmit a revise_requested epic/release plan for re-approval (#640/#629; shared ledger with #630).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "body": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "resubmitted_by": {"type": "string"},
+                                    },
+                                    "required": ["plan_id"],
+                                },
+                            },
+                            {
                                 "name": "plate_er_planning_list_pending",
-                                "description": "List pending epic/release plans and incomplete ER sessions for the feed.",
+                                "description": "List pending/revise epic/release plans and incomplete ER sessions for the feed.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
