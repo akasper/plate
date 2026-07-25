@@ -281,6 +281,44 @@ def build_marketplace_entry(
     }
 
 
+# Heuristic packaging cost (#634/#652) — advisory tokens for build + review packets.
+_PACKAGE_ESTIMATE_BASE = 6000
+_PACKAGE_MEDIA_EXTRA = 2000
+_PACKAGE_PERSIST_EXTRA = 1500
+
+
+def estimate_package_cost(
+    *,
+    n_fragments: int = 0,
+    n_media: int = 0,
+    persist: bool = True,
+) -> dict[str, Any]:
+    """Advisory token estimate for marketplace package build (#634/#652)."""
+    tokens = _PACKAGE_ESTIMATE_BASE
+    frag_n = max(0, int(n_fragments or 0))
+    media_n = max(0, int(n_media or 0))
+    tokens += min(8000, frag_n * 200)
+    if media_n:
+        tokens += _PACKAGE_MEDIA_EXTRA + min(4000, media_n * 300)
+    if persist:
+        tokens += _PACKAGE_PERSIST_EXTRA
+    return {
+        "ok": True,
+        "estimated_tokens": int(tokens),
+        "breakdown": {
+            "base": _PACKAGE_ESTIMATE_BASE,
+            "fragments": min(8000, frag_n * 200),
+            "media": (_PACKAGE_MEDIA_EXTRA + min(4000, media_n * 300)) if media_n else 0,
+            "persist": _PACKAGE_PERSIST_EXTRA if persist else 0,
+        },
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine enforce hard ceilings.",
+            "build_package hydrates remaining via get_budget_snapshot when use_live_budget.",
+            "Human marketplace publish remains a Task (#380/#381/#626) — never auto-publish.",
+        ],
+    }
+
+
 def build_package(
     version: str,
     fragments: list[dict[str, Any]],
@@ -289,14 +327,62 @@ def build_package(
     require_approved_media: bool = False,
     persist: bool = True,
     package_id: str | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Build a full marketplace/release package payload (dry-run safe)."""
+    """Build a full marketplace/release package payload (dry-run safe).
+
+    #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
+    hydrate remaining tokens from durable budget snapshot and block if est exceeds remaining.
+    Never auto-publishes (human Tasks for real marketplace publish).
+    """
+    frags = list(fragments or [])
+    n_media = 0
+    for f in frags:
+        media = f.get("media") if isinstance(f, dict) else None
+        if isinstance(media, list):
+            n_media += len(media)
+    cost_est = estimate_package_cost(
+        n_fragments=len(frags), n_media=n_media, persist=persist
+    )
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    effective_remaining = budget_remaining
+    budget_notes: list[str] = []
+    if effective_remaining is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot(estimate_tokens=est_tokens)
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective_remaining = int(rem)
+                budget_notes.append(
+                    f"budget hydrated: remaining_tokens={effective_remaining} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            budget_notes.append(f"budget hydrate skipped: {exc}")
+
+    if effective_remaining is not None and est_tokens > int(effective_remaining):
+        return {
+            "ok": False,
+            "blocked": True,
+            "reason": "budget",
+            "error": (
+                f"budget: est {est_tokens} tokens exceeds remaining {effective_remaining}"
+            ),
+            "cost_estimate_tokens": est_tokens,
+            "budget_remaining": int(effective_remaining),
+            "cost_estimate": cost_est,
+            "notes": budget_notes,
+        }
+
     ver = version.lstrip("v") or "0.0.0"
-    media_manifest = build_media_manifest(fragments, version=ver)
+    media_manifest = build_media_manifest(frags, version=ver)
     media = list(media_manifest.get("media") or [])
-    narratives = build_user_narratives(fragments)
+    narratives = build_user_narratives(frags)
     onboarding = build_onboarding_proof(ver)
-    planning_links = collect_planning_links(fragments)
+    planning_links = collect_planning_links(frags)
     media_md = str(media_manifest.get("markdown_approved") or "") or render_media_markdown(
         media, only_approved=True
     )
@@ -330,7 +416,7 @@ def build_package(
         narratives=narratives,
         onboarding_proof=onboarding,
         planning_links=planning_links,
-        fragment_slugs=[str(f.get("slug") or f.get("_source_file") or "") for f in fragments],
+        fragment_slugs=[str(f.get("slug") or f.get("_source_file") or "") for f in frags],
         readiness=readiness,
         marketplace_entry=marketplace,
         publish_blocked_reason="human_publish_task_required",
@@ -338,6 +424,9 @@ def build_package(
             "media_markdown_all": media_manifest.get("markdown_all") or "",
             "media_markdown_approved": media_md,
             "require_approved_media": require_approved_media,
+            "cost_estimate_tokens": est_tokens,
+            "budget_remaining": effective_remaining,
+            "budget_notes": budget_notes,
         },
     )
 
@@ -352,6 +441,9 @@ def build_package(
     return {
         "ok": True,
         "package": pkg.to_dict(),
+        "cost_estimate_tokens": est_tokens,
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
         "marker": render_packaging_marker(
             {
                 "id": pid,
@@ -360,6 +452,7 @@ def build_package(
                 "ready_for_review": readiness["ready_for_review"],
                 "n_narratives": len(narratives),
                 "n_media": int((media_manifest.get("summary") or {}).get("n_total") or 0),
+                "cost_estimate_tokens": est_tokens,
             }
         ),
     }
@@ -612,20 +705,42 @@ def plan_marketplace_package_op(
     *,
     fragments: list[dict[str, Any]] | None = None,
     releases_dir: Path | str = ".agentic/releases",
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Agent packet for scheduled marketplace-package op (#641/#652)."""
+    """Agent packet for scheduled marketplace-package op (#641/#652).
+
+    Includes #634 cost estimate; build preview respects budget gate (persist=False).
+    """
     from .release import collect_fragments
 
     frags = fragments
     if frags is None:
         frags = collect_fragments(Path(releases_dir))
     ver = (version or "unreleased").lstrip("v")
-    built = build_package(ver, frags, persist=False)
+    n_media = 0
+    for f in frags or []:
+        media = f.get("media") if isinstance(f, dict) else None
+        if isinstance(media, list):
+            n_media += len(media)
+    cost_est = estimate_package_cost(
+        n_fragments=len(frags or []), n_media=n_media, persist=True
+    )
+    built = build_package(
+        ver,
+        frags,
+        persist=False,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
     pkg = built.get("package") or {}
-    return {
-        "ok": True,
+    out: dict[str, Any] = {
+        "ok": bool(built.get("ok")),
         "op_id": "marketplace-package",
         "version": ver,
+        "cost_estimate": cost_est,
+        "cost_estimate_tokens": cost_est.get("estimated_tokens"),
+        "budget_remaining": built.get("budget_remaining"),
         "package_preview": {
             "status": pkg.get("status"),
             "readiness": pkg.get("readiness"),
@@ -634,6 +749,7 @@ def plan_marketplace_package_op(
             "onboarding_title": (pkg.get("onboarding_proof") or {}).get("title"),
         },
         "steps": [
+            "Check budget: plate_autonomy_budget / remaining vs cost_estimate_tokens",
             "plate_packaging_build (persist package under .agentic/packaging/)",
             "Review markdown: plate_packaging_render",
             "Surface feed: plate_packaging_feed / endless feed",
@@ -642,6 +758,7 @@ def plan_marketplace_package_op(
             "Human completes publish; agent never holds marketplace credentials",
         ],
         "tools": [
+            "plate_autonomy_budget",
             "plate_packaging_build",
             "plate_packaging_decide",
             "plate_packaging_feed",
@@ -663,5 +780,17 @@ def plan_marketplace_package_op(
                 },
             ],
         },
-        "marker": render_packaging_marker({"op": "marketplace-package", "version": ver}),
+        "marker": render_packaging_marker(
+            {
+                "op": "marketplace-package",
+                "version": ver,
+                "cost_estimate_tokens": cost_est.get("estimated_tokens"),
+            }
+        ),
     }
+    if not built.get("ok"):
+        out["blocked"] = True
+        out["error"] = built.get("error")
+        out["reason"] = built.get("reason")
+        out["package_preview"] = {"blocked": True, "error": built.get("error")}
+    return out
