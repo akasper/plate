@@ -55,6 +55,45 @@ class TestRecommendWhatNext(unittest.TestCase):
         )
         self.assertEqual(out["priority"], "epic")
 
+    def test_ready_issue_before_generic_epic(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 5},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            ready_issues=[
+                {"number": 793, "title": "what_next ready candidates", "labels": ["Feature"]},
+                {"number": 331, "title": "config lifecycle", "labels": ["Feature"]},
+            ],
+        )
+        self.assertEqual(out["priority"], "ready_issue")
+        self.assertEqual(out["issue_number"], 793)
+        self.assertIn("#793", out["next_action"])
+        self.assertEqual(out["state_snapshot"]["ready_issue_count"], 2)
+        self.assertEqual(len(out["ready_issues"]), 2)
+
+    def test_open_pr_still_beats_ready_issue(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[{"number": 800, "title": "in flight", "baseRefName": "release"}],
+            ready_issues=[{"number": 793, "title": "ready", "labels": ["Feature"]}],
+        )
+        self.assertEqual(out["priority"], "open_pr")
+        self.assertEqual(out["pr_number"], 800)
+
+    def test_budget_still_beats_ready_issue(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={
+                "budget_pressure": "critical",
+                "remaining_tokens": 100,
+                "daily_limit": 50000,
+            },
+            open_prs=[],
+            ready_issues=[{"number": 793, "title": "ready", "labels": ["Feature"]}],
+        )
+        self.assertEqual(out["priority"], "budget_gate")
+
     def test_fragments_when_no_epics(self):
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 0},
@@ -63,6 +102,55 @@ class TestRecommendWhatNext(unittest.TestCase):
             pending_fragment_count=12,
         )
         self.assertEqual(out["priority"], "fragments")
+
+    def test_fetch_ready_issue_candidates_filters(self):
+        from plate_core.what_next import fetch_ready_issue_candidates
+
+        class FakeGh:
+            def api(self, endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+                if "status:ready-to-work" in endpoint or "status%3Aready-to-work" in endpoint:
+                    return {
+                        "items": [
+                            {
+                                "number": 793,
+                                "title": "ready one",
+                                "labels": [{"name": "Feature"}, {"name": "status:ready-to-work"}],
+                            },
+                            {
+                                "number": 999,
+                                "title": "stub ready",
+                                "labels": [
+                                    {"name": "Feature"},
+                                    {"name": "status:ready-to-work"},
+                                    {"name": "status:stub"},
+                                ],
+                            },
+                        ]
+                    }
+                return {
+                    "items": [
+                        {
+                            "number": 340,
+                            "title": "spec audit",
+                            "labels": [{"name": "Feature"}],
+                        },
+                        {
+                            "number": 634,
+                            "title": "budgets",
+                            "labels": [
+                                {"name": "Feature"},
+                                {"name": "status:implemented"},
+                            ],
+                        },
+                    ]
+                }
+
+        out = fetch_ready_issue_candidates("akasper/plate", limit=10, gh=FakeGh())
+        nums = [i["number"] for i in out]
+        self.assertIn(793, nums)
+        self.assertIn(340, nums)
+        self.assertNotIn(999, nums)
+        self.assertNotIn(634, nums)
 
 
 class TestWhatNextCLI(unittest.TestCase):

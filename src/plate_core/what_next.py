@@ -1,16 +1,18 @@
-"""What-next recommendation for PLATE agents (#282 / #654 harden).
+"""What-next recommendation for PLATE agents (#282 / #654 / #793 harden).
 
 Priority (cheap → specific):
 1. Critical/exhausted durable budget pressure (surface gates still apply under risk=off)
 2. Open PRs targeting integration base (babysit to green)
 3. Missing labels → bootstrap
-4. Open Epics → advance ready child Feature/Bug
-5. Pending fragments / release status
+4. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
+5. Open Epics → advance ready child Feature/Bug (generic when no candidates)
+6. Pending fragments / release status
 """
 
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote_plus
 
 
 def recommend_what_next(
@@ -20,16 +22,19 @@ def recommend_what_next(
     open_prs: list[dict[str, Any]] | None = None,
     agent_type: str | None = None,
     pending_fragment_count: int | None = None,
+    ready_issues: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure recommendation from pre-fetched state (testable).
 
     ``health``: get_health().to_dict() shape (label_coverage_ok, open_epic_count, budget_*).
     ``budget``: get_budget_snapshot() or cost dashboard budget dict.
     ``open_prs``: list of {number, title, baseRefName, mergeable?} for open PRs.
+    ``ready_issues``: list of {number, title, labels?} implementable Feature/Bug candidates.
     """
     h = dict(health or {})
     b = dict(budget or {})
     prs = list(open_prs or [])
+    ready = list(ready_issues or [])
     labels_ok = bool(h.get("label_coverage_ok", False))
     open_epics = int(h.get("open_epic_count") or 0)
     pressure = str(
@@ -57,6 +62,7 @@ def recommend_what_next(
         "budget_risk_tolerance": risk,
         "open_pr_count": len(prs),
         "pending_fragment_count": pending_fragment_count,
+        "ready_issue_count": len(ready),
     }
 
     # 1) Budget critical/exhausted — even under risk=off (surface gates)
@@ -134,7 +140,40 @@ def recommend_what_next(
             "priority": "bootstrap",
         }
 
-    # 4) Open Epics → advance ready child
+    # 4) Concrete ready Feature/Bug — prefer over generic epic text (#793)
+    if ready:
+        first = ready[0]
+        num = first.get("number") or first.get("issue_number")
+        title = str(first.get("title") or "")[:80]
+        action = f"implement ready issue #{num}: {title}"
+        prompt = (
+            f"Pipeline empty; start highest ready candidate #{num}. "
+            f"Run `gh plate release status` first, branch from origin/release as "
+            f"feature/{num}-short-slug (or bug/). TDD when code; author fragment "
+            f"under .agentic/releases/unreleased/; open PR targeting release with "
+            f"Closes #{num} in the body only; then babysit that PR to CLEAN. "
+            f"Prefer v1.0 path (#654): safety → feed → PM over marketplace Tasks."
+            + quiet
+        )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": f"{len(ready)} ready/implementable issue candidate(s) (#793)",
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "ready_issue",
+            "issue_number": num,
+            "issue_title": title,
+            "ready_issues": [
+                {
+                    "number": i.get("number") or i.get("issue_number"),
+                    "title": str(i.get("title") or "")[:120],
+                }
+                for i in ready[:10]
+            ],
+        }
+
+    # 5) Open Epics → advance ready child (generic when no candidates listed)
     if open_epics > 0:
         action = (
             "advance an open Epic: pick a child Feature/Bug with tests sketched, "
@@ -157,7 +196,7 @@ def recommend_what_next(
             "priority": "epic",
         }
 
-    # 5) Fragments / release
+    # 6) Fragments / release
     if pending_fragment_count is not None and int(pending_fragment_count) > 0:
         action = (
             f"review {pending_fragment_count} pending unreleased fragments; "
@@ -195,6 +234,113 @@ def recommend_what_next(
     }
 
 
+def _issue_label_names(item: dict[str, Any]) -> list[str]:
+    raw = item.get("labels") or []
+    names: list[str] = []
+    for lab in raw:
+        if isinstance(lab, dict):
+            n = lab.get("name")
+            if n:
+                names.append(str(n))
+        elif lab:
+            names.append(str(lab))
+    return names
+
+
+def _normalize_ready_issue(item: dict[str, Any]) -> dict[str, Any] | None:
+    num = item.get("number")
+    if num is None:
+        return None
+    return {
+        "number": int(num),
+        "title": str(item.get("title") or ""),
+        "labels": _issue_label_names(item),
+    }
+
+
+def fetch_ready_issue_candidates(
+    repo: str | None = None,
+    *,
+    limit: int = 10,
+    gh: Any | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch open implementable Feature/Bug candidates for empty-pipeline what_next.
+
+    Prefer ``status:ready-to-work``. Fall back to Feature/Bug without
+    ``need:refinement``, ``status:stub``, or ``status:implemented``.
+    Skip Epic/Release/Task types and human-only blockers.
+    """
+    from .github_client import GhClient
+    from .health import resolve_repo
+
+    target = resolve_repo(repo)
+    client = gh or GhClient()
+    seen: set[int] = set()
+    out: list[dict[str, Any]] = []
+
+    def _absorb(items: list[Any], *, require_ready_label: bool) -> None:
+        for item in items:
+            if not isinstance(item, dict) or len(out) >= limit:
+                return
+            norm = _normalize_ready_issue(item)
+            if not norm:
+                continue
+            n = int(norm["number"])
+            if n in seen:
+                continue
+            labs = {x.lower() for x in norm["labels"]}
+            if require_ready_label and "status:ready-to-work" not in labs:
+                continue
+            # Skip non-work issue types and already-landed / blocked work
+            if labs & {
+                "epic",
+                "release",
+                "task",
+                "status:implemented",
+                "status:stub",
+                "need:refinement",
+                "need:human-review",
+                "status:blocked",
+            }:
+                continue
+            # Prefer Feature/Bug; allow bare status:ready-to-work without type
+            type_ok = bool(labs & {"feature", "bug", "documentation", "feedback response"})
+            if not require_ready_label and not type_ok:
+                continue
+            if require_ready_label and not type_ok and "status:ready-to-work" not in labs:
+                continue
+            seen.add(n)
+            out.append(norm)
+
+    # 1) Explicit ready-to-work
+    try:
+        q1 = f"repo:{target} is:issue is:open label:status:ready-to-work"
+        data = client.api(f"search/issues?q={quote_plus(q1)}&per_page={min(limit, 20)}") or {}
+        items = data.get("items") if isinstance(data, dict) else None
+        if isinstance(items, list):
+            _absorb(items, require_ready_label=True)
+    except Exception:
+        pass
+
+    # 2) Fallback: open Feature/Bug without refinement/stub/implemented
+    if len(out) < limit:
+        try:
+            q2 = (
+                f"repo:{target} is:issue is:open "
+                f"(label:Feature OR label:Bug) "
+                f"-label:status:implemented -label:status:stub "
+                f"-label:need:refinement -label:need:human-review -label:status:blocked"
+            )
+            data = client.api(f"search/issues?q={quote_plus(q2)}&per_page={min(limit * 2, 30)}") or {}
+            items = data.get("items") if isinstance(data, dict) else None
+            if isinstance(items, list):
+                _absorb(items, require_ready_label=False)
+        except Exception:
+            pass
+
+    return out[:limit]
+
+
 def get_what_next(
     repo: str | None = None,
     agent_type: str | None = None,
@@ -202,11 +348,13 @@ def get_what_next(
     include_prs: bool = True,
     include_budget: bool = True,
     include_fragments: bool = True,
+    include_ready_issues: bool = True,
 ) -> dict[str, Any]:
-    """Live what-next: health + budget snapshot + optional open PRs."""
+    """Live what-next: health + budget snapshot + optional open PRs + ready issues."""
     health: dict[str, Any] = {}
     budget: dict[str, Any] = {}
     open_prs: list[dict[str, Any]] = []
+    ready_issues: list[dict[str, Any]] = []
     pending_fragment_count: int | None = None
 
     try:
@@ -268,6 +416,13 @@ def get_what_next(
         except Exception:
             open_prs = []
 
+    if include_ready_issues and not open_prs:
+        # Only spend search budget when pipeline is empty (PRs still win ranking).
+        try:
+            ready_issues = fetch_ready_issue_candidates(repo, limit=10)
+        except Exception:
+            ready_issues = []
+
     if include_fragments:
         try:
             from pathlib import Path
@@ -285,4 +440,5 @@ def get_what_next(
         open_prs=open_prs,
         agent_type=agent_type,
         pending_fragment_count=pending_fragment_count,
+        ready_issues=ready_issues,
     )

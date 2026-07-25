@@ -921,19 +921,28 @@ class ProjectManager:
             from .what_next import get_what_next
 
             wn = get_what_next(self.repo, "pm")
-            impact = "high" if wn.get("priority") in ("budget_gate", "open_pr") else "medium"
-            items.append(
-                {
-                    "id": "what_next",
-                    "title": wn.get("next_action"),
-                    "type": "process",
-                    "prompt_segment": wn.get("prompt_segment"),
-                    "impact": impact,
-                    "reason": wn.get("rationale") or "what_next",
-                    "priority": wn.get("priority"),
-                    "state_snapshot": wn.get("state_snapshot"),
-                }
+            impact = (
+                "high"
+                if wn.get("priority") in ("budget_gate", "open_pr", "ready_issue")
+                else "medium"
             )
+            row: dict[str, Any] = {
+                "id": "what_next",
+                "title": wn.get("next_action"),
+                "type": "process",
+                "prompt_segment": wn.get("prompt_segment"),
+                "impact": impact,
+                "reason": wn.get("rationale") or "what_next",
+                "priority": wn.get("priority"),
+                "state_snapshot": wn.get("state_snapshot"),
+            }
+            if wn.get("issue_number") is not None:
+                row["issue_number"] = wn.get("issue_number")
+            if wn.get("pr_number") is not None:
+                row["pr_number"] = wn.get("pr_number")
+            if wn.get("ready_issues"):
+                row["ready_issues"] = wn.get("ready_issues")
+            items.append(row)
         except Exception:
             items.append(
                 {
