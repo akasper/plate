@@ -921,6 +921,15 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_monitor_feed":
             payload = {"items": monitoring_feed_items(limit=int(args.get("limit") or 10))}
         elif name == "plate_stub_author":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = author_stub(
                 str(args.get("intent") or args.get("task") or ""),
                 issue_type=args.get("issue_type") or args.get("type"),
@@ -933,6 +942,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 source=str(args.get("source") or "qa"),
                 labels=list(args.get("labels") or []) or None,
                 persist=bool(args.get("persist", True)),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_stub_refine":
             payload = refine_stub(
@@ -945,10 +956,21 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 mark_ready=bool(args.get("mark_ready") or args.get("ready") or False),
             )
         elif name == "plate_stub_create":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = create_stub_issue(
                 args.get("draft_id") or args.get("id"),
                 repo=args.get("repo"),
                 dry_run=bool(args.get("dry_run", True)),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_stub_list":
             payload = {
@@ -961,6 +983,15 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_stub_get":
             payload = {"draft": get_stub(str(args.get("draft_id") or args.get("id") or ""))}
         elif name == "plate_stub_author_create":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = author_and_create(
                 str(args.get("intent") or ""),
                 issue_type=args.get("issue_type") or args.get("type"),
@@ -970,6 +1001,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 summary=args.get("summary"),
                 source=str(args.get("source") or "qa"),
                 parent_epic=args.get("parent_epic"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_stub_feed":
             payload = {"items": stubs_feed_items(limit=int(args.get("limit") or 10))}
@@ -3054,7 +3087,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_stub_author",
-                                "description": "Author a local stub Issue draft of any PLATE type from intent/Q&A (#637).",
+                                "description": "Author a local stub Issue draft of any PLATE type from intent/Q&A (#637). #634 budget gate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -3071,6 +3104,8 @@ def run() -> None:
                                         "source": {"type": "string"},
                                         "labels": {"type": "array", "items": {"type": "string"}},
                                         "persist": {"type": "boolean"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                     "required": ["intent"],
                                 },
@@ -3095,7 +3130,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_stub_create",
-                                "description": "Create GitHub issue from stub draft (dry_run default true) (#637).",
+                                "description": "Create GitHub issue from stub draft (dry_run default true) (#637). #634 budget gate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -3103,6 +3138,8 @@ def run() -> None:
                                         "id": {"type": "string"},
                                         "repo": {"type": "string"},
                                         "dry_run": {"type": "boolean"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                 },
                             },
@@ -3132,7 +3169,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_stub_author_create",
-                                "description": "Author stub then dry-run/create GitHub issue in one call (#637).",
+                                "description": "Author stub then dry-run/create GitHub issue in one call (#637). #634 budget gate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -3144,6 +3181,8 @@ def run() -> None:
                                         "dry_run": {"type": "boolean"},
                                         "source": {"type": "string"},
                                         "parent_epic": {},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                     "required": ["intent"],
                                 },
