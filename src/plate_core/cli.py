@@ -39,7 +39,10 @@ from .feed import get_user_feed
 from .planning import (
     apply_planning_answer,
     build_plan_from_session,
+    decide_pending_plan,
     get_planning_script,
+    list_pending_plans,
+    planning_feed_items,
     start_planning_session,
 )
 from .epic_release_planning import (
@@ -805,6 +808,44 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"Planning script ({out['kind']}): {out['count']} questions")
         for i, q in enumerate(out["questions"], 1):
             print(f"  {i}. [{q['id']}] {q['prompt']}")
+        return 0
+
+    if getattr(args, "list_pending", False) or getattr(args, "feed", False):
+        if getattr(args, "feed", False):
+            rows = planning_feed_items(limit=int(getattr(args, "limit", 20) or 20))
+            key = "feed"
+        else:
+            rows = list_pending_plans(limit=int(getattr(args, "limit", 20) or 20))
+            key = "pending"
+        if args.json:
+            print(json.dumps({key: rows}))
+            return 0
+        if not rows:
+            print("No pending plans." if key == "pending" else "Planning feed empty.")
+            return 0
+        for r in rows:
+            print(
+                f"{r.get('id')} [{r.get('status') or r.get('item_type')}] "
+                f"{r.get('title') or r.get('kind')}"
+            )
+        return 0
+
+    if getattr(args, "decide", None):
+        out = decide_pending_plan(
+            str(args.decide),
+            str(getattr(args, "decision", None) or "approve"),
+            note=str(getattr(args, "note", None) or ""),
+            decided_by=str(getattr(args, "by", None) or "cli-user"),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "decide failed", file=sys.stderr)
+            return 1
+        print(f"{out.get('status')}: {out.get('plan', {}).get('id')}")
+        for step in out.get("next_steps") or []:
+            print(f"  - {step}")
         return 0
 
     if getattr(args, "build_file", None):
@@ -3125,12 +3166,24 @@ def build_parser() -> argparse.ArgumentParser:
     feed.set_defaults(func=cmd_feed)
     plan = sub.add_parser(
         "plan",
-        help="Q&A-driven feature (#630) or product (#628) planning: script, start session, build stubs",
+        help="Q&A-driven feature (#630) or product (#628) planning: script, start, build, decide, list",
     )
     plan.add_argument("kind", nargs="?", default="feature", choices=["feature", "product"], help="Planning kind")
     plan.add_argument("--script", action="store_true", help="Print ordered questions")
     plan.add_argument("--answers-file", dest="answers_file", help="JSON array of answers to walk session offline")
     plan.add_argument("--build-file", dest="build_file", help="JSON session file to build plan from")
+    plan.add_argument("--list-pending", dest="list_pending", action="store_true", help="List pending plan stubs")
+    plan.add_argument("--feed", action="store_true", help="List planning feed items (pending + sessions)")
+    plan.add_argument("--decide", metavar="ID", help="Decide on pending plan id")
+    plan.add_argument(
+        "--decision",
+        choices=["approve", "revise", "reject"],
+        default="approve",
+        help="Decision for --decide (default approve)",
+    )
+    plan.add_argument("--note", default="", help="Decision note")
+    plan.add_argument("--by", default="cli-user", help="Actor for --decide")
+    plan.add_argument("--limit", type=int, default=20)
     plan.add_argument("--json", action="store_true")
     plan.set_defaults(func=cmd_plan)
 
