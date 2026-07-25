@@ -120,6 +120,15 @@ from .design_validation import (
     propose_contract,
     validate_contract_readiness,
 )
+from .release_media import (
+    build_media_manifest,
+    collect_release_media,
+    decide_media_item,
+    media_approval_summary,
+    media_feed_items,
+    render_media_markdown,
+    validate_media_paths,
+)
 from .tasks import (
     close_task_with_signal,
     create_task,
@@ -1097,6 +1106,65 @@ def cmd_task(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def cmd_release_media(args: argparse.Namespace) -> int:
+    """Release notes GIF/video media helpers (#635)."""
+    from .release import collect_fragments
+
+    releases_dir = Path(getattr(args, "releases_dir", None) or ".agentic/releases")
+    fragments = collect_fragments(releases_dir)
+    media = collect_release_media(fragments)
+
+    if getattr(args, "feed", False):
+        rows = media_feed_items(media)
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    if getattr(args, "decide", False):
+        out = decide_media_item(
+            media,
+            index=getattr(args, "index", None),
+            path=getattr(args, "path", None) or None,
+            url=getattr(args, "url", None) or None,
+            decision=str(getattr(args, "decision", None) or "approve"),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} matched={out.get('matched')} status={out.get('status')}")
+        print("Note: decide updates an in-memory list; persist by editing fragment media.approval_status.")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "render", False):
+        only = bool(getattr(args, "approved_only", False))
+        md = render_media_markdown(media, only_approved=only)
+        if args.json:
+            print(json.dumps({"markdown": md, "n": len(media)}))
+            return 0
+        print(md or "(no media)")
+        return 0
+
+    if getattr(args, "validate_paths", False):
+        out = validate_media_paths(media, repo_root=Path("."))
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} missing={out.get('missing')}")
+        return 0 if out.get("ok") else 1
+
+    # default: manifest / summary
+    manifest = build_media_manifest(fragments, version=getattr(args, "version", None))
+    if args.json:
+        print(json.dumps(manifest))
+        return 0
+    s = manifest.get("summary") or media_approval_summary(media)
+    print(f"media total={s.get('n_total')} pending={s.get('n_pending')} approved={s.get('n_approved')}")
+    return 0
 
 
 def cmd_design_contract(args: argparse.Namespace) -> int:
@@ -2693,6 +2761,24 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
+
+    rmedia = sub.add_parser(
+        "release-media",
+        help="Collect/render/approve GIF/video media for release notes (#635)",
+    )
+    rmedia.add_argument("--releases-dir", dest="releases_dir", default=".agentic/releases")
+    rmedia.add_argument("--version", default="")
+    rmedia.add_argument("--render", action="store_true", help="Print media markdown")
+    rmedia.add_argument("--approved-only", dest="approved_only", action="store_true")
+    rmedia.add_argument("--validate-paths", dest="validate_paths", action="store_true")
+    rmedia.add_argument("--feed", action="store_true")
+    rmedia.add_argument("--decide", action="store_true")
+    rmedia.add_argument("--decision", default="approve")
+    rmedia.add_argument("--index", type=int)
+    rmedia.add_argument("--path", default="")
+    rmedia.add_argument("--url", default="")
+    rmedia.add_argument("--json", action="store_true")
+    rmedia.set_defaults(func=cmd_release_media)
 
     dcontract = sub.add_parser(
         "design-contract",

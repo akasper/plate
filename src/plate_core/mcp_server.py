@@ -132,6 +132,15 @@ from .design_validation import (
     update_contract,
     validate_contract_readiness,
 )
+from .release_media import (
+    build_media_manifest,
+    collect_release_media,
+    decide_media_item,
+    media_feed_items,
+    render_media_markdown,
+    validate_media_paths,
+)
+from .release import collect_fragments as collect_release_fragments
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .collab import (
     analyze_pr_authorship,
@@ -932,6 +941,47 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 payload["ok"] = True
         elif name == "plate_design_contract_feed":
             payload = {"items": contract_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_release_media_manifest":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            frags = collect_release_fragments(rdir)
+            payload = build_media_manifest(frags, version=args.get("version"))
+        elif name == "plate_release_media_render":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            media = collect_release_media(collect_release_fragments(rdir))
+            payload = {
+                "markdown": render_media_markdown(
+                    media, only_approved=bool(args.get("only_approved") or False)
+                ),
+                "n": len(media),
+            }
+        elif name == "plate_release_media_feed":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            media = collect_release_media(collect_release_fragments(rdir))
+            payload = {"items": media_feed_items(media)}
+        elif name == "plate_release_media_validate_paths":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            media = collect_release_media(collect_release_fragments(rdir))
+            payload = validate_media_paths(media, repo_root=_P("."))
+        elif name == "plate_release_media_decide":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            media = collect_release_media(collect_release_fragments(rdir))
+            payload = decide_media_item(
+                media,
+                index=args.get("index"),
+                path=args.get("path"),
+                url=args.get("url"),
+                decision=str(args.get("decision") or "approve"),
+            )
         elif name == "plate_task_create":
             payload = create_task(
                 str(args.get("title") or ""),
@@ -2746,6 +2796,58 @@ def run() -> None:
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_manifest",
+                                "description": "Aggregate GIF/video media from unreleased fragments for release notes (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "releases_dir": {"type": "string"},
+                                        "version": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_render",
+                                "description": "Render release media markdown from fragments (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "releases_dir": {"type": "string"},
+                                        "only_approved": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_feed",
+                                "description": "Feed items for pending release media approval (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"releases_dir": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_validate_paths",
+                                "description": "Check that fragment media paths exist on disk (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"releases_dir": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_decide",
+                                "description": "Approve/reject a media item in-memory (persist by editing fragment) (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "releases_dir": {"type": "string"},
+                                        "index": {"type": "integer"},
+                                        "path": {"type": "string"},
+                                        "url": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                    },
                                 },
                             },
                             {
