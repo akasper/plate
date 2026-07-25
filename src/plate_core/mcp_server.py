@@ -738,13 +738,34 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 complete_when_done=bool(args.get("complete_when_done", True)),
             )
         elif name == "plate_fleet_status":
+            br = args.get("budget_remaining")
+            if br is None:
+                br = args.get("budget_tokens")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = fleet_status(
-                budget_remaining=args.get("budget_tokens") or args.get("budget_remaining"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
                 risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
             )
         elif name == "plate_fleet_roles":
             payload = {"roles": list_fleet_roles()}
         elif name == "plate_fleet_handoff":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = create_handoff(
                 from_agent=str(args.get("from_agent") or "orchestrator"),
                 to_agent=str(args.get("to_agent") or ""),
@@ -758,6 +779,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 related_pr=args.get("related_pr"),
                 parent_handoff_id=args.get("parent_handoff_id"),
                 requires_human=bool(args.get("requires_human", False)),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_fleet_update":
             payload = update_handoff(
@@ -2772,7 +2795,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_fleet_handoff",
-                                "description": "Create explicit agent→agent handoff packet with narrow context (#644).",
+                                "description": "Create explicit agent→agent handoff packet with narrow context; #634 live budget gate (#644).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -2783,6 +2806,14 @@ def run() -> None:
                                         "artifacts": {"type": "array", "items": {"type": "string"}},
                                         "constraints": {"type": "array", "items": {"type": "string"}},
                                         "budget_tokens": {"type": "integer"},
+                                        "budget_remaining": {
+                                            "type": "integer",
+                                            "description": "Explicit remaining tokens; blocks when est exceeds remaining (#634).",
+                                        },
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate remaining from durable spend when budget_remaining omitted (default true).",
+                                        },
                                         "risk": {"type": "string"},
                                         "related_issue": {"type": "integer"},
                                         "related_pr": {"type": "integer"},
