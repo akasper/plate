@@ -101,6 +101,16 @@ from .bug_loop import (
     start_bug_loop,
     update_bug_loop,
 )
+from .feature_loop import (
+    advance_feature_loop,
+    cancel_feature_loop,
+    estimate_feature_cost,
+    feature_loop_feed_items,
+    get_feature_loop,
+    list_feature_loops,
+    run_feature_loop_tick,
+    start_feature_loop,
+)
 from .tasks import (
     close_task_with_signal,
     create_task,
@@ -1078,6 +1088,125 @@ def cmd_task(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def cmd_feature_loop(args: argparse.Namespace) -> int:
+    """Autonomous feature implementation loop orchestration (#639)."""
+    if getattr(args, "estimate", False):
+        out = estimate_feature_cost(
+            size=str(getattr(args, "size", None) or "medium"),
+            needs_design_validation=bool(getattr(args, "design", False)),
+            needs_media=not bool(getattr(args, "no_media", False)),
+            e2e=bool(getattr(args, "e2e", False)),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"estimate tokens={out.get('estimated_tokens')} size={out.get('size')}")
+        return 0
+
+    if getattr(args, "list", False):
+        rows = list_feature_loops(
+            status=str(getattr(args, "status", None) or "active"),
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+        if args.json:
+            print(json.dumps({"runs": rows}))
+            return 0
+        for r in rows:
+            print(
+                f"{r.get('id')} [{r.get('stage')}] feature=#{r.get('feature_number')} "
+                f"pr={r.get('pr_number')} est={r.get('cost_estimate_tokens')} {r.get('feature_title')}"
+            )
+        return 0
+
+    if getattr(args, "get", None):
+        r = get_feature_loop(str(args.get))
+        if args.json:
+            print(json.dumps({"run": r}))
+            return 0 if r else 1
+        if not r:
+            print("not found")
+            return 1
+        print(f"{r.get('id')} stage={r.get('stage')} status={r.get('status')} est={r.get('cost_estimate_tokens')}")
+        return 0
+
+    if getattr(args, "advance", None):
+        out = advance_feature_loop(
+            str(args.advance),
+            pr_number=getattr(args, "pr", None),
+            branch=getattr(args, "branch", None) or None,
+            note=getattr(args, "note", None) or None,
+            force_skip_checkpoint=bool(getattr(args, "skip_checkpoint", False)),
+            skip_media=bool(getattr(args, "skip_media", False)),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(
+            f"ok={out.get('ok')} advanced={out.get('advanced')} "
+            f"{out.get('from_stage')}→{out.get('to_stage') or (out.get('run') or {}).get('stage')}"
+        )
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "tick", None):
+        out = run_feature_loop_tick(
+            str(args.tick),
+            dry_run=not getattr(args, "apply", False),
+            fetch_gates=bool(getattr(args, "fetch_gates", False)),
+            repo=getattr(args, "repo", None),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        pkt = out.get("packet") or {}
+        print(f"tick stage={pkt.get('stage')} dry_run={out.get('dry_run')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "cancel", None):
+        out = cancel_feature_loop(str(args.cancel), note=getattr(args, "note", None) or "")
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"cancel ok={out.get('ok')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "feed", False):
+        rows = feature_loop_feed_items(limit=int(getattr(args, "limit", 10) or 10))
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    labels = []
+    raw = getattr(args, "labels", None) or ""
+    if raw:
+        labels = [x.strip() for x in str(raw).split(",") if x.strip()]
+    out = start_feature_loop(
+        feature_number=getattr(args, "feature", None),
+        feature_title=str(getattr(args, "title", None) or ""),
+        risk=str(getattr(args, "risk", None) or "medium"),
+        size=str(getattr(args, "size", None) or "medium"),
+        labels=labels or None,
+        risk_tolerance=str(getattr(args, "risk_tolerance", None) or "medium"),
+        needs_design_validation=bool(getattr(args, "design", False)),
+        needs_media_approval=not bool(getattr(args, "no_media", False)),
+        e2e=bool(getattr(args, "e2e", False)),
+        pr_number=getattr(args, "pr", None),
+        branch=getattr(args, "branch", None) or None,
+        budget_remaining=getattr(args, "budget_remaining", None),
+    )
+    if args.json:
+        print(json.dumps(out))
+        return 0 if out.get("ok") else 1
+    run = out.get("run") or {}
+    print(
+        f"ok={out.get('ok')} id={run.get('id')} stage={run.get('stage')} "
+        f"est={run.get('cost_estimate_tokens')} human={run.get('requires_human')}"
+    )
+    return 0 if out.get("ok") else 1
 
 
 def cmd_bug_loop(args: argparse.Namespace) -> int:
@@ -2462,6 +2591,40 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
+
+    featloop = sub.add_parser(
+        "feature-loop",
+        help="Autonomous feature implementation loop orchestration (#639)",
+    )
+    featloop.add_argument("--repo", help="owner/name")
+    featloop.add_argument("--feature", type=int, help="Feature issue number")
+    featloop.add_argument("--title", default="", help="Feature title")
+    featloop.add_argument("--risk", default="medium")
+    featloop.add_argument("--risk-tolerance", dest="risk_tolerance", default="medium")
+    featloop.add_argument("--size", default="medium", choices=["trivial", "small", "medium", "large"])
+    featloop.add_argument("--labels", default="")
+    featloop.add_argument("--pr", type=int)
+    featloop.add_argument("--branch", default="")
+    featloop.add_argument("--design", action="store_true", help="Include design validation cost")
+    featloop.add_argument("--e2e", action="store_true")
+    featloop.add_argument("--no-media", dest="no_media", action="store_true")
+    featloop.add_argument("--budget-remaining", dest="budget_remaining", type=int)
+    featloop.add_argument("--estimate", action="store_true", help="Cost estimate only")
+    featloop.add_argument("--list", action="store_true")
+    featloop.add_argument("--get", metavar="RUN_ID")
+    featloop.add_argument("--advance", metavar="RUN_ID")
+    featloop.add_argument("--tick", metavar="RUN_ID")
+    featloop.add_argument("--cancel", metavar="RUN_ID")
+    featloop.add_argument("--feed", action="store_true")
+    featloop.add_argument("--apply", action="store_true")
+    featloop.add_argument("--fetch-gates", dest="fetch_gates", action="store_true")
+    featloop.add_argument("--skip-checkpoint", dest="skip_checkpoint", action="store_true")
+    featloop.add_argument("--skip-media", dest="skip_media", action="store_true")
+    featloop.add_argument("--note", default="")
+    featloop.add_argument("--status", default="active")
+    featloop.add_argument("--limit", type=int, default=50)
+    featloop.add_argument("--json", action="store_true")
+    featloop.set_defaults(func=cmd_feature_loop)
 
     bugloop = sub.add_parser(
         "bug-loop",

@@ -339,6 +339,11 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - Advance with `plate_bug_loop_advance`; tick with gates via `plate_bug_loop_tick` + `plate_pr_babysit` / `plate_get_pr_merge_gates`.
 - Never self-merge when risk-off or requires_human; surface human_checkpoint + feed. Local runs in `.agentic/bug_loops/`.
 
+### Feature implementation loop (#639)
+- Orchestrate Features: `plate_feature_loop_start` (upfront cost estimate) → plan→draft PR→failing tests→impl→fragment→media→babysit→checkpoint?→merge_eligible.
+- Estimate only: `plate_feature_loop_estimate` / `gh plate feature-loop --estimate`. Budget can block start.
+- Same babysit/gate rules as bug loop; media/design approval via human_checkpoint. Local runs in `.agentic/feature_loops/`.
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 
