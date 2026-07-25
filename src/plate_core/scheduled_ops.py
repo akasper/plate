@@ -442,25 +442,29 @@ def ops_feed_items(
     limit: int = 10,
     base_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Feed: ops that need human attention or are due (manual cadence always listed if gated)."""
-    st = scheduled_ops_status(risk_tolerance=risk_tolerance, base_dir=base_dir)
+    """Feed: only active/blocked scheduled op *runs* (not the full gated catalog)."""
     items = []
-    for o in st["gated"][:limit]:
-        full = get_op(o["id"]) or o
+    for r in list_op_runs(status="all", limit=limit * 2, base_dir=base_dir):
+        if r.get("status") not in ("blocked", "running", "planned"):
+            continue
+        oid = r.get("op_id")
+        full = get_op(str(oid)) or {"id": oid, "description": oid, "risk_level": "medium"}
         items.append(
             {
-                "id": f"sop-{o['id']}",
+                "id": r.get("id") or f"sop-{oid}",
                 "item_type": "scheduled_op",
-                "title": f"Scheduled op needs gate: {o['id']}",
-                "op_id": o["id"],
-                "risk_level": o.get("risk_level"),
-                "badges": ["scheduled_op", o.get("risk_level") or "medium", "gated"],
+                "title": f"Scheduled op [{r.get('status')}]: {oid}",
+                "op_id": oid,
+                "risk_level": full.get("risk_level"),
+                "badges": ["scheduled_op", str(r.get("status")), str(full.get("risk_level") or "medium")],
                 "source": "scheduled_ops",
-                "impact": "high" if o.get("risk_level") in ("high", "critical") else "medium",
-                "reason": full.get("description") or o["id"],
+                "impact": "high" if full.get("risk_level") in ("high", "critical") else "medium",
+                "reason": full.get("description") or str(oid),
                 "ask_user_question": build_op_packet(full, dry_run=True).get("ask_user_question"),
             }
         )
+        if len(items) >= limit:
+            break
     return items
 
 
