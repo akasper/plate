@@ -1,0 +1,26 @@
+{
+  "slug": "360-detect-human-blockers",
+  "change_type": "feature",
+  "surface": "src/plate_core/tasks.py, mcp_server.py, cli.py",
+  "summary": "Detect human-only blockers (credentials, trusted publisher, PyPI, marketplace, billing, external accounts) and optionally open Task issues with dedupe markers (#360); MCP plate_task_detect + gh plate task --detect/--apply.",
+  "migration_impact": "New detect path defaults to classification-only. create/apply opens Tasks using #359 contract. Dedupe skips when an open Task already tracks the blocker class.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. On CI/session signals that look human-only: plate_task_detect (dry) first.",
+    "3. When confirmed: plate_task_detect create=true dry_run=false or gh plate task --detect --signal '...' --apply.",
+    "4. Never invent PLATE-TASK-CLOSED; humans complete external work."
+  ],
+  "agent_notes": "Complements #359 explicit create. Agent-solvable signals must not open Tasks. Closes #360.",
+  "breaking": false,
+  "links": [
+    "#360",
+    "#359",
+    "#349",
+    "#654",
+    "#626",
+    "#625"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
