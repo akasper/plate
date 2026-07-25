@@ -1,0 +1,26 @@
+{
+  "slug": "647-ledger-pause-gate-visibility",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, costs.py, tests/test_ledger.py",
+  "summary": "Harden #647 provenance: ledger writes on checkpoint/budget cycle pauses and gate shadow_required; dashboard exposes ledger summary + pause/shadow drift signals; gitignore ephemeral .agentic/ledger/.",
+  "migration_impact": "More local JSON under .agentic/ledger/ (gitignored). Cost dashboard gains ledger key. No config schema change.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Use gh plate ledger --summary / plate_ledger_* after autonomy cycles to audit pause/shadow_required rows.",
+    "3. Cost dashboard feed_items now include ledger-derived drift signals for high-impact pauses.",
+    "4. Optional: retain selected ledger entries for audits before cleaning .agentic/ledger/."
+  ],
+  "agent_notes": "Every blocked high-impact gate and checkpoint pause should leave a PLATE-DECISION ledger row. Prefer ledger_id from gate responses when explaining blocks to humans.",
+  "breaking": false,
+  "links": [
+    "#647",
+    "#645",
+    "#648",
+    "#634",
+    "#653",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
