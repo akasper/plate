@@ -200,3 +200,6 @@ tests/e2e/package-lock.json
 
 # Ephemeral planning sessions + pending plan stubs (#628/#630)
 .agentic/planning/
+
+# Ephemeral #652 marketplace packaging builds (local before human publish)
+.agentic/packaging/
