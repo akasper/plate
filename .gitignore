@@ -203,3 +203,6 @@ tests/e2e/package-lock.json
 
 # Ephemeral #652 marketplace packaging builds (local before human publish)
 .agentic/packaging/
+
+# Ephemeral #650 hybrid/non-code project profile (local override)
+.agentic/hybrid/
