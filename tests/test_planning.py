@@ -12,9 +12,11 @@ from plate_core.planning import (
     build_feature_plan,
     build_plan_from_session,
     build_product_plan,
+    decide_pending_plan,
     get_planning_script,
     list_pending_plans,
     load_planning_session,
+    planning_feed_items,
     start_planning_session,
 )
 
@@ -103,10 +105,6 @@ class TestProductPlanning628(unittest.TestCase):
         self.assertTrue(plan["requires_approval"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestPlanningDurableTUI(unittest.TestCase):
     def test_durable_session_and_tui_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -151,3 +149,55 @@ class TestPlanningDurableTUI(unittest.TestCase):
             self.assertTrue((root / "pending").is_dir())
             pending = list_pending_plans(base_dir=root / "pending")
             self.assertGreaterEqual(len(pending), 1)
+            self.assertTrue(pending[0].get("ask_user_question"))
+
+    def test_decide_and_feed_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sdir = root / "sessions"
+            pdir = root / "pending"
+            start = start_planning_session("feature", base_dir=sdir, persist=True)
+            session = start["session"]
+            answers_seq = [
+                "problem",
+                "behavior",
+                "ac1; ac2",
+                "unit tests",
+                "docs",
+                "none",
+                "risk:medium",
+                "none",
+                "none",
+            ]
+            for text in answers_seq:
+                out = apply_planning_answer(session, text, base_dir=sdir, persist=True)
+                session = out["session"]
+            # incomplete session remains for feed
+            start2 = start_planning_session("product", base_dir=sdir, persist=True)
+            self.assertFalse(start2["session"]["complete"])
+
+            built = build_plan_from_session(session, planning_root=root, persist_pending=True)
+            self.assertTrue(built["ok"])
+            pid = built["plan"]["id"]
+            feed = planning_feed_items(pending_dir=pdir, sessions_dir=sdir, limit=10)
+            types = {f.get("item_type") for f in feed}
+            self.assertIn("planning_approval", types)
+            self.assertIn("planning_session", types)
+            appr = next(f for f in feed if f.get("item_type") == "planning_approval")
+            self.assertTrue(appr["ask_user_question"]["options"])
+
+            dec = decide_pending_plan(
+                pid, "approve", decided_by="test", base_dir=pdir, archive=True
+            )
+            self.assertTrue(dec["ok"])
+            self.assertEqual(dec["status"], "approved")
+            self.assertTrue(dec["next_steps"])
+            # no longer pending
+            self.assertEqual(list_pending_plans(base_dir=pdir), [])
+            again = decide_pending_plan(pid, "approve", base_dir=pdir)
+            # archived under decided — get finds it but not pending_approval
+            self.assertFalse(again.get("ok"))
+
+
+if __name__ == "__main__":
+    unittest.main()
