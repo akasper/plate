@@ -286,6 +286,47 @@ def run_scheduled_op(
         reasons.append("critical op always needs explicit approved=true")
 
     packet = build_op_packet(op, dry_run=dry_run)
+    # #645: always attach a shadow/simulate preview for medium+ scheduled ops
+    shadow_report: dict[str, Any] | None = None
+    shadow_id: str | None = None
+    if risk in ("medium", "high", "critical") or needs_human:
+        try:
+            from .autonomy import AutonomyEngine
+
+            eng = AutonomyEngine(repo=None)
+            eng.risk_tolerance = risk_tolerance
+            eng.enabled = (risk_tolerance or "off").lower() not in ("off", "")
+            eng.autonomy_config = {
+                "enabled": eng.enabled,
+                "risk_tolerance": risk_tolerance,
+            }
+            # Map op id to action_kind when catalog uses hyphens
+            action_kind = str(op.get("action_kind") or op_id).replace("-", "_")
+            shadow = eng.simulate_action(
+                action_kind,
+                scope={
+                    "scheduled_op": op_id,
+                    "risk_level": risk,
+                    "procedure_risk": risk,
+                    "skip_git_preview": False,
+                },
+            )
+            shadow_report = shadow.to_dict()
+            shadow_id = shadow.shadow_id
+            packet = dict(packet)
+            packet["shadow_id"] = shadow_id
+            packet["shadow_report"] = {
+                "shadow_id": shadow_id,
+                "impact": shadow_report.get("impact"),
+                "requires_approval": shadow_report.get("requires_approval"),
+                "estimated_tokens": shadow_report.get("estimated_tokens"),
+                "predicted_diff": shadow_report.get("predicted_diff"),
+                "worktree_plan": shadow_report.get("worktree_plan"),
+                "gate_preview": shadow_report.get("gate_preview"),
+            }
+        except Exception as exc:
+            reasons.append(f"shadow preview unavailable: {exc}")
+
     ts = _now()
     run = ScheduledOpRun(
         id=f"sop-{uuid.uuid4().hex[:10]}",
@@ -299,10 +340,16 @@ def run_scheduled_op(
         created_at=ts,
         updated_at=ts,
         completed_at=ts if (dry_run and not blocked) else None,
-        metadata={"risk_tolerance": risk_tolerance, "approved": approved},
+        metadata={
+            "risk_tolerance": risk_tolerance,
+            "approved": approved,
+            "shadow_id": shadow_id,
+        },
     )
     if dry_run and not blocked:
         run.notes.append("dry_run complete: packet emitted; no remote side effects")
+        if shadow_id:
+            run.notes.append(f"shadow preview {shadow_id} attached")
         run.status = "done"
 
     data = _load(base_dir)
@@ -328,6 +375,9 @@ def run_scheduled_op(
             f"risk={risk} dry_run={dry_run} -->"
         ),
     }
+    if shadow_report is not None:
+        out["shadow_report"] = shadow_report
+        out["shadow_id"] = shadow_id
     if blocked:
         out["error"] = "; ".join(reasons)
         out["reason"] = out["error"]
@@ -340,10 +390,11 @@ def run_scheduled_op(
                 action_kind="scheduled_op",
                 decision="pause" if blocked else ("proceed" if not dry_run else "shadow"),
                 reason=f"scheduled op {op_id}: {out.get('status')}",
-                sources=["scheduled_ops", "#641"],
+                sources=["scheduled_ops", "#641", "#645"],
                 risk_tolerance=risk_tolerance,
                 impact=risk,
                 checkpoint_id=checkpoint_id,
+                shadow_id=shadow_id,
                 actor="scheduled_ops",
                 metadata={"run_id": run.id, "op_id": op_id, "dry_run": dry_run},
             )
