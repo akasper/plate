@@ -815,12 +815,22 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
             )
         elif name == "plate_fleet_plan":
+            bt = args.get("budget_tokens")
+            if bt is not None:
+                try:
+                    bt = int(bt)
+                except (TypeError, ValueError):
+                    bt = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = plan_fleet_from_intent(
                 str(args.get("intent") or args.get("task") or ""),
-                budget_tokens=int(args.get("budget_tokens") or 20000),
+                budget_tokens=bt,
                 risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
                 related_issue=args.get("related_issue"),
                 create=bool(args.get("create") or args.get("apply") or False),
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_fleet_feed":
             payload = {"items": handoff_feed_items(limit=int(args.get("limit") or 10))}
@@ -2904,13 +2914,20 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_fleet_plan",
-                                "description": "Plan multi-agent handoffs from high-level intent; optional create (#644).",
+                                "description": "Plan multi-agent handoffs from high-level intent; optional create; #634 live budget hydrate (#644).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "intent": {"type": "string"},
                                         "task": {"type": "string"},
-                                        "budget_tokens": {"type": "integer"},
+                                        "budget_tokens": {
+                                            "type": "integer",
+                                            "description": "Explicit total pool; when omitted hydrates from durable remaining (#634).",
+                                        },
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate pool from spend.json when budget_tokens omitted (default true).",
+                                        },
                                         "risk_tolerance": {"type": "string"},
                                         "related_issue": {"type": "integer"},
                                         "create": {"type": "boolean"},

@@ -602,18 +602,42 @@ def allocate_fleet_budget(
 def plan_fleet_from_intent(
     intent: str,
     *,
-    budget_tokens: int = 20000,
+    budget_tokens: int | None = None,
     risk_tolerance: str = "medium",
     related_issue: int | None = None,
     base_dir: Path | None = None,
     create: bool = False,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
     """Map a high-level user intent to a multi-agent handoff plan (example flow #644).
 
     create=False → dry plan only; create=True → write open handoffs.
+
+    #634: when ``budget_tokens`` is omitted and ``use_live_budget`` is True (default),
+    hydrate total pool from durable remaining tokens so fleet plans honor AutonomyEngine rails.
+    Explicit ``budget_tokens`` wins. Block create when remaining is 0.
     """
     text = (intent or "").lower()
     steps: list[dict[str, Any]] = []
+    budget_notes: list[str] = []
+    effective_budget = budget_tokens
+    if effective_budget is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot()
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective_budget = int(rem)
+                budget_notes.append(
+                    f"budget hydrated: remaining_tokens={effective_budget} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            budget_notes.append(f"budget hydrate skipped: {exc}")
+    if effective_budget is None:
+        effective_budget = 20000
+        budget_notes.append("budget defaulted to 20000 (no live remaining)")
 
     # Always start with planner unless pure ops
     want_research = any(k in text for k in ("market", "research", "discuss", "competitor"))
@@ -673,8 +697,34 @@ def plan_fleet_from_intent(
             }
         )
 
+    # Zero remaining: plan shape only, do not allocate or create
+    if int(effective_budget) <= 0:
+        plan = [
+            {
+                **s,
+                "budget_tokens": 0,
+                "from_agent": "orchestrator",
+                "related_issue": related_issue,
+            }
+            for s in steps
+        ]
+        return {
+            "ok": False,
+            "blocked": True,
+            "reason": "budget",
+            "error": f"budget: remaining {effective_budget} tokens; cannot allocate fleet",
+            "intent": intent,
+            "plan": plan,
+            "budget": None,
+            "budget_remaining_tokens": int(effective_budget),
+            "created": [],
+            "n_created": 0,
+            "dry_run": not create,
+            "notes": budget_notes,
+        }
+
     alloc = allocate_fleet_budget(
-        budget_tokens,
+        int(effective_budget),
         active_roles=[s["to_agent"] for s in steps],
         risk_tolerance=risk_tolerance,
     )
@@ -682,6 +732,7 @@ def plan_fleet_from_intent(
 
     plan = []
     created = []
+    skipped: list[dict[str, Any]] = []
     for s in steps:
         tokens = (by_id.get(s["to_agent"]) or {}).get("tokens")
         entry = {
@@ -700,20 +751,34 @@ def plan_fleet_from_intent(
                 risk=s.get("risk") or "medium",
                 related_issue=related_issue,
                 requires_human=bool(s.get("requires_human")),
+                # Pool already live-hydrated; pass remaining so handoffs share the same gate
+                budget_remaining=int(effective_budget),
+                use_live_budget=False,
                 context={"intent": intent, "plan_step": True},
                 base_dir=base_dir,
             )
             if r.get("ok"):
                 created.append(r.get("handoff"))
+            else:
+                skipped.append(
+                    {
+                        "to_agent": s["to_agent"],
+                        "error": r.get("error"),
+                        "reason": r.get("reason"),
+                    }
+                )
 
     return {
         "ok": True,
         "intent": intent,
         "plan": plan,
         "budget": alloc,
+        "budget_remaining_tokens": int(effective_budget),
         "created": created,
         "n_created": len(created),
+        "skipped": skipped,
         "dry_run": not create,
+        "notes": budget_notes,
     }
 
 

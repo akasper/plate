@@ -2443,20 +2443,31 @@ def cmd_fleet(args: argparse.Namespace) -> int:
 
     if getattr(args, "plan", None) is not None:
         intent = str(args.plan or "")
+        bt = getattr(args, "budget_tokens", None)
+        if bt is not None:
+            try:
+                bt = int(bt)
+            except (TypeError, ValueError):
+                bt = None
         out = plan_fleet_from_intent(
             intent,
-            budget_tokens=int(getattr(args, "budget_tokens", None) or 20000),
+            budget_tokens=bt,
             risk_tolerance=str(getattr(args, "risk", None) or "medium"),
             related_issue=getattr(args, "related_issue", None),
             create=bool(getattr(args, "apply", False)),
+            use_live_budget=not bool(getattr(args, "no_live_budget", False)),
         )
         if args.json:
             print(json.dumps(out))
-            return 0
-        print(f"plan steps={len(out.get('plan') or [])} created={out.get('n_created')} dry_run={out.get('dry_run')}")
+            return 0 if out.get("ok") is not False else 1
+        print(
+            f"plan ok={out.get('ok')} steps={len(out.get('plan') or [])} "
+            f"created={out.get('n_created')} dry_run={out.get('dry_run')} "
+            f"remaining={out.get('budget_remaining_tokens')}"
+        )
         for s in out.get("plan") or []:
             print(f"  → {s.get('to_agent')}: {s.get('task')[:80]} ({s.get('budget_tokens')} tok)")
-        return 0
+        return 0 if out.get("ok") is not False else 1
 
     if getattr(args, "feed", False):
         rows = handoff_feed_items(limit=int(getattr(args, "limit", 10) or 10))
