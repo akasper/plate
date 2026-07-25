@@ -85,6 +85,33 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.plate_config_resolved_version, "1.2")
         self.assertTrue(report.plate_config_upgrade_available)
         self.assertIn(".plate/config present", report.plate_repo_signals)  # #459 / #464 detection for default persona
+        # #634 budget fields present (best-effort; values depend on local/config)
+        d = report.to_dict()
+        self.assertIn("budget_remaining_tokens", d)
+        self.assertIn("budget_pressure", d)
+
+    def test_health_budget_fields_from_snapshot(self):
+        """#634/#783: health merges get_budget_snapshot into report."""
+        fake_snap = {
+            "enabled": True,
+            "risk_tolerance": "medium",
+            "daily_limit": 50000,
+            "spent_today": 12000,
+            "remaining_tokens": 38000,
+            "burn_rate": 24.0,
+            "budget_pressure": "ok",
+            "remaining_usd": 8.5,
+        }
+        with patch("plate_core.autonomy.get_budget_snapshot", return_value=fake_snap):
+            report = get_health(repo="akasper/plate_core", client=FakeClient())
+        self.assertTrue(report.budget_enabled)
+        self.assertEqual(report.budget_risk_tolerance, "medium")
+        self.assertEqual(report.budget_remaining_tokens, 38000)
+        self.assertEqual(report.budget_daily_limit, 50000)
+        self.assertEqual(report.budget_spent_today, 12000)
+        self.assertEqual(report.budget_burn_rate, 24.0)
+        self.assertEqual(report.budget_pressure, "ok")
+        self.assertEqual(report.budget_remaining_usd, 8.5)
 
     def test_health_partial_on_failures(self):
         """Degraded mode with errors list when some calls fail (rate, 404 etc)."""
