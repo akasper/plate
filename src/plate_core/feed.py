@@ -596,6 +596,31 @@ def get_user_feed(
         except Exception:
             pm_assignments = []
 
+    # #651 open path/branch ownership pauses → feed signals
+    try:
+        from .collab import ownership_feed_items
+
+        for own in ownership_feed_items(limit=10):
+            signal_items.append(
+                {
+                    "id": own.get("id"),
+                    "type": "collab_ownership",
+                    "title": own.get("title"),
+                    "rank": 18,
+                    "impact": own.get("impact") or "high",
+                    "reason": own.get("reason") or "Human path/branch ownership pause (#651)",
+                    "prompt_segment": (
+                        f"{own.get('title')}. "
+                        f"Agents skip overlapping work. "
+                        f"Release: plate_collab_ownership_release / gh plate collab --release {own.get('id')}."
+                    ),
+                    "source": "collab_ownership",
+                    "ask_user_question": own.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,
