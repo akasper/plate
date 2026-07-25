@@ -168,5 +168,8 @@ tests/e2e/package-lock.json
 # Ephemeral #647 decision ledger entries (local provenance)
 .agentic/ledger/
 
+# Ephemeral #660 PM assignment queue + last_cycle (local runtime)
+.agentic/pm/
+
 # Ephemeral planning sessions + pending plan stubs (#628/#630)
 .agentic/planning/

@@ -1,0 +1,27 @@
+{
+  "slug": "660-pm-orchestrator-loop",
+  "change_type": "feature",
+  "surface": "src/plate_core/pm.py, mcp_server.py, cli.py, .gitignore",
+  "summary": "Deepen #660 PM orchestrator: durable .agentic/pm queue, multi-cycle run_loop with budget/checkpoint/idle stops, complete_assignment, #648 open-count + high-impact checkpoint open, #647 ledger on cycles, ask_user_question payloads; MCP plate_pm_run_loop/queue/complete + gh plate pm --loop/--queue/--complete.",
+  "migration_impact": "New plate_pm_run_loop, plate_pm_queue, plate_pm_complete tools and CLI flags. Queue state under .agentic/pm/ (gitignored). Assignments include ask_user_question for host TUI. High-impact --apply opens #648 checkpoints. Epic #660 remains open for full multi-agent runtime.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate pm --queue / plate_pm_queue to inspect durable assignments.",
+    "3. gh plate pm --loop (dry-run default) for multi-cycle orchestration; --apply to open checkpoints + attempt delegate.",
+    "4. plate_pm_complete / --complete ASSIGNMENT_ID after persona finishes work.",
+    "5. Present assignment ask_user_question via host TUI; do not treat dry_run proposals as executed work."
+  ],
+  "agent_notes": "Prefer dry_run loop before --apply. Pause when open_checkpoints > 0. Risk-off blocks non-qanda assigns. Full team runtime/webhooks remain follow-ups on Epic #660.",
+  "breaking": false,
+  "links": [
+    "#660",
+    "#654",
+    "#648",
+    "#647",
+    "#631",
+    "#470"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
