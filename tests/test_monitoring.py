@@ -9,6 +9,7 @@ from pathlib import Path
 from plate_core.monitoring import (
     classify_discussion_title,
     decide_proposal,
+    estimate_monitor_cost,
     list_proposals,
     monitor_market_signals,
     monitoring_feed_items,
@@ -69,9 +70,11 @@ class TestReviewPersist(unittest.TestCase):
             min_score=25,
             persist=True,
             base_dir=self.base,
+            use_live_budget=False,
         )
         self.assertTrue(out["ok"])
         self.assertGreaterEqual(out["n_proposed"], 1)
+        self.assertIn("cost_estimate_tokens", out)
         props = list_proposals(base_dir=self.base)
         self.assertTrue(props)
         pid = props[0]["id"]
@@ -91,8 +94,10 @@ class TestReviewPersist(unittest.TestCase):
             ],
             persist=True,
             base_dir=self.base,
+            use_live_budget=False,
         )
         self.assertEqual(out["n_proposed"], 1)
+        self.assertIn("cost_estimate_tokens", out)
         feed = monitoring_feed_items(base_dir=self.base)
         self.assertTrue(feed)
         self.assertIn("ask_user_question", feed[0])
@@ -102,6 +107,7 @@ class TestReviewPersist(unittest.TestCase):
             discussions=[{"number": 1, "title": "Implement release ceremony automation", "body": "feature"}],
             dry_run=True,
             base_dir=self.base,
+            use_live_budget=False,
         )
         self.assertEqual(d["status"], "dry-run")
         self.assertEqual(d["proc_id"], "weekly-discussion-review")
@@ -112,9 +118,34 @@ class TestReviewPersist(unittest.TestCase):
             signals=[{"title": "Pricing change", "impact": "medium", "sources": ["a"]}],
             dry_run=True,
             base_dir=self.base,
+            use_live_budget=False,
         )
         self.assertEqual(m["proc_id"], "market-condition-monitor")
         self.assertTrue(m["dry_run"])
+
+    def test_budget_gate(self):
+        est = estimate_monitor_cost(kind="discussion", n_items=2, persist=True)
+        self.assertTrue(est["ok"])
+        self.assertGreater(est["estimated_tokens"], 0)
+        blocked = review_discussions(
+            [{"number": 1, "title": "Add feature X for autonomy", "body": "detail"}],
+            min_score=10,
+            persist=False,
+            budget_remaining=10,
+            use_live_budget=False,
+            base_dir=self.base,
+        )
+        self.assertFalse(blocked["ok"])
+        self.assertTrue(blocked.get("blocked"))
+        self.assertIn("budget", blocked.get("error") or "")
+        ok = monitor_market_signals(
+            [{"title": "Pricing", "impact": "high", "sources": ["a"]}],
+            persist=False,
+            budget_remaining=est["estimated_tokens"] + 5000,
+            use_live_budget=False,
+            base_dir=self.base,
+        )
+        self.assertTrue(ok["ok"])
 
 
 class TestScoreDiscussion(unittest.TestCase):
