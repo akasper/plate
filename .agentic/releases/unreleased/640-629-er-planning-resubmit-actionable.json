@@ -1,0 +1,26 @@
+{
+  "slug": "640-629-er-planning-resubmit-actionable",
+  "change_type": "feature",
+  "surface": "src/plate_core/epic_release_planning.py, cli.py, mcp_server.py, tests/test_epic_release_planning.py",
+  "summary": "Harden #629/#640 epic/release Q&A planning: revise stays feed-actionable with resubmit TUI; resubmit_er_plan + er_plan_ask_user_payload; feed ranks revise higher; CLI er-plan --resubmit/--history; MCP plate_er_planning_resubmit (shared ledger with #630).",
+  "migration_impact": "ER revise no longer leaves plans invisible in feed. Approve after revise requires resubmit. New MCP tool and CLI flags. History via shared planning ledger.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. On revise: plan stays pending with resubmit option.",
+    "3. After edits: gh plate er-plan --resubmit ID or plate_er_planning_resubmit.",
+    "4. Then plate_er_planning_decide approve."
+  ],
+  "agent_notes": "Parity with #630 feature planning resubmit. Does not create Epics/Releases or cut tags on approve. Feature plans remain on plate plan surfaces.",
+  "breaking": false,
+  "links": [
+    "#745",
+    "#640",
+    "#629",
+    "#630",
+    "#656",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

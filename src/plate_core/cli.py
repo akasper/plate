@@ -54,6 +54,7 @@ from .epic_release_planning import (
     decide_er_plan,
     er_planning_feed_items,
     get_er_script,
+    resubmit_er_plan,
     start_er_session,
 )
 from .design_research_approval import (
@@ -968,6 +969,36 @@ def cmd_er_plan(args: argparse.Namespace) -> int:
                 f"{r.get('id')} [{r.get('status') or r.get('item_type')}] "
                 f"{r.get('title') or r.get('kind')}"
             )
+        return 0
+    if getattr(args, "resubmit", None):
+        out = resubmit_er_plan(
+            str(args.resubmit),
+            title=getattr(args, "title", None),
+            note=str(getattr(args, "note", None) or ""),
+            resubmitted_by=str(getattr(args, "by", None) or "cli-user"),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "resubmit failed", file=sys.stderr)
+            return 1
+        print(f"resubmitted {out.get('id')} v{out.get('version')} [{out.get('status')}]")
+        return 0
+    if getattr(args, "history", None):
+        from .planning import get_plan_history
+
+        rows = get_plan_history(
+            str(args.history), limit=int(getattr(args, "limit", 20) or 20)
+        )
+        if args.json:
+            print(json.dumps({"history": rows}))
+            return 0
+        if not rows:
+            print("No ER plan history.")
+            return 0
+        for r in rows:
+            print(f"{r.get('ts')} [{r.get('decision')}] by={r.get('by')} v={r.get('version')}")
         return 0
     if getattr(args, "decide", None):
         out = decide_er_plan(
@@ -3352,6 +3383,13 @@ def build_parser() -> argparse.ArgumentParser:
     er_plan.add_argument("--list-pending", dest="list_pending", action="store_true")
     er_plan.add_argument("--feed", action="store_true", help="Pending ER plans + incomplete sessions")
     er_plan.add_argument("--decide", metavar="ID", help="Decide pending epic/release plan id")
+    er_plan.add_argument(
+        "--resubmit",
+        metavar="ID",
+        help="Resubmit revise_requested epic/release plan (#640/#629)",
+    )
+    er_plan.add_argument("--history", metavar="ID", help="Decision history for ER plan id")
+    er_plan.add_argument("--title", help="Optional title override for --resubmit")
     er_plan.add_argument(
         "--decision",
         choices=["approve", "revise", "reject"],
