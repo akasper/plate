@@ -1,0 +1,25 @@
+{
+  "slug": "647-ledger-feed-gates",
+  "change_type": "feature",
+  "surface": "src/plate_core/ledger.py, feed.py, cli.py",
+  "summary": "Harden #647: list_blocking_decisions + richer ledger_summary (by_action/impact/blocking); ledger_feed_items with ask_user_question for pause/shadow_required; endless feed ranks ledger_gate; CLI summary markdown.",
+  "migration_impact": "Additive ledger summary fields and feed item type ledger_gate. No schema break. Hosts should present ledger_gate options (inspect / decide checkpoint / resume shadow) before retrying gated actions.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate ledger --summary for blocking counts + recent gates.",
+    "3. plate_feed ranks ledger_gate from recent pause/shadow_required entries.",
+    "4. Resolve via plate_checkpoint_decide or gate_high_impact(shadow_ack=..., approved=True); do not re-run blindly."
+  ],
+  "agent_notes": "Prefer ledger entry checkpoint_id/shadow_id for resume. Blocking decisions: pause, shadow_required, reject. Feed rank ~12 (after open checkpoints).",
+  "breaking": false,
+  "links": [
+    "#647",
+    "#648",
+    "#645",
+    "#631",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

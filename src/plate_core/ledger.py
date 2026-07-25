@@ -252,16 +252,182 @@ def record_from_autonomy_action(
     )
 
 
+# Decisions that should surface as human-attention feed gates (#647 harden)
+BLOCKING_DECISIONS = frozenset(
+    {"pause", "shadow_required", "reject", "rejected", "block", "blocked"}
+)
+
+
+def list_blocking_decisions(
+    *,
+    limit: int = 20,
+    base_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Recent ledger rows that represent pause/shadow/reject gates."""
+    out: list[dict[str, Any]] = []
+    for row in list_decisions(limit=max(limit * 5, 50), base_dir=base_dir):
+        if str(row.get("decision") or "").lower() in BLOCKING_DECISIONS:
+            out.append(row)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def ledger_summary(*, base_dir: Path | None = None, limit: int = 20) -> dict[str, Any]:
-    """Compact summary for status/dashboard consumers."""
+    """Compact summary for status/dashboard/feed consumers (#647)."""
     rows = list_decisions(limit=limit, base_dir=base_dir)
     by_decision: dict[str, int] = {}
+    by_action: dict[str, int] = {}
+    by_impact: dict[str, int] = {}
+    blocking: list[dict[str, Any]] = []
     for r in rows:
         d = str(r.get("decision") or "unknown")
         by_decision[d] = by_decision.get(d, 0) + 1
+        ak = str(r.get("action_kind") or "unknown")
+        by_action[ak] = by_action.get(ak, 0) + 1
+        imp = str(r.get("impact") or "unset") or "unset"
+        by_impact[imp] = by_impact.get(imp, 0) + 1
+        if d in BLOCKING_DECISIONS:
+            blocking.append(
+                {
+                    "id": r.get("id"),
+                    "action_kind": r.get("action_kind"),
+                    "decision": r.get("decision"),
+                    "reason": r.get("reason"),
+                    "checkpoint_id": r.get("checkpoint_id"),
+                    "shadow_id": r.get("shadow_id"),
+                    "related_issue": r.get("related_issue"),
+                    "created_at": r.get("created_at"),
+                }
+            )
     return {
         "count": len(rows),
         "by_decision": by_decision,
+        "by_action_kind": by_action,
+        "by_impact": by_impact,
+        "blocking_count": len(blocking),
+        "blocking": blocking[:10],
+        "last_blocking": blocking[0] if blocking else None,
         "recent_ids": [r.get("id") for r in rows[:10]],
         "dir": str(_ensure_dir(base_dir)),
     }
+
+
+def ledger_feed_items(
+    *,
+    limit: int = 10,
+    base_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Ranked feed signals from recent blocking ledger decisions (#647 → #631).
+
+    Hosts present ask_user_question; agents should open checkpoint/shadow resume
+    rather than re-running the gated action blindly.
+    """
+    items: list[dict[str, Any]] = []
+    for i, row in enumerate(list_blocking_decisions(limit=limit, base_dir=base_dir)):
+        eid = str(row.get("id") or f"dec-{i}")
+        dec = str(row.get("decision") or "pause")
+        kind = str(row.get("action_kind") or "unknown")
+        reason = str(row.get("reason") or "")[:160]
+        title = f"Ledger {dec}: {kind}"
+        if row.get("related_issue"):
+            title += f" (#{row['related_issue']})"
+        impact = str(row.get("impact") or "").lower()
+        if impact not in ("low", "medium", "high", "critical"):
+            impact = "high" if dec in BLOCKING_DECISIONS else "medium"
+        cp = row.get("checkpoint_id")
+        sid = row.get("shadow_id")
+        options = [
+            {
+                "id": "inspect",
+                "label": "Inspect ledger entry",
+                "description": f"gh plate ledger --get {eid} / plate_ledger_get",
+            },
+        ]
+        if cp:
+            options.append(
+                {
+                    "id": "decide_checkpoint",
+                    "label": "Decide checkpoint",
+                    "description": f"plate_checkpoint_decide {cp} approve|reject",
+                }
+            )
+        if sid:
+            options.append(
+                {
+                    "id": "resume_shadow",
+                    "label": "Resume with shadow ack",
+                    "description": f"gate_high_impact(..., shadow_ack={sid}, approved=True)",
+                }
+            )
+        options.append(
+            {
+                "id": "ack",
+                "label": "Acknowledge only",
+                "description": "Leave gate in place; no action",
+            }
+        )
+        steps = [
+            f"plate_ledger_get id={eid}",
+            f"decision={dec} action={kind}: {reason}",
+        ]
+        if cp:
+            steps.append(f"checkpoint_id={cp}")
+        if sid:
+            steps.append(f"shadow_id={sid}")
+        items.append(
+            {
+                "id": eid,
+                "item_type": "ledger_gate",
+                "type": "ledger_gate",
+                "title": title,
+                "rank": 12 + i,  # after hard checkpoints (~10), before general drift
+                "impact": impact,
+                "decision": dec,
+                "action_kind": kind,
+                "checkpoint_id": cp,
+                "shadow_id": sid,
+                "related_issue": row.get("related_issue"),
+                "related_pr": row.get("related_pr"),
+                "reason": reason or f"Autonomous decision {dec} for {kind}",
+                "prompt_segment": (
+                    f"{title}. {reason} "
+                    f"Do not re-run gated action without checkpoint/shadow approval."
+                ),
+                "source": "decision_ledger",
+                "badges": ["ledger", dec, impact],
+                "marker": row.get("marker") or render_decision_marker(row),
+                "ask_user_question": {
+                    "question": f"{title} — next step?",
+                    "options": options,
+                },
+                "steps": steps,
+            }
+        )
+    return items
+
+
+def format_ledger_summary_markdown(summary: dict[str, Any] | None = None, *, base_dir: Path | None = None) -> str:
+    """CLI/wiki-friendly ledger summary (#647)."""
+    s = summary if summary is not None else ledger_summary(base_dir=base_dir)
+    lines = [
+        "# Decision ledger summary",
+        "",
+        f"- Entries (window): {s.get('count')}",
+        f"- Blocking: {s.get('blocking_count')}",
+        f"- By decision: {s.get('by_decision')}",
+        f"- By action: {s.get('by_action_kind')}",
+        f"- Dir: {s.get('dir')}",
+        "",
+    ]
+    blocking = s.get("blocking") or []
+    if blocking:
+        lines.append("## Blocking (recent)")
+        lines.append("")
+        for b in blocking[:8]:
+            lines.append(
+                f"- `{b.get('id')}` {b.get('decision')} {b.get('action_kind')}: "
+                f"{str(b.get('reason') or '')[:100]}"
+            )
+        lines.append("")
+    return "\n".join(lines)

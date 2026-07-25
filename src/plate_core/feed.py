@@ -417,13 +417,14 @@ def build_feed_items(
         )
     for i, sig in enumerate(signal_items or []):
         stype = str(sig.get("type") or "signal")
-        # Keep budget_gate / cost types first-class so presentation ranks them visibly (#653)
+        # Keep budget_gate / ledger_gate / cost types first-class (#653/#647)
         item_type = (
             stype
             if stype
             in (
                 "checkpoint",
                 "budget_gate",
+                "ledger_gate",
                 "cost_hotspot",
                 "procedure",
                 "drift",
@@ -833,6 +834,33 @@ def get_user_feed(
             )
     except Exception:
         pass
+
+    # #647 decision ledger blocking gates → feed signals (autonomy surfaces only)
+    if include_autonomy:
+        try:
+            from .ledger import ledger_feed_items
+
+            for lg in ledger_feed_items(limit=8):
+                signal_items.append(
+                    {
+                        "id": lg.get("id"),
+                        "type": lg.get("type") or "ledger_gate",
+                        "title": lg.get("title"),
+                        "rank": int(lg.get("rank") or 12),
+                        "impact": lg.get("impact") or "high",
+                        "reason": lg.get("reason") or "Decision ledger gate (#647)",
+                        "prompt_segment": lg.get("prompt_segment")
+                        or (
+                            f"{lg.get('title')}. "
+                            f"plate_ledger_get {lg.get('id')}; resolve checkpoint/shadow before retry."
+                        ),
+                        "source": "decision_ledger",
+                        "ask_user_question": lg.get("ask_user_question"),
+                        "related_issue": lg.get("related_issue"),
+                    }
+                )
+        except Exception:
+            pass
 
     items = build_feed_items(
         questions=q_items,
