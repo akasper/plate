@@ -166,6 +166,65 @@ def render_handoff_marker(packet: dict[str, Any] | HandoffPacket) -> str:
     return f"{MARKER_BEGIN}\n{json.dumps(data, indent=2)}\n{MARKER_END}\n"
 
 
+# Heuristic handoff token costs by risk (#634/#644 parity with feature/bug loops).
+_HANDOFF_ESTIMATE_BASE: dict[str, int] = {
+    "low": 2000,
+    "medium": 5000,
+    "high": 12000,
+    "critical": 20000,
+}
+
+
+def estimate_handoff_cost(
+    *,
+    to_agent: str = "",
+    risk: str = "medium",
+    budget_tokens: int | None = None,
+) -> dict[str, Any]:
+    """Advisory token estimate for a fleet handoff (#634/#644)."""
+    if budget_tokens is not None:
+        try:
+            tokens = max(0, int(budget_tokens))
+        except (TypeError, ValueError):
+            tokens = _HANDOFF_ESTIMATE_BASE["medium"]
+        return {
+            "ok": True,
+            "to_agent": to_agent,
+            "risk": (risk or "medium").lower(),
+            "estimated_tokens": tokens,
+            "source": "explicit",
+        }
+    risk_n = (risk or "medium").lower()
+    if risk_n not in _HANDOFF_ESTIMATE_BASE:
+        risk_n = "medium"
+    tokens = _HANDOFF_ESTIMATE_BASE[risk_n]
+    role = get_fleet_role((to_agent or "").strip())
+    if role and role.get("default_token_share"):
+        # Scale medium baseline by role share relative to implementer 0.35
+        try:
+            share = float(role.get("default_token_share") or 0.15)
+            tokens = max(500, int(_HANDOFF_ESTIMATE_BASE["medium"] * (share / 0.35)))
+            if risk_n == "high":
+                tokens = int(tokens * 1.5)
+            elif risk_n == "critical":
+                tokens = int(tokens * 2.0)
+            elif risk_n == "low":
+                tokens = max(500, int(tokens * 0.6))
+        except (TypeError, ValueError):
+            pass
+    return {
+        "ok": True,
+        "to_agent": to_agent,
+        "risk": risk_n,
+        "estimated_tokens": int(tokens),
+        "source": "heuristic",
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine enforce hard ceilings.",
+            "create_handoff hydrates remaining via get_budget_snapshot when use_live_budget.",
+        ],
+    }
+
+
 def create_handoff(
     *,
     from_agent: str,
@@ -181,11 +240,17 @@ def create_handoff(
     parent_handoff_id: str | None = None,
     requires_human: bool = False,
     budget_remaining: int | None = None,
+    use_live_budget: bool = True,
     open_checkpoint: bool = False,
     base_dir: Path | None = None,
     record_ledger: bool = True,
 ) -> dict[str, Any]:
-    """Create an explicit agent→agent handoff packet."""
+    """Create an explicit agent→agent handoff packet.
+
+    #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
+    hydrate remaining tokens from durable budget snapshot. When ``budget_tokens`` is
+    omitted, fill from ``estimate_handoff_cost``. Gate when est exceeds remaining.
+    """
     fa = (from_agent or "orchestrator").strip()
     ta = (to_agent or "").strip()
     task_s = (task or "").strip()
@@ -197,19 +262,47 @@ def create_handoff(
     risk_n = (risk or "medium").lower()
     need_human = bool(requires_human) or risk_n in ("high", "critical")
 
-    # #644 harden: optional hard budget gate before opening work
+    cost_est = estimate_handoff_cost(
+        to_agent=ta, risk=risk_n, budget_tokens=budget_tokens
+    )
+    effective_tokens = budget_tokens
+    if effective_tokens is None:
+        effective_tokens = int(cost_est.get("estimated_tokens") or 0)
+
+    effective_remaining = budget_remaining
+    budget_notes: list[str] = []
+    if effective_remaining is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot(estimate_tokens=int(effective_tokens or 0))
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective_remaining = int(rem)
+                budget_notes.append(
+                    f"budget hydrated: remaining_tokens={effective_remaining} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            budget_notes.append(f"budget hydrate skipped: {exc}")
+
+    # #644/#634: hard budget gate before opening work
     if (
-        budget_remaining is not None
-        and budget_tokens is not None
-        and int(budget_tokens) > int(budget_remaining)
+        effective_remaining is not None
+        and effective_tokens is not None
+        and int(effective_tokens) > int(effective_remaining)
     ):
         return {
             "ok": False,
             "error": (
-                f"budget_tokens {budget_tokens} exceeds remaining {budget_remaining}"
+                f"budget_tokens {effective_tokens} exceeds remaining {effective_remaining}"
             ),
             "blocked": True,
             "reason": "budget",
+            "cost_estimate_tokens": int(effective_tokens),
+            "budget_remaining": int(effective_remaining),
+            "cost_estimate": cost_est,
+            "notes": budget_notes,
         }
 
     # Soft validate role ids (allow free-form for host agents)
@@ -225,7 +318,7 @@ def create_handoff(
         artifacts=list(artifacts or []),
         constraints=list(constraints or [])
         + (["quiet_ops", "github_as_truth"] if not constraints else []),
-        budget_tokens=budget_tokens,
+        budget_tokens=int(effective_tokens) if effective_tokens is not None else None,
         risk=risk_n,
         related_issue=related_issue,
         related_pr=related_pr,
@@ -236,6 +329,10 @@ def create_handoff(
     )
     if role:
         packet.context.setdefault("to_role", role)
+    if budget_notes:
+        packet.context.setdefault("budget_notes", budget_notes)
+    if effective_remaining is not None:
+        packet.context.setdefault("budget_remaining_at_create", int(effective_remaining))
 
     # High-risk / human handoffs start blocked until accept or checkpoint approve
     if need_human and risk_n in ("high", "critical"):
@@ -252,6 +349,11 @@ def create_handoff(
         "ok": True,
         "handoff": packet.to_dict(),
         "marker": render_handoff_marker(packet),
+        "cost_estimate_tokens": int(effective_tokens) if effective_tokens is not None else None,
+        "budget_remaining": (
+            int(effective_remaining) if effective_remaining is not None else None
+        ),
+        "cost_estimate": cost_est,
         "delegation_hint": (
             f"plate_delegate_to_agent / gh plate agents delegate {ta} "
             f"--task {json.dumps(task_s)[:80]}"
@@ -272,7 +374,8 @@ def create_handoff(
                 scope={
                     "handoff_id": packet.handoff_id,
                     "to_agent": ta,
-                    "budget_tokens": budget_tokens,
+                    "budget_tokens": packet.budget_tokens,
+                    "budget_remaining": effective_remaining,
                 },
                 created_by="fleet",
                 pause_autonomy=True,
@@ -298,15 +401,19 @@ def create_handoff(
                 action_kind="fleet_handoff",
                 decision="delegate" if packet.status == "open" else "pause",
                 reason=f"handoff {fa} → {ta}: {task_s[:120]}",
-                sources=["fleet", "#644"],
+                sources=["fleet", "#644", "#634"],
                 risk_tolerance=packet.risk,
                 impact=packet.risk,
                 related_issue=related_issue,
                 related_pr=related_pr,
-                cost_estimate_tokens=budget_tokens,
+                cost_estimate_tokens=packet.budget_tokens,
                 checkpoint_id=out.get("checkpoint_id"),
                 actor="fleet",
-                metadata={"handoff_id": packet.handoff_id, "to_agent": ta},
+                metadata={
+                    "handoff_id": packet.handoff_id,
+                    "to_agent": ta,
+                    "budget_remaining": effective_remaining,
+                },
             )
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:
@@ -613,10 +720,15 @@ def plan_fleet_from_intent(
 def fleet_status(
     *,
     budget_remaining: int | None = None,
+    use_live_budget: bool = True,
     risk_tolerance: str = "medium",
     base_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """Aggregate fleet roles + active handoffs + budget allocation snapshot."""
+    """Aggregate fleet roles + active handoffs + budget allocation snapshot.
+
+    #634: when budget_remaining omitted and use_live_budget, hydrate remaining
+    from durable spend so status/allocation matches AutonomyEngine rails.
+    """
     active = list_handoffs(status="active", limit=100, base_dir=base_dir)
     by_agent: dict[str, int] = {}
     human_needed = 0
@@ -626,10 +738,22 @@ def fleet_status(
         if h.get("requires_human") or h.get("status") == "blocked":
             human_needed += 1
 
+    effective_remaining = budget_remaining
+    if effective_remaining is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot()
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective_remaining = int(rem)
+        except Exception:
+            pass
+
     budget = None
-    if budget_remaining is not None:
+    if effective_remaining is not None:
         budget = allocate_fleet_budget(
-            budget_remaining,
+            effective_remaining,
             active_roles=list(by_agent.keys()) or None,
             risk_tolerance=risk_tolerance,
         )
@@ -641,6 +765,7 @@ def fleet_status(
         "by_agent": by_agent,
         "human_needed": human_needed,
         "budget": budget,
+        "budget_remaining_tokens": effective_remaining,
         "risk_tolerance": risk_tolerance,
     }
 
@@ -731,6 +856,7 @@ def handoff_from_pm_assignment(
     assignment: dict[str, Any],
     *,
     budget_remaining: int | None = None,
+    use_live_budget: bool = True,
     open_checkpoint: bool = False,
     base_dir: Path | None = None,
     record_ledger: bool = True,
@@ -739,6 +865,7 @@ def handoff_from_pm_assignment(
 
     Maps PM persona agent_id to fleet role when possible; otherwise uses agent_id
     as free-form to_agent. Does not complete the PM assignment.
+    Live #634 budget hydrate when budget_remaining omitted (use_live_budget).
     """
     if not assignment:
         return {"ok": False, "error": "assignment required"}
@@ -779,6 +906,7 @@ def handoff_from_pm_assignment(
         related_issue=related_issue,
         requires_human=bool(assignment.get("requires_checkpoint")),
         budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget if budget_remaining is None else False,
         open_checkpoint=open_checkpoint or bool(assignment.get("requires_checkpoint")),
         context={
             "pm_assignment_id": assignment.get("assignment_id"),
