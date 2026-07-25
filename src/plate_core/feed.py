@@ -645,6 +645,30 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #642 pending discussion/market monitor proposals → feed signals
+    try:
+        from .monitoring import monitoring_feed_items
+
+        for mp in monitoring_feed_items(limit=10):
+            signal_items.append(
+                {
+                    "id": mp.get("id"),
+                    "type": "monitor_proposal",
+                    "title": mp.get("title"),
+                    "rank": 20,
+                    "impact": mp.get("impact") or "medium",
+                    "reason": mp.get("reason") or "Scheduled monitoring proposal (#642)",
+                    "prompt_segment": (
+                        f"{mp.get('title')}. "
+                        f"Decide: plate_monitor_decide / gh plate monitor --decide {mp.get('id')} approve|reject."
+                    ),
+                    "source": "monitoring",
+                    "ask_user_question": mp.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,

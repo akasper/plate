@@ -74,6 +74,15 @@ from .fleet import (
     plan_fleet_from_intent,
     update_handoff,
 )
+from .monitoring import (
+    decide_proposal,
+    list_proposals,
+    monitor_market_signals,
+    monitoring_feed_items,
+    review_discussions,
+    run_discussion_review_procedure,
+    run_market_monitor_procedure,
+)
 from .tasks import (
     close_task_with_signal,
     create_task,
@@ -1051,6 +1060,107 @@ def cmd_task(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def cmd_monitor(args: argparse.Namespace) -> int:
+    """Scheduled discussion review + market monitoring (#642)."""
+    if getattr(args, "list_proposals", False):
+        rows = list_proposals(
+            status=str(getattr(args, "status", None) or "pending"),
+            source=getattr(args, "source", None) or None,
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+        if args.json:
+            print(json.dumps({"proposals": rows}))
+            return 0
+        for p in rows:
+            print(f"{p.get('id')} [{p.get('score')}] {p.get('proposed_type')}: {p.get('title')}")
+        return 0
+
+    if getattr(args, "decide", None):
+        out = decide_proposal(
+            str(args.decide),
+            str(getattr(args, "decision", None) or "approve"),
+            created_issue=getattr(args, "created_issue", None),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} status={(out.get('proposal') or {}).get('status')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "feed", False):
+        rows = monitoring_feed_items(limit=int(getattr(args, "limit", 10) or 10))
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    if getattr(args, "market", False):
+        raw = getattr(args, "signals_json", None) or "[]"
+        try:
+            signals = json.loads(raw) if isinstance(raw, str) else list(raw or [])
+        except json.JSONDecodeError:
+            # single signal from title
+            signals = [{"title": raw, "detail": getattr(args, "detail", "") or ""}]
+        if getattr(args, "title", None):
+            signals = list(signals) if signals else []
+            signals.append(
+                {
+                    "title": args.title,
+                    "detail": getattr(args, "detail", "") or "",
+                    "url": getattr(args, "url", "") or "",
+                    "impact": getattr(args, "impact", None) or "medium",
+                }
+            )
+        dry = not getattr(args, "apply", False)
+        if dry:
+            out = run_market_monitor_procedure(signals=signals, dry_run=True)
+        else:
+            out = monitor_market_signals(signals, persist=True)
+            out["status"] = "executed"
+            out["dry_run"] = False
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"market: status={out.get('status')} proposed={out.get('n_proposed')} dry_run={out.get('dry_run', dry)}")
+        return 0
+
+    # default: discussion review
+    dry = not getattr(args, "apply", False)
+    discussions = None
+    raw_d = getattr(args, "discussions_json", None)
+    if raw_d:
+        try:
+            discussions = json.loads(raw_d)
+        except json.JSONDecodeError:
+            discussions = None
+    if dry:
+        out = run_discussion_review_procedure(
+            repo=getattr(args, "repo", None),
+            discussions=discussions,
+            dry_run=True,
+            fetch_live=False,
+        )
+    else:
+        out = review_discussions(
+            discussions,
+            repo=getattr(args, "repo", None),
+            persist=True,
+            fetch_live=bool(getattr(args, "live", False)),
+        )
+        out["status"] = "executed"
+        out["dry_run"] = False
+    if args.json:
+        print(json.dumps(out))
+        return 0 if out.get("ok") else 1
+    print(
+        f"discussions: status={out.get('status')} scanned={out.get('n_scanned')} "
+        f"proposed={out.get('n_proposed')} dry_run={out.get('dry_run', dry)}"
+    )
+    return 0 if out.get("ok") else 1
 
 
 def cmd_fleet(args: argparse.Namespace) -> int:
@@ -2158,6 +2268,31 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
+
+    monitor = sub.add_parser(
+        "monitor",
+        help="Scheduled discussion review + market monitoring (#642)",
+    )
+    monitor.add_argument("--repo", help="owner/name for live discussion fetch")
+    monitor.add_argument("--market", action="store_true", help="Run market signal synthesis")
+    monitor.add_argument("--list-proposals", action="store_true", help="List monitor proposals")
+    monitor.add_argument("--decide", metavar="PROPOSAL_ID", help="approve/reject a proposal")
+    monitor.add_argument("--decision", default="approve", help="approve|reject|created")
+    monitor.add_argument("--created-issue", dest="created_issue", type=int)
+    monitor.add_argument("--feed", action="store_true", help="Feed items for pending proposals")
+    monitor.add_argument("--apply", action="store_true", help="Persist proposals (default dry-run)")
+    monitor.add_argument("--live", action="store_true", help="Fetch open Ideas discussions")
+    monitor.add_argument("--title", default="", help="Market signal title (with --market)")
+    monitor.add_argument("--detail", default="", help="Market signal detail")
+    monitor.add_argument("--url", default="", help="Market signal URL")
+    monitor.add_argument("--impact", default="medium", help="Signal impact low|medium|high")
+    monitor.add_argument("--signals-json", dest="signals_json", default="", help="JSON array of signals")
+    monitor.add_argument("--discussions-json", dest="discussions_json", default="", help="JSON array of discussions")
+    monitor.add_argument("--source", default="", help="Filter proposals by source")
+    monitor.add_argument("--status", default="pending", help="Proposal status filter")
+    monitor.add_argument("--limit", type=int, default=50)
+    monitor.add_argument("--json", action="store_true")
+    monitor.set_defaults(func=cmd_monitor)
 
     fleet = sub.add_parser(
         "fleet",
