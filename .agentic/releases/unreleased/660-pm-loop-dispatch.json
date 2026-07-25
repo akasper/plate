@@ -1,0 +1,27 @@
+{
+  "slug": "660-pm-loop-dispatch",
+  "change_type": "feature",
+  "surface": "src/plate_core/pm.py, tests/test_pm.py",
+  "summary": "Wire #660 PM apply cycles to #638/#639 loops: dispatch_loop_from_assignment starts feature_loop (budget-aware) for implement/refactor and bug_loop for bugfix; run_cycle reports loop_dispatches + loop_run_id on assignments; dispatch_loops flag (default true).",
+  "migration_impact": "Apply-mode PM cycles may create durable runs under .agentic/feature_loops/ and .agentic/bug_loops/ (gitignored). dry_run still skips. Opt out with dispatch_loops=false. Does not auto-merge.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Apply PM: gh plate pm --run (or plate_pm_run_cycle dry_run=false) with dispatch_loops enabled.",
+    "3. Inspect assignment.loop_run_id / report.loop_dispatches; advance via feature-loop / bug-loop CLI or MCP.",
+    "4. Budget: remaining tokens from PM status gate loop start; live hydrate when remaining omitted."
+  ],
+  "agent_notes": "Pairs with fleet handoffs (#644) and budget snapshot (#634). Loops only for implement/bugfix/refactor; design/research/release stay packet/fleet. risk-off still blocks most assignments before loop dispatch.",
+  "breaking": false,
+  "links": [
+    "#737",
+    "#660",
+    "#638",
+    "#639",
+    "#634",
+    "#644",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

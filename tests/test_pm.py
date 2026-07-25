@@ -276,11 +276,14 @@ class TestPMCycle(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             pm_dir = Path(tmp) / "pm"
             fleet_dir = Path(tmp) / "fleet"
+            feat_dir = Path(tmp) / "featloops"
             pm = ProjectManager(
                 repo=None,
                 state_dir=pm_dir,
                 fleet_base_dir=fleet_dir,
+                feature_loop_base_dir=feat_dir,
                 dispatch_fleet=True,
+                dispatch_loops=True,
             )
             with patch.object(pm, "get_status", return_value=self._fake_status()), patch.object(
                 pm,
@@ -291,10 +294,13 @@ class TestPMCycle(unittest.TestCase):
                         "title": "Implement feature fleet",
                         "type": "feature",
                         "impact": "medium",
+                        "number": 42,
                     }
                 ],
             ), patch("plate_core.baseline_catalog.delegate_to_agent", create=True):
-                rep = pm.run_cycle(dry_run=False, max_assignments=1, dispatch_fleet=True)
+                rep = pm.run_cycle(
+                    dry_run=False, max_assignments=1, dispatch_fleet=True, dispatch_loops=True
+                )
             self.assertEqual(rep["status"], "completed")
             self.assertTrue(rep.get("dispatch_fleet"))
             self.assertGreaterEqual(len(rep.get("fleet_handoffs") or []), 1)
@@ -305,6 +311,36 @@ class TestPMCycle(unittest.TestCase):
 
             hos = list_handoffs(status="all", base_dir=fleet_dir)
             self.assertTrue(any(h.get("handoff_id") == asg["fleet_handoff_id"] for h in hos))
+            # #660/#639: implement assignments also open a feature loop
+            self.assertTrue(rep.get("dispatch_loops"))
+            self.assertGreaterEqual(len(rep.get("loop_dispatches") or []), 1)
+            self.assertEqual(asg.get("loop_kind"), "feature")
+            self.assertTrue(asg.get("loop_run_id"))
+            from plate_core.feature_loop import list_feature_loops
+
+            loops = list_feature_loops(status="active", base_dir=feat_dir)
+            self.assertTrue(any(r.get("id") == asg["loop_run_id"] for r in loops))
+
+    def test_dispatch_loop_from_assignment_bugfix(self):
+        from plate_core.pm import dispatch_loop_from_assignment
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "bugloops"
+            out = dispatch_loop_from_assignment(
+                {
+                    "work_type": "bugfix",
+                    "work_title": "Fix labels flake",
+                    "work_id": "issue-99",
+                    "number": 99,
+                    "risk": "low",
+                    "risk_tolerance": "medium",
+                },
+                bug_loop_base_dir=bdir,
+                record_ledger=False,
+            )
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["loop_kind"], "bug")
+            self.assertTrue(out["run_id"])
 
 
 if __name__ == "__main__":

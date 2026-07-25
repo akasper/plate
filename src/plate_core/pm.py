@@ -16,6 +16,7 @@ Slices:
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -280,6 +281,122 @@ def build_assignment_tui(assignment: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _issue_number_from_assignment(asg: dict[str, Any]) -> int | None:
+    """Best-effort GitHub issue number for loop start from assignment/work fields."""
+    for key in ("work_number", "issue_number", "number", "feature_number", "bug_number"):
+        raw = asg.get(key)
+        if raw is None and isinstance(asg.get("packet"), dict):
+            raw = asg["packet"].get(key)
+        if raw is None and isinstance(asg.get("item"), dict):
+            raw = asg["item"].get(key) or asg["item"].get("number")
+        if raw is None:
+            continue
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            pass
+    wid = str(asg.get("work_id") or "")
+    if wid.isdigit():
+        return int(wid)
+    # e.g. "issue-123" or "#42"
+    m = re.search(r"(?:#|issue[-_]?|feature[-_]?|bug[-_]?)(\d+)", wid, re.I)
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def dispatch_loop_from_assignment(
+    asg: dict[str, Any],
+    *,
+    budget_remaining: int | None = None,
+    feature_loop_base_dir: Path | None = None,
+    bug_loop_base_dir: Path | None = None,
+    budget_base_dir: Path | None = None,
+    record_ledger: bool = True,
+) -> dict[str, Any]:
+    """Open durable #638/#639 loop from a delegated PM assignment (#660 bridge).
+
+    - work_type ``implement`` / feature-like → ``start_feature_loop`` (live budget hydrate)
+    - work_type ``bugfix`` → ``start_bug_loop``
+    Other types are skipped (design/research/release stay as packets/fleet only).
+    Never merges; loops emit agent packets only.
+    """
+    work_type = str(asg.get("work_type") or "").lower()
+    title = str(asg.get("work_title") or asg.get("title") or "PM work")
+    risk = str(asg.get("risk") or asg.get("impact") or "medium").lower()
+    if risk in ("critical",):
+        risk = "high"
+    risk_tol = str(
+        asg.get("risk_tolerance")
+        or (asg.get("packet") or {}).get("risk_tolerance")
+        or "medium"
+    )
+    labels = list(asg.get("labels") or (asg.get("packet") or {}).get("labels") or [])
+    issue_n = _issue_number_from_assignment(asg)
+
+    if work_type in ("implement", "feature", "refactor"):
+        from .feature_loop import start_feature_loop
+
+        size = "medium"
+        if work_type == "refactor":
+            size = "large"
+        out = start_feature_loop(
+            feature_number=issue_n,
+            feature_title=title,
+            risk=risk if risk in ("low", "medium", "high") else "medium",
+            size=size,
+            labels=labels or None,
+            risk_tolerance=risk_tol,
+            needs_media_approval=False,
+            budget_remaining=budget_remaining,
+            use_live_budget=budget_remaining is None,
+            budget_base_dir=budget_base_dir,
+            base_dir=feature_loop_base_dir,
+            record_ledger=record_ledger,
+        )
+        run = out.get("run") or {}
+        return {
+            "ok": bool(out.get("ok")),
+            "loop_kind": "feature",
+            "run_id": run.get("id"),
+            "stage": run.get("stage"),
+            "blocked": bool(out.get("blocked")),
+            "error": out.get("error"),
+            "budget_remaining": out.get("budget_remaining"),
+            "result": out,
+        }
+
+    if work_type in ("bugfix", "bug"):
+        from .bug_loop import start_bug_loop
+
+        out = start_bug_loop(
+            bug_number=issue_n,
+            bug_title=title,
+            risk=risk if risk in ("low", "medium", "high") else "medium",
+            labels=labels or None,
+            risk_tolerance=risk_tol,
+            base_dir=bug_loop_base_dir,
+            record_ledger=record_ledger,
+        )
+        run = out.get("run") or {}
+        return {
+            "ok": bool(out.get("ok", True)),
+            "loop_kind": "bug",
+            "run_id": run.get("id"),
+            "stage": run.get("stage"),
+            "blocked": False,
+            "error": out.get("error"),
+            "result": out,
+        }
+
+    return {
+        "ok": False,
+        "skipped": True,
+        "reason": f"work_type={work_type} has no bug/feature loop mapping",
+        "loop_kind": None,
+    }
+
+
 def assign_work(
     item: dict[str, Any],
     *,
@@ -305,6 +422,11 @@ def assign_work(
         blocked = True
         reason_parts.append("blocked: risk_tolerance=off")
 
+    work_number = item.get("number") or item.get("issue_number") or item.get("feature_number") or item.get("bug_number")
+    try:
+        work_number_int = int(work_number) if work_number is not None else None
+    except (TypeError, ValueError):
+        work_number_int = None
     assignment = Assignment(
         assignment_id=f"asg-{uuid.uuid4().hex[:10]}",
         work_id=str(item.get("id") or item.get("number") or item.get("title") or "work"),
@@ -323,6 +445,10 @@ def assign_work(
             "prompt_segment": item.get("prompt_segment")
             or f"Execute {work_type} for: {item.get('title')}. Follow TDD, quiet ops, Closes in PR body.",
             "impact": impact,
+            "risk_tolerance": risk_tolerance,
+            "number": work_number_int,
+            "issue_number": work_number_int,
+            "labels": list(item.get("labels") or []) or None,
             "source_item": {
                 k: item[k]
                 for k in item
@@ -361,6 +487,10 @@ def assign_work(
                 assignment.rationale += f"; checkpoint_open_failed={exc}"
 
     out = assignment.to_dict()
+    if work_number_int is not None:
+        out["work_number"] = work_number_int
+        out["number"] = work_number_int
+    out["risk_tolerance"] = risk_tolerance
     out["ask_user_question"] = build_assignment_tui(out)
     return out
 
@@ -415,13 +545,21 @@ class ProjectManager:
         state_dir: Path | None = None,
         checkpoint_base_dir: Path | None = None,
         fleet_base_dir: Path | None = None,
+        feature_loop_base_dir: Path | None = None,
+        bug_loop_base_dir: Path | None = None,
+        budget_base_dir: Path | None = None,
         dispatch_fleet: bool = True,
+        dispatch_loops: bool = True,
     ):
         self.repo = repo
         self.state_dir = state_dir
         self.checkpoint_base_dir = checkpoint_base_dir
         self.fleet_base_dir = fleet_base_dir
+        self.feature_loop_base_dir = feature_loop_base_dir
+        self.bug_loop_base_dir = bug_loop_base_dir
+        self.budget_base_dir = budget_base_dir
         self.dispatch_fleet = dispatch_fleet
+        self.dispatch_loops = dispatch_loops
         self._assignments: list[dict[str, Any]] = self._load_queue()
 
     def _queue_path(self) -> Path:
@@ -710,15 +848,19 @@ class ProjectManager:
         dry_run: bool = True,
         max_assignments: int = 5,
         dispatch_fleet: bool | None = None,
+        dispatch_loops: bool | None = None,
     ) -> dict[str, Any]:
         """One PM orchestration cycle; merges new assignments into durable queue.
 
         When dry_run is False and dispatch_fleet is True (default), delegated
         assignments also open a #644 fleet handoff via handoff_from_pm_assignment.
+        When dry_run is False and dispatch_loops is True (default), implement/bugfix
+        assignments also start durable #639/#638 feature/bug loops (budget-aware).
         """
         ts = _now()
         status = self.get_status()
         do_fleet = self.dispatch_fleet if dispatch_fleet is None else bool(dispatch_fleet)
+        do_loops = self.dispatch_loops if dispatch_loops is None else bool(dispatch_loops)
         work = self.collect_work(limit=max(max_assignments * 2, 5))
         # #643: pause items labeled driver:human (human owns; no auto-delegate)
         human_paused: list[dict[str, Any]] = []
@@ -733,6 +875,7 @@ class ProjectManager:
         new_assignments: list[dict[str, Any]] = []
         blocked: list[str] = []
         fleet_handoffs: list[dict[str, Any]] = []
+        loop_dispatches: list[dict[str, Any]] = []
 
         if status.open_checkpoints > 0:
             report = {
@@ -888,6 +1031,57 @@ class ProjectManager:
                                     blocked.append(asg["assignment_id"])
                             except Exception as exc:
                                 asg.setdefault("packet", {})["fleet_error"] = str(exc)
+                        # #660/#638/#639: open durable feature/bug loop for implement/bugfix
+                        if do_loops and asg.get("status") == "delegated":
+                            try:
+                                asg["risk_tolerance"] = status.risk_tolerance
+                                loop_out = dispatch_loop_from_assignment(
+                                    asg,
+                                    budget_remaining=budget,
+                                    feature_loop_base_dir=self.feature_loop_base_dir,
+                                    bug_loop_base_dir=self.bug_loop_base_dir,
+                                    budget_base_dir=self.budget_base_dir,
+                                    record_ledger=True,
+                                )
+                                if loop_out.get("skipped"):
+                                    asg.setdefault("packet", {})["loop_skip"] = loop_out.get(
+                                        "reason"
+                                    )
+                                elif loop_out.get("ok") or loop_out.get("run_id"):
+                                    asg["loop_run_id"] = loop_out.get("run_id")
+                                    asg["loop_kind"] = loop_out.get("loop_kind")
+                                    asg.setdefault("packet", {})["loop_run_id"] = loop_out.get(
+                                        "run_id"
+                                    )
+                                    asg.setdefault("packet", {})["loop_kind"] = loop_out.get(
+                                        "loop_kind"
+                                    )
+                                    asg.setdefault("packet", {})["loop_stage"] = loop_out.get(
+                                        "stage"
+                                    )
+                                    if loop_out.get("blocked"):
+                                        asg["status"] = "blocked"
+                                        asg.setdefault("packet", {})["loop_block"] = loop_out.get(
+                                            "error"
+                                        )
+                                        blocked.append(asg["assignment_id"])
+                                    loop_dispatches.append(
+                                        {
+                                            "assignment_id": asg.get("assignment_id"),
+                                            "loop_kind": loop_out.get("loop_kind"),
+                                            "run_id": loop_out.get("run_id"),
+                                            "stage": loop_out.get("stage"),
+                                            "blocked": bool(loop_out.get("blocked")),
+                                        }
+                                    )
+                                elif loop_out.get("blocked"):
+                                    asg["status"] = "blocked"
+                                    asg.setdefault("packet", {})["loop_block"] = loop_out.get(
+                                        "error"
+                                    )
+                                    blocked.append(asg["assignment_id"])
+                            except Exception as exc:
+                                asg.setdefault("packet", {})["loop_error"] = str(exc)
             asg["ask_user_question"] = build_assignment_tui(asg)
             new_assignments.append(asg)
             seen.add(str(asg.get("work_id") or ""))
@@ -911,6 +1105,7 @@ class ProjectManager:
                         "assignments": new_assignments,
                         "blocked": blocked,
                         "fleet_handoffs": fleet_handoffs,
+                        "loop_dispatches": loop_dispatches,
                         "pm_status": status.to_dict(),
                     },
                     indent=2,
@@ -926,6 +1121,7 @@ class ProjectManager:
             "assignments": new_assignments,
             "blocked": blocked,
             "fleet_handoffs": fleet_handoffs,
+            "loop_dispatches": loop_dispatches,
             "human_paused": [
                 {
                     "id": x.get("id") or x.get("number"),
@@ -939,13 +1135,14 @@ class ProjectManager:
             "timestamp": ts,
             "dry_run": dry_run,
             "dispatch_fleet": do_fleet and not dry_run,
+            "dispatch_loops": do_loops and not dry_run,
             "queue_size": len(self._assignments),
-            "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'completed', 'n': len(new_assignments), 'fleet': len(fleet_handoffs), 'ts': ts})}\n{MARKER_END}",
+            "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'completed', 'n': len(new_assignments), 'fleet': len(fleet_handoffs), 'loops': len(loop_dispatches), 'ts': ts})}\n{MARKER_END}",
         }
         _ledger_pm(
             "pm_cycle",
             "proceed" if not dry_run else "shadow",
-            f"cycle completed n={len(new_assignments)} blocked={len(blocked)} fleet={len(fleet_handoffs)}",
+            f"cycle completed n={len(new_assignments)} blocked={len(blocked)} fleet={len(fleet_handoffs)} loops={len(loop_dispatches)}",
             cost=sum(int(a.get("estimated_tokens") or 0) for a in new_assignments),
             risk=status.risk_tolerance,
             metadata={
@@ -964,6 +1161,7 @@ class ProjectManager:
         max_assignments: int = 5,
         stop_on_pause: bool = True,
         dispatch_fleet: bool | None = None,
+        dispatch_loops: bool | None = None,
     ) -> dict[str, Any]:
         """Multi-cycle orchestrator loop with budget/checkpoint stop conditions."""
         cycles: list[dict[str, Any]] = []
@@ -973,6 +1171,7 @@ class ProjectManager:
                 dry_run=dry_run,
                 max_assignments=max_assignments,
                 dispatch_fleet=dispatch_fleet,
+                dispatch_loops=dispatch_loops,
             )
             cycles.append(
                 {
@@ -981,6 +1180,7 @@ class ProjectManager:
                     "n_assignments": len(rep.get("assignments") or []),
                     "blocked": len(rep.get("blocked") or []),
                     "n_fleet": len(rep.get("fleet_handoffs") or []),
+                    "n_loops": len(rep.get("loop_dispatches") or []),
                     "queue_size": rep.get("queue_size"),
                 }
             )
@@ -1033,17 +1233,24 @@ def run_pm_cycle(
     max_assignments: int = 5,
     state_dir: Path | None = None,
     dispatch_fleet: bool = True,
+    dispatch_loops: bool = True,
     fleet_base_dir: Path | None = None,
+    feature_loop_base_dir: Path | None = None,
+    bug_loop_base_dir: Path | None = None,
 ) -> dict[str, Any]:
     return ProjectManager(
         repo=repo,
         state_dir=state_dir,
         fleet_base_dir=fleet_base_dir,
+        feature_loop_base_dir=feature_loop_base_dir,
+        bug_loop_base_dir=bug_loop_base_dir,
         dispatch_fleet=dispatch_fleet,
+        dispatch_loops=dispatch_loops,
     ).run_cycle(
         dry_run=dry_run,
         max_assignments=max_assignments,
         dispatch_fleet=dispatch_fleet,
+        dispatch_loops=dispatch_loops,
     )
 
 
@@ -1054,17 +1261,24 @@ def run_pm_loop(
     max_assignments: int = 5,
     state_dir: Path | None = None,
     dispatch_fleet: bool = True,
+    dispatch_loops: bool = True,
     fleet_base_dir: Path | None = None,
+    feature_loop_base_dir: Path | None = None,
+    bug_loop_base_dir: Path | None = None,
 ) -> dict[str, Any]:
     return ProjectManager(
         repo=repo,
         state_dir=state_dir,
         fleet_base_dir=fleet_base_dir,
+        feature_loop_base_dir=feature_loop_base_dir,
+        bug_loop_base_dir=bug_loop_base_dir,
         dispatch_fleet=dispatch_fleet,
+        dispatch_loops=dispatch_loops,
     ).run_loop(
         max_cycles=max_cycles,
         dry_run=dry_run,
         max_assignments=max_assignments,
+        dispatch_fleet=dispatch_fleet,
     )
 
 
