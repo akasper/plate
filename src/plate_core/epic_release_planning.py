@@ -562,6 +562,105 @@ def build_er_plan_from_session(
     }
 
 
+def er_plan_ask_user_payload(plan: dict[str, Any]) -> dict[str, Any]:
+    """TUI for epic/release plan approval (#629/#640), including revise_requested resubmit."""
+    pid = str(plan.get("id") or "er-plan")
+    kind = str(plan.get("kind") or "epic")
+    title = str(plan.get("title") or "untitled")[:80]
+    status = str(plan.get("status") or "pending_approval")
+    if status in ("revise_requested", "revised"):
+        return {
+            "item_id": pid,
+            "item_type": "er_planning_approval",
+            "kind": kind,
+            "status": status,
+            "question": f"Revise requested for {kind} plan: {title} — resubmit?",
+            "options": [
+                {
+                    "id": "resubmit",
+                    "label": "Resubmit for approval",
+                    "description": (
+                        f"plate_er_planning_resubmit {pid} / gh plate er-plan --resubmit {pid}"
+                    ),
+                },
+                {
+                    "id": "resume_session",
+                    "label": "Resume ER Q&A",
+                    "description": f"Continue session {plan.get('session_id') or 'n/a'} then rebuild",
+                },
+                {
+                    "id": "reject",
+                    "label": "Reject",
+                    "description": f"plate_er_planning_decide {pid} reject",
+                },
+            ],
+            "multi_select": False,
+        }
+    return {
+        "item_id": pid,
+        "item_type": "er_planning_approval",
+        "kind": kind,
+        "status": status,
+        "question": f"Approve {kind} plan: {title}?",
+        "options": [
+            {
+                "id": "approve",
+                "label": "Approve",
+                "description": f"plate_er_planning_decide {pid} approve — create Epic/Release artifacts (host)",
+            },
+            {
+                "id": "revise",
+                "label": "Revise",
+                "description": f"plate_er_planning_decide {pid} revise — keep actionable until resubmit",
+            },
+            {
+                "id": "reject",
+                "label": "Reject",
+                "description": f"plate_er_planning_decide {pid} reject — drop plan",
+            },
+        ],
+        "multi_select": False,
+    }
+
+
+def resubmit_er_plan(
+    plan_id: str,
+    *,
+    title: str | None = None,
+    body: str | None = None,
+    note: str = "",
+    resubmitted_by: str = "human",
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Resubmit revise_requested epic/release plan for re-approval (#640/#629)."""
+    from .planning import resubmit_pending_plan
+
+    out = resubmit_pending_plan(
+        plan_id,
+        title=title,
+        body=body,
+        note=note,
+        resubmitted_by=resubmitted_by,
+        base_dir=base_dir,
+    )
+    if not out.get("ok"):
+        return out
+    plan = out.get("plan") or {}
+    # Prefer ER-shaped TUI after resubmit
+    plan["ask_user_question"] = er_plan_ask_user_payload(plan)
+    plan["approval_prompt"] = plan["ask_user_question"].get("question")
+    if plan.get("path"):
+        try:
+            Path(plan["path"]).write_text(
+                json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+        except OSError:
+            pass
+    out["plan"] = plan
+    out["ask_user_question"] = plan["ask_user_question"]
+    return out
+
+
 def decide_er_plan(
     plan_id: str,
     decision: str,
@@ -574,7 +673,8 @@ def decide_er_plan(
     """Approve/revise/reject a pending epic/release plan (#629/#640).
 
     Reuses the shared pending-plan ledger under `.agentic/planning/pending/`.
-    Does not create GitHub issues or cut releases.
+    Does not create GitHub issues or cut releases. Revise stays feed-actionable
+    until resubmit_er_plan (#630 parity).
     """
     from .planning import decide_pending_plan
 
@@ -607,9 +707,22 @@ def decide_er_plan(
                 "Do not implement children until refined ACs land",
             ]
     elif out.get("status") == "revise_requested":
+        # Keep ER TUI on the still-pending plan
+        plan["ask_user_question"] = er_plan_ask_user_payload(plan)
+        plan["approval_prompt"] = plan["ask_user_question"].get("question")
+        if plan.get("path"):
+            try:
+                Path(plan["path"]).write_text(
+                    json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+                )
+            except OSError:
+                pass
+        out["plan"] = plan
+        out["ask_user_question"] = plan["ask_user_question"]
         out["next_steps"] = [
             f"Resume ER session session_id={plan.get('session_id')}",
-            "plate_er_planning_start or load session; answer revised fields; rebuild",
+            f"Update plan then plate_er_planning_resubmit {plan.get('id')}",
+            "Feed keeps revise_requested until resubmit + re-approve",
         ]
     return out
 
@@ -644,59 +757,46 @@ def er_planning_feed_items(
     sessions_dir: Path | None = None,
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    """Feed rows for pending epic/release plans + incomplete ER sessions (#629/#640)."""
-    from .planning import list_pending_plans
+    """Feed rows for pending/revise epic/release plans + incomplete ER sessions (#629/#640)."""
+    from .planning import list_actionable_plans
 
     items: list[dict[str, Any]] = []
-    for pl in list_pending_plans(base_dir=pending_dir, limit=limit * 2):
+    for pl in list_actionable_plans(base_dir=pending_dir, limit=limit * 2):
         kind = str(pl.get("kind") or "")
         if kind not in ("epic", "release"):
             continue
-        if str(pl.get("status") or "pending_approval") not in (
-            "pending_approval",
-            "pending",
-            "",
-        ):
-            continue
+        st = str(pl.get("status") or "pending_approval")
         pid = str(pl.get("id") or "er-plan")
-        auj = pl.get("ask_user_question") or {
-            "item_id": pid,
-            "item_type": "er_planning_approval",
-            "kind": kind,
-            "question": f"Approve {kind} plan: {str(pl.get('title') or '')[:80]}?",
-            "options": [
-                {
-                    "id": "approve",
-                    "label": "Approve",
-                    "description": f"plate_er_planning_decide {pid} approve",
-                },
-                {
-                    "id": "revise",
-                    "label": "Revise",
-                    "description": f"plate_er_planning_decide {pid} revise",
-                },
-                {
-                    "id": "reject",
-                    "label": "Reject",
-                    "description": f"plate_er_planning_decide {pid} reject",
-                },
-            ],
-            "multi_select": False,
-        }
+        revised = st in ("revise_requested", "revised")
+        auj = pl.get("ask_user_question") or er_plan_ask_user_payload(pl)
+        # Ensure revise_requested has resubmit option even if stale payload
+        if revised and not any(
+            o.get("id") == "resubmit" for o in (auj.get("options") or [])
+        ):
+            auj = er_plan_ask_user_payload(pl)
         items.append(
             {
                 "id": pid,
                 "item_type": "er_planning_approval",
                 "kind": kind,
                 "title": pl.get("title") or f"Pending {kind} plan",
-                "status": pl.get("status") or "pending_approval",
-                "rank": 15,
+                "status": st,
+                "version": pl.get("version") or 1,
+                "rank": 13 if revised else 15,
                 "impact": "high",
-                "reason": f"Q&A {kind} plan awaiting approval (#629/#640)",
+                "reason": (
+                    f"Q&A {kind} plan revise requested — resubmit (#629/#640)"
+                    if revised
+                    else f"Q&A {kind} plan awaiting approval (#629/#640)"
+                ),
                 "approval_prompt": auj.get("question"),
                 "prompt_segment": (
-                    f"Approve {kind} plan {pid}: plate_er_planning_decide "
-                    f"{pid} approve|revise|reject"
+                    f"Resubmit {kind} plan {pid}: plate_er_planning_resubmit {pid}"
+                    if revised
+                    else (
+                        f"Approve {kind} plan {pid}: plate_er_planning_decide "
+                        f"{pid} approve|revise|reject"
+                    )
                 ),
                 "summary": (pl.get("body") or "")[:240],
                 "ask_user_question": auj,
