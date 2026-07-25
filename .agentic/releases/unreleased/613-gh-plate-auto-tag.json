@@ -1,0 +1,25 @@
+{
+  "slug": "613-gh-plate-auto-tag",
+  "change_type": "feature",
+  "surface": ".github/workflows/publish-gh-plate-extension.yml, src/plate_core/release.py, cli.py",
+  "summary": "Automate post-release gh-plate tag + GitHub Release (#613): workflow always ensures tag (no force-move) and release notes even when tree unchanged; commits PLATE_CORE_VERSION; plan_gh_plate_sync helper + finalize step visibility.",
+  "migration_impact": "Release PR merge → plate tag push continues to trigger publish-gh-plate-extension.yml. Thin repo gets matching vX.Y.Z tag + Release when missing. Requires THIN_SHIM_DEPLOY_TOKEN (existing). Not template methodology content.",
+  "migration_guidance": [
+    "1. Ensure THIN_SHIM_DEPLOY_TOKEN has contents:write on akasper/gh-plate.",
+    "2. On each plate tag v*, workflow syncs launcher + VERSION + PLATE_CORE_VERSION, tags, creates gh-plate GitHub Release if missing.",
+    "3. Repair: Actions → Publish gh-plate thin shim → workflow_dispatch with version.",
+    "4. gh plate release finalize prints the gh-plate sync plan for operators."
+  ],
+  "agent_notes": "Publishing-only workflow (not template_payload). Complements #614 version lock and #599 sync. Closes #613.",
+  "breaking": false,
+  "links": [
+    "#613",
+    "#614",
+    "#599",
+    "#591",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

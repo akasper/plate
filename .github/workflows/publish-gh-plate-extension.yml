@@ -20,15 +20,17 @@ name: Publish gh-plate thin shim (PLATE-CORE-PUBLISHING-ONLY)
 # The thin repo (akasper/gh-plate) is a minimal shim whose only job
 # is to host the launcher script. All real code, the plate-core PyPI
 # package, MCP, plugins, etc. live in the main akasper/plate repo.
+#
+# #613: Runs after plate tags are pushed (Release PR merge → tag on main)
+# and ensures matching tag + GitHub Release on gh-plate (idempotent).
 # ============================================================
 
 on:
   # Trigger after the normal release ceremony has produced a tag on main.
-  # Adjust as needed once the exact release cut + tag flow is finalized.
   push:
     tags:
       - 'v*'
-  # Also allow manual trigger for recovery / initial seed.
+  # Manual recovery / re-sync for a version.
   workflow_dispatch:
     inputs:
       version:
@@ -60,8 +62,15 @@ jobs:
             # Prefer the tag name when triggered by tag push.
             VER="${GITHUB_REF#refs/tags/}"
           fi
+          # Normalize to vX.Y.Z
+          case "$VER" in
+            v*) ;;
+            *) VER="v${VER}" ;;
+          esac
+          BARE="${VER#v}"
           echo "version=$VER" >> $GITHUB_OUTPUT
-          echo "Publishing shim for $VER"
+          echo "bare=$BARE" >> $GITHUB_OUTPUT
+          echo "Publishing shim for $VER (bare=$BARE)"
 
       - name: Checkout the thin shim repo (using deploy token with write to the thin repo only)
         uses: actions/checkout@v4
@@ -71,16 +80,15 @@ jobs:
           path: thin-shim
           fetch-depth: 0
 
-      - name: Copy canonical launcher from this release into the thin repo
+      - name: Sync launcher + version markers
         run: |
           set -euo pipefail
           # The root gh-plate in this repo is the source of truth for the launcher.
-          # It already prefers the installed plate_core package.
           cp gh-plate thin-shim/gh-plate
           chmod +x thin-shim/gh-plate
 
           VER="${{ steps.version.outputs.version }}"
-          BARE="${VER#v}"
+          BARE="${{ steps.version.outputs.bare }}"
           # VERSION + PLATE_CORE_VERSION markers power version lock (#614).
           echo "$VER" > thin-shim/VERSION
           echo "$BARE" > thin-shim/PLATE_CORE_VERSION
@@ -96,41 +104,79 @@ jobs:
           fi
           echo "Verified: thin-shim/gh-plate is executable"
 
-      - name: Commit and push to the thin repo + create matching tag
+      - name: Commit and push to the thin repo (if changed)
         working-directory: thin-shim
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Force the executable bit in the index (defensive; checkout + chmod + cp should already have it)
           git add --chmod=+x gh-plate
-          git add VERSION
+          git add VERSION PLATE_CORE_VERSION
           if git diff --cached --quiet; then
-            echo "No changes to the launcher for this version; nothing to do."
+            echo "No content changes for ${{ steps.version.outputs.version }}; continuing to ensure tag/release."
+          else
+            git commit -m "Sync gh-plate launcher for ${{ steps.version.outputs.version }} (matches plate-core ${{ steps.version.outputs.bare }})"
+            git push origin HEAD:main
+            echo "Pushed sync commit to gh-plate main."
+          fi
+
+      - name: Ensure matching tag on gh-plate (idempotent, no force-move)
+        working-directory: thin-shim
+        env:
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch origin --tags
+          if git ls-remote --tags origin "refs/tags/${VER}" | grep -q .; then
+            echo "Tag ${VER} already exists on gh-plate; leaving immutable."
+          else
+            # Tag current HEAD (synced main tip)
+            git checkout main 2>/dev/null || git checkout -B main origin/main
+            git pull --ff-only origin main || true
+            git tag "${VER}"
+            git push origin "refs/tags/${VER}"
+            echo "Created tag ${VER} on gh-plate."
+          fi
+
+      - name: Ensure GitHub Release on gh-plate (idempotent)
+        working-directory: thin-shim
+        env:
+          GH_TOKEN: ${{ secrets.THIN_SHIM_DEPLOY_TOKEN }}
+          VER: ${{ steps.version.outputs.version }}
+          BARE: ${{ steps.version.outputs.bare }}
+        run: |
+          set -euo pipefail
+          # Skip if release already exists
+          if gh release view "${VER}" --repo akasper/gh-plate >/dev/null 2>&1; then
+            echo "GitHub Release ${VER} already exists on gh-plate."
             exit 0
           fi
+          NOTES=$(cat <<EOF
+          ## gh-plate ${VER}
 
-          git commit -m "Sync gh-plate launcher for ${{ steps.version.outputs.version }} (matches plate-core ${{ steps.version.outputs.version }})"
+          Thin GitHub CLI extension shim matching **plate-core ${BARE}**.
 
-          git push origin HEAD:main
+          - Install pin: \`gh extension install akasper/gh-plate@${VER}\`
+          - Runtime pins \`plate-core==${BARE}\` via VERSION / PLATE_CORE_VERSION (#614)
+          - Source: [akasper/plate ${VER}](https://github.com/akasper/plate/releases/tag/${VER})
 
-          # Create (or move) a lightweight tag on the thin repo for discoverability.
-          # Users can still just `gh extension install akasper/gh-plate` (latest).
-          # Guard against silent overwrite if re-triggered for the same version
-          # (non-blocking review feedback on #601). Check first; only force if absent.
-          VER="${{ steps.version.outputs.version }}"
-          if git ls-remote --tags origin "refs/tags/${VER}" | grep -q . || git ls-remote --tags origin "${VER}" | grep -q .; then
-            echo "Tag ${VER} already exists on thin repo; skipping force tag push to protect immutability. (Existing tag points to prior commit for this version.)"
+          Automated by plate workflow publish-gh-plate-extension.yml (#613).
+          EOF
+          )
+          # gh release create fails if tag missing; tag step above ensures it
+          if gh release create "${VER}" \
+              --repo akasper/gh-plate \
+              --title "gh-plate ${VER}" \
+              --notes "${NOTES}"; then
+            echo "Created GitHub Release ${VER} on gh-plate."
           else
-            git tag -f "${VER}"
-            git push origin -f "${VER}"
+            echo "WARNING: gh release create failed (non-fatal if race/exists)."
+            gh release view "${VER}" --repo akasper/gh-plate || true
           fi
-
-          echo "Thin shim updated and tagged for ${{ steps.version.outputs.version }}"
 
       - name: Summary
         run: |
           echo "gh-plate thin shim sync complete for version ${{ steps.version.outputs.version }}."
-          echo "Users can now: gh extension install akasper/gh-plate"
-          echo "See Epic #596 (and children #597/#598/#599) for context and isolation rules."
+          echo "Users: gh extension install akasper/gh-plate@${{ steps.version.outputs.version }}"
+          echo "See #613, #614, #599 for isolation rules."

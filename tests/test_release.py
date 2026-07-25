@@ -25,6 +25,8 @@ from plate_core.release import (
     validate_release_workspace,
     collect_closes_block,
     create_github_release,
+    normalize_release_tag,
+    plan_gh_plate_sync,
     perform_guarded_hard_reset,
     ensure_next_release_issue,
 )
@@ -1294,5 +1296,29 @@ class FinalizeAutomationTests(unittest.TestCase):
         self.assertTrue(info.get("created") or info.get("exists"))
 
 
+class GhPlateSyncPlanTests(unittest.TestCase):
+    """#613 pure plan helper for thin-shim post-release sync."""
+
+    def test_normalize_tag(self):
+        self.assertEqual(normalize_release_tag("0.7.2"), "v0.7.2")
+        self.assertEqual(normalize_release_tag("v1.0.0"), "v1.0.0")
+        self.assertIsNone(normalize_release_tag(""))
+
+    def test_plan_gh_plate_sync(self):
+        plan = plan_gh_plate_sync("v0.8.0")
+        self.assertTrue(plan["ok"])
+        self.assertEqual(plan["tag"], "v0.8.0")
+        self.assertEqual(plan["version"], "0.8.0")
+        self.assertEqual(plan["files"]["PLATE_CORE_VERSION"], "0.8.0")
+        self.assertTrue(plan["idempotent"])
+        self.assertIn("plate-core 0.8.0", plan["notes_body"])
+        self.assertIn("publish-gh-plate-extension.yml", plan["workflow"])
+
+    def test_plan_requires_version(self):
+        plan = plan_gh_plate_sync(None)
+        self.assertFalse(plan["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()
+
