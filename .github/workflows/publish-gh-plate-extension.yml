@@ -79,9 +79,12 @@ jobs:
           cp gh-plate thin-shim/gh-plate
           chmod +x thin-shim/gh-plate
 
-          # Write / update a simple VERSION marker so versions are explicit and auditable.
-          echo "${{ steps.version.outputs.version }}" > thin-shim/VERSION
-          echo "Synced launcher + VERSION for ${{ steps.version.outputs.version }}"
+          VER="${{ steps.version.outputs.version }}"
+          BARE="${VER#v}"
+          # VERSION + PLATE_CORE_VERSION markers power version lock (#614).
+          echo "$VER" > thin-shim/VERSION
+          echo "$BARE" > thin-shim/PLATE_CORE_VERSION
+          echo "Synced launcher + VERSION=$VER PLATE_CORE_VERSION=$BARE"
 
       - name: Verify executable bit (critical for gh extension runtime)
         run: |
