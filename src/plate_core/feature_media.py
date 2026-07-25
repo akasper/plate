@@ -300,31 +300,19 @@ def plan_feature_media(
     }
     # Charge durable spend only on live budget path (use_live_budget=True).
     # Explicit budget_remaining + use_live_budget=False is for tests/dry-run overrides.
-    if est_tokens > 0 and use_live_budget:
-        try:
-            from .autonomy import record_budget_spend
+    try:
+        from .autonomy import apply_live_budget_charge
 
-            charge = record_budget_spend(
-                est_tokens,
-                base_dir=budget_base_dir,
-                reason=f"feature_media_plan:{rec.id}",
-                action_kind="feature_media_plan",
-            )
-            out["budget_charge"] = charge
-            if charge.get("ok"):
-                rem = effective_remaining
-                if rem is not None:
-                    out["budget_remaining"] = max(0, int(rem) - est_tokens)
-                out["notes"].append(
-                    f"budget charged: {est_tokens} tokens "
-                    f"(spent_today={charge.get('spent_today')})"
-                )
-            else:
-                out["notes"].append(
-                    f"budget charge skipped: {charge.get('error') or 'unknown'}"
-                )
-        except Exception as exc:
-            out["notes"].append(f"budget charge skipped: {exc}")
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="feature_media_plan",
+            reason=f"feature_media_plan:{rec.id}",
+            base_dir=budget_base_dir,
+        )
+    except Exception as exc:
+        out["notes"].append(f"budget charge skipped: {exc}")
     return out
 
 

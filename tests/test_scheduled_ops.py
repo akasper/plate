@@ -129,7 +129,7 @@ class TestRunGates(unittest.TestCase):
         self.assertEqual(out.get("cost_estimate_tokens"), est)
         self.assertEqual(out.get("budget_remaining"), max(0, est - 1))
 
-    def test_budget_allows_when_remaining_sufficient(self):
+    def test_budget_allows_when_remaining_sufficient_no_charge(self):
         est = estimate_op_cost("scheduled-refactor", dry_run=True)["estimated_tokens"]
         out = run_scheduled_op(
             "scheduled-refactor",
@@ -143,6 +143,7 @@ class TestRunGates(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertEqual(out.get("budget_remaining"), est + 1000)
         self.assertIn("cost_estimate_tokens", out)
+        self.assertNotIn("budget_charge", out)
 
     def test_plan_includes_cost_estimate(self):
         p = plan_op("scheduled-refactor")

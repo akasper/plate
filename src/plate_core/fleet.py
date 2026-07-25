@@ -354,11 +354,24 @@ def create_handoff(
             int(effective_remaining) if effective_remaining is not None else None
         ),
         "cost_estimate": cost_est,
+        "notes": list(budget_notes),
         "delegation_hint": (
             f"plate_delegate_to_agent / gh plate agents delegate {ta} "
             f"--task {json.dumps(task_s)[:80]}"
         ),
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=int(effective_tokens or 0),
+            use_live_budget=use_live_budget,
+            action_kind="fleet_handoff",
+            reason=f"create_handoff:{packet.handoff_id}",
+        )
+    except Exception:
+        pass
 
     if open_checkpoint or (need_human and risk_n in ("high", "critical")):
         try:
