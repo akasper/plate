@@ -372,10 +372,17 @@ def start_feature_loop(
     pr_number: int | None = None,
     branch: str | None = None,
     budget_remaining: int | None = None,
+    use_live_budget: bool = True,
+    budget_base_dir: Path | None = None,
     base_dir: Path | None = None,
     record_ledger: bool = True,
 ) -> dict[str, Any]:
-    """Start a durable Feature implementation run."""
+    """Start a durable Feature implementation run.
+
+    When ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
+    hydrate remaining tokens from durable #634 budget snapshot so starts honor the
+    same rails as AutonomyEngine without a manual CLI flag.
+    """
     title = (feature_title or "").strip() or (
         f"Feature #{feature_number}" if feature_number else "Untitled feature"
     )
@@ -394,10 +401,41 @@ def start_feature_loop(
     )
     blocked = False
     notes = list(human.get("reasons") or [])
-    if budget_remaining is not None and est["estimated_tokens"] > budget_remaining:
+    budget_snap: dict[str, Any] | None = None
+    effective_budget = budget_remaining
+    if effective_budget is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            budget_snap = get_budget_snapshot(
+                estimated_tokens=int(est["estimated_tokens"]),
+                base_dir=budget_base_dir,
+            )
+            # Only enforce live rails when autonomy is enabled (risk != off)
+            if budget_snap.get("enabled"):
+                effective_budget = int(budget_snap.get("remaining_tokens") or 0)
+                notes.append(
+                    f"budget hydrated: remaining_tokens={effective_budget} "
+                    f"pressure={budget_snap.get('budget_pressure')}"
+                )
+                if budget_snap.get("would_pause") or budget_snap.get("would_throttle"):
+                    # Mirror engine: pause/throttle both block start of large Features
+                    blocked = True
+                    notes.append(
+                        budget_snap.get("gate_reason")
+                        or "blocked: live budget estimate gate"
+                    )
+        except Exception as exc:
+            notes.append(f"budget hydrate skipped: {exc}")
+
+    if (
+        not blocked
+        and effective_budget is not None
+        and est["estimated_tokens"] > effective_budget
+    ):
         blocked = True
         notes.append(
-            f"blocked: est {est['estimated_tokens']} > budget remaining {budget_remaining}"
+            f"blocked: est {est['estimated_tokens']} > budget remaining {effective_budget}"
         )
 
     ts = _now()
@@ -428,6 +466,12 @@ def start_feature_loop(
             "risk_tolerance": risk_tolerance,
             "estimate": est,
             "e2e": e2e,
+            "budget_remaining": effective_budget,
+            "budget_source": (
+                "explicit"
+                if budget_remaining is not None
+                else ("live" if budget_snap and budget_snap.get("enabled") else "none")
+            ),
         },
     )
     data = _load(base_dir)
@@ -440,7 +484,10 @@ def start_feature_loop(
         "estimate": est,
         "human_assessment": human,
         "blocked": blocked,
+        "budget_remaining": effective_budget,
     }
+    if budget_snap is not None:
+        out["budget_snapshot"] = budget_snap
     if blocked:
         out["error"] = notes[-1] if notes else "budget blocked"
     if record_ledger:

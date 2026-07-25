@@ -1512,6 +1512,170 @@ def get_autonomy_status(repo: str | None = None) -> dict[str, Any]:
     return engine.get_status().to_dict()
 
 
+def get_budget_snapshot(
+    repo: str | None = None,
+    *,
+    base_dir: Path | None = None,
+    estimated_tokens: int | None = None,
+) -> dict[str, Any]:
+    """Human-facing #634 budget UX snapshot (CLI/MCP/feature_loop hydrate).
+
+    Merges .plate autonomy.token_budget + cost_ceiling_usd with durable
+    ``.agentic/budget/spend.json`` counters so operators and loops see the same
+    rails the AutonomyEngine enforces across process restarts.
+
+    Returns dict with limits, spend, remaining, burn, would_pause/throttle for
+    an optional estimate, and paths. Safe when config/spend missing.
+    """
+    try:
+        cfg = load_plate_config()
+        auto = dict(getattr(cfg, "autonomy", None) or {})
+    except Exception:
+        auto = {}
+
+    tb = auto.get("token_budget") if isinstance(auto.get("token_budget"), dict) else {}
+    try:
+        daily = int(tb.get("daily") if tb.get("daily") is not None else 50000)
+    except (TypeError, ValueError):
+        daily = 50000
+    try:
+        per_cycle = int(tb.get("per_cycle") if tb.get("per_cycle") is not None else 8000)
+    except (TypeError, ValueError):
+        per_cycle = 8000
+    action_policy = str(tb.get("action") or auto.get("action") or "pause").lower()
+    if action_policy not in ("pause", "throttle", "warn"):
+        action_policy = "pause"
+
+    ceiling_raw = auto.get("cost_ceiling_usd")
+    try:
+        cost_ceiling_usd = float(ceiling_raw) if ceiling_raw is not None else None
+    except (TypeError, ValueError):
+        cost_ceiling_usd = None
+
+    risk = str(auto.get("risk_tolerance") or "off").lower()
+    enabled = bool(auto.get("enabled", False)) and risk != "off"
+
+    spend = load_budget_spend(base_dir=base_dir) or {}
+    try:
+        spent_today = int(spend.get("spent_today") or 0)
+    except (TypeError, ValueError):
+        spent_today = 0
+    try:
+        spent_this_cycle = int(spend.get("spent_this_cycle") or 0)
+    except (TypeError, ValueError):
+        spent_this_cycle = 0
+    try:
+        spent_usd_today = float(spend.get("spent_usd_today") or 0.0)
+    except (TypeError, ValueError):
+        spent_usd_today = 0.0
+    # Prefer recomputed USD when token spend present (keeps heuristic consistent)
+    if spent_usd_today <= 0 and spent_today > 0:
+        spent_usd_today = tokens_to_usd(spent_today)
+
+    remaining_tokens = max(0, daily - spent_today)
+    remaining_cycle = max(0, per_cycle - spent_this_cycle)
+    remaining_usd = None
+    if cost_ceiling_usd is not None:
+        remaining_usd = max(0.0, round(cost_ceiling_usd - spent_usd_today, 6))
+
+    burn_rate = 0.0
+    if daily > 0:
+        burn_rate = round(max(0.0, min(100.0, (spent_today / daily) * 100)), 1)
+
+    est = int(estimated_tokens) if estimated_tokens is not None else None
+    would_pause = False
+    would_throttle = False
+    gate_reason = None
+    if est is not None and est > 0:
+        over_daily = spent_today + est > daily
+        over_cycle = spent_this_cycle + est > per_cycle
+        over_usd = (
+            cost_ceiling_usd is not None
+            and (spent_usd_today + tokens_to_usd(est)) > cost_ceiling_usd
+        )
+        breach = over_daily or over_cycle or over_usd
+        if breach:
+            if action_policy == "warn":
+                gate_reason = "estimate exceeds budget (warn policy — would proceed)"
+            elif action_policy == "throttle":
+                would_throttle = True
+                gate_reason = "estimate exceeds budget (throttle)"
+            else:
+                would_pause = True
+                gate_reason = "estimate exceeds budget (pause)"
+            if over_daily:
+                gate_reason = f"{gate_reason}: daily"
+            elif over_cycle:
+                gate_reason = f"{gate_reason}: per_cycle"
+            elif over_usd:
+                gate_reason = f"{gate_reason}: cost_ceiling_usd"
+
+    # Pressure without estimate: remaining under 10% of daily
+    pressure = "ok"
+    if remaining_tokens <= 0 or (remaining_usd is not None and remaining_usd <= 0):
+        pressure = "exhausted"
+    elif burn_rate >= 90 or remaining_tokens < max(1, int(daily * 0.1)):
+        pressure = "high"
+    elif burn_rate >= 70:
+        pressure = "elevated"
+
+    spend_path = str(_budget_spend_path(base_dir))
+    return {
+        "enabled": enabled,
+        "risk_tolerance": risk,
+        "action_policy": action_policy,
+        "daily_limit": daily,
+        "per_cycle_limit": per_cycle,
+        "cost_ceiling_usd": cost_ceiling_usd,
+        "spent_today": spent_today,
+        "spent_this_cycle": spent_this_cycle,
+        "spent_usd_today": round(spent_usd_today, 6),
+        "remaining_tokens": remaining_tokens,
+        "remaining_cycle_tokens": remaining_cycle,
+        "remaining_usd": remaining_usd,
+        "burn_rate": burn_rate,
+        "budget_pressure": pressure,
+        "estimated_tokens": est,
+        "would_pause": would_pause,
+        "would_throttle": would_throttle,
+        "gate_reason": gate_reason,
+        "spend_path": spend_path,
+        "spend_day": spend.get("day"),
+        "updated_at": spend.get("updated_at"),
+        "usd_per_1k_tokens": _USD_PER_1K_TOKENS,
+        "note": (
+            "Durable spend under .agentic/budget/spend.json (#634). "
+            "risk_tolerance=off skips AutonomyEngine enforce; snapshot still shows limits."
+        ),
+        "repo": repo,
+    }
+
+
+def format_budget_snapshot_markdown(snap: dict[str, Any]) -> str:
+    """Render get_budget_snapshot for CLI / feed text."""
+    lines = [
+        "## Budget snapshot (#634)",
+        f"- Enabled: {snap.get('enabled')} | risk: {snap.get('risk_tolerance')} | policy: {snap.get('action_policy')}",
+        f"- Daily: {snap.get('spent_today')}/{snap.get('daily_limit')} tokens "
+        f"(remaining {snap.get('remaining_tokens')}, burn {snap.get('burn_rate')}%)",
+        f"- Per-cycle: {snap.get('spent_this_cycle')}/{snap.get('per_cycle_limit')} "
+        f"(remaining {snap.get('remaining_cycle_tokens')})",
+        f"- USD: spent={snap.get('spent_usd_today')} ceiling={snap.get('cost_ceiling_usd')} "
+        f"remaining={snap.get('remaining_usd')}",
+        f"- Pressure: {snap.get('budget_pressure')}",
+    ]
+    if snap.get("estimated_tokens") is not None:
+        lines.append(
+            f"- Estimate {snap.get('estimated_tokens')}: "
+            f"would_pause={snap.get('would_pause')} would_throttle={snap.get('would_throttle')} "
+            f"({snap.get('gate_reason') or 'within budget'})"
+        )
+    lines.append(f"- Spend file: {snap.get('spend_path')}")
+    if snap.get("note"):
+        lines.append(f"- Note: {snap.get('note')}")
+    return "\n".join(lines) + "\n"
+
+
 def run_autonomy_cycle(repo: str | None = None, dry_run: bool = False, max_steps: int | None = None) -> dict[str, Any]:
     engine = AutonomyEngine(repo=repo)
     return engine.run_cycle(dry_run=dry_run, max_steps=max_steps).to_dict()

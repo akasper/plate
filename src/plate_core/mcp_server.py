@@ -34,7 +34,7 @@ from .release import (
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
-from .autonomy import get_autonomy_status, run_autonomy_cycle
+from .autonomy import get_autonomy_status, get_budget_snapshot, run_autonomy_cycle
 from .checkpoint import (
     create_checkpoint,
     decide_checkpoint,
@@ -642,6 +642,12 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 ).to_dict()
         elif name == "plate_autonomy_status":
             payload = get_autonomy_status(args.get("repo"))
+        elif name == "plate_autonomy_budget":
+            est = args.get("estimated_tokens") or args.get("estimate_tokens")
+            payload = get_budget_snapshot(
+                args.get("repo"),
+                estimated_tokens=int(est) if est is not None else None,
+            )
         elif name == "plate_pm_status":
             payload = get_pm_status(args.get("repo"))
         elif name == "plate_pm_team":
@@ -928,6 +934,9 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             labels = args.get("labels") or []
             if isinstance(labels, str):
                 labels = [x.strip() for x in labels.split(",") if x.strip()]
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = start_feature_loop(
                 feature_number=args.get("feature_number") or args.get("feature"),
                 feature_title=str(args.get("feature_title") or args.get("title") or ""),
@@ -942,6 +951,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 pr_number=args.get("pr_number") or args.get("pr"),
                 branch=args.get("branch"),
                 budget_remaining=args.get("budget_remaining"),
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_feature_loop_advance":
             payload = advance_feature_loop(
@@ -2516,6 +2526,24 @@ def run() -> None:
                                 },
                             },
                             {
+                                "name": "plate_autonomy_budget",
+                                "description": "Durable #634 budget snapshot: limits, spend.json counters, remaining tokens/USD, pressure, optional estimate would_pause/throttle. Use before long feature loops.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "estimated_tokens": {
+                                            "type": "integer",
+                                            "description": "Optional estimate to project would_pause/throttle.",
+                                        },
+                                        "estimate_tokens": {
+                                            "type": "integer",
+                                            "description": "Alias for estimated_tokens.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
                                 "name": "plate_pm_status",
                                 "description": "Project Manager orchestrator status: budget, team size, open assignments/checkpoints (#660).",
                                 "inputSchema": {
@@ -3025,6 +3053,10 @@ def run() -> None:
                                         "pr_number": {"type": "integer"},
                                         "branch": {"type": "string"},
                                         "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "When true (default), hydrate remaining tokens from durable #634 snapshot if budget_remaining omitted.",
+                                        },
                                     },
                                 },
                             },
