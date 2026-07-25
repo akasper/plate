@@ -1,0 +1,26 @@
+{
+  "slug": "656-feed-approval-rank-glue",
+  "change_type": "feature",
+  "surface": "src/plate_core/feed.py, tests/test_feed.py",
+  "summary": "#656 feed glue: honor rank/status/item_type from artifact + Q&A plan approval sources (revise_requested sorts higher); first-class planning_approval/er_planning_approval/artifact_approval types; ask_user_question fallback with resubmit for revised plans/artifacts.",
+  "migration_impact": "Feed presentation item_type may be planning_approval/er_planning_approval/artifact_approval instead of generic approval. Revised items rank ahead of pending. Hosts should honor pre-shaped ask_user_question then fallback options.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Present feed presentation[].ask_user_question; option ids include resubmit for revise_requested/revised.",
+    "3. No .plate schema change."
+  ],
+  "agent_notes": "Pairs with #630/#640 plan resubmit and #632 artifact resubmit. Prefer source-provided rank over index-only ranking.",
+  "breaking": false,
+  "links": [
+    "#747",
+    "#656",
+    "#631",
+    "#630",
+    "#640",
+    "#632",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
