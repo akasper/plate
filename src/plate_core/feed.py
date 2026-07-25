@@ -123,9 +123,17 @@ def issue_to_feed_item(issue: dict[str, Any], item_type: str) -> FeedItem:
     updated = str(issue.get("updated_at") or issue.get("created_at") or "")
     rank = _rank_score(item_type, impact, labels, updated)
     badges = [item_type, impact]
+    lower_labs = {x.lower() for x in labels}
     for key in ("need:human-review", "status:blocked", "risk:high", "risk:critical", "status:ready-to-work"):
-        if key in {x.lower() for x in labels}:
+        if key in lower_labs:
             badges.append(key)
+    # #643 driver labels: surface co-existence ownership in feed
+    for dlab in ("driver:human", "driver:agent", "driver:collaborative"):
+        if dlab in lower_labs:
+            badges.append(dlab)
+            if dlab == "driver:human":
+                rank = max(1, rank - 8)  # human-driven items surface earlier
+            break
     if item_type == "question":
         prompt = (
             f"Present Question #{number} via native ask_user_question with minimal front-matter. "
@@ -138,6 +146,9 @@ def issue_to_feed_item(issue: dict[str, Any], item_type: str) -> FeedItem:
             f"Title: {title}. Wait for <!-- PLATE-TASK-CLOSED --> completion signal."
         )
         reason = "Open human Task"
+    if "driver:human" in lower_labs:
+        prompt += " driver:human — agents pause auto-delegation; human owns next steps (#643)."
+        reason = f"{reason}; human driving"
     return FeedItem(
         id=f"{item_type}-{number}",
         item_type=item_type,

@@ -629,6 +629,16 @@ class ProjectManager:
         ts = _now()
         status = self.get_status()
         work = self.collect_work(limit=max(max_assignments * 2, 5))
+        # #643: pause items labeled driver:human (human owns; no auto-delegate)
+        human_paused: list[dict[str, Any]] = []
+        try:
+            from .collab import filter_work_for_driver
+
+            split = filter_work_for_driver(work, skip_human_driver=True)
+            human_paused = list(split.get("paused_human_driver") or [])
+            work = list(split.get("assignable") or work)
+        except Exception:
+            human_paused = []
         new_assignments: list[dict[str, Any]] = []
         blocked: list[str] = []
 
@@ -734,8 +744,16 @@ class ProjectManager:
             "status": "completed",
             "assignments": new_assignments,
             "blocked": blocked,
+            "human_paused": [
+                {
+                    "id": x.get("id") or x.get("number"),
+                    "title": x.get("title"),
+                    "driver": "human",
+                }
+                for x in human_paused
+            ],
             "pm_status": self.get_status().to_dict(),
-            "work_considered": len(work),
+            "work_considered": len(work) + len(human_paused),
             "timestamp": ts,
             "dry_run": dry_run,
             "queue_size": len(self._assignments),
