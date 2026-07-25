@@ -350,6 +350,12 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - Drop failing TDD scaffolds via `plate_design_contract_scaffold` (python|typescript). Do not weaken assertions to pass.
 - Pending contracts surface in the feed; pair with feature_loop `needs_design_validation`.
 
+### Release notes media (#635)
+- Attach demo GIF/video on fragments via optional `media: [{type, path|url, caption, approval_status}]`.
+- Aggregate/render: `plate_release_media_manifest` / `gh plate release-media`; cut_release embeds media into release.json.
+- Prefer approved media in GitHub Release body; pending items surface for user approval in the feed.
+- Capture via record-e2e-gif / Playwright into `tests/e2e/fixtures/gifs/` then reference path in the fragment.
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 
