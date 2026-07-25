@@ -1332,6 +1332,15 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 dry_run=bool(args.get("dry_run", True)),
             )
         elif name == "plate_scheduled_op_run":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = run_scheduled_op(
                 str(args.get("op_id") or args.get("id") or ""),
                 dry_run=bool(args.get("dry_run", True)),
@@ -1339,6 +1348,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 approved=bool(args.get("approved") or False),
                 checkpoint_id=args.get("checkpoint_id"),
                 note=str(args.get("note") or ""),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_scheduled_op_runs":
             payload = {
@@ -3742,7 +3753,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_scheduled_op_run",
-                                "description": "Run/record scheduled op (dry_run default; high/critical need approved) (#641).",
+                                "description": "Run/record scheduled op (dry_run default; high/critical need approved; #634 budget gate) (#641).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -3752,6 +3763,14 @@ def run() -> None:
                                         "approved": {"type": "boolean"},
                                         "checkpoint_id": {"type": "string"},
                                         "note": {"type": "string"},
+                                        "budget_remaining": {
+                                            "type": "integer",
+                                            "description": "Explicit remaining tokens; blocks when est exceeds remaining (#634).",
+                                        },
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate remaining from durable spend.json when budget_remaining omitted (default true).",
+                                        },
                                     },
                                     "required": ["op_id"],
                                 },
