@@ -117,6 +117,8 @@ class TestLifecycle(unittest.TestCase):
         self.assertTrue(ok["advanced"])
 
     def test_high_risk_checkpoint_and_feed(self):
+        from plate_core.checkpoint import decide_checkpoint
+
         r = start_feature_loop(
             feature_number=14,
             feature_title="API break",
@@ -130,6 +132,23 @@ class TestLifecycle(unittest.TestCase):
         update_feature_loop(rid, stage="babysit", pr_number=1, base_dir=self.base)
         out = advance_feature_loop(rid, base_dir=self.base)
         self.assertEqual(out["to_stage"], "human_checkpoint")
+        # #648 bridge: auto-open durable checkpoint + packet decide options
+        cid = out.get("checkpoint_id") or out["run"].get("checkpoint_id")
+        self.assertTrue(cid and str(cid).startswith("cp-"))
+        pkt = out["packet"]
+        self.assertEqual(pkt.get("checkpoint_id"), cid)
+        self.assertTrue(any(o.get("id") == "approve" for o in pkt["ask_user_question"]["options"]))
+        blocked = advance_feature_loop(rid, base_dir=self.base)
+        self.assertFalse(blocked["advanced"])
+        decide_checkpoint(
+            cid,
+            "approve",
+            decided_by="test",
+            base_dir=self.base / "checkpoints",
+        )
+        ok = advance_feature_loop(rid, base_dir=self.base)
+        self.assertTrue(ok["advanced"])
+        self.assertEqual(ok["to_stage"], "merge_eligible")
         feed = feature_loop_feed_items(base_dir=self.base)
         self.assertTrue(feed)
         t = run_feature_loop_tick(rid, dry_run=True, base_dir=self.base)

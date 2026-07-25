@@ -1,0 +1,24 @@
+{
+  "slug": "648-loop-checkpoint-bridge",
+  "change_type": "feature",
+  "surface": "src/plate_core/bug_loop.py, feature_loop.py, checkpoint.py",
+  "summary": "Harden #648 across bug/feature loops: entering human_checkpoint auto-opens a durable checkpoint; advance to merge_eligible requires approve; packets expose decide ask_user_question options.",
+  "migration_impact": "Bug and Feature loop advance at human_checkpoint now creates .agentic/checkpoints records (or under test base_dir/checkpoints) and blocks leave until plate_checkpoint_decide approve. force_skip_checkpoint still bypasses for low-risk paths.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. On high-risk bug/feature loops: advance into human_checkpoint (auto-opens cp-*).",
+    "3. User decides via plate_checkpoint_decide / gh plate checkpoint --decide ID --decision approve (or feed options).",
+    "4. Re-advance the loop to merge_eligible only after approval; do not merge while pending."
+  ],
+  "agent_notes": "Prefer the checkpoint_id on the loop run over ad-hoc comments. force_skip_checkpoint is only for explicit low-risk skip paths. Feed/TUI hosts should present packet ask_user_question approve/reject options at human_checkpoint.",
+  "breaking": false,
+  "links": [
+    "#648",
+    "#638",
+    "#639",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
