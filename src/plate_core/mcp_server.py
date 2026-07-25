@@ -72,6 +72,7 @@ from .pm import (
     run_pm_cycle,
     run_pm_loop,
 )
+from .tasks import close_task_with_signal, create_task
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -498,6 +499,28 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 status=str(args.get("status") or "done"),
                 note=str(args.get("note") or ""),
                 repo=args.get("repo"),
+            )
+        elif name == "plate_task_create":
+            payload = create_task(
+                str(args.get("title") or ""),
+                human_action=str(args.get("human_action") or args.get("action") or ""),
+                why_agent_cannot=str(args.get("why_agent_cannot") or args.get("why") or ""),
+                context=str(args.get("context") or ""),
+                instructions=str(args.get("instructions") or ""),
+                done_signal=args.get("done_signal"),
+                related_links=args.get("related_links") or args.get("related"),
+                milestone=args.get("milestone"),
+                epic_milestone_name=args.get("epic_milestone"),
+                labels=list(args.get("labels") or []) if isinstance(args.get("labels"), list) else None,
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", False)),
+            )
+        elif name == "plate_task_close":
+            payload = close_task_with_signal(
+                int(args.get("number") or args.get("issue_number") or 0),
+                comment=str(args.get("comment") or args.get("note") or "Task complete."),
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", False)),
             )
         elif name == "plate_ledger_record":
             payload = record_decision(
@@ -1577,6 +1600,41 @@ def run() -> None:
                                         "note": {"type": "string"},
                                     },
                                     "required": ["assignment_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_task_create",
+                                "description": "Create a human-only Task issue with the 6-field contract (#359). Redacts secret-looking text. Agents never complete the human work.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "human_action": {"type": "string"},
+                                        "why_agent_cannot": {"type": "string"},
+                                        "context": {"type": "string"},
+                                        "instructions": {"type": "string"},
+                                        "done_signal": {"type": "string"},
+                                        "related_links": {"type": "string"},
+                                        "milestone": {"type": "string"},
+                                        "epic_milestone": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                    },
+                                    "required": ["title", "human_action", "why_agent_cannot", "context", "instructions"],
+                                },
+                            },
+                            {
+                                "name": "plate_task_close",
+                                "description": "Close a Task with <!-- PLATE-TASK-CLOSED --> after human completion (#359). Do not invent completion.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "number": {"type": "integer"},
+                                        "comment": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                    },
+                                    "required": ["number"],
                                 },
                             },
                             {
