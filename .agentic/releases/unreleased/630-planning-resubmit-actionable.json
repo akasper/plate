@@ -1,0 +1,26 @@
+{
+  "slug": "630-planning-resubmit-actionable",
+  "change_type": "feature",
+  "surface": "src/plate_core/planning.py, cli.py, mcp_server.py, tests/test_planning.py",
+  "summary": "Harden #630 Q&A planning: revise keeps plans actionable (revise_requested) with resubmit TUI; resubmit_pending_plan + history sidecar; list_actionable_plans; feed ranks revised higher; CLI --resubmit/--history/--actionable; MCP plate_planning_resubmit/history.",
+  "migration_impact": "Revise no longer archives plans out of the feed. Approve after revise requires resubmit first. New MCP tools and CLI flags. History under .agentic/planning/pending/*.history.jsonl (local).",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. On revise: plan stays pending; feed shows resubmit option.",
+    "3. After edits: gh plate plan --resubmit ID or plate_planning_resubmit.",
+    "4. Then plate_planning_decide approve. Use --actionable / --history for ops."
+  ],
+  "agent_notes": "Parity with #632 artifact resubmit. Does not auto-create GitHub issues on approve. Epic/release plans remain on er_planning surfaces.",
+  "breaking": false,
+  "links": [
+    "#743",
+    "#630",
+    "#628",
+    "#632",
+    "#656",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

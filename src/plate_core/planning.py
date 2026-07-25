@@ -283,10 +283,41 @@ def pending_plan_ask_user_payload(plan: dict[str, Any]) -> dict[str, Any]:
     pid = str(plan.get("id") or "plan")
     kind = str(plan.get("kind") or "feature")
     title = str(plan.get("title") or "untitled plan")[:80]
+    status = str(plan.get("status") or "pending_approval")
+    if status in ("revise_requested", "revised"):
+        return {
+            "item_id": pid,
+            "item_type": "planning_approval",
+            "kind": kind,
+            "status": status,
+            "question": f"Revise requested for {kind} plan: {title} — resubmit?",
+            "options": [
+                {
+                    "id": "resubmit",
+                    "label": "Resubmit for approval",
+                    "description": (
+                        f"plate_planning_resubmit {pid} (or gh plate plan --resubmit {pid}) "
+                        "after updating plan body/session answers"
+                    ),
+                },
+                {
+                    "id": "resume_session",
+                    "label": "Resume Q&A session",
+                    "description": f"Continue session {plan.get('session_id') or 'n/a'} then rebuild plan",
+                },
+                {
+                    "id": "reject",
+                    "label": "Reject",
+                    "description": f"plate_planning_decide {pid} reject — drop plan",
+                },
+            ],
+            "multi_select": False,
+        }
     return {
         "item_id": pid,
         "item_type": "planning_approval",
         "kind": kind,
+        "status": status,
         "question": f"Approve {kind} plan: {title}?",
         "options": [
             {
@@ -297,7 +328,7 @@ def pending_plan_ask_user_payload(plan: dict[str, Any]) -> dict[str, Any]:
             {
                 "id": "revise",
                 "label": "Revise",
-                "description": f"plate_planning_decide {pid} revise — return to Q&A, no issues",
+                "description": f"plate_planning_decide {pid} revise — keep actionable until resubmit",
             },
             {
                 "id": "reject",
@@ -306,6 +337,154 @@ def pending_plan_ask_user_payload(plan: dict[str, Any]) -> dict[str, Any]:
             },
         ],
         "multi_select": False,
+    }
+
+
+def _plan_history_path(plan_path: Path) -> Path:
+    return plan_path.with_suffix(".history.jsonl")
+
+
+def append_plan_history(
+    plan_path: Path,
+    event: dict[str, Any],
+) -> None:
+    """Append one decision/resubmit event to plan history sidecar."""
+    hist = _plan_history_path(plan_path)
+    hist.parent.mkdir(parents=True, exist_ok=True)
+    row = dict(event)
+    row.setdefault("ts", _now())
+    with hist.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+def get_plan_history(
+    plan_id: str,
+    *,
+    base_dir: Path | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Read decision history for a plan (pending or decided)."""
+    plan = get_pending_plan(plan_id, base_dir=base_dir)
+    if not plan or not plan.get("path"):
+        return []
+    hist_path = _plan_history_path(Path(plan["path"]))
+    if not hist_path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    try:
+        for line in hist_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    except OSError:
+        return []
+    return rows[-limit:]
+
+
+def list_actionable_plans(
+    *,
+    base_dir: Path | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Pending + revise_requested plans still needing human feed action (#630 harden)."""
+    root = base_dir if base_dir is not None else PENDING_DIR
+    if not root.is_dir():
+        return []
+    actionable = []
+    for f in sorted(root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        st = str(data.get("status") or "pending_approval")
+        if st not in ("pending_approval", "pending", "", "revise_requested", "revised"):
+            continue
+        data["path"] = str(f)
+        actionable.append(data)
+        if len(actionable) >= limit:
+            break
+    return actionable
+
+
+def resubmit_pending_plan(
+    plan_id: str,
+    *,
+    title: str | None = None,
+    body: str | None = None,
+    note: str = "",
+    resubmitted_by: str = "human",
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Re-open a revise_requested plan for approval (#630 parity with #632 resubmit).
+
+    Bumps version, sets status=pending_approval, restores ask_user_question,
+    appends history event. Does not create GitHub issues.
+    """
+    plan = get_pending_plan(plan_id, base_dir=base_dir)
+    if not plan:
+        return {"ok": False, "error": f"pending plan not found: {plan_id}"}
+    status = str(plan.get("status") or "")
+    if status not in ("revise_requested", "revised", "pending_approval", "pending", ""):
+        return {
+            "ok": False,
+            "error": f"cannot resubmit plan in status={status}",
+            "plan": plan,
+        }
+    if title is not None and str(title).strip():
+        plan["title"] = str(title).strip()
+    if body is not None:
+        plan["body"] = body
+    try:
+        ver = int(plan.get("version") or 1)
+    except (TypeError, ValueError):
+        ver = 1
+    plan["version"] = ver + 1
+    plan["status"] = "pending_approval"
+    plan["resubmitted_by"] = resubmitted_by
+    plan["resubmit_note"] = note or None
+    plan["updated_at"] = _now()
+    plan["decided_at"] = None
+    plan["decided_by"] = None
+    plan["decision_note"] = None
+    plan["archived"] = False
+    plan["ask_user_question"] = pending_plan_ask_user_payload(plan)
+    plan["approval_prompt"] = plan["ask_user_question"].get("question")
+    plan["prompt_segment"] = (
+        f"Present plan approval via ask_user_question for {plan.get('id')}; "
+        f"decide with plate_planning_decide / gh plate plan --decide."
+    )
+
+    pending_root = base_dir if base_dir is not None else PENDING_DIR
+    pending_root.mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "_", str(plan.get("id") or plan_id))
+    # Prefer keep path if still under pending; else write new pending file
+    path = Path(plan.get("path") or (pending_root / f"{safe}.json"))
+    if path.parent.name == "decided" or not str(path).startswith(str(pending_root)):
+        path = pending_root / f"{safe}.json"
+    path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    plan["path"] = str(path)
+    append_plan_history(
+        path,
+        {
+            "decision": "resubmitted",
+            "by": resubmitted_by,
+            "note": note or None,
+            "version": plan["version"],
+            "plan_id": plan.get("id"),
+        },
+    )
+    return {
+        "ok": True,
+        "id": plan.get("id"),
+        "version": plan["version"],
+        "status": plan["status"],
+        "plan": plan,
+        "history": get_plan_history(str(plan.get("id")), base_dir=base_dir, limit=10),
+        "marker": plan.get("marker") or render_plan_marker(plan),
     }
 
 
@@ -322,12 +501,16 @@ def decide_pending_plan(
 
     Approve does **not** auto-create GitHub issues (agent/host owns create);
     it marks the plan approved and returns create instructions from the plan body.
+
+    revise keeps the plan in pending as ``revise_requested`` (actionable in feed)
+    until ``resubmit_pending_plan`` re-opens approval (#630 harden / #632 parity).
     """
     plan = get_pending_plan(plan_id, base_dir=base_dir)
     if not plan:
         return {"ok": False, "error": f"pending plan not found: {plan_id}"}
     status = str(plan.get("status") or "")
-    if status not in ("pending_approval", "pending", ""):
+    # Allow decide from pending; reject also allowed from revise_requested
+    if status not in ("pending_approval", "pending", "", "revise_requested", "revised"):
         return {
             "ok": False,
             "error": f"plan already decided: status={status}",
@@ -346,30 +529,86 @@ def decide_pending_plan(
             "ok": False,
             "error": f"invalid decision '{decision}'; use approve|revise|reject",
         }
+    # Cannot approve while still revise_requested without resubmit
+    if mapping[dec] == "approved" and status in ("revise_requested", "revised"):
+        return {
+            "ok": False,
+            "error": "plan has revise_requested; resubmit before approve",
+            "plan": plan,
+            "next_steps": [
+                f"plate_planning_resubmit {plan_id}",
+                "Then plate_planning_decide approve",
+            ],
+        }
     plan["status"] = mapping[dec]
     plan["decided_by"] = decided_by
     plan["decision_note"] = note or None
     plan["decided_at"] = _now()
     plan["updated_at"] = plan["decided_at"]
-    plan["ask_user_question"] = None  # no longer pending
 
     pending_root = base_dir if base_dir is not None else PENDING_DIR
-    # Write update in place first
     path = Path(plan.get("path") or (pending_root / f"{re.sub(r'[^a-zA-Z0-9._-]', '_', plan['id'])}.json"))
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    if archive and plan["status"] in ("approved", "rejected", "revise_requested"):
-        decided_root = pending_root.parent / "decided" if pending_root.name == "pending" else pending_root / "decided"
-        decided_root.mkdir(parents=True, exist_ok=True)
-        dest = decided_root / path.name
-        dest.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
-        try:
-            path.unlink()
-        except OSError:
-            pass
-        plan["path"] = str(dest)
-        plan["archived"] = True
+    if plan["status"] == "revise_requested":
+        # Stay actionable in pending for feed + resubmit
+        plan["ask_user_question"] = pending_plan_ask_user_payload(plan)
+        plan["approval_prompt"] = plan["ask_user_question"].get("question")
+        plan["prompt_segment"] = (
+            f"Plan {plan.get('id')} needs revision; resubmit via plate_planning_resubmit "
+            f"or resume session {plan.get('session_id')}."
+        )
+        plan["archived"] = False
+        path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plan["path"] = str(path)
+        append_plan_history(
+            path,
+            {
+                "decision": "revise",
+                "by": decided_by,
+                "note": note or None,
+                "version": plan.get("version") or 1,
+                "plan_id": plan.get("id"),
+            },
+        )
+    else:
+        plan["ask_user_question"] = None
+        path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        append_plan_history(
+            path,
+            {
+                "decision": dec,
+                "by": decided_by,
+                "note": note or None,
+                "version": plan.get("version") or 1,
+                "plan_id": plan.get("id"),
+                "status": plan["status"],
+            },
+        )
+        if archive and plan["status"] in ("approved", "rejected"):
+            decided_root = (
+                pending_root.parent / "decided"
+                if pending_root.name == "pending"
+                else pending_root / "decided"
+            )
+            decided_root.mkdir(parents=True, exist_ok=True)
+            dest = decided_root / path.name
+            dest.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+            # move history sidecar if present
+            hist = _plan_history_path(path)
+            if hist.is_file():
+                try:
+                    dest_hist = _plan_history_path(dest)
+                    dest_hist.write_text(hist.read_text(encoding="utf-8"), encoding="utf-8")
+                    hist.unlink()
+                except OSError:
+                    pass
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            plan["path"] = str(dest)
+            plan["archived"] = True
 
     next_steps: list[str] = []
     if plan["status"] == "approved":
@@ -382,7 +621,8 @@ def decide_pending_plan(
     elif plan["status"] == "revise_requested":
         next_steps = [
             f"Resume or restart planning session session_id={plan.get('session_id')}",
-            "plate_planning_start + answer revised fields; rebuild pending plan",
+            f"Update plan content then plate_planning_resubmit {plan.get('id')}",
+            "Feed keeps revise_requested until resubmit + re-approve",
         ]
     else:
         next_steps = ["Plan rejected; no GitHub issues created."]
@@ -393,6 +633,7 @@ def decide_pending_plan(
         "decision": dec,
         "status": plan["status"],
         "next_steps": next_steps,
+        "history": get_plan_history(str(plan.get("id")), base_dir=base_dir, limit=10),
         "marker": plan.get("marker") or render_plan_marker(plan),
     }
 
@@ -427,35 +668,39 @@ def planning_feed_items(
     sessions_dir: Path | None = None,
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    """Feed rows for pending plan approvals + incomplete planning sessions (#628/#630)."""
+    """Feed rows for pending/revise plan approvals + incomplete planning sessions (#628/#630)."""
     items: list[dict[str, Any]] = []
-    for pl in list_pending_plans(base_dir=pending_dir, limit=limit):
-        if str(pl.get("status") or "pending_approval") not in (
-            "pending_approval",
-            "pending",
-            "",
-        ):
-            continue
+    # Actionable = pending_approval + revise_requested (#630 harden)
+    for pl in list_actionable_plans(base_dir=pending_dir, limit=limit):
+        st = str(pl.get("status") or "pending_approval")
         # Epic/release pending plans are owned by er_planning_feed_items (#629/#640)
         kind = str(pl.get("kind") or "feature")
         if kind in ("epic", "release"):
             continue
         auj = pl.get("ask_user_question") or pending_plan_ask_user_payload(pl)
         pid = str(pl.get("id") or "plan")
+        revised = st in ("revise_requested", "revised")
         items.append(
             {
                 "id": pid,
                 "item_type": "planning_approval",
                 "kind": kind,
                 "title": pl.get("title") or "Pending plan",
-                "status": pl.get("status") or "pending_approval",
-                "rank": 16,
+                "status": st,
+                "version": pl.get("version") or 1,
+                "rank": 14 if revised else 16,
                 "impact": "high",
-                "reason": "Q&A plan awaiting approval (#628/#630)",
+                "reason": (
+                    "Q&A plan revise requested — resubmit (#630)"
+                    if revised
+                    else "Q&A plan awaiting approval (#628/#630)"
+                ),
                 "approval_prompt": auj.get("question"),
                 "prompt_segment": pl.get("prompt_segment")
                 or (
-                    f"Approve plan {pid}: plate_planning_decide {pid} approve|revise|reject"
+                    f"Resubmit plan {pid}: plate_planning_resubmit {pid}"
+                    if revised
+                    else f"Approve plan {pid}: plate_planning_decide {pid} approve|revise|reject"
                 ),
                 "summary": (pl.get("body") or "")[:240],
                 "ask_user_question": auj,

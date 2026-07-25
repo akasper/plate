@@ -48,9 +48,12 @@ from .planning import (
     apply_planning_answer,
     build_plan_from_session,
     decide_pending_plan,
+    get_plan_history,
     get_planning_script,
+    list_actionable_plans,
     list_pending_plans,
     planning_feed_items,
+    resubmit_pending_plan,
     start_planning_session,
 )
 from .epic_release_planning import (
@@ -414,9 +417,28 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 note=str(args.get("note") or ""),
                 decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
             )
+        elif name == "plate_planning_resubmit":
+            payload = resubmit_pending_plan(
+                str(args.get("plan_id") or args.get("id") or ""),
+                title=args.get("title"),
+                body=args.get("body"),
+                note=str(args.get("note") or ""),
+                resubmitted_by=str(args.get("resubmitted_by") or args.get("by") or "mcp"),
+            )
+        elif name == "plate_planning_history":
+            payload = {
+                "history": get_plan_history(
+                    str(args.get("plan_id") or args.get("id") or ""),
+                    limit=int(args.get("limit") or 20),
+                )
+            }
         elif name == "plate_planning_list_pending":
             if args.get("feed"):
                 payload = {"feed": planning_feed_items(limit=int(args.get("limit") or 20))}
+            elif args.get("actionable"):
+                payload = {
+                    "actionable": list_actionable_plans(limit=int(args.get("limit") or 20))
+                }
             else:
                 payload = {
                     "pending": list_pending_plans(limit=int(args.get("limit") or 20))
@@ -1929,7 +1951,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_planning_decide",
-                                "description": "Approve/revise/reject a pending Q&A plan stub (#628/#630). Does not auto-create GitHub issues.",
+                                "description": "Approve/revise/reject a pending Q&A plan stub (#628/#630). Revise stays actionable until resubmit. Does not auto-create GitHub issues.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -1945,14 +1967,45 @@ def run() -> None:
                                 },
                             },
                             {
+                                "name": "plate_planning_resubmit",
+                                "description": "Resubmit a revise_requested plan for re-approval (#630; parity with artifact resubmit).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "body": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "resubmitted_by": {"type": "string"},
+                                    },
+                                    "required": ["plan_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_planning_history",
+                                "description": "Decision/resubmit history for a Q&A plan id (#630).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                    "required": ["plan_id"],
+                                },
+                            },
+                            {
                                 "name": "plate_planning_list_pending",
-                                "description": "List pending plan stubs or planning feed items (pending + incomplete sessions).",
+                                "description": "List pending plan stubs, actionable (pending+revise), or planning feed items.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "feed": {
                                             "type": "boolean",
                                             "description": "If true, return planning_feed_items shape",
+                                        },
+                                        "actionable": {
+                                            "type": "boolean",
+                                            "description": "If true, pending + revise_requested plans",
                                         },
                                         "limit": {"type": "integer"},
                                     },

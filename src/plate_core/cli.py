@@ -40,9 +40,12 @@ from .planning import (
     apply_planning_answer,
     build_plan_from_session,
     decide_pending_plan,
+    get_plan_history,
     get_planning_script,
+    list_actionable_plans,
     list_pending_plans,
     planning_feed_items,
+    resubmit_pending_plan,
     start_planning_session,
 )
 from .epic_release_planning import (
@@ -815,10 +818,15 @@ def cmd_plan(args: argparse.Namespace) -> int:
             print(f"  {i}. [{q['id']}] {q['prompt']}")
         return 0
 
-    if getattr(args, "list_pending", False) or getattr(args, "feed", False):
+    if getattr(args, "list_pending", False) or getattr(args, "feed", False) or getattr(
+        args, "actionable", False
+    ):
         if getattr(args, "feed", False):
             rows = planning_feed_items(limit=int(getattr(args, "limit", 20) or 20))
             key = "feed"
+        elif getattr(args, "actionable", False):
+            rows = list_actionable_plans(limit=int(getattr(args, "limit", 20) or 20))
+            key = "actionable"
         else:
             rows = list_pending_plans(limit=int(getattr(args, "limit", 20) or 20))
             key = "pending"
@@ -826,13 +834,48 @@ def cmd_plan(args: argparse.Namespace) -> int:
             print(json.dumps({key: rows}))
             return 0
         if not rows:
-            print("No pending plans." if key == "pending" else "Planning feed empty.")
+            print(
+                "No pending plans."
+                if key == "pending"
+                else ("No actionable plans." if key == "actionable" else "Planning feed empty.")
+            )
             return 0
         for r in rows:
             print(
                 f"{r.get('id')} [{r.get('status') or r.get('item_type')}] "
                 f"{r.get('title') or r.get('kind')}"
             )
+        return 0
+
+    if getattr(args, "resubmit", None):
+        out = resubmit_pending_plan(
+            str(args.resubmit),
+            title=getattr(args, "title", None),
+            body=None,
+            note=str(getattr(args, "note", None) or ""),
+            resubmitted_by=str(getattr(args, "by", None) or "cli-user"),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "resubmit failed", file=sys.stderr)
+            return 1
+        print(f"resubmitted {out.get('id')} v{out.get('version')} [{out.get('status')}]")
+        return 0
+
+    if getattr(args, "history", None):
+        rows = get_plan_history(
+            str(args.history), limit=int(getattr(args, "limit", 20) or 20)
+        )
+        if args.json:
+            print(json.dumps({"history": rows}))
+            return 0
+        if not rows:
+            print("No plan history.")
+            return 0
+        for r in rows:
+            print(f"{r.get('ts')} [{r.get('decision')}] by={r.get('by')} v={r.get('version')}")
         return 0
 
     if getattr(args, "decide", None):
@@ -3273,8 +3316,20 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--answers-file", dest="answers_file", help="JSON array of answers to walk session offline")
     plan.add_argument("--build-file", dest="build_file", help="JSON session file to build plan from")
     plan.add_argument("--list-pending", dest="list_pending", action="store_true", help="List pending plan stubs")
+    plan.add_argument(
+        "--actionable",
+        action="store_true",
+        help="List pending + revise_requested plans (#630)",
+    )
     plan.add_argument("--feed", action="store_true", help="List planning feed items (pending + sessions)")
     plan.add_argument("--decide", metavar="ID", help="Decide on pending plan id")
+    plan.add_argument(
+        "--resubmit",
+        metavar="ID",
+        help="Resubmit revise_requested plan for re-approval (#630)",
+    )
+    plan.add_argument("--history", metavar="ID", help="Show decision history for a plan id")
+    plan.add_argument("--title", help="Optional title override for --resubmit")
     plan.add_argument(
         "--decision",
         choices=["approve", "revise", "reject"],
