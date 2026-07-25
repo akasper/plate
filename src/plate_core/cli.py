@@ -2283,6 +2283,14 @@ def cmd_monitor(args: argparse.Namespace) -> int:
             print(f"{r.get('id')} {r.get('title')}")
         return 0
 
+    br = getattr(args, "budget_remaining", None)
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = not bool(getattr(args, "no_live_budget", False))
+
     if getattr(args, "market", False):
         raw = getattr(args, "signals_json", None) or "[]"
         try:
@@ -2302,16 +2310,30 @@ def cmd_monitor(args: argparse.Namespace) -> int:
             )
         dry = not getattr(args, "apply", False)
         if dry:
-            out = run_market_monitor_procedure(signals=signals, dry_run=True)
+            out = run_market_monitor_procedure(
+                signals=signals,
+                dry_run=True,
+                budget_remaining=br,
+                use_live_budget=use_live,
+            )
         else:
-            out = monitor_market_signals(signals, persist=True)
-            out["status"] = "executed"
+            out = monitor_market_signals(
+                signals,
+                persist=True,
+                budget_remaining=br,
+                use_live_budget=use_live,
+            )
+            out["status"] = "executed" if out.get("ok") else out.get("status") or "blocked"
             out["dry_run"] = False
         if args.json:
             print(json.dumps(out))
             return 0 if out.get("ok") else 1
-        print(f"market: status={out.get('status')} proposed={out.get('n_proposed')} dry_run={out.get('dry_run', dry)}")
-        return 0
+        print(
+            f"market: status={out.get('status')} proposed={out.get('n_proposed')} "
+            f"dry_run={out.get('dry_run', dry)} est={out.get('cost_estimate_tokens')} "
+            f"remaining={out.get('budget_remaining')}"
+        )
+        return 0 if out.get("ok") else 1
 
     # default: discussion review
     dry = not getattr(args, "apply", False)
@@ -2328,6 +2350,8 @@ def cmd_monitor(args: argparse.Namespace) -> int:
             discussions=discussions,
             dry_run=True,
             fetch_live=False,
+            budget_remaining=br,
+            use_live_budget=use_live,
         )
     else:
         out = review_discussions(
@@ -2335,15 +2359,18 @@ def cmd_monitor(args: argparse.Namespace) -> int:
             repo=getattr(args, "repo", None),
             persist=True,
             fetch_live=bool(getattr(args, "live", False)),
+            budget_remaining=br,
+            use_live_budget=use_live,
         )
-        out["status"] = "executed"
+        out["status"] = "executed" if out.get("ok") else out.get("status") or "blocked"
         out["dry_run"] = False
     if args.json:
         print(json.dumps(out))
         return 0 if out.get("ok") else 1
     print(
         f"discussions: status={out.get('status')} scanned={out.get('n_scanned')} "
-        f"proposed={out.get('n_proposed')} dry_run={out.get('dry_run', dry)}"
+        f"proposed={out.get('n_proposed')} dry_run={out.get('dry_run', dry)} "
+        f"est={out.get('cost_estimate_tokens')} remaining={out.get('budget_remaining')}"
     )
     return 0 if out.get("ok") else 1
 
@@ -3880,6 +3907,19 @@ def build_parser() -> argparse.ArgumentParser:
     monitor.add_argument("--discussions-json", dest="discussions_json", default="", help="JSON array of discussions")
     monitor.add_argument("--source", default="", help="Filter proposals by source")
     monitor.add_argument("--status", default="pending", help="Proposal status filter")
+    monitor.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit remaining tokens for #634 gate (overrides live hydrate)",
+    )
+    monitor.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     monitor.add_argument("--limit", type=int, default=50)
     monitor.add_argument("--json", action="store_true")
     monitor.set_defaults(func=cmd_monitor)

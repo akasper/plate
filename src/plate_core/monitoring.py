@@ -320,6 +320,94 @@ def decide_proposal(
     return {"ok": True, "proposal": found}
 
 
+# Heuristic monitor costs (#634/#642) — advisory tokens for scan + proposal persist.
+_MONITOR_BASE = 2500
+_MONITOR_PER_ITEM = 150
+_MONITOR_LIVE_FETCH = 2000
+_MONITOR_PERSIST = 800
+
+
+def estimate_monitor_cost(
+    *,
+    kind: str = "discussion",
+    n_items: int = 0,
+    persist: bool = True,
+    fetch_live: bool = False,
+) -> dict[str, Any]:
+    """Advisory token estimate for discussion review or market monitor (#634/#642)."""
+    kind_n = (kind or "discussion").lower()
+    if kind_n not in ("discussion", "market"):
+        kind_n = "discussion"
+    n = max(0, int(n_items or 0))
+    tokens = _MONITOR_BASE + min(6000, n * _MONITOR_PER_ITEM)
+    if fetch_live:
+        tokens += _MONITOR_LIVE_FETCH
+    if persist:
+        tokens += _MONITOR_PERSIST
+    return {
+        "ok": True,
+        "kind": kind_n,
+        "estimated_tokens": int(tokens),
+        "breakdown": {
+            "base": _MONITOR_BASE,
+            "items": min(6000, n * _MONITOR_PER_ITEM),
+            "live_fetch": _MONITOR_LIVE_FETCH if fetch_live else 0,
+            "persist": _MONITOR_PERSIST if persist else 0,
+        },
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine enforce hard ceilings.",
+            "review_discussions / monitor_market_signals hydrate remaining when use_live_budget.",
+        ],
+    }
+
+
+def _budget_gate(
+    *,
+    kind: str,
+    n_items: int,
+    persist: bool,
+    fetch_live: bool = False,
+    budget_remaining: int | None,
+    use_live_budget: bool,
+) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
+    """Return (cost_est, effective_remaining, notes, block_result_or_None)."""
+    cost_est = estimate_monitor_cost(
+        kind=kind, n_items=n_items, persist=persist, fetch_live=fetch_live
+    )
+    est = int(cost_est.get("estimated_tokens") or 0)
+    notes: list[str] = []
+    effective = budget_remaining
+    if effective is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot(estimate_tokens=est)
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective = int(rem)
+                notes.append(
+                    f"budget hydrated: remaining_tokens={effective} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            notes.append(f"budget hydrate skipped: {exc}")
+    if effective is not None and est > int(effective):
+        block = {
+            "ok": False,
+            "blocked": True,
+            "reason": "budget",
+            "error": f"budget: est {est} tokens exceeds remaining {effective}",
+            "cost_estimate_tokens": est,
+            "budget_remaining": int(effective),
+            "cost_estimate": cost_est,
+            "notes": notes,
+            "proposals": [],
+            "n_proposed": 0,
+        }
+        return cost_est, effective, notes, block
+    return cost_est, effective, notes, None
+
+
 def review_discussions(
     discussions: list[dict[str, Any]] | None = None,
     *,
@@ -329,9 +417,28 @@ def review_discussions(
     persist: bool = True,
     base_dir: Path | None = None,
     fetch_live: bool = False,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Review discussion candidates; return ranked proposals (optionally live Ideas)."""
+    """Review discussion candidates; return ranked proposals (optionally live Ideas).
+
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
+    """
     items = list(discussions or [])
+    # Pre-count for estimate (live fetch may add items later; include live overhead when requested)
+    cost_est, effective_remaining, budget_notes, blocked = _budget_gate(
+        kind="discussion",
+        n_items=len(items) or (int(limit or 10) if fetch_live else 0),
+        persist=persist,
+        fetch_live=fetch_live,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        blocked["n_scanned"] = 0
+        blocked["min_score"] = min_score
+        return blocked
+
     if fetch_live and not items:
         try:
             from .discussions import list_open_ideas
@@ -380,8 +487,17 @@ def review_discussions(
         "n_proposed": len(proposals),
         "proposals": proposals,
         "min_score": min_score,
+        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
+        "notes": budget_notes,
         "marker": render_monitor_marker(
-            {"proc": "discussion-review", "n_scanned": len(items), "n_proposed": len(proposals)}
+            {
+                "proc": "discussion-review",
+                "n_scanned": len(items),
+                "n_proposed": len(proposals),
+                "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+            }
         ),
     }
 
@@ -393,13 +509,30 @@ def monitor_market_signals(
     limit: int = 10,
     persist: bool = True,
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
     """Synthesize market signal dicts into Question proposals for the feed.
 
     Hosts inject signals (from web_search / x_* / feedback aggregation); this
     module does not call external networks itself.
+
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
     """
     items = list(signals or [])
+    cost_est, effective_remaining, budget_notes, blocked = _budget_gate(
+        kind="market",
+        n_items=len(items),
+        persist=persist,
+        fetch_live=False,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        blocked["n_signals"] = len(items)
+        blocked["min_score"] = min_score
+        return blocked
+
     scored = [score_market_signal(it) for it in items]
     scored = [s for s in scored if float(s.get("score") or 0) >= min_score]
     scored.sort(key=lambda x: -float(x.get("score") or 0))
@@ -420,8 +553,17 @@ def monitor_market_signals(
         "n_proposed": len(proposals),
         "proposals": proposals,
         "min_score": min_score,
+        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
+        "notes": budget_notes,
         "marker": render_monitor_marker(
-            {"proc": "market-monitor", "n_signals": len(items), "n_proposed": len(proposals)}
+            {
+                "proc": "market-monitor",
+                "n_signals": len(items),
+                "n_proposed": len(proposals),
+                "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+            }
         ),
     }
 
@@ -433,6 +575,8 @@ def run_discussion_review_procedure(
     dry_run: bool = True,
     fetch_live: bool = False,
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
     """Procedure entry: weekly discussion review (#642)."""
     result = review_discussions(
@@ -441,9 +585,14 @@ def run_discussion_review_procedure(
         persist=not dry_run,
         fetch_live=fetch_live and not dry_run,
         base_dir=base_dir,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
     )
     result["proc_id"] = "weekly-discussion-review"
-    result["status"] = "dry-run" if dry_run else "executed"
+    if result.get("blocked"):
+        result["status"] = "blocked"
+    else:
+        result["status"] = "dry-run" if dry_run else "executed"
     result["dry_run"] = dry_run
     return result
 
@@ -453,11 +602,22 @@ def run_market_monitor_procedure(
     signals: list[dict[str, Any]] | None = None,
     dry_run: bool = True,
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
     """Procedure entry: market condition monitoring (#642)."""
-    result = monitor_market_signals(signals, persist=not dry_run, base_dir=base_dir)
+    result = monitor_market_signals(
+        signals,
+        persist=not dry_run,
+        base_dir=base_dir,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
     result["proc_id"] = "market-condition-monitor"
-    result["status"] = "dry-run" if dry_run else "executed"
+    if result.get("blocked"):
+        result["status"] = "blocked"
+    else:
+        result["status"] = "dry-run" if dry_run else "executed"
     result["dry_run"] = dry_run
     return result
 

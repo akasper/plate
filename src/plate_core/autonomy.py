@@ -1433,6 +1433,15 @@ class AutonomyEngine:
                     out["checkpoint"] = gate.get("checkpoint")
                 return out
         # #642: dispatch discussion review + market monitor procedures
+        # #634: pass engine remaining so monitors share durable budget rails
+        mon_remaining = None
+        try:
+            daily = int(
+                (self.autonomy_config.get("token_budget") or {}).get("daily") or 50000
+            )
+            mon_remaining = max(0, daily - int(self._spent_today or 0))
+        except Exception:
+            mon_remaining = None
         if proc_id == "weekly-discussion-review":
             try:
                 from .monitoring import run_discussion_review_procedure
@@ -1441,6 +1450,8 @@ class AutonomyEngine:
                     repo=self.repo,
                     dry_run=False,
                     fetch_live=True,
+                    budget_remaining=mon_remaining,
+                    use_live_budget=mon_remaining is None,
                 )
                 out["log_marker"] = (
                     f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence="
@@ -1455,7 +1466,12 @@ class AutonomyEngine:
                 from .monitoring import run_market_monitor_procedure
 
                 # Hosts inject signals via plate_monitor_market; bare procedure records empty scan
-                out = run_market_monitor_procedure(signals=[], dry_run=False)
+                out = run_market_monitor_procedure(
+                    signals=[],
+                    dry_run=False,
+                    budget_remaining=mon_remaining,
+                    use_live_budget=mon_remaining is None,
+                )
                 out["log_marker"] = (
                     f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence="
                     f"{pdef.cadence if pdef else 'weekly'} risk="
