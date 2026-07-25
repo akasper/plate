@@ -411,6 +411,21 @@ def start_bug_loop(
         out["budget_snapshot"] = budget_snap
     if blocked:
         out["error"] = notes[-1] if notes else "budget blocked"
+    elif use_live_budget:
+        try:
+            from .autonomy import apply_live_budget_charge
+
+            out.setdefault("notes", list(notes))
+            apply_live_budget_charge(
+                out,
+                tokens=int(est["estimated_tokens"] or 0),
+                use_live_budget=True,
+                action_kind="bug_loop_start",
+                reason=f"start_bug_loop:{run.id}",
+                base_dir=budget_base_dir,
+            )
+        except Exception:
+            pass
     if record_ledger:
         try:
             from .ledger import record_decision

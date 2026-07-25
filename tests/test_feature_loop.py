@@ -50,6 +50,7 @@ class TestLifecycle(unittest.TestCase):
             risk="low",
             needs_media_approval=False,
             risk_tolerance="medium",
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
@@ -107,6 +108,56 @@ class TestLifecycle(unittest.TestCase):
             self.assertTrue(r["blocked"])
             self.assertIn("budget_snapshot", r)
             self.assertLessEqual(r["budget_remaining"], 500)
+            self.assertNotIn("budget_charge", r)
+
+    def test_live_start_charges_spend(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import load_budget_spend, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": __import__("datetime")
+                    .datetime.now(__import__("datetime").timezone.utc)
+                    .date()
+                    .isoformat(),
+                    "spent_today": 0,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 100_000,
+                        "per_cycle": 50_000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                r = start_feature_loop(
+                    feature_number=77,
+                    feature_title="Charge loop",
+                    size="trivial",
+                    needs_media_approval=False,
+                    use_live_budget=True,
+                    budget_base_dir=bdir,
+                    base_dir=self.base,
+                    record_ledger=False,
+                )
+            self.assertTrue(r["ok"], r)
+            self.assertTrue((r.get("budget_charge") or {}).get("ok"))
+            est = int(r["run"]["cost_estimate_tokens"] or 0)
+            self.assertEqual(load_budget_spend(base_dir=bdir).get("spent_today"), est)
 
     def test_advance_low_risk_to_done(self):
         r = start_feature_loop(
@@ -116,6 +167,7 @@ class TestLifecycle(unittest.TestCase):
             risk="low",
             needs_media_approval=False,
             risk_tolerance="high",
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
@@ -139,6 +191,7 @@ class TestLifecycle(unittest.TestCase):
             needs_media_approval=False,
             risk="low",
             risk_tolerance="high",
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
@@ -161,6 +214,7 @@ class TestLifecycle(unittest.TestCase):
             needs_media_approval=False,
             risk="low",
             risk_tolerance="high",
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
@@ -208,6 +262,7 @@ class TestLifecycle(unittest.TestCase):
             feature_title="API break",
             risk="high",
             labels=["Feature", "need:human-review"],
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )

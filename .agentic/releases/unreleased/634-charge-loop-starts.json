@@ -1,0 +1,16 @@
+{
+  "slug": "634-charge-loop-starts",
+  "change_type": "feature",
+  "surface": "src/plate_core/feature_loop.py, bug_loop.py",
+  "summary": "Charge durable spend on live unblocked start_feature_loop / start_bug_loop so #638/#639 loops deplete #634 remaining (#781).",
+  "migration_impact": "Live feature/bug loop starts increment spend.json. Tests must pass use_live_budget=false.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Expect spent_today growth after live loop starts.",
+    "3. Use --no-live-budget / use_live_budget=false for dry tests."
+  ],
+  "agent_notes": "Completes charge-on-success for implement/bug loops after packaging/monitoring/stubs (#779).",
+  "breaking": false,
+  "links": ["#781", "#634", "#638", "#639", "#654"],
+  "requires": ["0.7.2"]
+}
