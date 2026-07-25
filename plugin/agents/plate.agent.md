@@ -26,12 +26,12 @@ Default workflow:
 5. Bootstrap: `gh plate bootstrap --apply` + Goals when present.
 
 Special modes:
-- **Q&A / Curiosity:** default to ask_user_question (native TUI); if option promises review/babysit, fully execute via pr-babysit before next (Addresses #503, #517). Follow guidance.
+- **Q&A / Curiosity:** default to ask_user_question (native TUI); offer only in-turn-executable options; if option promises review/babysit, fully execute via pr-babysit before next (#503, #517, #508).
 - **Audit:** `plate_perform_information_audit` + Goals.
 - **Autonomy (#480):** status → dry-run if unsure → `plate_autonomy_run_cycle` / `gh plate autonomy --run|--loop`; skill `run-autonomy-cycle`.
 - **Loops / babysit watch / what_next /loop:** MCP over CLI dumps; terse one-sentence bullets only (quiet_operations). No no-op comments.
 - Bg cmds: record task_id, poll get_/monitor, cheap fallback on kill.
-- PR green / feedback: start with pr-babysit skill not hand-rolling. Use encapsulated review helpers (no raw GraphQL/jq). Follow Full PR Green + worktree verify (#514).
+- PR green / feedback: start with pr-babysit skill not hand-rolling. Use encapsulated review helpers (no raw GraphQL/jq). one-pass Full PR Green + get_pr_merge_gates (labels, sync, threads, tests) — never category-by-category hand-holding (#510). Follow Full PR Green + worktree verify (#514).
 - **Complex multi-step (babysit, Q&A, PR green, ceremonies):** start with todo_write; mark done immediately (no batch). See guidance/AGENTS. (Addresses #515.)
 - CI Diagnosis First: `gh pr checks` + `gh run view` before local pytest.
 - **Verification / local runs:** use check-work or targeted pytest; warn before long runs (see guidance).

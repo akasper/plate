@@ -72,7 +72,15 @@ PLATE supports a Curiosity-driven workflow where informational goals are tracked
 
 ### Enforcement and follow-through for PLATE Q&A
 - **Mandatory use of native TUI forms for Q&A in PLATE contexts:** Agents must *consistently default to or use* Grok Build native TUI interactive configurator (arrow-key forms) via ask_user_question (or host native TUI) for interactive Q&A; include detection/fallback note; do not require user reminders. Do not use raw text prompts unless native is unavailable.
-- **Enforcement of Q&A option follow-through:** After answers, explicitly create/update artifacts (issues, fragments, docs) per Answer signal checklist and contemplation contract. Use explicit checklist in turns or session state to ensure complete follow-through without mid-stream corrections. Offer *only* options/actions in ask_user_question whose full follow-through (artifacts + execution) will be completed in this turn before any further progress or new Q&A; do not declare done or offer next until prior chosen option is fully executed. If a choice promises "review the PR", "babysit", "address feedback", or similar, the agent *must* fully execute that work using the dedicated pr-babysit skill (or MCP), isolated worktree, push to the *existing* PR branch, resolve addressed threads, before offering the next question or declaring progress/done. Never merge or advance with unaddressed feedback. (Addresses #503, #517.)
+- **Enforcement of Q&A option follow-through:** After answers, explicitly create/update artifacts (issues, fragments, docs) per Answer signal checklist and contemplation contract. Use explicit checklist in turns or session state to ensure complete follow-through without mid-stream corrections. Offer *only* options/actions in ask_user_question whose full follow-through (artifacts + execution) will be completed in this turn before any further progress or new Q&A; do not declare done or offer next until prior chosen option is fully executed. If a choice promises "review the PR", "babysit", "address feedback", or similar, the agent *must* fully execute that work using the dedicated pr-babysit skill (or MCP), isolated worktree, push to the *existing* PR branch, resolve addressed threads, before offering the next question or declaring progress/done. Never merge or advance with unaddressed feedback. (Addresses #503, #517, #508.)
+
+### Q&A Follow-Through Checklist (#508)
+Before offering the next ask_user_question (or declaring progress/done after a choice):
+1. **Options are executable in-turn only** — do not list babysit/review/merge unless this turn will finish them.
+2. **todo_write** the chosen path immediately (capture answer → artifacts → promised execution).
+3. **Execute fully** before next Q&A: pr-babysit to CLEAN when promised; write fragments/docs when promised; never squash-merge unaddressed feedback.
+4. **Mismatch recovery:** if you advanced without follow-through, open a Bug stub + corrective PR on the *same* branch before more planning.
+5. Mark checklist todos completed only when GitHub state proves it (checks green, threads resolved, files committed).
 
 ### Question handling flow
 1. Use available MCP tools (or future equivalents such as `plate_list_questions`, `plate_get_question`) to discover and prioritize open Questions.
@@ -286,7 +294,17 @@ When given a *single high-level instruction* like "get this PR green", "make mer
 
 6. Only then produce the one-sentence summary for the human of what is left + current state. Use terse quiet output for loops.
 
-For any PR health / conflict / feedback / 'get green' work, start by using the dedicated pr-babysit skill (gh plate pr babysit or plate_pr_babysit MCP) rather than hand-rolling raw git + gh commands. Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit` + get_pr_merge_gates) surface by default. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state from a single high-level prompt instead of sequential single-category fixes waiting for user diagnosis. (Addresses #519, #528, #526, etc.)
+For any PR health / conflict / feedback / 'get green' work, start by using the dedicated pr-babysit skill (gh plate pr babysit or plate_pr_babysit MCP) rather than hand-rolling raw git + gh commands. Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit` + get_pr_merge_gates) surface by default. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state from a single high-level prompt instead of sequential single-category fixes waiting for user diagnosis. (Addresses #519, #528, #526, #510.)
+
+### Merge Gates Checklist (#510)
+From one "get this PR green" prompt, inspect and fix **all** agent-actionable gates in one pass (do not wait for the user to name the next category):
+1. **CI diagnosis first** — `gh pr checks` + `gh run view … --log-failed` on the specific failing job.
+2. **Merge gates bundle** — `plate_get_pr_merge_gates` / `plate_pr_babysit` (mergeStateStatus, threads, note).
+3. **Labels** — required PR type + area:* + risk:* (and Feature fragment when applicable).
+4. **Base sync** — BEHIND/CONFLICTING/DIRTY → local-rebase or copilot-request (isolated worktree).
+5. **Feedback-resolution** — actionable threads via plate_get_actionable_review_threads + plate_resolve_review_thread; outdated via babysit `--act` (#605).
+6. **Tests / title / issue-link / feature-change-files** — fix what failed; re-push to the *same* branch.
+7. **Stop only when** remaining items are human-only; then one-sentence summary.
 
 The pr-babysit skill should support (or be used in) a "until green" / comprehensive make-mergeable flow with the above loop, appropriate quiet reporting, and clear human escalation points.
 
