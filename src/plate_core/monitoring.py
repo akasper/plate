@@ -481,25 +481,39 @@ def review_discussions(
         else:
             proposals.append(s)
 
-    return {
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    out: dict[str, Any] = {
         "ok": True,
         "n_scanned": len(items),
         "n_proposed": len(proposals),
         "proposals": proposals,
         "min_score": min_score,
-        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
         "marker": render_monitor_marker(
             {
                 "proc": "discussion-review",
                 "n_scanned": len(items),
                 "n_proposed": len(proposals),
-                "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+                "cost_estimate_tokens": est_tokens,
             }
         ),
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="monitor_discussion",
+            reason="review_discussions",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def monitor_market_signals(
@@ -547,25 +561,39 @@ def monitor_market_signals(
         else:
             proposals.append(s)
 
-    return {
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    out: dict[str, Any] = {
         "ok": True,
         "n_signals": len(items),
         "n_proposed": len(proposals),
         "proposals": proposals,
         "min_score": min_score,
-        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
         "marker": render_monitor_marker(
             {
                 "proc": "market-monitor",
                 "n_signals": len(items),
                 "n_proposed": len(proposals),
-                "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+                "cost_estimate_tokens": est_tokens,
             }
         ),
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="monitor_market",
+            reason="monitor_market_signals",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def run_discussion_review_procedure(
