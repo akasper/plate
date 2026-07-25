@@ -162,6 +162,90 @@ class TestFeed631(unittest.TestCase):
         self.assertEqual(items[0].item_type, "approval")
         self.assertIn("design", items[0].title.lower())
 
+    def test_pm_assignment_in_build_feed(self):
+        items = build_feed_items(
+            pm_assignments=[{
+                "assignment_id": "asg-abc",
+                "work_title": "Implement auth",
+                "work_type": "implement",
+                "agent_id": "dev-cautious",
+                "agent_name": "Cautious Implementer",
+                "status": "proposed",
+                "requires_checkpoint": False,
+                "rationale": "matched skill",
+                "packet": {"prompt_segment": "Do auth TDD"},
+            }],
+        )
+        self.assertEqual(items[0].item_type, "pm_assignment")
+        self.assertEqual(items[0].id, "asg-abc")
+        self.assertIn("plate_pm_complete", items[0].prompt_segment)
+        self.assertIn("Cautious", items[0].title)
+
+    def test_ask_user_question_pm_assignment(self):
+        from plate_core.feed import FeedItem
+
+        payload = ask_user_question_payload(
+            FeedItem(
+                id="asg-1",
+                item_type="pm_assignment",
+                number=None,
+                title="Ship X → Dev",
+                rank=20,
+                impact="medium",
+            )
+        )
+        self.assertTrue(any(o["id"] == "approve_run" for o in payload["options"]))
+        self.assertTrue(any(o["id"] == "cancel" for o in payload["options"]))
+
+    def test_get_user_feed_includes_pm_queue(self):
+        fake_asg = [{
+            "assignment_id": "asg-feed",
+            "work_title": "Research market",
+            "work_type": "research",
+            "agent_id": "research-analyst",
+            "agent_name": "Research Analyst",
+            "status": "proposed",
+            "requires_checkpoint": False,
+            "rationale": "research",
+            "packet": {},
+            "ask_user_question": {
+                "question": "Run research?",
+                "options": [{"label": "Go"}],
+            },
+        }]
+
+        def _queue(**kw):
+            return fake_asg if kw.get("status") == "proposed" else []
+
+        with patch("plate_core.pm.list_pm_queue", side_effect=_queue), patch(
+            "plate_core.checkpoint.list_open_checkpoints", return_value=[]
+        ), patch(
+            "plate_core.autonomy.get_autonomy_status",
+            return_value={"risk_tolerance": "off", "enabled": False},
+        ), patch(
+            "plate_core.costs.get_cost_dashboard",
+            return_value={"feed_items": []},
+        ), patch(
+            "plate_core.design_research_approval.list_proposals",
+            return_value=[],
+        ), patch(
+            "plate_core.planning.list_pending_plans",
+            return_value=[],
+        ):
+            feed = get_user_feed(
+                repo="akasper/plate",
+                limit=10,
+                include_process=False,
+                include_autonomy=True,
+                questions=[],
+                tasks=[],
+            )
+        self.assertGreaterEqual(feed["counts"].get("pm_assignments", 0), 1)
+        types = [p["type"] for p in feed["presentation"]]
+        self.assertIn("pm_assignment", types)
+        pm_row = next(p for p in feed["presentation"] if p["type"] == "pm_assignment")
+        self.assertEqual(pm_row["ask_user_question"]["question"], "Run research?")
+
 
 if __name__ == "__main__":
     unittest.main()
