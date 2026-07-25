@@ -2335,6 +2335,12 @@ def cmd_fleet(args: argparse.Namespace) -> int:
         return 0
 
     if getattr(args, "handoff", False):
+        br = getattr(args, "budget_remaining", None)
+        if br is not None:
+            try:
+                br = int(br)
+            except (TypeError, ValueError):
+                br = None
         out = create_handoff(
             from_agent=str(getattr(args, "from_agent", None) or "orchestrator"),
             to_agent=str(getattr(args, "to_agent", None) or ""),
@@ -2344,12 +2350,18 @@ def cmd_fleet(args: argparse.Namespace) -> int:
             related_issue=getattr(args, "related_issue", None),
             related_pr=getattr(args, "related_pr", None),
             requires_human=bool(getattr(args, "requires_human", False)),
+            budget_remaining=br,
+            use_live_budget=not bool(getattr(args, "no_live_budget", False)),
         )
         if args.json:
             print(json.dumps(out))
             return 0 if out.get("ok") else 1
         h = out.get("handoff") or {}
-        print(f"ok={out.get('ok')} id={h.get('handoff_id')} {h.get('from_agent')}→{h.get('to_agent')}")
+        print(
+            f"ok={out.get('ok')} id={h.get('handoff_id')} "
+            f"{h.get('from_agent')}→{h.get('to_agent')} "
+            f"est={out.get('cost_estimate_tokens')} remaining={out.get('budget_remaining')}"
+        )
         return 0 if out.get("ok") else 1
 
     if getattr(args, "complete", None):
@@ -2431,14 +2443,26 @@ def cmd_fleet(args: argparse.Namespace) -> int:
         return 0
 
     # default status
+    br = getattr(args, "budget_remaining", None)
+    if br is None:
+        br = getattr(args, "budget_tokens", None)
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
     st = fleet_status(
-        budget_remaining=getattr(args, "budget_tokens", None),
+        budget_remaining=br,
+        use_live_budget=not bool(getattr(args, "no_live_budget", False)),
         risk_tolerance=str(getattr(args, "risk", None) or "medium"),
     )
     if args.json:
         print(json.dumps(st))
         return 0
-    print(f"fleet: active={st.get('n_active')} human_needed={st.get('human_needed')} by_agent={st.get('by_agent')}")
+    print(
+        f"fleet: active={st.get('n_active')} human_needed={st.get('human_needed')} "
+        f"by_agent={st.get('by_agent')} remaining={st.get('budget_remaining_tokens')}"
+    )
     return 0
 
 
@@ -3835,6 +3859,19 @@ def build_parser() -> argparse.ArgumentParser:
     fleet.add_argument("--apply", action="store_true", help="With --plan: create handoffs")
     fleet.add_argument("--feed", action="store_true", help="Feed presentation for active handoffs")
     fleet.add_argument("--budget-tokens", dest="budget_tokens", type=int, default=None)
+    fleet.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit remaining tokens for #634 gate (overrides live hydrate)",
+    )
+    fleet.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     fleet.add_argument("--risk", default="medium")
     fleet.add_argument("--active-roles", dest="active_roles", default="", help="Comma roles for --allocate")
     fleet.add_argument("--related-issue", dest="related_issue", type=int)

@@ -11,6 +11,7 @@ from plate_core.fleet import (
     allocate_fleet_budget,
     complete_handoff,
     create_handoff,
+    estimate_handoff_cost,
     fleet_status,
     handoff_feed_items,
     handoff_from_pm_assignment,
@@ -112,11 +113,13 @@ class TestBudgetAndPlan(unittest.TestCase):
             task="big work",
             budget_tokens=5000,
             budget_remaining=100,
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
         self.assertFalse(blocked["ok"])
         self.assertTrue(blocked.get("blocked"))
+        self.assertEqual(blocked.get("cost_estimate_tokens"), 5000)
 
         hi = create_handoff(
             from_agent="orchestrator",
@@ -125,11 +128,13 @@ class TestBudgetAndPlan(unittest.TestCase):
             risk="high",
             requires_human=True,
             open_checkpoint=True,
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
         self.assertTrue(hi["ok"])
         self.assertEqual(hi["handoff"]["status"], "blocked")
+        self.assertIsNotNone(hi.get("cost_estimate_tokens"))
         # active includes blocked
         active = list_handoffs(status="active", base_dir=self.base)
         self.assertTrue(any(h.get("status") == "blocked" for h in active))
@@ -154,12 +159,41 @@ class TestBudgetAndPlan(unittest.TestCase):
                 "impact": "medium",
             },
             budget_remaining=10000,
+            use_live_budget=False,
             base_dir=self.base,
             record_ledger=False,
         )
         self.assertTrue(out["ok"])
         self.assertEqual(out["handoff"]["to_agent"], "implementer")
         self.assertEqual(out["pm_assignment_id"], "asg-1")
+
+    def test_estimate_handoff_cost(self):
+        est = estimate_handoff_cost(to_agent="implementer", risk="medium")
+        self.assertTrue(est["ok"])
+        self.assertGreater(est["estimated_tokens"], 0)
+        explicit = estimate_handoff_cost(budget_tokens=1234)
+        self.assertEqual(explicit["estimated_tokens"], 1234)
+
+    def test_estimate_fills_budget_tokens_and_status_remaining(self):
+        out = create_handoff(
+            from_agent="orchestrator",
+            to_agent="implementer",
+            task="estimate fill",
+            budget_remaining=50000,
+            use_live_budget=False,
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        self.assertTrue(out["ok"])
+        self.assertIsNotNone(out["handoff"].get("budget_tokens"))
+        self.assertGreater(out["handoff"]["budget_tokens"], 0)
+        st = fleet_status(
+            budget_remaining=8000,
+            use_live_budget=False,
+            base_dir=self.base,
+        )
+        self.assertEqual(st.get("budget_remaining_tokens"), 8000)
+        self.assertIsNotNone(st.get("budget"))
 
 
 if __name__ == "__main__":

@@ -1467,15 +1467,27 @@ class AutonomyEngine:
                 return {"proc_id": proc_id, "status": "error", "error": str(exc)}
 
         # #641 scheduled ops catalog dispatch (dry-run packet by default when called from engine apply path)
+        # #634: pass engine remaining so ops share the same durable budget rails
         try:
             from .scheduled_ops import run_procedure_dispatch
 
+            remaining = None
+            try:
+                daily = int(
+                    (self.autonomy_config.get("token_budget") or {}).get("daily")
+                    or 50000
+                )
+                remaining = max(0, daily - int(self._spent_today or 0))
+            except Exception:
+                remaining = None
             sop = run_procedure_dispatch(
                 proc_id,
                 dry_run=False,
                 risk_tolerance=self.risk_tolerance,
                 approved=approved,
                 checkpoint_id=checkpoint_id,
+                budget_remaining=remaining,
+                use_live_budget=remaining is None,
             )
             if sop is not None:
                 return sop
