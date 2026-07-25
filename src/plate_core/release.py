@@ -1371,6 +1371,59 @@ def perform_guarded_hard_reset(
         return {"error": f"reset_exception: {e}", "command": shell_cmd}
 
 
+def normalize_release_tag(version: str | None) -> str | None:
+    """Return vX.Y.Z form for a version or tag string."""
+    if not version:
+        return None
+    v = str(version).strip()
+    if not v:
+        return None
+    bare = v[1:] if v.lower().startswith("v") else v
+    return f"v{bare}"
+
+
+def plan_gh_plate_sync(version: str | None) -> dict:
+    """Plan post-release gh-plate thin-shim sync/tag/release (#613).
+
+    Pure helper for CI/finalize: returns file markers, tag, notes body, idempotent steps.
+    Actual git ops live in .github/workflows/publish-gh-plate-extension.yml (token-scoped).
+    """
+    tag = normalize_release_tag(version)
+    if not tag:
+        return {"ok": False, "error": "version_required"}
+    bare = tag.lstrip("v")
+    notes = (
+        f"## gh-plate {tag}\n\n"
+        f"Thin GitHub CLI extension shim matching **plate-core {bare}**.\n\n"
+        f"- Install: `gh extension install akasper/gh-plate@{tag}`\n"
+        f"- Or latest: `gh extension install akasper/gh-plate` then upgrade\n"
+        f"- Runtime: pins `plate-core=={bare}` via VERSION/PLATE_CORE_VERSION (#614)\n"
+        f"- Source of truth: [akasper/plate](https://github.com/akasper/plate) tag `{tag}`\n"
+        f"- Plate GitHub Release: https://github.com/akasper/plate/releases/tag/{tag}\n"
+    )
+    return {
+        "ok": True,
+        "version": bare,
+        "tag": tag,
+        "files": {
+            "gh-plate": "copy from plate monorepo root launcher",
+            "VERSION": tag,
+            "PLATE_CORE_VERSION": bare,
+        },
+        "steps": [
+            "copy launcher + VERSION + PLATE_CORE_VERSION into akasper/gh-plate",
+            "commit if tree dirty (idempotent if already synced)",
+            "push main",
+            f"create tag {tag} only if missing (no force-move of existing tags)",
+            f"create GitHub Release on gh-plate for {tag} if missing (notes link to plate)",
+        ],
+        "notes_body": notes,
+        "workflow": ".github/workflows/publish-gh-plate-extension.yml",
+        "trigger": "push tags v* on akasper/plate (after Release PR merge tags main) or workflow_dispatch",
+        "idempotent": True,
+    }
+
+
 def ensure_next_release_issue(
     repo: str | None = None,
     client: GhClient | None = None,
