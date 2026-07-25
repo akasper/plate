@@ -260,8 +260,10 @@ def get_cost_dashboard(
         "remaining_usd": remaining_usd,
         "burn_rate_pct": burn,
         "spent_tokens_est_today": spent_tokens_est,
+        "spent_usd_est_today": round((spent_tokens_est / 1000.0) * 0.002, 6) if spent_tokens_est else 0.0,
         "enforcement_active": enabled and risk != "off",
         "would_throttle_at": max(0, daily - per_cycle) if action_policy == "throttle" else None,
+        "durable_spend_note": "AutonomyEngine persists counters under .agentic/budget/spend.json (#634)",
     }
 
     # Drift / risk signals
