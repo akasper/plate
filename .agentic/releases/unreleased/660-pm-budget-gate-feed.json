@@ -1,0 +1,25 @@
+{
+  "slug": "660-pm-budget-gate-feed",
+  "change_type": "feature",
+  "surface": "src/plate_core/pm.py, feed.py",
+  "summary": "Harden #660 PM orchestrator: hydrate durable spend + cost dashboard budget_pressure into PMStatus; pause cycles on critical/exhausted budget; run_loop stop reasons; pm_feed_items (checkpoint/budget gates + blocked queue); feed ranks pm_gate and blocked assignments.",
+  "migration_impact": "PMStatus gains budget_pressure, would_pause_next_cycle, spent_today_durable. run_cycle may return status=paused pause_kind=budget. Feed includes pm_gate signals when autonomy included. No config schema break.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. plate_pm_status / gh plate pm --status shows budget_pressure fields.",
+    "3. Before long loops: resolve open checkpoints and budget gates (costs --dashboard).",
+    "4. plate_feed ranks PM pause gates ahead of ordinary assignments."
+  ],
+  "agent_notes": "Do not plate_pm_run_cycle --apply while pause_kind is budget or checkpoints. Prefer dry_run loops. Blocked assignments stay in feed until plate_pm_complete or re-budget.",
+  "breaking": false,
+  "links": [
+    "#660",
+    "#634",
+    "#653",
+    "#648",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
