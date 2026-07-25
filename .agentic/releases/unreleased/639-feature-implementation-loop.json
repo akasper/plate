@@ -1,0 +1,26 @@
+{
+  "slug": "639-feature-implementation-loop",
+  "change_type": "feature",
+  "surface": "src/plate_core/feature_loop.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+  "summary": "Autonomous Feature implementation loop first slice (#639): durable stage machine with upfront cost estimate, TDD/docs/media/babysit stages, budget block on start, gate-aware advance, feed prompts, MCP plate_feature_loop_* + gh plate feature-loop; no silent merge.",
+  "migration_impact": "Optional local runs under .agentic/feature_loops/ (gitignored). Orchestration contracts only; agents execute work via existing TDD/babysit/fragment flows. Budget remaining can block start.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Estimate: gh plate feature-loop --estimate --size medium --design --e2e",
+    "3. Start: plate_feature_loop_start / gh plate feature-loop --feature N --title \"...\"",
+    "4. Advance stages; babysit with plate_pr_babysit; human_checkpoint for media/high risk."
+  ],
+  "agent_notes": "First orchestration slice of Epic #639. Full auto draft-PR creation, Playwright media capture (#636), and design contracts (#646) remain follow-ups. Prefer dry_run ticks; pair with #638 bug loop and #634 budgets.",
+  "breaking": false,
+  "links": [
+    "#639",
+    "#638",
+    "#654",
+    "#646",
+    "#636",
+    "#634"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
