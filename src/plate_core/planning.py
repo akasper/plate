@@ -901,16 +901,17 @@ def start_planning_session(
     if persist:
         sdict = save_planning_session(sdict, base_dir=base_dir)
     nq = qs[0] if qs else None
-    return {
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    out: dict[str, Any] = {
         "ok": True,
         "session": sdict,
         "session_id": sdict.get("id"),
         "total_questions": len(qs),
         "next_question": nq,
-        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
         "ask_user_question": question_ask_user_payload(nq, kind=k, turn=0, total=len(qs)),
         "prompt_segment": (
             f"Present via native ask_user_question: {qs[0]['prompt']}"
@@ -922,6 +923,19 @@ def start_planning_session(
             "record free-text answer with plate_planning_answer; session_id is durable."
         ),
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="planning_start",
+            reason=f"start_planning_session:{k}:{sdict.get('id')}",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def apply_planning_answer(
@@ -1243,17 +1257,31 @@ def build_plan_from_session(
         ],
         "multi_select": False,
     }
-    return {
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    out: dict[str, Any] = {
         "ok": True,
         "plan": plan,
         "session_complete": complete,
         "ask_user_question": approval_payload,
         "pending_path": plan.get("path"),
-        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="planning_build",
+            reason=f"build_plan:{kind}:{sid or plan.get('id')}",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def get_planning_script(kind: str = "feature") -> dict[str, Any]:

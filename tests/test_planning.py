@@ -296,6 +296,8 @@ class TestPlanningBudget634(unittest.TestCase):
         )
         self.assertFalse(b_block.get("ok"))
         self.assertTrue(b_block.get("blocked"))
+        self.assertNotIn("budget_charge", ok)
+        self.assertNotIn("budget_charge", b_block)
 
 
 

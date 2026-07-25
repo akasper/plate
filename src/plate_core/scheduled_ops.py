@@ -484,6 +484,7 @@ def run_scheduled_op(
         "cost_estimate_tokens": est_tokens,
         "cost_estimate": cost_est,
         "budget_remaining": effective_budget,
+        "notes": list(merged_notes),
         "log_marker": (
             f"<!-- PLATE-PROCEDURE-RUN:{op_id} cadence={op.get('cadence')} "
             f"risk={risk} dry_run={dry_run} -->"
@@ -495,6 +496,19 @@ def run_scheduled_op(
     if blocked:
         out["error"] = "; ".join(reasons)
         out["reason"] = out["error"]
+    elif use_live_budget and est_tokens > 0:
+        try:
+            from .autonomy import apply_live_budget_charge
+
+            apply_live_budget_charge(
+                out,
+                tokens=est_tokens,
+                use_live_budget=True,
+                action_kind="scheduled_op",
+                reason=f"run_scheduled_op:{op_id}:{run.id}",
+            )
+        except Exception:
+            pass
 
     if record_ledger:
         try:
