@@ -55,7 +55,14 @@ from .design_research_approval import (
     list_proposals,
     propose_artifact,
 )
-from .pm import get_pm_status, list_team, run_pm_cycle
+from .pm import (
+    complete_pm_assignment,
+    get_pm_status,
+    list_pm_queue,
+    list_team,
+    run_pm_cycle,
+    run_pm_loop,
+)
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -822,6 +829,53 @@ def cmd_pm(args: argparse.Namespace) -> int:
         for p in team:
             print(f"{p['id']}: {p['name']} ({p['role']}) — {p['style']}")
         return 0
+    if getattr(args, "queue", False):
+        rows = list_pm_queue(
+            repo=getattr(args, "repo", None),
+            status=getattr(args, "queue_status", None) or "all",
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+        if args.json:
+            print(json.dumps({"assignments": rows}))
+            return 0
+        if not rows:
+            print("PM queue empty.")
+            return 0
+        for a in rows:
+            print(
+                f"{a.get('assignment_id')} [{a.get('status')}] "
+                f"{a.get('agent_id')} ← {a.get('work_type')}: {a.get('work_title')}"
+            )
+        return 0
+    if getattr(args, "complete", None):
+        out = complete_pm_assignment(
+            str(args.complete),
+            status=str(getattr(args, "complete_status", None) or "done"),
+            note=str(getattr(args, "note", None) or ""),
+            repo=getattr(args, "repo", None),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"complete: ok={out.get('ok')} status={ (out.get('assignment') or {}).get('status') }")
+        return 0 if out.get("ok") else 1
+    if getattr(args, "loop", False):
+        rep = run_pm_loop(
+            repo=getattr(args, "repo", None),
+            dry_run=not getattr(args, "apply", False),
+            max_cycles=int(getattr(args, "max_cycles", 3) or 3),
+            max_assignments=int(getattr(args, "max_assignments", 5) or 5),
+        )
+        if args.json:
+            print(json.dumps(rep))
+            return 0
+        print(
+            f"PM loop: cycles={rep.get('n_cycles')} stop={rep.get('stopped_reason')} "
+            f"dry_run={rep.get('dry_run')}"
+        )
+        for c in rep.get("cycles") or []:
+            print(f"  cycle {c.get('cycle')}: {c.get('status')} n={c.get('n_assignments')}")
+        return 0
     if getattr(args, "run", False):
         rep = run_pm_cycle(
             repo=getattr(args, "repo", None),
@@ -843,7 +897,10 @@ def cmd_pm(args: argparse.Namespace) -> int:
         return 0
     print(f"PM enabled (autonomy): {st.get('enabled')} risk={st.get('risk_tolerance')}")
     print(f"Budget remaining: {st.get('budget_remaining_tokens')} burn={st.get('burn_rate')}%")
-    print(f"Team size: {st.get('team_size')} open_checkpoints={st.get('open_checkpoints')}")
+    print(
+        f"Team size: {st.get('team_size')} open_checkpoints={st.get('open_checkpoints')} "
+        f"queue={st.get('queue_size')} proposed={st.get('proposed')} done={st.get('done')}"
+    )
     return 0
 
 
@@ -1648,8 +1705,26 @@ def build_parser() -> argparse.ArgumentParser:
     pm.add_argument("--status", action="store_true", help="Show PM status (default)")
     pm.add_argument("--team", action="store_true", help="List personas")
     pm.add_argument("--run", action="store_true", help="Run one orchestration cycle")
-    pm.add_argument("--apply", action="store_true", help="With --run: attempt delegation (default dry-run)")
+    pm.add_argument("--loop", action="store_true", help="Multi-cycle orchestrator loop")
+    pm.add_argument("--queue", action="store_true", help="List durable assignment queue")
+    pm.add_argument(
+        "--queue-status",
+        dest="queue_status",
+        default="all",
+        help="Filter queue: proposed|delegated|blocked|done|cancelled|all",
+    )
+    pm.add_argument("--complete", metavar="ASSIGNMENT_ID", help="Mark assignment done/cancelled")
+    pm.add_argument(
+        "--complete-status",
+        dest="complete_status",
+        default="done",
+        help="Status for --complete (default done)",
+    )
+    pm.add_argument("--note", default="", help="Note for --complete")
+    pm.add_argument("--apply", action="store_true", help="With --run/--loop: attempt delegation (default dry-run)")
     pm.add_argument("--max-assignments", dest="max_assignments", type=int, default=5)
+    pm.add_argument("--max-cycles", dest="max_cycles", type=int, default=3)
+    pm.add_argument("--limit", type=int, default=50, help="Queue list limit")
     pm.add_argument("--json", action="store_true")
     pm.set_defaults(func=cmd_pm)
 
