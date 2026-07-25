@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from plate_core.feed import (
+    ask_user_question_payload,
     build_feed_items,
     get_user_feed,
     issue_to_feed_item,
@@ -93,11 +94,6 @@ class TestFeed631(unittest.TestCase):
         self.assertEqual(feed["counts"]["questions"], 0)
         self.assertIsNotNone(feed["errors"]["questions"])
 
-
-if __name__ == "__main__":
-    unittest.main()
-
-
     def test_structured_checkpoint_feed_item(self):
         items = build_feed_items(
             questions=[],
@@ -116,3 +112,56 @@ if __name__ == "__main__":
         self.assertIn("plate_checkpoint_decide", items[0].prompt_segment)
         self.assertIn("checkpoint_id=cp-abc", items[0].prompt_segment)
         self.assertIn("shadow_ack=shadow-x", items[0].prompt_segment)
+
+    def test_ask_user_question_payload_for_types(self):
+        from plate_core.feed import ask_user_question_payload, FeedItem
+        q = ask_user_question_payload(
+            FeedItem(id="q-1", item_type="question", number=10, title="What?", rank=20, impact="low")
+        )
+        self.assertIn("options", q)
+        self.assertEqual(q["options"][0]["id"], "answer_now")
+        tsk = ask_user_question_payload(
+            FeedItem(id="t-1", item_type="task", number=11, title="Do X", rank=5, impact="high")
+        )
+        self.assertTrue(any(o["id"] == "done_signal" for o in tsk["options"]))
+        cp = ask_user_question_payload(
+            FeedItem(id="cp-1", item_type="checkpoint", number=None, title="Approve", rank=10, impact="high")
+        )
+        self.assertTrue(any(o["id"] == "approve" for o in cp["options"]))
+
+    def test_feed_presentation_includes_ask_user_question(self):
+        feed = get_user_feed(
+            repo="akasper/plate",
+            limit=5,
+            include_process=False,
+            include_autonomy=False,
+            questions=[{
+                "number": 1,
+                "title": "Q1",
+                "body": "b",
+                "html_url": "https://example.com/1",
+                "updated_at": "2026-07-24T00:00:00Z",
+                "labels": [{"name": "Question"}],
+            }],
+            tasks=[],
+        )
+        self.assertTrue(feed["presentation"])
+        self.assertIn("ask_user_question", feed["presentation"][0])
+        self.assertIn("options", feed["presentation"][0]["ask_user_question"])
+
+    def test_approval_items_in_build_feed(self):
+        items = build_feed_items(
+            approval_items=[{
+                "id": "ap-1",
+                "kind": "design",
+                "title": "Checkout UX",
+                "status": "pending",
+                "approval_prompt": "Approve design?",
+            }],
+        )
+        self.assertEqual(items[0].item_type, "approval")
+        self.assertIn("design", items[0].title.lower())
+
+
+if __name__ == "__main__":
+    unittest.main()
