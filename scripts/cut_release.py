@@ -202,6 +202,14 @@ def fragment_to_entry(fragment: dict) -> dict:
         entry["links"] = fragment["links"]
     if fragment.get("requires"):
         entry["requires"] = fragment["requires"]
+    # #635 media passthrough
+    try:
+        from plate_core.release_media import attach_media_to_entry
+
+        entry = attach_media_to_entry(entry, fragment)
+    except Exception:
+        if fragment.get("media"):
+            entry["media"] = fragment["media"]
     return entry
 
 
@@ -209,7 +217,7 @@ def build_release(version: str, fragments: list[dict]) -> dict:
     entries = [fragment_to_entry(f) for f in fragments]
     slugs = [f.get("slug", f.get("_source_file", "")) for f in fragments]
     summary_slugs = ", ".join(slugs[:5]) + ("..." if len(slugs) > 5 else "")
-    return {
+    release: dict = {
         "version": version,
         "summary": f"PLATE {version} -- {len(entries)} change(s): {summary_slugs}.",
         "cut_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -217,6 +225,16 @@ def build_release(version: str, fragments: list[dict]) -> dict:
         "fragment_slugs": [f.get("slug", f["_source_file"]) for f in fragments],
         "entries": entries,
     }
+    try:
+        from plate_core.release_media import build_media_manifest
+
+        manifest = build_media_manifest(fragments, version=version)
+        release["media"] = manifest.get("media") or []
+        release["media_summary"] = manifest.get("summary")
+        release["media_markdown"] = manifest.get("markdown_approved") or ""
+    except Exception:
+        release["media"] = []
+    return release
 
 
 # ---------------------------------------------------------------------------

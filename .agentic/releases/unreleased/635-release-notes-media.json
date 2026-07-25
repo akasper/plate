@@ -1,0 +1,24 @@
+{
+  "slug": "635-release-notes-media",
+  "change_type": "feature",
+  "surface": "src/plate_core/release_media.py, release.py, scripts/render_release_notes.py, scripts/cut_release.py, cli.py, mcp_server.py, .agentic/releases/unreleased/README.md",
+  "summary": "Release notes demo media (#635): optional fragment `media` array (gif/video/image/link), normalize/collect/approve, cut_release + render_release_notes embed media markdown, MCP plate_release_media_* + gh plate release-media, feed pending approvals.",
+  "migration_impact": "Fragments may include optional media[]. cut_release writes media + media_markdown into release.json. Capture GIFs via e2e tooling then reference path; approve before shipping preferred.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. On Feature fragments add media: [{type:\"gif\", path:\"tests/e2e/fixtures/gifs/foo.gif\", caption:\"...\", approval_status:\"pending\"}].",
+    "3. gh plate release-media / plate_release_media_manifest to list; approve via feed or set approval_status approved.",
+    "4. cut_release aggregates into release notes and GitHub Release body helpers."
+  ],
+  "agent_notes": "First slice of #635 — schema + render + approval helpers. Does not auto-record Playwright GIFs (see #636 / record-e2e-gif). Prefer only_approved media for public Release body.",
+  "breaking": false,
+  "links": [
+    "#635",
+    "#636",
+    "#654",
+    "#639"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
