@@ -1396,6 +1396,55 @@ def run_pm_cycle(
     )
 
 
+def tick_pm_loops(
+    repo: str | None = None,
+    *,
+    dry_run: bool = True,
+    fetch_gates: bool = False,
+    limit: int = 20,
+    complete_when_done: bool = True,
+    state_dir: Path | None = None,
+    feature_loop_base_dir: Path | None = None,
+    bug_loop_base_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Dedicated surface: tick delegated #638/#639 loops without a full PM assign cycle.
+
+    Useful for host loops that only need stage sync / estimate_cost advance / babysit
+    gates / complete-on-done after work was already delegated.
+    """
+    pm = ProjectManager(
+        repo=repo,
+        state_dir=state_dir,
+        feature_loop_base_dir=feature_loop_base_dir,
+        bug_loop_base_dir=bug_loop_base_dir,
+        dispatch_fleet=False,
+        dispatch_loops=False,
+    )
+    ticks = pm.tick_delegated_loops(
+        dry_run=dry_run,
+        fetch_gates=fetch_gates,
+        limit=limit,
+        complete_when_done=complete_when_done,
+    )
+    completed = sum(1 for t in ticks if t.get("completed_assignment"))
+    advanced = sum(1 for t in ticks if t.get("advanced"))
+    return {
+        "ok": True,
+        "dry_run": dry_run,
+        "loop_ticks": ticks,
+        "n_ticks": len(ticks),
+        "n_advanced": advanced,
+        "n_completed": completed,
+        "queue_size": len(pm._assignments),
+        "pm_status": pm.get_status().to_dict(),
+        "marker": (
+            f"{MARKER_BEGIN}\n"
+            f'{json.dumps({"status": "tick_loops", "n": len(ticks), "advanced": advanced, "completed": completed})}\n'
+            f"{MARKER_END}"
+        ),
+    }
+
+
 def run_pm_loop(
     repo: str | None = None,
     dry_run: bool = True,

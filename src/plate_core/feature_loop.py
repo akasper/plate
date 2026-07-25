@@ -824,11 +824,23 @@ def run_feature_loop_tick(
         "run": run,
         "packet": packet,
     }
-    if not dry_run and run.get("stage") == "babysit" and gates:
-        adv = advance_feature_loop(run_id, gates=gates, base_dir=base_dir)
-        result["advance"] = adv
-        result["run"] = adv.get("run") or run
-        result["packet"] = adv.get("packet") or packet
+    if not dry_run:
+        stage = str(run.get("stage") or "")
+        # estimate_cost is recorded at start; auto-advance so PM ticks make progress (#639/#660)
+        if stage == "estimate_cost":
+            adv = advance_feature_loop(
+                run_id,
+                skip_media=not bool(run.get("needs_media_approval")),
+                base_dir=base_dir,
+            )
+            result["advance"] = adv
+            result["run"] = adv.get("run") or run
+            result["packet"] = adv.get("packet") or packet
+        elif stage == "babysit" and gates:
+            adv = advance_feature_loop(run_id, gates=gates, base_dir=base_dir)
+            result["advance"] = adv
+            result["run"] = adv.get("run") or run
+            result["packet"] = adv.get("packet") or packet
     return result
 
 
