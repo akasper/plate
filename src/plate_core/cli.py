@@ -63,6 +63,7 @@ from .pm import (
     run_pm_cycle,
     run_pm_loop,
 )
+from .tasks import close_task_with_signal, create_task
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -823,6 +824,56 @@ def cmd_artifact(args: argparse.Namespace) -> int:
     for r in rows:
         print(f"{r.get('id')} [{r.get('status')}] {r.get('kind')}: {r.get('title')}")
     return 0
+
+def cmd_task(args: argparse.Namespace) -> int:
+    """Create or close human Task issues (#359)."""
+    if getattr(args, "close", None):
+        out = close_task_with_signal(
+            int(args.close),
+            comment=str(getattr(args, "comment", None) or "Task complete."),
+            repo=getattr(args, "repo", None),
+            dry_run=bool(getattr(args, "dry_run", False)),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"task close: ok={out.get('ok')} number={out.get('number')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "create", False) or getattr(args, "title", None):
+        title = getattr(args, "title", None) or ""
+        if not title:
+            print("task create requires --title", file=sys.stderr)
+            return 2
+        out = create_task(
+            title,
+            human_action=str(getattr(args, "human_action", None) or ""),
+            why_agent_cannot=str(getattr(args, "why", None) or ""),
+            context=str(getattr(args, "context", None) or ""),
+            instructions=str(getattr(args, "instructions", None) or ""),
+            done_signal=getattr(args, "done_signal", None),
+            related_links=getattr(args, "related", None),
+            milestone=getattr(args, "milestone", None),
+            epic_milestone_name=getattr(args, "epic_milestone", None),
+            repo=getattr(args, "repo", None),
+            dry_run=bool(getattr(args, "dry_run", False)),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(f"task create failed: {out.get('error')}", file=sys.stderr)
+            return 1
+        if out.get("dry_run"):
+            print(f"dry-run Task: {out.get('title')}")
+            print(out.get("body", "")[:500])
+            return 0
+        print(f"Created Task #{out.get('number')}: {out.get('url')}")
+        return 0
+
+    print("Usage: gh plate task --create --title ... --human-action ... --why ... --context ... --instructions ...", file=sys.stderr)
+    return 2
+
 
 def cmd_pm(args: argparse.Namespace) -> int:
     """Project Manager orchestrator CLI (#660)."""
@@ -1701,6 +1752,27 @@ def build_parser() -> argparse.ArgumentParser:
     artifact.add_argument("--by", default="cli-user")
     artifact.add_argument("--json", action="store_true")
     artifact.set_defaults(func=cmd_artifact)
+
+    task = sub.add_parser(
+        "task",
+        help="Create/close human Task issues (#359): required 6-field contract",
+    )
+    task.add_argument("--repo", help="owner/name")
+    task.add_argument("--create", action="store_true", help="Create a Task issue")
+    task.add_argument("--title", help="Task title (human action summary)")
+    task.add_argument("--human-action", dest="human_action", default="", help="What the human must do")
+    task.add_argument("--why", dest="why", default="", help="Why the agent cannot safely proceed")
+    task.add_argument("--context", default="", help="Context and affected artifacts")
+    task.add_argument("--instructions", default="", help="Best-effort next steps")
+    task.add_argument("--done-signal", dest="done_signal", help="Override default done signal text")
+    task.add_argument("--related", default="", help="Related links (text)")
+    task.add_argument("--milestone", help="Milestone number or title")
+    task.add_argument("--epic-milestone", dest="epic_milestone", help="Epic milestone title to inherit")
+    task.add_argument("--close", type=int, metavar="N", help="Close Task #N with PLATE-TASK-CLOSED")
+    task.add_argument("--comment", default="", help="Completion comment for --close")
+    task.add_argument("--dry-run", action="store_true")
+    task.add_argument("--json", action="store_true")
+    task.set_defaults(func=cmd_task)
 
     pm = sub.add_parser(
         "pm",
