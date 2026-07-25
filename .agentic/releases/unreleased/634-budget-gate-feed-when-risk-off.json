@@ -1,0 +1,25 @@
+{
+  "slug": "634-budget-gate-feed-when-risk-off",
+  "change_type": "feature",
+  "surface": "src/plate_core/costs.py, feed.py (via cost dashboard signals)",
+  "summary": "Emit budget_gate feed items for critical/exhausted pressure even when risk_tolerance=off so the endless feed prioritizes budget decisions while surface gates still apply (#787/#634/#653).",
+  "migration_impact": "Operators with risk=off now see budget_gate in feed/dashboard when remaining is exhausted or critical. Elevated-only burn while engine off ranks lower (rank 22).",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate costs --dashboard / plate_feed should show budget_gate under risk=off when spend is high.",
+    "3. risk_tolerance=off still disables AutonomyEngine cycles only."
+  ],
+  "agent_notes": "Pairs with #785 loop hydrate-when-risk-off. Do not hide budget pressure because the engine is parked.",
+  "breaking": false,
+  "links": [
+    "#787",
+    "#634",
+    "#653",
+    "#631",
+    "#785",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
