@@ -204,10 +204,46 @@ def stage_packet(run: dict[str, Any]) -> dict[str, Any]:
     if stage == "babysit" and pr:
         steps.append(f"gh plate pr babysit {pr} --act")
         steps.append(f"plate_get_pr_merge_gates pr_number={pr}")
+    cid = run.get("checkpoint_id")
     if stage == "human_checkpoint":
-        steps.append("plate_checkpoint_create or feed Task; do not merge until approved")
+        if cid:
+            steps.append(f"plate_checkpoint_decide id={cid} decision=approve (or reject/revise)")
+            steps.append(f"gh plate checkpoint --decide {cid} --decision approve")
+            steps.append("Do not merge until checkpoint is approved; then plate_bug_loop_advance")
+        else:
+            steps.append("plate_bug_loop_advance opens #648 checkpoint; decide then re-advance")
     if stage == "merge_eligible" and pr:
         steps.append(f"Report merge readiness for PR #{pr}; human merges when risk-off")
+    options: list[dict[str, str]]
+    if stage == "human_checkpoint" and cid:
+        options = [
+            {
+                "id": "approve",
+                "label": "Approve checkpoint",
+                "description": f"plate_checkpoint_decide {cid} approve then advance",
+            },
+            {
+                "id": "reject",
+                "label": "Reject",
+                "description": f"plate_checkpoint_decide {cid} reject",
+            },
+            {
+                "id": "cancel",
+                "label": "Cancel loop",
+                "description": f"plate_bug_loop_cancel {run.get('id')}",
+            },
+        ]
+        question = (
+            f"Approve bug loop checkpoint {cid} for #{bug or '?'} "
+            f"({str(title)[:60]}) before merge?"
+        )
+    else:
+        options = [
+            {"id": "advance", "label": "Advance stage", "description": f"plate_bug_loop_advance {run.get('id')}"},
+            {"id": "block", "label": "Mark blocked", "description": "Need more info / human"},
+            {"id": "cancel", "label": "Cancel loop", "description": f"plate_bug_loop_cancel {run.get('id')}"},
+        ]
+        question = f"Bug loop [{stage}] for #{bug or '?'}: {str(title)[:80]} — advance?"
     return {
         "run_id": run.get("id"),
         "stage": stage,
@@ -215,18 +251,15 @@ def stage_packet(run: dict[str, Any]) -> dict[str, Any]:
         "pr_number": pr,
         "branch": run.get("branch"),
         "title": title,
+        "checkpoint_id": cid,
         "prompt": prompt,
         "steps": steps,
         "ask_user_question": {
-            "question": f"Bug loop [{stage}] for #{bug or '?'}: {str(title)[:80]} — advance?",
-            "options": [
-                {"id": "advance", "label": "Advance stage", "description": f"plate_bug_loop_advance {run.get('id')}"},
-                {"id": "block", "label": "Mark blocked", "description": "Need more info / human"},
-                {"id": "cancel", "label": "Cancel loop", "description": f"plate_bug_loop_cancel {run.get('id')}"},
-            ],
+            "question": question,
+            "options": options,
         },
         "marker": render_bug_loop_marker(
-            {"id": run.get("id"), "stage": stage, "bug": bug, "pr": pr}
+            {"id": run.get("id"), "stage": stage, "bug": bug, "pr": pr, "checkpoint_id": cid}
         ),
     }
 
@@ -364,6 +397,107 @@ def update_bug_loop(
     return {"ok": True, "run": found, "packet": stage_packet(found)}
 
 
+def _checkpoint_base(base_dir: Path | None) -> Path | None:
+    """Isolate checkpoints under loop base_dir in tests; production uses default."""
+    if base_dir is None:
+        return None
+    return Path(base_dir) / "checkpoints"
+
+
+def _open_human_checkpoint_for_run(found: dict[str, Any], *, base_dir: Path | None) -> dict[str, Any] | None:
+    """Create a durable #648 checkpoint when entering human_checkpoint (once)."""
+    if found.get("checkpoint_id"):
+        return None
+    try:
+        from .checkpoint import create_checkpoint
+    except Exception:
+        return None
+    bug_n = found.get("bug_number")
+    title = f"Approve bug loop merge: {found.get('bug_title') or bug_n or found.get('id')}"
+    reason = (
+        f"Bug loop #{bug_n or '?'} at human_checkpoint "
+        f"(risk={found.get('risk')}; pr={found.get('pr_number')}). "
+        "Approve before merge_eligible."
+    )
+    cp = create_checkpoint(
+        title=title[:200],
+        reason=reason,
+        impact="high" if str(found.get("risk") or "").lower() in ("high", "critical") else "medium",
+        action_kind="bug_loop_merge",
+        scope={
+            "run_id": found.get("id"),
+            "loop": "bug",
+            "stage": "human_checkpoint",
+        },
+        related_issue=int(bug_n) if bug_n is not None else None,
+        related_pr=int(found["pr_number"]) if found.get("pr_number") is not None else None,
+        created_by="bug_loop",
+        risk_tolerance="off",
+        autonomy_enabled=False,
+        pause_autonomy=True,
+        base_dir=_checkpoint_base(base_dir),
+    )
+    if isinstance(cp, dict) and cp.get("id"):
+        found["checkpoint_id"] = cp["id"]
+        found.setdefault("notes", []).append(f"opened checkpoint {cp['id']}")
+        found.setdefault("history", []).append(
+            {"ts": _now(), "stage": "human_checkpoint", "event": "checkpoint_opened", "checkpoint_id": cp["id"]}
+        )
+        return cp
+    return None
+
+
+def _human_checkpoint_blocks_advance(
+    found: dict[str, Any],
+    *,
+    force_skip_checkpoint: bool,
+    base_dir: Path | None,
+) -> dict[str, Any] | None:
+    """If at human_checkpoint without approved #648, return a blocked advance payload."""
+    if force_skip_checkpoint:
+        return None
+    cid = found.get("checkpoint_id")
+    if not cid:
+        # Ensure a checkpoint exists before leaving this stage
+        _open_human_checkpoint_for_run(found, base_dir=base_dir)
+        cid = found.get("checkpoint_id")
+    if not cid:
+        return {
+            "ok": True,
+            "advanced": False,
+            "reason": "human_checkpoint requires a #648 checkpoint_id",
+            "run": found,
+            "packet": stage_packet(found),
+        }
+    try:
+        from .checkpoint import checkpoint_approval_for_gate
+    except Exception as exc:
+        return {
+            "ok": True,
+            "advanced": False,
+            "reason": f"checkpoint module unavailable: {exc}",
+            "run": found,
+            "packet": stage_packet(found),
+        }
+    gate = checkpoint_approval_for_gate(
+        str(cid),
+        action_kind="bug_loop_merge",
+        base_dir=_checkpoint_base(base_dir),
+    )
+    if gate.get("approved"):
+        return None
+    return {
+        "ok": True,
+        "advanced": False,
+        "reason": gate.get("reason")
+        or f"checkpoint {cid} not approved; stay on human_checkpoint",
+        "checkpoint_id": cid,
+        "checkpoint_gate": gate,
+        "run": found,
+        "packet": stage_packet(found),
+    }
+
+
 def advance_bug_loop(
     run_id: str,
     *,
@@ -421,12 +555,28 @@ def advance_bug_loop(
                 "packet": stage_packet(found),
             }
 
+    # #648: cannot leave human_checkpoint without approved checkpoint
+    if cur == "human_checkpoint":
+        blocked = _human_checkpoint_blocks_advance(
+            found, force_skip_checkpoint=force_skip_checkpoint, base_dir=base_dir
+        )
+        if blocked is not None:
+            found["updated_at"] = _now()
+            _save(data, base_dir)
+            blocked["run"] = found
+            blocked["packet"] = stage_packet(found)
+            return blocked
+
     skip_cp = force_skip_checkpoint or not found.get("requires_human")
     # When leaving babysit, go to human_checkpoint if required
     if cur == "babysit" and found.get("requires_human") and not force_skip_checkpoint:
         nxt = "human_checkpoint"
     else:
         nxt = next_stage(cur, skip_checkpoint=skip_cp)
+
+    opened_cp = None
+    if nxt == "human_checkpoint":
+        opened_cp = _open_human_checkpoint_for_run(found, base_dir=base_dir)
 
     found["stage"] = nxt
     if nxt == "done":
@@ -436,7 +586,7 @@ def advance_bug_loop(
     )
     found["updated_at"] = _now()
     _save(data, base_dir)
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "advanced": True,
         "from_stage": cur,
@@ -444,6 +594,12 @@ def advance_bug_loop(
         "run": found,
         "packet": stage_packet(found),
     }
+    if opened_cp is not None:
+        out["checkpoint"] = opened_cp
+        out["checkpoint_id"] = opened_cp.get("id")
+    elif found.get("checkpoint_id"):
+        out["checkpoint_id"] = found.get("checkpoint_id")
+    return out
 
 
 def run_bug_loop_tick(

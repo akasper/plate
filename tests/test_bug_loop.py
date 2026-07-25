@@ -82,10 +82,29 @@ class TestRunLifecycle(unittest.TestCase):
         rid = r["run"]["id"]
         # jump to babysit then advance
         from plate_core.bug_loop import update_bug_loop
+        from plate_core.checkpoint import decide_checkpoint
 
         update_bug_loop(rid, stage="babysit", pr_number=100, base_dir=self.base)
         out = advance_bug_loop(rid, base_dir=self.base)
         self.assertEqual(out["to_stage"], "human_checkpoint")
+        # #648 bridge: entering human_checkpoint auto-opens a durable checkpoint
+        self.assertTrue(out.get("checkpoint_id") or out["run"].get("checkpoint_id"))
+        cid = out.get("checkpoint_id") or out["run"]["checkpoint_id"]
+        self.assertTrue(str(cid).startswith("cp-"))
+        # Cannot leave without approval
+        blocked = advance_bug_loop(rid, base_dir=self.base)
+        self.assertFalse(blocked["advanced"])
+        self.assertEqual(blocked["run"]["stage"], "human_checkpoint")
+        # Approve then advance
+        decide_checkpoint(
+            cid,
+            "approve",
+            decided_by="test",
+            base_dir=self.base / "checkpoints",
+        )
+        ok = advance_bug_loop(rid, base_dir=self.base)
+        self.assertTrue(ok["advanced"])
+        self.assertEqual(ok["to_stage"], "merge_eligible")
 
     def test_babysit_gate_blocks_advance(self):
         r = start_bug_loop(bug_number=1, bug_title="x", pr_number=9, base_dir=self.base, record_ledger=False)
