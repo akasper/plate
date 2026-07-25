@@ -94,12 +94,20 @@ class TestPlanningAndValidation(unittest.TestCase):
 
 
 class TestFeed(unittest.TestCase):
-    def test_feed_when_unset(self):
+    def test_feed_when_non_software_detected(self):
         with tempfile.TemporaryDirectory() as td:
-            # empty root → software default, optional unset item
-            items = hybrid_feed_items(base_dir=Path(td) / "hybrid", repo_root=Path(td))
+            root = Path(td)
+            (root / "docs").mkdir()
+            (root / "mkdocs.yml").write_text("site_name: x\n", encoding="utf-8")
+            items = hybrid_feed_items(base_dir=root / "hybrid", repo_root=root)
             self.assertTrue(items)
             self.assertTrue(any("ask_user_question" in i for i in items))
+            self.assertTrue(any("docs" in (i.get("title") or "").lower() or "docs" in (i.get("badges") or []) for i in items))
+
+    def test_feed_quiet_for_empty_software(self):
+        with tempfile.TemporaryDirectory() as td:
+            items = hybrid_feed_items(base_dir=Path(td) / "hybrid", repo_root=Path(td))
+            self.assertEqual(items, [])
 
 
 if __name__ == "__main__":
