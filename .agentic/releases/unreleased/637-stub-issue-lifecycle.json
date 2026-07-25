@@ -1,0 +1,25 @@
+{
+  "slug": "637-stub-issue-lifecycle",
+  "change_type": "feature",
+  "surface": "src/plate_core/stubs.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+  "summary": "Autonomous stub Issue authoring/refinement lifecycle (#637): draft all PLATE types from intent/Q&A, refine AC via answers, durable .agentic/stubs/, dry-run create, status:stub+need:refinement labels, feed prompts, MCP plate_stub_* + gh plate stub.",
+  "migration_impact": "Optional local drafts under .agentic/stubs/ (gitignored). Create on GitHub is dry-run by default. Complements plate_task_create and planning sessions.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Author: gh plate stub --intent \"...\" --type Feature (or plate_stub_author).",
+    "3. Refine: plate_stub_refine; create: plate_stub_create dry_run=false / gh plate stub --create <id> --apply.",
+    "4. Feed surfaces drafts awaiting create/refine."
+  ],
+  "agent_notes": "First slice of Epic #637 — local lifecycle + GitHub create. Full Q&A-driven multi-turn loops, Design/Research artifact commits, and automatic Epic sub-issue linking remain follow-ups. Prefer dry_run until human/checkpoint allows create.",
+  "breaking": false,
+  "links": [
+    "#637",
+    "#654",
+    "#359",
+    "#642",
+    "#631"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

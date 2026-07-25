@@ -83,6 +83,14 @@ from .monitoring import (
     run_discussion_review_procedure,
     run_market_monitor_procedure,
 )
+from .stubs import (
+    author_and_create,
+    author_stub,
+    create_stub_issue,
+    list_stubs,
+    refine_stub,
+    stubs_feed_items,
+)
 from .tasks import (
     close_task_with_signal,
     create_task,
@@ -1060,6 +1068,93 @@ def cmd_task(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def cmd_stub(args: argparse.Namespace) -> int:
+    """Autonomous stub issue authoring + refinement (#637)."""
+    if getattr(args, "list", False):
+        rows = list_stubs(
+            status=str(getattr(args, "status", None) or "all"),
+            issue_type=getattr(args, "type", None) or None,
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+        if args.json:
+            print(json.dumps({"drafts": rows}))
+            return 0
+        for d in rows:
+            print(f"{d.get('id')} [{d.get('status')}] {d.get('issue_type')}: {d.get('title')}")
+        return 0
+
+    if getattr(args, "refine", None):
+        ac = []
+        raw_ac = getattr(args, "add_acceptance", None) or ""
+        if raw_ac:
+            ac = [x.strip() for x in str(raw_ac).split(";") if x.strip()]
+        out = refine_stub(
+            str(args.refine),
+            add_acceptance=ac or None,
+            summary_append=getattr(args, "summary", None) or None,
+            issue_type=getattr(args, "type", None) or None,
+            note=getattr(args, "note", None) or None,
+            mark_ready=bool(getattr(args, "ready", False)),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} status={(out.get('draft') or {}).get('status')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "create", None):
+        out = create_stub_issue(
+            str(args.create),
+            repo=getattr(args, "repo", None),
+            dry_run=not getattr(args, "apply", False),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"create ok={out.get('ok')} dry_run={out.get('dry_run')} number={out.get('number')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "feed", False):
+        rows = stubs_feed_items(limit=int(getattr(args, "limit", 10) or 10))
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    # default: author
+    intent = getattr(args, "intent", None) or getattr(args, "title", None) or ""
+    if getattr(args, "apply", False) and intent:
+        out = author_and_create(
+            str(intent),
+            issue_type=getattr(args, "type", None) or None,
+            title=getattr(args, "title", None) or None,
+            dry_run=False,
+            repo=getattr(args, "repo", None),
+            source=str(getattr(args, "source", None) or "qa"),
+        )
+    else:
+        out = author_stub(
+            str(intent),
+            issue_type=getattr(args, "type", None) or None,
+            title=getattr(args, "title", None) or None,
+            summary=getattr(args, "summary", None) or None,
+            source=str(getattr(args, "source", None) or "qa"),
+            parent_epic=getattr(args, "parent_epic", None),
+            persist=True,
+        )
+        if getattr(args, "dry_create", False) and out.get("ok"):
+            c = create_stub_issue(out["draft"]["id"], dry_run=True, repo=getattr(args, "repo", None))
+            out["create"] = c
+    if args.json:
+        print(json.dumps(out))
+        return 0 if out.get("ok") else 1
+    d = out.get("draft") or {}
+    print(f"ok={out.get('ok')} id={d.get('id')} type={d.get('issue_type')} title={d.get('title')}")
+    return 0 if out.get("ok") else 1
 
 
 def cmd_monitor(args: argparse.Namespace) -> int:
@@ -2268,6 +2363,31 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
+
+    stub = sub.add_parser(
+        "stub",
+        help="Author/refine/create stub Issues of all types (#637)",
+    )
+    stub.add_argument("--repo", help="owner/name")
+    stub.add_argument("--intent", default="", help="Free-text intent / Q&A answer")
+    stub.add_argument("--title", default="", help="Optional explicit title")
+    stub.add_argument("--type", dest="type", default="", help="Feature|Bug|Epic|Release|Research|Design|Question|Task")
+    stub.add_argument("--summary", default="", help="Summary or refinement append")
+    stub.add_argument("--source", default="qa")
+    stub.add_argument("--parent-epic", dest="parent_epic", default=None)
+    stub.add_argument("--list", action="store_true", help="List local drafts")
+    stub.add_argument("--refine", metavar="DRAFT_ID", help="Refine draft by id")
+    stub.add_argument("--add-acceptance", dest="add_acceptance", default="", help="Semicolon-separated AC lines")
+    stub.add_argument("--note", default="")
+    stub.add_argument("--ready", action="store_true", help="With --refine: mark ready-to-work")
+    stub.add_argument("--create", metavar="DRAFT_ID", help="Create GitHub issue from draft")
+    stub.add_argument("--apply", action="store_true", help="Actually create (default dry for --create; with --intent creates on GH)")
+    stub.add_argument("--dry-create", dest="dry_create", action="store_true", help="After author, dry-run create payload")
+    stub.add_argument("--feed", action="store_true")
+    stub.add_argument("--status", default="all")
+    stub.add_argument("--limit", type=int, default=50)
+    stub.add_argument("--json", action="store_true")
+    stub.set_defaults(func=cmd_stub)
 
     monitor = sub.add_parser(
         "monitor",
