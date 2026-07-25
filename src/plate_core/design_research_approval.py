@@ -114,6 +114,7 @@ def propose_artifact(
     out["approval_prompt"] = (
         f"Approve this {k}? (#{related_issue or 'n/a'}) — Approve / Revise / Reject"
     )
+    out["ask_user_question"] = ask_user_question_payload(out)
     return out
 
 
@@ -249,6 +250,23 @@ def decide_proposal(
         "revised": "Revise artifact content, then propose_artifact again or re-submit same id after update.",
         "rejected": "Do not use this artifact; capture alternative via Research/Design issue.",
     }.get(new_status, "")
+    # #647: durable provenance for artifact decisions
+    try:
+        from .ledger import record_decision
+
+        led = record_decision(
+            action_kind=f"artifact_{rec.kind}",
+            decision=new_status,
+            reason=note or out["next_prompt"] or f"{new_status} {rec.kind} artifact",
+            sources=["design_research_approval", "#632"],
+            related_issue=rec.related_issue,
+            actor=decided_by,
+            metadata={"proposal_id": rec.id, "version": rec.version, "title": rec.title},
+            base_dir=None,
+        )
+        out["ledger_id"] = led.get("id")
+    except Exception:
+        pass
     return out
 
 
@@ -282,8 +300,55 @@ def render_approval_marker(rec: ArtifactProposal | dict[str, Any]) -> str:
     return f"{MARKER_BEGIN}\n{json.dumps(payload, indent=2)}\n{MARKER_END}"
 
 
+def ask_user_question_payload(proposal: dict[str, Any]) -> dict[str, Any]:
+    """Native TUI payload for one Design/Research approval (#632)."""
+    pid = str(proposal.get("id") or "artifact")
+    kind = str(proposal.get("kind") or "design")
+    title = str(proposal.get("title") or "artifact")
+    summary = str(proposal.get("summary") or "")[:240]
+    path = str(proposal.get("content_path") or "n/a")
+    return {
+        "item_id": pid,
+        "item_type": "artifact_approval",
+        "kind": kind,
+        "question": (
+            f"Approve {kind} artifact '{title}'?\n"
+            f"Summary: {summary or '(none)'}\n"
+            f"Path/link: {path}\n"
+            "Not authoritative until Approve."
+        ),
+        "options": [
+            {
+                "id": "approve",
+                "label": "Approve",
+                "description": f"plate_artifact_decide {pid} approve — becomes authoritative.",
+            },
+            {
+                "id": "revise",
+                "label": "Revise",
+                "description": f"plate_artifact_decide {pid} revise — bump version; re-propose content.",
+            },
+            {
+                "id": "reject",
+                "label": "Reject",
+                "description": f"plate_artifact_decide {pid} reject — do not use.",
+            },
+            {
+                "id": "open_artifact",
+                "label": "Open artifact",
+                "description": f"Review content at {path} before deciding.",
+            },
+        ],
+        "multi_select": False,
+        "related_issue": proposal.get("related_issue"),
+        "originating_question": proposal.get("originating_question"),
+        "media_links": list(proposal.get("media_links") or []),
+    }
+
+
 def presentation_for_feed(proposal: dict[str, Any]) -> dict[str, Any]:
     """Shape for #631 feed / ask_user_question."""
+    payload = ask_user_question_payload(proposal)
     return {
         "id": proposal.get("id"),
         "item_type": "artifact_approval",
@@ -297,5 +362,7 @@ def presentation_for_feed(proposal: dict[str, Any]) -> dict[str, Any]:
             "Approve / Revise / Reject"
         ),
         "url": proposal.get("content_path"),
+        "ask_user_question": payload,
+        "approval_prompt": proposal.get("approval_prompt") or payload.get("question"),
         "reason": "Design/Research pending human approval (#632)",
     }
