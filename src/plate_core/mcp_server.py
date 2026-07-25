@@ -915,15 +915,21 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             labels = args.get("labels") or []
             if isinstance(labels, str):
                 labels = [x.strip() for x in labels.split(",") if x.strip()]
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = start_bug_loop(
                 bug_number=args.get("bug_number") or args.get("bug"),
                 bug_title=str(args.get("bug_title") or args.get("title") or ""),
                 risk=str(args.get("risk") or "medium"),
+                size=str(args.get("size") or "medium"),
                 labels=list(labels) if labels else None,
                 paths=list(args.get("paths") or []) or None,
                 risk_tolerance=str(args.get("risk_tolerance") or "medium"),
                 pr_number=args.get("pr_number") or args.get("pr"),
                 branch=args.get("branch"),
+                budget_remaining=args.get("budget_remaining"),
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_bug_loop_advance":
             payload = advance_bug_loop(
@@ -3024,7 +3030,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_bug_loop_start",
-                                "description": "Start autonomous bug resolution loop run (#638): plan→TDD→PR→babysit→merge-eligible.",
+                                "description": "Start autonomous bug resolution loop run (#638): plan→TDD→PR→babysit→merge-eligible; budget estimate + live hydrate (#634).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -3033,12 +3039,21 @@ def run() -> None:
                                         "bug_title": {"type": "string"},
                                         "title": {"type": "string"},
                                         "risk": {"type": "string"},
+                                        "size": {
+                                            "type": "string",
+                                            "description": "trivial|small|medium|large for cost estimate",
+                                        },
                                         "labels": {"type": "array", "items": {"type": "string"}},
                                         "paths": {"type": "array", "items": {"type": "string"}},
                                         "risk_tolerance": {"type": "string"},
                                         "pr_number": {"type": "integer"},
                                         "pr": {"type": "integer"},
                                         "branch": {"type": "string"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate remaining tokens from durable spend when budget_remaining omitted (default true).",
+                                        },
                                     },
                                 },
                             },
