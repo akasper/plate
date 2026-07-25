@@ -1,0 +1,25 @@
+{
+  "slug": "634-budget-snapshot-ux",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, feature_loop.py, cli.py, mcp_server.py, tests/",
+  "summary": "#634 budget UX: get_budget_snapshot + format markdown; gh plate autonomy --budget [--estimate-tokens]; plate_autonomy_budget MCP; feature_loop start auto-hydrates remaining tokens from durable spend when autonomy enabled (use_live_budget default true).",
+  "migration_impact": "New CLI flag --budget and MCP plate_autonomy_budget. Feature loop start may block when live budget pressure + estimate exceed rails (only when .plate autonomy enabled and risk != off). Explicit budget_remaining still wins; use_live_budget=false opts out.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Inspect rails: gh plate autonomy --budget [--estimate-tokens N] --json or plate_autonomy_budget.",
+    "3. Feature loop start without --budget-remaining hydrates from spend.json when autonomy is on.",
+    "4. Pass --budget-remaining or use_live_budget=false for isolated/test starts."
+  ],
+  "agent_notes": "Prefer plate_autonomy_budget before long feature_loop starts. risk-off repos see snapshot limits but do not auto-block starts. Pairs with durable spend (#634) and cost dashboard (#653).",
+  "breaking": false,
+  "links": [
+    "#735",
+    "#634",
+    "#653",
+    "#639",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

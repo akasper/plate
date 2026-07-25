@@ -593,6 +593,50 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertGreater(tokens_to_usd(est), 0.0001)
             self.assertEqual(eng.enforce_budget(est, "plan_epic"), Decision.PAUSE)
 
+    def test_get_budget_snapshot_and_markdown(self):
+        """#634 UX: get_budget_snapshot merges limits + durable spend for CLI/loops."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import (
+            format_budget_snapshot_markdown,
+            get_budget_snapshot,
+            save_budget_spend,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "day": "2026-07-25",
+                    "spent_today": 4000,
+                    "spent_this_cycle": 500,
+                    "spent_usd_today": 0.008,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {"daily": 10000, "per_cycle": 2000, "action": "pause"},
+                    "cost_ceiling_usd": 1.0,
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                # load_budget_spend is called with base_dir — patch path via base_dir arg
+                snap = get_budget_snapshot(base_dir=bdir, estimated_tokens=7000)
+            self.assertEqual(snap["daily_limit"], 10000)
+            self.assertEqual(snap["spent_today"], 4000)
+            self.assertEqual(snap["remaining_tokens"], 6000)
+            self.assertTrue(snap["would_pause"])
+            self.assertIn("daily", snap["gate_reason"] or "")
+            md = format_budget_snapshot_markdown(snap)
+            self.assertIn("Budget snapshot", md)
+            self.assertIn("4000/10000", md)
+
 
 if __name__ == "__main__":
     unittest.main()

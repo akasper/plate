@@ -2452,6 +2452,17 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         print(f"Last cycle: {status.get('last_cycle')}")
         return 0
 
+    if getattr(args, "budget", False):
+        from .autonomy import format_budget_snapshot_markdown, get_budget_snapshot
+
+        est = getattr(args, "estimate_tokens", None)
+        snap = get_budget_snapshot(args.repo, estimated_tokens=est)
+        if args.json:
+            print(json.dumps(snap))
+            return 0
+        print(format_budget_snapshot_markdown(snap), end="")
+        return 0
+
     simulate_kind = getattr(args, "simulate", None)
     if simulate_kind:
         scope: dict = {}
@@ -2476,7 +2487,10 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         return 0
 
     if not getattr(args, "run", False) and not getattr(args, "loop", False):
-        print("No --run, --loop, or --simulate specified; execution skipped (use --status for info only).")
+        print(
+            "No --run, --loop, --budget, or --simulate specified; "
+            "execution skipped (use --status or --budget for info only)."
+        )
         return 0
 
     dry_run = getattr(args, "dry_run", False)
@@ -2485,7 +2499,11 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
     run = getattr(args, "run", False)
 
     if not run and not loop:
-        print("Usage: gh plate autonomy --status | --simulate ACTION | --run [--dry-run] | --loop [--max-cycles N]", file=sys.stderr)
+        print(
+            "Usage: gh plate autonomy --status | --budget [--estimate-tokens N] | "
+            "--simulate ACTION | --run [--dry-run] | --loop [--max-cycles N]",
+            file=sys.stderr,
+        )
         return 1
 
     if loop:
@@ -3684,6 +3702,18 @@ def build_parser() -> argparse.ArgumentParser:
     autonomy = sub.add_parser("autonomy", help="Autonomy status, run cycle, and --loop for persistent budgeted long-running operation (Epic #470)")
     autonomy.add_argument("--repo", help="owner/name; defaults to git remote origin")
     autonomy.add_argument("--status", action="store_true", help="Show autonomy status (risk tolerance, budget, autopilot score)")
+    autonomy.add_argument(
+        "--budget",
+        action="store_true",
+        help="Show durable #634 budget snapshot (limits, spend, remaining, pressure; pairs with feature-loop hydrate)",
+    )
+    autonomy.add_argument(
+        "--estimate-tokens",
+        type=int,
+        dest="estimate_tokens",
+        default=None,
+        help="With --budget: project would_pause/throttle for this token estimate",
+    )
     autonomy.add_argument(
         "--simulate",
         metavar="ACTION",
