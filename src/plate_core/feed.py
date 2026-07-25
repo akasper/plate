@@ -479,6 +479,21 @@ def get_user_feed(
         approval_items = list_proposals(status="pending", limit=15)
     except Exception:
         approval_items = []
+    # #628/#630 pending Q&A plans awaiting approval
+    try:
+        from .planning import list_pending_plans
+
+        for pl in list_pending_plans(limit=10):
+            approval_items.append({
+                "id": pl.get("id"),
+                "kind": pl.get("kind") or "feature",
+                "title": pl.get("title") or "Pending plan",
+                "status": pl.get("status") or "pending_approval",
+                "approval_prompt": pl.get("approval_prompt") or pl.get("prompt_segment"),
+                "summary": (pl.get("body") or "")[:200],
+            })
+    except Exception:
+        pass
 
     items = build_feed_items(
         questions=q_items,
