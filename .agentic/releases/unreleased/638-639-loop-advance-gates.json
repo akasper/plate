@@ -10,9 +10,10 @@
     "3. Expect advance to stay on babysit while checks pending or failing; re-tick after CI settles.",
     "4. Human CHANGES_REQUESTED remains a hard babysit hold (address feedback before advance)."
   ],
-  "agent_notes": "evaluate_babysit_gates is pure and shared — prefer it over hand-rolled merge_state checks. risk-off still never auto-merges; merge_eligible only reports readiness. Pairs with #648 checkpoints and #605 outdated thread resolve.",
+  "agent_notes": "evaluate_babysit_gates is pure and shared \u2014 prefer it over hand-rolled merge_state checks. risk-off still never auto-merges; merge_eligible only reports readiness. Pairs with #648 checkpoints and #605 outdated thread resolve.",
   "breaking": false,
   "links": [
+    "#734",
     "#638",
     "#639",
     "#654",
