@@ -782,14 +782,112 @@ def question_ask_user_payload(
     }
 
 
+# Heuristic planning costs (#634 / #628 / #630).
+_PLAN_SESSION_BASE = 4000
+_PLAN_PRODUCT_EXTRA = 2000
+_PLAN_BUILD_BASE = 5000
+_PLAN_PRODUCT_BUILD_EXTRA = 2500
+
+
+def estimate_planning_cost(
+    *,
+    kind: str = "feature",
+    phase: str = "start",
+) -> dict[str, Any]:
+    """Advisory token estimate for Q&A planning start or build (#634/#628/#630)."""
+    k = "product" if (kind or "").lower() == "product" else "feature"
+    phase_n = (phase or "start").lower()
+    if phase_n not in ("start", "build"):
+        phase_n = "start"
+    if phase_n == "start":
+        tokens = _PLAN_SESSION_BASE + (_PLAN_PRODUCT_EXTRA if k == "product" else 0)
+    else:
+        tokens = _PLAN_BUILD_BASE + (_PLAN_PRODUCT_BUILD_EXTRA if k == "product" else 0)
+    return {
+        "ok": True,
+        "kind": k,
+        "phase": phase_n,
+        "estimated_tokens": int(tokens),
+        "breakdown": {
+            "base": _PLAN_SESSION_BASE if phase_n == "start" else _PLAN_BUILD_BASE,
+            "product_extra": (
+                (_PLAN_PRODUCT_EXTRA if phase_n == "start" else _PLAN_PRODUCT_BUILD_EXTRA)
+                if k == "product"
+                else 0
+            ),
+        },
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine enforce hard ceilings.",
+            "start_planning_session / build_plan_from_session hydrate remaining when use_live_budget.",
+        ],
+    }
+
+
+def _planning_budget_gate(
+    *,
+    kind: str,
+    phase: str,
+    budget_remaining: int | None,
+    use_live_budget: bool,
+) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
+    cost_est = estimate_planning_cost(kind=kind, phase=phase)
+    est = int(cost_est.get("estimated_tokens") or 0)
+    notes: list[str] = []
+    effective = budget_remaining
+    if effective is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot(estimate_tokens=est)
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective = int(rem)
+                notes.append(
+                    f"budget hydrated: remaining_tokens={effective} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            notes.append(f"budget hydrate skipped: {exc}")
+    if effective is not None and est > int(effective):
+        return (
+            cost_est,
+            effective,
+            notes,
+            {
+                "ok": False,
+                "blocked": True,
+                "reason": "budget",
+                "error": f"budget: est {est} tokens exceeds remaining {effective}",
+                "cost_estimate_tokens": est,
+                "budget_remaining": int(effective),
+                "cost_estimate": cost_est,
+                "notes": notes,
+            },
+        )
+    return cost_est, effective, notes, None
+
+
 def start_planning_session(
     kind: str = "feature",
     *,
     base_dir: Path | None = None,
     persist: bool = True,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Begin a Q&A planning session; returns first question + session state."""
+    """Begin a Q&A planning session; returns first question + session state.
+
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
+    """
     k = "product" if kind == "product" else "feature"
+    cost_est, effective_remaining, budget_notes, blocked = _planning_budget_gate(
+        kind=k,
+        phase="start",
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        return blocked
     qs = _questions_for(k)
     session = PlanningSession(
         kind=k,
@@ -804,10 +902,15 @@ def start_planning_session(
         sdict = save_planning_session(sdict, base_dir=base_dir)
     nq = qs[0] if qs else None
     return {
+        "ok": True,
         "session": sdict,
         "session_id": sdict.get("id"),
         "total_questions": len(qs),
         "next_question": nq,
+        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
+        "notes": budget_notes,
         "ask_user_question": question_ask_user_payload(nq, kind=k, turn=0, total=len(qs)),
         "prompt_segment": (
             f"Present via native ask_user_question: {qs[0]['prompt']}"
@@ -1093,8 +1196,13 @@ def build_plan_from_session(
     *,
     planning_root: Path | None = None,
     persist_pending: bool = True,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Build plan from session; optionally persist under planning_root/pending/."""
+    """Build plan from session; optionally persist under planning_root/pending/.
+
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
+    """
     if isinstance(session, PlanningSession):
         kind = session.kind
         answers = session.answers
@@ -1107,6 +1215,14 @@ def build_plan_from_session(
         sid = str(session.get("id") or "")
     if not complete and not answers:
         return {"ok": False, "error": "session incomplete or empty"}
+    cost_est, effective_remaining, budget_notes, blocked = _planning_budget_gate(
+        kind=str(kind),
+        phase="build",
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        return blocked
     if kind == "product":
         plan = build_product_plan(answers)
     else:
@@ -1133,6 +1249,10 @@ def build_plan_from_session(
         "session_complete": complete,
         "ask_user_question": approval_payload,
         "pending_path": plan.get("path"),
+        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
+        "notes": budget_notes,
     }
 
 
