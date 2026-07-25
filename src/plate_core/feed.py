@@ -417,10 +417,24 @@ def build_feed_items(
         )
     for i, sig in enumerate(signal_items or []):
         stype = str(sig.get("type") or "signal")
+        # Keep budget_gate / cost types first-class so presentation ranks them visibly (#653)
+        item_type = (
+            stype
+            if stype
+            in (
+                "checkpoint",
+                "budget_gate",
+                "cost_hotspot",
+                "procedure",
+                "drift",
+                "signal",
+            )
+            else ("signal" if stype in ("drift", "cost_hotspot", "signal") else stype)
+        )
         items.append(
             FeedItem(
                 id=str(sig.get("id") or f"signal-{i}"),
-                item_type="signal" if stype in ("drift", "cost_hotspot", "signal") else stype,
+                item_type=item_type,
                 number=sig.get("issue_number"),
                 title=str(sig.get("title") or "signal"),
                 rank=int(sig.get("rank") or (45 + i)),
@@ -541,12 +555,19 @@ def get_user_feed(
                 if fi.get("type") == "checkpoint":
                     continue  # already from list_open_checkpoints
                 signal_items.append({**fi, "source": "cost_dashboard"})
-            if not autonomy_snap:
-                autonomy_snap = {
-                    "burn_rate": (dash.get("projections") or {}).get("burn_rate_pct"),
-                    "autopilot_score": (dash.get("risk") or {}).get("autopilot_score"),
-                    "budget_remaining_tokens": (dash.get("budget") or {}).get("remaining_tokens"),
-                }
+            # Always enrich autonomy snap with dashboard budget pressure (#634/#653)
+            b = dash.get("budget") or {}
+            r = dash.get("risk") or {}
+            autonomy_snap = {
+                **(autonomy_snap or {}),
+                "burn_rate": (dash.get("projections") or {}).get("burn_rate_pct", autonomy_snap.get("burn_rate")),
+                "autopilot_score": r.get("autopilot_score", autonomy_snap.get("autopilot_score")),
+                "budget_remaining_tokens": b.get("remaining_tokens", autonomy_snap.get("budget_remaining_tokens")),
+                "budget_pressure": b.get("budget_pressure"),
+                "would_pause_next_cycle": b.get("would_pause_next_cycle"),
+                "would_throttle_next_cycle": b.get("would_throttle_next_cycle"),
+                "spent_today_durable": b.get("spent_today_durable"),
+            }
         except Exception:
             pass
 
@@ -823,7 +844,7 @@ def get_user_feed(
         pm_assignments=pm_assignments,
     )
     top = items[: max(1, limit)]
-    # Prefer pre-shaped ask_user_question from approval/plan/PM sources when present
+    # Prefer pre-shaped ask_user_question from approval/plan/PM/cost sources when present
     pre_payloads: dict[str, Any] = {}
     for ap in approval_items:
         if ap.get("id") and ap.get("ask_user_question"):
@@ -832,6 +853,10 @@ def get_user_feed(
         aid = asg.get("assignment_id")
         if aid and asg.get("ask_user_question"):
             pre_payloads[str(aid)] = asg["ask_user_question"]
+    for sig in signal_items:
+        sid = sig.get("id")
+        if sid and sig.get("ask_user_question"):
+            pre_payloads[str(sid)] = sig["ask_user_question"]
 
     presentation = []
     for i, it in enumerate(top):
@@ -873,6 +898,11 @@ def get_user_feed(
             "enabled": autonomy_snap.get("enabled"),
             "autopilot_score": autonomy_snap.get("autopilot_score"),
             "burn_rate": autonomy_snap.get("burn_rate"),
+            "budget_remaining_tokens": autonomy_snap.get("budget_remaining_tokens"),
+            "budget_pressure": autonomy_snap.get("budget_pressure"),
+            "would_pause_next_cycle": autonomy_snap.get("would_pause_next_cycle"),
+            "would_throttle_next_cycle": autonomy_snap.get("would_throttle_next_cycle"),
+            "spent_today_durable": autonomy_snap.get("spent_today_durable"),
         },
         "errors": {
             "questions": fetch_error_q,
