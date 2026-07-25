@@ -721,6 +721,30 @@ class ReleaseWorkspaceValidationTests(unittest.TestCase):
 
 
 class GetReleaseStatusTests(unittest.TestCase):
+    @staticmethod
+    def _base_api(endpoint, *, release_branch=False, releases=None):
+        """Shared mock API for get_release_status tests."""
+        if endpoint.startswith("repos/owner/repo/branches/"):
+            if release_branch and endpoint.endswith("/release"):
+                return {"name": "release"}
+            raise GhApiError("Not Found")
+        if endpoint.startswith("search/issues?q=") and "label%3ARelease" in endpoint:
+            return {"items": [], "total_count": 0}
+        if endpoint.startswith("search/issues?q=") and "label%3AMajor" in endpoint:
+            return {"items": [], "total_count": 0}
+        if "/releases/" in endpoint:
+            if releases is None:
+                raise GhApiError("Not Found")
+            if endpoint.endswith("/releases/latest"):
+                return releases.get("latest") or (_ for _ in ()).throw(GhApiError("Not Found"))
+            # /releases/tags/vX.Y.Z
+            tag = endpoint.rsplit("/", 1)[-1]
+            row = (releases or {}).get(tag)
+            if row:
+                return row
+            raise GhApiError("Not Found")
+        raise AssertionError(f"Unexpected endpoint: {endpoint}")
+
     def test_basic_status_no_release_branch(self):
         with TemporaryDirectory() as tmp:
             d = Path(tmp)
@@ -736,16 +760,7 @@ class GetReleaseStatusTests(unittest.TestCase):
             (unreleased / "my-feat.json").write_text(json.dumps(frag))
 
             client = Mock()
-            def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
-                if endpoint.startswith("repos/owner/repo/branches/"):
-                    raise GhApiError("Not Found")
-                if endpoint.startswith("search/issues?q=") and "label%3ARelease" in endpoint:
-                    return {"items": [], "total_count": 0}
-                if endpoint.startswith("search/issues?q=") and "label%3AMajor" in endpoint:
-                    return {"items": [], "total_count": 0}
-                raise AssertionError(f"Unexpected endpoint: {endpoint}")
-
-            client.api.side_effect = api_side_effect
+            client.api.side_effect = lambda *a, **k: self._base_api(a[0])
 
             with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
                 report = get_release_status(repo="owner/repo", releases_dir=d, client=client)
@@ -757,6 +772,7 @@ class GetReleaseStatusTests(unittest.TestCase):
             self.assertGreaterEqual(len(report.warnings), 1)
             self.assertEqual(report.pending_fragment_count, 1)
             self.assertEqual(report.pending_fragments[0].slug, "my-feat")
+            self.assertFalse(report.github_release_exists)
 
     def test_release_branch_present(self):
         with TemporaryDirectory() as tmp:
@@ -764,15 +780,27 @@ class GetReleaseStatusTests(unittest.TestCase):
             (d / "v0.1.3.json").write_text('{"version":"0.1.3","entries":[]}')
 
             client = Mock()
+
             def api_side_effect(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
                 if endpoint == "repos/owner/repo/branches/release":
                     return {"name": "release"}
                 if endpoint.startswith("repos/owner/repo/branches/"):
                     raise GhApiError("Not Found")
                 if endpoint.startswith("search/issues?q=") and "label%3ARelease" in endpoint:
-                    return {"items": [{"number": 10, "title": "Release v0.2.0", "html_url": "https://..."}], "total_count": 1}
+                    return {
+                        "items": [
+                            {
+                                "number": 10,
+                                "title": "Release v0.2.0",
+                                "html_url": "https://...",
+                            }
+                        ],
+                        "total_count": 1,
+                    }
                 if endpoint.startswith("search/issues?q=") and "label%3AMajor" in endpoint:
                     return {"items": [], "total_count": 0}
+                if "/releases/" in endpoint:
+                    raise GhApiError("Not Found")
                 raise AssertionError(f"Unexpected endpoint: {endpoint}")
 
             client.api.side_effect = api_side_effect
@@ -787,6 +815,42 @@ class GetReleaseStatusTests(unittest.TestCase):
             self.assertGreaterEqual(len(report.warnings), 1)
             self.assertEqual(report.latest_version, "0.1.3")
             self.assertEqual(len(report.open_release_issues), 1)
+            self.assertFalse(report.github_release_exists)
+            self.assertTrue(any("GitHub Release object missing" in w for w in report.warnings))
+
+    def test_github_release_present_and_latest(self):
+        """#594: status reports GitHub Releases exists + is_latest."""
+        with TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "v0.7.2.json").write_text('{"version":"0.7.2","entries":[]}')
+
+            client = Mock()
+            releases = {
+                "v0.7.2": {
+                    "id": 99,
+                    "tag_name": "v0.7.2",
+                    "html_url": "https://github.com/owner/repo/releases/tag/v0.7.2",
+                },
+                "latest": {
+                    "id": 99,
+                    "tag_name": "v0.7.2",
+                    "html_url": "https://github.com/owner/repo/releases/tag/v0.7.2",
+                },
+            }
+            client.api.side_effect = lambda *a, **k: self._base_api(
+                a[0], release_branch=True, releases=releases
+            )
+
+            with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+                report = get_release_status(repo="owner/repo", releases_dir=d, client=client)
+
+            self.assertTrue(report.github_release_exists)
+            self.assertTrue(report.github_release_is_latest)
+            self.assertEqual(
+                report.github_release_url,
+                "https://github.com/owner/repo/releases/tag/v0.7.2",
+            )
+            self.assertEqual(report.github_release_tag, "v0.7.2")
 
     def test_to_dict_schema(self):
         report = ReleaseStatusReport(
@@ -806,6 +870,10 @@ class GetReleaseStatusTests(unittest.TestCase):
             linked_epics=[],
             on_hold_epics=[],
             release_track_summary={},
+            github_release_exists=True,
+            github_release_is_latest=False,
+            github_release_url="https://example/releases/tag/v0.1.3",
+            github_release_tag="v0.1.3",
         )
         d = report.to_dict()
         self.assertIn("release_branch_exists", d)
@@ -819,6 +887,10 @@ class GetReleaseStatusTests(unittest.TestCase):
         self.assertIn("linked_epics", d)
         self.assertIn("on_hold_epics", d)
         self.assertIn("release_track_summary", d)
+        self.assertIn("github_release_exists", d)
+        self.assertIn("github_release_is_latest", d)
+        self.assertIn("github_release_url", d)
+        self.assertIn("github_release_tag", d)
 
     def test_status_populates_next_release_linked_epics_and_on_hold(self):
         with TemporaryDirectory() as tmp:
@@ -902,6 +974,9 @@ class GetReleaseStatusTests(unittest.TestCase):
                         ],
                         "total_count": 3,
                     }
+                if "/releases/" in endpoint:
+                    # #594: no published GitHub Release for this fixture
+                    raise GhApiError("Not Found")
                 raise AssertionError(f"Unexpected endpoint: {endpoint}")
 
             client.api.side_effect = api_side_effect
@@ -913,7 +988,12 @@ class GetReleaseStatusTests(unittest.TestCase):
             self.assertEqual(report.active_next_release["html_url"], "https://github.com/owner/repo/issues/50")
             self.assertEqual(report.release_branch_mode, "multi-track")
             self.assertEqual(report.release_branch_reset_target, "main")
-            self.assertEqual(report.warnings, [])
+            # Only expected warning is missing GitHub Release for local version (#594)
+            self.assertTrue(
+                all("GitHub Release" in w for w in report.warnings),
+                report.warnings,
+            )
+            self.assertFalse(report.github_release_exists)
             self.assertEqual(
                 report.linked_epics,
                 [
