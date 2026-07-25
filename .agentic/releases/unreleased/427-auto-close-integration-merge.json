@@ -1,0 +1,24 @@
+{
+  "slug": "427-auto-close-integration-merge",
+  "change_type": "feature",
+  "surface": ".github/workflows/pr-issue-link-check.yml, src/plate_core/integration_close.py",
+  "summary": "Auto-close Closes/Fixes/Resolves issues when PRs merge to release* or epic/* integration branches (#427); keep status:implemented labeling; skip Epic/Task/Release; pure helpers + audit comment marker.",
+  "migration_impact": "Workflows that merge to release/epic/* will close linked Feature/Bug/Doc issues after merge (not only on main). Epic/Task/Release issues stay open. main behavior unchanged (native GitHub close).",
+  "migration_guidance": [
+    "1. Upgrade plate_core / pull workflow updates.",
+    "2. Prefer Closes #N in PR bodies targeting release; issues close via CI with PLATE-INTEGRATION-CLOSE marker.",
+    "3. Do not put Closes on Epic/Task/Release when the work is only a partial slice — use Related to #N or omit keyword.",
+    "4. main Release PRs still rely on native GitHub auto-close."
+  ],
+  "agent_notes": "Helpers in plate_core.integration_close for tests/reuse. Workflow owns live close (permissions). Complements #556 status:implemented. Addresses stuck open issues after release merges.",
+  "breaking": false,
+  "links": [
+    "#427",
+    "#556",
+    "#654",
+    "#488"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

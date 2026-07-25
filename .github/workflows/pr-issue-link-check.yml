@@ -148,60 +148,142 @@ jobs:
 
             core.setFailed(message);
 
-  # Minimal implementation for PLATE Issue states (#556): on merge of a PR to a release/next track
-  # branch (not main), mark linked issues with status:implemented (distinguishes "in this RC" from
-  # fully released on main+tag). Uses the same linked-issue detection logic as the check job.
-  # Run on PR closed+merged or direct push to release-*.
+  # PLATE Issue states (#556) + integration auto-close (#427):
+  # On merge to release* or epic/*, mark linked issues status:implemented and close
+  # safe issue types (Feature/Bug/Doc/…). Skip Epic/Task/Release (ceremony / human Task).
+  # main keeps native GitHub auto-close only.
   mark-implemented-on-release-merge:
     if: |
       (github.event_name == 'pull_request' &&
        github.event.action == 'closed' &&
        github.event.pull_request.merged == true &&
-       (startsWith(github.event.pull_request.base.ref, 'release') || github.event.pull_request.base.ref == 'release')) ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release'))
+       (startsWith(github.event.pull_request.base.ref, 'release') ||
+        github.event.pull_request.base.ref == 'release' ||
+        startsWith(github.event.pull_request.base.ref, 'epic/'))) ||
+      (github.event_name == 'push' &&
+       (startsWith(github.ref, 'refs/heads/release') || startsWith(github.ref, 'refs/heads/epic/')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
       pull-requests: read
     steps:
-      - name: Mark linked issues as status:implemented (release branch merge)
+      - name: Mark implemented + auto-close linked issues (integration merge)
         uses: actions/github-script@v8
         with:
           script: |
             const isPR = !!context.payload.pull_request;
             const pr = context.payload.pull_request;
             const baseRef = isPR ? pr.base.ref : (context.ref || '').replace('refs/heads/', '');
-            if (!baseRef || !baseRef.startsWith('release')) {
-              core.info('Not a release-track merge; skipping implemented state.');
+            const isIntegration =
+              !!baseRef &&
+              (baseRef === 'release' ||
+                baseRef.startsWith('release-') ||
+                baseRef.startsWith('release/') ||
+                baseRef.startsWith('epic/') ||
+                baseRef.startsWith('epic-'));
+            if (!isIntegration || baseRef === 'main') {
+              core.info(`Not a PLATE integration merge (base=${baseRef}); skipping.`);
               return;
             }
-            // Collect linked issue numbers (reuse pattern from check job)
-            let linked = new Set();
+
+            // Parse Closes/Fixes/Resolves (body only; title must not carry keywords)
+            const linked = new Set();
             if (isPR) {
               const body = pr.body || '';
-              const closingPattern = /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(#\d+)/gi;
+              const closingPattern =
+                /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/)?#?(\d+)\b/gi;
               let m;
               while ((m = closingPattern.exec(body)) !== null) {
-                linked.add(parseInt(m[2].replace('#', '')));
+                linked.add(parseInt(m[2], 10));
               }
-              // For full fidelity, a GraphQL step could be added; this covers the common Closes case for now.
             }
             if (linked.size === 0) {
-              core.info('No linked issues found via body Closes; skipping status:implemented label.');
+              core.info('No linked issues via closing keywords; nothing to label/close.');
               return;
             }
+
+            const SKIP_CLOSE = new Set(['Epic', 'Task', 'Release']);
             const label = 'status:implemented';
+            const prNumber = isPR ? pr.number : 0;
+            const closed = [];
+            const labeled = [];
+            const skipped = [];
+
             for (const num of linked) {
+              let issue;
               try {
-                await github.rest.issues.addLabels({
+                const resp = await github.rest.issues.get({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: num,
-                  labels: [label]
                 });
-                core.info(`Added ${label} to #${num} (merged to ${baseRef}).`);
+                issue = resp.data;
               } catch (e) {
-                core.warning(`Failed to label #${num}: ${e.message}`);
+                core.warning(`Could not fetch #${num}: ${e.message}`);
+                continue;
+              }
+
+              // Always attempt status:implemented on open issues
+              if (issue.state === 'open') {
+                try {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: num,
+                    labels: [label],
+                  });
+                  labeled.push(num);
+                  core.info(`Added ${label} to #${num} (merged to ${baseRef}).`);
+                } catch (e) {
+                  core.warning(`Failed to label #${num}: ${e.message}`);
+                }
+              } else {
+                core.info(`#${num} already ${issue.state}; skip label/close.`);
+                skipped.push({ number: num, reason: `already_${issue.state}` });
+                continue;
+              }
+
+              const names = (issue.labels || []).map((l) =>
+                typeof l === 'string' ? l : l.name
+              );
+              const skipHit = names.filter((n) => SKIP_CLOSE.has(n));
+              if (skipHit.length) {
+                core.info(`Skip auto-close #${num}: types ${skipHit.join(',')}`);
+                skipped.push({ number: num, reason: `skip_type:${skipHit.join(',')}` });
+                continue;
+              }
+
+              const commentBody = [
+                `Auto-closed after merge of #${prNumber} into \`${baseRef}\` (PLATE integration-branch close, #427).`,
+                '',
+                '<!-- PLATE-INTEGRATION-CLOSE:BEGIN -->',
+                JSON.stringify({ pr: prNumber, base: baseRef, reason: 'closing_keyword' }),
+                '<!-- PLATE-INTEGRATION-CLOSE:END -->',
+                '',
+              ].join('\n');
+
+              try {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: num,
+                  body: commentBody,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: num,
+                  state: 'closed',
+                  state_reason: 'completed',
+                });
+                closed.push(num);
+                core.info(`Closed #${num} after merge to ${baseRef}.`);
+              } catch (e) {
+                core.warning(`Failed to close #${num}: ${e.message}`);
               }
             }
+
+            core.info(
+              `Integration close audit: labeled=[${labeled.join(',')}] closed=[${closed.join(',')}] skipped=${JSON.stringify(skipped)}`
+            );
