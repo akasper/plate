@@ -401,11 +401,13 @@ def get_cost_dashboard(
             ],
         }
 
-    # #634/#653: top-rank budget gate when pressure is real (drives endless feed)
-    if budget_pressure in ("critical", "exhausted") and (enabled and risk != "off"):
+    # #634/#653/#787: top-rank budget gate when pressure is real (drives endless feed).
+    # Surface critical/exhausted even when risk_tolerance=off — engine autopilot is off but
+    # durable remaining still gates Feature/Bug/planning surfaces (#785).
+    if budget_pressure in ("critical", "exhausted"):
         gate_title = (
             f"Budget {budget_pressure}: {rem_i} tokens left of {daily} "
-            f"(policy={action_policy})"
+            f"(policy={action_policy}; risk={risk}; engine={'on' if enabled and risk != 'off' else 'off'})"
         )
         feed_items.append({
             "id": f"budget-gate-{budget_pressure}",
@@ -413,10 +415,13 @@ def get_cost_dashboard(
             "type": "budget_gate",
             "title": gate_title,
             "impact": "critical" if budget_pressure == "exhausted" else "high",
-            "reason": "Autonomy budget near/at limit — feed prioritizes human budget decision (#634/#653)",
+            "reason": (
+                "Budget near/at limit — feed prioritizes human budget decision "
+                "for surface gates + autonomy (#634/#653/#787)"
+            ),
             "prompt_segment": (
                 f"{gate_title}. Present ask_user_question options; "
-                "do not start large unsupervised cycles until resolved."
+                "do not start large cycles (engine or live surface gates) until resolved."
             ),
             "ask_user_question": _budget_ask(gate_title),
         })
@@ -429,6 +434,21 @@ def get_cost_dashboard(
             "title": elev_title,
             "impact": "medium",
             "reason": "Elevated burn — surface before more high-cost work",
+            "prompt_segment": elev_title,
+            "ask_user_question": _budget_ask(elev_title),
+        })
+    elif burn >= 70 and (not enabled or risk == "off") and rem_i < daily:
+        # Softer signal when engine is off but durable spend is high
+        elev_title = (
+            f"Budget elevated (engine off): burn {burn}% remaining {rem_i}/{daily}"
+        )
+        feed_items.append({
+            "id": "budget-gate-elevated-risk-off",
+            "rank": 22,
+            "type": "budget_gate",
+            "title": elev_title,
+            "impact": "medium",
+            "reason": "Elevated durable burn while risk_tolerance=off — surface gates still apply",
             "prompt_segment": elev_title,
             "ask_user_question": _budget_ask(elev_title),
         })

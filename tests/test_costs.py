@@ -117,25 +117,54 @@ class CostDashboard653Tests(unittest.TestCase):
         self.assertTrue(hotspots[0].get("ask_user_question"))
 
     def test_dashboard_autonomy_off_signal(self):
+        from unittest.mock import patch
+
         client = self._client_two_reports()
-        dash = get_cost_dashboard(
-            repo="akasper/plate",
-            client=client,
-            autonomy_status={
-                "enabled": False,
-                "risk_tolerance": "off",
-                "budget_remaining_tokens": 50000,
-                "burn_rate": 0.0,
-                "autopilot_score": 20,
-                "open_human_checkpoints": [],
-                "due_procedures": [],
-            },
-            health={},
-        )
+        with patch("plate_core.autonomy.load_budget_spend", return_value={}):
+            dash = get_cost_dashboard(
+                repo="akasper/plate",
+                client=client,
+                autonomy_status={
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "budget_remaining_tokens": 50000,
+                    "burn_rate": 0.0,
+                    "autopilot_score": 20,
+                    "open_human_checkpoints": [],
+                    "due_procedures": [],
+                },
+                health={},
+            )
         self.assertFalse(dash["budget"]["enforcement_active"])
         self.assertTrue(any(s["kind"] == "autonomy_off" for s in dash["drift_signals"]))
-        # No budget_gate when autonomy off
+        # No budget_gate when pressure is ok (remaining full, burn 0) even if engine off
         self.assertFalse(any(i.get("type") == "budget_gate" for i in dash["feed_items"]))
+
+    def test_dashboard_budget_gate_when_risk_off_exhausted(self):
+        """#787: critical/exhausted budget_gate surfaces even under risk_tolerance=off."""
+        from unittest.mock import patch
+
+        client = self._client_two_reports()
+        with patch("plate_core.autonomy.load_budget_spend", return_value={}):
+            dash = get_cost_dashboard(
+                repo="akasper/plate",
+                client=client,
+                autonomy_status={
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "budget_remaining_tokens": 0,
+                    "burn_rate": 100.0,
+                    "autopilot_score": 10,
+                    "open_human_checkpoints": [],
+                    "due_procedures": [],
+                },
+                health={},
+            )
+        self.assertIn(dash["budget"]["budget_pressure"], ("critical", "exhausted"))
+        gates = [i for i in dash["feed_items"] if i.get("type") == "budget_gate"]
+        self.assertTrue(gates, dash["feed_items"])
+        self.assertIn("ask_user_question", gates[0])
+        self.assertTrue(any("engine=off" in str(g.get("title") or "") for g in gates))
 
     def test_dashboard_high_burn_signal(self):
         client = self._client_two_reports()
