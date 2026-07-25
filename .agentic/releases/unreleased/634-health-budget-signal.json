@@ -1,0 +1,23 @@
+{
+  "slug": "634-health-budget-signal",
+  "change_type": "feature",
+  "surface": "src/plate_core/health.py, cli.py",
+  "summary": "Surface #634 durable budget remaining, burn, and pressure on HealthReport + gh plate health human/JSON output so operators see budget without a separate autonomy call (#783).",
+  "migration_impact": "Additive health fields only. Agents may read budget_* keys from plate_health / gh plate health --json.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer gh plate health --json budget_* or human Budget (#634) line.",
+    "3. Full dashboard remains plate_costs / autonomy --budget."
+  ],
+  "agent_notes": "Complements #653 cost dashboard and charge-on-success gates. Does not change health pass/warn/fail scoring.",
+  "breaking": false,
+  "links": [
+    "#783",
+    "#634",
+    "#653",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
