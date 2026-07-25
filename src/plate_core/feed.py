@@ -741,6 +741,30 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #646 pending design contracts → feed signals
+    try:
+        from .design_validation import contract_feed_items
+
+        for dc in contract_feed_items(limit=10):
+            signal_items.append(
+                {
+                    "id": dc.get("id"),
+                    "type": "design_contract",
+                    "title": dc.get("title"),
+                    "rank": 13,
+                    "impact": dc.get("impact") or "high",
+                    "reason": dc.get("reason") or "Design contract approval (#646)",
+                    "prompt_segment": (
+                        f"{dc.get('title')}. "
+                        f"Decide: plate_design_contract_decide {dc.get('id')} approve|reject."
+                    ),
+                    "source": "design_validation",
+                    "ask_user_question": dc.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,

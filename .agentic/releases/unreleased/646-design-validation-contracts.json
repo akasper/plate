@@ -1,0 +1,25 @@
+{
+  "slug": "646-design-validation-contracts",
+  "change_type": "feature",
+  "surface": "src/plate_core/design_validation.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+  "summary": "First-class design validation contracts (#646): propose visual/interaction/a11y criteria per Feature, approval lifecycle, readiness checks, failing TDD scaffolds (python|typescript/Playwright), feed prompts, MCP plate_design_contract_* + gh plate design-contract.",
+  "migration_impact": "Optional local contracts under .agentic/design_contracts/ (gitignored). Feature loops should set needs_design_validation and require approved contracts before merge of UI Features.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Propose: gh plate design-contract --feature N --title \"...\" --interactions \"a;b\" --playwright",
+    "3. Approve via feed or plate_design_contract_decide; scaffold failing tests with --scaffold.",
+    "4. validate readiness before feature-loop implement stage."
+  ],
+  "agent_notes": "First slice of #646 — contract ledger + scaffolds, not full visual-regression CI. Pair with #639 feature_loop and #636 media. Never weaken failing design contract tests to green.",
+  "breaking": false,
+  "links": [
+    "#646",
+    "#639",
+    "#636",
+    "#632",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

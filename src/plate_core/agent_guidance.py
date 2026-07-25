@@ -344,6 +344,12 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - Estimate only: `plate_feature_loop_estimate` / `gh plate feature-loop --estimate`. Budget can block start.
 - Same babysit/gate rules as bug loop; media/design approval via human_checkpoint. Local runs in `.agentic/feature_loops/`.
 
+### Design validation contracts (#646)
+- Propose enforceable visual/interaction contracts: `plate_design_contract_propose` / `gh plate design-contract`.
+- Approve before impl: `plate_design_contract_decide`; check readiness with `plate_design_contract_validate`.
+- Drop failing TDD scaffolds via `plate_design_contract_scaffold` (python|typescript). Do not weaken assertions to pass.
+- Pending contracts surface in the feed; pair with feature_loop `needs_design_validation`.
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 
