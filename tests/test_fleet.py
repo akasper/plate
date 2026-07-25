@@ -83,10 +83,13 @@ class TestBudgetAndPlan(unittest.TestCase):
         dry = plan_fleet_from_intent(
             "Plan the next release and start implementing the top features",
             budget_tokens=20000,
+            use_live_budget=False,
             create=False,
             base_dir=self.base,
         )
         self.assertTrue(dry["dry_run"])
+        self.assertTrue(dry["ok"])
+        self.assertEqual(dry.get("budget_remaining_tokens"), 20000)
         self.assertGreaterEqual(len(dry["plan"]), 2)
         agents = {s["to_agent"] for s in dry["plan"]}
         self.assertIn("planner", agents)
@@ -95,16 +98,30 @@ class TestBudgetAndPlan(unittest.TestCase):
         created = plan_fleet_from_intent(
             "Plan and implement features",
             budget_tokens=10000,
+            use_live_budget=False,
             create=True,
             base_dir=self.base,
         )
         self.assertFalse(created["dry_run"])
         self.assertGreater(created["n_created"], 0)
-        st = fleet_status(base_dir=self.base)
+        st = fleet_status(base_dir=self.base, use_live_budget=False)
         self.assertGreater(st["n_active"], 0)
         feed = handoff_feed_items(base_dir=self.base)
         self.assertTrue(feed)
         self.assertIn("ask_user_question", feed[0])
+
+    def test_plan_blocks_on_zero_budget(self):
+        out = plan_fleet_from_intent(
+            "Implement features",
+            budget_tokens=0,
+            use_live_budget=False,
+            create=True,
+            base_dir=self.base,
+        )
+        self.assertFalse(out["ok"])
+        self.assertTrue(out.get("blocked"))
+        self.assertEqual(out.get("n_created"), 0)
+        self.assertIn("budget", out.get("error") or "")
 
     def test_budget_gate_and_blocked_high_risk(self):
         blocked = create_handoff(
