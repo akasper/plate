@@ -12,6 +12,8 @@ from plate_core.epic_release_planning import (
     build_epic_plan,
     build_er_plan_from_session,
     build_release_plan,
+    decide_er_plan,
+    er_planning_feed_items,
     get_er_script,
     load_er_session,
     start_er_session,
@@ -106,10 +108,6 @@ class TestReleasePlanning629(unittest.TestCase):
         self.assertEqual(built["plan"]["kind"], "release")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestERDurableTUI(unittest.TestCase):
     def test_er_durable_and_tui(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -139,3 +137,35 @@ class TestERDurableTUI(unittest.TestCase):
             self.assertIn("ask_user_question", built)
             pending = list_pending_plans(base_dir=root / "pending")
             self.assertGreaterEqual(len(pending), 1)
+
+    def test_er_decide_and_feed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sdir = root / "er_sessions"
+            pdir = root / "pending"
+            # incomplete session for feed
+            start_er_session("epic", base_dir=sdir, persist=True)
+            start = start_er_session("release", base_dir=sdir, persist=True)
+            session = start["session"]
+            while not session.get("complete"):
+                out = apply_er_answer(session, "x", base_dir=sdir, persist=True)
+                session = out["session"]
+            built = build_er_plan_from_session(session, planning_root=root, persist_pending=True)
+            self.assertTrue(built["ok"])
+            pid = built["plan"]["id"]
+            feed = er_planning_feed_items(pending_dir=pdir, sessions_dir=sdir, limit=10)
+            types = {f.get("item_type") for f in feed}
+            self.assertIn("er_planning_approval", types)
+            self.assertIn("er_planning_session", types)
+            dec = decide_er_plan(pid, "approve", decided_by="test", base_dir=pdir)
+            self.assertTrue(dec["ok"])
+            self.assertEqual(dec["status"], "approved")
+            self.assertTrue(any("Next Release" in s or "notes" in s for s in dec["next_steps"]))
+            self.assertEqual(
+                [p for p in list_pending_plans(base_dir=pdir) if p.get("kind") == "release"],
+                [],
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

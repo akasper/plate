@@ -519,18 +519,40 @@ def build_er_plan_from_session(
             plan = save_pending_plan(plan, base_dir=pending_root)
         except Exception:
             pass
+    pid = str(plan.get("id") or "er-plan")
     approval_payload = {
-        "item_id": plan.get("id") or "er-plan",
+        "item_id": pid,
         "item_type": "er_planning_approval",
         "kind": kind,
         "question": f"Approve {kind} plan: {plan.get('title') or 'untitled'}?",
         "options": [
-            {"id": "approve", "label": "Approve", "description": "Create Epic/Release artifacts on GitHub (host)."},
-            {"id": "revise", "label": "Revise", "description": "Return to Q&A; do not create issues."},
-            {"id": "reject", "label": "Reject", "description": "Drop plan."},
+            {
+                "id": "approve",
+                "label": "Approve",
+                "description": f"plate_er_planning_decide {pid} approve — create Epic/Release artifacts (host)",
+            },
+            {
+                "id": "revise",
+                "label": "Revise",
+                "description": f"plate_er_planning_decide {pid} revise — return to Q&A",
+            },
+            {
+                "id": "reject",
+                "label": "Reject",
+                "description": f"plate_er_planning_decide {pid} reject — drop plan",
+            },
         ],
         "multi_select": False,
     }
+    # Keep pending file payload in sync when saved
+    if plan.get("path") and plan.get("status") in ("pending_approval", "pending", None, ""):
+        plan["ask_user_question"] = approval_payload
+        try:
+            Path(plan["path"]).write_text(
+                json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+        except OSError:
+            pass
     return {
         "ok": True,
         "plan": plan,
@@ -538,6 +560,190 @@ def build_er_plan_from_session(
         "ask_user_question": approval_payload,
         "pending_path": plan.get("path"),
     }
+
+
+def decide_er_plan(
+    plan_id: str,
+    decision: str,
+    *,
+    note: str = "",
+    decided_by: str = "human",
+    base_dir: Path | None = None,
+    archive: bool = True,
+) -> dict[str, Any]:
+    """Approve/revise/reject a pending epic/release plan (#629/#640).
+
+    Reuses the shared pending-plan ledger under `.agentic/planning/pending/`.
+    Does not create GitHub issues or cut releases.
+    """
+    from .planning import decide_pending_plan
+
+    out = decide_pending_plan(
+        plan_id,
+        decision,
+        note=note,
+        decided_by=decided_by,
+        base_dir=base_dir,
+        archive=archive,
+    )
+    if not out.get("ok"):
+        return out
+    plan = out.get("plan") or {}
+    kind = str(plan.get("kind") or "")
+    # Specialize next steps for epic vs release
+    if out.get("status") == "approved":
+        if kind == "release":
+            out["next_steps"] = [
+                "Ensure open Next Release issue exists (or rename when packaging)",
+                "Link scope Epics/Features via Development sidebar",
+                "Draft notes skeleton from plan notes_skeleton / fragments",
+                "Do not cut/tag/finalize without release ceremony + human approval",
+            ]
+        elif kind == "epic":
+            out["next_steps"] = [
+                "Create Epic issue from plan title/body/labels",
+                "Create child Feature/Design/Research stubs with need:refinement",
+                "Assign milestone / track label when known",
+                "Do not implement children until refined ACs land",
+            ]
+    elif out.get("status") == "revise_requested":
+        out["next_steps"] = [
+            f"Resume ER session session_id={plan.get('session_id')}",
+            "plate_er_planning_start or load session; answer revised fields; rebuild",
+        ]
+    return out
+
+
+def list_active_er_sessions(
+    *,
+    base_dir: Path | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Incomplete durable epic/release sessions for feed resume."""
+    root = base_dir if base_dir is not None else ER_SESSIONS_DIR
+    if not root.is_dir():
+        return []
+    rows: list[dict[str, Any]] = []
+    for f in sorted(root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("complete"):
+            continue
+        data["path"] = str(f)
+        rows.append(data)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def er_planning_feed_items(
+    *,
+    pending_dir: Path | None = None,
+    sessions_dir: Path | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Feed rows for pending epic/release plans + incomplete ER sessions (#629/#640)."""
+    from .planning import list_pending_plans
+
+    items: list[dict[str, Any]] = []
+    for pl in list_pending_plans(base_dir=pending_dir, limit=limit * 2):
+        kind = str(pl.get("kind") or "")
+        if kind not in ("epic", "release"):
+            continue
+        if str(pl.get("status") or "pending_approval") not in (
+            "pending_approval",
+            "pending",
+            "",
+        ):
+            continue
+        pid = str(pl.get("id") or "er-plan")
+        auj = pl.get("ask_user_question") or {
+            "item_id": pid,
+            "item_type": "er_planning_approval",
+            "kind": kind,
+            "question": f"Approve {kind} plan: {str(pl.get('title') or '')[:80]}?",
+            "options": [
+                {
+                    "id": "approve",
+                    "label": "Approve",
+                    "description": f"plate_er_planning_decide {pid} approve",
+                },
+                {
+                    "id": "revise",
+                    "label": "Revise",
+                    "description": f"plate_er_planning_decide {pid} revise",
+                },
+                {
+                    "id": "reject",
+                    "label": "Reject",
+                    "description": f"plate_er_planning_decide {pid} reject",
+                },
+            ],
+            "multi_select": False,
+        }
+        items.append(
+            {
+                "id": pid,
+                "item_type": "er_planning_approval",
+                "kind": kind,
+                "title": pl.get("title") or f"Pending {kind} plan",
+                "status": pl.get("status") or "pending_approval",
+                "rank": 15,
+                "impact": "high",
+                "reason": f"Q&A {kind} plan awaiting approval (#629/#640)",
+                "approval_prompt": auj.get("question"),
+                "prompt_segment": (
+                    f"Approve {kind} plan {pid}: plate_er_planning_decide "
+                    f"{pid} approve|revise|reject"
+                ),
+                "summary": (pl.get("body") or "")[:240],
+                "ask_user_question": auj,
+                "source": "er_planning",
+                "session_id": pl.get("session_id"),
+            }
+        )
+    for sess in list_active_er_sessions(base_dir=sessions_dir, limit=max(1, limit // 2)):
+        sid = str(sess.get("id") or "")
+        kind = str(sess.get("kind") or "epic")
+        turn = int(sess.get("turn") or 0)
+        qs = _qs(kind)
+        total = len(qs)
+        nq = qs[turn] if turn < total else None
+        items.append(
+            {
+                "id": sid,
+                "item_type": "er_planning_session",
+                "kind": kind,
+                "title": f"Resume {kind} planning ({turn}/{total})",
+                "status": "in_progress",
+                "rank": 21,
+                "impact": "medium",
+                "reason": "Incomplete epic/release Q&A session",
+                "prompt_segment": (
+                    f"Resume ER session {sid}: plate_er_planning_answer session_id={sid}"
+                ),
+                "ask_user_question": er_question_payload(
+                    nq, kind=kind, turn=turn, total=total
+                )
+                if nq
+                else {
+                    "question": f"ER session {sid} ready to build?",
+                    "options": [
+                        {
+                            "id": "build",
+                            "label": "Build plan",
+                            "description": "plate_er_planning_build",
+                        }
+                    ],
+                },
+                "source": "er_planning",
+                "session_id": sid,
+            }
+        )
+    items.sort(key=lambda x: (int(x.get("rank") or 99), str(x.get("title") or "")))
+    return items[: max(1, limit)]
 
 
 def get_er_script(kind: str = "epic") -> dict[str, Any]:

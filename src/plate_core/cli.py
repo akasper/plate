@@ -48,6 +48,8 @@ from .planning import (
 from .epic_release_planning import (
     apply_er_answer,
     build_er_plan_from_session,
+    decide_er_plan,
+    er_planning_feed_items,
     get_er_script,
     start_er_session,
 )
@@ -904,6 +906,39 @@ def cmd_er_plan(args: argparse.Namespace) -> int:
         print(f"{out['kind']} planning: {out['count']} questions")
         for i, q in enumerate(out["questions"], 1):
             print(f"  {i}. [{q['id']}] {q['prompt']}")
+        return 0
+    if getattr(args, "list_pending", False) or getattr(args, "feed", False):
+        rows = er_planning_feed_items(limit=int(getattr(args, "limit", 20) or 20))
+        if not getattr(args, "feed", False):
+            rows = [r for r in rows if r.get("item_type") == "er_planning_approval"]
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        if not rows:
+            print("No epic/release planning items.")
+            return 0
+        for r in rows:
+            print(
+                f"{r.get('id')} [{r.get('status') or r.get('item_type')}] "
+                f"{r.get('title') or r.get('kind')}"
+            )
+        return 0
+    if getattr(args, "decide", None):
+        out = decide_er_plan(
+            str(args.decide),
+            str(getattr(args, "decision", None) or "approve"),
+            note=str(getattr(args, "note", None) or ""),
+            decided_by=str(getattr(args, "by", None) or "cli-user"),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "decide failed", file=sys.stderr)
+            return 1
+        print(f"{out.get('status')}: {out.get('plan', {}).get('id')}")
+        for step in out.get("next_steps") or []:
+            print(f"  - {step}")
         return 0
     if getattr(args, "answers_file", None):
         answers = json.loads(Path(args.answers_file).read_text(encoding="utf-8"))
@@ -3189,11 +3224,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     er_plan = sub.add_parser(
         "er-plan",
-        help="Q&A epic (#640) or release (#629) planning: script / start / answers-file build",
+        help="Q&A epic (#640) or release (#629) planning: script / start / build / decide / feed",
     )
     er_plan.add_argument("kind", nargs="?", default="epic", choices=["epic", "release"])
     er_plan.add_argument("--script", action="store_true")
     er_plan.add_argument("--answers-file", dest="answers_file", help="JSON array of answers")
+    er_plan.add_argument("--list-pending", dest="list_pending", action="store_true")
+    er_plan.add_argument("--feed", action="store_true", help="Pending ER plans + incomplete sessions")
+    er_plan.add_argument("--decide", metavar="ID", help="Decide pending epic/release plan id")
+    er_plan.add_argument(
+        "--decision",
+        choices=["approve", "revise", "reject"],
+        default="approve",
+    )
+    er_plan.add_argument("--note", default="")
+    er_plan.add_argument("--by", default="cli-user")
+    er_plan.add_argument("--limit", type=int, default=20)
     er_plan.add_argument("--json", action="store_true")
     er_plan.set_defaults(func=cmd_er_plan)
 
