@@ -8,8 +8,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.ledger import (
+    format_ledger_summary_markdown,
     get_decision,
+    ledger_feed_items,
     ledger_summary,
+    list_blocking_decisions,
     list_decisions,
     query_decisions,
     record_decision,
@@ -104,6 +107,38 @@ class TestLedger647(unittest.TestCase):
         self.assertEqual(s["count"], 2)
         self.assertIn("proceed", s["by_decision"])
         self.assertIn("pause", s["by_decision"])
+        self.assertEqual(s["blocking_count"], 1)
+        self.assertIsNotNone(s["last_blocking"])
+        self.assertIn("b", s["by_action_kind"])
+        md = format_ledger_summary_markdown(s)
+        self.assertIn("Blocking", md)
+        self.assertIn("Decision ledger", md)
+
+    def test_blocking_and_feed_items(self):
+        record_decision("what_next", "proceed", "ok", base_dir=self.base)
+        rec = record_decision(
+            "deploy",
+            "shadow_required",
+            "need human",
+            shadow_id="shadow-xyz",
+            checkpoint_id="cp-abc",
+            related_issue=647,
+            impact="critical",
+            base_dir=self.base,
+        )
+        blocked = list_blocking_decisions(base_dir=self.base)
+        self.assertEqual(len(blocked), 1)
+        self.assertEqual(blocked[0]["id"], rec["id"])
+        feed = ledger_feed_items(base_dir=self.base)
+        self.assertEqual(len(feed), 1)
+        item = feed[0]
+        self.assertEqual(item["type"], "ledger_gate")
+        self.assertEqual(item["id"], rec["id"])
+        self.assertTrue(item["ask_user_question"]["options"])
+        labels = {o["id"] for o in item["ask_user_question"]["options"]}
+        self.assertIn("decide_checkpoint", labels)
+        self.assertIn("resume_shadow", labels)
+        self.assertIn("inspect", labels)
 
 
 class TestAutonomyLedgerWire(unittest.TestCase):
