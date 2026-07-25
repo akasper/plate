@@ -151,6 +151,15 @@ from .feature_media import (
     register_capture,
     skip_feature_media,
 )
+from .packaging import (
+    build_package,
+    decide_package_publish,
+    get_package,
+    list_packages,
+    packaging_feed_items,
+    plan_marketplace_package_op,
+    render_package_markdown,
+)
 from .scheduled_ops import (
     complete_op_run,
     list_op_runs,
@@ -1000,6 +1009,86 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 path=args.get("path"),
                 url=args.get("url"),
                 decision=str(args.get("decision") or "approve"),
+            )
+        elif name == "plate_packaging_build":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            frags = collect_release_fragments(rdir)
+            payload = build_package(
+                str(args.get("version") or "unreleased"),
+                frags,
+                base_dir=bdir,
+                require_approved_media=bool(args.get("require_approved_media") or False),
+                persist=not bool(args.get("no_persist") or False),
+            )
+        elif name == "plate_packaging_list":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            payload = {
+                "packages": list_packages(
+                    base_dir=bdir,
+                    status=str(args.get("status") or "all"),
+                    limit=int(args.get("limit") or 20),
+                )
+            }
+        elif name == "plate_packaging_get":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            p = get_package(str(args.get("package_id") or args.get("id") or ""), base_dir=bdir)
+            payload = {"package": p, "ok": p is not None}
+        elif name == "plate_packaging_render":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            pid = str(args.get("package_id") or args.get("id") or "")
+            p = get_package(pid, base_dir=bdir) if pid else None
+            if p is None and args.get("version"):
+                rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+                built = build_package(
+                    str(args.get("version")),
+                    collect_release_fragments(rdir),
+                    base_dir=bdir,
+                    persist=False,
+                )
+                p = built.get("package")
+            if not p:
+                payload = {"ok": False, "error": "package not found"}
+            else:
+                payload = {
+                    "ok": True,
+                    "markdown": render_package_markdown(p),
+                    "package_id": p.get("id"),
+                }
+        elif name == "plate_packaging_decide":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            payload = decide_package_publish(
+                str(args.get("package_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=str(args.get("note") or ""),
+                base_dir=bdir,
+            )
+        elif name == "plate_packaging_feed":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            payload = {
+                "items": packaging_feed_items(
+                    base_dir=bdir, limit=int(args.get("limit") or 8)
+                )
+            }
+        elif name == "plate_packaging_plan":
+            from pathlib import Path as _P
+
+            payload = plan_marketplace_package_op(
+                args.get("version"),
+                releases_dir=_P(str(args.get("releases_dir") or ".agentic/releases")),
             )
         elif name == "plate_feature_media_plan":
             payload = plan_feature_media(
@@ -2959,6 +3048,96 @@ def run() -> None:
                                         "path": {"type": "string"},
                                         "url": {"type": "string"},
                                         "decision": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_build",
+                                "description": "Build marketplace/release package with media, user narratives, onboarding proof, and planning links (#652). Never publishes.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "version": {"type": "string"},
+                                        "releases_dir": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                        "require_approved_media": {"type": "boolean"},
+                                        "no_persist": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_list",
+                                "description": "List persisted marketplace package builds (#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "base_dir": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_get",
+                                "description": "Get one marketplace package build by id (#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "package_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_render",
+                                "description": "Render marketplace package markdown (media + narratives + onboarding) (#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "package_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "version": {"type": "string"},
+                                        "releases_dir": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_decide",
+                                "description": "Approve package for human publish or reject (#652). Never publishes credentials/secrets.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "package_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                    },
+                                    "required": ["package_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_feed",
+                                "description": "Feed items for marketplace packages awaiting review/publish Tasks (#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "base_dir": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_plan",
+                                "description": "Agent packet for marketplace-package scheduled op (#641/#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "version": {"type": "string"},
+                                        "releases_dir": {"type": "string"},
                                     },
                                 },
                             },
