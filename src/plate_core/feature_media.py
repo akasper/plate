@@ -163,6 +163,7 @@ def _feature_media_budget_gate(
     quality: str,
     budget_remaining: int | None,
     use_live_budget: bool,
+    budget_base_dir: Path | None = None,
 ) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
     cost_est = estimate_feature_media_cost(phase=phase, quality=quality)
     est = int(cost_est.get("estimated_tokens") or 0)
@@ -172,7 +173,7 @@ def _feature_media_budget_gate(
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot(estimate_tokens=est)
+            snap = get_budget_snapshot(estimate_tokens=est, base_dir=budget_base_dir)
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective = int(rem)
@@ -212,17 +213,20 @@ def plan_feature_media(
     base_dir: Path | None = None,
     budget_remaining: int | None = None,
     use_live_budget: bool = True,
+    budget_base_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Create a planned media capture record for a Feature.
 
     #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
     hydrate remaining tokens from durable budget snapshot and block if est exceeds remaining.
+    Successful live plans charge durable spend via ``record_budget_spend``.
     """
     cost_est, effective_remaining, budget_notes, blocked = _feature_media_budget_gate(
         phase="plan",
         quality=quality or "medium",
         budget_remaining=budget_remaining,
         use_live_budget=use_live_budget,
+        budget_base_dir=budget_base_dir,
     )
     if blocked is not None:
         return blocked
@@ -281,6 +285,7 @@ def plan_feature_media(
             ],
         },
     }
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
     out: dict[str, Any] = {
         "ok": True,
         "record": rec.to_dict(),
@@ -289,10 +294,37 @@ def plan_feature_media(
             {"id": rec.id, "test_name": tname, "status": "planned"}
         ),
         "cost_estimate": cost_est,
-        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
     }
+    # Charge durable spend only on live budget path (use_live_budget=True).
+    # Explicit budget_remaining + use_live_budget=False is for tests/dry-run overrides.
+    if est_tokens > 0 and use_live_budget:
+        try:
+            from .autonomy import record_budget_spend
+
+            charge = record_budget_spend(
+                est_tokens,
+                base_dir=budget_base_dir,
+                reason=f"feature_media_plan:{rec.id}",
+                action_kind="feature_media_plan",
+            )
+            out["budget_charge"] = charge
+            if charge.get("ok"):
+                rem = effective_remaining
+                if rem is not None:
+                    out["budget_remaining"] = max(0, int(rem) - est_tokens)
+                out["notes"].append(
+                    f"budget charged: {est_tokens} tokens "
+                    f"(spent_today={charge.get('spent_today')})"
+                )
+            else:
+                out["notes"].append(
+                    f"budget charge skipped: {charge.get('error') or 'unknown'}"
+                )
+        except Exception as exc:
+            out["notes"].append(f"budget charge skipped: {exc}")
     return out
 
 
