@@ -122,6 +122,16 @@ from .feature_loop import (
     start_feature_loop,
     update_feature_loop,
 )
+from .design_validation import (
+    build_failing_test_scaffold,
+    contract_feed_items,
+    decide_contract,
+    get_contract,
+    list_contracts,
+    propose_contract,
+    update_contract,
+    validate_contract_readiness,
+)
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .collab import (
     analyze_pr_authorship,
@@ -870,6 +880,58 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             )
         elif name == "plate_feature_loop_feed":
             payload = {"items": feature_loop_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_design_contract_propose":
+            payload = propose_contract(
+                feature_number=args.get("feature_number") or args.get("feature"),
+                feature_title=str(args.get("feature_title") or args.get("title") or ""),
+                visual_specs=list(args.get("visual_specs") or []) or None,
+                interaction_criteria=list(args.get("interaction_criteria") or []) or None,
+                a11y_criteria=list(args.get("a11y_criteria") or []) or None,
+                artifact_paths=list(args.get("artifact_paths") or []) or None,
+                has_playwright=bool(args.get("has_playwright") or False),
+                submit_for_approval=bool(args.get("submit_for_approval", True)),
+            )
+        elif name == "plate_design_contract_list":
+            payload = {
+                "contracts": list_contracts(
+                    status=str(args.get("status") or "all"),
+                    feature_number=args.get("feature_number") or args.get("feature"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_design_contract_get":
+            payload = {"contract": get_contract(str(args.get("contract_id") or args.get("id") or ""))}
+        elif name == "plate_design_contract_decide":
+            payload = decide_contract(
+                str(args.get("contract_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=args.get("note"),
+            )
+        elif name == "plate_design_contract_update":
+            payload = update_contract(
+                str(args.get("contract_id") or args.get("id") or ""),
+                visual_specs=list(args.get("visual_specs") or []) or None,
+                interaction_criteria=list(args.get("interaction_criteria") or []) or None,
+                a11y_criteria=list(args.get("a11y_criteria") or []) or None,
+                artifact_paths=list(args.get("artifact_paths") or []) or None,
+                status=args.get("status"),
+            )
+        elif name == "plate_design_contract_validate":
+            payload = validate_contract_readiness(
+                args.get("contract_id") or args.get("id"),
+            )
+        elif name == "plate_design_contract_scaffold":
+            c = get_contract(str(args.get("contract_id") or args.get("id") or ""))
+            if not c:
+                payload = {"ok": False, "error": "contract not found"}
+            else:
+                payload = build_failing_test_scaffold(
+                    c, language=str(args.get("language") or "python")
+                )
+                payload["ok"] = True
+        elif name == "plate_design_contract_feed":
+            payload = {"items": contract_feed_items(limit=int(args.get("limit") or 10))}
         elif name == "plate_task_create":
             payload = create_task(
                 str(args.get("title") or ""),
@@ -2583,6 +2645,104 @@ def run() -> None:
                             {
                                 "name": "plate_feature_loop_feed",
                                 "description": "Feed presentation for active Feature loops (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_propose",
+                                "description": "Propose visual/interaction design contract for a Feature with failing-test scaffold (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "feature_number": {"type": "integer"},
+                                        "feature_title": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "visual_specs": {"type": "array", "items": {"type": "string"}},
+                                        "interaction_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "a11y_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "artifact_paths": {"type": "array", "items": {"type": "string"}},
+                                        "has_playwright": {"type": "boolean"},
+                                        "submit_for_approval": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_list",
+                                "description": "List design contracts (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "feature_number": {"type": "integer"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_get",
+                                "description": "Get one design contract (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"contract_id": {"type": "string"}},
+                                    "required": ["contract_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_decide",
+                                "description": "Approve/reject/revise a design contract (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "contract_id": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["contract_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_update",
+                                "description": "Update design contract criteria (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "contract_id": {"type": "string"},
+                                        "visual_specs": {"type": "array", "items": {"type": "string"}},
+                                        "interaction_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "a11y_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "artifact_paths": {"type": "array", "items": {"type": "string"}},
+                                        "status": {"type": "string"},
+                                    },
+                                    "required": ["contract_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_validate",
+                                "description": "Check if design contract is ready for Feature implementation (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"contract_id": {"type": "string"}},
+                                    "required": ["contract_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_scaffold",
+                                "description": "Generate failing design-contract test scaffold (python|typescript) (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "contract_id": {"type": "string"},
+                                        "language": {"type": "string"},
+                                    },
+                                    "required": ["contract_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_feed",
+                                "description": "Feed presentation for pending design contracts (#646).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {"limit": {"type": "integer"}},
