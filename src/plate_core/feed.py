@@ -574,20 +574,21 @@ def get_user_feed(
 
     approval_items: list[dict[str, Any]] = []
     try:
-        from .design_research_approval import list_proposals, presentation_for_feed
+        from .design_research_approval import artifact_feed_items
 
-        for prop in list_proposals(status="pending", limit=15):
-            shaped = presentation_for_feed(prop)
-            approval_items.append({
-                "id": shaped.get("id") or prop.get("id"),
-                "kind": shaped.get("kind") or prop.get("kind"),
-                "title": shaped.get("title") or prop.get("title"),
-                "status": prop.get("status") or "pending",
-                "approval_prompt": shaped.get("approval_prompt"),
-                "prompt_segment": shaped.get("prompt_segment"),
-                "summary": prop.get("summary") or "",
-                "ask_user_question": shaped.get("ask_user_question"),
-            })
+        for shaped in artifact_feed_items(limit=15):
+            approval_items.append(
+                {
+                    "id": shaped.get("id"),
+                    "kind": shaped.get("kind"),
+                    "title": shaped.get("title"),
+                    "status": shaped.get("status") or "pending",
+                    "approval_prompt": shaped.get("approval_prompt"),
+                    "prompt_segment": shaped.get("prompt_segment"),
+                    "summary": shaped.get("reason") or "",
+                    "ask_user_question": shaped.get("ask_user_question"),
+                }
+            )
     except Exception:
         approval_items = []
     # #628/#630 pending Q&A plans + incomplete sessions awaiting action
