@@ -7,12 +7,19 @@ Standalone from feature/product planning (#630/#628) so it can land independentl
 
 from __future__ import annotations
 
+import json
+import re
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 MARKER_BEGIN = "<!-- PLATE-EPIC-RELEASE-PLAN:BEGIN -->"
 MARKER_END = "<!-- PLATE-EPIC-RELEASE-PLAN:END -->"
+
+# Durable multi-turn ER sessions (#629/#640) — sibling of feature/product planning
+ER_SESSIONS_DIR = Path(".agentic/planning/er_sessions")
 
 EPIC_PLANNING_QUESTIONS: list[dict[str, Any]] = [
     {
@@ -124,6 +131,7 @@ class ERSession:
     answers: dict[str, str] = field(default_factory=dict)
     complete: bool = False
     started_at: str = ""
+    id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -144,16 +152,100 @@ def _qs(kind: str) -> list[dict[str, Any]]:
     return list(RELEASE_PLANNING_QUESTIONS if kind == "release" else EPIC_PLANNING_QUESTIONS)
 
 
-def start_er_session(kind: str = "epic") -> dict[str, Any]:
+def _er_session_path(session_id: str, base_dir: Path | None = None) -> Path:
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "_", session_id or "unknown")
+    return (base_dir or ER_SESSIONS_DIR) / f"{safe}.json"
+
+
+def save_er_session(
+    session: dict[str, Any] | ERSession,
+    *,
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    data = session.to_dict() if isinstance(session, ERSession) else dict(session)
+    sid = data.get("id") or f"er-{data.get('kind', 'epic')}-{uuid.uuid4().hex[:10]}"
+    data["id"] = sid
+    data["updated_at"] = _now()
+    path = _er_session_path(sid, base_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    data["path"] = str(path)
+    return data
+
+
+def load_er_session(session_id: str, *, base_dir: Path | None = None) -> dict[str, Any] | None:
+    path = _er_session_path(session_id, base_dir)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["path"] = str(path)
+        return data
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def er_question_payload(
+    question: dict[str, Any] | None,
+    *,
+    kind: str = "epic",
+    turn: int = 0,
+    total: int = 0,
+) -> dict[str, Any] | None:
+    """Native ask_user_question payload for one ER script question (#629/#640)."""
+    if not question:
+        return None
+    qid = str(question.get("id") or f"q-{turn}")
+    prompt = str(question.get("prompt") or "")
+    progress = f" ({turn + 1}/{total})" if total else ""
+    return {
+        "item_id": qid,
+        "item_type": "er_planning_question",
+        "kind": kind,
+        "question": f"[{kind} planning{progress}] {prompt}",
+        "options": [
+            {"id": "answer", "label": "Answer (free text)", "description": "Provide text to plate_er_planning_answer."},
+            {"id": "skip_optional", "label": "Skip / none", "description": "Record 'none' when optional."},
+            {"id": "pause", "label": "Pause session", "description": "Resume later via durable session_id."},
+        ],
+        "field": question.get("field"),
+        "required": bool(question.get("required")),
+        "multi_select": False,
+        "allow_free_text": True,
+    }
+
+
+def start_er_session(
+    kind: str = "epic",
+    *,
+    base_dir: Path | None = None,
+    persist: bool = True,
+) -> dict[str, Any]:
     k = "release" if kind == "release" else "epic"
     qs = _qs(k)
-    session = ERSession(kind=k, turn=0, answers={}, complete=False, started_at=_now())
+    session = ERSession(
+        kind=k,
+        turn=0,
+        answers={},
+        complete=False,
+        started_at=_now(),
+        id=f"er-{k}-{uuid.uuid4().hex[:10]}",
+    )
+    sdict = session.to_dict()
+    if persist:
+        sdict = save_er_session(sdict, base_dir=base_dir)
+    nq = qs[0] if qs else None
     return {
-        "session": session.to_dict(),
+        "session": sdict,
+        "session_id": sdict.get("id"),
         "total_questions": len(qs),
-        "next_question": qs[0] if qs else None,
+        "next_question": nq,
+        "ask_user_question": er_question_payload(nq, kind=k, turn=0, total=len(qs)),
         "prompt_segment": f"Present via ask_user_question: {qs[0]['prompt']}" if qs else "",
-        "tui_hint": "One question at a time; then plate_er_planning_answer; build with plate_er_planning_build.",
+        "tui_hint": (
+            "One question at a time via ask_user_question payload; "
+            "plate_er_planning_answer; build with plate_er_planning_build; session_id is durable."
+        ),
         "issue_refs": ["#640", "#629", "#654"],
     }
 
@@ -163,6 +255,8 @@ def apply_er_answer(
     answer_text: str,
     *,
     question_id: str | None = None,
+    base_dir: Path | None = None,
+    persist: bool = True,
 ) -> dict[str, Any]:
     if isinstance(session, ERSession):
         s = session
@@ -173,13 +267,21 @@ def apply_er_answer(
             answers=dict(session.get("answers") or {}),
             complete=bool(session.get("complete")),
             started_at=session.get("started_at") or _now(),
+            id=str(session.get("id") or ""),
         )
+    if not s.id:
+        s.id = f"er-{s.kind}-{uuid.uuid4().hex[:10]}"
     qs = _qs(s.kind)
     if s.complete or s.turn >= len(qs):
+        sdict = s.to_dict()
+        if persist:
+            sdict = save_er_session(sdict, base_dir=base_dir)
         return {
-            "session": s.to_dict(),
+            "session": sdict,
+            "session_id": sdict.get("id"),
             "complete": True,
             "next_question": None,
+            "ask_user_question": None,
             "note": "session complete; call plate_er_planning_build",
         }
     q = qs[s.turn]
@@ -188,17 +290,37 @@ def apply_er_answer(
     s.turn += 1
     if s.turn >= len(qs):
         s.complete = True
+        sdict = s.to_dict()
+        if persist:
+            sdict = save_er_session(sdict, base_dir=base_dir)
         return {
-            "session": s.to_dict(),
+            "session": sdict,
+            "session_id": sdict.get("id"),
             "complete": True,
             "next_question": None,
+            "ask_user_question": {
+                "item_id": "build",
+                "item_type": "er_planning_complete",
+                "kind": s.kind,
+                "question": f"{s.kind.title()} planning Q&A complete. Build plan for approval?",
+                "options": [
+                    {"id": "build", "label": "Build plan", "description": "plate_er_planning_build → pending approval"},
+                    {"id": "revise", "label": "Revise", "description": "Start a new session."},
+                ],
+                "multi_select": False,
+            },
             "prompt_segment": "Session complete. Build plan for human approval.",
         }
     nq = qs[s.turn]
+    sdict = s.to_dict()
+    if persist:
+        sdict = save_er_session(sdict, base_dir=base_dir)
     return {
-        "session": s.to_dict(),
+        "session": sdict,
+        "session_id": sdict.get("id"),
         "complete": False,
         "next_question": nq,
+        "ask_user_question": er_question_payload(nq, kind=s.kind, turn=s.turn, total=len(qs)),
         "prompt_segment": f"Present via ask_user_question: {nq['prompt']}",
     }
 
@@ -371,17 +493,51 @@ Q&A release planning (#629). Human approval required before creating/renaming Re
     return plan
 
 
-def build_er_plan_from_session(session: dict[str, Any] | ERSession) -> dict[str, Any]:
+def build_er_plan_from_session(
+    session: dict[str, Any] | ERSession,
+    *,
+    planning_root: Path | None = None,
+    persist_pending: bool = True,
+) -> dict[str, Any]:
     if isinstance(session, ERSession):
         kind, answers, complete = session.kind, session.answers, session.complete
+        sid = session.id
     else:
         kind = session.get("kind") or "epic"
         answers = dict(session.get("answers") or {})
         complete = bool(session.get("complete"))
+        sid = str(session.get("id") or "")
     if not answers:
         return {"ok": False, "error": "session empty"}
     plan = build_release_plan(answers) if kind == "release" else build_epic_plan(answers)
-    return {"ok": True, "plan": plan, "session_complete": complete}
+    plan["session_id"] = sid
+    if persist_pending:
+        try:
+            from .planning import save_pending_plan
+
+            pending_root = (planning_root / "pending") if planning_root is not None else None
+            plan = save_pending_plan(plan, base_dir=pending_root)
+        except Exception:
+            pass
+    approval_payload = {
+        "item_id": plan.get("id") or "er-plan",
+        "item_type": "er_planning_approval",
+        "kind": kind,
+        "question": f"Approve {kind} plan: {plan.get('title') or 'untitled'}?",
+        "options": [
+            {"id": "approve", "label": "Approve", "description": "Create Epic/Release artifacts on GitHub (host)."},
+            {"id": "revise", "label": "Revise", "description": "Return to Q&A; do not create issues."},
+            {"id": "reject", "label": "Reject", "description": "Drop plan."},
+        ],
+        "multi_select": False,
+    }
+    return {
+        "ok": True,
+        "plan": plan,
+        "session_complete": complete,
+        "ask_user_question": approval_payload,
+        "pending_path": plan.get("path"),
+    }
 
 
 def get_er_script(kind: str = "epic") -> dict[str, Any]:
