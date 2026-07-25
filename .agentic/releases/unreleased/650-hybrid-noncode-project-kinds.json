@@ -1,0 +1,10 @@
+{
+  "slug": "650-hybrid-noncode-project-kinds",
+  "change_type": "feature",
+  "surface": "src/plate_core/hybrid.py, cli.py, mcp_server.py, feed.py, agent_guidance.py",
+  "summary": "Hybrid/non-code project support first slice (#650): project kinds (software/docs/content/marketing/design_system/infra/hybrid), artifact types, validation strategies (link check, content lint, visual, claims, IaC plan), detect/set profile, kind-aware planning templates + Feature validation plans, feed + MCP/CLI.",
+  "migration_impact": "none",
+  "agent_notes": "Use plate_hybrid_detect / plate_hybrid_set_kind / gh plate hybrid. Do not assume unit tests alone for non-code work. Follow-ups: wire feature_loop to consume validation plans; deploy target adapters.",
+  "links": ["#650", "#654", "#627", "#646", "#628"],
+  "breaking": false
+}

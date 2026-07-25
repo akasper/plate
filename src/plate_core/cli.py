@@ -148,6 +148,18 @@ from .packaging import (
     plan_marketplace_package_op,
     render_package_markdown,
 )
+from .hybrid import (
+    detect_project_kind,
+    feature_validation_plan,
+    get_kind_contract,
+    hybrid_feed_items,
+    list_artifact_types,
+    list_project_kinds,
+    list_validation_strategies,
+    load_project_profile,
+    planning_template_for_kind,
+    set_project_kind,
+)
 from .scheduled_ops import (
     complete_op_run,
     list_op_runs,
@@ -1330,6 +1342,121 @@ def cmd_feature_media(args: argparse.Namespace) -> int:
         return 0 if out.get("ok") else 1
     r = out.get("record") or {}
     print(f"ok={out.get('ok')} id={r.get('id')} test={r.get('test_name')} path={r.get('gif_path')}")
+    return 0 if out.get("ok") else 1
+
+
+def cmd_hybrid(args: argparse.Namespace) -> int:
+    """Hybrid / non-code project kinds, artifacts, validation (#650)."""
+    base = Path(getattr(args, "base_dir", None) or ".agentic/hybrid")
+    root = Path(getattr(args, "repo_root", None) or ".")
+
+    if getattr(args, "list_kinds", False) or getattr(args, "list", False):
+        rows = list_project_kinds()
+        if args.json:
+            print(json.dumps({"kinds": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')}: {r.get('label')} — {r.get('description')}")
+        return 0
+
+    if getattr(args, "list_artifacts", False):
+        rows = list_artifact_types()
+        if args.json:
+            print(json.dumps({"artifact_types": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')}: {r.get('label')}")
+        return 0
+
+    if getattr(args, "list_validation", False):
+        rows = list_validation_strategies(kind=getattr(args, "kind", None) or None)
+        if args.json:
+            print(json.dumps({"validation": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')}: {r.get('label')} ({r.get('command_hint')})")
+        return 0
+
+    if getattr(args, "detect", False):
+        out = detect_project_kind(root)
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        p = out.get("profile") or {}
+        print(f"kind={p.get('kind')} confidence={p.get('confidence')} signals={p.get('detected_signals')}")
+        return 0
+
+    if getattr(args, "set_kind", None):
+        out = set_project_kind(
+            str(args.set_kind),
+            base_dir=base,
+            note=getattr(args, "note", None) or "",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} kind={(out.get('profile') or {}).get('kind')} {out.get('error') or ''}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "show", False) or getattr(args, "profile", False):
+        out = load_project_profile(base_dir=base, repo_root=root)
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        p = out.get("profile") or {}
+        print(f"source={out.get('source')} kind={p.get('kind')} validation={p.get('validation')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "template", None):
+        kind = str(args.template)
+        out = planning_template_for_kind(kind)
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"kind={out.get('kind')} questions={len(out.get('questions') or [])}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "validation_plan", False):
+        kind = str(getattr(args, "kind", None) or "software")
+        out = feature_validation_plan(
+            kind,
+            feature_title=str(getattr(args, "title", None) or ""),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"kind={out.get('kind')} steps={len(out.get('steps') or [])}")
+        for s in out.get("steps") or []:
+            print(f"  - {s.get('id')}: {s.get('command_hint')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "contract", None):
+        c = get_kind_contract(str(args.contract))
+        if args.json:
+            print(json.dumps({"contract": c, "ok": c is not None}))
+            return 0 if c else 1
+        if not c:
+            print("unknown kind")
+            return 1
+        print(f"{c.get('kind')}: {c.get('label')}")
+        return 0
+
+    if getattr(args, "feed", False):
+        rows = hybrid_feed_items(base_dir=base, repo_root=root)
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    # default: show profile
+    out = load_project_profile(base_dir=base, repo_root=root)
+    if args.json:
+        print(json.dumps(out))
+        return 0 if out.get("ok") else 1
+    p = out.get("profile") or {}
+    print(f"source={out.get('source')} kind={p.get('kind')} confidence={p.get('confidence')}")
     return 0 if out.get("ok") else 1
 
 
@@ -3146,6 +3273,28 @@ def build_parser() -> argparse.ArgumentParser:
     fmedia.add_argument("--limit", type=int, default=50)
     fmedia.add_argument("--json", action="store_true")
     fmedia.set_defaults(func=cmd_feature_media)
+
+    hybrid = sub.add_parser(
+        "hybrid",
+        help="Hybrid/non-code project kinds, artifact types, validation plans (#650)",
+    )
+    hybrid.add_argument("--base-dir", dest="base_dir", default=".agentic/hybrid")
+    hybrid.add_argument("--repo-root", dest="repo_root", default=".")
+    hybrid.add_argument("--list", "--list-kinds", dest="list_kinds", action="store_true")
+    hybrid.add_argument("--list-artifacts", dest="list_artifacts", action="store_true")
+    hybrid.add_argument("--list-validation", dest="list_validation", action="store_true")
+    hybrid.add_argument("--detect", action="store_true")
+    hybrid.add_argument("--set-kind", dest="set_kind", metavar="KIND")
+    hybrid.add_argument("--show", "--profile", dest="show", action="store_true")
+    hybrid.add_argument("--template", metavar="KIND", help="Planning template for kind")
+    hybrid.add_argument("--validation-plan", dest="validation_plan", action="store_true")
+    hybrid.add_argument("--kind", default="")
+    hybrid.add_argument("--title", default="")
+    hybrid.add_argument("--contract", metavar="KIND")
+    hybrid.add_argument("--feed", action="store_true")
+    hybrid.add_argument("--note", default="")
+    hybrid.add_argument("--json", action="store_true")
+    hybrid.set_defaults(func=cmd_hybrid)
 
     packaging = sub.add_parser(
         "packaging",

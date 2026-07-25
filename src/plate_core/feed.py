@@ -860,6 +860,28 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #650 hybrid / non-code project profile → feed signals
+    try:
+        from .hybrid import hybrid_feed_items
+
+        for hy in hybrid_feed_items(limit=3):
+            signal_items.append(
+                {
+                    "id": hy.get("id"),
+                    "type": hy.get("item_type") or "hybrid_profile",
+                    "title": hy.get("title"),
+                    "rank": int(hy.get("rank") or 20),
+                    "impact": hy.get("impact") or "low",
+                    "reason": hy.get("reason") or "Hybrid project kind (#650)",
+                    "prompt_segment": hy.get("prompt_segment")
+                    or "plate_hybrid_detect / plate_hybrid_set_kind",
+                    "source": "hybrid",
+                    "ask_user_question": hy.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     # #647 decision ledger blocking gates → feed signals (autonomy surfaces only)
     if include_autonomy:
         try:

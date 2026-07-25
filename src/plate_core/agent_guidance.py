@@ -371,6 +371,11 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - `plate_packaging_build` / `gh plate packaging`; render with `plate_packaging_render`; feed via `plate_packaging_feed`.
 - `plate_packaging_decide approve` only marks approved_for_publish — never publishes. Real marketplace/PyPI stays human Task (#380/#381/#625/#626).
 
+### Hybrid / non-code projects (#650)
+- Project kinds: software, docs, content, marketing, design_system, infra, hybrid — each with artifact types + validation strategies (link check, content lint, visual, claims, IaC plan, etc.).
+- `plate_hybrid_detect` / `plate_hybrid_set_kind` / `gh plate hybrid`; planning templates via `plate_hybrid_planning_template`; Feature validation plans via `plate_hybrid_validation_plan`.
+- Do not assume unit tests alone for non-code work; attach kind-aware validation and human gates (editorial/claims/prod apply).
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 
