@@ -107,6 +107,14 @@ class CostDashboard653Tests(unittest.TestCase):
         self.assertTrue(any(i["type"] == "cost_hotspot" for i in dash["feed_items"]))
         self.assertTrue(any(s["kind"] == "health_recommendation" for s in dash["drift_signals"]))
         self.assertIn("Cost + Risk Dashboard", dash["markdown"])
+        # burn 50% → elevated budget gate with ask_user_question (#634/#653)
+        self.assertEqual(dash["budget"]["budget_pressure"], "elevated")
+        gates = [i for i in dash["feed_items"] if i.get("type") == "budget_gate"]
+        self.assertTrue(gates)
+        self.assertIn("ask_user_question", gates[0])
+        self.assertTrue(gates[0]["ask_user_question"]["options"])
+        hotspots = [i for i in dash["feed_items"] if i.get("type") == "cost_hotspot"]
+        self.assertTrue(hotspots[0].get("ask_user_question"))
 
     def test_dashboard_autonomy_off_signal(self):
         client = self._client_two_reports()
@@ -126,6 +134,8 @@ class CostDashboard653Tests(unittest.TestCase):
         )
         self.assertFalse(dash["budget"]["enforcement_active"])
         self.assertTrue(any(s["kind"] == "autonomy_off" for s in dash["drift_signals"]))
+        # No budget_gate when autonomy off
+        self.assertFalse(any(i.get("type") == "budget_gate" for i in dash["feed_items"]))
 
     def test_dashboard_high_burn_signal(self):
         client = self._client_two_reports()
@@ -145,6 +155,60 @@ class CostDashboard653Tests(unittest.TestCase):
         )
         self.assertTrue(any(s["kind"] == "burn_high" for s in dash["drift_signals"]))
         self.assertLess(dash["projections"]["projected_days_remaining_at_burn"], 1.0)
+        self.assertIn(dash["budget"]["budget_pressure"], ("critical", "exhausted"))
+        self.assertTrue(any(i.get("type") == "budget_gate" for i in dash["feed_items"]))
+        self.assertTrue(dash["budget"]["would_throttle_next_cycle"] or dash["budget"]["would_pause_next_cycle"]
+                        or dash["budget"]["budget_pressure"] in ("critical", "exhausted"))
+
+    def test_dashboard_durable_spend_and_gate(self):
+        """#634: durable spend.json informs remaining when autonomy_status omits it."""
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        client = self._client_two_reports()
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp)
+            (bdir / "spend.json").write_text(
+                json.dumps(
+                    {
+                        "date": "2099-01-01",  # stale day ignored by load? still returns file
+                        "spent_today": 48000,
+                        "spent_this_cycle": 100,
+                        "spent_usd_today": 0.1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            # load_budget_spend checks date match — patch it to return our counters
+            with patch(
+                "plate_core.autonomy.load_budget_spend",
+                return_value={
+                    "date": "today",
+                    "spent_today": 48000,
+                    "spent_usd_today": 0.1,
+                },
+            ):
+                dash = get_cost_dashboard(
+                    repo="akasper/plate",
+                    client=client,
+                    autonomy_status={
+                        "enabled": True,
+                        "risk_tolerance": "medium",
+                        # omit remaining → durable fills in
+                        "burn_rate": 0.0,
+                        "autopilot_score": 50,
+                        "open_human_checkpoints": [],
+                        "due_procedures": [],
+                    },
+                    health={},
+                )
+        self.assertEqual(dash["budget"]["spent_today_durable"], 48000)
+        daily = int(dash["budget"]["daily_tokens"])
+        self.assertEqual(dash["budget"]["remaining_tokens"], max(0, daily - 48000))
+        self.assertIn(dash["budget"]["budget_pressure"], ("critical", "exhausted", "elevated"))
+        self.assertTrue(any(i.get("type") == "budget_gate" for i in dash["feed_items"]))
 
 
 if __name__ == "__main__":
