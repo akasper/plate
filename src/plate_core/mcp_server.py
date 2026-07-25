@@ -489,6 +489,15 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 "items": er_planning_feed_items(limit=int(args.get("limit") or 20))
             }
         elif name == "plate_artifact_propose":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = propose_artifact(
                 kind=str(args.get("kind") or "design"),
                 title=str(args.get("title") or "Artifact"),
@@ -500,6 +509,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 originating_question=args.get("originating_question"),
                 media_links=list(args.get("media_links") or []),
                 actor=str(args.get("actor") or "agent"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_artifact_decide":
             payload = decide_proposal(
@@ -510,6 +521,15 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 open_checkpoint=bool(args.get("open_checkpoint") or False),
             )
         elif name == "plate_artifact_resubmit":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = resubmit_proposal(
                 str(args.get("proposal_id") or args.get("id") or ""),
                 summary=args.get("summary"),
@@ -518,6 +538,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 media_links=list(args.get("media_links") or []) if args.get("media_links") is not None else None,
                 title=args.get("title"),
                 actor=str(args.get("actor") or "agent"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_artifact_history":
             payload = {
@@ -2265,7 +2287,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_artifact_propose",
-                                "description": "Propose a Design or Research artifact for human approval (#632). Durable under .agentic/approvals/.",
+                                "description": "Propose a Design or Research artifact for human approval (#632). #634 budget gate. Durable under .agentic/approvals/.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -2279,6 +2301,8 @@ def run() -> None:
                                         "originating_question": {"type": "integer"},
                                         "media_links": {"type": "array", "items": {"type": "string"}},
                                         "actor": {"type": "string"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                     "required": ["kind", "title", "summary"],
                                 },
@@ -2303,7 +2327,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_artifact_resubmit",
-                                "description": "Resubmit a revised Design/Research proposal after content update (#632).",
+                                "description": "Resubmit a revised Design/Research proposal after content update (#632). #634 budget gate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -2314,6 +2338,8 @@ def run() -> None:
                                         "title": {"type": "string"},
                                         "media_links": {"type": "array", "items": {"type": "string"}},
                                         "actor": {"type": "string"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                     "required": ["proposal_id"],
                                 },
