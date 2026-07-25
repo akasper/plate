@@ -7,13 +7,17 @@ import unittest
 from pathlib import Path
 
 from plate_core.design_research_approval import (
+    artifact_feed_items,
     ask_user_question_payload,
     decide_proposal,
     get_proposal,
+    get_proposal_history,
+    list_actionable_proposals,
     list_authoritative,
     list_proposals,
     presentation_for_feed,
     propose_artifact,
+    resubmit_proposal,
 )
 
 
@@ -66,10 +70,35 @@ class TestDesignResearchApproval632(unittest.TestCase):
         rev = decide_proposal(out["id"], "revise", note="needs more detail", base_dir=self.base)
         self.assertEqual(rev["status"], "revised")
         self.assertEqual(rev["version"], 2)
+        # revised stays actionable for feed
+        actionable = list_actionable_proposals(base_dir=self.base)
+        self.assertTrue(any(a["id"] == out["id"] for a in actionable))
         # new proposal then reject
         out2 = propose_artifact("design", "B", "s", base_dir=self.base)
         rej = decide_proposal(out2["id"], "reject", base_dir=self.base)
         self.assertEqual(rej["status"], "rejected")
+
+    def test_resubmit_and_history(self):
+        out = propose_artifact(
+            "design", "Checkout", "v1", content_path="docs/design/a.md", base_dir=self.base
+        )
+        decide_proposal(out["id"], "revise", note="add mobile", base_dir=self.base)
+        hist = get_proposal_history(out["id"], base_dir=self.base)
+        self.assertTrue(any(h.get("decision") == "revised" for h in hist))
+        re = resubmit_proposal(
+            out["id"],
+            summary="v2 with mobile",
+            content_path="docs/design/a-v2.md",
+            actor="agent",
+            base_dir=self.base,
+        )
+        self.assertTrue(re["ok"])
+        self.assertEqual(re["status"], "pending")
+        self.assertGreaterEqual(re["version"], 3)
+        hist2 = get_proposal_history(out["id"], base_dir=self.base)
+        self.assertTrue(any(h.get("decision") == "resubmitted" for h in hist2))
+        feed = artifact_feed_items(base_dir=self.base)
+        self.assertTrue(any(f["id"] == out["id"] for f in feed))
 
     def test_list_pending_and_feed_shape(self):
         propose_artifact("design", "D1", "s", base_dir=self.base)
@@ -81,6 +110,11 @@ class TestDesignResearchApproval632(unittest.TestCase):
         self.assertEqual(feed["impact"], "high")
         self.assertIn("ask_user_question", feed)
         self.assertTrue(any(o["id"] == "approve" for o in feed["ask_user_question"]["options"]))
+        # revised presentation prioritizes resubmit option
+        p = propose_artifact("design", "D2", "s", base_dir=self.base)
+        decide_proposal(p["id"], "revise", note="more", base_dir=self.base)
+        shaped = presentation_for_feed(get_proposal(p["id"], base_dir=self.base))
+        self.assertEqual(shaped["ask_user_question"]["options"][0]["id"], "resubmit")
 
     def test_ask_user_question_on_propose(self):
         out = propose_artifact("design", "D", "summary", base_dir=self.base)

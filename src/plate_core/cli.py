@@ -56,9 +56,12 @@ from .epic_release_planning import (
 from .design_research_approval import (
     decide_proposal,
     get_proposal,
+    get_proposal_history,
+    list_actionable_proposals,
     list_authoritative,
     list_proposals,
     propose_artifact,
+    resubmit_proposal,
 )
 from .pm import (
     complete_pm_assignment,
@@ -996,6 +999,7 @@ def cmd_artifact(args: argparse.Namespace) -> int:
             args.decision,
             decided_by=getattr(args, "by", None) or "cli-user",
             note=getattr(args, "note", None) or "",
+            open_checkpoint=bool(getattr(args, "open_checkpoint", False)),
         )
         if args.json:
             print(json.dumps(out))
@@ -1004,6 +1008,35 @@ def cmd_artifact(args: argparse.Namespace) -> int:
             print(out.get("error") or "failed", file=sys.stderr)
             return 1
         print(f"{out.get('id')} -> {out.get('status')}")
+        if out.get("next_prompt"):
+            print(out["next_prompt"])
+        return 0
+    if getattr(args, "resubmit", None):
+        out = resubmit_proposal(
+            str(args.resubmit),
+            summary=getattr(args, "summary", None) or None,
+            content_path=getattr(args, "content_path", None) or None,
+            title=getattr(args, "title", None) or None,
+            actor=getattr(args, "by", None) or "cli-user",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "failed", file=sys.stderr)
+            return 1
+        print(f"resubmitted {out.get('id')} v{out.get('version')} [{out.get('status')}]")
+        return 0
+    if getattr(args, "history", None):
+        rows = get_proposal_history(str(args.history))
+        if args.json:
+            print(json.dumps({"history": rows}))
+            return 0
+        if not rows:
+            print("No history.")
+            return 0
+        for r in rows:
+            print(f"{r.get('at')} {r.get('decision')} by={r.get('by')} v{r.get('version')}: {r.get('note')}")
         return 0
     if getattr(args, "get", None):
         rec = get_proposal(args.get)
@@ -1017,6 +1050,8 @@ def cmd_artifact(args: argparse.Namespace) -> int:
         return 0
     if getattr(args, "authoritative", False):
         rows = list_authoritative(kind=getattr(args, "kind", None))
+    elif getattr(args, "actionable", False) or (getattr(args, "status", None) == "actionable"):
+        rows = list_actionable_proposals(kind=getattr(args, "kind", None))
     else:
         rows = list_proposals(
             status=getattr(args, "status", None) or "pending",
@@ -3245,7 +3280,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     artifact = sub.add_parser(
         "artifact",
-        help="Design/Research artifact approval (#632): propose, decide, list, get",
+        help="Design/Research artifact approval (#632): propose, decide, resubmit, history, list",
     )
     artifact.add_argument("--propose", action="store_true")
     artifact.add_argument("--kind", choices=["design", "research"], default="design")
@@ -3258,9 +3293,18 @@ def build_parser() -> argparse.ArgumentParser:
     artifact.add_argument("--decide", metavar="ID")
     artifact.add_argument("--decision", choices=["approve", "revise", "reject"])
     artifact.add_argument("--note", default="")
+    artifact.add_argument(
+        "--open-checkpoint",
+        dest="open_checkpoint",
+        action="store_true",
+        help="On revise, open a #648 checkpoint when related_issue is set",
+    )
+    artifact.add_argument("--resubmit", metavar="ID", help="Resubmit revised content for re-approval")
+    artifact.add_argument("--history", metavar="ID", help="Show decision history for proposal")
     artifact.add_argument("--get", metavar="ID")
     artifact.add_argument("--list", action="store_true")
-    artifact.add_argument("--status", default="pending")
+    artifact.add_argument("--status", default="pending", help="pending|revised|approved|rejected|actionable|all")
+    artifact.add_argument("--actionable", action="store_true", help="List pending+revised")
     artifact.add_argument("--authoritative", action="store_true")
     artifact.add_argument("--by", default="cli-user")
     artifact.add_argument("--json", action="store_true")
