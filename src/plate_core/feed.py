@@ -417,7 +417,7 @@ def build_feed_items(
         )
     for i, sig in enumerate(signal_items or []):
         stype = str(sig.get("type") or "signal")
-        # Keep budget_gate / ledger_gate / cost types first-class (#653/#647)
+        # Keep budget_gate / ledger_gate / pm_gate / cost types first-class
         item_type = (
             stype
             if stype
@@ -425,6 +425,7 @@ def build_feed_items(
                 "checkpoint",
                 "budget_gate",
                 "ledger_gate",
+                "pm_gate",
                 "cost_hotspot",
                 "procedure",
                 "drift",
@@ -630,15 +631,31 @@ def get_user_feed(
     except Exception:
         pass
 
-    # #660 PM durable queue → endless feed (proposed + delegated only)
+    # #660 PM durable queue + pause gates → endless feed
     pm_assignments: list[dict[str, Any]] = []
     if include_autonomy:
         try:
-            from .pm import list_pm_queue
+            from .pm import list_pm_queue, pm_feed_items
 
-            for st in ("proposed", "delegated"):
+            for st in ("proposed", "delegated", "blocked"):
                 for row in list_pm_queue(status=st, limit=20):
                     pm_assignments.append(row)
+            # Gate signals (budget/checkpoint pause) as top-ranked feed signals
+            for gate in pm_feed_items(limit=8):
+                if gate.get("item_type") == "pm_gate":
+                    signal_items.append(
+                        {
+                            "id": gate.get("id"),
+                            "type": "pm_gate",
+                            "title": gate.get("title"),
+                            "rank": int(gate.get("rank") or 8),
+                            "impact": gate.get("impact") or "high",
+                            "reason": gate.get("reason") or "PM gate",
+                            "prompt_segment": gate.get("prompt_segment"),
+                            "source": "pm",
+                            "ask_user_question": gate.get("ask_user_question"),
+                        }
+                    )
         except Exception:
             pm_assignments = []
 
