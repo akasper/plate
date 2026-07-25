@@ -361,6 +361,11 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - CLI: `gh plate feature-media --feature N --title "..."`. Skip only with explicit reason.
 - Pairs with feature_loop `media_capture` stage and #635 fragment media[].
 
+### Scheduled ops (#641)
+- Catalog: refactor, release-cut/finalize prep, deploy-production, marketing deploy, marketplace package, implement-epic-slice.
+- `plate_scheduled_ops_status` / `gh plate scheduled-ops`; plan packets with `plate_scheduled_op_plan`.
+- High/critical ops need `approved=true` or checkpoint; marketplace publish stays human Task. Dry-run default.
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 

@@ -1,0 +1,11 @@
+{
+  "id": "implement-epic-slice",
+  "cadence": "manual",
+  "risk_level": "medium",
+  "description": "Implement next ready Feature via feature_loop under an Epic (#641/#639).",
+  "steps": [
+    {"tool": "plate_scheduled_op_run", "args": {"op_id": "implement-epic-slice", "dry_run": true}}
+  ],
+  "enabled": true,
+  "max_tokens_per_run": 20000
+}

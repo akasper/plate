@@ -1,0 +1,11 @@
+{
+  "id": "marketing-site-deploy",
+  "cadence": "manual",
+  "risk_level": "high",
+  "description": "Marketing/docs site deploy with approved release media (#641).",
+  "steps": [
+    {"tool": "plate_scheduled_op_run", "args": {"op_id": "marketing-site-deploy", "dry_run": true}}
+  ],
+  "enabled": true,
+  "max_tokens_per_run": 8000
+}
