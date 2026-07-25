@@ -68,6 +68,11 @@ from .tasks import (
     create_task,
     detect_and_create_tasks,
 )
+from .collab import (
+    analyze_pr_authorship,
+    collab_policy_check,
+    collab_status_for_issue,
+)
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -828,6 +833,46 @@ def cmd_artifact(args: argparse.Namespace) -> int:
     for r in rows:
         print(f"{r.get('id')} [{r.get('status')}] {r.get('kind')}: {r.get('title')}")
     return 0
+
+def cmd_collab(args: argparse.Namespace) -> int:
+    """Human/agent co-existence checks (#643)."""
+    labels = []
+    raw = getattr(args, "labels", None) or ""
+    if raw:
+        labels = [x.strip() for x in str(raw).split(",") if x.strip()]
+    if getattr(args, "issue_status", False):
+        out = collab_status_for_issue(
+            {"number": getattr(args, "number", None), "title": getattr(args, "title", "") or "", "labels": labels}
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"driver={out.get('driver')} pause_delegation={out.get('pause_delegation')}")
+        return 0
+    action = getattr(args, "action", None) or "delegate"
+    auth = None
+    if getattr(args, "author", None) or getattr(args, "mix", None):
+        commits = []
+        mix = getattr(args, "mix", None)
+        if mix == "mixed":
+            commits = [{"author": {"login": "human1"}}, {"author": {"login": "bot[bot]"}}]
+        elif mix == "human":
+            commits = [{"author": {"login": "human1"}}]
+        elif mix == "agent":
+            commits = [{"author": {"login": "copilot[bot]"}}]
+        auth = analyze_pr_authorship(
+            author_login=getattr(args, "author", None),
+            commits=commits or None,
+        )
+    out = collab_policy_check(action, labels=labels, authorship=auth)
+    if auth is not None:
+        out["authorship"] = auth.to_dict()
+    if args.json:
+        print(json.dumps(out))
+        return 0 if out.get("allowed") else 1
+    print(f"allowed={out.get('allowed')} escalate={out.get('escalate')} reason={out.get('reason')}")
+    return 0 if out.get("allowed") else 1
+
 
 def cmd_task(args: argparse.Namespace) -> int:
     """Create, detect, or close human Task issues (#359/#360)."""
@@ -1781,6 +1826,20 @@ def build_parser() -> argparse.ArgumentParser:
     artifact.add_argument("--by", default="cli-user")
     artifact.add_argument("--json", action="store_true")
     artifact.set_defaults(func=cmd_artifact)
+
+    collab = sub.add_parser(
+        "collab",
+        help="Human/agent co-existence policy checks (#643)",
+    )
+    collab.add_argument("--action", default="delegate", help="Action to gate: delegate|push_branch|force_push|auto_merge|...")
+    collab.add_argument("--labels", default="", help="Comma-separated labels (include driver:human etc.)")
+    collab.add_argument("--author", default="", help="PR author login")
+    collab.add_argument("--mix", choices=["human", "agent", "mixed"], help="Simulated authorship mix for checks")
+    collab.add_argument("--issue-status", action="store_true", help="Summarize driver state for labels")
+    collab.add_argument("--number", type=int)
+    collab.add_argument("--title", default="")
+    collab.add_argument("--json", action="store_true")
+    collab.set_defaults(func=cmd_collab)
 
     task = sub.add_parser(
         "task",
