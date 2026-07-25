@@ -1928,6 +1928,12 @@ def cmd_design_contract(args: argparse.Namespace) -> int:
     raw_v = getattr(args, "visuals", None) or ""
     if raw_v:
         visuals = [x.strip() for x in str(raw_v).split(";") if x.strip()]
+    br = getattr(args, "budget_remaining", None)
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
     out = propose_contract(
         feature_number=getattr(args, "feature", None),
         feature_title=str(getattr(args, "title", None) or ""),
@@ -1935,12 +1941,18 @@ def cmd_design_contract(args: argparse.Namespace) -> int:
         interaction_criteria=interactions or None,
         has_playwright=bool(getattr(args, "playwright", False)),
         submit_for_approval=not bool(getattr(args, "draft", False)),
+        budget_remaining=br,
+        use_live_budget=not bool(getattr(args, "no_live_budget", False)),
     )
     if args.json:
         print(json.dumps(out))
         return 0 if out.get("ok") else 1
     c = out.get("contract") or {}
-    print(f"ok={out.get('ok')} id={c.get('id')} status={c.get('status')} scaffold={ (out.get('test_scaffold') or {}).get('path_hint') }")
+    print(
+        f"ok={out.get('ok')} id={c.get('id')} status={c.get('status')} "
+        f"scaffold={(out.get('test_scaffold') or {}).get('path_hint')} "
+        f"est={out.get('cost_estimate_tokens')} remaining={out.get('budget_remaining')}"
+    )
     return 0 if out.get("ok") else 1
 
 
@@ -3777,6 +3789,19 @@ def build_parser() -> argparse.ArgumentParser:
     dcontract.add_argument("--feed", action="store_true")
     dcontract.add_argument("--note", default="")
     dcontract.add_argument("--status", default="all")
+    dcontract.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit remaining tokens for #634 gate (overrides live hydrate)",
+    )
+    dcontract.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     dcontract.add_argument("--limit", type=int, default=50)
     dcontract.add_argument("--json", action="store_true")
     dcontract.set_defaults(func=cmd_design_contract)

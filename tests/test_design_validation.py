@@ -10,6 +10,7 @@ from plate_core.design_validation import (
     build_failing_test_scaffold,
     contract_feed_items,
     decide_contract,
+    estimate_contract_cost,
     list_contracts,
     propose_contract,
     validate_contract_readiness,
@@ -30,8 +31,10 @@ class TestDesignContracts(unittest.TestCase):
             feature_title="Coach pathway UI",
             has_playwright=True,
             base_dir=self.base,
+            use_live_budget=False,
         )
         self.assertTrue(r["ok"])
+        self.assertIn("cost_estimate_tokens", r)
         c = r["contract"]
         self.assertEqual(c["status"], "pending_approval")
         self.assertTrue(c["interaction_criteria"])
@@ -47,6 +50,7 @@ class TestDesignContracts(unittest.TestCase):
             feature_title="X",
             interaction_criteria=["Click save persists"],
             base_dir=self.base,
+            use_live_budget=False,
         )
         cid = r["contract"]["id"]
         v0 = validate_contract_readiness(cid, base_dir=self.base)
@@ -57,7 +61,9 @@ class TestDesignContracts(unittest.TestCase):
         self.assertTrue(v1["ready"])
 
     def test_reject_and_feed(self):
-        r = propose_contract(feature_title="Y", base_dir=self.base)
+        r = propose_contract(
+            feature_title="Y", base_dir=self.base, use_live_budget=False
+        )
         cid = r["contract"]["id"]
         feed = contract_feed_items(base_dir=self.base)
         self.assertTrue(feed)
@@ -65,10 +71,37 @@ class TestDesignContracts(unittest.TestCase):
         self.assertEqual(list_contracts(status="pending_approval", base_dir=self.base), [])
 
     def test_ts_scaffold(self):
-        r = propose_contract(feature_title="UI", base_dir=self.base, submit_for_approval=False)
+        r = propose_contract(
+            feature_title="UI",
+            base_dir=self.base,
+            submit_for_approval=False,
+            use_live_budget=False,
+        )
         sc = build_failing_test_scaffold(r["contract"], language="typescript")
         self.assertTrue(sc["path_hint"].endswith(".ts"))
         self.assertIn("playwright", sc["content"].lower())
+
+    def test_budget_gate(self):
+        est = estimate_contract_cost(has_playwright=False)
+        self.assertTrue(est["ok"])
+        self.assertGreater(est["estimated_tokens"], 0)
+        blocked = propose_contract(
+            feature_title="Too expensive",
+            base_dir=self.base,
+            budget_remaining=10,
+            use_live_budget=False,
+        )
+        self.assertFalse(blocked["ok"])
+        self.assertTrue(blocked.get("blocked"))
+        self.assertIn("budget", blocked.get("error") or "")
+        ok = propose_contract(
+            feature_title="Ok",
+            base_dir=self.base,
+            budget_remaining=est["estimated_tokens"] + 1000,
+            use_live_budget=False,
+        )
+        self.assertTrue(ok["ok"])
+        self.assertEqual(ok.get("budget_remaining"), est["estimated_tokens"] + 1000)
 
 
 if __name__ == "__main__":
