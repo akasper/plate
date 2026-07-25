@@ -180,6 +180,8 @@ def create_handoff(
     related_pr: int | None = None,
     parent_handoff_id: str | None = None,
     requires_human: bool = False,
+    budget_remaining: int | None = None,
+    open_checkpoint: bool = False,
     base_dir: Path | None = None,
     record_ledger: bool = True,
 ) -> dict[str, Any]:
@@ -191,6 +193,24 @@ def create_handoff(
         return {"ok": False, "error": "to_agent required"}
     if not task_s:
         return {"ok": False, "error": "task required"}
+
+    risk_n = (risk or "medium").lower()
+    need_human = bool(requires_human) or risk_n in ("high", "critical")
+
+    # #644 harden: optional hard budget gate before opening work
+    if (
+        budget_remaining is not None
+        and budget_tokens is not None
+        and int(budget_tokens) > int(budget_remaining)
+    ):
+        return {
+            "ok": False,
+            "error": (
+                f"budget_tokens {budget_tokens} exceeds remaining {budget_remaining}"
+            ),
+            "blocked": True,
+            "reason": "budget",
+        }
 
     # Soft validate role ids (allow free-form for host agents)
     role = get_fleet_role(ta)
@@ -206,16 +226,23 @@ def create_handoff(
         constraints=list(constraints or [])
         + (["quiet_ops", "github_as_truth"] if not constraints else []),
         budget_tokens=budget_tokens,
-        risk=(risk or "medium").lower(),
+        risk=risk_n,
         related_issue=related_issue,
         related_pr=related_pr,
         parent_handoff_id=parent_handoff_id,
-        requires_human=bool(requires_human),
+        requires_human=need_human,
         created_at=ts,
         updated_at=ts,
     )
     if role:
         packet.context.setdefault("to_role", role)
+
+    # High-risk / human handoffs start blocked until accept or checkpoint approve
+    if need_human and risk_n in ("high", "critical"):
+        packet.status = "blocked"
+        packet.context.setdefault(
+            "block_reason", "requires_human_or_high_risk_until_accepted"
+        )
 
     data = _load(base_dir)
     data["handoffs"].append(packet.to_dict())
@@ -231,13 +258,45 @@ def create_handoff(
         ),
     }
 
+    if open_checkpoint or (need_human and risk_n in ("high", "critical")):
+        try:
+            from .checkpoint import create_checkpoint
+
+            cp = create_checkpoint(
+                title=f"Fleet handoff {fa} → {ta}",
+                reason=task_s[:200],
+                impact="high" if risk_n in ("high", "critical") else "medium",
+                action_kind="fleet_handoff",
+                related_issue=related_issue,
+                related_pr=related_pr,
+                scope={
+                    "handoff_id": packet.handoff_id,
+                    "to_agent": ta,
+                    "budget_tokens": budget_tokens,
+                },
+                created_by="fleet",
+                pause_autonomy=True,
+            )
+            if isinstance(cp, dict) and cp.get("id"):
+                out["checkpoint_id"] = cp["id"]
+                # store on packet
+                for h in data["handoffs"]:
+                    if h.get("handoff_id") == packet.handoff_id:
+                        h.setdefault("context", {})["checkpoint_id"] = cp["id"]
+                        h["updated_at"] = _now()
+                        out["handoff"] = h
+                        break
+                _save(data, base_dir)
+        except Exception:
+            pass
+
     if record_ledger:
         try:
             from .ledger import record_decision
 
             rec = record_decision(
                 action_kind="fleet_handoff",
-                decision="delegate",
+                decision="delegate" if packet.status == "open" else "pause",
                 reason=f"handoff {fa} → {ta}: {task_s[:120]}",
                 sources=["fleet", "#644"],
                 risk_tolerance=packet.risk,
@@ -245,6 +304,7 @@ def create_handoff(
                 related_issue=related_issue,
                 related_pr=related_pr,
                 cost_estimate_tokens=budget_tokens,
+                checkpoint_id=out.get("checkpoint_id"),
                 actor="fleet",
                 metadata={"handoff_id": packet.handoff_id, "to_agent": ta},
             )
@@ -280,6 +340,11 @@ def update_handoff(
         st = status.lower().strip()
         if st not in ("open", "accepted", "done", "blocked", "cancelled"):
             return {"ok": False, "error": f"invalid status: {status}"}
+        # Accepting a blocked human/high-risk handoff clears block
+        if st == "accepted" and found.get("status") == "blocked":
+            ctx = dict(found.get("context") or {})
+            ctx.pop("block_reason", None)
+            found["context"] = ctx
         found["status"] = st
         if st in ("done", "cancelled"):
             found["completed_at"] = _now()
@@ -364,7 +429,8 @@ def _filter_handoffs(
         st = h.get("status")
         if status and status != "all":
             if status == "active":
-                if st not in ("open", "accepted"):
+                # include blocked so feed/orchestrator can surface human gates (#644)
+                if st not in ("open", "accepted", "blocked"):
                     continue
             elif st != status:
                 continue
@@ -601,6 +667,38 @@ def handoff_feed_items(
             continue
         hid = h.get("handoff_id")
         title = f"Fleet handoff: {h.get('from_agent')} → {h.get('to_agent')}"
+        cp = (h.get("context") or {}).get("checkpoint_id")
+        options = [
+            {
+                "id": "accept",
+                "label": "Accept / run",
+                "description": f"plate_fleet_update {hid} --status accepted then execute",
+            },
+            {
+                "id": "done",
+                "label": "Mark done",
+                "description": f"plate_fleet_complete {hid}",
+            },
+            {
+                "id": "block",
+                "label": "Block",
+                "description": f"plate_fleet_update {hid} --status blocked",
+            },
+            {
+                "id": "cancel",
+                "label": "Cancel",
+                "description": f"plate_fleet_update {hid} --status cancelled",
+            },
+        ]
+        if cp:
+            options.insert(
+                0,
+                {
+                    "id": "decide_checkpoint",
+                    "label": "Decide checkpoint",
+                    "description": f"plate_checkpoint_decide {cp} approve|reject",
+                },
+            )
         items.append(
             {
                 "id": hid,
@@ -611,29 +709,15 @@ def handoff_feed_items(
                 "to_agent": h.get("to_agent"),
                 "from_agent": h.get("from_agent"),
                 "requires_human": h.get("requires_human"),
+                "rank": 10 if h.get("status") == "blocked" else 18,
                 "badges": ["fleet", "handoff", str(h.get("status")), str(h.get("to_agent"))],
                 "source": "fleet_handoffs",
                 "impact": "high" if h.get("requires_human") or h.get("status") == "blocked" else "medium",
                 "reason": h.get("task") or title,
+                "checkpoint_id": cp,
                 "ask_user_question": {
                     "question": f"{title}: {str(h.get('task') or '')[:120]}",
-                    "options": [
-                        {
-                            "id": "accept",
-                            "label": "Accept / run",
-                            "description": f"plate_fleet_update {hid} --status accepted then execute",
-                        },
-                        {
-                            "id": "done",
-                            "label": "Mark done",
-                            "description": f"plate_fleet_complete {hid}",
-                        },
-                        {
-                            "id": "cancel",
-                            "label": "Cancel",
-                            "description": f"plate_fleet_update {hid} --status cancelled",
-                        },
-                    ],
+                    "options": options,
                 },
                 "marker": render_handoff_marker(h),
             }
@@ -641,3 +725,69 @@ def handoff_feed_items(
         if len(items) >= limit:
             break
     return items
+
+
+def handoff_from_pm_assignment(
+    assignment: dict[str, Any],
+    *,
+    budget_remaining: int | None = None,
+    open_checkpoint: bool = False,
+    base_dir: Path | None = None,
+    record_ledger: bool = True,
+) -> dict[str, Any]:
+    """Bridge #660 PM assignment → #644 fleet handoff packet.
+
+    Maps PM persona agent_id to fleet role when possible; otherwise uses agent_id
+    as free-form to_agent. Does not complete the PM assignment.
+    """
+    if not assignment:
+        return {"ok": False, "error": "assignment required"}
+    agent = str(assignment.get("agent_id") or assignment.get("to_agent") or "").strip()
+    # Map PM personas → fleet roles
+    persona_to_role = {
+        "dev-cautious": "implementer",
+        "dev-pragmatic": "implementer",
+        "dev-refactorer": "implementer",
+        "design-minimal": "planner",
+        "design-storyteller": "market-monitor",
+        "research-analyst": "researcher",
+        "release-engineer": "deployer",
+        "pm-orchestrator": "planner",
+    }
+    to_agent = persona_to_role.get(agent, agent or "implementer")
+    task = str(
+        assignment.get("work_title")
+        or assignment.get("task")
+        or assignment.get("packet", {}).get("prompt_segment")
+        or "PM assignment"
+    )
+    budget = assignment.get("estimated_tokens")
+    risk = str(assignment.get("risk") or assignment.get("impact") or "medium")
+    related = assignment.get("related_issue") or assignment.get("work_id")
+    related_issue = None
+    if related is not None:
+        try:
+            related_issue = int(str(related).lstrip("#"))
+        except (TypeError, ValueError):
+            related_issue = None
+    out = create_handoff(
+        from_agent="pm-orchestrator",
+        to_agent=to_agent,
+        task=task[:500],
+        budget_tokens=int(budget) if budget is not None else None,
+        risk=risk,
+        related_issue=related_issue,
+        requires_human=bool(assignment.get("requires_checkpoint")),
+        budget_remaining=budget_remaining,
+        open_checkpoint=open_checkpoint or bool(assignment.get("requires_checkpoint")),
+        context={
+            "pm_assignment_id": assignment.get("assignment_id"),
+            "work_type": assignment.get("work_type"),
+            "pm_agent_id": agent,
+        },
+        base_dir=base_dir,
+        record_ledger=record_ledger,
+    )
+    if out.get("ok"):
+        out["pm_assignment_id"] = assignment.get("assignment_id")
+    return out
