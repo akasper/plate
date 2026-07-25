@@ -427,6 +427,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 repo=args.get("repo"),
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
             ).to_dict()
+        elif name == "plate_release_repair":
+            from .release import repair_release_standing_state
+
+            payload = repair_release_standing_state(
+                repo=args.get("repo"),
+                dry_run=not bool(args.get("apply", False)),
+                apply=bool(args.get("apply", False)),
+            )
         elif name == "plate_release_target_epic":
             payload = get_release_target_epic_guidance(
                 epic_number=int(args.get("epic_number")),
@@ -1453,6 +1461,17 @@ def run() -> None:
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                     },
                                     "required": ["original_issue_number", "blockage_point", "missing_info"],
+                                },
+                            },
+                            {
+                                "name": "plate_release_repair",
+                                "description": "Init/repair standing release tracks (release-major/minor/patch + legacy release) and ensure exactly one Next Release issue (#320). Default dry-run; set apply=true to create missing artifacts.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "apply": {"type": "boolean"},
+                                    },
                                 },
                             },
                             {
