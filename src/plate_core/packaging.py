@@ -438,12 +438,13 @@ def build_package(
         data["packages"] = packages[-50:]  # cap history
         _save(data, base_dir)
 
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "package": pkg.to_dict(),
         "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
+        "notes": list(budget_notes),
         "marker": render_packaging_marker(
             {
                 "id": pid,
@@ -456,6 +457,19 @@ def build_package(
             }
         ),
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="package_build",
+            reason=f"build_package:{ver}:{pid}",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def list_packages(
