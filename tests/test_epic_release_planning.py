@@ -166,6 +166,38 @@ class TestERDurableTUI(unittest.TestCase):
                 [],
             )
 
+    def test_er_revise_resubmit_actionable(self):
+        from plate_core.epic_release_planning import resubmit_er_plan
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sdir = root / "er_sessions"
+            pdir = root / "pending"
+            start = start_er_session("epic", base_dir=sdir, persist=True)
+            session = start["session"]
+            while not session.get("complete"):
+                out = apply_er_answer(session, "x", base_dir=sdir, persist=True)
+                session = out["session"]
+            built = build_er_plan_from_session(session, planning_root=root, persist_pending=True)
+            pid = built["plan"]["id"]
+            rev = decide_er_plan(pid, "revise", decided_by="test", base_dir=pdir)
+            self.assertTrue(rev["ok"])
+            self.assertEqual(rev["status"], "revise_requested")
+            feed = er_planning_feed_items(pending_dir=pdir, sessions_dir=sdir, limit=10)
+            appr = next(f for f in feed if f.get("id") == pid)
+            self.assertEqual(appr["status"], "revise_requested")
+            self.assertTrue(
+                any(o["id"] == "resubmit" for o in appr["ask_user_question"]["options"])
+            )
+            blocked = decide_er_plan(pid, "approve", base_dir=pdir)
+            self.assertFalse(blocked["ok"])
+            res = resubmit_er_plan(pid, title="Epic v2", note="scope fix", base_dir=pdir)
+            self.assertTrue(res["ok"])
+            self.assertEqual(res["status"], "pending_approval")
+            ok = decide_er_plan(pid, "approve", base_dir=pdir)
+            self.assertTrue(ok["ok"])
+            self.assertEqual(ok["status"], "approved")
+
 
 if __name__ == "__main__":
     unittest.main()
