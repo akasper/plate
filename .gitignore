@@ -164,3 +164,6 @@ tests/e2e/package-lock.json
 
 # Ephemeral #634 durable budget spend counters
 .agentic/budget/
+
+# Ephemeral #647 decision ledger entries (local provenance)
+.agentic/ledger/
