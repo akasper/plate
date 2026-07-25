@@ -445,6 +445,11 @@ def cmd_release_status(args: argparse.Namespace) -> int:
             print(f"WARNING: {warning}")
     print(f"Current version: {report.current_version or '(none)'}")
     print(f"Latest version:  {report.latest_version or '(none)'}")
+    print(f"GitHub release exists: {getattr(report, 'github_release_exists', False)}")
+    print(f"GitHub release is latest: {getattr(report, 'github_release_is_latest', False)}")
+    print(f"GitHub release url: {getattr(report, 'github_release_url', None) or '(none)'}")
+    if getattr(report, "github_release_tag", None):
+        print(f"GitHub release tag: {report.github_release_tag}")
     print(f"Open Release issues: {len(report.open_release_issues)}")
     for ri in report.open_release_issues:
         print(f"  - #{ri['number']}: {ri['title']}")
