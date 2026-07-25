@@ -272,6 +272,40 @@ class TestPMCycle(unittest.TestCase):
             types = {i.get("item_type") for i in items}
             self.assertIn("pm_assignment", types)
 
+    def test_apply_cycle_dispatches_fleet_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pm_dir = Path(tmp) / "pm"
+            fleet_dir = Path(tmp) / "fleet"
+            pm = ProjectManager(
+                repo=None,
+                state_dir=pm_dir,
+                fleet_base_dir=fleet_dir,
+                dispatch_fleet=True,
+            )
+            with patch.object(pm, "get_status", return_value=self._fake_status()), patch.object(
+                pm,
+                "collect_work",
+                return_value=[
+                    {
+                        "id": "w-fleet",
+                        "title": "Implement feature fleet",
+                        "type": "feature",
+                        "impact": "medium",
+                    }
+                ],
+            ), patch("plate_core.baseline_catalog.delegate_to_agent", create=True):
+                rep = pm.run_cycle(dry_run=False, max_assignments=1, dispatch_fleet=True)
+            self.assertEqual(rep["status"], "completed")
+            self.assertTrue(rep.get("dispatch_fleet"))
+            self.assertGreaterEqual(len(rep.get("fleet_handoffs") or []), 1)
+            asg = rep["assignments"][0]
+            self.assertEqual(asg["status"], "delegated")
+            self.assertTrue(asg.get("fleet_handoff_id"))
+            from plate_core.fleet import list_handoffs
+
+            hos = list_handoffs(status="all", base_dir=fleet_dir)
+            self.assertTrue(any(h.get("handoff_id") == asg["fleet_handoff_id"] for h in hos))
+
 
 if __name__ == "__main__":
     unittest.main()

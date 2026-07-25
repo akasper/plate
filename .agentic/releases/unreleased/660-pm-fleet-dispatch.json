@@ -1,0 +1,23 @@
+{
+  "slug": "660-pm-fleet-dispatch",
+  "change_type": "feature",
+  "surface": "src/plate_core/pm.py",
+  "summary": "Wire #660 PM apply cycles to #644 fleet: on delegated assignments, handoff_from_pm_assignment opens durable handoffs (budget-aware); report.fleet_handoffs + assignment.fleet_handoff_id; dispatch_fleet flag on run_cycle/loop.",
+  "migration_impact": "Non-dry-run plate_pm_run_cycle / run_pm_cycle now create fleet handoffs by default (dispatch_fleet=True). Dry-run unchanged. Pass dispatch_fleet=false to disable. Handoffs land under .agentic/fleet/ (or fleet_base_dir in tests).",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer dry_run first; then --apply / dry_run=false to open handoffs.",
+    "3. Inspect report.fleet_handoffs and gh plate fleet --list.",
+    "4. Accept blocked high-risk handoffs via plate_fleet_update before execution."
+  ],
+  "agent_notes": "dry_run never opens fleet handoffs. Budget remaining is passed into handoff create. If fleet budget-blocks, assignment status becomes blocked.",
+  "breaking": false,
+  "links": [
+    "#660",
+    "#644",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
