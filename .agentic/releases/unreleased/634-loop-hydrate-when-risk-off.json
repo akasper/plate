@@ -1,0 +1,24 @@
+{
+  "slug": "634-loop-hydrate-when-risk-off",
+  "change_type": "fix",
+  "surface": "src/plate_core/feature_loop.py, bug_loop.py",
+  "summary": "start_feature_loop / start_bug_loop hydrate durable remaining whenever remaining_tokens is present, not only when snapshot.enabled — so use_live_budget works under risk_tolerance=off (#785/#634).",
+  "migration_impact": "Live loop starts may now block or charge when remaining is low even if autonomy risk is off. Pass use_live_budget=false to skip.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Expect live loop starts to honor spend.json remaining regardless of risk_tolerance.",
+    "3. risk_tolerance=off still disables AutonomyEngine cycles only."
+  ],
+  "agent_notes": "Aligns surface budget gates with AGENTS.md: risk-off blocks engine autopilot, not Feature/Bug implementation rails.",
+  "breaking": false,
+  "links": [
+    "#785",
+    "#634",
+    "#638",
+    "#639",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
