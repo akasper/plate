@@ -83,6 +83,7 @@ from .pm import (
     list_team,
     run_pm_cycle,
     run_pm_loop,
+    tick_pm_loops,
 )
 from .fleet import (
     allocate_fleet_budget,
@@ -727,6 +728,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 status=str(args.get("status") or "done"),
                 note=str(args.get("note") or ""),
                 repo=args.get("repo"),
+            )
+        elif name == "plate_pm_tick_loops":
+            payload = tick_pm_loops(
+                args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+                fetch_gates=bool(args.get("fetch_gates") or args.get("fetch_loop_gates") or False),
+                limit=int(args.get("limit") or 20),
+                complete_when_done=bool(args.get("complete_when_done", True)),
             )
         elif name == "plate_fleet_status":
             payload = fleet_status(
@@ -2711,6 +2720,21 @@ def run() -> None:
                                         "note": {"type": "string"},
                                     },
                                     "required": ["assignment_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_pm_tick_loops",
+                                "description": "Tick delegated #638/#639 loops only (sync stages, auto-advance estimate_cost, optional babysit gates, complete-on-done) without new PM assigns (#660).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "fetch_gates": {"type": "boolean"},
+                                        "fetch_loop_gates": {"type": "boolean"},
+                                        "limit": {"type": "integer"},
+                                        "complete_when_done": {"type": "boolean"},
+                                    },
                                 },
                             },
                             {

@@ -177,6 +177,29 @@ class TestLifecycle(unittest.TestCase):
         self.assertFalse(blocked["advanced"])
         self.assertIn("CI failing", blocked["reason"])
 
+    def test_tick_auto_advances_estimate_cost(self):
+        r = start_feature_loop(
+            feature_number=16,
+            feature_title="est advance",
+            size="trivial",
+            risk="low",
+            needs_media_approval=False,
+            risk_tolerance="high",
+            use_live_budget=False,
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        rid = r["run"]["id"]
+        self.assertEqual(r["run"]["stage"], "estimate_cost")
+        dry = run_feature_loop_tick(rid, dry_run=True, base_dir=self.base)
+        self.assertTrue(dry["ok"])
+        self.assertIsNone(dry.get("advance"))
+        self.assertEqual(dry["run"]["stage"], "estimate_cost")
+        applied = run_feature_loop_tick(rid, dry_run=False, base_dir=self.base)
+        self.assertTrue(applied["ok"])
+        self.assertTrue((applied.get("advance") or {}).get("advanced"))
+        self.assertEqual(applied["run"]["stage"], "plan")
+
     def test_high_risk_checkpoint_and_feed(self):
         from plate_core.checkpoint import decide_checkpoint
 

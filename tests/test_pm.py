@@ -428,6 +428,54 @@ class TestPMCycle(unittest.TestCase):
             self.assertEqual(rep["loop_ticks"][0]["loop_run_id"], rid)
             self.assertEqual(rep["loop_ticks"][0]["stage"], "estimate_cost")
 
+    def test_tick_pm_loops_surface_advances_estimate(self):
+        from plate_core.feature_loop import start_feature_loop
+        from plate_core.pm import tick_pm_loops
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pm_dir = Path(tmp) / "pm"
+            fdir = Path(tmp) / "feats"
+            started = start_feature_loop(
+                feature_number=4,
+                feature_title="tick surface",
+                risk="low",
+                size="trivial",
+                needs_media_approval=False,
+                use_live_budget=False,
+                base_dir=fdir,
+                record_ledger=False,
+            )
+            rid = started["run"]["id"]
+            # seed queue via ProjectManager
+            pm = ProjectManager(
+                repo=None,
+                state_dir=pm_dir,
+                feature_loop_base_dir=fdir,
+            )
+            pm._assignments = [
+                {
+                    "assignment_id": "asg-tick3",
+                    "work_id": "4",
+                    "work_title": "tick surface",
+                    "work_type": "implement",
+                    "status": "delegated",
+                    "loop_run_id": rid,
+                    "loop_kind": "feature",
+                    "packet": {},
+                }
+            ]
+            pm._save_queue()
+            out = tick_pm_loops(
+                repo=None,
+                dry_run=False,
+                state_dir=pm_dir,
+                feature_loop_base_dir=fdir,
+            )
+            self.assertTrue(out["ok"])
+            self.assertGreaterEqual(out["n_ticks"], 1)
+            self.assertGreaterEqual(out["n_advanced"], 1)
+            self.assertEqual(out["loop_ticks"][0]["stage"], "plan")
+
 
 if __name__ == "__main__":
     unittest.main()
