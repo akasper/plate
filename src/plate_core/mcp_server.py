@@ -63,7 +63,15 @@ from .design_research_approval import (
     list_proposals,
     propose_artifact,
 )
-from .pm import assign_work, get_pm_status, list_team, run_pm_cycle
+from .pm import (
+    assign_work,
+    complete_pm_assignment,
+    get_pm_status,
+    list_pm_queue,
+    list_team,
+    run_pm_cycle,
+    run_pm_loop,
+)
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -468,6 +476,28 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 repo=args.get("repo"),
                 dry_run=bool(args.get("dry_run", True)),
                 max_assignments=int(args.get("max_assignments") or 5),
+            )
+        elif name == "plate_pm_run_loop":
+            payload = run_pm_loop(
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+                max_cycles=int(args.get("max_cycles") or 3),
+                max_assignments=int(args.get("max_assignments") or 5),
+            )
+        elif name == "plate_pm_queue":
+            payload = {
+                "assignments": list_pm_queue(
+                    repo=args.get("repo"),
+                    status=args.get("status"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_pm_complete":
+            payload = complete_pm_assignment(
+                str(args.get("assignment_id") or ""),
+                status=str(args.get("status") or "done"),
+                note=str(args.get("note") or ""),
+                repo=args.get("repo"),
             )
         elif name == "plate_ledger_record":
             payload = record_decision(
@@ -1505,6 +1535,48 @@ def run() -> None:
                                         "dry_run": {"type": "boolean"},
                                         "max_assignments": {"type": "integer"},
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_pm_run_loop",
+                                "description": "Multi-cycle PM orchestrator loop with stop on checkpoints/budget/idle (#660). Default dry_run=true.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "max_cycles": {"type": "integer"},
+                                        "max_assignments": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_pm_queue",
+                                "description": "List durable PM assignment queue (.agentic/pm/queue.json) with ask_user_question payloads (#660).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "status": {
+                                            "type": "string",
+                                            "description": "proposed|delegated|blocked|done|cancelled|all",
+                                        },
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_pm_complete",
+                                "description": "Mark a PM assignment done/cancelled and persist queue (#660).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "assignment_id": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["assignment_id"],
                                 },
                             },
                             {

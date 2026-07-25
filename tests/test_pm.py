@@ -1,4 +1,4 @@
-"""Tests for Project Manager / Orchestrator (#660) first slice."""
+"""Tests for Project Manager / Orchestrator (#660) — core + durable loop deepen."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from unittest.mock import patch
 from plate_core.pm import (
     ProjectManager,
     assign_work,
+    build_assignment_tui,
     classify_work_type,
     get_persona,
     list_team,
@@ -55,6 +56,8 @@ class TestPMTeamAndAssign(unittest.TestCase):
         self.assertIn(asg["status"], ("proposed", "delegated"))
         self.assertTrue(asg["agent_id"].startswith("dev-"))
         self.assertIn("packet", asg)
+        self.assertIn("ask_user_question", asg)
+        self.assertIn("options", asg["ask_user_question"])
 
     def test_release_requires_checkpoint(self):
         asg = assign_work(
@@ -64,37 +67,63 @@ class TestPMTeamAndAssign(unittest.TestCase):
         )
         self.assertTrue(asg["requires_checkpoint"])
 
+    def test_assign_opens_checkpoint_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            asg = assign_work(
+                {"id": "hi", "title": "Cut release v2", "impact": "high"},
+                risk_tolerance="high",
+                budget_remaining=50000,
+                open_checkpoint=True,
+                checkpoint_base_dir=Path(tmp),
+            )
+            self.assertTrue(asg.get("checkpoint_id"))
+            self.assertTrue(asg["checkpoint_id"].startswith("cp-"))
+            self.assertTrue(list(Path(tmp).glob("cp-*.json")))
+
+    def test_tui_payload_shape(self):
+        tui = build_assignment_tui(
+            {
+                "assignment_id": "asg-1",
+                "work_title": "Ship feature",
+                "agent_name": "Cautious",
+                "status": "proposed",
+            }
+        )
+        self.assertIn("question", tui)
+        self.assertGreaterEqual(len(tui["options"]), 3)
+
 
 class TestPMCycle(unittest.TestCase):
+    def _fake_status(self, **overrides):
+        base = {
+            "to_dict": lambda self: {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "budget_remaining_tokens": 50000,
+                "open_checkpoints": 0,
+            },
+            "open_checkpoints": 0,
+            "risk_tolerance": "medium",
+            "budget_remaining_tokens": 50000,
+            "enabled": True,
+            "burn_rate": 0.0,
+            "autopilot_score": 50,
+            "team_size": 8,
+            "open_assignments": 0,
+            "last_cycle": None,
+            "queue_size": 0,
+            "proposed": 0,
+            "delegated": 0,
+            "blocked": 0,
+            "done": 0,
+        }
+        base.update(overrides)
+        return type("S", (), base)()
+
     def test_run_cycle_dry_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             pm = ProjectManager(repo=None, state_dir=Path(tmp))
-            with patch.object(
-                pm,
-                "get_status",
-                return_value=type(
-                    "S",
-                    (),
-                    {
-                        "to_dict": lambda self: {
-                            "enabled": True,
-                            "risk_tolerance": "medium",
-                            "budget_remaining_tokens": 50000,
-                            "open_checkpoints": 0,
-                        },
-                        "open_checkpoints": 0,
-                        "risk_tolerance": "medium",
-                        "budget_remaining_tokens": 50000,
-                        "enabled": True,
-                        "burn_rate": 0.0,
-                        "autopilot_score": 50,
-                        "team_size": 8,
-                        "open_assignments": 0,
-                        "last_cycle": None,
-                        "queue_size": 0,
-                    },
-                )(),
-            ), patch.object(
+            with patch.object(pm, "get_status", return_value=self._fake_status()), patch.object(
                 pm,
                 "collect_work",
                 return_value=[
@@ -107,25 +136,96 @@ class TestPMCycle(unittest.TestCase):
             self.assertEqual(len(report["assignments"]), 2)
             self.assertTrue(report["dry_run"])
             self.assertTrue((Path(tmp) / "last_cycle.json").exists())
+            self.assertTrue((Path(tmp) / "queue.json").exists())
+            # durable queue reload
+            pm2 = ProjectManager(repo=None, state_dir=Path(tmp))
+            q = pm2.list_queue()
+            self.assertEqual(len(q), 2)
+            self.assertIn("ask_user_question", q[0])
 
     def test_paused_on_checkpoints(self):
         pm = ProjectManager(repo=None)
         with patch.object(
             pm,
             "get_status",
-            return_value=type(
-                "S",
-                (),
-                {
-                    "to_dict": lambda self: {"open_checkpoints": 1},
-                    "open_checkpoints": 1,
-                    "risk_tolerance": "medium",
-                    "budget_remaining_tokens": 50000,
-                },
-            )(),
+            return_value=self._fake_status(
+                open_checkpoints=1,
+                to_dict=lambda self: {"open_checkpoints": 1},
+            ),
         ):
             report = pm.run_cycle(dry_run=True)
         self.assertEqual(report["status"], "paused")
+
+    def test_dedupe_existing_work_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo=None, state_dir=Path(tmp))
+            with patch.object(pm, "get_status", return_value=self._fake_status()), patch.object(
+                pm,
+                "collect_work",
+                return_value=[
+                    {"id": "w1", "title": "Implement auth", "type": "feature", "impact": "medium"},
+                ],
+            ):
+                pm.run_cycle(dry_run=True, max_assignments=5)
+                r2 = pm.run_cycle(dry_run=True, max_assignments=5)
+            # second cycle should not re-add same work_id
+            self.assertEqual(len(r2["assignments"]), 0)
+            self.assertEqual(len(pm.list_queue()), 1)
+
+    def test_complete_assignment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo=None, state_dir=Path(tmp))
+            with patch.object(pm, "get_status", return_value=self._fake_status()), patch.object(
+                pm,
+                "collect_work",
+                return_value=[{"id": "w9", "title": "Do thing", "type": "feature"}],
+            ):
+                rep = pm.run_cycle(dry_run=True)
+            aid = rep["assignments"][0]["assignment_id"]
+            out = pm.complete_assignment(aid, status="done", note="shipped")
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["assignment"]["status"], "done")
+            st = pm.get_status()
+            # get_status without patch uses real checkpoint count 0 + queue
+            self.assertEqual(st.done, 1)
+
+    def test_run_loop_stops_on_idle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo=None, state_dir=Path(tmp))
+            calls = {"n": 0}
+
+            def collect(limit=10):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    return [{"id": "once", "title": "One shot", "type": "feature"}]
+                return []
+
+            with patch.object(pm, "get_status", return_value=self._fake_status()), patch.object(
+                pm, "collect_work", side_effect=collect
+            ):
+                loop = pm.run_loop(max_cycles=5, dry_run=True, max_assignments=3)
+            self.assertGreaterEqual(loop["n_cycles"], 1)
+            self.assertIn(loop["stopped_reason"], ("idle", "max_cycles"))
+            self.assertIn("queue", loop)
+
+    def test_get_status_counts_pending_checkpoints(self):
+        with tempfile.TemporaryDirectory() as tmp_pm, tempfile.TemporaryDirectory() as tmp_cp:
+            from plate_core.checkpoint import create_checkpoint
+
+            create_checkpoint(
+                title="Need human",
+                reason="test",
+                impact="high",
+                risk_tolerance="off",
+                base_dir=Path(tmp_cp),
+            )
+            pm = ProjectManager(
+                repo=None,
+                state_dir=Path(tmp_pm),
+                checkpoint_base_dir=Path(tmp_cp),
+            )
+            st = pm.get_status()
+            self.assertGreaterEqual(st.open_checkpoints, 1)
 
 
 if __name__ == "__main__":
