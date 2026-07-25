@@ -609,6 +609,25 @@ def get_user_feed(
             )
     except Exception:
         pass
+    # #629/#640 epic/release pending plans + incomplete ER sessions
+    try:
+        from .epic_release_planning import er_planning_feed_items
+
+        for pl in er_planning_feed_items(limit=12):
+            approval_items.append(
+                {
+                    "id": pl.get("id"),
+                    "kind": pl.get("kind") or pl.get("item_type") or "epic",
+                    "title": pl.get("title") or "Pending ER plan",
+                    "status": pl.get("status") or "pending_approval",
+                    "approval_prompt": pl.get("approval_prompt") or pl.get("prompt_segment"),
+                    "prompt_segment": pl.get("prompt_segment"),
+                    "summary": pl.get("summary") or "",
+                    "ask_user_question": pl.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
 
     # #660 PM durable queue → endless feed (proposed + delegated only)
     pm_assignments: list[dict[str, Any]] = []

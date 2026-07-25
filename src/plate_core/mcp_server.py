@@ -56,6 +56,8 @@ from .planning import (
 from .epic_release_planning import (
     apply_er_answer,
     build_er_plan_from_session,
+    decide_er_plan,
+    er_planning_feed_items,
     get_er_script,
     start_er_session,
 )
@@ -440,6 +442,17 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = build_er_plan_from_session(session if isinstance(session, dict) else {})
         elif name == "plate_er_planning_script":
             payload = get_er_script(str(args.get("kind") or "epic"))
+        elif name == "plate_er_planning_decide":
+            payload = decide_er_plan(
+                str(args.get("plan_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                note=str(args.get("note") or ""),
+                decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
+            )
+        elif name == "plate_er_planning_list_pending":
+            payload = {
+                "items": er_planning_feed_items(limit=int(args.get("limit") or 20))
+            }
         elif name == "plate_artifact_propose":
             payload = propose_artifact(
                 kind=str(args.get("kind") or "design"),
@@ -1947,7 +1960,34 @@ def run() -> None:
                                     },
                                 },
                             },
-{
+                            {
+                                "name": "plate_er_planning_decide",
+                                "description": "Approve/revise/reject a pending epic/release plan (#640/#629). Does not create issues or cut releases.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string"},
+                                        "decision": {
+                                            "type": "string",
+                                            "description": "approve | revise | reject",
+                                        },
+                                        "note": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                    },
+                                    "required": ["plan_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_er_planning_list_pending",
+                                "description": "List pending epic/release plans and incomplete ER sessions for the feed.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
                                 "name": "plate_artifact_propose",
                                 "description": "Propose a Design or Research artifact for human approval (#632). Durable under .agentic/approvals/.",
                                 "inputSchema": {

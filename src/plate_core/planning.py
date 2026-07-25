@@ -436,13 +436,17 @@ def planning_feed_items(
             "",
         ):
             continue
+        # Epic/release pending plans are owned by er_planning_feed_items (#629/#640)
+        kind = str(pl.get("kind") or "feature")
+        if kind in ("epic", "release"):
+            continue
         auj = pl.get("ask_user_question") or pending_plan_ask_user_payload(pl)
         pid = str(pl.get("id") or "plan")
         items.append(
             {
                 "id": pid,
                 "item_type": "planning_approval",
-                "kind": pl.get("kind") or "feature",
+                "kind": kind,
                 "title": pl.get("title") or "Pending plan",
                 "status": pl.get("status") or "pending_approval",
                 "rank": 16,
