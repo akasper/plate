@@ -474,9 +474,20 @@ def get_user_feed(
 
     approval_items: list[dict[str, Any]] = []
     try:
-        from .design_research_approval import list_proposals
+        from .design_research_approval import list_proposals, presentation_for_feed
 
-        approval_items = list_proposals(status="pending", limit=15)
+        for prop in list_proposals(status="pending", limit=15):
+            shaped = presentation_for_feed(prop)
+            approval_items.append({
+                "id": shaped.get("id") or prop.get("id"),
+                "kind": shaped.get("kind") or prop.get("kind"),
+                "title": shaped.get("title") or prop.get("title"),
+                "status": prop.get("status") or "pending",
+                "approval_prompt": shaped.get("approval_prompt"),
+                "prompt_segment": shaped.get("prompt_segment"),
+                "summary": prop.get("summary") or "",
+                "ask_user_question": shaped.get("ask_user_question"),
+            })
     except Exception:
         approval_items = []
     # #628/#630 pending Q&A plans awaiting approval
@@ -504,8 +515,15 @@ def get_user_feed(
         approval_items=approval_items,
     )
     top = items[: max(1, limit)]
+    # Prefer pre-shaped ask_user_question from approval/plan sources when present on source dicts
+    pre_payloads: dict[str, Any] = {}
+    for ap in approval_items:
+        if ap.get("id") and ap.get("ask_user_question"):
+            pre_payloads[str(ap["id"])] = ap["ask_user_question"]
+
     presentation = []
     for i, it in enumerate(top):
+        auj = pre_payloads.get(it.id) or ask_user_question_payload(it)
         row = {
             "index": i + 1,
             "id": it.id,
@@ -517,7 +535,7 @@ def get_user_feed(
             "url": it.url,
             "prompt_segment": it.prompt_segment,
             "reason": it.reason,
-            "ask_user_question": ask_user_question_payload(it),
+            "ask_user_question": auj,
         }
         presentation.append(row)
     ts = datetime.now(timezone.utc).isoformat()

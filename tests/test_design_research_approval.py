@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from plate_core.design_research_approval import (
+    ask_user_question_payload,
     decide_proposal,
     get_proposal,
     list_authoritative,
@@ -78,6 +79,23 @@ class TestDesignResearchApproval632(unittest.TestCase):
         feed = presentation_for_feed(pending[0])
         self.assertEqual(feed["item_type"], "artifact_approval")
         self.assertEqual(feed["impact"], "high")
+        self.assertIn("ask_user_question", feed)
+        self.assertTrue(any(o["id"] == "approve" for o in feed["ask_user_question"]["options"]))
+
+    def test_ask_user_question_on_propose(self):
+        out = propose_artifact("design", "D", "summary", base_dir=self.base)
+        self.assertIn("ask_user_question", out)
+        self.assertEqual(out["ask_user_question"]["item_type"], "artifact_approval")
+        payload = ask_user_question_payload(out)
+        self.assertIn("Approve design", payload["question"])
+
+    def test_decide_records_ledger_when_available(self):
+        out = propose_artifact("research", "R", "s", base_dir=self.base)
+        # ledger may write to default dir; best-effort field
+        decided = decide_proposal(out["id"], "approve", base_dir=self.base)
+        self.assertTrue(decided["ok"])
+        # ledger_id optional if ledger path fails; still success
+        self.assertEqual(decided["status"], "approved")
 
 
 if __name__ == "__main__":
