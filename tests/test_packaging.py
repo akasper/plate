@@ -12,6 +12,7 @@ from plate_core.packaging import (
     build_package,
     build_user_narratives,
     decide_package_publish,
+    estimate_package_cost,
     list_packages,
     narrative_for_fragment,
     packaging_feed_items,
@@ -80,8 +81,15 @@ class TestBuildPackage(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as td:
             base = Path(td)
-            out = build_package("0.8.0", frags, base_dir=base, persist=True)
+            out = build_package(
+                "0.8.0",
+                frags,
+                base_dir=base,
+                persist=True,
+                use_live_budget=False,
+            )
             self.assertTrue(out["ok"])
+            self.assertIn("cost_estimate_tokens", out)
             pkg = out["package"]
             self.assertEqual(pkg["version"], "0.8.0")
             self.assertEqual(len(pkg["narratives"]), 2)
@@ -132,10 +140,37 @@ class TestBuildPackage(unittest.TestCase):
         plan = plan_marketplace_package_op(
             "0.8.0",
             fragments=[{"slug": "x", "summary": "Y"}],
+            use_live_budget=False,
         )
         self.assertTrue(plan["ok"])
         self.assertEqual(plan["op_id"], "marketplace-package")
         self.assertIn("plate_packaging_build", plan["tools"])
+        self.assertIn("cost_estimate_tokens", plan)
+        self.assertGreater(plan["cost_estimate_tokens"], 0)
+
+    def test_estimate_and_budget_gate(self):
+        est = estimate_package_cost(n_fragments=2, n_media=1, persist=True)
+        self.assertTrue(est["ok"])
+        self.assertGreater(est["estimated_tokens"], 0)
+        blocked = build_package(
+            "0.9.0",
+            [{"slug": "a", "summary": "A", "media": [{"path": "x.gif"}]}],
+            persist=False,
+            budget_remaining=10,
+            use_live_budget=False,
+        )
+        self.assertFalse(blocked["ok"])
+        self.assertTrue(blocked.get("blocked"))
+        self.assertIn("budget", blocked.get("error") or "")
+        ok = build_package(
+            "0.9.0",
+            [{"slug": "a", "summary": "A"}],
+            persist=False,
+            budget_remaining=est["estimated_tokens"] + 5000,
+            use_live_budget=False,
+        )
+        self.assertTrue(ok["ok"])
+        self.assertEqual(ok.get("budget_remaining"), est["estimated_tokens"] + 5000)
 
 
 if __name__ == "__main__":
