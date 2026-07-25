@@ -16,6 +16,7 @@ from plate_core.epic_release_planning import (
     er_planning_feed_items,
     get_er_script,
     load_er_session,
+    estimate_er_planning_cost,
     start_er_session,
 )
 from plate_core.planning import list_pending_plans
@@ -45,7 +46,7 @@ class TestEpicPlanning640(unittest.TestCase):
         self.assertIn("PLATE-EPIC-RELEASE-PLAN", plan["marker"])
 
     def test_session_walk(self):
-        start = start_er_session("epic", persist=False)
+        start = start_er_session("epic", persist=False, use_live_budget=False)
         session = start["session"]
         answers = [
             "Feed UX",
@@ -61,7 +62,7 @@ class TestEpicPlanning640(unittest.TestCase):
             out = apply_er_answer(session, a, persist=False)
             session = out["session"]
         self.assertTrue(session["complete"])
-        built = build_er_plan_from_session(session, persist_pending=False)
+        built = build_er_plan_from_session(session, persist_pending=False, use_live_budget=False)
         self.assertTrue(built["ok"])
         self.assertEqual(built["plan"]["kind"], "epic")
 
@@ -88,7 +89,7 @@ class TestReleasePlanning629(unittest.TestCase):
         self.assertIn("demo gif", plan["notes_skeleton"]["media_plan"])
 
     def test_release_session(self):
-        start = start_er_session("release", persist=False)
+        start = start_er_session("release", persist=False, use_live_budget=False)
         session = start["session"]
         for a in [
             "Ship 1.0 slice",
@@ -103,7 +104,7 @@ class TestReleasePlanning629(unittest.TestCase):
             out = apply_er_answer(session, a, persist=False)
             session = out["session"]
         self.assertTrue(session["complete"])
-        built = build_er_plan_from_session(session, persist_pending=False)
+        built = build_er_plan_from_session(session, persist_pending=False, use_live_budget=False)
         self.assertTrue(built["ok"])
         self.assertEqual(built["plan"]["kind"], "release")
 
@@ -112,7 +113,7 @@ class TestERDurableTUI(unittest.TestCase):
     def test_er_durable_and_tui(self):
         with tempfile.TemporaryDirectory() as tmp:
             sdir = Path(tmp) / "er_sessions"
-            start = start_er_session("epic", base_dir=sdir, persist=True)
+            start = start_er_session("epic", base_dir=sdir, persist=True, use_live_budget=False)
             self.assertIn("session_id", start)
             self.assertIn("ask_user_question", start)
             self.assertTrue(start["ask_user_question"]["allow_free_text"])
@@ -126,13 +127,13 @@ class TestERDurableTUI(unittest.TestCase):
     def test_er_pending_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            start = start_er_session("release", base_dir=root / "er_sessions", persist=True)
+            start = start_er_session("release", base_dir=root / "er_sessions", persist=True, use_live_budget=False)
             session = start["session"]
             # walk remaining questions with dummy answers
             while not session.get("complete"):
                 out = apply_er_answer(session, "x", base_dir=root / "er_sessions", persist=True)
                 session = out["session"]
-            built = build_er_plan_from_session(session, planning_root=root, persist_pending=True)
+            built = build_er_plan_from_session(session, planning_root=root, persist_pending=True, use_live_budget=False)
             self.assertTrue(built["ok"])
             self.assertIn("ask_user_question", built)
             pending = list_pending_plans(base_dir=root / "pending")
@@ -144,13 +145,13 @@ class TestERDurableTUI(unittest.TestCase):
             sdir = root / "er_sessions"
             pdir = root / "pending"
             # incomplete session for feed
-            start_er_session("epic", base_dir=sdir, persist=True)
-            start = start_er_session("release", base_dir=sdir, persist=True)
+            start_er_session("epic", base_dir=sdir, persist=True, use_live_budget=False)
+            start = start_er_session("release", base_dir=sdir, persist=True, use_live_budget=False)
             session = start["session"]
             while not session.get("complete"):
                 out = apply_er_answer(session, "x", base_dir=sdir, persist=True)
                 session = out["session"]
-            built = build_er_plan_from_session(session, planning_root=root, persist_pending=True)
+            built = build_er_plan_from_session(session, planning_root=root, persist_pending=True, use_live_budget=False)
             self.assertTrue(built["ok"])
             pid = built["plan"]["id"]
             feed = er_planning_feed_items(pending_dir=pdir, sessions_dir=sdir, limit=10)
@@ -173,12 +174,12 @@ class TestERDurableTUI(unittest.TestCase):
             root = Path(tmp)
             sdir = root / "er_sessions"
             pdir = root / "pending"
-            start = start_er_session("epic", base_dir=sdir, persist=True)
+            start = start_er_session("epic", base_dir=sdir, persist=True, use_live_budget=False)
             session = start["session"]
             while not session.get("complete"):
                 out = apply_er_answer(session, "x", base_dir=sdir, persist=True)
                 session = out["session"]
-            built = build_er_plan_from_session(session, planning_root=root, persist_pending=True)
+            built = build_er_plan_from_session(session, planning_root=root, persist_pending=True, use_live_budget=False)
             pid = built["plan"]["id"]
             rev = decide_er_plan(pid, "revise", decided_by="test", base_dir=pdir)
             self.assertTrue(rev["ok"])
@@ -197,6 +198,38 @@ class TestERDurableTUI(unittest.TestCase):
             ok = decide_er_plan(pid, "approve", base_dir=pdir)
             self.assertTrue(ok["ok"])
             self.assertEqual(ok["status"], "approved")
+
+
+
+class TestERBudget634(unittest.TestCase):
+    def test_budget_gate(self):
+        est = estimate_er_planning_cost(kind="epic", phase="start")
+        self.assertTrue(est["ok"])
+        self.assertGreater(est["estimated_tokens"], 0)
+        blocked = start_er_session(
+            "epic", persist=False, budget_remaining=10, use_live_budget=False
+        )
+        self.assertFalse(blocked.get("ok"))
+        self.assertTrue(blocked.get("blocked"))
+        ok = start_er_session(
+            "epic",
+            persist=False,
+            budget_remaining=est["estimated_tokens"] + 1000,
+            use_live_budget=False,
+        )
+        self.assertTrue(ok.get("ok", True))
+        session = {
+            "kind": "epic",
+            "complete": True,
+            "answers": {"intent": "Ship safety", "scope": "budgets"},
+            "id": "er-x",
+        }
+        b_block = build_er_plan_from_session(
+            session, persist_pending=False, budget_remaining=10, use_live_budget=False
+        )
+        self.assertFalse(b_block.get("ok"))
+        self.assertTrue(b_block.get("blocked"))
+
 
 
 if __name__ == "__main__":
