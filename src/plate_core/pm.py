@@ -414,10 +414,14 @@ class ProjectManager:
         repo: str | None = None,
         state_dir: Path | None = None,
         checkpoint_base_dir: Path | None = None,
+        fleet_base_dir: Path | None = None,
+        dispatch_fleet: bool = True,
     ):
         self.repo = repo
         self.state_dir = state_dir
         self.checkpoint_base_dir = checkpoint_base_dir
+        self.fleet_base_dir = fleet_base_dir
+        self.dispatch_fleet = dispatch_fleet
         self._assignments: list[dict[str, Any]] = self._load_queue()
 
     def _queue_path(self) -> Path:
@@ -700,10 +704,21 @@ class ProjectManager:
             if a.get("status") in active and a.get("work_id")
         }
 
-    def run_cycle(self, *, dry_run: bool = True, max_assignments: int = 5) -> dict[str, Any]:
-        """One PM orchestration cycle; merges new assignments into durable queue."""
+    def run_cycle(
+        self,
+        *,
+        dry_run: bool = True,
+        max_assignments: int = 5,
+        dispatch_fleet: bool | None = None,
+    ) -> dict[str, Any]:
+        """One PM orchestration cycle; merges new assignments into durable queue.
+
+        When dry_run is False and dispatch_fleet is True (default), delegated
+        assignments also open a #644 fleet handoff via handoff_from_pm_assignment.
+        """
         ts = _now()
         status = self.get_status()
+        do_fleet = self.dispatch_fleet if dispatch_fleet is None else bool(dispatch_fleet)
         work = self.collect_work(limit=max(max_assignments * 2, 5))
         # #643: pause items labeled driver:human (human owns; no auto-delegate)
         human_paused: list[dict[str, Any]] = []
@@ -717,6 +732,7 @@ class ProjectManager:
             human_paused = []
         new_assignments: list[dict[str, Any]] = []
         blocked: list[str] = []
+        fleet_handoffs: list[dict[str, Any]] = []
 
         if status.open_checkpoints > 0:
             report = {
@@ -831,6 +847,47 @@ class ProjectManager:
                             )
                         except Exception:
                             pass
+                        # #660/#644: open durable fleet handoff for multi-agent execution
+                        if do_fleet:
+                            try:
+                                from .fleet import handoff_from_pm_assignment
+
+                                ho = handoff_from_pm_assignment(
+                                    asg,
+                                    budget_remaining=budget,
+                                    open_checkpoint=bool(asg.get("requires_checkpoint")),
+                                    base_dir=self.fleet_base_dir,
+                                    record_ledger=True,
+                                )
+                                if ho.get("ok"):
+                                    hid = (ho.get("handoff") or {}).get("handoff_id")
+                                    asg["fleet_handoff_id"] = hid
+                                    asg.setdefault("packet", {})["fleet_handoff_id"] = hid
+                                    if ho.get("checkpoint_id"):
+                                        asg.setdefault("packet", {})[
+                                            "fleet_checkpoint_id"
+                                        ] = ho["checkpoint_id"]
+                                    fleet_handoffs.append(
+                                        {
+                                            "assignment_id": asg.get("assignment_id"),
+                                            "handoff_id": hid,
+                                            "to_agent": (ho.get("handoff") or {}).get(
+                                                "to_agent"
+                                            ),
+                                            "status": (ho.get("handoff") or {}).get(
+                                                "status"
+                                            ),
+                                            "checkpoint_id": ho.get("checkpoint_id"),
+                                        }
+                                    )
+                                elif ho.get("blocked"):
+                                    asg["status"] = "blocked"
+                                    asg.setdefault("packet", {})["fleet_block"] = ho.get(
+                                        "error"
+                                    )
+                                    blocked.append(asg["assignment_id"])
+                            except Exception as exc:
+                                asg.setdefault("packet", {})["fleet_error"] = str(exc)
             asg["ask_user_question"] = build_assignment_tui(asg)
             new_assignments.append(asg)
             seen.add(str(asg.get("work_id") or ""))
@@ -853,6 +910,7 @@ class ProjectManager:
                         "timestamp": ts,
                         "assignments": new_assignments,
                         "blocked": blocked,
+                        "fleet_handoffs": fleet_handoffs,
                         "pm_status": status.to_dict(),
                     },
                     indent=2,
@@ -867,6 +925,7 @@ class ProjectManager:
             "status": "completed",
             "assignments": new_assignments,
             "blocked": blocked,
+            "fleet_handoffs": fleet_handoffs,
             "human_paused": [
                 {
                     "id": x.get("id") or x.get("number"),
@@ -879,16 +938,21 @@ class ProjectManager:
             "work_considered": len(work) + len(human_paused),
             "timestamp": ts,
             "dry_run": dry_run,
+            "dispatch_fleet": do_fleet and not dry_run,
             "queue_size": len(self._assignments),
-            "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'completed', 'n': len(new_assignments), 'ts': ts})}\n{MARKER_END}",
+            "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'completed', 'n': len(new_assignments), 'fleet': len(fleet_handoffs), 'ts': ts})}\n{MARKER_END}",
         }
         _ledger_pm(
             "pm_cycle",
             "proceed" if not dry_run else "shadow",
-            f"cycle completed n={len(new_assignments)} blocked={len(blocked)}",
+            f"cycle completed n={len(new_assignments)} blocked={len(blocked)} fleet={len(fleet_handoffs)}",
             cost=sum(int(a.get("estimated_tokens") or 0) for a in new_assignments),
             risk=status.risk_tolerance,
-            metadata={"dry_run": dry_run, "n": len(new_assignments)},
+            metadata={
+                "dry_run": dry_run,
+                "n": len(new_assignments),
+                "n_fleet": len(fleet_handoffs),
+            },
         )
         return report
 
@@ -899,18 +963,24 @@ class ProjectManager:
         dry_run: bool = True,
         max_assignments: int = 5,
         stop_on_pause: bool = True,
+        dispatch_fleet: bool | None = None,
     ) -> dict[str, Any]:
         """Multi-cycle orchestrator loop with budget/checkpoint stop conditions."""
         cycles: list[dict[str, Any]] = []
         stopped_reason = "max_cycles"
         for i in range(max(1, max_cycles)):
-            rep = self.run_cycle(dry_run=dry_run, max_assignments=max_assignments)
+            rep = self.run_cycle(
+                dry_run=dry_run,
+                max_assignments=max_assignments,
+                dispatch_fleet=dispatch_fleet,
+            )
             cycles.append(
                 {
                     "cycle": i + 1,
                     "status": rep.get("status"),
                     "n_assignments": len(rep.get("assignments") or []),
                     "blocked": len(rep.get("blocked") or []),
+                    "n_fleet": len(rep.get("fleet_handoffs") or []),
                     "queue_size": rep.get("queue_size"),
                 }
             )
@@ -962,9 +1032,18 @@ def run_pm_cycle(
     dry_run: bool = True,
     max_assignments: int = 5,
     state_dir: Path | None = None,
+    dispatch_fleet: bool = True,
+    fleet_base_dir: Path | None = None,
 ) -> dict[str, Any]:
-    return ProjectManager(repo=repo, state_dir=state_dir).run_cycle(
-        dry_run=dry_run, max_assignments=max_assignments
+    return ProjectManager(
+        repo=repo,
+        state_dir=state_dir,
+        fleet_base_dir=fleet_base_dir,
+        dispatch_fleet=dispatch_fleet,
+    ).run_cycle(
+        dry_run=dry_run,
+        max_assignments=max_assignments,
+        dispatch_fleet=dispatch_fleet,
     )
 
 
@@ -974,8 +1053,15 @@ def run_pm_loop(
     max_cycles: int = 3,
     max_assignments: int = 5,
     state_dir: Path | None = None,
+    dispatch_fleet: bool = True,
+    fleet_base_dir: Path | None = None,
 ) -> dict[str, Any]:
-    return ProjectManager(repo=repo, state_dir=state_dir).run_loop(
+    return ProjectManager(
+        repo=repo,
+        state_dir=state_dir,
+        fleet_base_dir=fleet_base_dir,
+        dispatch_fleet=dispatch_fleet,
+    ).run_loop(
         max_cycles=max_cycles,
         dry_run=dry_run,
         max_assignments=max_assignments,
