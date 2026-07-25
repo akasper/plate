@@ -72,6 +72,17 @@ from .pm import (
     run_pm_cycle,
     run_pm_loop,
 )
+from .fleet import (
+    allocate_fleet_budget,
+    complete_handoff,
+    create_handoff,
+    fleet_status,
+    handoff_feed_items,
+    list_fleet_roles,
+    list_handoffs,
+    plan_fleet_from_intent,
+    update_handoff,
+)
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .collab import (
     analyze_pr_authorship,
@@ -520,6 +531,70 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 note=str(args.get("note") or ""),
                 repo=args.get("repo"),
             )
+        elif name == "plate_fleet_status":
+            payload = fleet_status(
+                budget_remaining=args.get("budget_tokens") or args.get("budget_remaining"),
+                risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
+            )
+        elif name == "plate_fleet_roles":
+            payload = {"roles": list_fleet_roles()}
+        elif name == "plate_fleet_handoff":
+            payload = create_handoff(
+                from_agent=str(args.get("from_agent") or "orchestrator"),
+                to_agent=str(args.get("to_agent") or ""),
+                task=str(args.get("task") or ""),
+                context=args.get("context") if isinstance(args.get("context"), dict) else {},
+                artifacts=list(args.get("artifacts") or []),
+                constraints=list(args.get("constraints") or []),
+                budget_tokens=args.get("budget_tokens"),
+                risk=str(args.get("risk") or "medium"),
+                related_issue=args.get("related_issue"),
+                related_pr=args.get("related_pr"),
+                parent_handoff_id=args.get("parent_handoff_id"),
+                requires_human=bool(args.get("requires_human", False)),
+            )
+        elif name == "plate_fleet_update":
+            payload = update_handoff(
+                str(args.get("handoff_id") or args.get("id") or ""),
+                status=args.get("status"),
+                notes=args.get("notes") or args.get("note"),
+                artifacts=list(args.get("artifacts") or []) or None,
+                context_patch=args.get("context") if isinstance(args.get("context"), dict) else None,
+            )
+        elif name == "plate_fleet_complete":
+            payload = complete_handoff(
+                str(args.get("handoff_id") or args.get("id") or ""),
+                notes=str(args.get("notes") or args.get("note") or ""),
+                artifacts=list(args.get("artifacts") or []) or None,
+            )
+        elif name == "plate_fleet_list":
+            payload = {
+                "handoffs": list_handoffs(
+                    status=str(args.get("status") or "active"),
+                    to_agent=args.get("to_agent"),
+                    from_agent=args.get("from_agent"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_fleet_allocate":
+            roles = args.get("active_roles") or args.get("roles")
+            if isinstance(roles, str):
+                roles = [x.strip() for x in roles.split(",") if x.strip()]
+            payload = allocate_fleet_budget(
+                int(args.get("budget_tokens") or args.get("total_tokens") or 20000),
+                active_roles=list(roles) if roles else None,
+                risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
+            )
+        elif name == "plate_fleet_plan":
+            payload = plan_fleet_from_intent(
+                str(args.get("intent") or args.get("task") or ""),
+                budget_tokens=int(args.get("budget_tokens") or 20000),
+                risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
+                related_issue=args.get("related_issue"),
+                create=bool(args.get("create") or args.get("apply") or False),
+            )
+        elif name == "plate_fleet_feed":
+            payload = {"items": handoff_feed_items(limit=int(args.get("limit") or 10))}
         elif name == "plate_task_create":
             payload = create_task(
                 str(args.get("title") or ""),
@@ -1713,6 +1788,123 @@ def run() -> None:
                                         "note": {"type": "string"},
                                     },
                                     "required": ["assignment_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_status",
+                                "description": "Multi-agent fleet status: roles, active handoffs, budget allocation (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "budget_tokens": {"type": "integer"},
+                                        "risk_tolerance": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_roles",
+                                "description": "List fleet agent roles (planner/implementer/reviewer/researcher/deployer/market) (#644).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_fleet_handoff",
+                                "description": "Create explicit agent→agent handoff packet with narrow context (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "from_agent": {"type": "string"},
+                                        "to_agent": {"type": "string"},
+                                        "task": {"type": "string"},
+                                        "context": {"type": "object"},
+                                        "artifacts": {"type": "array", "items": {"type": "string"}},
+                                        "constraints": {"type": "array", "items": {"type": "string"}},
+                                        "budget_tokens": {"type": "integer"},
+                                        "risk": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "related_pr": {"type": "integer"},
+                                        "parent_handoff_id": {"type": "string"},
+                                        "requires_human": {"type": "boolean"},
+                                    },
+                                    "required": ["to_agent", "task"],
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_update",
+                                "description": "Update handoff status (accepted|done|blocked|cancelled) (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "handoff_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "notes": {"type": "string"},
+                                        "artifacts": {"type": "array", "items": {"type": "string"}},
+                                        "context": {"type": "object"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_complete",
+                                "description": "Mark a fleet handoff done (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "handoff_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "notes": {"type": "string"},
+                                        "artifacts": {"type": "array", "items": {"type": "string"}},
+                                    },
+                                    "required": ["handoff_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_list",
+                                "description": "List fleet handoffs (default active) (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "to_agent": {"type": "string"},
+                                        "from_agent": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_allocate",
+                                "description": "Allocate token budget across concurrent fleet agents (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "budget_tokens": {"type": "integer"},
+                                        "active_roles": {"type": "array", "items": {"type": "string"}},
+                                        "risk_tolerance": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_plan",
+                                "description": "Plan multi-agent handoffs from high-level intent; optional create (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "intent": {"type": "string"},
+                                        "task": {"type": "string"},
+                                        "budget_tokens": {"type": "integer"},
+                                        "risk_tolerance": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "create": {"type": "boolean"},
+                                        "apply": {"type": "boolean"},
+                                    },
+                                    "required": ["intent"],
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_feed",
+                                "description": "Feed presentation items for active fleet handoffs (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
                                 },
                             },
                             {

@@ -621,6 +621,30 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #644 active multi-agent handoffs → feed signals
+    try:
+        from .fleet import handoff_feed_items
+
+        for ho in handoff_feed_items(limit=10):
+            signal_items.append(
+                {
+                    "id": ho.get("id"),
+                    "type": "fleet_handoff",
+                    "title": ho.get("title"),
+                    "rank": 16,
+                    "impact": ho.get("impact") or "medium",
+                    "reason": ho.get("reason") or "Fleet handoff (#644)",
+                    "prompt_segment": (
+                        f"{ho.get('title')}: {str(ho.get('task') or '')[:100]}. "
+                        f"Complete: plate_fleet_complete / gh plate fleet --complete {ho.get('id')}."
+                    ),
+                    "source": "fleet_handoffs",
+                    "ask_user_question": ho.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,
