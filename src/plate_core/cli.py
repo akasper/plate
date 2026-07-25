@@ -1688,6 +1688,14 @@ def cmd_packaging(args: argparse.Namespace) -> int:
         print(f"{p.get('id')} v{p.get('version')} status={p.get('status')}")
         return 0
 
+    br = getattr(args, "budget_remaining", None)
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = not bool(getattr(args, "no_live_budget", False))
+
     if getattr(args, "render", None) or getattr(args, "render_id", None):
         pid = getattr(args, "render", None) or getattr(args, "render_id", None)
         p = get_package(str(pid), base_dir=base) if pid and pid is not True else None
@@ -1699,7 +1707,15 @@ def cmd_packaging(args: argparse.Namespace) -> int:
                 frags,
                 base_dir=base,
                 persist=False,
+                budget_remaining=br,
+                use_live_budget=use_live,
             )
+            if not built.get("ok"):
+                if args.json:
+                    print(json.dumps(built))
+                else:
+                    print(f"ok=False blocked={built.get('blocked')} {built.get('error')}")
+                return 1
             p = built.get("package")
         if not p:
             print("package not found; build first or pass --version for ephemeral render")
@@ -1738,12 +1754,18 @@ def cmd_packaging(args: argparse.Namespace) -> int:
         out = plan_marketplace_package_op(
             getattr(args, "version", None) or None,
             releases_dir=releases_dir,
+            budget_remaining=br,
+            use_live_budget=use_live,
         )
         if args.json:
             print(json.dumps(out))
             return 0 if out.get("ok") else 1
         prev = out.get("package_preview") or {}
-        print(f"ok={out.get('ok')} version={out.get('version')} status={prev.get('status')} narratives={prev.get('n_narratives')}")
+        print(
+            f"ok={out.get('ok')} version={out.get('version')} status={prev.get('status')} "
+            f"narratives={prev.get('n_narratives')} est={out.get('cost_estimate_tokens')} "
+            f"remaining={out.get('budget_remaining')}"
+        )
         return 0 if out.get("ok") else 1
 
     # default: build
@@ -1755,6 +1777,8 @@ def cmd_packaging(args: argparse.Namespace) -> int:
         base_dir=base,
         require_approved_media=bool(getattr(args, "require_approved_media", False)),
         persist=not bool(getattr(args, "no_persist", False)),
+        budget_remaining=br,
+        use_live_budget=use_live,
     )
     if args.json:
         print(json.dumps(out))
@@ -1762,7 +1786,8 @@ def cmd_packaging(args: argparse.Namespace) -> int:
     p = out.get("package") or {}
     print(
         f"ok={out.get('ok')} id={p.get('id')} v{p.get('version')} status={p.get('status')} "
-        f"narratives={len(p.get('narratives') or [])} ready={(p.get('readiness') or {}).get('ready_for_review')}"
+        f"narratives={len(p.get('narratives') or [])} ready={(p.get('readiness') or {}).get('ready_for_review')} "
+        f"est={out.get('cost_estimate_tokens')} remaining={out.get('budget_remaining')}"
     )
     return 0 if out.get("ok") else 1
 
@@ -3657,6 +3682,19 @@ def build_parser() -> argparse.ArgumentParser:
     packaging.add_argument("--plan", action="store_true", help="Marketplace-package op packet")
     packaging.add_argument("--require-approved-media", dest="require_approved_media", action="store_true")
     packaging.add_argument("--no-persist", dest="no_persist", action="store_true")
+    packaging.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit remaining tokens for #634 gate (overrides live hydrate)",
+    )
+    packaging.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     packaging.add_argument("--status", default="all")
     packaging.add_argument("--limit", type=int, default=20)
     packaging.add_argument("--json", action="store_true")
