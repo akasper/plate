@@ -126,6 +126,48 @@ class TestRunLifecycle(unittest.TestCase):
         )
         self.assertTrue(out2["advanced"])
 
+    def test_babysit_blocks_on_ci_and_changes_requested(self):
+        """#638/#639: CI fail + CHANGES_REQUESTED must hold the loop on babysit."""
+        r = start_bug_loop(bug_number=2, bug_title="ci", pr_number=11, base_dir=self.base, record_ledger=False)
+        rid = r["run"]["id"]
+        ci_block = advance_bug_loop(
+            rid,
+            gates={
+                "merge_state": "CLEAN",
+                "unresolved_review_threads": 0,
+                "ci_failing": True,
+                "failing_checks": 2,
+            },
+            base_dir=self.base,
+        )
+        self.assertFalse(ci_block["advanced"])
+        self.assertIn("CI failing", ci_block["reason"])
+
+        review_block = advance_bug_loop(
+            rid,
+            gates={
+                "merge_state": "CLEAN",
+                "unresolved_review_threads": 0,
+                "review_decision": "CHANGES_REQUESTED",
+            },
+            base_dir=self.base,
+        )
+        self.assertFalse(review_block["advanced"])
+        self.assertIn("CHANGES_REQUESTED", review_block["reason"])
+
+        pending = advance_bug_loop(
+            rid,
+            gates={
+                "merge_state": "CLEAN",
+                "unresolved_review_threads": 0,
+                "ci_pending": True,
+                "pending_checks": 1,
+            },
+            base_dir=self.base,
+        )
+        self.assertFalse(pending["advanced"])
+        self.assertIn("CI pending", pending["reason"])
+
     def test_tick_dry_and_feed(self):
         r = start_bug_loop(bug_number=3, bug_title="feed me", base_dir=self.base, record_ledger=False)
         rid = r["run"]["id"]

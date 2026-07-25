@@ -670,29 +670,22 @@ def advance_feature_loop(
         found.setdefault("notes", []).append(note)
 
     cur = str(found.get("stage") or "estimate_cost")
-    if cur == "babysit" and gates is not None:
-        merge_state = str(gates.get("merge_state") or gates.get("mergeStateStatus") or "").upper()
-        unresolved = int(
-            gates.get("unresolved_review_threads") or gates.get("actionable_agent_threads") or 0
-        )
-        if merge_state in ("BLOCKED", "DIRTY", "CONFLICTING", "BEHIND"):
-            found.setdefault("notes", []).append(f"babysit gate: merge_state={merge_state}")
+    # Gate: cannot leave babysit / merge_eligible if gates say not clean (when provided)
+    if cur in ("babysit", "merge_eligible") and gates is not None:
+        from .pr_babysit import evaluate_babysit_gates
+
+        gate = evaluate_babysit_gates(gates)
+        if gate.get("blocked"):
+            reason = str(gate.get("reason") or "gates not clean")
+            found.setdefault("notes", []).append(f"babysit gate: {reason}")
             found["updated_at"] = _now()
+            found["last_gate_checks"] = gate.get("checks") or {}
             _save(data, base_dir)
             return {
                 "ok": True,
                 "advanced": False,
-                "reason": f"PR not clean ({merge_state}); stay on babysit",
-                "run": found,
-                "packet": stage_packet(found),
-            }
-        if unresolved > 0:
-            found["updated_at"] = _now()
-            _save(data, base_dir)
-            return {
-                "ok": True,
-                "advanced": False,
-                "reason": f"{unresolved} unresolved threads; stay on babysit",
+                "reason": reason,
+                "gate_checks": gate.get("checks"),
                 "run": found,
                 "packet": stage_packet(found),
             }
@@ -766,6 +759,14 @@ def run_feature_loop_tick(
                 "merge_state": gates.get("merge_state"),
                 "unresolved_review_threads": gates.get("unresolved_review_threads"),
                 "actionable_agent_threads": gates.get("actionable_agent_threads"),
+                "review_decision": gates.get("review_decision"),
+                "ci_state": gates.get("ci_state"),
+                "ci_failing": gates.get("ci_failing"),
+                "ci_pending": gates.get("ci_pending"),
+                "failing_checks": gates.get("failing_checks"),
+                "pending_checks": gates.get("pending_checks"),
+                "loop_advance_blocked": gates.get("loop_advance_blocked"),
+                "loop_advance_reason": gates.get("loop_advance_reason"),
             }
         except Exception as exc:
             packet["gates_error"] = str(exc)
