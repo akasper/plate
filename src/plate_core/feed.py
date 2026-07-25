@@ -746,18 +746,23 @@ def get_user_feed(
     process_items: list[dict[str, Any]] = []
     if include_process:
         try:
-            # Lazy import to avoid circular MCP dependency in tests
-            from .mcp_server import _what_next
+            # Shared helper (no MCP import) — budget/PR priority (#789/#791)
+            from .what_next import get_what_next
 
-            wn = _what_next(target, "general")
+            wn = get_what_next(target, "general")
+            prio = str(wn.get("priority") or "")
+            rank = 8 if prio == "budget_gate" else (12 if prio == "open_pr" else 50)
+            impact = "high" if prio in ("budget_gate", "open_pr") else "medium"
             process_items.append(
                 {
                     "title": wn.get("next_action"),
                     "prompt_segment": wn.get("prompt_segment"),
                     "reason": wn.get("rationale") or "plate_what_next",
-                    "rank": 50,
-                    "impact": "medium",
+                    "rank": rank,
+                    "impact": impact,
                     "source": "what_next",
+                    "priority": prio,
+                    "state_snapshot": wn.get("state_snapshot"),
                 }
             )
         except Exception:

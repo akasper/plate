@@ -918,17 +918,20 @@ class ProjectManager:
             )
             return items[:limit]
         try:
-            from .mcp_server import _what_next
+            from .what_next import get_what_next
 
-            wn = _what_next(self.repo, "pm")
+            wn = get_what_next(self.repo, "pm")
+            impact = "high" if wn.get("priority") in ("budget_gate", "open_pr") else "medium"
             items.append(
                 {
                     "id": "what_next",
                     "title": wn.get("next_action"),
                     "type": "process",
                     "prompt_segment": wn.get("prompt_segment"),
-                    "impact": "medium",
+                    "impact": impact,
                     "reason": wn.get("rationale") or "what_next",
+                    "priority": wn.get("priority"),
+                    "state_snapshot": wn.get("state_snapshot"),
                 }
             )
         except Exception:

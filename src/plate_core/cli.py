@@ -251,6 +251,39 @@ def cmd_health(args: argparse.Namespace) -> int:
     return 0 if report.status != "fail" else 1
 
 
+def cmd_what_next(args: argparse.Namespace) -> int:
+    """Recommend next PLATE process step (#789/#791)."""
+    from .what_next import get_what_next
+
+    out = get_what_next(
+        getattr(args, "repo", None),
+        getattr(args, "agent_type", None) or "general",
+        include_prs=not bool(getattr(args, "no_prs", False)),
+        include_budget=not bool(getattr(args, "no_budget", False)),
+        include_fragments=not bool(getattr(args, "no_fragments", False)),
+    )
+    if args.json:
+        print(json.dumps(out))
+        return 0 if not out.get("error") else 1
+    print(f"Next: {out.get('next_action')}")
+    print(f"Priority: {out.get('priority') or 'n/a'}")
+    if out.get("rationale"):
+        print(f"Rationale: {out.get('rationale')}")
+    snap = out.get("state_snapshot") or {}
+    if snap:
+        print(
+            "State: "
+            f"labels_ok={snap.get('label_coverage_ok')} "
+            f"epics={snap.get('open_epic_count')} "
+            f"prs={snap.get('open_pr_count')} "
+            f"budget={snap.get('budget_pressure')} "
+            f"remaining={snap.get('budget_remaining_tokens')}"
+        )
+    if out.get("prompt_segment"):
+        print(f"Prompt: {out.get('prompt_segment')}")
+    return 0 if not out.get("error") else 1
+
+
 def cmd_epic_status(args: argparse.Namespace) -> int:
     report = get_epic_status(args.repo)
     if args.json:
@@ -3392,6 +3425,20 @@ def build_parser() -> argparse.ArgumentParser:
     health.add_argument("--repo", help="owner/name; defaults to git remote origin")
     health.add_argument("--json", action="store_true", help="Output JSON")
     health.set_defaults(func=cmd_health)
+
+    what_next = sub.add_parser(
+        "what-next",
+        help="Recommend next PLATE process step (budget → open PRs → epics) (#789/#791)",
+    )
+    what_next.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    what_next.add_argument("--agent-type", dest="agent_type", default="general")
+    what_next.add_argument("--no-prs", action="store_true", help="Skip open PR scan")
+    what_next.add_argument("--no-budget", action="store_true", help="Skip budget snapshot")
+    what_next.add_argument(
+        "--no-fragments", action="store_true", help="Skip unreleased fragment count"
+    )
+    what_next.add_argument("--json", action="store_true", help="Output JSON")
+    what_next.set_defaults(func=cmd_what_next)
 
     epic = sub.add_parser("epic", help="Epic-related PLATE commands")
     epic_sub = epic.add_subparsers(dest="epic_command", required=True)
