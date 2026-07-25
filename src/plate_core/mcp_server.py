@@ -389,7 +389,20 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_plan_epic":
             payload = _plan_epic_stub(args).to_dict()
         elif name == "plate_planning_start":
-            payload = start_planning_session(str(args.get("kind") or "feature"))
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = start_planning_session(
+                str(args.get("kind") or "feature"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
         elif name == "plate_planning_answer":
             session = args.get("session") or {}
             if isinstance(session, str):
@@ -409,7 +422,20 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     session = json.loads(session)
                 except Exception:
                     session = {}
-            payload = build_plan_from_session(session if isinstance(session, dict) else {})
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = build_plan_from_session(
+                session if isinstance(session, dict) else {},
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
         elif name == "plate_planning_script":
             payload = get_planning_script(str(args.get("kind") or "feature"))
         elif name == "plate_planning_decide":
@@ -2095,11 +2121,13 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_planning_start",
-                                "description": "Start Q&A-driven feature (#630) or product (#628) planning session. Returns first question for ask_user_question.",
+                                "description": "Start Q&A-driven feature (#630) or product (#628) planning session. Returns first question for ask_user_question. #634 budget gate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "kind": {"type": "string", "description": "feature | product"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                 },
                             },
@@ -2118,11 +2146,13 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_planning_build",
-                                "description": "Build Feature or product Epic stub plan from completed session answers for human approval (#628/#630).",
+                                "description": "Build Feature or product Epic stub plan from completed session answers for human approval (#628/#630). #634 budget gate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "session": {"type": "object"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                     "required": ["session"],
                                 },
