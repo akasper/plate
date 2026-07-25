@@ -72,7 +72,7 @@ from .pm import (
     run_pm_cycle,
     run_pm_loop,
 )
-from .tasks import close_task_with_signal, create_task
+from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -521,6 +521,18 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 comment=str(args.get("comment") or args.get("note") or "Task complete."),
                 repo=args.get("repo"),
                 dry_run=bool(args.get("dry_run", False)),
+            )
+        elif name == "plate_task_detect":
+            signals = args.get("signals")
+            if isinstance(signals, str):
+                signals = [signals]
+            payload = detect_and_create_tasks(
+                signals=list(signals) if isinstance(signals, list) else None,
+                text=str(args.get("text") or args.get("signal") or "") or None,
+                context=str(args.get("context") or ""),
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+                create=bool(args.get("create", False)),
             )
         elif name == "plate_ledger_record":
             payload = record_decision(
@@ -1635,6 +1647,22 @@ def run() -> None:
                                         "dry_run": {"type": "boolean"},
                                     },
                                     "required": ["number"],
+                                },
+                            },
+                            {
+                                "name": "plate_task_detect",
+                                "description": "Detect human-only blockers (credentials, PyPI, billing, marketplace, external accounts) and optionally create Task issues (#360). Default detect-only (create=false, dry_run=true).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "text": {"type": "string"},
+                                        "signal": {"type": "string"},
+                                        "signals": {"type": "array", "items": {"type": "string"}},
+                                        "context": {"type": "string"},
+                                        "create": {"type": "boolean"},
+                                        "dry_run": {"type": "boolean"},
+                                    },
                                 },
                             },
                             {

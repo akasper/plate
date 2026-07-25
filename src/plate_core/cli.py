@@ -63,7 +63,11 @@ from .pm import (
     run_pm_cycle,
     run_pm_loop,
 )
-from .tasks import close_task_with_signal, create_task
+from .tasks import (
+    close_task_with_signal,
+    create_task,
+    detect_and_create_tasks,
+)
 from .plate_config import (
     PlateConfigError,
     apply_plate_config_upgrade,
@@ -826,7 +830,7 @@ def cmd_artifact(args: argparse.Namespace) -> int:
     return 0
 
 def cmd_task(args: argparse.Namespace) -> int:
-    """Create or close human Task issues (#359)."""
+    """Create, detect, or close human Task issues (#359/#360)."""
     if getattr(args, "close", None):
         out = close_task_with_signal(
             int(args.close),
@@ -839,6 +843,27 @@ def cmd_task(args: argparse.Namespace) -> int:
             return 0 if out.get("ok") else 1
         print(f"task close: ok={out.get('ok')} number={out.get('number')}")
         return 0 if out.get("ok") else 1
+
+    if getattr(args, "detect", False) or getattr(args, "signal", None):
+        signal = str(getattr(args, "signal", None) or "")
+        out = detect_and_create_tasks(
+            text=signal or None,
+            signals=[signal] if signal else None,
+            context=str(getattr(args, "context", None) or ""),
+            repo=getattr(args, "repo", None),
+            dry_run=not bool(getattr(args, "apply", False)),
+            create=bool(getattr(args, "apply", False) or getattr(args, "create", False)),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        blockers = out.get("blockers") or []
+        print(f"detected {len(blockers)} human blocker(s); create={out.get('create')} dry_run={out.get('dry_run')}")
+        for b in blockers:
+            print(f"  - {b.get('class_id')}: {b.get('title')}")
+        for c in out.get("created") or []:
+            print(f"  created: #{c.get('number')} {c.get('url')}")
+        return 0
 
     if getattr(args, "create", False) or getattr(args, "title", None):
         title = getattr(args, "title", None) or ""
@@ -871,7 +896,11 @@ def cmd_task(args: argparse.Namespace) -> int:
         print(f"Created Task #{out.get('number')}: {out.get('url')}")
         return 0
 
-    print("Usage: gh plate task --create --title ... --human-action ... --why ... --context ... --instructions ...", file=sys.stderr)
+    print(
+        "Usage: gh plate task --create|--detect|--close "
+        "(see --help)",
+        file=sys.stderr,
+    )
     return 2
 
 
@@ -1770,6 +1799,13 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--epic-milestone", dest="epic_milestone", help="Epic milestone title to inherit")
     task.add_argument("--close", type=int, metavar="N", help="Close Task #N with PLATE-TASK-CLOSED")
     task.add_argument("--comment", default="", help="Completion comment for --close")
+    task.add_argument("--detect", action="store_true", help="Detect human-only blockers from --signal (#360)")
+    task.add_argument("--signal", default="", help="Text signal to classify (CI log, error, note)")
+    task.add_argument(
+        "--apply",
+        action="store_true",
+        help="With --detect: create Task issues for blockers (default detect-only)",
+    )
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
