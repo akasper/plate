@@ -1,0 +1,25 @@
+{
+  "slug": "654-what-next-budget-and-prs",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py, mcp_server.py",
+  "summary": "Harden plate_what_next: prefer durable budget critical/exhausted, then open release PRs to babysit, then bootstrap/epics/fragments; testable recommend_what_next helper (#789/#654).",
+  "migration_impact": "Agents following plate_what_next will get budget_gate and open-PR priority before advancing Epics. risk_off does not hide budget pressure.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Call plate_what_next / get_what_next at cycle start.",
+    "3. Honor priority=budget_gate before large Feature/Bug starts."
+  ],
+  "agent_notes": "Replaces v1 labels/epics-only heuristic. Aligns with #787 feed budget_gate and #785 loop hydrate under risk=off.",
+  "breaking": false,
+  "links": [
+    "#789",
+    "#654",
+    "#634",
+    "#787",
+    "#631",
+    "#513"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

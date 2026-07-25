@@ -280,46 +280,16 @@ def _plan_epic_stub(args: dict) -> object:
 
 
 def _what_next(repo: str | None, agent_type: str | None = None) -> dict:
-    """v1 static What Next? for PLATE process (Epic #282 / #285).
+    """What Next? for PLATE process (#282 / #654 harden).
 
-    Uses live health + simple heuristics over documented flows (epics, labels, fragments, Goals).
-    Returns next recommended action + prompt segment for agent use.
+    Prefers budget critical/exhausted, open release PRs to babysit, then
+    labels/bootstrap, open Epics, pending fragments. Uses health + durable
+    budget snapshot; risk_off does not hide budget pressure (#787/#785).
     """
     try:
-        from .health import get_health
-        h = get_health(repo).to_dict() if repo or True else {}
-        labels_ok = h.get("label_coverage_ok", False)
-        open_epics = h.get("open_epic_count", 0)
-        # simplistic v1
-        if not labels_ok:
-            action = "run bootstrap to establish labels/wiki/epic/starters"
-            prompt = (
-                "Follow the PLATE bootstrap flow: create required labels, enable wiki, seed initial Epic, "
-                "seed starter Questions from catalog. Then create a Goals wiki page per convention and use it for audits. "
-                "For any looped execution, use terse one-sentence bullet turn summaries and post comments only on meaningful progress (quiet_operations guidance)."
-            )
-        elif open_epics > 0:
-            action = "advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement"
-            prompt = (
-                "Use plate_epic_status or gh plate epic status to list children. For a Feature: read full issue, "
-                "add/update tests first, implement smallest change, author fragment in .agentic/releases/unreleased/, "
-                "PR with clean title + labels (Feature + area + Epic:*) + Closes #N in body only, babysit with gh plate pr babysit. "
-                "In loops: terse bullet turn summaries only; comments only on real progress per quiet_operations."
-            )
-        else:
-            action = "check for pending release fragments or next beta item"
-            prompt = (
-                "Run gh plate release status. If unreleased fragments, prepare for cut_release. "
-                "Otherwise pick next beta-roadmap Feature (e.g. #260 local-rebase, #285 what-next, packaging, etc.). "
-                "Looped runs: emit only terse one-sentence bullets for the turn; follow quiet comment rules."
-            )
-        return {
-            "next_action": action,
-            "prompt_segment": prompt,
-            "rationale": "v1 heuristic on health (labels, open_epics); expand with full state (epics, fragments, Goals presence) in follow-ups",
-            "state_snapshot": {"label_coverage_ok": labels_ok, "open_epic_count": open_epics},
-            "agent_type": agent_type or "general",
-        }
+        from .what_next import get_what_next
+
+        return get_what_next(repo, agent_type)
     except Exception as exc:
         return {"next_action": "inspect with plate_health + plate_epic_status", "error": str(exc)}
 
