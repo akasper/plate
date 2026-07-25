@@ -310,11 +310,12 @@ The pr-babysit skill should support (or be used in) a "until green" / comprehens
 
 Use this section for any monitoring, babysitting, contemplation, or repeated what_next work. The goal is dramatically less noise in Issues and terminals while preserving every required traceable artifact.
 
-### Human co-existence (#643)
+### Human co-existence (#643 / #651)
 - Respect `driver:human` / `driver:collaborative` / `driver:agent` labels. On `driver:human`, pause auto-delegation and do not push/auto-merge without explicit human direction.
 - Mixed human+agent PRs: never force-push; escalate before history rewrites. Use `plate_collab_check` / authorship mix when unsure.
 - Prefer human review when `need:human-review`, high risk, or collaborative mix; never self-merge those.
 - Clear signaling: PLATE markers on comments, quiet ops, and collab markers for ownership handoffs.
+- Path/branch ownership (#651): humans claim pause via `plate_collab_ownership_claim` / `gh plate collab --claim` (durable `.agentic/collab/`). Agents must call policy check with paths/branch; skip overlapping work until release. Use feature/* or bug/* branches in isolated worktrees — never agent-edit main/release directly.
 
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):

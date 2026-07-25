@@ -75,9 +75,15 @@ from .pm import (
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .collab import (
     analyze_pr_authorship,
+    branch_etiquette_check,
+    claim_ownership,
     collab_policy_check,
     collab_status_for_issue,
+    concurrent_edit_risk,
     get_driver,
+    list_ownership_claims,
+    ownership_feed_items,
+    release_ownership,
 )
 from .discussions import (
     add_discussion_comment,
@@ -559,10 +565,17 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     author_login=args.get("author_login"),
                     commits=list(args.get("commits") or []) if isinstance(args.get("commits"), list) else None,
                 )
+            paths = args.get("paths") or []
+            if isinstance(paths, str):
+                paths = [p.strip() for p in paths.split(",") if p.strip()]
             payload = collab_policy_check(
                 str(args.get("action") or "delegate"),
                 labels=list(labels),
                 authorship=auth,
+                paths=list(paths) if paths else None,
+                branch=args.get("branch"),
+                worktree_root=args.get("worktree_root"),
+                repo_root=args.get("repo_root"),
             )
             payload["driver"] = get_driver(list(labels))
             if auth is not None:
@@ -575,6 +588,42 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 issue = dict(issue)
                 issue["labels"] = args.get("labels")
             payload = collab_status_for_issue(issue if isinstance(issue, dict) else {})
+        elif name == "plate_collab_ownership_claim":
+            payload = claim_ownership(
+                kind=str(args.get("kind") or "path"),
+                target=str(args.get("target") or ""),
+                owner=str(args.get("owner") or "human"),
+                reason=str(args.get("reason") or ""),
+                related_issue=args.get("related_issue"),
+                actor=str(args.get("actor") or "human"),
+            )
+        elif name == "plate_collab_ownership_release":
+            payload = release_ownership(
+                args.get("claim_id") or args.get("id"),
+                kind=args.get("kind"),
+                target=args.get("target"),
+            )
+        elif name == "plate_collab_ownership_list":
+            payload = {
+                "claims": list_ownership_claims(
+                    status=str(args.get("status") or "open"),
+                    kind=args.get("kind"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_collab_etiquette":
+            payload = branch_etiquette_check(
+                args.get("branch"),
+                worktree_root=args.get("worktree_root"),
+                repo_root=args.get("repo_root"),
+            )
+        elif name == "plate_collab_concurrent":
+            paths = args.get("paths") or []
+            if isinstance(paths, str):
+                paths = [p.strip() for p in paths.split(",") if p.strip()]
+            payload = concurrent_edit_risk(list(paths))
+        elif name == "plate_collab_ownership_feed":
+            payload = {"items": ownership_feed_items(limit=int(args.get("limit") or 10))}
         elif name == "plate_ledger_record":
             payload = record_decision(
                 action_kind=str(args.get("action_kind") or "unknown"),
@@ -1719,7 +1768,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_collab_check",
-                                "description": "Human/agent co-existence policy check (#643): gate actions (delegate, push, force_push, auto_merge) against driver:* labels and PR authorship mix.",
+                                "description": "Human/agent co-existence policy check (#643/#651): gate actions against driver:* labels, authorship mix, path/branch ownership, and worktree etiquette.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -1728,6 +1777,10 @@ def run() -> None:
                                         "author_login": {"type": "string"},
                                         "pr_number": {"type": "integer"},
                                         "commits": {"type": "array", "items": {"type": "object"}},
+                                        "paths": {"type": "array", "items": {"type": "string"}},
+                                        "branch": {"type": "string"},
+                                        "worktree_root": {"type": "string"},
+                                        "repo_root": {"type": "string"},
                                     },
                                     "required": ["action"],
                                 },
@@ -1740,6 +1793,81 @@ def run() -> None:
                                     "properties": {
                                         "issue": {"type": "object"},
                                         "labels": {"type": "array", "items": {"type": "string"}},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_collab_ownership_claim",
+                                "description": "Claim path or branch ownership to pause agent autonomy on that surface (#651). Durable under .agentic/collab/ownership.json.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "description": "path|branch"},
+                                        "target": {"type": "string"},
+                                        "owner": {"type": "string", "description": "human|agent|collaborative"},
+                                        "reason": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "actor": {"type": "string"},
+                                    },
+                                    "required": ["target"],
+                                },
+                            },
+                            {
+                                "name": "plate_collab_ownership_release",
+                                "description": "Release a path/branch ownership claim by id or kind+target (#651).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "claim_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "kind": {"type": "string"},
+                                        "target": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_collab_ownership_list",
+                                "description": "List ownership claims (default open) (#651).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "kind": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_collab_etiquette",
+                                "description": "Branch/worktree etiquette check for agents (#651): integration branch + isolation.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "branch": {"type": "string"},
+                                        "worktree_root": {"type": "string"},
+                                        "repo_root": {"type": "string"},
+                                    },
+                                    "required": ["branch"],
+                                },
+                            },
+                            {
+                                "name": "plate_collab_concurrent",
+                                "description": "Predict concurrent-edit risk from open ownership claims for given paths (#651).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "paths": {"type": "array", "items": {"type": "string"}},
+                                    },
+                                    "required": ["paths"],
+                                },
+                            },
+                            {
+                                "name": "plate_collab_ownership_feed",
+                                "description": "Feed presentation items for open human/collaborative ownership pauses (#651).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "limit": {"type": "integer"},
                                     },
                                 },
                             },

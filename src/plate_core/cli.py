@@ -70,8 +70,14 @@ from .tasks import (
 )
 from .collab import (
     analyze_pr_authorship,
+    branch_etiquette_check,
+    claim_ownership,
     collab_policy_check,
     collab_status_for_issue,
+    concurrent_edit_risk,
+    list_ownership_claims,
+    ownership_feed_items,
+    release_ownership,
 )
 from .plate_config import (
     PlateConfigError,
@@ -835,11 +841,86 @@ def cmd_artifact(args: argparse.Namespace) -> int:
     return 0
 
 def cmd_collab(args: argparse.Namespace) -> int:
-    """Human/agent co-existence checks (#643)."""
+    """Human/agent co-existence checks (#643 / #651)."""
     labels = []
     raw = getattr(args, "labels", None) or ""
     if raw:
         labels = [x.strip() for x in str(raw).split(",") if x.strip()]
+
+    if getattr(args, "claim", False):
+        kind = getattr(args, "kind", None) or "path"
+        target = getattr(args, "target", None) or ""
+        out = claim_ownership(
+            kind=kind,
+            target=target,
+            owner=getattr(args, "owner", None) or "human",
+            reason=getattr(args, "reason", None) or "",
+            related_issue=getattr(args, "number", None),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        claim = out.get("claim") or {}
+        print(f"ok={out.get('ok')} id={claim.get('id')} {claim.get('kind')} {claim.get('target')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "release", None):
+        rid = getattr(args, "release", None)
+        if rid is True or rid == "":
+            out = release_ownership(
+                kind=getattr(args, "kind", None),
+                target=getattr(args, "target", None),
+            )
+        else:
+            out = release_ownership(str(rid))
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} released={out.get('n') or 0}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "list_claims", False):
+        rows = list_ownership_claims(status=getattr(args, "status", None) or "open", limit=50)
+        if args.json:
+            print(json.dumps(rows))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} [{r.get('owner')}] {r.get('kind')} {r.get('target')}")
+        return 0
+
+    if getattr(args, "etiquette", False):
+        out = branch_etiquette_check(
+            getattr(args, "branch", None) or "",
+            worktree_root=getattr(args, "worktree_root", None),
+            repo_root=getattr(args, "repo_root", None),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} reason={out.get('reason')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "concurrent", False):
+        paths = []
+        raw_p = getattr(args, "paths", None) or ""
+        if raw_p:
+            paths = [x.strip() for x in str(raw_p).split(",") if x.strip()]
+        out = concurrent_edit_risk(paths)
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"level={out.get('level')} advice={out.get('advice')}")
+        return 0
+
+    if getattr(args, "ownership_feed", False):
+        rows = ownership_feed_items(limit=10)
+        if args.json:
+            print(json.dumps(rows))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
     if getattr(args, "issue_status", False):
         out = collab_status_for_issue(
             {"number": getattr(args, "number", None), "title": getattr(args, "title", "") or "", "labels": labels}
@@ -864,7 +945,19 @@ def cmd_collab(args: argparse.Namespace) -> int:
             author_login=getattr(args, "author", None),
             commits=commits or None,
         )
-    out = collab_policy_check(action, labels=labels, authorship=auth)
+    paths = []
+    raw_p = getattr(args, "paths", None) or ""
+    if raw_p:
+        paths = [x.strip() for x in str(raw_p).split(",") if x.strip()]
+    out = collab_policy_check(
+        action,
+        labels=labels,
+        authorship=auth,
+        paths=paths or None,
+        branch=getattr(args, "branch", None) or None,
+        worktree_root=getattr(args, "worktree_root", None),
+        repo_root=getattr(args, "repo_root", None),
+    )
     if auth is not None:
         out["authorship"] = auth.to_dict()
     if args.json:
@@ -1881,7 +1974,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     collab = sub.add_parser(
         "collab",
-        help="Human/agent co-existence policy checks (#643)",
+        help="Human/agent co-existence + ownership etiquette (#643/#651)",
     )
     collab.add_argument("--action", default="delegate", help="Action to gate: delegate|push_branch|force_push|auto_merge|...")
     collab.add_argument("--labels", default="", help="Comma-separated labels (include driver:human etc.)")
@@ -1891,6 +1984,21 @@ def build_parser() -> argparse.ArgumentParser:
     collab.add_argument("--number", type=int)
     collab.add_argument("--title", default="")
     collab.add_argument("--json", action="store_true")
+    collab.add_argument("--claim", action="store_true", help="Claim path/branch ownership (#651)")
+    collab.add_argument("--release", nargs="?", const=True, default=None, help="Release claim by id (or --kind/--target)")
+    collab.add_argument("--list-claims", action="store_true", help="List open ownership claims")
+    collab.add_argument("--etiquette", action="store_true", help="Branch/worktree etiquette check")
+    collab.add_argument("--concurrent", action="store_true", help="Concurrent-edit risk for --paths")
+    collab.add_argument("--ownership-feed", action="store_true", help="Feed presentation for open claims")
+    collab.add_argument("--kind", choices=["path", "branch"], default="path", help="Ownership kind for claim/release")
+    collab.add_argument("--target", default="", help="Path or branch for claim/release")
+    collab.add_argument("--owner", choices=["human", "agent", "collaborative"], default="human")
+    collab.add_argument("--reason", default="", help="Claim reason")
+    collab.add_argument("--status", default="open", help="Claim list status filter")
+    collab.add_argument("--paths", default="", help="Comma-separated paths for policy/concurrent checks")
+    collab.add_argument("--branch", default="", help="Branch name for policy/etiquette")
+    collab.add_argument("--worktree-root", default="", help="Worktree path for isolation check")
+    collab.add_argument("--repo-root", default="", help="Primary repo root for isolation check")
     collab.set_defaults(func=cmd_collab)
 
     task = sub.add_parser(
