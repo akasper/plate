@@ -141,6 +141,16 @@ from .release_media import (
     validate_media_paths,
 )
 from .release import collect_fragments as collect_release_fragments
+from .feature_media import (
+    attach_to_fragment_file,
+    decide_feature_media,
+    feature_media_feed_items,
+    get_feature_media,
+    list_feature_media,
+    plan_feature_media,
+    register_capture,
+    skip_feature_media,
+)
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .collab import (
     analyze_pr_authorship,
@@ -982,6 +992,58 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 url=args.get("url"),
                 decision=str(args.get("decision") or "approve"),
             )
+        elif name == "plate_feature_media_plan":
+            payload = plan_feature_media(
+                feature_number=args.get("feature_number") or args.get("feature"),
+                feature_title=str(args.get("feature_title") or args.get("title") or ""),
+                test_name=args.get("test_name"),
+                caption=args.get("caption"),
+                fragment_slug=args.get("fragment_slug"),
+                quality=str(args.get("quality") or "medium"),
+            )
+        elif name == "plate_feature_media_register":
+            payload = register_capture(
+                str(args.get("record_id") or args.get("id") or ""),
+                gif_path=args.get("gif_path"),
+                video_path=args.get("video_path"),
+                size_bytes=args.get("size_bytes"),
+                quality=args.get("quality"),
+                capture_result=args.get("capture_result")
+                if isinstance(args.get("capture_result"), dict)
+                else None,
+                submit_for_approval=bool(args.get("submit_for_approval", True)),
+            )
+        elif name == "plate_feature_media_list":
+            payload = {
+                "records": list_feature_media(
+                    status=str(args.get("status") or "all"),
+                    feature_number=args.get("feature_number") or args.get("feature"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_feature_media_get":
+            payload = {
+                "record": get_feature_media(str(args.get("record_id") or args.get("id") or ""))
+            }
+        elif name == "plate_feature_media_decide":
+            payload = decide_feature_media(
+                str(args.get("record_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=args.get("note"),
+            )
+        elif name == "plate_feature_media_skip":
+            payload = skip_feature_media(
+                str(args.get("record_id") or args.get("id") or ""),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_feature_media_attach_fragment":
+            payload = attach_to_fragment_file(
+                str(args.get("record_id") or args.get("id") or ""),
+                str(args.get("fragment_path") or args.get("fragment") or ""),
+            )
+        elif name == "plate_feature_media_feed":
+            payload = {"items": feature_media_feed_items(limit=int(args.get("limit") or 10))}
         elif name == "plate_task_create":
             payload = create_task(
                 str(args.get("title") or ""),
@@ -2848,6 +2910,107 @@ def run() -> None:
                                         "url": {"type": "string"},
                                         "decision": {"type": "string"},
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_plan",
+                                "description": "Plan per-Feature demo GIF capture (test_name + path + steps) (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "feature_number": {"type": "integer"},
+                                        "feature_title": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "test_name": {"type": "string"},
+                                        "caption": {"type": "string"},
+                                        "fragment_slug": {"type": "string"},
+                                        "quality": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_register",
+                                "description": "Register record_e2e_gif result for a Feature media plan (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "record_id": {"type": "string"},
+                                        "gif_path": {"type": "string"},
+                                        "video_path": {"type": "string"},
+                                        "size_bytes": {"type": "integer"},
+                                        "quality": {"type": "string"},
+                                        "capture_result": {"type": "object"},
+                                        "submit_for_approval": {"type": "boolean"},
+                                    },
+                                    "required": ["record_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_list",
+                                "description": "List Feature media registry records (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "feature_number": {"type": "integer"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_get",
+                                "description": "Get one Feature media record (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"record_id": {"type": "string"}},
+                                    "required": ["record_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_decide",
+                                "description": "Approve/reject Feature demo media (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "record_id": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["record_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_skip",
+                                "description": "Skip media requirement for a Feature (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "record_id": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["record_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_attach_fragment",
+                                "description": "Append approved media to unreleased fragment media[] (#636/#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "record_id": {"type": "string"},
+                                        "fragment_path": {"type": "string"},
+                                        "fragment": {"type": "string"},
+                                    },
+                                    "required": ["record_id", "fragment_path"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_feed",
+                                "description": "Feed presentation for planned/pending Feature media (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
                                 },
                             },
                             {

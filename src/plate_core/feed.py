@@ -765,6 +765,30 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #636 Feature demo media plan/approval → feed signals
+    try:
+        from .feature_media import feature_media_feed_items
+
+        for fm in feature_media_feed_items(limit=10):
+            signal_items.append(
+                {
+                    "id": fm.get("id"),
+                    "type": fm.get("item_type") or "feature_media",
+                    "title": fm.get("title"),
+                    "rank": 14,
+                    "impact": fm.get("impact") or "medium",
+                    "reason": fm.get("reason") or "Feature media (#636)",
+                    "prompt_segment": (
+                        f"{fm.get('title')}. "
+                        f"record_e2e_gif / plate_feature_media_register / decide."
+                    ),
+                    "source": "feature_media",
+                    "ask_user_question": fm.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,
