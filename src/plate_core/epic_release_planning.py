@@ -215,13 +215,112 @@ def er_question_payload(
     }
 
 
+# Heuristic epic/release planning costs (#634 / #629 / #640).
+_ER_SESSION_BASE = 4500
+_ER_RELEASE_EXTRA = 1500
+_ER_BUILD_BASE = 5500
+_ER_RELEASE_BUILD_EXTRA = 2000
+
+
+def estimate_er_planning_cost(
+    *,
+    kind: str = "epic",
+    phase: str = "start",
+) -> dict[str, Any]:
+    """Advisory token estimate for epic/release Q&A planning start or build (#634/#629/#640)."""
+    k = "release" if (kind or "").lower() == "release" else "epic"
+    phase_n = (phase or "start").lower()
+    if phase_n not in ("start", "build"):
+        phase_n = "start"
+    if phase_n == "start":
+        tokens = _ER_SESSION_BASE + (_ER_RELEASE_EXTRA if k == "release" else 0)
+    else:
+        tokens = _ER_BUILD_BASE + (_ER_RELEASE_BUILD_EXTRA if k == "release" else 0)
+    return {
+        "ok": True,
+        "kind": k,
+        "phase": phase_n,
+        "estimated_tokens": int(tokens),
+        "breakdown": {
+            "base": _ER_SESSION_BASE if phase_n == "start" else _ER_BUILD_BASE,
+            "release_extra": (
+                (_ER_RELEASE_EXTRA if phase_n == "start" else _ER_RELEASE_BUILD_EXTRA)
+                if k == "release"
+                else 0
+            ),
+        },
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine enforce hard ceilings.",
+            "start_er_session / build_er_plan_from_session hydrate remaining when use_live_budget.",
+        ],
+    }
+
+
+def _er_budget_gate(
+    *,
+    kind: str,
+    phase: str,
+    budget_remaining: int | None,
+    use_live_budget: bool,
+) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
+    cost_est = estimate_er_planning_cost(kind=kind, phase=phase)
+    est = int(cost_est.get("estimated_tokens") or 0)
+    notes: list[str] = []
+    effective = budget_remaining
+    if effective is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot(estimate_tokens=est)
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective = int(rem)
+                notes.append(
+                    f"budget hydrated: remaining_tokens={effective} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            notes.append(f"budget hydrate skipped: {exc}")
+    if effective is not None and est > int(effective):
+        return (
+            cost_est,
+            effective,
+            notes,
+            {
+                "ok": False,
+                "blocked": True,
+                "reason": "budget",
+                "error": f"budget: est {est} tokens exceeds remaining {effective}",
+                "cost_estimate_tokens": est,
+                "budget_remaining": int(effective),
+                "cost_estimate": cost_est,
+                "notes": notes,
+            },
+        )
+    return cost_est, effective, notes, None
+
+
 def start_er_session(
     kind: str = "epic",
     *,
     base_dir: Path | None = None,
     persist: bool = True,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
+    """Begin epic/release Q&A planning session.
+
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
+    """
     k = "release" if kind == "release" else "epic"
+    cost_est, effective_remaining, budget_notes, blocked = _er_budget_gate(
+        kind=k,
+        phase="start",
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        return blocked
     qs = _qs(k)
     session = ERSession(
         kind=k,
@@ -236,17 +335,22 @@ def start_er_session(
         sdict = save_er_session(sdict, base_dir=base_dir)
     nq = qs[0] if qs else None
     return {
+        "ok": True,
         "session": sdict,
         "session_id": sdict.get("id"),
         "total_questions": len(qs),
         "next_question": nq,
+        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
+        "notes": budget_notes,
         "ask_user_question": er_question_payload(nq, kind=k, turn=0, total=len(qs)),
         "prompt_segment": f"Present via ask_user_question: {qs[0]['prompt']}" if qs else "",
         "tui_hint": (
             "One question at a time via ask_user_question payload; "
             "plate_er_planning_answer; build with plate_er_planning_build; session_id is durable."
         ),
-        "issue_refs": ["#640", "#629", "#654"],
+        "issue_refs": ["#640", "#629", "#654", "#634"],
     }
 
 
@@ -498,7 +602,13 @@ def build_er_plan_from_session(
     *,
     planning_root: Path | None = None,
     persist_pending: bool = True,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
+    """Build epic/release plan from session.
+
+    #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
+    """
     if isinstance(session, ERSession):
         kind, answers, complete = session.kind, session.answers, session.complete
         sid = session.id
@@ -509,6 +619,14 @@ def build_er_plan_from_session(
         sid = str(session.get("id") or "")
     if not answers:
         return {"ok": False, "error": "session empty"}
+    cost_est, effective_remaining, budget_notes, blocked = _er_budget_gate(
+        kind=str(kind),
+        phase="build",
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        return blocked
     plan = build_release_plan(answers) if kind == "release" else build_epic_plan(answers)
     plan["session_id"] = sid
     if persist_pending:
@@ -559,6 +677,10 @@ def build_er_plan_from_session(
         "session_complete": complete,
         "ask_user_question": approval_payload,
         "pending_path": plan.get("path"),
+        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "budget_remaining": effective_remaining,
+        "cost_estimate": cost_est,
+        "notes": budget_notes,
     }
 
 
