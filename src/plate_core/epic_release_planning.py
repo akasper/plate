@@ -334,16 +334,17 @@ def start_er_session(
     if persist:
         sdict = save_er_session(sdict, base_dir=base_dir)
     nq = qs[0] if qs else None
-    return {
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    out: dict[str, Any] = {
         "ok": True,
         "session": sdict,
         "session_id": sdict.get("id"),
         "total_questions": len(qs),
         "next_question": nq,
-        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
         "ask_user_question": er_question_payload(nq, kind=k, turn=0, total=len(qs)),
         "prompt_segment": f"Present via ask_user_question: {qs[0]['prompt']}" if qs else "",
         "tui_hint": (
@@ -352,6 +353,19 @@ def start_er_session(
         ),
         "issue_refs": ["#640", "#629", "#654", "#634"],
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="er_planning_start",
+            reason=f"start_er_session:{k}:{sdict.get('id')}",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def apply_er_answer(
@@ -671,17 +685,31 @@ def build_er_plan_from_session(
             )
         except OSError:
             pass
-    return {
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    out: dict[str, Any] = {
         "ok": True,
         "plan": plan,
         "session_complete": complete,
         "ask_user_question": approval_payload,
         "pending_path": plan.get("path"),
-        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "cost_estimate_tokens": est_tokens,
         "budget_remaining": effective_remaining,
         "cost_estimate": cost_est,
-        "notes": budget_notes,
+        "notes": list(budget_notes),
     }
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="er_planning_build",
+            reason=f"build_er_plan:{kind}:{sid or pid}",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def er_plan_ask_user_payload(plan: dict[str, Any]) -> dict[str, Any]:

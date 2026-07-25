@@ -720,6 +720,43 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertTrue(snap["would_pause"])
             self.assertIn("daily", snap.get("gate_reason") or "")
 
+    def test_apply_live_budget_charge(self):
+        """#777 helper charges only on live path and adjusts remaining."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.autonomy import apply_live_budget_charge, load_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            out = {
+                "ok": True,
+                "budget_remaining": 10000,
+                "notes": [],
+            }
+            apply_live_budget_charge(
+                out,
+                tokens=500,
+                use_live_budget=True,
+                action_kind="unit_test",
+                reason="test",
+                base_dir=bdir,
+            )
+            self.assertTrue(out["budget_charge"]["ok"])
+            self.assertEqual(out["budget_remaining"], 9500)
+            self.assertEqual(load_budget_spend(base_dir=bdir).get("spent_today"), 500)
+
+            dry = {"ok": True, "budget_remaining": 10000, "notes": []}
+            apply_live_budget_charge(
+                dry,
+                tokens=500,
+                use_live_budget=False,
+                action_kind="unit_test",
+                base_dir=bdir,
+            )
+            self.assertNotIn("budget_charge", dry)
+            self.assertEqual(load_budget_spend(base_dir=bdir).get("spent_today"), 500)
+
 
 if __name__ == "__main__":
     unittest.main()

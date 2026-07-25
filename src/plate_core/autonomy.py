@@ -375,6 +375,49 @@ def record_budget_spend(
         }
 
 
+def apply_live_budget_charge(
+    out: dict[str, Any],
+    *,
+    tokens: int,
+    use_live_budget: bool,
+    action_kind: str,
+    reason: str | None = None,
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Merge durable spend charge into a success response when live budget is active.
+
+    No-op when ``use_live_budget`` is False (tests/dry overrides) or tokens <= 0.
+    Mutates and returns ``out`` for chaining. Safe if charge fails.
+    """
+    if not out or not use_live_budget:
+        return out
+    tok = max(0, int(tokens or 0))
+    if tok <= 0:
+        return out
+    charge = record_budget_spend(
+        tok,
+        base_dir=base_dir,
+        reason=reason or action_kind,
+        action_kind=action_kind,
+    )
+    out["budget_charge"] = charge
+    notes = list(out.get("notes") or [])
+    if charge.get("ok"):
+        rem = out.get("budget_remaining")
+        if rem is not None:
+            try:
+                out["budget_remaining"] = max(0, int(rem) - tok)
+            except (TypeError, ValueError):
+                pass
+        notes.append(
+            f"budget charged: {tok} tokens (spent_today={charge.get('spent_today')})"
+        )
+    else:
+        notes.append(f"budget charge skipped: {charge.get('error') or 'unknown'}")
+    out["notes"] = notes
+    return out
+
+
 def tokens_to_usd(tokens: int) -> float:
     """Heuristic USD projection for cost_ceiling enforcement (#634)."""
     return round((max(0, int(tokens)) / 1000.0) * _USD_PER_1K_TOKENS, 6)
