@@ -197,6 +197,72 @@ class TestFeed631(unittest.TestCase):
         self.assertTrue(any(o["id"] == "approve_run" for o in payload["options"]))
         self.assertTrue(any(o["id"] == "cancel" for o in payload["options"]))
 
+    def test_loop_stage_rank_and_tui(self):
+        from plate_core.feed import ask_user_question_payload, loop_stage_feed_rank
+
+        self.assertLess(
+            loop_stage_feed_rank("human_checkpoint"),
+            loop_stage_feed_rank("plan"),
+        )
+        self.assertLess(loop_stage_feed_rank("babysit"), loop_stage_feed_rank("implement"))
+        babysit = ask_user_question_payload(
+            {
+                "id": "featloop-1",
+                "item_type": "feature_loop",
+                "title": "Feed ranking",
+                "stage": "babysit",
+                "pr_number": 99,
+            }
+        )
+        self.assertTrue(any(o["id"] == "babysit" for o in babysit["options"]))
+        self.assertTrue(any(o["id"] == "tick_gates" for o in babysit["options"]))
+        hc = ask_user_question_payload(
+            {
+                "id": "bugloop-1",
+                "item_type": "bug_loop",
+                "title": "Auth",
+                "stage": "human_checkpoint",
+            }
+        )
+        self.assertTrue(any(o["id"] == "approve_checkpoint" for o in hc["options"]))
+        pm_loop = ask_user_question_payload(
+            {
+                "id": "asg-loop",
+                "item_type": "pm_assignment",
+                "title": "Impl",
+                "agent_name": "Dev",
+                "loop_run_id": "featloop-x",
+                "loop_kind": "feature",
+            }
+        )
+        self.assertTrue(any(o["id"] == "tick_loop" for o in pm_loop["options"]))
+
+    def test_build_feed_ranks_babysit_loop_high(self):
+        from plate_core.feed import build_feed_items, loop_stage_feed_rank
+
+        items = build_feed_items(
+            signal_items=[
+                {
+                    "id": "fl-1",
+                    "type": "feature_loop",
+                    "title": "Feature loop [babysit]: X",
+                    "stage": "babysit",
+                    "rank": loop_stage_feed_rank("babysit", kind="feature"),
+                    "impact": "medium",
+                },
+                {
+                    "id": "fl-2",
+                    "type": "feature_loop",
+                    "title": "Feature loop [plan]: Y",
+                    "stage": "plan",
+                    "rank": loop_stage_feed_rank("plan", kind="feature"),
+                    "impact": "medium",
+                },
+            ],
+        )
+        self.assertEqual(items[0].id, "fl-1")
+        self.assertLess(items[0].rank, items[1].rank)
+
     def test_get_user_feed_includes_pm_queue(self):
         fake_asg = [{
             "assignment_id": "asg-feed",

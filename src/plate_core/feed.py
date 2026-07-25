@@ -249,6 +249,29 @@ def _checkpoint_to_feed_item(cp: str | dict[str, Any], index: int) -> FeedItem:
     )
 
 
+def loop_stage_feed_rank(stage: str | None, *, kind: str = "feature") -> int:
+    """Lower rank = higher priority in endless feed (#631/#638/#639).
+
+    human_checkpoint and babysit surface above routine plan/impl stages so
+    agents clear gates before starting new work.
+    """
+    s = str(stage or "").lower()
+    if s in ("human_checkpoint",):
+        return 8
+    if s in ("babysit",):
+        return 9
+    if s in ("merge_eligible",):
+        return 10
+    if s in ("blocked",):
+        return 9
+    if s in ("ready_for_review",):
+        return 11
+    # feature estimate / plan early stages slightly below bugfix mid-loop
+    if kind == "bug":
+        return 13
+    return 12
+
+
 def ask_user_question_payload(item: FeedItem | dict[str, Any]) -> dict[str, Any]:
     """Native TUI payload for one feed item (#631 host bridge).
 
@@ -293,9 +316,100 @@ def ask_user_question_payload(item: FeedItem | dict[str, Any]) -> dict[str, Any]
             {"id": "revise", "label": "Revise", "description": "Request new version."},
             {"id": "reject", "label": "Reject", "description": "Reject proposal."},
         ]
+    elif itype in ("feature_loop", "bug_loop"):
+        stage = str(d.get("stage") or "")
+        kind = "feature" if itype == "feature_loop" else "bug"
+        advance_cmd = (
+            f"plate_feature_loop_advance {cid}"
+            if kind == "feature"
+            else f"plate_bug_loop_advance {cid}"
+        )
+        tick_cmd = (
+            f"plate_feature_loop_tick {cid}"
+            if kind == "feature"
+            else f"plate_bug_loop_tick {cid}"
+        )
+        question = f"{kind.title()} loop [{stage or '?'}]: {title}"
+        if stage == "human_checkpoint":
+            options = [
+                {
+                    "id": "approve_checkpoint",
+                    "label": "Approve checkpoint",
+                    "description": "plate_checkpoint_decide approve on loop checkpoint_id; then advance",
+                },
+                {
+                    "id": "tick",
+                    "label": "Refresh status",
+                    "description": tick_cmd,
+                },
+                {
+                    "id": "defer",
+                    "label": "Defer",
+                    "description": "Leave on human_checkpoint; re-surface next feed cycle.",
+                },
+            ]
+        elif stage == "babysit":
+            pr = d.get("pr_number") or ""
+            options = [
+                {
+                    "id": "babysit",
+                    "label": "Babysit PR",
+                    "description": f"gh plate pr babysit {pr} --act; then {advance_cmd} with gates",
+                },
+                {
+                    "id": "tick_gates",
+                    "label": "Tick + fetch gates",
+                    "description": f"{tick_cmd} fetch_gates=true",
+                },
+                {
+                    "id": "skip",
+                    "label": "Skip for now",
+                    "description": "Leave on babysit; do not re-request Copilot in a loop.",
+                },
+            ]
+        elif stage == "merge_eligible":
+            options = [
+                {
+                    "id": "report_ready",
+                    "label": "Report merge-ready",
+                    "description": "Human merge only unless autonomy risk allows; do not self-merge when risk=off.",
+                },
+                {
+                    "id": "advance_done",
+                    "label": "Mark loop done",
+                    "description": advance_cmd,
+                },
+                {
+                    "id": "skip",
+                    "label": "Hold",
+                    "description": "Keep merge_eligible until human merges.",
+                },
+            ]
+        else:
+            options = [
+                {
+                    "id": "advance",
+                    "label": "Advance stage",
+                    "description": f"Execute stage packet then {advance_cmd}",
+                },
+                {
+                    "id": "tick",
+                    "label": "Tick (status only)",
+                    "description": tick_cmd,
+                },
+                {
+                    "id": "skip",
+                    "label": "Skip for now",
+                    "description": "Leave active; pick next feed item.",
+                },
+            ]
     elif itype in ("pm_assignment", "assignment"):
         agent = str(d.get("agent_name") or d.get("agent_id") or "persona")
         aid = cid or str(d.get("assignment_id") or "asg")
+        loop_id = d.get("loop_run_id") or (d.get("packet") or {}).get("loop_run_id") if isinstance(d.get("packet"), dict) else d.get("loop_run_id")
+        loop_kind = d.get("loop_kind") or (
+            (d.get("packet") or {}).get("loop_kind") if isinstance(d.get("packet"), dict) else None
+        )
         question = f"PM assignment: {title} → {agent}?"
         options = [
             {
@@ -314,6 +428,18 @@ def ask_user_question_payload(item: FeedItem | dict[str, Any]) -> dict[str, Any]
                 "description": f"plate_pm_complete {aid} --status cancelled",
             },
         ]
+        if loop_id:
+            options.insert(
+                1,
+                {
+                    "id": "tick_loop",
+                    "label": "Tick linked loop",
+                    "description": (
+                        f"plate_pm_run_cycle tick_loops=true / "
+                        f"{'plate_feature_loop_tick' if loop_kind == 'feature' else 'plate_bug_loop_tick'} {loop_id}"
+                    ),
+                },
+            )
     else:
         question = f"{itype}: {title}"
         options = [
@@ -329,6 +455,7 @@ def ask_user_question_payload(item: FeedItem | dict[str, Any]) -> dict[str, Any]
         "options": options,
         "prompt_segment": str(d.get("prompt_segment") or ""),
         "multi_select": False,
+        "stage": d.get("stage"),
     }
 
 
@@ -346,6 +473,12 @@ def _pm_assignment_to_feed_item(asg: dict[str, Any], index: int) -> FeedItem:
     if asg.get("requires_checkpoint"):
         rank = 12 + index
     packet = asg.get("packet") if isinstance(asg.get("packet"), dict) else {}
+    loop_id = asg.get("loop_run_id") or packet.get("loop_run_id")
+    loop_kind = asg.get("loop_kind") or packet.get("loop_kind")
+    loop_stage = asg.get("loop_stage") or packet.get("loop_stage")
+    if loop_id and status == "delegated":
+        # Prefer active loop-backed work over plain proposed assigns
+        rank = min(rank, loop_stage_feed_rank(loop_stage, kind=str(loop_kind or "feature")) + 1)
     prompt = str(
         packet.get("prompt_segment")
         or asg.get("rationale")
@@ -353,7 +486,12 @@ def _pm_assignment_to_feed_item(asg: dict[str, Any], index: int) -> FeedItem:
     )
     if asg.get("checkpoint_id"):
         prompt += f" Open checkpoint {asg.get('checkpoint_id')} before execute."
+    if loop_id:
+        prompt += f" Linked {loop_kind or 'loop'} {loop_id} stage={loop_stage or '?'}; tick via PM cycle or loop MCP."
     prompt += f" On finish: plate_pm_complete / gh plate pm --complete {aid}."
+    badges = ["pm", status, work_type, impact]
+    if loop_id:
+        badges.extend([str(loop_kind or "loop"), str(loop_stage or "looped")])
     return FeedItem(
         id=aid,
         item_type="pm_assignment",
@@ -361,12 +499,12 @@ def _pm_assignment_to_feed_item(asg: dict[str, Any], index: int) -> FeedItem:
         title=f"[{status}] {title} → {agent}",
         rank=rank,
         impact=impact,
-        badges=["pm", status, work_type, impact],
+        badges=badges,
         prompt_segment=prompt,
         reason=str(asg.get("rationale") or f"PM queue ({status})"),
         source="pm_queue",
         body_excerpt=str(packet.get("task_summary") or title)[:240],
-        labels=[work_type, status],
+        labels=[work_type, status] + ([str(loop_kind)] if loop_id else []),
     )
 
 
@@ -760,17 +898,32 @@ def get_user_feed(
     except Exception:
         pass
 
-    # #638 active bug resolution loops → feed signals
+    # #638 active bug resolution loops → feed signals (stage-ranked #631 polish)
     try:
         from .bug_loop import bug_loop_feed_items
 
         for bl in bug_loop_feed_items(limit=10):
+            stage = bl.get("stage")
+            # Prefer stage-aware TUI from feed helper when loop packet is thin
+            tui = bl.get("ask_user_question") or ask_user_question_payload(
+                {
+                    "id": bl.get("id"),
+                    "item_type": "bug_loop",
+                    "title": bl.get("title"),
+                    "stage": stage,
+                    "pr_number": bl.get("pr_number"),
+                    "prompt_segment": bl.get("reason"),
+                }
+            )
             signal_items.append(
                 {
                     "id": bl.get("id"),
                     "type": "bug_loop",
+                    "item_type": "bug_loop",
                     "title": bl.get("title"),
-                    "rank": 12,
+                    "stage": stage,
+                    "pr_number": bl.get("pr_number"),
+                    "rank": loop_stage_feed_rank(stage, kind="bug"),
                     "impact": bl.get("impact") or "medium",
                     "reason": bl.get("reason") or "Bug resolution loop (#638)",
                     "prompt_segment": (
@@ -778,23 +931,37 @@ def get_user_feed(
                         f"tick: plate_bug_loop_tick."
                     ),
                     "source": "bug_loop",
-                    "ask_user_question": bl.get("ask_user_question"),
+                    "ask_user_question": tui,
                 }
             )
     except Exception:
         pass
 
-    # #639 active feature implementation loops → feed signals
+    # #639 active feature implementation loops → feed signals (stage-ranked #631 polish)
     try:
         from .feature_loop import feature_loop_feed_items
 
         for fl in feature_loop_feed_items(limit=10):
+            stage = fl.get("stage")
+            tui = fl.get("ask_user_question") or ask_user_question_payload(
+                {
+                    "id": fl.get("id"),
+                    "item_type": "feature_loop",
+                    "title": fl.get("title"),
+                    "stage": stage,
+                    "pr_number": fl.get("pr_number"),
+                    "prompt_segment": fl.get("reason"),
+                }
+            )
             signal_items.append(
                 {
                     "id": fl.get("id"),
                     "type": "feature_loop",
+                    "item_type": "feature_loop",
                     "title": fl.get("title"),
-                    "rank": 11,
+                    "stage": stage,
+                    "pr_number": fl.get("pr_number"),
+                    "rank": loop_stage_feed_rank(stage, kind="feature"),
                     "impact": fl.get("impact") or "medium",
                     "reason": fl.get("reason") or "Feature implementation loop (#639)",
                     "prompt_segment": (
@@ -802,7 +969,7 @@ def get_user_feed(
                         f"Advance: plate_feature_loop_advance {fl.get('id')}."
                     ),
                     "source": "feature_loop",
-                    "ask_user_question": fl.get("ask_user_question"),
+                    "ask_user_question": tui,
                 }
             )
     except Exception:
@@ -971,7 +1138,26 @@ def get_user_feed(
             pre_payloads[str(ap["id"])] = ap["ask_user_question"]
     for asg in pm_assignments:
         aid = asg.get("assignment_id")
-        if aid and asg.get("ask_user_question"):
+        if not aid:
+            continue
+        # Prefer stage-aware feed TUI when a #638/#639 loop is linked (#631 polish)
+        if asg.get("loop_run_id") or (asg.get("packet") or {}).get("loop_run_id"):
+            pre_payloads[str(aid)] = ask_user_question_payload(
+                {
+                    "id": aid,
+                    "item_type": "pm_assignment",
+                    "title": asg.get("work_title") or aid,
+                    "agent_name": asg.get("agent_name"),
+                    "agent_id": asg.get("agent_id"),
+                    "loop_run_id": asg.get("loop_run_id")
+                    or (asg.get("packet") or {}).get("loop_run_id"),
+                    "loop_kind": asg.get("loop_kind")
+                    or (asg.get("packet") or {}).get("loop_kind"),
+                    "packet": asg.get("packet") or {},
+                    "prompt_segment": (asg.get("packet") or {}).get("prompt_segment"),
+                }
+            )
+        elif asg.get("ask_user_question"):
             pre_payloads[str(aid)] = asg["ask_user_question"]
     for sig in signal_items:
         sid = sig.get("id")
