@@ -192,5 +192,8 @@ tests/e2e/package-lock.json
 # Ephemeral #646 design contracts (local before merge to docs)
 .agentic/design_contracts/
 
+# Ephemeral #636 per-Feature media capture registry (local)
+.agentic/feature_media/
+
 # Ephemeral planning sessions + pending plan stubs (#628/#630)
 .agentic/planning/

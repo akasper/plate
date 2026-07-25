@@ -129,6 +129,16 @@ from .release_media import (
     render_media_markdown,
     validate_media_paths,
 )
+from .feature_media import (
+    attach_to_fragment_file,
+    decide_feature_media,
+    feature_media_feed_items,
+    get_feature_media,
+    list_feature_media,
+    plan_feature_media,
+    register_capture,
+    skip_feature_media,
+)
 from .tasks import (
     close_task_with_signal,
     create_task,
@@ -1106,6 +1116,104 @@ def cmd_task(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def cmd_feature_media(args: argparse.Namespace) -> int:
+    """Per-Feature GIF/video capture + approval (#636)."""
+    if getattr(args, "list", False):
+        rows = list_feature_media(
+            status=str(getattr(args, "status", None) or "all"),
+            feature_number=getattr(args, "feature", None),
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+        if args.json:
+            print(json.dumps({"records": rows}))
+            return 0
+        for r in rows:
+            print(
+                f"{r.get('id')} [{r.get('status')}] feature=#{r.get('feature_number')} "
+                f"test={r.get('test_name')} {r.get('gif_path')}"
+            )
+        return 0
+
+    if getattr(args, "get", None):
+        r = get_feature_media(str(args.get))
+        if args.json:
+            print(json.dumps({"record": r}))
+            return 0 if r else 1
+        if not r:
+            print("not found")
+            return 1
+        print(f"{r.get('id')} status={r.get('status')} path={r.get('gif_path')}")
+        return 0
+
+    if getattr(args, "register", None):
+        out = register_capture(
+            str(args.register),
+            gif_path=getattr(args, "gif_path", None) or None,
+            size_bytes=getattr(args, "size_bytes", None),
+            quality=getattr(args, "quality", None) or None,
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} status={(out.get('record') or {}).get('status')} exists={out.get('file_exists')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "decide", None):
+        out = decide_feature_media(
+            str(args.decide),
+            str(getattr(args, "decision", None) or "approve"),
+            decided_by=str(getattr(args, "decided_by", None) or "human"),
+            note=getattr(args, "note", None) or None,
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} status={(out.get('record') or {}).get('status')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "skip", None):
+        out = skip_feature_media(str(args.skip), note=getattr(args, "note", None) or "")
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"skip ok={out.get('ok')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "attach", None):
+        frag = getattr(args, "fragment", None) or ""
+        out = attach_to_fragment_file(str(args.attach), frag)
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"attach ok={out.get('ok')} path={out.get('fragment_path')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "feed", False):
+        rows = feature_media_feed_items(limit=int(getattr(args, "limit", 10) or 10))
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    # default plan
+    out = plan_feature_media(
+        feature_number=getattr(args, "feature", None),
+        feature_title=str(getattr(args, "title", None) or ""),
+        test_name=getattr(args, "test_name", None) or None,
+        caption=getattr(args, "caption", None) or None,
+        fragment_slug=getattr(args, "fragment_slug", None) or None,
+        quality=str(getattr(args, "quality", None) or "medium"),
+    )
+    if args.json:
+        print(json.dumps(out))
+        return 0 if out.get("ok") else 1
+    r = out.get("record") or {}
+    print(f"ok={out.get('ok')} id={r.get('id')} test={r.get('test_name')} path={r.get('gif_path')}")
+    return 0 if out.get("ok") else 1
 
 
 def cmd_release_media(args: argparse.Namespace) -> int:
@@ -2761,6 +2869,34 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
+
+    fmedia = sub.add_parser(
+        "feature-media",
+        help="Plan/register/approve per-Feature demo GIF/video (#636)",
+    )
+    fmedia.add_argument("--feature", type=int, help="Feature issue number")
+    fmedia.add_argument("--title", default="", help="Feature title")
+    fmedia.add_argument("--test-name", dest="test_name", default="", help="E2E test name for record_e2e_gif")
+    fmedia.add_argument("--caption", default="")
+    fmedia.add_argument("--fragment-slug", dest="fragment_slug", default="")
+    fmedia.add_argument("--quality", default="medium")
+    fmedia.add_argument("--list", action="store_true")
+    fmedia.add_argument("--get", metavar="RECORD_ID")
+    fmedia.add_argument("--register", metavar="RECORD_ID", help="Register capture result")
+    fmedia.add_argument("--gif-path", dest="gif_path", default="")
+    fmedia.add_argument("--size-bytes", dest="size_bytes", type=int)
+    fmedia.add_argument("--decide", metavar="RECORD_ID")
+    fmedia.add_argument("--decision", default="approve")
+    fmedia.add_argument("--decided-by", dest="decided_by", default="human")
+    fmedia.add_argument("--skip", metavar="RECORD_ID")
+    fmedia.add_argument("--attach", metavar="RECORD_ID", help="Attach media to fragment JSON")
+    fmedia.add_argument("--fragment", default="", help="Path to fragment JSON for --attach")
+    fmedia.add_argument("--feed", action="store_true")
+    fmedia.add_argument("--note", default="")
+    fmedia.add_argument("--status", default="all")
+    fmedia.add_argument("--limit", type=int, default=50)
+    fmedia.add_argument("--json", action="store_true")
+    fmedia.set_defaults(func=cmd_feature_media)
 
     rmedia = sub.add_parser(
         "release-media",
