@@ -111,6 +111,15 @@ from .feature_loop import (
     run_feature_loop_tick,
     start_feature_loop,
 )
+from .design_validation import (
+    build_failing_test_scaffold,
+    contract_feed_items,
+    decide_contract,
+    get_contract,
+    list_contracts,
+    propose_contract,
+    validate_contract_readiness,
+)
 from .tasks import (
     close_task_with_signal,
     create_task,
@@ -1088,6 +1097,99 @@ def cmd_task(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def cmd_design_contract(args: argparse.Namespace) -> int:
+    """Design validation contracts for Features (#646)."""
+    if getattr(args, "list", False):
+        rows = list_contracts(
+            status=str(getattr(args, "status", None) or "all"),
+            feature_number=getattr(args, "feature", None),
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+        if args.json:
+            print(json.dumps({"contracts": rows}))
+            return 0
+        for c in rows:
+            print(f"{c.get('id')} [{c.get('status')}] feature=#{c.get('feature_number')} {c.get('feature_title')}")
+        return 0
+
+    if getattr(args, "get", None):
+        c = get_contract(str(args.get))
+        if args.json:
+            print(json.dumps({"contract": c}))
+            return 0 if c else 1
+        if not c:
+            print("not found")
+            return 1
+        print(f"{c.get('id')} status={c.get('status')} interactions={len(c.get('interaction_criteria') or [])}")
+        return 0
+
+    if getattr(args, "decide", None):
+        out = decide_contract(
+            str(args.decide),
+            str(getattr(args, "decision", None) or "approve"),
+            decided_by=str(getattr(args, "decided_by", None) or "human"),
+            note=getattr(args, "note", None) or None,
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} status={(out.get('contract') or {}).get('status')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "validate", None):
+        out = validate_contract_readiness(str(args.validate))
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ready") else 1
+        print(f"ready={out.get('ready')} checks={out.get('checks')}")
+        return 0 if out.get("ready") else 1
+
+    if getattr(args, "scaffold", None):
+        c = get_contract(str(args.scaffold))
+        if not c:
+            print("not found")
+            return 1
+        sc = build_failing_test_scaffold(c, language=str(getattr(args, "lang", None) or "python"))
+        if args.json:
+            print(json.dumps(sc))
+            return 0
+        print(f"# {sc.get('path_hint')}\n{sc.get('content')}")
+        return 0
+
+    if getattr(args, "feed", False):
+        rows = contract_feed_items(limit=int(getattr(args, "limit", 10) or 10))
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    # default propose
+    interactions = []
+    raw_i = getattr(args, "interactions", None) or ""
+    if raw_i:
+        interactions = [x.strip() for x in str(raw_i).split(";") if x.strip()]
+    visuals = []
+    raw_v = getattr(args, "visuals", None) or ""
+    if raw_v:
+        visuals = [x.strip() for x in str(raw_v).split(";") if x.strip()]
+    out = propose_contract(
+        feature_number=getattr(args, "feature", None),
+        feature_title=str(getattr(args, "title", None) or ""),
+        visual_specs=visuals or None,
+        interaction_criteria=interactions or None,
+        has_playwright=bool(getattr(args, "playwright", False)),
+        submit_for_approval=not bool(getattr(args, "draft", False)),
+    )
+    if args.json:
+        print(json.dumps(out))
+        return 0 if out.get("ok") else 1
+    c = out.get("contract") or {}
+    print(f"ok={out.get('ok')} id={c.get('id')} status={c.get('status')} scaffold={ (out.get('test_scaffold') or {}).get('path_hint') }")
+    return 0 if out.get("ok") else 1
 
 
 def cmd_feature_loop(args: argparse.Namespace) -> int:
@@ -2591,6 +2693,31 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
+
+    dcontract = sub.add_parser(
+        "design-contract",
+        help="Design validation + visual/interaction contracts for Features (#646)",
+    )
+    dcontract.add_argument("--feature", type=int, help="Feature issue number")
+    dcontract.add_argument("--title", default="", help="Feature title")
+    dcontract.add_argument("--interactions", default="", help="Semicolon-separated interaction criteria")
+    dcontract.add_argument("--visuals", default="", help="Semicolon-separated visual specs")
+    dcontract.add_argument("--playwright", action="store_true", help="Include Playwright items in test plan")
+    dcontract.add_argument("--draft", action="store_true", help="Keep as draft (no pending_approval)")
+    dcontract.add_argument("--list", action="store_true")
+    dcontract.add_argument("--get", metavar="CONTRACT_ID")
+    dcontract.add_argument("--decide", metavar="CONTRACT_ID")
+    dcontract.add_argument("--decision", default="approve")
+    dcontract.add_argument("--decided-by", dest="decided_by", default="human")
+    dcontract.add_argument("--validate", metavar="CONTRACT_ID")
+    dcontract.add_argument("--scaffold", metavar="CONTRACT_ID", help="Print failing test scaffold")
+    dcontract.add_argument("--lang", default="python", choices=["python", "typescript"])
+    dcontract.add_argument("--feed", action="store_true")
+    dcontract.add_argument("--note", default="")
+    dcontract.add_argument("--status", default="all")
+    dcontract.add_argument("--limit", type=int, default=50)
+    dcontract.add_argument("--json", action="store_true")
+    dcontract.set_defaults(func=cmd_design_contract)
 
     featloop = sub.add_parser(
         "feature-loop",

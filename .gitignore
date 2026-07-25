@@ -189,5 +189,8 @@ tests/e2e/package-lock.json
 # Ephemeral #639 feature implementation loop runs (local orchestration)
 .agentic/feature_loops/
 
+# Ephemeral #646 design contracts (local before merge to docs)
+.agentic/design_contracts/
+
 # Ephemeral planning sessions + pending plan stubs (#628/#630)
 .agentic/planning/
