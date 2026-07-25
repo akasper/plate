@@ -322,6 +322,12 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - Plan multi-role work from intent with `plate_fleet_plan` (dry-run default); allocate budget via `plate_fleet_allocate`.
 - Complete handoffs with provenance; surface active handoffs in the feed. Complements PM personas (#660) and `plate_delegate_to_agent`.
 
+### Scheduled monitoring (#642)
+- Weekly procedures: `weekly-discussion-review`, `market-condition-monitor` (low risk; AutonomyEngine list/run).
+- Discussion Ideas → stub proposals: `plate_monitor_discussions` / `gh plate monitor` (dry-run default; `--apply` / `--live` to persist/fetch).
+- Market signals are host-injected (web_search / x_*); core never scrapes network: `plate_monitor_market` with `signals`.
+- Pending proposals surface in the feed; decide with `plate_monitor_decide` before creating GitHub issues.
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 
