@@ -2206,16 +2206,29 @@ def cmd_stub(args: argparse.Namespace) -> int:
         print(f"ok={out.get('ok')} status={(out.get('draft') or {}).get('status')}")
         return 0 if out.get("ok") else 1
 
+    br = getattr(args, "budget_remaining", None)
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = not bool(getattr(args, "no_live_budget", False))
+
     if getattr(args, "create", None):
         out = create_stub_issue(
             str(args.create),
             repo=getattr(args, "repo", None),
             dry_run=not getattr(args, "apply", False),
+            budget_remaining=br,
+            use_live_budget=use_live,
         )
         if args.json:
             print(json.dumps(out))
             return 0 if out.get("ok") else 1
-        print(f"create ok={out.get('ok')} dry_run={out.get('dry_run')} number={out.get('number')}")
+        print(
+            f"create ok={out.get('ok')} dry_run={out.get('dry_run')} number={out.get('number')} "
+            f"est={out.get('cost_estimate_tokens')} remaining={out.get('budget_remaining')}"
+        )
         return 0 if out.get("ok") else 1
 
     if getattr(args, "feed", False):
@@ -2237,6 +2250,8 @@ def cmd_stub(args: argparse.Namespace) -> int:
             dry_run=False,
             repo=getattr(args, "repo", None),
             source=str(getattr(args, "source", None) or "qa"),
+            budget_remaining=br,
+            use_live_budget=use_live,
         )
     else:
         out = author_stub(
@@ -2247,15 +2262,26 @@ def cmd_stub(args: argparse.Namespace) -> int:
             source=str(getattr(args, "source", None) or "qa"),
             parent_epic=getattr(args, "parent_epic", None),
             persist=True,
+            budget_remaining=br,
+            use_live_budget=use_live,
         )
         if getattr(args, "dry_create", False) and out.get("ok"):
-            c = create_stub_issue(out["draft"]["id"], dry_run=True, repo=getattr(args, "repo", None))
+            c = create_stub_issue(
+                out["draft"]["id"],
+                dry_run=True,
+                repo=getattr(args, "repo", None),
+                budget_remaining=br,
+                use_live_budget=use_live,
+            )
             out["create"] = c
     if args.json:
         print(json.dumps(out))
         return 0 if out.get("ok") else 1
     d = out.get("draft") or {}
-    print(f"ok={out.get('ok')} id={d.get('id')} type={d.get('issue_type')} title={d.get('title')}")
+    print(
+        f"ok={out.get('ok')} id={d.get('id')} type={d.get('issue_type')} title={d.get('title')} "
+        f"est={out.get('cost_estimate_tokens')} remaining={out.get('budget_remaining')}"
+    )
     return 0 if out.get("ok") else 1
 
 
@@ -3907,6 +3933,19 @@ def build_parser() -> argparse.ArgumentParser:
     stub.add_argument("--dry-create", dest="dry_create", action="store_true", help="After author, dry-run create payload")
     stub.add_argument("--feed", action="store_true")
     stub.add_argument("--status", default="all")
+    stub.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit remaining tokens for #634 gate (overrides live hydrate)",
+    )
+    stub.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     stub.add_argument("--limit", type=int, default=50)
     stub.add_argument("--json", action="store_true")
     stub.set_defaults(func=cmd_stub)
