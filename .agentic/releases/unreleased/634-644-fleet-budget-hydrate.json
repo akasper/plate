@@ -1,0 +1,26 @@
+{
+  "slug": "634-644-fleet-budget-hydrate",
+  "change_type": "feature",
+  "surface": "src/plate_core/fleet.py, autonomy.py, cli.py, mcp_server.py, tests/test_fleet.py",
+  "summary": "Gate #644 fleet handoffs on live #634 budget: estimate_handoff_cost, create_handoff/fleet_status hydrate+block, PM bridge + AutonomyEngine scheduled-op remaining pass-through, CLI/MCP fields (#755).",
+  "migration_impact": "create_handoff and fleet_status hydrate remaining from durable spend by default; over-budget handoffs return blocked. Pass budget_remaining or use_live_budget=false to override. Engine procedure dispatch passes engine remaining into scheduled ops.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer live hydrate (default): plate_fleet_handoff / gh plate fleet --handoff.",
+    "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+    "4. Disable hydrate for offline tests: --no-live-budget / use_live_budget=false.",
+    "5. fleet_status JSON includes budget_remaining_tokens when hydrated."
+  ],
+  "agent_notes": "Parity with feature_loop/bug_loop/scheduled_ops #634 hydrate. Does not close parent #634 UX stub. Closes #755. Related #644 #660 #654.",
+  "breaking": false,
+  "links": [
+    "#755",
+    "#634",
+    "#644",
+    "#660",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
