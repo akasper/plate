@@ -1,54 +1,188 @@
 #!/usr/bin/env python3
-"""gh extension entrypoint for plate_core."""
+"""gh extension entrypoint for plate_core.
+
+Version locking (#614): when installed as the thin `akasper/gh-plate` extension,
+this launcher pins `plate-core==X.Y.Z` from the sibling VERSION / PLATE_CORE_VERSION
+marker written at release sync. Dev checkouts (src/plate_core present) skip the pin
+unless PLATE_CORE_FORCE_PIN=1.
+"""
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import re
+import subprocess
 import sys
+from typing import Any
+
+_VERSION_RE = re.compile(r"^v?(?P<ver>\d+\.\d+\.\d+(?:[a-zA-Z0-9._-]*)?)\s*$")
 
 
-def _ensure_plate_core() -> None:
-    """Best-effort ensure for the published gh extension case (thin shim).
+def _script_dir() -> str:
+    return os.path.dirname(os.path.abspath(__file__))
 
-    When this script is installed via `gh extension install akasper/gh-plate`,
-    plate_core may not yet be on the PYTHONPATH or installed. We try a
-    non-destructive `pip install --user` so first-run UX is good.
 
-    This is a no-op when the package is already importable (dev, pip-installed,
-    or already auto-installed on a previous run).
+def normalize_version(raw: str | None) -> str | None:
+    """Normalize tag/version strings to bare semver-ish (strip leading v)."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    m = _VERSION_RE.match(text)
+    if m:
+        return m.group("ver")
+    # tolerate extra noise (e.g. "v0.7.2\n")
+    text = text.lstrip("vV").strip()
+    return text or None
+
+
+def is_dev_checkout(script_dir: str | None = None) -> bool:
+    """True when running from a full plate monorepo (src/plate_core present)."""
+    root = script_dir or _script_dir()
+    return os.path.isdir(os.path.join(root, "src", "plate_core"))
+
+
+def read_pinned_version(script_dir: str | None = None) -> str | None:
+    """Resolve pinned plate-core version for this launcher install.
+
+    Priority:
+    1. PLATE_CORE_VERSION env
+    2. PLATE_CORE_VERSION file next to this script
+    3. VERSION file next to this script (written by publish-gh-plate workflow)
     """
-    try:
-        import importlib.util
-        if importlib.util.find_spec("plate_core") is not None:
-            return
-    except Exception:
-        pass  # If the check itself fails we still attempt the import below.
+    env = os.environ.get("PLATE_CORE_VERSION")
+    if env:
+        return normalize_version(env)
+    root = script_dir or _script_dir()
+    for name in ("PLATE_CORE_VERSION", "VERSION"):
+        path = os.path.join(root, name)
+        try:
+            with open(path, encoding="utf-8") as fh:
+                pin = normalize_version(fh.read())
+            if pin:
+                return pin
+        except OSError:
+            continue
+    return None
 
+
+def get_installed_plate_core_version() -> str | None:
+    """Return installed plate_core.__version__ or None if not importable."""
     try:
-        import subprocess
-        # Keep pip noise off stdout so `gh plate ... --json` stays machine-parseable
-        # (e2e catalog-discovery and other consumers JSON.parse stdout).
-        print("plate-core not found; attempting `pip install --user plate-core` ...", file=sys.stderr)
+        if importlib.util.find_spec("plate_core") is None:
+            return None
+    except Exception:
+        return None
+    try:
+        import plate_core  # type: ignore
+
+        ver = getattr(plate_core, "__version__", None)
+        return normalize_version(ver) if ver else None
+    except Exception:
+        return None
+
+
+def _pip_install(spec: str) -> None:
+    """Install plate-core pin; keep pip off stdout for --json consumers."""
+    print(f"plate-core version lock active (gh-plate); ensuring {spec} ...", file=sys.stderr)
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "--user", spec],
+        stdout=sys.stderr,
+        stderr=subprocess.STDOUT,
+    )
+
+
+def ensure_plate_core(
+    *,
+    script_dir: str | None = None,
+    force_pin: bool | None = None,
+) -> dict[str, Any]:
+    """Ensure plate-core is importable and matches pin when locking applies.
+
+    Returns a small status dict for tests/observability (not printed).
+    """
+    root = script_dir or _script_dir()
+    pin = read_pinned_version(root)
+    env_force = os.environ.get("PLATE_CORE_FORCE_PIN", "").strip() in ("1", "true", "yes")
+    if force_pin is None:
+        force_pin = env_force
+
+    dev = is_dev_checkout(root)
+    if dev and not force_pin:
+        # Full monorepo: prefer local src path; do not reinstall from PyPI.
+        return {
+            "action": "dev_skip",
+            "pin": pin,
+            "installed": get_installed_plate_core_version(),
+            "dev": True,
+        }
+
+    installed = get_installed_plate_core_version()
+    if pin:
+        want = pin
+        if installed == want:
+            return {"action": "ok", "pin": want, "installed": installed, "dev": False}
+        spec = f"plate-core=={want}"
+        try:
+            _pip_install(spec)
+        except Exception as exc:
+            print(f"Warning: could not install {spec}: {exc}", file=sys.stderr)
+            return {
+                "action": "install_failed",
+                "pin": want,
+                "installed": get_installed_plate_core_version(),
+                "error": str(exc),
+                "dev": False,
+            }
+        return {
+            "action": "installed" if installed is None else "reinstalled",
+            "pin": want,
+            "installed": get_installed_plate_core_version(),
+            "dev": False,
+        }
+
+    # No pin (legacy thin install without VERSION): only install if missing
+    if installed is not None:
+        return {"action": "ok_unpinned", "pin": None, "installed": installed, "dev": False}
+    try:
+        print(
+            "plate-core not found; attempting `pip install --user plate-core` ...",
+            file=sys.stderr,
+        )
         subprocess.check_call(
             [sys.executable, "-m", "pip", "install", "--user", "plate-core"],
             stdout=sys.stderr,
             stderr=subprocess.STDOUT,
         )
     except Exception as exc:
-        # Do not hard-fail here; the subsequent import will give the real error.
         print(f"Warning: could not auto-install plate-core: {exc}", file=sys.stderr)
+        return {
+            "action": "install_failed",
+            "pin": None,
+            "installed": None,
+            "error": str(exc),
+            "dev": False,
+        }
+    return {
+        "action": "installed_unpinned",
+        "pin": None,
+        "installed": get_installed_plate_core_version(),
+        "dev": False,
+    }
 
 
-_ensure_plate_core()
+def main() -> int:
+    ensure_plate_core()
+    try:
+        from plate_core.cli import main as cli_main
+    except ImportError:
+        root = _script_dir()
+        sys.path.insert(0, os.path.join(root, "src"))
+        from plate_core.cli import main as cli_main  # type: ignore
 
-try:
-    # Prefer installed package
-    from plate_core.cli import main
-except ImportError:
-    # Dev / source tree
-    ROOT = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, os.path.join(ROOT, "src"))
-    from plate_core.cli import main
+    return int(cli_main())
 
 
 if __name__ == "__main__":
