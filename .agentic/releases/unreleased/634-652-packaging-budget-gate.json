@@ -1,0 +1,26 @@
+{
+  "slug": "634-652-packaging-budget-gate",
+  "change_type": "feature",
+  "surface": "src/plate_core/packaging.py, cli.py, mcp_server.py, tests/test_packaging.py",
+  "summary": "Gate #652 marketplace packaging on live #634 budget: estimate_package_cost, build_package hydrate/block, plan op cost fields, CLI --budget-remaining/--no-live-budget, MCP fields (#757).",
+  "migration_impact": "plate_packaging_build and gh plate packaging honor durable spend remaining by default; over-budget builds return blocked. Never auto-publishes. Pass budget_remaining or use_live_budget=false to override.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer live hydrate (default) before packaging builds.",
+    "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+    "4. Disable hydrate for offline tests: --no-live-budget / use_live_budget=false.",
+    "5. Human marketplace publish remains Tasks #380/#381/#626."
+  ],
+  "agent_notes": "Parity with feature/bug/scheduled_ops/fleet #634 hydrate. Does not close parent #634 UX stub. Closes #757. Related #652 #641 #654.",
+  "breaking": false,
+  "links": [
+    "#757",
+    "#634",
+    "#652",
+    "#641",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

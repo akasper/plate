@@ -1217,12 +1217,23 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
             bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
             frags = collect_release_fragments(rdir)
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
             payload = build_package(
                 str(args.get("version") or "unreleased"),
                 frags,
                 base_dir=bdir,
                 require_approved_media=bool(args.get("require_approved_media") or False),
                 persist=not bool(args.get("no_persist") or False),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
             )
         elif name == "plate_packaging_list":
             from pathlib import Path as _P
@@ -1249,21 +1260,35 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             p = get_package(pid, base_dir=bdir) if pid else None
             if p is None and args.get("version"):
                 rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+                br = args.get("budget_remaining")
+                if br is not None:
+                    try:
+                        br = int(br)
+                    except (TypeError, ValueError):
+                        br = None
+                use_live = args.get("use_live_budget")
+                if use_live is None:
+                    use_live = True
                 built = build_package(
                     str(args.get("version")),
                     collect_release_fragments(rdir),
                     base_dir=bdir,
                     persist=False,
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
                 )
-                p = built.get("package")
-            if not p:
-                payload = {"ok": False, "error": "package not found"}
-            else:
+                if not built.get("ok"):
+                    payload = built
+                else:
+                    p = built.get("package")
+            if p is not None:
                 payload = {
                     "ok": True,
                     "markdown": render_package_markdown(p),
                     "package_id": p.get("id"),
                 }
+            elif "payload" not in locals():
+                payload = {"ok": False, "error": "package not found"}
         elif name == "plate_packaging_decide":
             from pathlib import Path as _P
 
@@ -3568,7 +3593,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_packaging_build",
-                                "description": "Build marketplace/release package with media, user narratives, onboarding proof, and planning links (#652). Never publishes.",
+                                "description": "Build marketplace/release package with media, user narratives, onboarding proof, and planning links (#652). #634 budget gate. Never publishes.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -3577,6 +3602,14 @@ def run() -> None:
                                         "base_dir": {"type": "string"},
                                         "require_approved_media": {"type": "boolean"},
                                         "no_persist": {"type": "boolean"},
+                                        "budget_remaining": {
+                                            "type": "integer",
+                                            "description": "Explicit remaining tokens; blocks when est exceeds remaining (#634).",
+                                        },
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate remaining from durable spend when budget_remaining omitted (default true).",
+                                        },
                                     },
                                 },
                             },
