@@ -1,0 +1,25 @@
+{
+  "slug": "643-human-collab-first-slice",
+  "change_type": "feature",
+  "surface": "src/plate_core/collab.py, pm.py, feed.py, agent_guidance.py, mcp_server.py, cli.py",
+  "summary": "First human/agent co-existence slice (#643): driver:human|agent|collaborative labels, collab_policy_check (no force-push on human/mixed; pause delegate on driver:human), PR authorship mix, PM skips human-driven work, feed badges, MCP plate_collab_* + gh plate collab.",
+  "migration_impact": "Optional driver:* labels on issues/PRs. PM run_cycle reports human_paused. Agents should call plate_collab_check before force-push/auto-merge. Labels must exist in repo or be created if adopted.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. To claim human ownership of an item: add label driver:human (PM/autonomy pause auto-work).",
+    "3. Collaborative handoffs: driver:collaborative + need:human-review as needed.",
+    "4. gh plate collab --action force_push --mix mixed (or plate_collab_check) before risky git ops."
+  ],
+  "agent_notes": "First slice of #643; full PM webhook/driver field and collab metrics remain follow-ups. Issue stays open as stub for richer flows. Does not close #643 if epic-scale work remains — this PR uses Closes only if slice is accepted as first ship.",
+  "breaking": false,
+  "links": [
+    "#643",
+    "#654",
+    "#660",
+    "#496",
+    "#631"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

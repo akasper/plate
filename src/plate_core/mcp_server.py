@@ -73,6 +73,12 @@ from .pm import (
     run_pm_loop,
 )
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
+from .collab import (
+    analyze_pr_authorship,
+    collab_policy_check,
+    collab_status_for_issue,
+    get_driver,
+)
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -534,6 +540,33 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 dry_run=bool(args.get("dry_run", True)),
                 create=bool(args.get("create", False)),
             )
+        elif name == "plate_collab_check":
+            labels = args.get("labels") or []
+            if isinstance(labels, str):
+                labels = [labels]
+            auth = None
+            if args.get("commits") or args.get("author_login"):
+                auth = analyze_pr_authorship(
+                    pr_number=args.get("pr_number"),
+                    author_login=args.get("author_login"),
+                    commits=list(args.get("commits") or []) if isinstance(args.get("commits"), list) else None,
+                )
+            payload = collab_policy_check(
+                str(args.get("action") or "delegate"),
+                labels=list(labels),
+                authorship=auth,
+            )
+            payload["driver"] = get_driver(list(labels))
+            if auth is not None:
+                payload["authorship"] = auth.to_dict() if hasattr(auth, "to_dict") else auth
+        elif name == "plate_collab_issue_status":
+            issue = args.get("issue") or {}
+            if isinstance(issue, str):
+                issue = {"title": issue, "labels": args.get("labels") or []}
+            if not issue.get("labels") and args.get("labels"):
+                issue = dict(issue)
+                issue["labels"] = args.get("labels")
+            payload = collab_status_for_issue(issue if isinstance(issue, dict) else {})
         elif name == "plate_ledger_record":
             payload = record_decision(
                 action_kind=str(args.get("action_kind") or "unknown"),
@@ -1662,6 +1695,32 @@ def run() -> None:
                                         "context": {"type": "string"},
                                         "create": {"type": "boolean"},
                                         "dry_run": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_collab_check",
+                                "description": "Human/agent co-existence policy check (#643): gate actions (delegate, push, force_push, auto_merge) against driver:* labels and PR authorship mix.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "action": {"type": "string"},
+                                        "labels": {"type": "array", "items": {"type": "string"}},
+                                        "author_login": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "commits": {"type": "array", "items": {"type": "object"}},
+                                    },
+                                    "required": ["action"],
+                                },
+                            },
+                            {
+                                "name": "plate_collab_issue_status",
+                                "description": "Summarize driver:* / pause-delegation state for an issue (#643).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "issue": {"type": "object"},
+                                        "labels": {"type": "array", "items": {"type": "string"}},
                                     },
                                 },
                             },
