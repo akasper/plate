@@ -1,0 +1,24 @@
+{
+  "slug": "631-660-feed-pm-queue",
+  "change_type": "feature",
+  "surface": "src/plate_core/feed.py",
+  "summary": "Rank open PM queue assignments (proposed/delegated) into the endless Q+Task feed with ask_user_question payloads and plate_pm_complete follow-through (#631/#660).",
+  "migration_impact": "Additive feed item_type pm_assignment and counts.pm_assignments. Hosts should present new options (approve_run|defer|cancel). No breaking changes to existing feed consumers.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate feed / plate_feed will include PM assignments when .agentic/pm/queue.json has proposed/delegated rows.",
+    "3. After user approves a packet, run persona work then plate_pm_complete ASSIGNMENT_ID.",
+    "4. Dry-run PM cycles populate queue without execute; still appear in feed for review."
+  ],
+  "agent_notes": "Deepens #631 feed + #660 PM loop bridge. Prefer pre-shaped ask_user_question from PM packets when present. Related to #654 Phase 2–3.",
+  "breaking": false,
+  "links": [
+    "#631",
+    "#660",
+    "#654",
+    "#648"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

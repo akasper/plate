@@ -10,7 +10,12 @@ v1 slice:
 - Integrate optional what_next + autonomy open_human_checkpoints when available
 - Pure helpers accept injected items for offline unit tests
 
-Follow-ups: full ask_user_question host bridge, Projects v2 ranking, media badges.
+Deepen (#631/#660):
+- Rank open Project Manager assignments from the durable `.agentic/pm` queue
+  (proposed/delegated) so the endless feed surfaces persona work packets with
+  ask_user_question payloads and plate_pm_complete follow-through.
+
+Follow-ups: Projects v2 ranking, media badges.
 """
 
 from __future__ import annotations
@@ -277,6 +282,27 @@ def ask_user_question_payload(item: FeedItem | dict[str, Any]) -> dict[str, Any]
             {"id": "revise", "label": "Revise", "description": "Request new version."},
             {"id": "reject", "label": "Reject", "description": "Reject proposal."},
         ]
+    elif itype in ("pm_assignment", "assignment"):
+        agent = str(d.get("agent_name") or d.get("agent_id") or "persona")
+        aid = cid or str(d.get("assignment_id") or "asg")
+        question = f"PM assignment: {title} → {agent}?"
+        options = [
+            {
+                "id": "approve_run",
+                "label": "Approve & run",
+                "description": f"Execute packet for {agent}; then plate_pm_complete {aid} --status done",
+            },
+            {
+                "id": "defer",
+                "label": "Defer",
+                "description": "Leave proposed; next PM cycle may re-rank.",
+            },
+            {
+                "id": "cancel",
+                "label": "Cancel",
+                "description": f"plate_pm_complete {aid} --status cancelled",
+            },
+        ]
     else:
         question = f"{itype}: {title}"
         options = [
@@ -295,6 +321,44 @@ def ask_user_question_payload(item: FeedItem | dict[str, Any]) -> dict[str, Any]
     }
 
 
+def _pm_assignment_to_feed_item(asg: dict[str, Any], index: int) -> FeedItem:
+    """Normalize a PM queue assignment into a FeedItem (#660 → #631)."""
+    aid = str(asg.get("assignment_id") or f"asg-{index}")
+    title = str(asg.get("work_title") or asg.get("work_id") or "PM work")
+    agent = str(asg.get("agent_name") or asg.get("agent_id") or "persona")
+    work_type = str(asg.get("work_type") or "implement")
+    status = str(asg.get("status") or "proposed")
+    impact = "high" if asg.get("requires_checkpoint") else "medium"
+    if str(asg.get("packet", {}).get("impact") or "").lower() in ("high", "critical"):
+        impact = str(asg["packet"]["impact"]).lower()
+    rank = 18 + index if status == "delegated" else 22 + index
+    if asg.get("requires_checkpoint"):
+        rank = 12 + index
+    packet = asg.get("packet") if isinstance(asg.get("packet"), dict) else {}
+    prompt = str(
+        packet.get("prompt_segment")
+        or asg.get("rationale")
+        or f"Run PM assignment {aid} as {agent} ({work_type})."
+    )
+    if asg.get("checkpoint_id"):
+        prompt += f" Open checkpoint {asg.get('checkpoint_id')} before execute."
+    prompt += f" On finish: plate_pm_complete / gh plate pm --complete {aid}."
+    return FeedItem(
+        id=aid,
+        item_type="pm_assignment",
+        number=None,
+        title=f"[{status}] {title} → {agent}",
+        rank=rank,
+        impact=impact,
+        badges=["pm", status, work_type, impact],
+        prompt_segment=prompt,
+        reason=str(asg.get("rationale") or f"PM queue ({status})"),
+        source="pm_queue",
+        body_excerpt=str(packet.get("task_summary") or title)[:240],
+        labels=[work_type, status],
+    )
+
+
 def build_feed_items(
     *,
     questions: list[dict[str, Any]] | None = None,
@@ -303,6 +367,7 @@ def build_feed_items(
     checkpoints: list[str | dict[str, Any]] | None = None,
     signal_items: list[dict[str, Any]] | None = None,
     approval_items: list[dict[str, Any]] | None = None,
+    pm_assignments: list[dict[str, Any]] | None = None,
 ) -> list[FeedItem]:
     items: list[FeedItem] = []
     for iss in questions or []:
@@ -311,6 +376,8 @@ def build_feed_items(
         items.append(issue_to_feed_item(iss, "task"))
     for i, cp in enumerate(checkpoints or []):
         items.append(_checkpoint_to_feed_item(cp, i))
+    for i, asg in enumerate(pm_assignments or []):
+        items.append(_pm_assignment_to_feed_item(asg, i))
     for i, ap in enumerate(approval_items or []):
         pid = str(ap.get("id") or f"approval-{i}")
         kind = str(ap.get("kind") or "design")
@@ -506,6 +573,18 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #660 PM durable queue → endless feed (proposed + delegated only)
+    pm_assignments: list[dict[str, Any]] = []
+    if include_autonomy:
+        try:
+            from .pm import list_pm_queue
+
+            for st in ("proposed", "delegated"):
+                for row in list_pm_queue(status=st, limit=20):
+                    pm_assignments.append(row)
+        except Exception:
+            pm_assignments = []
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,
@@ -513,13 +592,18 @@ def get_user_feed(
         checkpoints=checkpoints,
         signal_items=signal_items,
         approval_items=approval_items,
+        pm_assignments=pm_assignments,
     )
     top = items[: max(1, limit)]
-    # Prefer pre-shaped ask_user_question from approval/plan sources when present on source dicts
+    # Prefer pre-shaped ask_user_question from approval/plan/PM sources when present
     pre_payloads: dict[str, Any] = {}
     for ap in approval_items:
         if ap.get("id") and ap.get("ask_user_question"):
             pre_payloads[str(ap["id"])] = ap["ask_user_question"]
+    for asg in pm_assignments:
+        aid = asg.get("assignment_id")
+        if aid and asg.get("ask_user_question"):
+            pre_payloads[str(aid)] = asg["ask_user_question"]
 
     presentation = []
     for i, it in enumerate(top):
@@ -542,13 +626,14 @@ def get_user_feed(
     return {
         "repo": target,
         "generated_for": "user_feed",
-        "issue_refs": ["#631", "#654", "#656", "#632"],
+        "issue_refs": ["#631", "#654", "#656", "#632", "#660"],
         "timestamp": ts,
         "counts": {
             "questions": len(q_items or []),
             "tasks": len(t_items or []),
             "checkpoints": len(checkpoints),
             "approvals": len(approval_items),
+            "pm_assignments": len(pm_assignments),
             "signals": len(signal_items),
             "process": len(process_items),
             "returned": len(top),
