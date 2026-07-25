@@ -1,0 +1,25 @@
+{
+  "slug": "634-630-planning-budget-gate",
+  "change_type": "feature",
+  "surface": "src/plate_core/planning.py, cli.py, mcp_server.py, tests/test_planning.py",
+  "summary": "Gate #628/#630 feature/product Q&A planning start+build on live #634 budget: estimate_planning_cost, hydrate/block, CLI/MCP fields (#769).",
+  "migration_impact": "plate_planning_start/build and gh plate plan honor durable spend remaining by default; over-budget returns blocked. Pass budget_remaining or use_live_budget=false to override.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer live hydrate (default) before starting or building plans.",
+    "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+    "4. Offline tests: --no-live-budget / use_live_budget=false."
+  ],
+  "agent_notes": "Parity with stubs/artifacts #634 hydrate. Closes #769. Related #634 #628 #630 #654.",
+  "breaking": false,
+  "links": [
+    "#769",
+    "#634",
+    "#628",
+    "#630",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

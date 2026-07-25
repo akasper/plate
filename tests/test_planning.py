@@ -13,6 +13,7 @@ from plate_core.planning import (
     build_plan_from_session,
     build_product_plan,
     decide_pending_plan,
+    estimate_planning_cost,
     get_planning_script,
     list_pending_plans,
     load_planning_session,
@@ -32,7 +33,11 @@ class TestFeaturePlanning630(unittest.TestCase):
         self.assertIn("media_plan", ids)
 
     def test_session_advances_and_builds(self):
-        start = start_planning_session("feature", persist=False)
+        start = start_planning_session(
+            "feature", persist=False, use_live_budget=False
+        )
+        self.assertTrue(start.get("ok", True))
+        self.assertIn("cost_estimate_tokens", start)
         session = start["session"]
         self.assertFalse(session["complete"])
         self.assertIsNotNone(start["next_question"])
@@ -52,8 +57,11 @@ class TestFeaturePlanning630(unittest.TestCase):
             out = apply_planning_answer(session, text, persist=False)
             session = out["session"]
         self.assertTrue(session["complete"])
-        built = build_plan_from_session(session, persist_pending=False)
+        built = build_plan_from_session(
+            session, persist_pending=False, use_live_budget=False
+        )
         self.assertTrue(built["ok"])
+        self.assertIn("cost_estimate_tokens", built)
         plan = built["plan"]
         self.assertEqual(plan["kind"], "feature")
         self.assertIn("[Feature]", plan["title"])
@@ -82,7 +90,9 @@ class TestFeaturePlanning630(unittest.TestCase):
 
 class TestProductPlanning628(unittest.TestCase):
     def test_product_session_and_epics(self):
-        start = start_planning_session("product", persist=False)
+        start = start_planning_session(
+            "product", persist=False, use_live_budget=False
+        )
         session = start["session"]
         seq = [
             "Ship agentic SDLC",
@@ -109,7 +119,7 @@ class TestPlanningDurableTUI(unittest.TestCase):
     def test_durable_session_and_tui_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             sdir = Path(tmp) / "sessions"
-            start = start_planning_session("feature", base_dir=sdir, persist=True)
+            start = start_planning_session("feature", base_dir=sdir, persist=True, use_live_budget=False)
             self.assertIn("session_id", start)
             self.assertIn("ask_user_question", start)
             self.assertTrue(start["ask_user_question"]["allow_free_text"])
@@ -127,7 +137,7 @@ class TestPlanningDurableTUI(unittest.TestCase):
     def test_pending_plan_persisted(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            start = start_planning_session("feature", base_dir=root / "sessions", persist=True)
+            start = start_planning_session("feature", base_dir=root / "sessions", persist=True, use_live_budget=False)
             session = start["session"]
             answers_seq = [
                 "Users cannot plan features without toil",
@@ -143,7 +153,7 @@ class TestPlanningDurableTUI(unittest.TestCase):
             for text in answers_seq:
                 out = apply_planning_answer(session, text, base_dir=root / "sessions", persist=True)
                 session = out["session"]
-            built = build_plan_from_session(session, planning_root=root, persist_pending=True)
+            built = build_plan_from_session(session, planning_root=root, persist_pending=True, use_live_budget=False)
             self.assertTrue(built["ok"])
             self.assertIn("ask_user_question", built)
             self.assertTrue((root / "pending").is_dir())
@@ -156,7 +166,7 @@ class TestPlanningDurableTUI(unittest.TestCase):
             root = Path(tmp)
             sdir = root / "sessions"
             pdir = root / "pending"
-            start = start_planning_session("feature", base_dir=sdir, persist=True)
+            start = start_planning_session("feature", base_dir=sdir, persist=True, use_live_budget=False)
             session = start["session"]
             answers_seq = [
                 "problem",
@@ -173,10 +183,10 @@ class TestPlanningDurableTUI(unittest.TestCase):
                 out = apply_planning_answer(session, text, base_dir=sdir, persist=True)
                 session = out["session"]
             # incomplete session remains for feed
-            start2 = start_planning_session("product", base_dir=sdir, persist=True)
+            start2 = start_planning_session("product", base_dir=sdir, persist=True, use_live_budget=False)
             self.assertFalse(start2["session"]["complete"])
 
-            built = build_plan_from_session(session, planning_root=root, persist_pending=True)
+            built = build_plan_from_session(session, planning_root=root, persist_pending=True, use_live_budget=False)
             self.assertTrue(built["ok"])
             pid = built["plan"]["id"]
             feed = planning_feed_items(pending_dir=pdir, sessions_dir=sdir, limit=10)
@@ -210,7 +220,7 @@ class TestPlanningDurableTUI(unittest.TestCase):
             root = Path(tmp)
             sdir = root / "sessions"
             pdir = root / "pending"
-            start = start_planning_session("feature", base_dir=sdir, persist=True)
+            start = start_planning_session("feature", base_dir=sdir, persist=True, use_live_budget=False)
             session = start["session"]
             for text in [
                 "problem",
@@ -225,7 +235,7 @@ class TestPlanningDurableTUI(unittest.TestCase):
             ]:
                 out = apply_planning_answer(session, text, base_dir=sdir, persist=True)
                 session = out["session"]
-            built = build_plan_from_session(session, planning_root=root, persist_pending=True)
+            built = build_plan_from_session(session, planning_root=root, persist_pending=True, use_live_budget=False)
             pid = built["plan"]["id"]
             rev = decide_pending_plan(pid, "revise", decided_by="test", base_dir=pdir)
             self.assertTrue(rev["ok"])
@@ -249,6 +259,44 @@ class TestPlanningDurableTUI(unittest.TestCase):
             ok = decide_pending_plan(pid, "approve", base_dir=pdir, archive=True)
             self.assertTrue(ok["ok"])
             self.assertEqual(ok["status"], "approved")
+
+
+
+class TestPlanningBudget634(unittest.TestCase):
+    def test_budget_gate(self):
+        est = estimate_planning_cost(kind="feature", phase="start")
+        self.assertTrue(est["ok"])
+        self.assertGreater(est["estimated_tokens"], 0)
+        blocked = start_planning_session(
+            "feature",
+            persist=False,
+            budget_remaining=10,
+            use_live_budget=False,
+        )
+        self.assertFalse(blocked.get("ok"))
+        self.assertTrue(blocked.get("blocked"))
+        ok = start_planning_session(
+            "feature",
+            persist=False,
+            budget_remaining=est["estimated_tokens"] + 1000,
+            use_live_budget=False,
+        )
+        self.assertTrue(ok.get("ok", True))
+        session = {
+            "kind": "feature",
+            "complete": True,
+            "answers": {"problem": "p", "desired_behavior": "x"},
+            "id": "plan-x",
+        }
+        b_block = build_plan_from_session(
+            session,
+            persist_pending=False,
+            budget_remaining=10,
+            use_live_budget=False,
+        )
+        self.assertFalse(b_block.get("ok"))
+        self.assertTrue(b_block.get("blocked"))
+
 
 
 if __name__ == "__main__":

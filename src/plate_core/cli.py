@@ -898,10 +898,20 @@ def cmd_plan(args: argparse.Namespace) -> int:
             print(f"  - {step}")
         return 0
 
+    br = getattr(args, "budget_remaining", None)
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = not bool(getattr(args, "no_live_budget", False))
+
     if getattr(args, "build_file", None):
         path = Path(args.build_file)
         session = json.loads(path.read_text(encoding="utf-8"))
-        out = build_plan_from_session(session)
+        out = build_plan_from_session(
+            session, budget_remaining=br, use_live_budget=use_live
+        )
         if args.json:
             print(json.dumps(out))
             return 0 if out.get("ok") else 1
@@ -911,11 +921,22 @@ def cmd_plan(args: argparse.Namespace) -> int:
         plan = out["plan"]
         print(plan.get("title"))
         print(plan.get("body") or plan.get("summary_body") or "")
-        print(f"requires_approval={plan.get('requires_approval')}")
+        print(
+            f"requires_approval={plan.get('requires_approval')} "
+            f"est={out.get('cost_estimate_tokens')} remaining={out.get('budget_remaining')}"
+        )
         return 0
 
     # Interactive: start and optionally walk answers from --answers-file
-    start = start_planning_session(kind)
+    start = start_planning_session(
+        kind, budget_remaining=br, use_live_budget=use_live
+    )
+    if start.get("ok") is False:
+        if args.json:
+            print(json.dumps(start))
+            return 1
+        print(start.get("error") or "start blocked", file=sys.stderr)
+        return 1
     if getattr(args, "answers_file", None):
         answers = json.loads(Path(args.answers_file).read_text(encoding="utf-8"))
         session = start["session"]
@@ -925,10 +946,15 @@ def cmd_plan(args: argparse.Namespace) -> int:
                 session = out["session"]
         elif isinstance(answers, dict):
             session = {**session, "answers": answers, "complete": True, "turn": 99}
-        out = build_plan_from_session(session)
+        out = build_plan_from_session(
+            session, budget_remaining=br, use_live_budget=use_live
+        )
         if args.json:
             print(json.dumps(out))
             return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "build failed", file=sys.stderr)
+            return 1
         plan = out.get("plan") or {}
         print(plan.get("title"))
         print(plan.get("body") or plan.get("summary_body") or "")
@@ -938,7 +964,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(json.dumps(start))
         return 0
     nq = start.get("next_question") or {}
-    print(f"Started {kind} planning session.")
+    print(
+        f"Started {kind} planning session. est={start.get('cost_estimate_tokens')} "
+        f"remaining={start.get('budget_remaining')}"
+    )
     print(f"Next: [{nq.get('id')}] {nq.get('prompt')}")
     print("Record answers via MCP plate_planning_answer or --answers-file JSON array, then --build-file session.json")
     return 0
@@ -3555,6 +3584,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     plan.add_argument("--note", default="", help="Decision note")
     plan.add_argument("--by", default="cli-user", help="Actor for --decide")
+    plan.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit remaining tokens for #634 gate (overrides live hydrate)",
+    )
+    plan.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     plan.add_argument("--limit", type=int, default=20)
     plan.add_argument("--json", action="store_true")
     plan.set_defaults(func=cmd_plan)
