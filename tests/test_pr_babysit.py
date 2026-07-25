@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.pr_babysit import (
@@ -862,8 +863,9 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("default to ask_user_question (native TUI); if option promises review/babysit", persona)
-        self.assertIn("Follow guidance.", persona)
+        self.assertIn("default to ask_user_question (native TUI)", persona)
+        self.assertIn("if option promises review/babysit", persona)
+        self.assertIn("default to ask_user_question (native TUI)", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
@@ -912,7 +914,8 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("default to ask_user_question (native TUI); if option promises review/babysit", persona)
+        self.assertIn("default to ask_user_question (native TUI)", persona)
+        self.assertIn("if option promises review/babysit", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
@@ -1040,16 +1043,38 @@ class PrBabysitTests(unittest.TestCase):
         """Regression test for #503: persona, guidance, and AGENTS must enforce that Q&A options promising 'review the PR'/'babysit'/'address feedback' result in *full execution* (pr-babysit skill, isolated worktree, push to same branch, resolve threads) before next question or progress/done; never merge or advance unaddressed. (Builds on #517/#503 stub.)"""
         from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
         self.assertIn("If a choice promises \"review the PR\", \"babysit\", \"address feedback\", or similar, the agent *must* fully execute that work using the dedicated pr-babysit skill", QANDA_CURIOSITY_GUIDANCE)
-        self.assertIn("Never merge or advance with unaddressed feedback. (Addresses #503, #517.)", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Never merge or advance with unaddressed feedback.", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("#508", QANDA_CURIOSITY_GUIDANCE)
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("if option promises review/babysit, fully execute via pr-babysit before next (Addresses #503, #517)", persona)
+        self.assertIn("if option promises review/babysit, fully execute via pr-babysit before next", persona)
+        self.assertIn("#508", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
         self.assertIn("If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed.", agents)
         self.assertIn("(Addresses #503, #518, #517, #521 and closes the post-0.6.1 Q&A/babysit stub cluster under #580/#569 polish.)", agents)
+
+
+
+    def test_508_qa_follow_through_checklist(self):
+        """#508: named Q&A follow-through checklist must remain in guidance + persona."""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("Q&A Follow-Through Checklist (#508)", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Options are executable in-turn only", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Mismatch recovery", QANDA_CURIOSITY_GUIDANCE)
+        persona = Path("plugin/agents/plate.agent.md").read_text(encoding="utf-8")
+        self.assertIn("#508", persona)
+
+    def test_510_merge_gates_checklist(self):
+        """#510: Full PR Green merge-gates checklist must stay discoverable."""
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("Merge Gates Checklist (#510)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("plate_get_pr_merge_gates", QUIET_OPERATIONS_GUIDANCE)
+        persona = Path("plugin/agents/plate.agent.md").read_text(encoding="utf-8")
+        self.assertIn("#510", persona)
+        self.assertIn("one-pass Full PR Green", persona)
 
 
 if __name__ == "__main__":
