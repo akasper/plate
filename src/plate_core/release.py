@@ -49,6 +49,11 @@ class ReleaseStatusReport:
     linked_epics: list[dict] = field(default_factory=list)
     on_hold_epics: list[dict] = field(default_factory=list)
     release_track_summary: dict = field(default_factory=dict)  # e.g. {"Major": 3, "Minor": 5, "Patch": 2}
+    # GitHub Releases object for latest/current version (#594)
+    github_release_exists: bool = False
+    github_release_is_latest: bool = False
+    github_release_url: str | None = None
+    github_release_tag: str | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -68,8 +73,70 @@ class ReleaseStatusReport:
             "linked_epics": self.linked_epics,
             "on_hold_epics": self.on_hold_epics,
             "release_track_summary": self.release_track_summary,
+            "github_release_exists": self.github_release_exists,
+            "github_release_is_latest": self.github_release_is_latest,
+            "github_release_url": self.github_release_url,
+            "github_release_tag": self.github_release_tag,
         }
         return d
+
+
+def fetch_github_release_state(
+    gh: GhClient,
+    repo: str,
+    version: str | None,
+) -> dict:
+    """Query GitHub Releases for a version tag (#594).
+
+    Returns dict with keys: exists, is_latest, url, tag, warning.
+    Graceful on 404 / permission / rate-limit (exists=False, optional warning).
+    """
+    out: dict = {
+        "exists": False,
+        "is_latest": False,
+        "url": None,
+        "tag": None,
+        "warning": None,
+    }
+    if not version:
+        return out
+    ver = str(version).lstrip("v")
+    tag = f"v{ver}"
+    out["tag"] = tag
+    try:
+        existing = gh.api(f"repos/{repo}/releases/tags/{tag}")
+    except GhApiError as exc:
+        msg = str(exc).lower()
+        if "404" in msg or "not found" in msg:
+            out["warning"] = (
+                f"GitHub Release object missing for tag {tag} "
+                "(version artifacts may exist without a published Release)."
+            )
+            return out
+        out["warning"] = f"Could not query GitHub Release for {tag}: {exc}"
+        return out
+    except Exception as exc:  # network / unexpected
+        out["warning"] = f"Could not query GitHub Release for {tag}: {exc}"
+        return out
+
+    if not isinstance(existing, dict) or not existing.get("id"):
+        out["warning"] = f"GitHub Release object missing for tag {tag}."
+        return out
+
+    out["exists"] = True
+    out["url"] = existing.get("html_url") or existing.get("url")
+    # Compare to /releases/latest
+    try:
+        latest = gh.api(f"repos/{repo}/releases/latest")
+        if isinstance(latest, dict):
+            latest_tag = (latest.get("tag_name") or "").lstrip("v")
+            out["is_latest"] = latest_tag == ver or (latest.get("tag_name") == tag)
+    except GhApiError:
+        # No latest release or permissions — exists still true
+        out["is_latest"] = False
+    except Exception:
+        out["is_latest"] = False
+    return out
 
 
 @dataclass
@@ -531,6 +598,11 @@ def get_release_status(
     agentic_dir = (releases_dir.parent if releases_dir else Path(".agentic"))
     extension_release_checks = _load_extension_release_checks(agentic_dir)
 
+    # GitHub Releases state for current/latest local version (#594)
+    gh_rel = fetch_github_release_state(gh, target, latest_version or current_version)
+    if gh_rel.get("warning"):
+        warnings.append(str(gh_rel["warning"]))
+
     return ReleaseStatusReport(
         repo=target,
         release_branch_exists=release_branch_exists,
@@ -548,6 +620,10 @@ def get_release_status(
         linked_epics=linked_epics,
         on_hold_epics=on_hold_epics,
         release_track_summary=release_track_summary,
+        github_release_exists=bool(gh_rel.get("exists")),
+        github_release_is_latest=bool(gh_rel.get("is_latest")),
+        github_release_url=gh_rel.get("url"),
+        github_release_tag=gh_rel.get("tag"),
     )
 
 
