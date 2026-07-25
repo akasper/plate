@@ -47,7 +47,10 @@ from .feed import get_user_feed
 from .planning import (
     apply_planning_answer,
     build_plan_from_session,
+    decide_pending_plan,
     get_planning_script,
+    list_pending_plans,
+    planning_feed_items,
     start_planning_session,
 )
 from .epic_release_planning import (
@@ -399,6 +402,20 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = build_plan_from_session(session if isinstance(session, dict) else {})
         elif name == "plate_planning_script":
             payload = get_planning_script(str(args.get("kind") or "feature"))
+        elif name == "plate_planning_decide":
+            payload = decide_pending_plan(
+                str(args.get("plan_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                note=str(args.get("note") or ""),
+                decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
+            )
+        elif name == "plate_planning_list_pending":
+            if args.get("feed"):
+                payload = {"feed": planning_feed_items(limit=int(args.get("limit") or 20))}
+            else:
+                payload = {
+                    "pending": list_pending_plans(limit=int(args.get("limit") or 20))
+                }
         elif name == "plate_er_planning_start":
             payload = start_er_session(str(args.get("kind") or "epic"))
         elif name == "plate_er_planning_answer":
@@ -1855,7 +1872,38 @@ def run() -> None:
                                     },
                                 },
                             },
-{
+                            {
+                                "name": "plate_planning_decide",
+                                "description": "Approve/revise/reject a pending Q&A plan stub (#628/#630). Does not auto-create GitHub issues.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string", "description": "Pending plan id"},
+                                        "decision": {
+                                            "type": "string",
+                                            "description": "approve | revise | reject",
+                                        },
+                                        "note": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                    },
+                                    "required": ["plan_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_planning_list_pending",
+                                "description": "List pending plan stubs or planning feed items (pending + incomplete sessions).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "feed": {
+                                            "type": "boolean",
+                                            "description": "If true, return planning_feed_items shape",
+                                        },
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
                                 "name": "plate_er_planning_start",
                                 "description": "Start Q&A epic (#640) or release (#629) planning session. Returns first ask_user_question prompt.",
                                 "inputSchema": {

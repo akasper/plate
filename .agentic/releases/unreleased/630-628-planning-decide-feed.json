@@ -1,0 +1,24 @@
+{
+  "slug": "630-628-planning-decide-feed",
+  "change_type": "feature",
+  "surface": "src/plate_core/planning.py, feed.py, cli.py, mcp_server.py",
+  "summary": "Harden #628/#630: decide_pending_plan (approve|revise|reject + archive), planning_feed_items (pending plans + incomplete sessions with ask_user_question), feed/CLI/MCP surfaces (plate_planning_decide, --list-pending/--decide/--feed).",
+  "migration_impact": "New MCP tools plate_planning_decide and plate_planning_list_pending; CLI gh plate plan --decide/--list-pending/--feed. Pending plans always carry ask_user_question. Approve does not auto-create GitHub issues. No config break.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. After plate_planning_build, present plan ask_user_question from feed or plan payload.",
+    "3. Human/host: plate_planning_decide plan_id approve|revise|reject (or gh plate plan --decide ID --decision approve).",
+    "4. On approve: agent creates GitHub stubs from plan body/labels; on revise: resume session_id."
+  ],
+  "agent_notes": "Never create issues until plan status=approved. Feed ranks planning_approval ~16 and incomplete sessions ~22. Decided plans archive under .agentic/planning/decided/.",
+  "breaking": false,
+  "links": [
+    "#630",
+    "#628",
+    "#631",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

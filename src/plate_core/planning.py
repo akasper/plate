@@ -231,10 +231,274 @@ def save_pending_plan(
     out["id"] = pid
     out["status"] = out.get("status") or "pending_approval"
     out["updated_at"] = _now()
+    if "created_at" not in out:
+        out["created_at"] = out["updated_at"]
+    # Ensure feed-ready approval payload is always present (#628/#630 harden)
+    if not out.get("ask_user_question"):
+        out["ask_user_question"] = pending_plan_ask_user_payload(out)
+    if not out.get("approval_prompt"):
+        out["approval_prompt"] = out["ask_user_question"].get("question")
+    if not out.get("prompt_segment"):
+        out["prompt_segment"] = (
+            f"Present plan approval via ask_user_question for {out.get('id')}; "
+            f"decide with plate_planning_decide / gh plate plan --decide."
+        )
     path = root / f"{re.sub(r'[^a-zA-Z0-9._-]', '_', pid)}.json"
     path.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     out["path"] = str(path)
     return out
+
+
+def get_pending_plan(plan_id: str, *, base_dir: Path | None = None) -> dict[str, Any] | None:
+    """Load one pending (or decided) plan by id."""
+    if not plan_id:
+        return None
+    root = base_dir if base_dir is not None else PENDING_DIR
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "_", plan_id)
+    path = root / f"{safe}.json"
+    if not path.is_file():
+        # prefix / glob
+        if root.is_dir():
+            matches = sorted(root.glob(f"{safe}*.json"))
+            if not matches:
+                # also search decided sibling
+                decided = root.parent / "decided" if root.name == "pending" else root / "decided"
+                if decided.is_dir():
+                    matches = sorted(decided.glob(f"{safe}*.json"))
+                if not matches:
+                    return None
+            path = matches[0]
+        else:
+            return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["path"] = str(path)
+        return data
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def pending_plan_ask_user_payload(plan: dict[str, Any]) -> dict[str, Any]:
+    """TUI payload for approving a pending Q&A plan (#628/#630)."""
+    pid = str(plan.get("id") or "plan")
+    kind = str(plan.get("kind") or "feature")
+    title = str(plan.get("title") or "untitled plan")[:80]
+    return {
+        "item_id": pid,
+        "item_type": "planning_approval",
+        "kind": kind,
+        "question": f"Approve {kind} plan: {title}?",
+        "options": [
+            {
+                "id": "approve",
+                "label": "Approve",
+                "description": f"plate_planning_decide {pid} approve — create GitHub stubs (host)",
+            },
+            {
+                "id": "revise",
+                "label": "Revise",
+                "description": f"plate_planning_decide {pid} revise — return to Q&A, no issues",
+            },
+            {
+                "id": "reject",
+                "label": "Reject",
+                "description": f"plate_planning_decide {pid} reject — drop plan",
+            },
+        ],
+        "multi_select": False,
+    }
+
+
+def decide_pending_plan(
+    plan_id: str,
+    decision: str,
+    *,
+    note: str = "",
+    decided_by: str = "human",
+    base_dir: Path | None = None,
+    archive: bool = True,
+) -> dict[str, Any]:
+    """Record approve|revise|reject on a pending plan and optionally archive to decided/.
+
+    Approve does **not** auto-create GitHub issues (agent/host owns create);
+    it marks the plan approved and returns create instructions from the plan body.
+    """
+    plan = get_pending_plan(plan_id, base_dir=base_dir)
+    if not plan:
+        return {"ok": False, "error": f"pending plan not found: {plan_id}"}
+    status = str(plan.get("status") or "")
+    if status not in ("pending_approval", "pending", ""):
+        return {
+            "ok": False,
+            "error": f"plan already decided: status={status}",
+            "plan": plan,
+        }
+    dec = (decision or "").lower().strip()
+    mapping = {
+        "approve": "approved",
+        "approved": "approved",
+        "revise": "revise_requested",
+        "reject": "rejected",
+        "rejected": "rejected",
+    }
+    if dec not in mapping:
+        return {
+            "ok": False,
+            "error": f"invalid decision '{decision}'; use approve|revise|reject",
+        }
+    plan["status"] = mapping[dec]
+    plan["decided_by"] = decided_by
+    plan["decision_note"] = note or None
+    plan["decided_at"] = _now()
+    plan["updated_at"] = plan["decided_at"]
+    plan["ask_user_question"] = None  # no longer pending
+
+    pending_root = base_dir if base_dir is not None else PENDING_DIR
+    # Write update in place first
+    path = Path(plan.get("path") or (pending_root / f"{re.sub(r'[^a-zA-Z0-9._-]', '_', plan['id'])}.json"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    if archive and plan["status"] in ("approved", "rejected", "revise_requested"):
+        decided_root = pending_root.parent / "decided" if pending_root.name == "pending" else pending_root / "decided"
+        decided_root.mkdir(parents=True, exist_ok=True)
+        dest = decided_root / path.name
+        dest.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        plan["path"] = str(dest)
+        plan["archived"] = True
+
+    next_steps: list[str] = []
+    if plan["status"] == "approved":
+        next_steps = [
+            "Create GitHub issue(s) from plan title/body/labels (agent/host)",
+            "Attach milestone/Epic link from plan epic_link if present",
+            "For linked Design/Research stubs, open as child issues with need:refinement",
+            "Do not merge implementation without Feature PR ceremony",
+        ]
+    elif plan["status"] == "revise_requested":
+        next_steps = [
+            f"Resume or restart planning session session_id={plan.get('session_id')}",
+            "plate_planning_start + answer revised fields; rebuild pending plan",
+        ]
+    else:
+        next_steps = ["Plan rejected; no GitHub issues created."]
+
+    return {
+        "ok": True,
+        "plan": plan,
+        "decision": dec,
+        "status": plan["status"],
+        "next_steps": next_steps,
+        "marker": plan.get("marker") or render_plan_marker(plan),
+    }
+
+
+def list_active_planning_sessions(
+    *,
+    base_dir: Path | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Incomplete durable sessions that can resume in the feed."""
+    root = base_dir if base_dir is not None else SESSIONS_DIR
+    if not root.is_dir():
+        return []
+    rows: list[dict[str, Any]] = []
+    for f in sorted(root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("complete"):
+            continue
+        data["path"] = str(f)
+        rows.append(data)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def planning_feed_items(
+    *,
+    pending_dir: Path | None = None,
+    sessions_dir: Path | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Feed rows for pending plan approvals + incomplete planning sessions (#628/#630)."""
+    items: list[dict[str, Any]] = []
+    for pl in list_pending_plans(base_dir=pending_dir, limit=limit):
+        if str(pl.get("status") or "pending_approval") not in (
+            "pending_approval",
+            "pending",
+            "",
+        ):
+            continue
+        auj = pl.get("ask_user_question") or pending_plan_ask_user_payload(pl)
+        pid = str(pl.get("id") or "plan")
+        items.append(
+            {
+                "id": pid,
+                "item_type": "planning_approval",
+                "kind": pl.get("kind") or "feature",
+                "title": pl.get("title") or "Pending plan",
+                "status": pl.get("status") or "pending_approval",
+                "rank": 16,
+                "impact": "high",
+                "reason": "Q&A plan awaiting approval (#628/#630)",
+                "approval_prompt": auj.get("question"),
+                "prompt_segment": pl.get("prompt_segment")
+                or (
+                    f"Approve plan {pid}: plate_planning_decide {pid} approve|revise|reject"
+                ),
+                "summary": (pl.get("body") or "")[:240],
+                "ask_user_question": auj,
+                "source": "planning",
+                "session_id": pl.get("session_id"),
+            }
+        )
+    for sess in list_active_planning_sessions(base_dir=sessions_dir, limit=max(1, limit // 2)):
+        sid = str(sess.get("id") or "")
+        kind = str(sess.get("kind") or "feature")
+        turn = int(sess.get("turn") or 0)
+        qs = _questions_for(kind)
+        total = len(qs)
+        nq = qs[turn] if turn < total else None
+        items.append(
+            {
+                "id": sid,
+                "item_type": "planning_session",
+                "kind": kind,
+                "title": f"Resume {kind} planning ({turn}/{total})",
+                "status": "in_progress",
+                "rank": 22,
+                "impact": "medium",
+                "reason": "Incomplete Q&A planning session",
+                "prompt_segment": (
+                    f"Resume session {sid}: plate_planning_answer session_id={sid}"
+                ),
+                "ask_user_question": question_ask_user_payload(
+                    nq, kind=kind, turn=turn, total=total
+                )
+                if nq
+                else {
+                    "question": f"Session {sid} ready to build?",
+                    "options": [
+                        {
+                            "id": "build",
+                            "label": "Build plan",
+                            "description": "plate_planning_build",
+                        }
+                    ],
+                },
+                "source": "planning",
+                "session_id": sid,
+            }
+        )
+    items.sort(key=lambda x: (int(x.get("rank") or 99), str(x.get("title") or "")))
+    return items[: max(1, limit)]
 
 
 def question_ask_user_payload(
