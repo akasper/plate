@@ -205,10 +205,11 @@ def propose_artifact(
     out["ok"] = True
     out["path"] = str(path)
     out["marker"] = render_approval_marker(rec)
-    out["cost_estimate_tokens"] = int(cost_est.get("estimated_tokens") or 0)
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    out["cost_estimate_tokens"] = est_tokens
     out["budget_remaining"] = effective_remaining
     out["cost_estimate"] = cost_est
-    out["notes"] = budget_notes
+    out["notes"] = list(budget_notes)
     out["prompt_segment"] = (
         f"Present {k} artifact '{rec.title}' for approval via ask_user_question. "
         f"Options: Approve | Revise (comment) | Reject. Summary: {rec.summary[:200]}. "
@@ -218,6 +219,18 @@ def propose_artifact(
         f"Approve this {k}? (#{related_issue or 'n/a'}) — Approve / Revise / Reject"
     )
     out["ask_user_question"] = ask_user_question_payload(out)
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="artifact_propose",
+            reason=f"propose_artifact:{pid}",
+        )
+    except Exception:
+        pass
     return out
 
 
@@ -385,14 +398,27 @@ def resubmit_proposal(
     out["ok"] = True
     out["path"] = str(path)
     out["marker"] = render_approval_marker(rec)
-    out["cost_estimate_tokens"] = int(cost_est.get("estimated_tokens") or 0)
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    out["cost_estimate_tokens"] = est_tokens
     out["budget_remaining"] = effective_remaining
     out["cost_estimate"] = cost_est
-    out["notes"] = budget_notes
+    out["notes"] = list(budget_notes)
     out["ask_user_question"] = ask_user_question_payload(out)
     out["prompt_segment"] = (
         f"Resubmitted {rec.kind} v{rec.version} '{rec.title}' for approval via ask_user_question."
     )
+    try:
+        from .autonomy import apply_live_budget_charge
+
+        apply_live_budget_charge(
+            out,
+            tokens=est_tokens,
+            use_live_budget=use_live_budget,
+            action_kind="artifact_resubmit",
+            reason=f"resubmit_proposal:{rec.id}",
+        )
+    except Exception:
+        pass
     return out
 
 

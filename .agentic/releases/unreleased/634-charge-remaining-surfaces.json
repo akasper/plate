@@ -1,0 +1,17 @@
+{
+  "slug": "634-charge-remaining-surfaces",
+  "change_type": "feature",
+  "surface": "src/plate_core/packaging.py, monitoring.py, stubs.py, design_validation.py, design_research_approval.py",
+  "summary": "Charge durable spend on live success for packaging build, discussion/market monitoring, stub author/create, design contract propose, and Design/Research artifact propose/resubmit (#779/#634).",
+  "migration_impact": "More live gated actions now deplete spend.json after success. Keep use_live_budget=false in unit tests.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Expect spent_today growth after live package/monitor/stub/design/artifact success.",
+    "3. Inspect with gh plate autonomy --budget.",
+    "4. Tests: use_live_budget=false."
+  ],
+  "agent_notes": "Completes the #634 charge-on-success pass started in #775–#778. Loops (feature/bug) already hydrate; charge there is optional follow-up.",
+  "breaking": false,
+  "links": ["#779", "#634", "#777", "#778", "#654"],
+  "requires": ["0.7.2"]
+}
