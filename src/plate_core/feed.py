@@ -233,6 +233,68 @@ def _checkpoint_to_feed_item(cp: str | dict[str, Any], index: int) -> FeedItem:
     )
 
 
+def ask_user_question_payload(item: FeedItem | dict[str, Any]) -> dict[str, Any]:
+    """Native TUI payload for one feed item (#631 host bridge).
+
+    Hosts should call ask_user_question with `question` + `options` (labels only for
+    multi-choice UIs). Option ids encode the intended follow-through for agents.
+    """
+    if isinstance(item, FeedItem):
+        d = item.to_dict()
+    else:
+        d = dict(item)
+    itype = str(d.get("item_type") or d.get("type") or "signal")
+    title = str(d.get("title") or "Feed item")
+    number = d.get("number")
+    num = f"#{number} " if number else ""
+    cid = str(d.get("id") or "")
+
+    if itype == "question":
+        question = f"Answer Question {num}{title}".strip()
+        options = [
+            {"id": "answer_now", "label": "Answer now", "description": "Capture answer + provenance; run contemplation."},
+            {"id": "defer", "label": "Defer", "description": "Leave open; surface again later."},
+            {"id": "block", "label": "Mark blocking", "description": "Treat as hard blocker for related work."},
+        ]
+    elif itype == "task":
+        question = f"Human Task {num}{title} — status?".strip()
+        options = [
+            {"id": "show_instructions", "label": "Show instructions", "description": "Display body; human acts externally."},
+            {"id": "done_signal", "label": "Done signal ready", "description": "Human will post <!-- PLATE-TASK-CLOSED --> (agent never fabricates)."},
+            {"id": "still_blocked", "label": "Still blocked", "description": "Keep open; no auto-close."},
+        ]
+    elif itype == "checkpoint":
+        question = f"Checkpoint {cid}: {title}"
+        options = [
+            {"id": "approve", "label": "Approve", "description": f"plate_checkpoint_decide / gh plate checkpoint --decide {cid} --decision approve"},
+            {"id": "revise", "label": "Revise", "description": "Request changes; keep autonomy paused."},
+            {"id": "reject", "label": "Reject", "description": "Reject gated action; do not proceed."},
+        ]
+    elif itype in ("approval", "design", "research"):
+        question = f"Approve artifact: {title}"
+        options = [
+            {"id": "approve", "label": "Approve", "description": "plate_artifact_decide approve (authoritative)."},
+            {"id": "revise", "label": "Revise", "description": "Request new version."},
+            {"id": "reject", "label": "Reject", "description": "Reject proposal."},
+        ]
+    else:
+        question = f"{itype}: {title}"
+        options = [
+            {"id": "act", "label": "Act on this", "description": str(d.get("prompt_segment") or d.get("reason") or "Follow prompt_segment.")},
+            {"id": "skip", "label": "Skip for now", "description": "Leave in feed; pick next item."},
+        ]
+
+    return {
+        "item_id": cid,
+        "item_type": itype,
+        "number": number,
+        "question": question,
+        "options": options,
+        "prompt_segment": str(d.get("prompt_segment") or ""),
+        "multi_select": False,
+    }
+
+
 def build_feed_items(
     *,
     questions: list[dict[str, Any]] | None = None,
@@ -240,6 +302,7 @@ def build_feed_items(
     process_items: list[dict[str, Any]] | None = None,
     checkpoints: list[str | dict[str, Any]] | None = None,
     signal_items: list[dict[str, Any]] | None = None,
+    approval_items: list[dict[str, Any]] | None = None,
 ) -> list[FeedItem]:
     items: list[FeedItem] = []
     for iss in questions or []:
@@ -248,6 +311,32 @@ def build_feed_items(
         items.append(issue_to_feed_item(iss, "task"))
     for i, cp in enumerate(checkpoints or []):
         items.append(_checkpoint_to_feed_item(cp, i))
+    for i, ap in enumerate(approval_items or []):
+        pid = str(ap.get("id") or f"approval-{i}")
+        kind = str(ap.get("kind") or "design")
+        title = str(ap.get("title") or pid)
+        items.append(
+            FeedItem(
+                id=pid,
+                item_type="approval",
+                number=None,
+                title=f"[{kind}] {title}",
+                rank=14 + i,
+                impact="high",
+                badges=["approval", kind, str(ap.get("status") or "pending")],
+                prompt_segment=str(
+                    ap.get("approval_prompt")
+                    or ap.get("prompt_segment")
+                    or (
+                        f"Present {kind} artifact '{title}' via ask_user_question; "
+                        f"decide with plate_artifact_decide {pid}."
+                    )
+                ),
+                reason="Pending Design/Research approval (#632)",
+                source="approvals_ledger",
+                body_excerpt=str(ap.get("summary") or ap.get("path") or "")[:240],
+            )
+        )
     for i, sig in enumerate(signal_items or []):
         stype = str(sig.get("type") or "signal")
         items.append(
@@ -383,16 +472,26 @@ def get_user_feed(
         except Exception:
             pass
 
+    approval_items: list[dict[str, Any]] = []
+    try:
+        from .design_research_approval import list_proposals
+
+        approval_items = list_proposals(status="pending", limit=15)
+    except Exception:
+        approval_items = []
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,
         process_items=process_items,
         checkpoints=checkpoints,
         signal_items=signal_items,
+        approval_items=approval_items,
     )
     top = items[: max(1, limit)]
-    presentation = [
-        {
+    presentation = []
+    for i, it in enumerate(top):
+        row = {
             "index": i + 1,
             "id": it.id,
             "type": it.item_type,
@@ -403,19 +502,20 @@ def get_user_feed(
             "url": it.url,
             "prompt_segment": it.prompt_segment,
             "reason": it.reason,
+            "ask_user_question": ask_user_question_payload(it),
         }
-        for i, it in enumerate(top)
-    ]
+        presentation.append(row)
     ts = datetime.now(timezone.utc).isoformat()
     return {
         "repo": target,
         "generated_for": "user_feed",
-        "issue_refs": ["#631", "#654", "#656"],
+        "issue_refs": ["#631", "#654", "#656", "#632"],
         "timestamp": ts,
         "counts": {
             "questions": len(q_items or []),
             "tasks": len(t_items or []),
             "checkpoints": len(checkpoints),
+            "approvals": len(approval_items),
             "signals": len(signal_items),
             "process": len(process_items),
             "returned": len(top),
@@ -433,8 +533,9 @@ def get_user_feed(
             "tasks": fetch_error_t,
         },
         "tui_hint": (
-            "Present presentation[] via native ask_user_question one-at-a-time; "
-            "for Task items do not auto-complete — wait for human PLATE-TASK-CLOSED."
+            "Present presentation[].ask_user_question one-at-a-time via native ask_user_question "
+            "(question + options labels). For Task items do not auto-complete — wait for human "
+            "PLATE-TASK-CLOSED. Checkpoints/approvals: decide only after user chooses."
         ),
         "markdown": format_feed_markdown(target, top),
         "marker": render_feed_marker(target, top, ts),

@@ -1,0 +1,25 @@
+{
+  "slug": "631-feed-ask-user-question-payloads",
+  "change_type": "feature",
+  "surface": "src/plate_core/feed.py, tests/test_feed.py",
+  "summary": "Deepen #631 endless feed: each presentation item includes ask_user_question payload (question+options); pending #632 Design/Research approvals ranked into feed; host TUI hint updated.",
+  "migration_impact": "plate_feed / gh plate feed presentation[] gains ask_user_question object. counts.approvals added. No breaking schema for prior fields.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Hosts: call ask_user_question with presentation[i].ask_user_question.question and option labels one-at-a-time.",
+    "3. Map option ids (approve/revise/reject/answer_now/done_signal) to plate_checkpoint_decide / plate_artifact_decide / contemplation / Task done-signal rules.",
+    "4. Never auto-complete Task items; wait for <!-- PLATE-TASK-CLOSED -->."
+  ],
+  "agent_notes": "Prefer plate_feed before ad-hoc issue scans for user-facing work. Checkpoints and approvals outrank low-risk Questions. Full Projects v2 ranking remains follow-up.",
+  "breaking": false,
+  "links": [
+    "#631",
+    "#632",
+    "#654",
+    "#656",
+    "#648"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
