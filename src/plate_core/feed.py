@@ -309,13 +309,70 @@ def ask_user_question_payload(item: FeedItem | dict[str, Any]) -> dict[str, Any]
             {"id": "revise", "label": "Revise", "description": "Request changes; keep autonomy paused."},
             {"id": "reject", "label": "Reject", "description": "Reject gated action; do not proceed."},
         ]
-    elif itype in ("approval", "design", "research"):
-        question = f"Approve artifact: {title}"
-        options = [
-            {"id": "approve", "label": "Approve", "description": "plate_artifact_decide approve (authoritative)."},
-            {"id": "revise", "label": "Revise", "description": "Request new version."},
-            {"id": "reject", "label": "Reject", "description": "Reject proposal."},
-        ]
+    elif itype in (
+        "approval",
+        "design",
+        "research",
+        "artifact_approval",
+        "planning_approval",
+        "er_planning_approval",
+    ):
+        status = str(d.get("status") or "pending")
+        if status in ("", "pending") and isinstance(d.get("labels"), list) and len(d["labels"]) >= 2:
+            # badges/labels often carry [kind, status]
+            status = str(d["labels"][1] or status)
+        labels = d.get("labels") if isinstance(d.get("labels"), list) else []
+        kind = str(d.get("kind") or (labels[0] if labels else "artifact"))
+        if itype in ("planning_approval",) or kind in ("feature", "product"):
+            decide = f"plate_planning_decide {cid}"
+            resubmit = f"plate_planning_resubmit {cid}"
+            noun = "plan"
+        elif itype in ("er_planning_approval",) or kind in ("epic", "release"):
+            decide = f"plate_er_planning_decide {cid}"
+            resubmit = f"plate_er_planning_resubmit {cid}"
+            noun = "plan"
+        else:
+            decide = f"plate_artifact_decide {cid}"
+            resubmit = f"plate_artifact_resubmit {cid}"
+            noun = "artifact"
+        if status in ("revise_requested", "revised"):
+            question = f"Resubmit revised {noun}: {title}"
+            options = [
+                {
+                    "id": "resubmit",
+                    "label": "Resubmit for approval",
+                    "description": resubmit,
+                },
+                {
+                    "id": "reject",
+                    "label": "Reject",
+                    "description": f"{decide} reject",
+                },
+                {
+                    "id": "skip",
+                    "label": "Defer",
+                    "description": "Leave revised; re-surface next feed cycle.",
+                },
+            ]
+        else:
+            question = f"Approve {noun}: {title}"
+            options = [
+                {
+                    "id": "approve",
+                    "label": "Approve",
+                    "description": f"{decide} approve (host creates issues if plan; artifact becomes authoritative).",
+                },
+                {
+                    "id": "revise",
+                    "label": "Revise",
+                    "description": f"{decide} revise — stays actionable until resubmit.",
+                },
+                {
+                    "id": "reject",
+                    "label": "Reject",
+                    "description": f"{decide} reject",
+                },
+            ]
     elif itype in ("feature_loop", "bug_loop"):
         stage = str(d.get("stage") or "")
         kind = "feature" if itype == "feature_loop" else "bug"
@@ -531,26 +588,69 @@ def build_feed_items(
         pid = str(ap.get("id") or f"approval-{i}")
         kind = str(ap.get("kind") or "design")
         title = str(ap.get("title") or pid)
+        status = str(ap.get("status") or "pending")
+        # Honor source-provided ranks (revise_requested / revised sort higher) (#656 glue)
+        try:
+            rank = int(ap.get("rank")) if ap.get("rank") is not None else (14 + i)
+        except (TypeError, ValueError):
+            rank = 14 + i
+        itype = str(ap.get("item_type") or ap.get("type") or "approval")
+        # Normalize to first-class feed types for presentation fallback
+        if itype in (
+            "planning_approval",
+            "er_planning_approval",
+            "artifact_approval",
+            "planning_session",
+            "er_planning_session",
+        ):
+            feed_type = itype
+        elif kind in ("feature", "product", "epic", "release"):
+            feed_type = (
+                "er_planning_approval"
+                if kind in ("epic", "release")
+                else "planning_approval"
+            )
+        elif kind in ("design", "research"):
+            feed_type = "artifact_approval"
+        else:
+            feed_type = "approval"
+        reason = str(
+            ap.get("reason")
+            or (
+                "Revised plan/artifact awaiting resubmit"
+                if status in ("revise_requested", "revised")
+                else "Pending Design/Research/plan approval (#632/#628/#640)"
+            )
+        )
+        source = str(
+            ap.get("source")
+            or (
+                "planning"
+                if "planning" in feed_type
+                else ("er_planning" if "er_planning" in feed_type else "approvals_ledger")
+            )
+        )
         items.append(
             FeedItem(
                 id=pid,
-                item_type="approval",
+                item_type=feed_type,
                 number=None,
                 title=f"[{kind}] {title}",
-                rank=14 + i,
-                impact="high",
-                badges=["approval", kind, str(ap.get("status") or "pending")],
+                rank=rank,
+                impact=str(ap.get("impact") or "high"),
+                badges=["approval", kind, status],
                 prompt_segment=str(
                     ap.get("approval_prompt")
                     or ap.get("prompt_segment")
                     or (
-                        f"Present {kind} artifact '{title}' via ask_user_question; "
-                        f"decide with plate_artifact_decide {pid}."
+                        f"Present {kind} '{title}' via ask_user_question; "
+                        f"decide/resubmit with plate_*_decide / plate_*_resubmit {pid}."
                     )
                 ),
-                reason="Pending Design/Research approval (#632)",
-                source="approvals_ledger",
+                reason=reason,
+                source=source,
                 body_excerpt=str(ap.get("summary") or ap.get("path") or "")[:240],
+                labels=[kind, status],
             )
         )
     for i, sig in enumerate(signal_items or []):
@@ -719,9 +819,14 @@ def get_user_feed(
             approval_items.append(
                 {
                     "id": shaped.get("id"),
+                    "item_type": shaped.get("item_type") or "artifact_approval",
                     "kind": shaped.get("kind"),
                     "title": shaped.get("title"),
                     "status": shaped.get("status") or "pending",
+                    "rank": shaped.get("rank"),
+                    "impact": shaped.get("impact") or "high",
+                    "reason": shaped.get("reason"),
+                    "source": "approvals_ledger",
                     "approval_prompt": shaped.get("approval_prompt"),
                     "prompt_segment": shaped.get("prompt_segment"),
                     "summary": shaped.get("reason") or "",
@@ -738,9 +843,14 @@ def get_user_feed(
             approval_items.append(
                 {
                     "id": pl.get("id"),
-                    "kind": pl.get("kind") or pl.get("item_type") or "feature",
+                    "item_type": pl.get("item_type") or "planning_approval",
+                    "kind": pl.get("kind") or "feature",
                     "title": pl.get("title") or "Pending plan",
                     "status": pl.get("status") or "pending_approval",
+                    "rank": pl.get("rank"),
+                    "impact": pl.get("impact") or "high",
+                    "reason": pl.get("reason"),
+                    "source": pl.get("source") or "planning",
                     "approval_prompt": pl.get("approval_prompt") or pl.get("prompt_segment"),
                     "prompt_segment": pl.get("prompt_segment"),
                     "summary": pl.get("summary") or "",
@@ -757,9 +867,14 @@ def get_user_feed(
             approval_items.append(
                 {
                     "id": pl.get("id"),
-                    "kind": pl.get("kind") or pl.get("item_type") or "epic",
+                    "item_type": pl.get("item_type") or "er_planning_approval",
+                    "kind": pl.get("kind") or "epic",
                     "title": pl.get("title") or "Pending ER plan",
                     "status": pl.get("status") or "pending_approval",
+                    "rank": pl.get("rank"),
+                    "impact": pl.get("impact") or "high",
+                    "reason": pl.get("reason"),
+                    "source": pl.get("source") or "er_planning",
                     "approval_prompt": pl.get("approval_prompt") or pl.get("prompt_segment"),
                     "prompt_segment": pl.get("prompt_segment"),
                     "summary": pl.get("summary") or "",
