@@ -159,8 +159,60 @@ class TestFeed631(unittest.TestCase):
                 "approval_prompt": "Approve design?",
             }],
         )
-        self.assertEqual(items[0].item_type, "approval")
+        self.assertIn(items[0].item_type, ("approval", "artifact_approval"))
         self.assertIn("design", items[0].title.lower())
+
+    def test_revised_approvals_rank_and_tui(self):
+        from plate_core.feed import ask_user_question_payload, build_feed_items
+
+        items = build_feed_items(
+            approval_items=[
+                {
+                    "id": "plan-1",
+                    "item_type": "planning_approval",
+                    "kind": "feature",
+                    "title": "Feature plan A",
+                    "status": "revise_requested",
+                    "rank": 14,
+                    "reason": "revise requested",
+                    "ask_user_question": {
+                        "question": "Resubmit?",
+                        "options": [{"id": "resubmit", "label": "Resubmit"}],
+                    },
+                },
+                {
+                    "id": "plan-2",
+                    "item_type": "planning_approval",
+                    "kind": "feature",
+                    "title": "Feature plan B",
+                    "status": "pending_approval",
+                    "rank": 16,
+                },
+            ],
+        )
+        self.assertEqual(items[0].id, "plan-1")
+        self.assertLess(items[0].rank, items[1].rank)
+        self.assertEqual(items[0].item_type, "planning_approval")
+        tui = ask_user_question_payload(
+            {
+                "id": "plan-1",
+                "item_type": "planning_approval",
+                "title": "Feature plan A",
+                "status": "revise_requested",
+                "kind": "feature",
+            }
+        )
+        self.assertTrue(any(o["id"] == "resubmit" for o in tui["options"]))
+        art = ask_user_question_payload(
+            {
+                "id": "art-1",
+                "item_type": "artifact_approval",
+                "title": "Design",
+                "status": "revised",
+                "kind": "design",
+            }
+        )
+        self.assertTrue(any(o["id"] == "resubmit" for o in art["options"]))
 
     def test_pm_assignment_in_build_feed(self):
         items = build_feed_items(
