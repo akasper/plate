@@ -35,6 +35,7 @@ downstream repos.
 | `breaking` | Boolean — `true` if downstream repos break without migration |
 | `links` | Related issue / PR references |
 | `requires` | Dependency version(s) |
+| `media` | Array of demo media for release notes (#635): `{type: gif\|video\|image\|link, path?, url?, caption?, approval_status?}` |
 
 ## When to use migration_guidance
 
