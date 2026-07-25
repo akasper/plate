@@ -472,7 +472,20 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     "pending": list_pending_plans(limit=int(args.get("limit") or 20))
                 }
         elif name == "plate_er_planning_start":
-            payload = start_er_session(str(args.get("kind") or "epic"))
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = start_er_session(
+                str(args.get("kind") or "epic"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
         elif name == "plate_er_planning_answer":
             session = args.get("session") or {}
             if isinstance(session, str):
@@ -492,7 +505,20 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     session = json.loads(session)
                 except Exception:
                     session = {}
-            payload = build_er_plan_from_session(session if isinstance(session, dict) else {})
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = build_er_plan_from_session(
+                session if isinstance(session, dict) else {},
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
         elif name == "plate_er_planning_script":
             payload = get_er_script(str(args.get("kind") or "epic"))
         elif name == "plate_er_planning_decide":
@@ -2231,11 +2257,13 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_er_planning_start",
-                                "description": "Start Q&A epic (#640) or release (#629) planning session. Returns first ask_user_question prompt.",
+                                "description": "Start Q&A epic (#640) or release (#629) planning session. Returns first ask_user_question prompt. #634 budget gate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "kind": {"type": "string", "description": "epic | release"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                 },
                             },
@@ -2254,11 +2282,13 @@ def run() -> None:
                             },
 {
                                 "name": "plate_er_planning_build",
-                                "description": "Build Epic tree or Release plan from session for human approval (#640/#629).",
+                                "description": "Build Epic tree or Release plan from session for human approval (#640/#629). #634 budget gate.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "session": {"type": "object"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
                                     },
                                     "required": ["session"],
                                 },

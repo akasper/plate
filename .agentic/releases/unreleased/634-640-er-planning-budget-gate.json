@@ -1,0 +1,26 @@
+{
+  "slug": "634-640-er-planning-budget-gate",
+  "change_type": "feature",
+  "surface": "src/plate_core/epic_release_planning.py, cli.py, mcp_server.py, tests/test_epic_release_planning.py",
+  "summary": "Gate #629/#640 epic/release Q&A planning start+build on live #634 budget: estimate_er_planning_cost, hydrate/block, CLI/MCP fields (#771).",
+  "migration_impact": "plate_er_planning_start/build and gh plate er-plan honor durable spend remaining by default; over-budget returns blocked. Pass budget_remaining or use_live_budget=false to override.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer live hydrate (default) before starting or building epic/release plans.",
+    "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+    "4. Offline tests: --no-live-budget / use_live_budget=false."
+  ],
+  "agent_notes": "Parity with feature/product planning #634 hydrate. Closes #771. Related #634 #629 #640 #654 #769.",
+  "breaking": false,
+  "links": [
+    "#771",
+    "#634",
+    "#629",
+    "#640",
+    "#654",
+    "#769"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
