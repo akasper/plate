@@ -1,0 +1,523 @@
+"""Autonomous bug resolution loop orchestration (#638).
+
+State machine that drives end-to-end bug fix work:
+  plan → open_pr_draft → add_failing_test → implement_fix → ready_for_review
+  → babysit → human_checkpoint? → merge_eligible → done
+
+Durable runs under .agentic/bug_loops/. Does not silently merge or force-push;
+emits agent packets + gate checks. Integrates babysit, collab, shadow, checkpoints.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+BUG_LOOP_DIR = Path(".agentic/bug_loops")
+RUNS_FILE = "runs.json"
+MARKER_BEGIN = "<!-- PLATE-BUG-LOOP:BEGIN -->"
+MARKER_END = "<!-- PLATE-BUG-LOOP:END -->"
+
+STAGES = (
+    "plan",
+    "open_pr_draft",
+    "add_failing_test",
+    "implement_fix",
+    "ready_for_review",
+    "babysit",
+    "human_checkpoint",
+    "merge_eligible",
+    "done",
+    "blocked",
+    "cancelled",
+)
+
+# Stage → agent packet prompt
+STAGE_PROMPTS: dict[str, str] = {
+    "plan": (
+        "Reproduce or document reproduction; confirm Bug issue labels; "
+        "run gh plate release status; plan TDD fix on feature/bug branch from origin/release."
+    ),
+    "open_pr_draft": (
+        "Open draft PR targeting release (legacy) with Bug label + Closes #N in body only; "
+        "clean human title; branch bug/<issue>-short-slug."
+    ),
+    "add_failing_test": (
+        "Add failing regression test that reproduces the bug (TDD). Push to PR branch."
+    ),
+    "implement_fix": (
+        "Implement minimal fix; run targeted tests; push until green locally."
+    ),
+    "ready_for_review": (
+        "Mark PR ready (gh pr ready); ensure labels, fragment if process, CI started."
+    ),
+    "babysit": (
+        "CI diagnosis first; gh plate pr babysit N --act; resolve threads; fix gates until CLEAN."
+    ),
+    "human_checkpoint": (
+        "High-risk or need:human-review: open #648 checkpoint / feed Task; wait for approve."
+    ),
+    "merge_eligible": (
+        "All agent gates green; report merge readiness. Do not self-merge unless autonomy allows."
+    ),
+    "done": "Bug loop complete; post USAGE REPORT on issue if closing.",
+}
+
+
+@dataclass
+class BugLoopRun:
+    """One autonomous bug resolution run."""
+
+    id: str
+    bug_number: int | None
+    bug_title: str
+    stage: str = "plan"
+    status: str = "active"  # active | done | blocked | cancelled
+    pr_number: int | None = None
+    branch: str | None = None
+    risk: str = "medium"
+    requires_human: bool = False
+    checkpoint_id: str | None = None
+    history: list[dict[str, Any]] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BugLoopRun":
+        known = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
+        return cls(**{k: v for k, v in data.items() if k in known})
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _store_path(base: Path | None = None) -> Path:
+    d = base or BUG_LOOP_DIR
+    if d.name == RUNS_FILE:
+        return d
+    return d / RUNS_FILE
+
+
+def _load(base: Path | None = None) -> dict[str, Any]:
+    path = _store_path(base)
+    if not path.exists():
+        return {"version": 1, "runs": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"version": 1, "runs": []}
+        data.setdefault("version", 1)
+        data.setdefault("runs", [])
+        if not isinstance(data["runs"], list):
+            data["runs"] = []
+        return data
+    except (OSError, json.JSONDecodeError):
+        return {"version": 1, "runs": []}
+
+
+def _save(data: dict[str, Any], base: Path | None = None) -> Path:
+    path = _store_path(base)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def render_bug_loop_marker(payload: dict[str, Any]) -> str:
+    return f"{MARKER_BEGIN}\n{json.dumps(payload, indent=2)}\n{MARKER_END}\n"
+
+
+def next_stage(current: str, *, skip_checkpoint: bool = False) -> str:
+    order = [
+        "plan",
+        "open_pr_draft",
+        "add_failing_test",
+        "implement_fix",
+        "ready_for_review",
+        "babysit",
+        "human_checkpoint",
+        "merge_eligible",
+        "done",
+    ]
+    if current not in order:
+        return "plan"
+    i = order.index(current)
+    nxt = order[min(i + 1, len(order) - 1)]
+    if skip_checkpoint and nxt == "human_checkpoint":
+        return "merge_eligible"
+    return nxt
+
+
+def assess_human_required(
+    *,
+    risk: str = "medium",
+    labels: list[str] | None = None,
+    risk_tolerance: str = "medium",
+    paths: list[str] | None = None,
+) -> dict[str, Any]:
+    """Decide if loop must pause at human_checkpoint."""
+    labs = {str(x).lower() for x in (labels or [])}
+    reasons: list[str] = []
+    required = False
+    if "need:human-review" in labs or "need:security-review" in labs:
+        required = True
+        reasons.append("need:human-review or security-review")
+    if risk in ("high", "critical"):
+        required = True
+        reasons.append(f"bug risk={risk}")
+    if (risk_tolerance or "").lower() == "off":
+        required = True
+        reasons.append("risk_tolerance=off")
+    if (risk_tolerance or "").lower() == "low" and risk not in ("low",):
+        required = True
+        reasons.append("risk exceeds low tolerance")
+    # High-risk paths
+    high_paths = ("agents.md", ".github/workflows", "spec.md", ".plate")
+    for p in paths or []:
+        pl = str(p).lower().replace("\\", "/")
+        if any(h in pl for h in high_paths):
+            required = True
+            reasons.append(f"high-risk path: {p}")
+    return {"required": required, "reasons": reasons}
+
+
+def stage_packet(run: dict[str, Any]) -> dict[str, Any]:
+    """Build agent work packet for current stage."""
+    stage = str(run.get("stage") or "plan")
+    bug = run.get("bug_number")
+    pr = run.get("pr_number")
+    title = run.get("bug_title") or "bug"
+    prompt = STAGE_PROMPTS.get(stage, STAGE_PROMPTS["plan"])
+    steps: list[str] = [prompt]
+    if stage == "open_pr_draft" and bug:
+        steps.append(f"Body must include Closes #{bug}")
+        steps.append(f"Suggested branch: bug/{bug}-short-slug")
+    if stage == "babysit" and pr:
+        steps.append(f"gh plate pr babysit {pr} --act")
+        steps.append(f"plate_get_pr_merge_gates pr_number={pr}")
+    if stage == "human_checkpoint":
+        steps.append("plate_checkpoint_create or feed Task; do not merge until approved")
+    if stage == "merge_eligible" and pr:
+        steps.append(f"Report merge readiness for PR #{pr}; human merges when risk-off")
+    return {
+        "run_id": run.get("id"),
+        "stage": stage,
+        "bug_number": bug,
+        "pr_number": pr,
+        "branch": run.get("branch"),
+        "title": title,
+        "prompt": prompt,
+        "steps": steps,
+        "ask_user_question": {
+            "question": f"Bug loop [{stage}] for #{bug or '?'}: {str(title)[:80]} — advance?",
+            "options": [
+                {"id": "advance", "label": "Advance stage", "description": f"plate_bug_loop_advance {run.get('id')}"},
+                {"id": "block", "label": "Mark blocked", "description": "Need more info / human"},
+                {"id": "cancel", "label": "Cancel loop", "description": f"plate_bug_loop_cancel {run.get('id')}"},
+            ],
+        },
+        "marker": render_bug_loop_marker(
+            {"id": run.get("id"), "stage": stage, "bug": bug, "pr": pr}
+        ),
+    }
+
+
+def start_bug_loop(
+    *,
+    bug_number: int | None = None,
+    bug_title: str = "",
+    risk: str = "medium",
+    labels: list[str] | None = None,
+    paths: list[str] | None = None,
+    risk_tolerance: str = "medium",
+    pr_number: int | None = None,
+    branch: str | None = None,
+    base_dir: Path | None = None,
+    record_ledger: bool = True,
+) -> dict[str, Any]:
+    """Start a durable bug resolution run at plan (or babysit if PR already exists)."""
+    title = (bug_title or "").strip() or (f"Bug #{bug_number}" if bug_number else "Untitled bug")
+    human = assess_human_required(
+        risk=risk, labels=labels, risk_tolerance=risk_tolerance, paths=paths
+    )
+    ts = _now()
+    stage = "plan"
+    if pr_number:
+        stage = "babysit"
+    run = BugLoopRun(
+        id=f"bugloop-{uuid.uuid4().hex[:10]}",
+        bug_number=bug_number,
+        bug_title=title,
+        stage=stage,
+        status="active",
+        pr_number=pr_number,
+        branch=branch or (f"bug/{bug_number}-fix" if bug_number else None),
+        risk=(risk or "medium").lower(),
+        requires_human=bool(human["required"]),
+        history=[{"ts": ts, "stage": stage, "event": "started"}],
+        notes=list(human.get("reasons") or []),
+        created_at=ts,
+        updated_at=ts,
+        metadata={"labels": list(labels or []), "paths": list(paths or []), "risk_tolerance": risk_tolerance},
+    )
+    data = _load(base_dir)
+    data["runs"].append(run.to_dict())
+    _save(data, base_dir)
+    out: dict[str, Any] = {
+        "ok": True,
+        "run": run.to_dict(),
+        "packet": stage_packet(run.to_dict()),
+        "human_assessment": human,
+    }
+    if record_ledger:
+        try:
+            from .ledger import record_decision
+
+            rec = record_decision(
+                action_kind="bug_loop_start",
+                decision="proceed",
+                reason=f"start bug loop for #{bug_number}: {title[:80]}",
+                sources=["bug_loop", "#638"],
+                risk_tolerance=risk_tolerance,
+                impact=risk,
+                related_issue=bug_number,
+                related_pr=pr_number,
+                actor="bug_loop",
+                metadata={"run_id": run.id},
+            )
+            out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
+        except Exception:
+            pass
+    return out
+
+
+def get_bug_loop(run_id: str, *, base_dir: Path | None = None) -> dict[str, Any] | None:
+    for r in _load(base_dir).get("runs") or []:
+        if r.get("id") == run_id:
+            return r
+        if run_id.isdigit() and r.get("bug_number") == int(run_id) and r.get("status") == "active":
+            return r
+    return None
+
+
+def list_bug_loops(
+    *,
+    status: str = "active",
+    limit: int = 50,
+    base_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    out = []
+    for r in _load(base_dir).get("runs") or []:
+        if status and status != "all" and r.get("status") != status:
+            continue
+        out.append(r)
+    return out[: max(1, int(limit or 50))]
+
+
+def update_bug_loop(
+    run_id: str,
+    *,
+    stage: str | None = None,
+    status: str | None = None,
+    pr_number: int | None = None,
+    branch: str | None = None,
+    note: str | None = None,
+    checkpoint_id: str | None = None,
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    data = _load(base_dir)
+    found = None
+    for r in data["runs"]:
+        if r.get("id") == run_id:
+            found = r
+            break
+    if not found:
+        return {"ok": False, "error": f"run not found: {run_id}"}
+    if stage:
+        if stage not in STAGES:
+            return {"ok": False, "error": f"invalid stage: {stage}"}
+        found["stage"] = stage
+        found.setdefault("history", []).append(
+            {"ts": _now(), "stage": stage, "event": "set_stage"}
+        )
+    if status:
+        found["status"] = status
+    if pr_number is not None:
+        found["pr_number"] = pr_number
+    if branch is not None:
+        found["branch"] = branch
+    if checkpoint_id is not None:
+        found["checkpoint_id"] = checkpoint_id
+    if note:
+        found.setdefault("notes", []).append(note)
+    found["updated_at"] = _now()
+    _save(data, base_dir)
+    return {"ok": True, "run": found, "packet": stage_packet(found)}
+
+
+def advance_bug_loop(
+    run_id: str,
+    *,
+    pr_number: int | None = None,
+    branch: str | None = None,
+    note: str | None = None,
+    force_skip_checkpoint: bool = False,
+    base_dir: Path | None = None,
+    gates: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Advance one stage with optional gate checks at babysit/merge."""
+    data = _load(base_dir)
+    found = None
+    for r in data["runs"]:
+        if r.get("id") == run_id:
+            found = r
+            break
+    if not found:
+        return {"ok": False, "error": f"run not found: {run_id}"}
+    if found.get("status") not in ("active",):
+        return {"ok": False, "error": f"run not active: {found.get('status')}", "run": found}
+
+    if pr_number is not None:
+        found["pr_number"] = pr_number
+    if branch is not None:
+        found["branch"] = branch
+    if note:
+        found.setdefault("notes", []).append(note)
+
+    cur = str(found.get("stage") or "plan")
+    # Gate: cannot leave babysit if gates say not clean (when provided)
+    if cur == "babysit" and gates is not None:
+        merge_state = str(gates.get("merge_state") or gates.get("mergeStateStatus") or "").upper()
+        unresolved = int(gates.get("unresolved_review_threads") or gates.get("actionable_agent_threads") or 0)
+        if merge_state not in ("CLEAN", "HAS_HOOKS", "") and merge_state not in ("UNKNOWN",):
+            if merge_state in ("BLOCKED", "DIRTY", "CONFLICTING", "BEHIND"):
+                found.setdefault("notes", []).append(f"babysit gate: merge_state={merge_state}")
+                found["updated_at"] = _now()
+                _save(data, base_dir)
+                return {
+                    "ok": True,
+                    "advanced": False,
+                    "reason": f"PR not clean ({merge_state}); stay on babysit",
+                    "run": found,
+                    "packet": stage_packet(found),
+                }
+        if unresolved > 0:
+            found["updated_at"] = _now()
+            _save(data, base_dir)
+            return {
+                "ok": True,
+                "advanced": False,
+                "reason": f"{unresolved} unresolved threads; stay on babysit",
+                "run": found,
+                "packet": stage_packet(found),
+            }
+
+    skip_cp = force_skip_checkpoint or not found.get("requires_human")
+    # When leaving babysit, go to human_checkpoint if required
+    if cur == "babysit" and found.get("requires_human") and not force_skip_checkpoint:
+        nxt = "human_checkpoint"
+    else:
+        nxt = next_stage(cur, skip_checkpoint=skip_cp)
+
+    found["stage"] = nxt
+    if nxt == "done":
+        found["status"] = "done"
+    found.setdefault("history", []).append(
+        {"ts": _now(), "stage": nxt, "event": "advanced", "from": cur}
+    )
+    found["updated_at"] = _now()
+    _save(data, base_dir)
+    return {
+        "ok": True,
+        "advanced": True,
+        "from_stage": cur,
+        "to_stage": nxt,
+        "run": found,
+        "packet": stage_packet(found),
+    }
+
+
+def run_bug_loop_tick(
+    run_id: str,
+    *,
+    dry_run: bool = True,
+    base_dir: Path | None = None,
+    fetch_gates: bool = False,
+    repo: str | None = None,
+) -> dict[str, Any]:
+    """One orchestrator tick: emit packet; optionally fetch merge gates on babysit.
+
+    dry_run=True: never advances stage automatically (report only).
+    dry_run=False: advances when safe (e.g. after babysit CLEAN).
+    """
+    run = get_bug_loop(run_id, base_dir=base_dir)
+    if not run:
+        return {"ok": False, "error": f"run not found: {run_id}"}
+    packet = stage_packet(run)
+    gates = None
+    if run.get("stage") == "babysit" and run.get("pr_number") and fetch_gates:
+        try:
+            from .pr_babysit import get_pr_merge_gates
+
+            gates = get_pr_merge_gates(int(run["pr_number"]), repo=repo)
+            packet["gates"] = {
+                "merge_state": gates.get("merge_state"),
+                "unresolved_review_threads": gates.get("unresolved_review_threads"),
+                "actionable_agent_threads": gates.get("actionable_agent_threads"),
+            }
+        except Exception as exc:
+            packet["gates_error"] = str(exc)
+
+    result: dict[str, Any] = {
+        "ok": True,
+        "dry_run": dry_run,
+        "run": run,
+        "packet": packet,
+    }
+    if not dry_run and run.get("stage") == "babysit" and gates:
+        adv = advance_bug_loop(run_id, gates=gates, base_dir=base_dir)
+        result["advance"] = adv
+        result["run"] = adv.get("run") or run
+        result["packet"] = adv.get("packet") or packet
+    return result
+
+
+def cancel_bug_loop(run_id: str, *, note: str = "", base_dir: Path | None = None) -> dict[str, Any]:
+    return update_bug_loop(run_id, status="cancelled", stage="cancelled", note=note or "cancelled", base_dir=base_dir)
+
+
+def bug_loop_feed_items(
+    *,
+    limit: int = 10,
+    base_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    items = []
+    for r in list_bug_loops(status="active", limit=limit, base_dir=base_dir):
+        pkt = stage_packet(r)
+        items.append(
+            {
+                "id": r.get("id"),
+                "item_type": "bug_loop",
+                "title": f"Bug loop [{r.get('stage')}]: {r.get('bug_title')}",
+                "stage": r.get("stage"),
+                "bug_number": r.get("bug_number"),
+                "pr_number": r.get("pr_number"),
+                "requires_human": r.get("requires_human"),
+                "badges": ["bug_loop", str(r.get("stage")), str(r.get("risk"))],
+                "source": "bug_loop",
+                "impact": "high" if r.get("requires_human") else "medium",
+                "reason": pkt.get("prompt"),
+                "ask_user_question": pkt.get("ask_user_question"),
+                "marker": pkt.get("marker"),
+            }
+        )
+    return items

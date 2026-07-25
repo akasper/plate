@@ -101,6 +101,16 @@ from .stubs import (
     refine_stub,
     stubs_feed_items,
 )
+from .bug_loop import (
+    advance_bug_loop,
+    bug_loop_feed_items,
+    cancel_bug_loop,
+    get_bug_loop,
+    list_bug_loops,
+    run_bug_loop_tick,
+    start_bug_loop,
+    update_bug_loop,
+)
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .collab import (
     analyze_pr_authorship,
@@ -723,6 +733,62 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             )
         elif name == "plate_stub_feed":
             payload = {"items": stubs_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_bug_loop_start":
+            labels = args.get("labels") or []
+            if isinstance(labels, str):
+                labels = [x.strip() for x in labels.split(",") if x.strip()]
+            payload = start_bug_loop(
+                bug_number=args.get("bug_number") or args.get("bug"),
+                bug_title=str(args.get("bug_title") or args.get("title") or ""),
+                risk=str(args.get("risk") or "medium"),
+                labels=list(labels) if labels else None,
+                paths=list(args.get("paths") or []) or None,
+                risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+                pr_number=args.get("pr_number") or args.get("pr"),
+                branch=args.get("branch"),
+            )
+        elif name == "plate_bug_loop_advance":
+            payload = advance_bug_loop(
+                str(args.get("run_id") or args.get("id") or ""),
+                pr_number=args.get("pr_number") or args.get("pr"),
+                branch=args.get("branch"),
+                note=args.get("note"),
+                force_skip_checkpoint=bool(args.get("force_skip_checkpoint") or False),
+                gates=args.get("gates") if isinstance(args.get("gates"), dict) else None,
+            )
+        elif name == "plate_bug_loop_tick":
+            payload = run_bug_loop_tick(
+                str(args.get("run_id") or args.get("id") or ""),
+                dry_run=bool(args.get("dry_run", True)),
+                fetch_gates=bool(args.get("fetch_gates") or False),
+                repo=args.get("repo"),
+            )
+        elif name == "plate_bug_loop_list":
+            payload = {
+                "runs": list_bug_loops(
+                    status=str(args.get("status") or "active"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_bug_loop_get":
+            payload = {"run": get_bug_loop(str(args.get("run_id") or args.get("id") or ""))}
+        elif name == "plate_bug_loop_cancel":
+            payload = cancel_bug_loop(
+                str(args.get("run_id") or args.get("id") or ""),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_bug_loop_update":
+            payload = update_bug_loop(
+                str(args.get("run_id") or args.get("id") or ""),
+                stage=args.get("stage"),
+                status=args.get("status"),
+                pr_number=args.get("pr_number") or args.get("pr"),
+                branch=args.get("branch"),
+                note=args.get("note"),
+                checkpoint_id=args.get("checkpoint_id"),
+            )
+        elif name == "plate_bug_loop_feed":
+            payload = {"items": bug_loop_feed_items(limit=int(args.get("limit") or 10))}
         elif name == "plate_task_create":
             payload = create_task(
                 str(args.get("title") or ""),
@@ -2198,6 +2264,117 @@ def run() -> None:
                             {
                                 "name": "plate_stub_feed",
                                 "description": "Feed presentation for stub drafts awaiting create/refine (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_start",
+                                "description": "Start autonomous bug resolution loop run (#638): plan→TDD→PR→babysit→merge-eligible.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "bug_number": {"type": "integer"},
+                                        "bug": {"type": "integer"},
+                                        "bug_title": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "risk": {"type": "string"},
+                                        "labels": {"type": "array", "items": {"type": "string"}},
+                                        "paths": {"type": "array", "items": {"type": "string"}},
+                                        "risk_tolerance": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "pr": {"type": "integer"},
+                                        "branch": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_advance",
+                                "description": "Advance bug loop one stage; babysit stage honors optional merge gates (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "branch": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "force_skip_checkpoint": {"type": "boolean"},
+                                        "gates": {"type": "object"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_tick",
+                                "description": "One bug-loop tick: emit stage packet; optional gate fetch; auto-advance only if dry_run=false (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "fetch_gates": {"type": "boolean"},
+                                        "repo": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_list",
+                                "description": "List bug resolution loop runs (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_get",
+                                "description": "Get one bug loop run (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_cancel",
+                                "description": "Cancel a bug loop run (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_update",
+                                "description": "Update bug loop fields (stage, pr, branch, checkpoint) (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "stage": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "branch": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "checkpoint_id": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_feed",
+                                "description": "Feed presentation for active bug resolution loops (#638).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {"limit": {"type": "integer"}},

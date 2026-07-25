@@ -334,6 +334,11 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - Local drafts under `.agentic/stubs/`; labels include `status:stub` + `need:refinement` until mark_ready.
 - Complements `plate_task_create`, planning sessions, and monitor proposals.
 
+### Bug resolution loop (#638)
+- Orchestrate TDD bug fixes: `plate_bug_loop_start` → stage packets (plan→draft PR→failing test→fix→ready→babysit→checkpoint?→merge_eligible).
+- Advance with `plate_bug_loop_advance`; tick with gates via `plate_bug_loop_tick` + `plate_pr_babysit` / `plate_get_pr_merge_gates`.
+- Never self-merge when risk-off or requires_human; surface human_checkpoint + feed. Local runs in `.agentic/bug_loops/`.
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 

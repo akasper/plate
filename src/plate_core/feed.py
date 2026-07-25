@@ -693,6 +693,30 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #638 active bug resolution loops → feed signals
+    try:
+        from .bug_loop import bug_loop_feed_items
+
+        for bl in bug_loop_feed_items(limit=10):
+            signal_items.append(
+                {
+                    "id": bl.get("id"),
+                    "type": "bug_loop",
+                    "title": bl.get("title"),
+                    "rank": 12,
+                    "impact": bl.get("impact") or "medium",
+                    "reason": bl.get("reason") or "Bug resolution loop (#638)",
+                    "prompt_segment": (
+                        f"{bl.get('title')}. Advance: plate_bug_loop_advance {bl.get('id')}; "
+                        f"tick: plate_bug_loop_tick."
+                    ),
+                    "source": "bug_loop",
+                    "ask_user_question": bl.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,

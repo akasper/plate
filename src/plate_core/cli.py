@@ -91,6 +91,16 @@ from .stubs import (
     refine_stub,
     stubs_feed_items,
 )
+from .bug_loop import (
+    advance_bug_loop,
+    bug_loop_feed_items,
+    cancel_bug_loop,
+    get_bug_loop,
+    list_bug_loops,
+    run_bug_loop_tick,
+    start_bug_loop,
+    update_bug_loop,
+)
 from .tasks import (
     close_task_with_signal,
     create_task,
@@ -1068,6 +1078,95 @@ def cmd_task(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def cmd_bug_loop(args: argparse.Namespace) -> int:
+    """Autonomous bug resolution loop orchestration (#638)."""
+    if getattr(args, "list", False):
+        rows = list_bug_loops(status=str(getattr(args, "status", None) or "active"), limit=int(getattr(args, "limit", 50) or 50))
+        if args.json:
+            print(json.dumps({"runs": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} [{r.get('stage')}] bug=#{r.get('bug_number')} pr={r.get('pr_number')} {r.get('bug_title')}")
+        return 0
+
+    if getattr(args, "get", None):
+        r = get_bug_loop(str(args.get))
+        if args.json:
+            print(json.dumps({"run": r}))
+            return 0 if r else 1
+        if not r:
+            print("not found")
+            return 1
+        print(f"{r.get('id')} stage={r.get('stage')} status={r.get('status')}")
+        return 0
+
+    if getattr(args, "advance", None):
+        out = advance_bug_loop(
+            str(args.advance),
+            pr_number=getattr(args, "pr", None),
+            branch=getattr(args, "branch", None) or None,
+            note=getattr(args, "note", None) or None,
+            force_skip_checkpoint=bool(getattr(args, "skip_checkpoint", False)),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"ok={out.get('ok')} advanced={out.get('advanced')} {out.get('from_stage')}→{out.get('to_stage') or (out.get('run') or {}).get('stage')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "tick", None):
+        out = run_bug_loop_tick(
+            str(args.tick),
+            dry_run=not getattr(args, "apply", False),
+            fetch_gates=bool(getattr(args, "fetch_gates", False)),
+            repo=getattr(args, "repo", None),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        pkt = out.get("packet") or {}
+        print(f"tick stage={pkt.get('stage')} dry_run={out.get('dry_run')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "cancel", None):
+        out = cancel_bug_loop(str(args.cancel), note=getattr(args, "note", None) or "")
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"cancel ok={out.get('ok')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "feed", False):
+        rows = bug_loop_feed_items(limit=int(getattr(args, "limit", 10) or 10))
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    # default start
+    labels = []
+    raw = getattr(args, "labels", None) or ""
+    if raw:
+        labels = [x.strip() for x in str(raw).split(",") if x.strip()]
+    out = start_bug_loop(
+        bug_number=getattr(args, "bug", None),
+        bug_title=str(getattr(args, "title", None) or ""),
+        risk=str(getattr(args, "risk", None) or "medium"),
+        labels=labels or None,
+        risk_tolerance=str(getattr(args, "risk_tolerance", None) or "medium"),
+        pr_number=getattr(args, "pr", None),
+        branch=getattr(args, "branch", None) or None,
+    )
+    if args.json:
+        print(json.dumps(out))
+        return 0 if out.get("ok") else 1
+    run = out.get("run") or {}
+    print(f"ok={out.get('ok')} id={run.get('id')} stage={run.get('stage')} human={run.get('requires_human')}")
+    return 0 if out.get("ok") else 1
 
 
 def cmd_stub(args: argparse.Namespace) -> int:
@@ -2363,6 +2462,33 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
+
+    bugloop = sub.add_parser(
+        "bug-loop",
+        help="Autonomous bug resolution loop orchestration (#638)",
+    )
+    bugloop.add_argument("--repo", help="owner/name")
+    bugloop.add_argument("--bug", type=int, help="Bug issue number")
+    bugloop.add_argument("--title", default="", help="Bug title")
+    bugloop.add_argument("--risk", default="medium")
+    bugloop.add_argument("--risk-tolerance", dest="risk_tolerance", default="medium")
+    bugloop.add_argument("--labels", default="", help="Comma labels for human-gate assessment")
+    bugloop.add_argument("--pr", type=int, help="Existing PR number")
+    bugloop.add_argument("--branch", default="")
+    bugloop.add_argument("--list", action="store_true")
+    bugloop.add_argument("--get", metavar="RUN_ID")
+    bugloop.add_argument("--advance", metavar="RUN_ID")
+    bugloop.add_argument("--tick", metavar="RUN_ID")
+    bugloop.add_argument("--cancel", metavar="RUN_ID")
+    bugloop.add_argument("--feed", action="store_true")
+    bugloop.add_argument("--apply", action="store_true", help="With --tick: allow auto-advance when gates clean")
+    bugloop.add_argument("--fetch-gates", dest="fetch_gates", action="store_true")
+    bugloop.add_argument("--skip-checkpoint", dest="skip_checkpoint", action="store_true")
+    bugloop.add_argument("--note", default="")
+    bugloop.add_argument("--status", default="active")
+    bugloop.add_argument("--limit", type=int, default=50)
+    bugloop.add_argument("--json", action="store_true")
+    bugloop.set_defaults(func=cmd_bug_loop)
 
     stub = sub.add_parser(
         "stub",
