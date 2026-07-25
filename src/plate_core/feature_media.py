@@ -34,6 +34,11 @@ STATUSES = (
     "skipped",
 )
 
+# Heuristic Feature media cost (#634/#636) — plan commits to E2E GIF capture work.
+_FEATURE_MEDIA_PLAN_BASE = 4500
+_FEATURE_MEDIA_HIGH_QUALITY_EXTRA = 2500
+_FEATURE_MEDIA_REGISTER_BASE = 800
+
 
 @dataclass
 class FeatureMediaRecord:
@@ -117,6 +122,85 @@ def expected_gif_path(test_name: str, *, repo_root: Path | None = None) -> Path:
     return root / DEFAULT_GIF_DIR / f"{test_name}.gif"
 
 
+def estimate_feature_media_cost(
+    *,
+    phase: str = "plan",
+    quality: str = "medium",
+) -> dict[str, Any]:
+    """Advisory token estimate for Feature media plan/register (#634/#636)."""
+    phase_n = (phase or "plan").lower()
+    if phase_n not in ("plan", "register"):
+        phase_n = "plan"
+    q = (quality or "medium").lower()
+    if phase_n == "plan":
+        tokens = _FEATURE_MEDIA_PLAN_BASE
+        high_extra = _FEATURE_MEDIA_HIGH_QUALITY_EXTRA if q in ("high", "hq", "max") else 0
+        tokens += high_extra
+        breakdown = {
+            "base": _FEATURE_MEDIA_PLAN_BASE,
+            "high_quality_extra": high_extra,
+        }
+    else:
+        tokens = _FEATURE_MEDIA_REGISTER_BASE
+        breakdown = {"base": _FEATURE_MEDIA_REGISTER_BASE, "high_quality_extra": 0}
+    return {
+        "ok": True,
+        "phase": phase_n,
+        "quality": q,
+        "estimated_tokens": int(tokens),
+        "breakdown": breakdown,
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine enforce hard ceilings.",
+            "plan_feature_media hydrates remaining via get_budget_snapshot when use_live_budget.",
+            "Plan commits to Playwright E2E GIF capture; register is cheap metadata after capture.",
+        ],
+    }
+
+
+def _feature_media_budget_gate(
+    *,
+    phase: str,
+    quality: str,
+    budget_remaining: int | None,
+    use_live_budget: bool,
+) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
+    cost_est = estimate_feature_media_cost(phase=phase, quality=quality)
+    est = int(cost_est.get("estimated_tokens") or 0)
+    notes: list[str] = []
+    effective = budget_remaining
+    if effective is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot(estimate_tokens=est)
+            rem = snap.get("remaining_tokens")
+            if rem is not None:
+                effective = int(rem)
+                notes.append(
+                    f"budget hydrated: remaining_tokens={effective} "
+                    f"pressure={snap.get('budget_pressure')}"
+                )
+        except Exception as exc:
+            notes.append(f"budget hydrate skipped: {exc}")
+    if effective is not None and est > int(effective):
+        return (
+            cost_est,
+            effective,
+            notes,
+            {
+                "ok": False,
+                "blocked": True,
+                "reason": "budget",
+                "error": f"budget: est {est} tokens exceeds remaining {effective}",
+                "cost_estimate_tokens": est,
+                "budget_remaining": int(effective),
+                "cost_estimate": cost_est,
+                "notes": notes,
+            },
+        )
+    return cost_est, effective, notes, None
+
+
 def plan_feature_media(
     *,
     feature_number: int | None = None,
@@ -126,8 +210,23 @@ def plan_feature_media(
     fragment_slug: str | None = None,
     quality: str = "medium",
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Create a planned media capture record for a Feature."""
+    """Create a planned media capture record for a Feature.
+
+    #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
+    hydrate remaining tokens from durable budget snapshot and block if est exceeds remaining.
+    """
+    cost_est, effective_remaining, budget_notes, blocked = _feature_media_budget_gate(
+        phase="plan",
+        quality=quality or "medium",
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )
+    if blocked is not None:
+        return blocked
+
     title = (feature_title or "").strip() or (
         f"Feature #{feature_number}" if feature_number else "Untitled feature"
     )
@@ -182,14 +281,19 @@ def plan_feature_media(
             ],
         },
     }
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "record": rec.to_dict(),
         "packet": packet,
         "marker": render_feature_media_marker(
             {"id": rec.id, "test_name": tname, "status": "planned"}
         ),
+        "cost_estimate": cost_est,
+        "cost_estimate_tokens": int(cost_est.get("estimated_tokens") or 0),
+        "budget_remaining": effective_remaining,
+        "notes": budget_notes,
     }
+    return out
 
 
 def register_capture(
