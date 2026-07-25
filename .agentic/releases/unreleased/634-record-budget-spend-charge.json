@@ -1,0 +1,27 @@
+{
+  "slug": "634-record-budget-spend-charge",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, feature_media.py",
+  "summary": "Public record_budget_spend charges durable spend.json when gated surfaces succeed; plan_feature_media charges on live path; get_budget_snapshot accepts estimate_tokens alias so existing surface gates actually hydrate (#775/#634).",
+  "migration_impact": "Live feature-media plans now increment spend.json. Surface gates that passed estimate_tokens (not estimated_tokens) now correctly compute would_pause/remaining. Offline tests should keep use_live_budget=false.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Expect spent_today to rise after live plan_feature_media / future wired surfaces.",
+    "3. Use get_budget_snapshot / gh plate autonomy --budget to inspect remaining.",
+    "4. Tests and dry-runs: pass use_live_budget=false to avoid charging.",
+    "5. Prefer estimated_tokens; estimate_tokens remains a supported alias."
+  ],
+  "agent_notes": "Closes two #634 gaps: (1) gates never charged spend; (2) estimate_tokens kwarg was ignored so live hydrate failed silently. First charge consumer is #636 plan_feature_media.",
+  "breaking": false,
+  "links": [
+    "#775",
+    "#634",
+    "#773",
+    "#774",
+    "#636",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

@@ -47,6 +47,7 @@ class TestRunGates(unittest.TestCase):
             risk_tolerance="medium",
             base_dir=self.base,
             record_ledger=False,
+            use_live_budget=False,
         )
         self.assertTrue(out["ok"])
         self.assertEqual(out["status"], "dry-run")
@@ -62,6 +63,7 @@ class TestRunGates(unittest.TestCase):
             approved=False,
             base_dir=self.base,
             record_ledger=False,
+            use_live_budget=False,
         )
         self.assertFalse(out["ok"])
         self.assertTrue(out["blocked"])
@@ -77,6 +79,7 @@ class TestRunGates(unittest.TestCase):
             approved=True,
             base_dir=self.base,
             record_ledger=False,
+            use_live_budget=False,
         )
         self.assertTrue(out["ok"])
         self.assertTrue(out.get("shadow_id"))

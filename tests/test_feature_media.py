@@ -137,6 +137,48 @@ class TestFeatureMediaBudgetGate(unittest.TestCase):
         self.assertTrue(ok.get("ok"))
         self.assertIn("cost_estimate_tokens", ok)
         self.assertEqual(ok.get("budget_remaining"), 50_000)
+        self.assertNotIn("budget_charge", ok)
+
+    def test_live_plan_charges_durable_spend(self):
+        from plate_core.autonomy import load_budget_spend, save_budget_spend
+        from unittest.mock import patch
+
+        bdir = self.base / "budget"
+        save_budget_spend(
+            {
+                "date": __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat(),
+                "spent_today": 0,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+            },
+            base_dir=bdir,
+        )
+
+        class _Cfg:
+            autonomy = {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "token_budget": {"daily": 100_000, "per_cycle": 50_000, "action": "pause"},
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            ok = plan_feature_media(
+                feature_title="Charge me",
+                base_dir=self.base,
+                use_live_budget=True,
+                budget_base_dir=bdir,
+            )
+        self.assertTrue(ok.get("ok"), ok)
+        charge = ok.get("budget_charge") or {}
+        self.assertTrue(charge.get("ok"), charge)
+        est = int(ok.get("cost_estimate_tokens") or 0)
+        self.assertGreater(est, 0)
+        data = load_budget_spend(base_dir=bdir)
+        self.assertEqual(data.get("spent_today"), est)
+        self.assertEqual(data.get("last_action_kind"), "feature_media_plan")
 
 
 if __name__ == "__main__":
