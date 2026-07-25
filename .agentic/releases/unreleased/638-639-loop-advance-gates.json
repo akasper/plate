@@ -1,0 +1,27 @@
+{
+  "slug": "638-639-loop-advance-gates",
+  "change_type": "feature",
+  "surface": "src/plate_core/pr_babysit.py, bug_loop.py, feature_loop.py, tests/",
+  "summary": "Harden #638/#639 loop advance gates: shared evaluate_babysit_gates blocks on merge_state, unresolved threads, review_decision=CHANGES_REQUESTED, and CI failing/pending; get_pr_merge_gates exposes reviewDecision + statusCheckRollup; babysit/merge_eligible stages refuse advance until clean.",
+  "migration_impact": "Bug/feature loop advance with gates= now also requires green/settled CI and no CHANGES_REQUESTED. get_pr_merge_gates returns additive fields (review_decision, ci_*, loop_advance_*). No .plate schema change.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. When advancing loops, pass gates from plate_get_pr_merge_gates / get_pr_merge_gates (or equivalent) so CI + review decision are checked.",
+    "3. Expect advance to stay on babysit while checks pending or failing; re-tick after CI settles.",
+    "4. Human CHANGES_REQUESTED remains a hard babysit hold (address feedback before advance)."
+  ],
+  "agent_notes": "evaluate_babysit_gates is pure and shared \u2014 prefer it over hand-rolled merge_state checks. risk-off still never auto-merges; merge_eligible only reports readiness. Pairs with #648 checkpoints and #605 outdated thread resolve.",
+  "breaking": false,
+  "links": [
+    "#734",
+    "#638",
+    "#639",
+    "#654",
+    "#526",
+    "#605",
+    "#648"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

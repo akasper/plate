@@ -116,6 +116,30 @@ class TestLifecycle(unittest.TestCase):
         )
         self.assertTrue(ok["advanced"])
 
+    def test_babysit_blocks_on_ci_failing(self):
+        r = start_feature_loop(
+            feature_number=15,
+            feature_title="ci gate",
+            pr_number=6,
+            needs_media_approval=False,
+            risk="low",
+            risk_tolerance="high",
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        rid = r["run"]["id"]
+        blocked = advance_feature_loop(
+            rid,
+            gates={
+                "merge_state": "CLEAN",
+                "unresolved_review_threads": 0,
+                "ci_state": "FAILURE",
+            },
+            base_dir=self.base,
+        )
+        self.assertFalse(blocked["advanced"])
+        self.assertIn("CI failing", blocked["reason"])
+
     def test_high_risk_checkpoint_and_feed(self):
         from plate_core.checkpoint import decide_checkpoint
 
