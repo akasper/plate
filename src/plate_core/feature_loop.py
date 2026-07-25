@@ -490,6 +490,21 @@ def start_feature_loop(
         out["budget_snapshot"] = budget_snap
     if blocked:
         out["error"] = notes[-1] if notes else "budget blocked"
+    elif use_live_budget:
+        try:
+            from .autonomy import apply_live_budget_charge
+
+            out.setdefault("notes", list(notes))
+            apply_live_budget_charge(
+                out,
+                tokens=int(est["estimated_tokens"] or 0),
+                use_live_budget=True,
+                action_kind="feature_loop_start",
+                reason=f"start_feature_loop:{run.id}",
+                base_dir=budget_base_dir,
+            )
+        except Exception:
+            pass
     if record_ledger:
         try:
             from .ledger import record_decision
@@ -498,7 +513,7 @@ def start_feature_loop(
                 action_kind="feature_loop_start",
                 decision="pause" if blocked else "proceed",
                 reason=f"start feature loop for #{feature_number}: {title[:80]}",
-                sources=["feature_loop", "#639"],
+                sources=["feature_loop", "#639", "#634"],
                 risk_tolerance=risk_tolerance,
                 impact=risk,
                 related_issue=feature_number,
