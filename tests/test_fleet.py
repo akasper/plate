@@ -48,6 +48,7 @@ class TestHandoffs(unittest.TestCase):
             budget_tokens=4000,
             base_dir=self.base,
             record_ledger=False,
+            use_live_budget=False,
         )
         self.assertTrue(r["ok"])
         hid = r["handoff"]["handoff_id"]
