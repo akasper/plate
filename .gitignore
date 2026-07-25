@@ -177,5 +177,8 @@ tests/e2e/package-lock.json
 # Ephemeral #644 multi-agent fleet handoffs (local coordination)
 .agentic/fleet/
 
+# Ephemeral #642 discussion/market monitor proposals (local)
+.agentic/monitoring/
+
 # Ephemeral planning sessions + pending plan stubs (#628/#630)
 .agentic/planning/

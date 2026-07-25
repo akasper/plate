@@ -1,0 +1,14 @@
+{
+  "id": "weekly-discussion-review",
+  "cadence": "weekly",
+  "risk_level": "low",
+  "description": "Review GitHub Discussions/Ideas; score promising items into stub Issue proposals for the endless feed (Epic/Feature/Bug/Question) with provenance (#642).",
+  "steps": [
+    {"tool": "plate_monitor_discussions", "args": {"fetch_live": true, "persist": true}, "apply_if_risk_ok": true},
+    {"action": "surface_proposals_in_feed"}
+  ],
+  "log_to": ".agentic/autonomy/runs/",
+  "max_tokens_per_run": 8000,
+  "enabled": true,
+  "requires": []
+}

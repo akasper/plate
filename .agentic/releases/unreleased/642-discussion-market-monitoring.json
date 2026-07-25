@@ -1,0 +1,25 @@
+{
+  "slug": "642-discussion-market-monitoring",
+  "change_type": "feature",
+  "surface": "src/plate_core/monitoring.py, autonomy.py, feed.py, mcp_server.py, cli.py, .agentic/procedures/, .gitignore",
+  "summary": "Scheduled discussion review + market monitoring (#642): score Discussions/Ideas into stub issue proposals, synthesize host-injected market signals into Questions, durable .agentic/monitoring proposals, weekly procedures, feed decide prompts, MCP plate_monitor_* + gh plate monitor, AutonomyEngine dispatch.",
+  "migration_impact": "New low-risk weekly procedures weekly-discussion-review and market-condition-monitor. Optional local .agentic/monitoring/ (gitignored). Market path requires host-injected signals (no core network scrape).",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Dry-run: gh plate monitor --json or plate_monitor_discussions; market via plate_monitor_market with signals.",
+    "3. Persist: --apply / dry_run=false; approve proposals via plate_monitor_decide before creating GitHub issues.",
+    "4. AutonomyEngine: procedures appear in list; run_procedure dispatches discussion/market handlers."
+  ],
+  "agent_notes": "First real #642 surface — propose + feed + procedures, not silent issue creation. Live Ideas fetch only when fetch_live/apply. Epic #659 scheduled ops still owns broader deploy/refactor cadence.",
+  "breaking": false,
+  "links": [
+    "#642",
+    "#654",
+    "#659",
+    "#631",
+    "#470"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
