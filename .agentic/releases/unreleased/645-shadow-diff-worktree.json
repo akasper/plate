@@ -1,0 +1,24 @@
+{
+  "slug": "645-shadow-diff-worktree",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, scheduled_ops.py",
+  "summary": "Harden #645 shadow previews: local git predicted_diff (stat/name-status/numstat vs base_ref), disposable worktree_plan with create/cleanup commands; scheduled ops attach shadow_id + preview on medium+ runs.",
+  "migration_impact": "ShadowReport gains predicted_diff and worktree_plan fields (additive). simulate/gate JSON includes them. Scheduled op dry-runs return shadow_report. Scope skip_git_preview=true disables git calls; base_ref/cwd override defaults.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. On plate_autonomy_simulate / gate_high_impact: review predicted_diff.stat and worktree_plan before approving high/critical.",
+    "3. Optional: create worktree via worktree_plan.create_commands for isolated tests; always cleanup.",
+    "4. scheduled-ops medium+ dry_run packets include shadow_id; pass through to checkpoint when gating deploy/release."
+  ],
+  "agent_notes": "Does not auto-create worktrees or run remote forks. Prefer base_ref=origin/release (legacy). Never force-push or publish from shadow worktree.",
+  "breaking": false,
+  "links": [
+    "#645",
+    "#641",
+    "#648",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

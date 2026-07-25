@@ -50,6 +50,8 @@ class TestRunGates(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertEqual(out["status"], "dry-run")
         self.assertTrue(out["packet"]["steps"])
+        # #645: medium+ ops attach shadow preview (diff/worktree)
+        self.assertTrue(out.get("shadow_id") or out["packet"].get("shadow_id"))
 
     def test_critical_blocked_without_approve(self):
         out = run_scheduled_op(
@@ -62,6 +64,9 @@ class TestRunGates(unittest.TestCase):
         )
         self.assertFalse(out["ok"])
         self.assertTrue(out["blocked"])
+        # Still get a shadow preview when blocked
+        self.assertIn("shadow_report", out)
+        self.assertTrue(out["shadow_report"].get("worktree_plan"))
 
     def test_critical_ok_with_approve(self):
         out = run_scheduled_op(
@@ -73,6 +78,7 @@ class TestRunGates(unittest.TestCase):
             record_ledger=False,
         )
         self.assertTrue(out["ok"])
+        self.assertTrue(out.get("shadow_id"))
 
     def test_plan_and_status(self):
         p = plan_op("release-cut-prep")

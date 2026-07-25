@@ -415,11 +415,78 @@ class TestShadowSimulation645(unittest.TestCase):
         d = simulate_autonomy_action("release_finalize", repo=None)
         self.assertEqual(d["mode"], "shadow")
         self.assertEqual(d["impact"], "critical")
+        # #645 harden fields always present (diff may be empty outside a git repo)
+        self.assertIn("predicted_diff", d)
+        self.assertIn("worktree_plan", d)
+        self.assertTrue(d["worktree_plan"].get("path"))
 
+    def test_git_diff_preview_and_worktree_plan(self):
+        """#645: collect_git_diff_preview + worktree plan on simulate for high impact."""
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import (
+            AutonomyEngine,
+            collect_git_diff_preview,
+            plan_shadow_worktree,
+            shadow_report_from_dict,
+        )
 
-if __name__ == "__main__":
-    unittest.main()
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "test"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+            (repo / "a.txt").write_text("one\n", encoding="utf-8")
+            subprocess.run(["git", "add", "a.txt"], cwd=repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "init"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+            (repo / "b.txt").write_text("two\n", encoding="utf-8")
+            subprocess.run(["git", "add", "b.txt"], cwd=repo, check=True, capture_output=True)
+            # No origin/release — falls back to WORKTREE / HEAD
+            preview = collect_git_diff_preview(base_ref="origin/release", cwd=repo)
+            self.assertTrue(preview["ok"], preview)
+            self.assertGreaterEqual(preview["file_count"], 1)
 
+            plan = plan_shadow_worktree("deploy", shadow_id="shadow-test-abc", base_ref="HEAD")
+            self.assertIn("deploy-shadow-test-abc", plan["path"])
+            self.assertTrue(plan["create_commands"])
+
+            eng = AutonomyEngine(repo=None)
+            eng.enabled = True
+            eng.risk_tolerance = "medium"
+            eng.shadow_base_dir = Path(tmp) / "shadow"
+            eng.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            report = eng.simulate_action(
+                "deploy",
+                scope={"cwd": str(repo), "base_ref": "HEAD"},
+            )
+            d = report.to_dict()
+            self.assertTrue(d["predicted_diff"].get("ok"))
+            self.assertTrue(d["worktree_plan"].get("path"))
+            # Durable rehydrate keeps new fields
+            rehyd = shadow_report_from_dict(d)
+            self.assertEqual(rehyd.predicted_diff.get("ok"), True)
+            self.assertTrue(rehyd.worktree_plan.get("create_commands"))
 
     def test_gate_honors_approved_checkpoint_id(self):
         """#648: approved checkpoint_id supplies approved + shadow_ack to gate."""
@@ -441,7 +508,11 @@ if __name__ == "__main__":
                 "risk_tolerance": "low",
                 "token_budget": {"daily": 50000, "per_cycle": 8000},
             }
-            blocked = eng.gate_high_impact("auto_merge", shadow_ack=None)
+            blocked = eng.gate_high_impact(
+                "auto_merge",
+                shadow_ack=None,
+                scope={"skip_git_preview": True},
+            )
             self.assertTrue(blocked["blocked"])
             cid = blocked["checkpoint_id"]
             sid = blocked["shadow_report"]["shadow_id"]
@@ -457,11 +528,11 @@ if __name__ == "__main__":
                 "auto_merge",
                 checkpoint_id=cid,
                 create_checkpoint=False,
+                scope={"skip_git_preview": True},
             )
             self.assertFalse(ok["blocked"], ok)
             self.assertEqual(ok["mode"], "approved")
             self.assertEqual(ok["shadow_report"]["shadow_id"], sid)
-
 
     def test_durable_budget_spend_across_engines(self):
         """#634: spend counters persist under .agentic/budget so governor survives restart."""
@@ -475,6 +546,11 @@ if __name__ == "__main__":
             eng1.enabled = True
             eng1.risk_tolerance = "high"
             eng1.budget_base_dir = bdir
+            # Isolate from any real .agentic/budget hydrated at __init__
+            eng1._spent_today = 0
+            eng1._spent_this_cycle = 0
+            eng1._spent_usd_today = 0.0
+            eng1.throttled_actions = 0
             eng1.autonomy_config = {
                 "enabled": True,
                 "risk_tolerance": "high",
@@ -516,3 +592,7 @@ if __name__ == "__main__":
             est = 50_000  # ~0.1 USD at heuristic rate
             self.assertGreater(tokens_to_usd(est), 0.0001)
             self.assertEqual(eng.enforce_budget(est, "plan_epic"), Decision.PAUSE)
+
+
+if __name__ == "__main__":
+    unittest.main()
