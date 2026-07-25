@@ -317,6 +317,11 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - Clear signaling: PLATE markers on comments, quiet ops, and collab markers for ownership handoffs.
 - Path/branch ownership (#651): humans claim pause via `plate_collab_ownership_claim` / `gh plate collab --claim` (durable `.agentic/collab/`). Agents must call policy check with paths/branch; skip overlapping work until release. Use feature/* or bug/* branches in isolated worktrees — never agent-edit main/release directly.
 
+### Multi-agent fleet (#644)
+- Prefer explicit handoffs: `plate_fleet_handoff` / `gh plate fleet --handoff` with narrow context packets (GitHub as truth; local `.agentic/fleet/` coordination only).
+- Plan multi-role work from intent with `plate_fleet_plan` (dry-run default); allocate budget via `plate_fleet_allocate`.
+- Complete handoffs with provenance; surface active handoffs in the feed. Complements PM personas (#660) and `plate_delegate_to_agent`.
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 

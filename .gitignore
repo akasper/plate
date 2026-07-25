@@ -174,5 +174,8 @@ tests/e2e/package-lock.json
 # Ephemeral #660 PM assignment queue + last_cycle (local runtime)
 .agentic/pm/
 
+# Ephemeral #644 multi-agent fleet handoffs (local coordination)
+.agentic/fleet/
+
 # Ephemeral planning sessions + pending plan stubs (#628/#630)
 .agentic/planning/
