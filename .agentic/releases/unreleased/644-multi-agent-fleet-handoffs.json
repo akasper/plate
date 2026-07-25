@@ -1,0 +1,25 @@
+{
+  "slug": "644-multi-agent-fleet-handoffs",
+  "change_type": "feature",
+  "surface": "src/plate_core/fleet.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+  "summary": "Multi-agent fleet orchestration first slice (#644): durable handoff contracts under .agentic/fleet/, role catalog (planner/implementer/reviewer/researcher/deployer/market), budget allocation, intent→plan, feed signals, MCP plate_fleet_* + gh plate fleet, ledger markers.",
+  "migration_impact": "Optional local fleet state in .agentic/fleet/ (gitignored). Complements PM personas (#660) and plate_delegate_to_agent; does not auto-spawn remote agents.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate fleet --roles / plate_fleet_roles to see fleet catalog.",
+    "3. Dry-run: gh plate fleet --plan \"...intent...\" or plate_fleet_plan; --apply/create to open handoffs.",
+    "4. Complete with plate_fleet_complete; watch feed for active handoffs."
+  ],
+  "agent_notes": "First slice of Epic #644 — contracts + coordination only. Full multi-runtime spawn, webhooks, and cross-host scheduling remain follow-ups. Prefer dry_run plan before create when risk unknown.",
+  "breaking": false,
+  "links": [
+    "#644",
+    "#660",
+    "#654",
+    "#470",
+    "#631"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

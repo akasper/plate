@@ -63,6 +63,17 @@ from .pm import (
     run_pm_cycle,
     run_pm_loop,
 )
+from .fleet import (
+    allocate_fleet_budget,
+    complete_handoff,
+    create_handoff,
+    fleet_status,
+    handoff_feed_items,
+    list_fleet_roles,
+    list_handoffs,
+    plan_fleet_from_intent,
+    update_handoff,
+)
 from .tasks import (
     close_task_with_signal,
     create_task,
@@ -1040,6 +1051,125 @@ def cmd_task(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def cmd_fleet(args: argparse.Namespace) -> int:
+    """Multi-agent fleet handoffs + budget allocation (#644)."""
+    if getattr(args, "roles", False):
+        roles = list_fleet_roles()
+        if args.json:
+            print(json.dumps({"roles": roles}))
+            return 0
+        for r in roles:
+            print(f"{r['id']}: {r['name']} ({r['role']}) share={r.get('default_token_share')}")
+        return 0
+
+    if getattr(args, "handoff", False):
+        out = create_handoff(
+            from_agent=str(getattr(args, "from_agent", None) or "orchestrator"),
+            to_agent=str(getattr(args, "to_agent", None) or ""),
+            task=str(getattr(args, "task", None) or ""),
+            budget_tokens=getattr(args, "budget_tokens", None),
+            risk=str(getattr(args, "risk", None) or "medium"),
+            related_issue=getattr(args, "related_issue", None),
+            related_pr=getattr(args, "related_pr", None),
+            requires_human=bool(getattr(args, "requires_human", False)),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        h = out.get("handoff") or {}
+        print(f"ok={out.get('ok')} id={h.get('handoff_id')} {h.get('from_agent')}→{h.get('to_agent')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "complete", None):
+        out = complete_handoff(str(args.complete), notes=str(getattr(args, "note", None) or ""))
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"complete: ok={out.get('ok')} status={(out.get('handoff') or {}).get('status')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "update", None):
+        out = update_handoff(
+            str(args.update),
+            status=getattr(args, "handoff_status", None),
+            notes=str(getattr(args, "note", None) or "") or None,
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        print(f"update: ok={out.get('ok')} status={(out.get('handoff') or {}).get('status')}")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "list_handoffs", False):
+        rows = list_handoffs(
+            status=str(getattr(args, "status", None) or "active"),
+            to_agent=getattr(args, "to_agent", None) or None,
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+        if args.json:
+            print(json.dumps({"handoffs": rows}))
+            return 0
+        for h in rows:
+            print(
+                f"{h.get('handoff_id')} [{h.get('status')}] "
+                f"{h.get('from_agent')}→{h.get('to_agent')}: {h.get('task')}"
+            )
+        return 0
+
+    if getattr(args, "allocate", False):
+        total = int(getattr(args, "budget_tokens", None) or 20000)
+        roles = getattr(args, "active_roles", None) or ""
+        active = [x.strip() for x in str(roles).split(",") if x.strip()] or None
+        out = allocate_fleet_budget(
+            total,
+            active_roles=active,
+            risk_tolerance=str(getattr(args, "risk", None) or "medium"),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        for a in out.get("allocations") or []:
+            print(f"{a['agent_id']}: {a['tokens']} tokens (share={a['share']})")
+        return 0 if out.get("ok") else 1
+
+    if getattr(args, "plan", None) is not None:
+        intent = str(args.plan or "")
+        out = plan_fleet_from_intent(
+            intent,
+            budget_tokens=int(getattr(args, "budget_tokens", None) or 20000),
+            risk_tolerance=str(getattr(args, "risk", None) or "medium"),
+            related_issue=getattr(args, "related_issue", None),
+            create=bool(getattr(args, "apply", False)),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"plan steps={len(out.get('plan') or [])} created={out.get('n_created')} dry_run={out.get('dry_run')}")
+        for s in out.get("plan") or []:
+            print(f"  → {s.get('to_agent')}: {s.get('task')[:80]} ({s.get('budget_tokens')} tok)")
+        return 0
+
+    if getattr(args, "feed", False):
+        rows = handoff_feed_items(limit=int(getattr(args, "limit", 10) or 10))
+        if args.json:
+            print(json.dumps({"items": rows}))
+            return 0
+        for r in rows:
+            print(f"{r.get('id')} {r.get('title')}")
+        return 0
+
+    # default status
+    st = fleet_status(
+        budget_remaining=getattr(args, "budget_tokens", None),
+        risk_tolerance=str(getattr(args, "risk", None) or "medium"),
+    )
+    if args.json:
+        print(json.dumps(st))
+        return 0
+    print(f"fleet: active={st.get('n_active')} human_needed={st.get('human_needed')} by_agent={st.get('by_agent')}")
+    return 0
 
 
 def cmd_pm(args: argparse.Namespace) -> int:
@@ -2028,6 +2158,40 @@ def build_parser() -> argparse.ArgumentParser:
     task.add_argument("--dry-run", action="store_true")
     task.add_argument("--json", action="store_true")
     task.set_defaults(func=cmd_task)
+
+    fleet = sub.add_parser(
+        "fleet",
+        help="Multi-agent fleet handoffs + budget allocation (#644)",
+    )
+    fleet.add_argument("--roles", action="store_true", help="List fleet roles")
+    fleet.add_argument("--handoff", action="store_true", help="Create agent→agent handoff")
+    fleet.add_argument("--from-agent", dest="from_agent", default="orchestrator")
+    fleet.add_argument("--to-agent", dest="to_agent", default="")
+    fleet.add_argument("--task", default="", help="Handoff task description")
+    fleet.add_argument("--complete", metavar="HANDOFF_ID", help="Mark handoff done")
+    fleet.add_argument("--update", metavar="HANDOFF_ID", help="Update handoff status")
+    fleet.add_argument(
+        "--handoff-status",
+        dest="handoff_status",
+        default=None,
+        help="Status for --update: open|accepted|done|blocked|cancelled",
+    )
+    fleet.add_argument("--list-handoffs", action="store_true", help="List handoffs")
+    fleet.add_argument("--status", default="active", help="Filter: open|active|done|all")
+    fleet.add_argument("--allocate", action="store_true", help="Split budget across roles")
+    fleet.add_argument("--plan", metavar="INTENT", nargs="?", const="", help="Plan fleet from intent (dry-run unless --apply)")
+    fleet.add_argument("--apply", action="store_true", help="With --plan: create handoffs")
+    fleet.add_argument("--feed", action="store_true", help="Feed presentation for active handoffs")
+    fleet.add_argument("--budget-tokens", dest="budget_tokens", type=int, default=None)
+    fleet.add_argument("--risk", default="medium")
+    fleet.add_argument("--active-roles", dest="active_roles", default="", help="Comma roles for --allocate")
+    fleet.add_argument("--related-issue", dest="related_issue", type=int)
+    fleet.add_argument("--related-pr", dest="related_pr", type=int)
+    fleet.add_argument("--requires-human", dest="requires_human", action="store_true")
+    fleet.add_argument("--note", default="")
+    fleet.add_argument("--limit", type=int, default=50)
+    fleet.add_argument("--json", action="store_true")
+    fleet.set_defaults(func=cmd_fleet)
 
     pm = sub.add_parser(
         "pm",
