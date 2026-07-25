@@ -370,7 +370,44 @@ class AutonomyEngine:
         self.shadow_base_dir: Path | None = None  # tests override; default SHADOW_DIR
         self.checkpoint_base_dir: Path | None = None  # tests override for #648 bridge
         self.budget_base_dir: Path | None = None  # tests override; default BUDGET_DIR
+        self.ledger_base_dir: Path | None = None  # tests override; default LEDGER_DIR
         self._load_durable_spend()
+
+    def _ledger_record(
+        self,
+        action_kind: str,
+        decision: str,
+        reason: str,
+        *,
+        cost_estimate_tokens: int | None = None,
+        impact: str = "",
+        shadow_id: str | None = None,
+        checkpoint_id: str | None = None,
+        sources: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        session: str = "",
+    ) -> dict[str, Any] | None:
+        """Best-effort #647 provenance write (never raises into autonomy path)."""
+        try:
+            from .ledger import record_decision
+
+            return record_decision(
+                action_kind=action_kind,
+                decision=decision,
+                reason=reason,
+                sources=sources or ["autonomy_engine"],
+                cost_estimate_tokens=cost_estimate_tokens,
+                risk_tolerance=self.risk_tolerance,
+                impact=impact,
+                shadow_id=shadow_id,
+                checkpoint_id=checkpoint_id,
+                actor="autonomy",
+                session=session,
+                metadata=metadata,
+                base_dir=self.ledger_base_dir,
+            )
+        except Exception:
+            return None
 
     def _load_durable_spend(self) -> None:
         """Hydrate spend counters from .agentic/budget/spend.json for process-safe #634 enforcement."""
@@ -600,6 +637,20 @@ class AutonomyEngine:
                         "pause_autonomy": cp.get("pause_autonomy"),
                     }
                     out["checkpoint_id"] = cp.get("id")
+            # #647: durable provenance for blocked high-impact gates
+            led = self._ledger_record(
+                kind,
+                "shadow_required",
+                reason,
+                cost_estimate_tokens=shadow.estimated_tokens,
+                impact=shadow.impact,
+                shadow_id=shadow.shadow_id,
+                checkpoint_id=out.get("checkpoint_id"),
+                sources=["autonomy_engine", "gate_high_impact", "#645"],
+                metadata={"mode": mode},
+            )
+            if led and led.get("id"):
+                out["ledger_id"] = led["id"]
             return out
 
         if impact in ("low", "medium"):
@@ -971,12 +1022,24 @@ class AutonomyEngine:
         # #648 hard pause when open human checkpoints exist
         try:
             from .checkpoint import autonomy_is_paused_by_checkpoints
-            pause_info = autonomy_is_paused_by_checkpoints()
+            pause_info = autonomy_is_paused_by_checkpoints(base_dir=self.checkpoint_base_dir)
             if pause_info.get("paused"):
                 ids = ", ".join(pause_info.get("checkpoint_ids") or []) or "(unknown)"
+                led = self._ledger_record(
+                    "run_cycle",
+                    "pause",
+                    f"open human checkpoint(s): {ids}",
+                    sources=["autonomy_engine", "checkpoint", "#648"],
+                    checkpoint_id=(pause_info.get("checkpoint_ids") or [None])[0],
+                    session=ts,
+                    metadata={"checkpoint_ids": pause_info.get("checkpoint_ids")},
+                )
+                taken = [f"paused: open human checkpoint(s) {ids}"]
+                if led and led.get("id"):
+                    taken.append(f"ledger: {led['id']} decision=pause")
                 return CycleReport(
                     status="paused",
-                    actions_taken=[f"paused: open human checkpoint(s) {ids}"],
+                    actions_taken=taken,
                     throttled=["checkpoint"],
                     paused=True,
                     budget_decision="pause",
@@ -995,6 +1058,16 @@ class AutonomyEngine:
             if dec == Decision.PAUSE:
                 paused = True
                 budget_dec = dec.value
+                led = self._ledger_record(
+                    "run_cycle",
+                    "pause",
+                    "budget governor paused cycle (no actions under token/USD rails)",
+                    cost_estimate_tokens=probe_est,
+                    sources=["autonomy_engine", "enforce_budget", "#634"],
+                    session=ts,
+                )
+                if led and led.get("id"):
+                    actions.append(f"ledger: {led['id']} decision=pause")
         for act in decided[: (max_steps if max_steps is not None else 10)]:
             kind = act.get("type", "unknown")
             est = act.get("est") or self.estimate_cost(kind, {"cost_report": snap.cost_report, "num_items": 2})
@@ -1010,6 +1083,7 @@ class AutonomyEngine:
                     risk_tolerance=self.risk_tolerance,
                     session=ts,
                     actor="autonomy",
+                    base_dir=self.ledger_base_dir,
                 )
                 actions.append(f"ledger: {led.get('id')} decision={dec.value}")
             except Exception:

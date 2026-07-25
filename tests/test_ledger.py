@@ -159,6 +159,62 @@ class TestAutonomyLedgerWire(unittest.TestCase):
             )
             self.assertGreaterEqual(len(list(base.glob("*.json"))), 1)
 
+    def test_gate_block_writes_ledger(self):
+        """#647: gate_high_impact shadow_required records durable provenance."""
+        from plate_core.autonomy import AutonomyEngine
+        from plate_core.ledger import list_decisions
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eng = AutonomyEngine(repo=None)
+            eng.enabled = True
+            eng.risk_tolerance = "low"
+            eng.shadow_base_dir = root / "shadow"
+            eng.checkpoint_base_dir = root / "cp"
+            eng.ledger_base_dir = root / "ledger"
+            eng.budget_base_dir = root / "budget"
+            eng.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "low",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            blocked = eng.gate_high_impact("deploy", shadow_ack=None)
+            self.assertTrue(blocked["blocked"])
+            self.assertIn("ledger_id", blocked)
+            rows = list_decisions(decision="shadow_required", base_dir=root / "ledger")
+            self.assertGreaterEqual(len(rows), 1)
+            self.assertEqual(rows[0].get("action_kind"), "deploy")
+
+    def test_checkpoint_pause_writes_ledger(self):
+        from plate_core.autonomy import AutonomyEngine
+        from plate_core.checkpoint import create_checkpoint
+        from plate_core.ledger import list_decisions
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            create_checkpoint(
+                "block cycle",
+                "need human",
+                impact="high",
+                base_dir=root / "cp",
+            )
+            eng = AutonomyEngine(repo=None)
+            eng.enabled = True
+            eng.risk_tolerance = "medium"
+            eng.checkpoint_base_dir = root / "cp"
+            eng.ledger_base_dir = root / "ledger"
+            eng.budget_base_dir = root / "budget"
+            eng.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            report = eng.run_cycle(dry_run=True, max_steps=1)
+            self.assertTrue(report.paused)
+            self.assertTrue(any("ledger:" in str(a) for a in report.actions_taken))
+            rows = list_decisions(decision="pause", base_dir=root / "ledger")
+            self.assertGreaterEqual(len(rows), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
