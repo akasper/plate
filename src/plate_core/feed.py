@@ -717,6 +717,30 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #639 active feature implementation loops → feed signals
+    try:
+        from .feature_loop import feature_loop_feed_items
+
+        for fl in feature_loop_feed_items(limit=10):
+            signal_items.append(
+                {
+                    "id": fl.get("id"),
+                    "type": "feature_loop",
+                    "title": fl.get("title"),
+                    "rank": 11,
+                    "impact": fl.get("impact") or "medium",
+                    "reason": fl.get("reason") or "Feature implementation loop (#639)",
+                    "prompt_segment": (
+                        f"{fl.get('title')} (est {fl.get('cost_estimate_tokens')} tok). "
+                        f"Advance: plate_feature_loop_advance {fl.get('id')}."
+                    ),
+                    "source": "feature_loop",
+                    "ask_user_question": fl.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,
