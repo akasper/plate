@@ -70,6 +70,7 @@ from .design_research_approval import (
 from .pm import (
     complete_pm_assignment,
     get_pm_status,
+    tick_pm_loops,
     list_pm_queue,
     list_team,
     run_pm_cycle,
@@ -2462,6 +2463,26 @@ def cmd_pm(args: argparse.Namespace) -> int:
             return 0 if out.get("ok") else 1
         print(f"complete: ok={out.get('ok')} status={ (out.get('assignment') or {}).get('status') }")
         return 0 if out.get("ok") else 1
+    if getattr(args, "tick_loops", False):
+        out = tick_pm_loops(
+            repo=getattr(args, "repo", None),
+            dry_run=not getattr(args, "apply", False),
+            fetch_gates=bool(getattr(args, "fetch_loop_gates", False)),
+            limit=int(getattr(args, "limit", 20) or 20),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(
+            f"PM tick_loops: n={out.get('n_ticks')} advanced={out.get('n_advanced')} "
+            f"completed={out.get('n_completed')} dry_run={out.get('dry_run')}"
+        )
+        for t in (out.get("loop_ticks") or [])[:10]:
+            print(
+                f"  {t.get('loop_kind')} {t.get('loop_run_id')}: "
+                f"stage={t.get('stage')} adv={t.get('advanced')} done={t.get('completed_assignment')}"
+            )
+        return 0
     if getattr(args, "loop", False):
         rep = run_pm_loop(
             repo=getattr(args, "repo", None),
@@ -3809,6 +3830,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="fetch_loop_gates",
         action="store_true",
         help="With --apply: fetch PR merge gates when ticking babysit loops",
+    )
+    pm.add_argument(
+        "--tick-loops",
+        dest="tick_loops",
+        action="store_true",
+        help="Tick delegated #638/#639 loops only (no new assigns); use --apply to advance estimate_cost/babysit",
     )
     pm.add_argument("--max-assignments", dest="max_assignments", type=int, default=5)
     pm.add_argument("--max-cycles", dest="max_cycles", type=int, default=3)
