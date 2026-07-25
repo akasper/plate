@@ -257,7 +257,66 @@ def plan_op(op_id: str, *, dry_run: bool = True) -> dict[str, Any]:
     op = get_op(op_id)
     if not op:
         return {"ok": False, "error": f"unknown op: {op_id}"}
-    return {"ok": True, "op": op, "packet": build_op_packet(op, dry_run=dry_run)}
+    est = estimate_op_cost(op_id, dry_run=dry_run)
+    return {
+        "ok": True,
+        "op": op,
+        "packet": build_op_packet(op, dry_run=dry_run),
+        "cost_estimate": est,
+    }
+
+
+# Heuristic token costs by risk (#634 / #641 parity with feature/bug loops).
+_OP_ESTIMATE_BASE: dict[str, int] = {
+    "low": 3000,
+    "medium": 8000,
+    "high": 15000,
+    "critical": 25000,
+}
+
+
+def estimate_op_cost(
+    op_id: str,
+    *,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Upfront cost estimate for a scheduled op (#634/#641).
+
+    Advisory tokens for budget gates; AutonomyEngine ceilings still apply on autonomy loops.
+    dry_run packets are cheaper (planning-only) than apply runs.
+    """
+    op = get_op(op_id)
+    if not op:
+        return {
+            "ok": False,
+            "op_id": op_id,
+            "estimated_tokens": 0,
+            "error": f"unknown op: {op_id}",
+        }
+    risk = str(op.get("risk_level") or "medium").lower()
+    if risk not in _OP_ESTIMATE_BASE:
+        risk = "medium"
+    base = _OP_ESTIMATE_BASE[risk]
+    # dry_run: packet + shadow only; apply: full agent steps
+    tokens = max(500, base // 4) if dry_run else base
+    if bool(op.get("requires_human")) and not dry_run:
+        tokens += 2000  # checkpoint / human coordination overhead
+    return {
+        "ok": True,
+        "op_id": op_id,
+        "risk_level": risk,
+        "dry_run": dry_run,
+        "estimated_tokens": int(tokens),
+        "breakdown": {
+            "base": base,
+            "dry_run_discount": base - tokens if dry_run else 0,
+            "human_overhead": 2000 if (bool(op.get("requires_human")) and not dry_run) else 0,
+        },
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine still enforce hard ceilings.",
+            "Gate scheduled runs with budget_remaining / live hydrate (use_live_budget).",
+        ],
+    }
 
 
 def run_scheduled_op(
@@ -270,8 +329,15 @@ def run_scheduled_op(
     note: str = "",
     base_dir: Path | None = None,
     record_ledger: bool = True,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any]:
-    """Start/record a scheduled op run. dry_run default — no side effects beyond local ledger."""
+    """Start/record a scheduled op run. dry_run default — no side effects beyond local ledger.
+
+    #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
+    hydrate remaining tokens from durable budget snapshot and block if est exceeds remaining.
+    Explicit ``budget_remaining`` wins; ``use_live_budget=False`` skips live hydrate.
+    """
     op = get_op(op_id)
     if not op:
         return {"ok": False, "error": f"unknown op: {op_id}"}
@@ -281,6 +347,29 @@ def run_scheduled_op(
     rank = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
     tol = rank.get((risk_tolerance or "medium").lower(), 0)
     op_rank = rank.get(risk.lower(), 2)
+
+    cost_est = estimate_op_cost(op_id, dry_run=dry_run)
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    effective_budget = budget_remaining
+    budget_notes: list[str] = []
+    if effective_budget is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            budget_snap = get_budget_snapshot(estimate_tokens=est_tokens)
+            rem = budget_snap.get("remaining_tokens")
+            if rem is not None:
+                effective_budget = int(rem)
+                budget_notes.append(
+                    f"budget hydrated: remaining_tokens={effective_budget} "
+                    f"pressure={budget_snap.get('budget_pressure')}"
+                )
+            if budget_snap.get("would_pause_next_cycle") and effective_budget is not None:
+                # Mirror dashboard pressure: treat would_pause as zero room for new spend
+                if int(effective_budget) < est_tokens:
+                    budget_notes.append("budget snapshot would_pause_next_cycle")
+        except Exception as exc:
+            budget_notes.append(f"budget hydrate skipped: {exc}")
 
     blocked = False
     reasons: list[str] = []
@@ -293,6 +382,11 @@ def run_scheduled_op(
     if risk == "critical" and not approved:
         blocked = True
         reasons.append("critical op always needs explicit approved=true")
+    if effective_budget is not None and est_tokens > int(effective_budget):
+        blocked = True
+        reasons.append(
+            f"budget: est {est_tokens} tokens exceeds remaining {effective_budget}"
+        )
 
     packet = build_op_packet(op, dry_run=dry_run)
     # #645: always attach a shadow/simulate preview for medium+ scheduled ops
@@ -337,6 +431,7 @@ def run_scheduled_op(
             reasons.append(f"shadow preview unavailable: {exc}")
 
     ts = _now()
+    merged_notes = list(budget_notes) + list(reasons) + ([note] if note else [])
     run = ScheduledOpRun(
         id=f"sop-{uuid.uuid4().hex[:10]}",
         op_id=op_id,
@@ -345,7 +440,7 @@ def run_scheduled_op(
         requires_human=needs_human,
         checkpoint_id=checkpoint_id,
         packet=packet,
-        notes=reasons + ([note] if note else []),
+        notes=merged_notes,
         created_at=ts,
         updated_at=ts,
         completed_at=ts if (dry_run and not blocked) else None,
@@ -353,6 +448,13 @@ def run_scheduled_op(
             "risk_tolerance": risk_tolerance,
             "approved": approved,
             "shadow_id": shadow_id,
+            "cost_estimate_tokens": est_tokens,
+            "budget_remaining": effective_budget,
+            "budget_source": (
+                "explicit"
+                if budget_remaining is not None
+                else ("live" if use_live_budget else "none")
+            ),
         },
     )
     if dry_run and not blocked:
@@ -379,6 +481,9 @@ def run_scheduled_op(
         "packet": packet,
         "proc_id": op_id,
         "status": "blocked" if blocked else ("dry-run" if dry_run else "executed"),
+        "cost_estimate_tokens": est_tokens,
+        "cost_estimate": cost_est,
+        "budget_remaining": effective_budget,
         "log_marker": (
             f"<!-- PLATE-PROCEDURE-RUN:{op_id} cadence={op.get('cadence')} "
             f"risk={risk} dry_run={dry_run} -->"
@@ -399,13 +504,19 @@ def run_scheduled_op(
                 action_kind="scheduled_op",
                 decision="pause" if blocked else ("proceed" if not dry_run else "shadow"),
                 reason=f"scheduled op {op_id}: {out.get('status')}",
-                sources=["scheduled_ops", "#641", "#645"],
+                sources=["scheduled_ops", "#641", "#645", "#634"],
                 risk_tolerance=risk_tolerance,
                 impact=risk,
                 checkpoint_id=checkpoint_id,
                 shadow_id=shadow_id,
                 actor="scheduled_ops",
-                metadata={"run_id": run.id, "op_id": op_id, "dry_run": dry_run},
+                metadata={
+                    "run_id": run.id,
+                    "op_id": op_id,
+                    "dry_run": dry_run,
+                    "cost_estimate_tokens": est_tokens,
+                    "budget_remaining": effective_budget,
+                },
             )
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:
@@ -469,8 +580,13 @@ def scheduled_ops_status(
     *,
     risk_tolerance: str = "medium",
     base_dir: Path | None = None,
+    include_budget: bool = True,
 ) -> dict[str, Any]:
-    """Summary for autonomy/status surfaces."""
+    """Summary for autonomy/status surfaces.
+
+    When include_budget is True, attach #634 remaining_tokens from durable snapshot
+    so operators see whether apply runs would gate on budget.
+    """
     rank = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
     tol = rank.get((risk_tolerance or "medium").lower(), 0)
     runnable = []
@@ -481,12 +597,18 @@ def scheduled_ops_status(
             "cadence": o["cadence"],
             "risk_level": o["risk_level"],
             "requires_human": o["requires_human"],
+            "estimated_tokens_dry_run": estimate_op_cost(o["id"], dry_run=True).get(
+                "estimated_tokens"
+            ),
+            "estimated_tokens_apply": estimate_op_cost(o["id"], dry_run=False).get(
+                "estimated_tokens"
+            ),
         }
         if rank.get(str(o["risk_level"]).lower(), 2) <= tol and not o["requires_human"]:
             runnable.append(item)
         else:
             gated.append(item)
-    return {
+    out: dict[str, Any] = {
         "ops": list_ops(),
         "runnable_at_tolerance": runnable,
         "gated": gated,
@@ -494,6 +616,17 @@ def scheduled_ops_status(
         "risk_tolerance": risk_tolerance,
         "n_ops": len(OPS_CATALOG),
     }
+    if include_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            snap = get_budget_snapshot()
+            out["budget_remaining_tokens"] = snap.get("remaining_tokens")
+            out["budget_pressure"] = snap.get("budget_pressure")
+            out["would_pause_next_cycle"] = snap.get("would_pause_next_cycle")
+        except Exception as exc:
+            out["budget_error"] = str(exc)
+    return out
 
 
 def ops_feed_items(
@@ -536,6 +669,8 @@ def run_procedure_dispatch(
     approved: bool = False,
     checkpoint_id: str | None = None,
     base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
 ) -> dict[str, Any] | None:
     """If proc_id is a #641 op, run it; else return None for caller fallback."""
     if get_op(proc_id) is None:
@@ -547,4 +682,6 @@ def run_procedure_dispatch(
         approved=approved,
         checkpoint_id=checkpoint_id,
         base_dir=base_dir,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
     )

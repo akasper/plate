@@ -1391,6 +1391,12 @@ def cmd_scheduled_ops(args: argparse.Namespace) -> int:
         return 0 if out.get("ok") else 1
 
     if getattr(args, "run", None):
+        budget_remaining = getattr(args, "budget_remaining", None)
+        if budget_remaining is not None:
+            try:
+                budget_remaining = int(budget_remaining)
+            except (TypeError, ValueError):
+                budget_remaining = None
         out = run_scheduled_op(
             str(args.run),
             dry_run=not getattr(args, "apply", False),
@@ -1398,11 +1404,16 @@ def cmd_scheduled_ops(args: argparse.Namespace) -> int:
             approved=bool(getattr(args, "approved", False)),
             checkpoint_id=getattr(args, "checkpoint_id", None) or None,
             note=getattr(args, "note", None) or "",
+            budget_remaining=budget_remaining,
+            use_live_budget=not bool(getattr(args, "no_live_budget", False)),
         )
         if args.json:
             print(json.dumps(out))
             return 0 if out.get("ok") else 1
-        print(f"ok={out.get('ok')} status={out.get('status')} blocked={out.get('blocked')}")
+        print(
+            f"ok={out.get('ok')} status={out.get('status')} blocked={out.get('blocked')} "
+            f"est={out.get('cost_estimate_tokens')} budget_remaining={out.get('budget_remaining')}"
+        )
         return 0 if out.get("ok") else 1
 
     if getattr(args, "runs", False):
@@ -3538,6 +3549,19 @@ def build_parser() -> argparse.ArgumentParser:
     sops.add_argument("--complete-status", dest="complete_status", default="done")
     sops.add_argument("--note", default="")
     sops.add_argument("--limit", type=int, default=50)
+    sops.add_argument(
+        "--budget-remaining",
+        dest="budget_remaining",
+        type=int,
+        default=None,
+        help="Explicit remaining tokens for #634 gate (overrides live hydrate)",
+    )
+    sops.add_argument(
+        "--no-live-budget",
+        dest="no_live_budget",
+        action="store_true",
+        help="Do not hydrate budget from spend.json / .plate",
+    )
     sops.add_argument("--json", action="store_true")
     sops.set_defaults(func=cmd_scheduled_ops)
 
