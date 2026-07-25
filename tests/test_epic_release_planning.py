@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import unittest
 
+import tempfile
+from pathlib import Path
+
 from plate_core.epic_release_planning import (
     apply_er_answer,
     build_epic_plan,
     build_er_plan_from_session,
     build_release_plan,
     get_er_script,
+    load_er_session,
     start_er_session,
 )
+from plate_core.planning import list_pending_plans
 
 
 class TestEpicPlanning640(unittest.TestCase):
@@ -38,7 +43,7 @@ class TestEpicPlanning640(unittest.TestCase):
         self.assertIn("PLATE-EPIC-RELEASE-PLAN", plan["marker"])
 
     def test_session_walk(self):
-        start = start_er_session("epic")
+        start = start_er_session("epic", persist=False)
         session = start["session"]
         answers = [
             "Feed UX",
@@ -51,10 +56,10 @@ class TestEpicPlanning640(unittest.TestCase):
             "Minor",
         ]
         for a in answers:
-            out = apply_er_answer(session, a)
+            out = apply_er_answer(session, a, persist=False)
             session = out["session"]
         self.assertTrue(session["complete"])
-        built = build_er_plan_from_session(session)
+        built = build_er_plan_from_session(session, persist_pending=False)
         self.assertTrue(built["ok"])
         self.assertEqual(built["plan"]["kind"], "epic")
 
@@ -81,7 +86,7 @@ class TestReleasePlanning629(unittest.TestCase):
         self.assertIn("demo gif", plan["notes_skeleton"]["media_plan"])
 
     def test_release_session(self):
-        start = start_er_session("release")
+        start = start_er_session("release", persist=False)
         session = start["session"]
         for a in [
             "Ship 1.0 slice",
@@ -93,13 +98,44 @@ class TestReleasePlanning629(unittest.TestCase):
             "none",
             "10k",
         ]:
-            out = apply_er_answer(session, a)
+            out = apply_er_answer(session, a, persist=False)
             session = out["session"]
         self.assertTrue(session["complete"])
-        built = build_er_plan_from_session(session)
+        built = build_er_plan_from_session(session, persist_pending=False)
         self.assertTrue(built["ok"])
         self.assertEqual(built["plan"]["kind"], "release")
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestERDurableTUI(unittest.TestCase):
+    def test_er_durable_and_tui(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sdir = Path(tmp) / "er_sessions"
+            start = start_er_session("epic", base_dir=sdir, persist=True)
+            self.assertIn("session_id", start)
+            self.assertIn("ask_user_question", start)
+            self.assertTrue(start["ask_user_question"]["allow_free_text"])
+            sid = start["session_id"]
+            self.assertIsNotNone(load_er_session(sid, base_dir=sdir))
+            out = apply_er_answer(start["session"], "Ship feed", base_dir=sdir, persist=True)
+            self.assertIn("ask_user_question", out)
+            loaded = load_er_session(sid, base_dir=sdir)
+            self.assertIn("intent", loaded["answers"])
+
+    def test_er_pending_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            start = start_er_session("release", base_dir=root / "er_sessions", persist=True)
+            session = start["session"]
+            # walk remaining questions with dummy answers
+            while not session.get("complete"):
+                out = apply_er_answer(session, "x", base_dir=root / "er_sessions", persist=True)
+                session = out["session"]
+            built = build_er_plan_from_session(session, planning_root=root, persist_pending=True)
+            self.assertTrue(built["ok"])
+            self.assertIn("ask_user_question", built)
+            pending = list_pending_plans(base_dir=root / "pending")
+            self.assertGreaterEqual(len(pending), 1)
