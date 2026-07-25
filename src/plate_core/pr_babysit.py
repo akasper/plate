@@ -298,8 +298,170 @@ def _load_review_threads(client: GhClient, repo: str, pr_number: int) -> list[di
     return pr_data.get("reviewThreads", [])
 
 
+def _summarize_status_check_rollup(rollup: dict | None) -> dict:
+    """Normalize GitHub statusCheckRollup into failing/pending counts + state.
+
+    Used by get_pr_merge_gates and evaluate_babysit_gates for #638/#639 loop advance.
+    """
+    if not isinstance(rollup, dict):
+        return {
+            "ci_state": None,
+            "failing_checks": 0,
+            "pending_checks": 0,
+            "ci_failing": False,
+            "ci_pending": False,
+        }
+    state = str(rollup.get("state") or "").upper() or None
+    failing = 0
+    pending = 0
+    contexts = rollup.get("contexts") or rollup.get("nodes") or []
+    if isinstance(contexts, dict):
+        contexts = contexts.get("nodes") or []
+    for ctx in contexts or []:
+        if not isinstance(ctx, dict):
+            continue
+        # CheckRun: status (QUEUED/IN_PROGRESS/COMPLETED) + conclusion
+        conclusion = str(ctx.get("conclusion") or "").upper()
+        status = str(ctx.get("status") or ctx.get("state") or "").upper()
+        if conclusion in ("FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"):
+            failing += 1
+        elif status in ("FAILURE", "ERROR"):
+            failing += 1
+        elif status in ("PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "REQUESTED", "WAITING"):
+            pending += 1
+        elif conclusion in ("", "NEUTRAL", "SKIPPED") and status in ("", "COMPLETED"):
+            continue
+    # Prefer rollup aggregate when contexts missing
+    if failing == 0 and pending == 0 and state:
+        if state in ("FAILURE", "ERROR"):
+            failing = 1
+        elif state in ("PENDING", "EXPECTED"):
+            pending = 1
+    return {
+        "ci_state": state,
+        "failing_checks": failing,
+        "pending_checks": pending,
+        "ci_failing": failing > 0 or state in ("FAILURE", "ERROR"),
+        "ci_pending": pending > 0 or state in ("PENDING", "EXPECTED"),
+    }
+
+
+def evaluate_babysit_gates(
+    gates: dict | None,
+    *,
+    require_ci_success: bool = True,
+    block_on_pending_ci: bool = True,
+) -> dict:
+    """Decide whether bug/feature loops may leave babysit (or merge_eligible).
+
+    Pure helper for #638/#639 advance gates. When ``gates`` is None, not blocked
+    (caller did not supply inspection). When present, blocks on:
+    - merge_state in BLOCKED/DIRTY/CONFLICTING/BEHIND
+    - unresolved / actionable agent review threads
+    - review_decision == CHANGES_REQUESTED
+    - CI failing (and optionally pending) when require_ci_success
+    - explicit need_human_review / labels containing need:human-review (soft: reason only
+      when also force-blocking via gates['block_human_review']=True — default False so
+      requires_human routing handles it)
+
+    Returns:
+        {blocked: bool, reason: str|None, checks: dict snapshot}
+    """
+    if not gates:
+        return {"blocked": False, "reason": None, "checks": {}}
+
+    merge_state = str(
+        gates.get("merge_state") or gates.get("mergeStateStatus") or ""
+    ).upper()
+    unresolved = int(
+        gates.get("unresolved_review_threads")
+        or gates.get("actionable_agent_threads")
+        or 0
+    )
+    # Prefer explicit actionable agent count for thread gate when both present
+    if gates.get("actionable_agent_threads") is not None and gates.get(
+        "unresolved_review_threads"
+    ) is not None:
+        unresolved = max(
+            int(gates.get("unresolved_review_threads") or 0),
+            int(gates.get("actionable_agent_threads") or 0),
+        )
+    review_decision = str(
+        gates.get("review_decision") or gates.get("reviewDecision") or ""
+    ).upper()
+    ci_failing = bool(gates.get("ci_failing"))
+    ci_pending = bool(gates.get("ci_pending"))
+    failing_checks = int(gates.get("failing_checks") or 0)
+    pending_checks = int(gates.get("pending_checks") or 0)
+    if failing_checks > 0:
+        ci_failing = True
+    if pending_checks > 0:
+        ci_pending = True
+    ci_state = str(gates.get("ci_state") or "").upper()
+    if ci_state in ("FAILURE", "ERROR"):
+        ci_failing = True
+    if ci_state in ("PENDING", "EXPECTED"):
+        ci_pending = True
+
+    checks = {
+        "merge_state": merge_state or None,
+        "unresolved_review_threads": unresolved,
+        "review_decision": review_decision or None,
+        "ci_failing": ci_failing,
+        "ci_pending": ci_pending,
+        "failing_checks": failing_checks,
+        "pending_checks": pending_checks,
+        "ci_state": ci_state or None,
+    }
+
+    if merge_state in ("BLOCKED", "DIRTY", "CONFLICTING", "BEHIND"):
+        return {
+            "blocked": True,
+            "reason": f"PR not clean ({merge_state}); stay on babysit",
+            "checks": checks,
+        }
+    if unresolved > 0:
+        return {
+            "blocked": True,
+            "reason": f"{unresolved} unresolved threads; stay on babysit",
+            "checks": checks,
+        }
+    if review_decision == "CHANGES_REQUESTED":
+        return {
+            "blocked": True,
+            "reason": "review_decision=CHANGES_REQUESTED; stay on babysit",
+            "checks": checks,
+        }
+    if require_ci_success and ci_failing:
+        n = failing_checks or 1
+        return {
+            "blocked": True,
+            "reason": f"CI failing ({n} check(s)); stay on babysit",
+            "checks": checks,
+        }
+    if require_ci_success and block_on_pending_ci and ci_pending:
+        n = pending_checks or 1
+        return {
+            "blocked": True,
+            "reason": f"CI pending ({n} check(s)); stay on babysit",
+            "checks": checks,
+        }
+    if gates.get("block_human_review"):
+        labels = gates.get("labels") or []
+        if gates.get("need_human_review") or any(
+            str(x) == "need:human-review" for x in labels
+        ):
+            return {
+                "blocked": True,
+                "reason": "need:human-review; stay on babysit/human_checkpoint",
+                "checks": checks,
+            }
+
+    return {"blocked": False, "reason": None, "checks": checks}
+
+
 def _load_pr_data(client: GhClient, repo: str, pr_number: int) -> dict:
-    """Load PR data including review threads and merge state.
+    """Load PR data including review threads, merge state, review decision, CI rollup.
 
     Returns:
         dict with keys:
@@ -307,6 +469,8 @@ def _load_pr_data(client: GhClient, repo: str, pr_number: int) -> dict:
             - mergeStateStatus (str): Merge state (CLEAN, BEHIND, CONFLICTING, DIRTY, etc)
             - baseRefName (str): Base branch name
             - headRefName (str): Head branch name
+            - reviewDecision (str|None): APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED / None
+            - statusCheckRollup (dict|None): GitHub rollup for head commit checks
     """
     owner, name = repo.split("/", 1)
     query = """
@@ -316,6 +480,10 @@ query($owner: String!, $repo: String!, $number: Int!) {
       mergeStateStatus
       baseRefName
       headRefName
+      reviewDecision
+      statusCheckRollup {
+        state
+      }
       reviewThreads(first: 100) {
         nodes {
           id
@@ -359,6 +527,8 @@ query($owner: String!, $repo: String!, $number: Int!) {
         "mergeStateStatus": pr.get("mergeStateStatus", "UNKNOWN"),
         "baseRefName": pr.get("baseRefName", ""),
         "headRefName": pr.get("headRefName", ""),
+        "reviewDecision": pr.get("reviewDecision"),
+        "statusCheckRollup": pr.get("statusCheckRollup"),
     }
 
 
@@ -820,15 +990,38 @@ def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhCli
     threads = pr_data.get("reviewThreads", [])
     scope = resolve_pr_review_scope(None)
     actionable = _extract_actionable_threads(threads, None, scope=scope)
+    ci = _summarize_status_check_rollup(pr_data.get("statusCheckRollup"))
+    review_decision = pr_data.get("reviewDecision")
+    gate_eval = evaluate_babysit_gates(
+        {
+            "merge_state": sync_info.get("state"),
+            "unresolved_review_threads": len(
+                [t for t in threads if not t.get("isResolved") and not t.get("isOutdated")]
+            ),
+            "actionable_agent_threads": len(actionable),
+            "review_decision": review_decision,
+            **ci,
+        }
+    )
 
     return {
         "repo": target,
         "pr_number": pr_number,
         "merge_state": sync_info.get("state"),
         "out_of_sync": sync_info.get("out_of_sync"),
-        "unresolved_review_threads": len([t for t in threads if not t.get("isResolved") and not t.get("isOutdated")]),
+        "unresolved_review_threads": len(
+            [t for t in threads if not t.get("isResolved") and not t.get("isOutdated")]
+        ),
         "actionable_agent_threads": len(actionable),
         "pr_review_scope": scope,
         "threads_with_suggestions": sum(1 for a in actionable if a.get("has_suggestion")),
-        "note": "Use plate_pr_babysit + gh pr checks + gh issue view for full gates (labels, CI, title, docs, etc.). Default pr_review_scope=all (#496) so Copilot/human threads count. Fix comprehensively in one loop. Escalate only true human-judgment items with need:human-review.",
+        "review_decision": review_decision,
+        "ci_state": ci.get("ci_state"),
+        "failing_checks": ci.get("failing_checks", 0),
+        "pending_checks": ci.get("pending_checks", 0),
+        "ci_failing": ci.get("ci_failing", False),
+        "ci_pending": ci.get("ci_pending", False),
+        "loop_advance_blocked": gate_eval.get("blocked", False),
+        "loop_advance_reason": gate_eval.get("reason"),
+        "note": "Use plate_pr_babysit + gh pr checks + gh issue view for full gates (labels, CI, title, docs, etc.). Default pr_review_scope=all (#496) so Copilot/human threads count. Bug/feature loops use evaluate_babysit_gates (CI + review_decision + threads + merge_state). Fix comprehensively in one loop. Escalate only true human-judgment items with need:human-review.",
     }

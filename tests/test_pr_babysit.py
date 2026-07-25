@@ -773,6 +773,8 @@ class PrBabysitTests(unittest.TestCase):
                         "mergeStateStatus": "BEHIND",
                         "baseRefName": "main",
                         "headRefName": "feature-branch",
+                        "reviewDecision": "CHANGES_REQUESTED",
+                        "statusCheckRollup": {"state": "FAILURE"},
                         "reviewThreads": {
                             "nodes": [
                                 {
@@ -811,8 +813,34 @@ class PrBabysitTests(unittest.TestCase):
         self.assertTrue(result["out_of_sync"])
         self.assertEqual(result["unresolved_review_threads"], 1)
         self.assertEqual(result["actionable_agent_threads"], 1)
+        self.assertEqual(result["review_decision"], "CHANGES_REQUESTED")
+        self.assertTrue(result["ci_failing"])
+        self.assertTrue(result["loop_advance_blocked"])
         self.assertIn("comprehensively", result["note"])
         self.assertIn("full gates", result["note"])
+
+    def test_evaluate_babysit_gates_ci_and_review(self):
+        """#638/#639 shared gate evaluator for loop advance."""
+        from plate_core.pr_babysit import evaluate_babysit_gates
+
+        clean = evaluate_babysit_gates(
+            {
+                "merge_state": "CLEAN",
+                "unresolved_review_threads": 0,
+                "ci_state": "SUCCESS",
+                "review_decision": "APPROVED",
+            }
+        )
+        self.assertFalse(clean["blocked"])
+
+        none = evaluate_babysit_gates(None)
+        self.assertFalse(none["blocked"])
+
+        fail = evaluate_babysit_gates(
+            {"merge_state": "CLEAN", "unresolved_review_threads": 0, "failing_checks": 3}
+        )
+        self.assertTrue(fail["blocked"])
+        self.assertIn("CI failing", fail["reason"])
 
     def test_long_running_background_task_protocol_in_guidance(self):
         """Regression test for #525: the long-running/background task protocol (record task_id, proactively schedule/polling with get_command_or_subagent_output or monitor at intervals rather than waiting for reminders, consider lightweight monitor helper) must be present in shipped guidance (and thus in the plate persona and pr-babysit flows)."""
