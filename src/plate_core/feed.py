@@ -669,6 +669,30 @@ def get_user_feed(
     except Exception:
         pass
 
+    # #637 stub drafts awaiting create/refine → feed signals
+    try:
+        from .stubs import stubs_feed_items
+
+        for sd in stubs_feed_items(limit=10):
+            signal_items.append(
+                {
+                    "id": sd.get("id"),
+                    "type": "stub_draft",
+                    "title": sd.get("title"),
+                    "rank": 22,
+                    "impact": sd.get("impact") or "medium",
+                    "reason": sd.get("reason") or "Stub draft (#637)",
+                    "prompt_segment": (
+                        f"{sd.get('title')}. "
+                        f"Create: plate_stub_create {sd.get('id')}; refine: plate_stub_refine."
+                    ),
+                    "source": "stubs",
+                    "ask_user_question": sd.get("ask_user_question"),
+                }
+            )
+    except Exception:
+        pass
+
     items = build_feed_items(
         questions=q_items,
         tasks=t_items,
