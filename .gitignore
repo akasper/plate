@@ -161,3 +161,6 @@ tests/e2e/package-lock.json
 
 # Ephemeral #645 shadow previews (durable ack; not release artifacts)
 .agentic/shadow/
+
+# Ephemeral #634 durable budget spend counters
+.agentic/budget/

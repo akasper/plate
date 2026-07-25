@@ -28,6 +28,11 @@ from .plate_config import load_plate_config, get_plate_config_report
 # Durable shadow previews (#645 harden): survive process restarts so shadow_ack works
 # across MCP/CLI sessions. Mirrors .agentic/checkpoints and .agentic/ledger layout.
 SHADOW_DIR = Path(".agentic/shadow")
+# Durable daily/cycle spend for #634 budget governor (survives process restart / --loop hosts).
+BUDGET_DIR = Path(".agentic/budget")
+BUDGET_SPEND_FILE = "spend.json"
+# Heuristic USD per 1k tokens for cost_ceiling projections (not billing).
+_USD_PER_1K_TOKENS = 0.002
 
 
 def _shadow_path(shadow_id: str, base_dir: Path | None = None) -> Path:
@@ -87,6 +92,37 @@ def shadow_report_from_dict(data: dict[str, Any]) -> "ShadowReport":
         timestamp=str(data.get("timestamp") or ""),
         scope=dict(data.get("scope") or {}),
     )
+
+
+def _budget_spend_path(base_dir: Path | None = None) -> Path:
+    return (base_dir or BUDGET_DIR) / BUDGET_SPEND_FILE
+
+
+def load_budget_spend(*, base_dir: Path | None = None) -> dict[str, Any]:
+    """Load durable spend counters for #634 (empty dict if missing)."""
+    path = _budget_spend_path(base_dir)
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_budget_spend(data: dict[str, Any], *, base_dir: Path | None = None) -> Path:
+    """Persist durable spend counters under .agentic/budget/spend.json."""
+    path = _budget_spend_path(base_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = dict(data)
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def tokens_to_usd(tokens: int) -> float:
+    """Heuristic USD projection for cost_ceiling enforcement (#634)."""
+    return round((max(0, int(tokens)) / 1000.0) * _USD_PER_1K_TOKENS, 6)
 
 
 @dataclass
@@ -323,16 +359,52 @@ class AutonomyEngine:
             self.enabled = self.autonomy_config.get("enabled", True)
             self.risk_tolerance = self.autonomy_config.get("risk_tolerance", "medium")
         self.procedures: list[ProcedureDef] = self._load_procedures()
-        # Simple in-memory spend for governor (real impl would persist or use comments)
-        # Separate per-cycle (reset each run_cycle) and daily (UTC day rollover) counters to address review feedback on budget tracking.
+        # Spend counters: in-memory + durable under .agentic/budget/spend.json (#634)
         self._spent_this_cycle: int = 0
         self._spent_today: int = 0
+        self._spent_usd_today: float = 0.0
         self._last_reset = datetime.now(timezone.utc).date()
         self.throttled_actions: int = 0  # for #479 autopilot calc and status
         # #645: in-memory + durable (.agentic/shadow/) previews so shadow_ack works across processes
         self._shadow_previews: dict[str, ShadowReport] = {}
         self.shadow_base_dir: Path | None = None  # tests override; default SHADOW_DIR
         self.checkpoint_base_dir: Path | None = None  # tests override for #648 bridge
+        self.budget_base_dir: Path | None = None  # tests override; default BUDGET_DIR
+        self._load_durable_spend()
+
+    def _load_durable_spend(self) -> None:
+        """Hydrate spend counters from .agentic/budget/spend.json for process-safe #634 enforcement."""
+        data = load_budget_spend(base_dir=self.budget_base_dir)
+        if not data:
+            return
+        today = datetime.now(timezone.utc).date().isoformat()
+        if str(data.get("date") or "") != today:
+            # Stale day — leave zeros; next save rewrites
+            return
+        try:
+            self._spent_today = int(data.get("spent_today") or 0)
+            self._spent_this_cycle = int(data.get("spent_this_cycle") or 0)
+            self._spent_usd_today = float(data.get("spent_usd_today") or 0.0)
+            self.throttled_actions = int(data.get("throttled_actions") or 0)
+            self._last_reset = datetime.now(timezone.utc).date()
+        except (TypeError, ValueError):
+            pass
+
+    def _persist_spend(self) -> None:
+        """Best-effort durable write after budget mutations."""
+        try:
+            save_budget_spend(
+                {
+                    "date": self._last_reset.isoformat(),
+                    "spent_today": int(self._spent_today),
+                    "spent_this_cycle": int(self._spent_this_cycle),
+                    "spent_usd_today": float(self._spent_usd_today),
+                    "throttled_actions": int(self.throttled_actions),
+                },
+                base_dir=self.budget_base_dir,
+            )
+        except OSError:
+            pass
 
     def _persist_shadow(self, report: ShadowReport) -> None:
         self._shadow_previews[report.shadow_id] = report
@@ -729,11 +801,20 @@ class AutonomyEngine:
         if isinstance(health, dict):
             for err in health.get("errors", []) or []:
                 open_cps.append(str(err))
+        ceiling = self.autonomy_config.get("cost_ceiling_usd")
+        try:
+            ceiling_f = float(ceiling) if ceiling is not None else None
+        except (TypeError, ValueError):
+            ceiling_f = None
+        remaining_usd = None
+        if ceiling_f is not None:
+            remaining_usd = max(0.0, round(ceiling_f - float(self._spent_usd_today), 6))
+
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=daily - self._spent_today,
-            budget_remaining_usd=float(self.autonomy_config.get("cost_ceiling_usd") or 0) if self.autonomy_config.get("cost_ceiling_usd") is not None else None,
+            budget_remaining_tokens=max(0, daily - self._spent_today),
+            budget_remaining_usd=remaining_usd,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
             burn_rate=round(burn_rate, 1),
@@ -770,48 +851,66 @@ class AutonomyEngine:
         )
 
     def enforce_budget(self, estimated: int, action_kind: str) -> Decision:
-        """Core governor per #471/#472/#474. Returns Decision (not bool).
+        """Core governor per #471/#472/#474/#634. Returns Decision (not bool).
 
         estimate_cost (wired #471 heuristics) is called by caller (decide_next/run_cycle) and passed here.
         On breach: throttle (partial spend + continue), pause (stop), warn (continue full).
-        Daily UTC reset + per_cycle/daily caps. Always respects risk_tolerance=='off'.
-        Ties to siblings: called before info_audit/plan_epic/delegate/apply procedures.
+        Daily UTC reset + per_cycle/daily caps + optional cost_ceiling_usd.
+        Spend is durable under .agentic/budget/spend.json so long /loop runs stay safe across processes.
+        Always respects risk_tolerance=='off'.
         """
         if not self.enabled or self.risk_tolerance == "off":
             return Decision.PROCEED  # explicit off or disabled: no autonomous budget enforcement
 
-        # Daily reset (UTC date) for _spent_today; _spent_this_cycle reset per run_cycle
+        # Daily reset (UTC date) for _spent_today; _spent_this_cycle reset on day rollover
         today = datetime.now(timezone.utc).date()
         if today != self._last_reset:
             self._spent_this_cycle = 0
             self._spent_today = 0
+            self._spent_usd_today = 0.0
             self._last_reset = today
+            self._persist_spend()
 
         cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000) or 8000
         daily_cap = self.autonomy_config.get("token_budget", {}).get("daily", 50000) or 50000
         policy = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
+        cost_ceiling = self.autonomy_config.get("cost_ceiling_usd")
+        try:
+            cost_ceiling_f = float(cost_ceiling) if cost_ceiling is not None else None
+        except (TypeError, ValueError):
+            cost_ceiling_f = None
 
+        est_usd = tokens_to_usd(estimated)
         projected_cycle = self._spent_this_cycle + estimated
         projected_daily = self._spent_today + estimated
+        projected_usd = self._spent_usd_today + est_usd
 
-        if projected_cycle > cap or projected_daily > daily_cap:
-            if policy == "pause":
-                # no additional spend on hard pause
-                return Decision.PAUSE
-            if policy == "throttle":
-                # partial spend + continue (throttle low-pri in caller)
-                self._spent_this_cycle += max(1, estimated // 2)
-                self._spent_today += max(1, estimated // 2)
-                self.throttled_actions += 1
-                return Decision.THROTTLE
-            # warn or other: full spend but flag
-            self._spent_this_cycle += estimated
-            self._spent_today += estimated
-            return Decision.WARN
+        token_breach = projected_cycle > cap or projected_daily > daily_cap
+        usd_breach = cost_ceiling_f is not None and projected_usd > cost_ceiling_f
 
-        self._spent_this_cycle += estimated
-        self._spent_today += estimated
-        return Decision.PROCEED
+        def _charge(tokens: int) -> None:
+            self._spent_this_cycle += tokens
+            self._spent_today += tokens
+            self._spent_usd_today += tokens_to_usd(tokens)
+            self._persist_spend()
+
+        if not token_breach and not usd_breach:
+            _charge(estimated)
+            return Decision.PROCEED
+
+        # Breach: policy + hard USD ceiling (never partial-spend past ceiling unless warn)
+        if policy == "pause":
+            return Decision.PAUSE
+        if usd_breach and policy != "warn":
+            return Decision.PAUSE
+        if policy == "throttle" and token_breach and not usd_breach:
+            half = max(1, estimated // 2)
+            _charge(half)
+            self.throttled_actions += 1
+            return Decision.THROTTLE
+        # warn (or throttle+usd already handled): charge full and flag
+        _charge(estimated)
+        return Decision.WARN
 
     def decide_next(self, snapshot: ProjectSnapshot) -> list[dict[str, Any]]:
         """Decide actions for the cycle (what_next + risk-filtered procedures + budget-aware).
