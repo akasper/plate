@@ -728,7 +728,15 @@ def cmd_ledger(args: argparse.Namespace) -> int:
         if args.json:
             print(json.dumps(s))
             return 0
-        print(f"ledger entries (recent window): {s.get('count')} by_decision={s.get('by_decision')}")
+        try:
+            from .ledger import format_ledger_summary_markdown
+
+            print(format_ledger_summary_markdown(s))
+        except Exception:
+            print(
+                f"ledger entries (recent window): {s.get('count')} "
+                f"by_decision={s.get('by_decision')} blocking={s.get('blocking_count')}"
+            )
         return 0
     else:
         rows = list_decisions(
@@ -745,6 +753,9 @@ def cmd_ledger(args: argparse.Namespace) -> int:
         return 0
     for r in rows:
         print(f"{r.get('id')} [{r.get('decision')}] {r.get('action_kind')}: {r.get('reason')[:80]}")
+    return 0
+
+
 def cmd_feed(args: argparse.Namespace) -> int:
     """Endless Q+Task user feed (#631)."""
     feed = get_user_feed(
