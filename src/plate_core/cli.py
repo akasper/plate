@@ -236,6 +236,18 @@ def cmd_health(args: argparse.Namespace) -> int:
             plate_line += f" enabled_extensions={','.join(report.plate_config_enabled_extensions)}"
     print(plate_line)
     print(f"Curiosity answers index: {'PRESENT' if report.curiosity_answers_present else 'MISSING'}")
+    if report.budget_remaining_tokens is not None or report.budget_daily_limit is not None:
+        burn = report.budget_burn_rate if report.budget_burn_rate is not None else "?"
+        pressure = report.budget_pressure or "n/a"
+        rem = report.budget_remaining_tokens if report.budget_remaining_tokens is not None else "?"
+        daily = report.budget_daily_limit if report.budget_daily_limit is not None else "?"
+        spent = report.budget_spent_today if report.budget_spent_today is not None else "?"
+        risk = report.budget_risk_tolerance or "?"
+        en = "on" if report.budget_enabled else "off"
+        print(
+            f"Budget (#634): remaining={rem}/{daily} spent_today={spent} "
+            f"burn={burn}% pressure={pressure} risk={risk} enabled={en}"
+        )
     return 0 if report.status != "fail" else 1
 
 

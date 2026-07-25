@@ -33,6 +33,15 @@ class HealthReport:
     plate_config_enabled_extensions: list[str] = field(default_factory=list)
     curiosity_answers_present: bool = False
     plate_repo_signals: list[str] = field(default_factory=list)
+    # #634 budget observability (durable spend + .plate autonomy limits)
+    budget_enabled: bool | None = None
+    budget_risk_tolerance: str | None = None
+    budget_remaining_tokens: int | None = None
+    budget_daily_limit: int | None = None
+    budget_spent_today: int | None = None
+    budget_burn_rate: float | None = None
+    budget_pressure: str | None = None
+    budget_remaining_usd: float | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -233,6 +242,39 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
     else:
         status = "fail"
 
+    # #634: best-effort durable budget snapshot for health CLI/MCP (no hard fail)
+    budget_enabled: bool | None = None
+    budget_risk_tolerance: str | None = None
+    budget_remaining_tokens: int | None = None
+    budget_daily_limit: int | None = None
+    budget_spent_today: int | None = None
+    budget_burn_rate: float | None = None
+    budget_pressure: str | None = None
+    budget_remaining_usd: float | None = None
+    try:
+        from .autonomy import get_budget_snapshot
+
+        snap = get_budget_snapshot()
+        if isinstance(snap, dict):
+            budget_enabled = bool(snap.get("enabled")) if "enabled" in snap else None
+            budget_risk_tolerance = (
+                str(snap.get("risk_tolerance")) if snap.get("risk_tolerance") is not None else None
+            )
+            if snap.get("remaining_tokens") is not None:
+                budget_remaining_tokens = int(snap.get("remaining_tokens") or 0)
+            if snap.get("daily_limit") is not None:
+                budget_daily_limit = int(snap.get("daily_limit") or 0)
+            if snap.get("spent_today") is not None:
+                budget_spent_today = int(snap.get("spent_today") or 0)
+            if snap.get("burn_rate") is not None:
+                budget_burn_rate = float(snap.get("burn_rate") or 0.0)
+            if snap.get("budget_pressure") is not None:
+                budget_pressure = str(snap.get("budget_pressure"))
+            if snap.get("remaining_usd") is not None:
+                budget_remaining_usd = float(snap.get("remaining_usd"))
+    except Exception as e:
+        errors.append(f"budget: {e}")
+
     report = HealthReport(
         repo=target,
         label_coverage_ok=label_ok,
@@ -252,5 +294,13 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         plate_config_enabled_extensions=plate_config_enabled_extensions,
         curiosity_answers_present=curiosity_answers_present,
         plate_repo_signals=plate_repo_signals,
+        budget_enabled=budget_enabled,
+        budget_risk_tolerance=budget_risk_tolerance,
+        budget_remaining_tokens=budget_remaining_tokens,
+        budget_daily_limit=budget_daily_limit,
+        budget_spent_today=budget_spent_today,
+        budget_burn_rate=budget_burn_rate,
+        budget_pressure=budget_pressure,
+        budget_remaining_usd=budget_remaining_usd,
     )
     return report
