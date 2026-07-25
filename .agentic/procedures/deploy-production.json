@@ -1,0 +1,11 @@
+{
+  "id": "deploy-production",
+  "cadence": "manual",
+  "risk_level": "critical",
+  "description": "Production deploy — always shadow + human checkpoint (#641).",
+  "steps": [
+    {"tool": "plate_scheduled_op_run", "args": {"op_id": "deploy-production", "dry_run": true}}
+  ],
+  "enabled": true,
+  "max_tokens_per_run": 8000
+}

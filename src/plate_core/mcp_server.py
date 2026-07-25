@@ -151,6 +151,15 @@ from .feature_media import (
     register_capture,
     skip_feature_media,
 )
+from .scheduled_ops import (
+    complete_op_run,
+    list_op_runs,
+    list_ops,
+    plan_op,
+    run_scheduled_op,
+    scheduled_ops_status,
+    ops_feed_items,
+)
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .collab import (
     analyze_pr_authorship,
@@ -1044,6 +1053,47 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             )
         elif name == "plate_feature_media_feed":
             payload = {"items": feature_media_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_scheduled_ops_list":
+            payload = {"ops": list_ops()}
+        elif name == "plate_scheduled_ops_status":
+            payload = scheduled_ops_status(
+                risk_tolerance=str(args.get("risk_tolerance") or "medium")
+            )
+        elif name == "plate_scheduled_op_plan":
+            payload = plan_op(
+                str(args.get("op_id") or args.get("id") or ""),
+                dry_run=bool(args.get("dry_run", True)),
+            )
+        elif name == "plate_scheduled_op_run":
+            payload = run_scheduled_op(
+                str(args.get("op_id") or args.get("id") or ""),
+                dry_run=bool(args.get("dry_run", True)),
+                risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+                approved=bool(args.get("approved") or False),
+                checkpoint_id=args.get("checkpoint_id"),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_scheduled_op_runs":
+            payload = {
+                "runs": list_op_runs(
+                    op_id=args.get("op_id"),
+                    status=str(args.get("status") or "all"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_scheduled_op_complete":
+            payload = complete_op_run(
+                str(args.get("run_id") or args.get("id") or ""),
+                status=str(args.get("status") or "done"),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_scheduled_ops_feed":
+            payload = {
+                "items": ops_feed_items(
+                    risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+                    limit=int(args.get("limit") or 10),
+                )
+            }
         elif name == "plate_task_create":
             payload = create_task(
                 str(args.get("title") or ""),
@@ -3011,6 +3061,83 @@ def run() -> None:
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_ops_list",
+                                "description": "List scheduled autonomous ops catalog (#641).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_scheduled_ops_status",
+                                "description": "Runnable vs gated scheduled ops at current risk_tolerance (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"risk_tolerance": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_op_plan",
+                                "description": "Emit agent step packet for a scheduled op (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "op_id": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                    },
+                                    "required": ["op_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_op_run",
+                                "description": "Run/record scheduled op (dry_run default; high/critical need approved) (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "op_id": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "risk_tolerance": {"type": "string"},
+                                        "approved": {"type": "boolean"},
+                                        "checkpoint_id": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["op_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_op_runs",
+                                "description": "List scheduled op runs (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "op_id": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_op_complete",
+                                "description": "Mark a scheduled op run done/cancelled (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_ops_feed",
+                                "description": "Feed items for gated scheduled ops needing human (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "risk_tolerance": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
                                 },
                             },
                             {

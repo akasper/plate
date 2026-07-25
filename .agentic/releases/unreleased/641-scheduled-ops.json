@@ -1,0 +1,25 @@
+{
+  "slug": "641-scheduled-ops",
+  "change_type": "feature",
+  "surface": "src/plate_core/scheduled_ops.py, autonomy.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .agentic/procedures/*, .gitignore",
+  "summary": "Scheduled autonomous ops first slice (#641): catalog (refactor, release-cut/finalize prep, deploy-production, marketing deploy, marketplace package, implement-epic-slice), risk/approval gates, dry-run packets, durable run ledger, procedure JSON + AutonomyEngine dispatch, MCP plate_scheduled_op_* + gh plate scheduled-ops, feed for gated ops.",
+  "migration_impact": "New procedures under .agentic/procedures/ and local ledger .agentic/scheduled_ops/ (gitignored). High/critical ops require approved or checkpoint; marketplace publish remains human Task.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate scheduled-ops --status / plate_scheduled_ops_status.",
+    "3. Dry-run: plate_scheduled_op_run op_id=scheduled-refactor dry_run=true.",
+    "4. High risk: open checkpoint + approved=true before apply; never silent deploy/publish."
+  ],
+  "agent_notes": "First orchestration slice of Epic #641 — packets + gates, not full auto cut/deploy. Pair with #638/#639 loops, #635 media, human Tasks for marketplace.",
+  "breaking": false,
+  "links": [
+    "#641",
+    "#654",
+    "#470",
+    "#639",
+    "#635"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
