@@ -802,6 +802,8 @@ class AutonomyEngine:
             {"id": "nightly-drift-detection", "cadence": "nightly", "risk_level": "medium", "description": "Built-in drift detection (labels, Goals, fragments, health vs expected)"},
             {"id": "feedback-integration", "cadence": "nightly", "risk_level": "low", "description": "Babysit PR feedback for agents"},
             {"id": "cost-rollup", "cadence": "weekly", "risk_level": "low", "description": "Aggregate USAGE REPORTs and costs"},
+            {"id": "weekly-discussion-review", "cadence": "weekly", "risk_level": "low", "description": "Review Discussions/Ideas into stub issue proposals for the feed (#642)"},
+            {"id": "market-condition-monitor", "cadence": "weekly", "risk_level": "low", "description": "Synthesize injected market signals into Question proposals (#642)"},
         ]:
             if builtin["id"] not in existing:
                 procs.append(ProcedureDef(**builtin))
@@ -1212,6 +1214,40 @@ class AutonomyEngine:
                     out["checkpoint_id"] = gate["checkpoint_id"]
                     out["checkpoint"] = gate.get("checkpoint")
                 return out
+        # #642: dispatch discussion review + market monitor procedures
+        if proc_id == "weekly-discussion-review":
+            try:
+                from .monitoring import run_discussion_review_procedure
+
+                out = run_discussion_review_procedure(
+                    repo=self.repo,
+                    dry_run=False,
+                    fetch_live=True,
+                )
+                out["log_marker"] = (
+                    f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence="
+                    f"{pdef.cadence if pdef else 'weekly'} risk="
+                    f"{pdef.risk_level if pdef else 'low'} -->"
+                )
+                return out
+            except Exception as exc:
+                return {"proc_id": proc_id, "status": "error", "error": str(exc)}
+        if proc_id == "market-condition-monitor":
+            try:
+                from .monitoring import run_market_monitor_procedure
+
+                # Hosts inject signals via plate_monitor_market; bare procedure records empty scan
+                out = run_market_monitor_procedure(signals=[], dry_run=False)
+                out["log_marker"] = (
+                    f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence="
+                    f"{pdef.cadence if pdef else 'weekly'} risk="
+                    f"{pdef.risk_level if pdef else 'low'} -->"
+                )
+                out["note"] = "Pass signals via plate_monitor_market / gh plate monitor --market for real signals"
+                return out
+            except Exception as exc:
+                return {"proc_id": proc_id, "status": "error", "error": str(exc)}
+
         # In full impl: dispatch steps using allow-listed MCP calls (e.g. plate_perform_information_audit, plate_pr_babysit, plate_costs)
         # For now, record marker + usage (as required by PLATE for procedures)
         marker = f"<!-- PLATE-PROCEDURE-RUN:{proc_id} cadence={pdef.cadence if pdef else 'unknown'} risk={pdef.risk_level if pdef else 'unknown'} -->"

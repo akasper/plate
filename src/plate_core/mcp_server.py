@@ -83,6 +83,15 @@ from .fleet import (
     plan_fleet_from_intent,
     update_handoff,
 )
+from .monitoring import (
+    decide_proposal,
+    list_proposals,
+    monitor_market_signals,
+    monitoring_feed_items,
+    review_discussions,
+    run_discussion_review_procedure,
+    run_market_monitor_procedure,
+)
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .collab import (
     analyze_pr_authorship,
@@ -595,6 +604,63 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             )
         elif name == "plate_fleet_feed":
             payload = {"items": handoff_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_monitor_discussions":
+            dry = bool(args.get("dry_run", True))
+            discussions = args.get("discussions")
+            if isinstance(discussions, str):
+                try:
+                    discussions = json.loads(discussions)
+                except Exception:
+                    discussions = None
+            if dry:
+                payload = run_discussion_review_procedure(
+                    repo=args.get("repo"),
+                    discussions=list(discussions) if discussions else None,
+                    dry_run=True,
+                    fetch_live=False,
+                )
+            else:
+                payload = review_discussions(
+                    list(discussions) if discussions else None,
+                    repo=args.get("repo"),
+                    persist=bool(args.get("persist", True)),
+                    fetch_live=bool(args.get("fetch_live", False)),
+                    min_score=float(args.get("min_score") or 30),
+                    limit=int(args.get("limit") or 10),
+                )
+        elif name == "plate_monitor_market":
+            signals = args.get("signals") or []
+            if isinstance(signals, str):
+                try:
+                    signals = json.loads(signals)
+                except Exception:
+                    signals = [{"title": signals}]
+            dry = bool(args.get("dry_run", True))
+            if dry:
+                payload = run_market_monitor_procedure(signals=list(signals), dry_run=True)
+            else:
+                payload = monitor_market_signals(
+                    list(signals),
+                    persist=bool(args.get("persist", True)),
+                    min_score=float(args.get("min_score") or 40),
+                    limit=int(args.get("limit") or 10),
+                )
+        elif name == "plate_monitor_list":
+            payload = {
+                "proposals": list_proposals(
+                    status=str(args.get("status") or "pending"),
+                    source=args.get("source"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_monitor_decide":
+            payload = decide_proposal(
+                str(args.get("proposal_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                created_issue=args.get("created_issue"),
+            )
+        elif name == "plate_monitor_feed":
+            payload = {"items": monitoring_feed_items(limit=int(args.get("limit") or 10))}
         elif name == "plate_task_create":
             payload = create_task(
                 str(args.get("title") or ""),
@@ -1902,6 +1968,70 @@ def run() -> None:
                             {
                                 "name": "plate_fleet_feed",
                                 "description": "Feed presentation items for active fleet handoffs (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_discussions",
+                                "description": "Review Discussions/Ideas into ranked stub issue proposals (#642). dry_run default true.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "discussions": {"type": "array", "items": {"type": "object"}},
+                                        "dry_run": {"type": "boolean"},
+                                        "fetch_live": {"type": "boolean"},
+                                        "persist": {"type": "boolean"},
+                                        "min_score": {"type": "number"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_market",
+                                "description": "Synthesize host-injected market signals into Question proposals (#642). No outbound network.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "signals": {"type": "array", "items": {"type": "object"}},
+                                        "dry_run": {"type": "boolean"},
+                                        "persist": {"type": "boolean"},
+                                        "min_score": {"type": "number"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_list",
+                                "description": "List monitoring proposals (default pending) (#642).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "source": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_decide",
+                                "description": "Approve/reject/created a monitoring proposal (#642).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "proposal_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "created_issue": {"type": "integer"},
+                                    },
+                                    "required": ["proposal_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_feed",
+                                "description": "Feed presentation for pending monitoring proposals (#642).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {"limit": {"type": "integer"}},
