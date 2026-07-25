@@ -92,6 +92,15 @@ from .monitoring import (
     run_discussion_review_procedure,
     run_market_monitor_procedure,
 )
+from .stubs import (
+    author_and_create,
+    author_stub,
+    create_stub_issue,
+    get_stub,
+    list_stubs,
+    refine_stub,
+    stubs_feed_items,
+)
 from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
 from .collab import (
     analyze_pr_authorship,
@@ -661,6 +670,59 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             )
         elif name == "plate_monitor_feed":
             payload = {"items": monitoring_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_stub_author":
+            payload = author_stub(
+                str(args.get("intent") or args.get("task") or ""),
+                issue_type=args.get("issue_type") or args.get("type"),
+                title=args.get("title"),
+                summary=args.get("summary"),
+                acceptance_criteria=list(args.get("acceptance_criteria") or []) or None,
+                parent_epic=args.get("parent_epic"),
+                milestone=args.get("milestone"),
+                related_links=list(args.get("related_links") or []) or None,
+                source=str(args.get("source") or "qa"),
+                labels=list(args.get("labels") or []) or None,
+                persist=bool(args.get("persist", True)),
+            )
+        elif name == "plate_stub_refine":
+            payload = refine_stub(
+                str(args.get("draft_id") or args.get("id") or ""),
+                answers=args.get("answers") if isinstance(args.get("answers"), dict) else None,
+                add_acceptance=list(args.get("add_acceptance") or args.get("acceptance_criteria") or []) or None,
+                summary_append=args.get("summary_append") or args.get("summary"),
+                issue_type=args.get("issue_type") or args.get("type"),
+                note=args.get("note"),
+                mark_ready=bool(args.get("mark_ready") or args.get("ready") or False),
+            )
+        elif name == "plate_stub_create":
+            payload = create_stub_issue(
+                args.get("draft_id") or args.get("id"),
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+            )
+        elif name == "plate_stub_list":
+            payload = {
+                "drafts": list_stubs(
+                    status=str(args.get("status") or "all"),
+                    issue_type=args.get("issue_type") or args.get("type"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_stub_get":
+            payload = {"draft": get_stub(str(args.get("draft_id") or args.get("id") or ""))}
+        elif name == "plate_stub_author_create":
+            payload = author_and_create(
+                str(args.get("intent") or ""),
+                issue_type=args.get("issue_type") or args.get("type"),
+                title=args.get("title"),
+                dry_run=bool(args.get("dry_run", True)),
+                repo=args.get("repo"),
+                summary=args.get("summary"),
+                source=str(args.get("source") or "qa"),
+                parent_epic=args.get("parent_epic"),
+            )
+        elif name == "plate_stub_feed":
+            payload = {"items": stubs_feed_items(limit=int(args.get("limit") or 10))}
         elif name == "plate_task_create":
             payload = create_task(
                 str(args.get("title") or ""),
@@ -2032,6 +2094,110 @@ def run() -> None:
                             {
                                 "name": "plate_monitor_feed",
                                 "description": "Feed presentation for pending monitoring proposals (#642).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_stub_author",
+                                "description": "Author a local stub Issue draft of any PLATE type from intent/Q&A (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "intent": {"type": "string"},
+                                        "task": {"type": "string"},
+                                        "issue_type": {"type": "string"},
+                                        "type": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "summary": {"type": "string"},
+                                        "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "parent_epic": {},
+                                        "milestone": {},
+                                        "related_links": {"type": "array", "items": {"type": "string"}},
+                                        "source": {"type": "string"},
+                                        "labels": {"type": "array", "items": {"type": "string"}},
+                                        "persist": {"type": "boolean"},
+                                    },
+                                    "required": ["intent"],
+                                },
+                            },
+                            {
+                                "name": "plate_stub_refine",
+                                "description": "Refine a stub draft with Q&A answers / AC / type changes (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "draft_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "answers": {"type": "object"},
+                                        "add_acceptance": {"type": "array", "items": {"type": "string"}},
+                                        "summary_append": {"type": "string"},
+                                        "issue_type": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "mark_ready": {"type": "boolean"},
+                                    },
+                                    "required": ["draft_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_stub_create",
+                                "description": "Create GitHub issue from stub draft (dry_run default true) (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "draft_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_stub_list",
+                                "description": "List local stub drafts (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "issue_type": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_stub_get",
+                                "description": "Get one stub draft by id (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "draft_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                    },
+                                    "required": ["draft_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_stub_author_create",
+                                "description": "Author stub then dry-run/create GitHub issue in one call (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "intent": {"type": "string"},
+                                        "issue_type": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "summary": {"type": "string"},
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "source": {"type": "string"},
+                                        "parent_epic": {},
+                                    },
+                                    "required": ["intent"],
+                                },
+                            },
+                            {
+                                "name": "plate_stub_feed",
+                                "description": "Feed presentation for stub drafts awaiting create/refine (#637).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {"limit": {"type": "integer"}},

@@ -328,6 +328,12 @@ Use this section for any monitoring, babysitting, contemplation, or repeated wha
 - Market signals are host-injected (web_search / x_*); core never scrapes network: `plate_monitor_market` with `signals`.
 - Pending proposals surface in the feed; decide with `plate_monitor_decide` before creating GitHub issues.
 
+### Stub issue lifecycle (#637)
+- Author any type (Feature/Bug/Epic/Release/Research/Design/Question/Task): `plate_stub_author` / `gh plate stub --intent "..."`.
+- Refine with Q&A: `plate_stub_refine`; create on GitHub only with explicit dry_run=false / `--apply`.
+- Local drafts under `.agentic/stubs/`; labels include `status:stub` + `need:refinement` until mark_ready.
+- Complements `plate_task_create`, planning sessions, and monitor proposals.
+
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
 
