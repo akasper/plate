@@ -590,19 +590,23 @@ def get_user_feed(
             })
     except Exception:
         approval_items = []
-    # #628/#630 pending Q&A plans awaiting approval
+    # #628/#630 pending Q&A plans + incomplete sessions awaiting action
     try:
-        from .planning import list_pending_plans
+        from .planning import planning_feed_items
 
-        for pl in list_pending_plans(limit=10):
-            approval_items.append({
-                "id": pl.get("id"),
-                "kind": pl.get("kind") or "feature",
-                "title": pl.get("title") or "Pending plan",
-                "status": pl.get("status") or "pending_approval",
-                "approval_prompt": pl.get("approval_prompt") or pl.get("prompt_segment"),
-                "summary": (pl.get("body") or "")[:200],
-            })
+        for pl in planning_feed_items(limit=12):
+            approval_items.append(
+                {
+                    "id": pl.get("id"),
+                    "kind": pl.get("kind") or pl.get("item_type") or "feature",
+                    "title": pl.get("title") or "Pending plan",
+                    "status": pl.get("status") or "pending_approval",
+                    "approval_prompt": pl.get("approval_prompt") or pl.get("prompt_segment"),
+                    "prompt_segment": pl.get("prompt_segment"),
+                    "summary": pl.get("summary") or "",
+                    "ask_user_question": pl.get("ask_user_question"),
+                }
+            )
     except Exception:
         pass
 
