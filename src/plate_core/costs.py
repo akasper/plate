@@ -319,18 +319,26 @@ def get_cost_dashboard(
     harvested_tokens = int(cost_dict.get("total_tokens") or 0)
     harvested_usd = _parse_usd(cost_dict.get("total_cost"))
 
-    # Enforcement preview for next cycle-sized action (#634 → feed)
+    # Enforcement preview for next cycle-sized action (#634 → feed).
+    # Surface would_pause_next_cycle even under risk=off (same as get_budget_snapshot);
+    # enforcement_active still reflects whether AutonomyEngine would enforce.
     rem_i = int(remaining_tokens or 0)
-    next_cycle_est = int(per_cycle)
-    would_breach_daily = rem_i < next_cycle_est
-    would_pause = bool(enabled and risk != "off" and would_breach_daily and action_policy == "pause")
-    would_throttle = bool(
-        enabled and risk != "off" and would_breach_daily and action_policy == "throttle"
-    )
+    next_cycle_est = max(1, int(per_cycle))
+    would_breach_next = rem_i < next_cycle_est or rem_i <= 0
+    if action_policy == "throttle":
+        would_pause = False
+        would_throttle = bool(would_breach_next)
+    elif action_policy == "warn":
+        would_pause = False
+        would_throttle = False
+    else:
+        # pause (default) — surface-visible next-cycle pause
+        would_pause = bool(would_breach_next)
+        would_throttle = False
     budget_pressure = "ok"
-    if rem_i <= 0 or would_pause:
+    if rem_i <= 0:
         budget_pressure = "exhausted"
-    elif would_throttle or burn >= 80 or rem_i <= max(1, next_cycle_est):
+    elif would_throttle or burn >= 80 or rem_i < next_cycle_est:
         budget_pressure = "critical"
     elif burn >= 50 or rem_i <= int(daily * 0.25):
         budget_pressure = "elevated"
