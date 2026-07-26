@@ -680,5 +680,111 @@ class TestPMCycle(unittest.TestCase):
             self.assertEqual(out["loop_ticks"][0]["stage"], "plan")
 
 
+class TestPMPromoteCheckpoint885(unittest.TestCase):
+    def test_promote_after_checkpoint_approve(self):
+        from plate_core.checkpoint import create_checkpoint, decide_checkpoint
+        from plate_core.pm import ProjectManager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cp_dir = root / "checkpoints"
+            pm_dir = root / "pm"
+            fleet_dir = root / "fleet"
+            feat_dir = root / "feats"
+            cp = create_checkpoint(
+                title="Approve high-impact ship",
+                reason="PM high-impact",
+                impact="high",
+                action_kind="pm_assign_implement",
+                base_dir=cp_dir,
+            )
+            cid = cp["id"]
+            pm = ProjectManager(
+                repo=None,
+                state_dir=pm_dir,
+                checkpoint_base_dir=cp_dir,
+                fleet_base_dir=fleet_dir,
+                feature_loop_base_dir=feat_dir,
+                dispatch_fleet=True,
+                dispatch_loops=True,
+            )
+            pm._assignments = [
+                {
+                    "assignment_id": "asg-hi-1",
+                    "work_id": "99",
+                    "work_title": "High impact feature",
+                    "work_type": "implement",
+                    "status": "proposed",
+                    "requires_checkpoint": True,
+                    "checkpoint_id": cid,
+                    "estimated_tokens": 1000,
+                    "risk": "high",
+                    "packet": {
+                        "checkpoint_id": cid,
+                        "risk_tolerance": "medium",
+                        "number": 99,
+                    },
+                }
+            ]
+            pm._save_queue()
+
+            # Pending: wait
+            pending = pm.promote_checkpoint_ready_assignments(dry_run=False)
+            self.assertEqual(pending[0]["action"], "wait")
+            self.assertEqual(pm._assignments[0]["status"], "proposed")
+
+            decide_checkpoint(cid, "approve", base_dir=cp_dir, decided_by="human")
+            promoted = pm.promote_checkpoint_ready_assignments(
+                dry_run=False,
+                budget_remaining=50_000,
+            )
+            self.assertEqual(promoted[0]["action"], "promote")
+            self.assertEqual(pm._assignments[0]["status"], "delegated")
+            # loop dispatch attempted for implement
+            self.assertTrue(
+                pm._assignments[0].get("loop_run_id")
+                or (promoted[0].get("loop") or {}).get("run_id")
+                or (promoted[0].get("loop") or {}).get("skipped") is not None
+                or (promoted[0].get("loop") or {}).get("ok") is not None,
+                promoted,
+            )
+
+    def test_rejected_checkpoint_blocks_assignment(self):
+        from plate_core.checkpoint import create_checkpoint, decide_checkpoint
+        from plate_core.pm import ProjectManager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cp_dir = root / "checkpoints"
+            pm_dir = root / "pm"
+            cp = create_checkpoint(
+                title="Reject me",
+                reason="no",
+                impact="high",
+                base_dir=cp_dir,
+            )
+            pm = ProjectManager(
+                repo=None,
+                state_dir=pm_dir,
+                checkpoint_base_dir=cp_dir,
+            )
+            pm._assignments = [
+                {
+                    "assignment_id": "asg-rej",
+                    "work_id": "1",
+                    "work_title": "Nope",
+                    "work_type": "implement",
+                    "status": "proposed",
+                    "requires_checkpoint": True,
+                    "checkpoint_id": cp["id"],
+                    "packet": {},
+                }
+            ]
+            decide_checkpoint(cp["id"], "reject", base_dir=cp_dir)
+            out = pm.promote_checkpoint_ready_assignments(dry_run=False)
+            self.assertEqual(out[0]["action"], "block")
+            self.assertEqual(pm._assignments[0]["status"], "blocked")
+
+
 if __name__ == "__main__":
     unittest.main()
