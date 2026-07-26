@@ -91,6 +91,33 @@ class TestAuthorRefine(unittest.TestCase):
         self.assertIn("Bug", c["labels"])
         self.assertIn("cost_estimate_tokens", c)
 
+    def test_create_dry_run_never_charges_live_budget(self):
+        from plate_core.autonomy import load_budget_spend
+
+        r = author_stub(
+            "broken CI on labels",
+            issue_type="Bug",
+            base_dir=self.base,
+            use_live_budget=False,
+        )
+        root_before = int((load_budget_spend() or {}).get("spent_today") or 0)
+        c = create_stub_issue(
+            r["draft"]["id"],
+            dry_run=True,
+            base_dir=self.base,
+            use_live_budget=True,
+        )
+        self.assertTrue(c["ok"])
+        self.assertNotIn("budget_charge", c)
+        self.assertTrue(
+            any("skipped budget charge" in n for n in (c.get("notes") or []))
+        )
+        self.assertEqual(
+            int((load_budget_spend() or {}).get("spent_today") or 0), root_before
+        )
+        local = load_budget_spend(base_dir=self.base / "budget")
+        self.assertEqual(int(local.get("spent_today") or 0), 0)
+
     def test_create_apply_mocked(self):
         r = author_stub(
             "design wireframes for feed",

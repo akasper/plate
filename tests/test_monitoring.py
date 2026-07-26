@@ -102,6 +102,27 @@ class TestReviewPersist(unittest.TestCase):
         self.assertTrue(feed)
         self.assertIn("ask_user_question", feed[0])
 
+    def test_dry_run_never_charges_live_budget(self):
+        from plate_core.autonomy import load_budget_spend
+        from plate_core.monitoring import review_discussions
+
+        root_before = int((load_budget_spend() or {}).get("spent_today") or 0)
+        out = review_discussions(
+            [{"title": "Epic idea for feed", "body": "feature planning"}],
+            persist=False,
+            fetch_live=False,
+            base_dir=self.base,
+            use_live_budget=True,
+        )
+        self.assertTrue(out["ok"])
+        self.assertNotIn("budget_charge", out)
+        self.assertTrue(
+            any("skipped budget charge" in n for n in (out.get("notes") or []))
+        )
+        self.assertEqual(
+            int((load_budget_spend() or {}).get("spent_today") or 0), root_before
+        )
+
     def test_procedure_dry_run(self):
         d = run_discussion_review_procedure(
             discussions=[{"number": 1, "title": "Implement release ceremony automation", "body": "feature"}],
