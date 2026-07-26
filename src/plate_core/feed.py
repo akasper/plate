@@ -463,26 +463,54 @@ def ask_user_question_payload(item: FeedItem | dict[str, Any]) -> dict[str, Any]
     elif itype in ("pm_assignment", "assignment"):
         agent = str(d.get("agent_name") or d.get("agent_id") or "persona")
         aid = cid or str(d.get("assignment_id") or "asg")
+        status = str(d.get("status") or "").lower()
+        if not status:
+            # FeedItem stores status in badges/labels (e.g. ["pm","proposed","implement",...])
+            for b in list(d.get("badges") or []) + list(d.get("labels") or []):
+                if str(b).lower() in (
+                    "proposed",
+                    "delegated",
+                    "blocked",
+                    "done",
+                    "cancelled",
+                ):
+                    status = str(b).lower()
+                    break
+        if not status:
+            status = "proposed"
         loop_id = d.get("loop_run_id") or (d.get("packet") or {}).get("loop_run_id") if isinstance(d.get("packet"), dict) else d.get("loop_run_id")
         loop_kind = d.get("loop_kind") or (
             (d.get("packet") or {}).get("loop_kind") if isinstance(d.get("packet"), dict) else None
         )
-        question = f"PM assignment: {title} → {agent}?"
+        question = f"PM assignment [{status}]: {title} → {agent}?"
+        # Proposed/blocked: explicit Approve & run → status=run (promote+dispatch, risk=off ok)
+        # Delegated: execute packet then complete done
+        if status == "delegated" or loop_id:
+            approve_desc = (
+                f"Continue packet for {agent}; when finished "
+                f"plate_pm_complete {aid} status=done"
+            )
+        else:
+            approve_desc = (
+                f"plate_pm_complete {aid} status=run "
+                f"(or gh plate pm --complete {aid} --complete-status run) "
+                f"→ delegated + dispatch for {agent}; works under risk=off"
+            )
         options = [
             {
                 "id": "approve_run",
-                "label": "Approve & run",
-                "description": f"Execute packet for {agent}; then plate_pm_complete {aid} --status done",
+                "label": "Approve & run" if status != "delegated" else "Continue & complete",
+                "description": approve_desc,
             },
             {
                 "id": "defer",
                 "label": "Defer",
-                "description": "Leave proposed; next PM cycle may re-rank.",
+                "description": "Leave in queue; next PM cycle may re-rank.",
             },
             {
                 "id": "cancel",
                 "label": "Cancel",
-                "description": f"plate_pm_complete {aid} --status cancelled",
+                "description": f"plate_pm_complete {aid} status=cancelled",
             },
         ]
         if loop_id:
@@ -545,7 +573,15 @@ def _pm_assignment_to_feed_item(asg: dict[str, Any], index: int) -> FeedItem:
         prompt += f" Open checkpoint {asg.get('checkpoint_id')} before execute."
     if loop_id:
         prompt += f" Linked {loop_kind or 'loop'} {loop_id} stage={loop_stage or '?'}; tick via PM cycle or loop MCP."
-    prompt += f" On finish: plate_pm_complete / gh plate pm --complete {aid}."
+    if status == "proposed":
+        prompt += (
+            f" Approve & run: plate_pm_complete {aid} status=run "
+            f"(gh plate pm --complete {aid} --complete-status run)."
+        )
+    elif status == "delegated":
+        prompt += f" On finish: plate_pm_complete {aid} status=done."
+    else:
+        prompt += f" Manage via plate_pm_complete / gh plate pm --complete {aid}."
     badges = ["pm", status, work_type, impact]
     if loop_id:
         badges.extend([str(loop_kind or "loop"), str(loop_stage or "looped")])
