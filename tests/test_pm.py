@@ -257,6 +257,32 @@ class TestPMCycle(unittest.TestCase):
         self.assertEqual(report["status"], "paused")
         self.assertEqual(report.get("pause_kind"), "budget")
 
+    def test_paused_on_budget_pressure_when_risk_off(self):
+        """#634/#660: surface budget rails pause PM even when autonomy risk=off."""
+        pm = ProjectManager(repo=None)
+        with patch.object(
+            pm,
+            "get_status",
+            return_value=self._fake_status(
+                enabled=False,
+                risk_tolerance="off",
+                budget_pressure="critical",
+                would_pause_next_cycle=True,
+                budget_remaining_tokens=1000,
+                to_dict=lambda self: {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "budget_pressure": "critical",
+                    "budget_remaining_tokens": 1000,
+                    "would_pause_next_cycle": True,
+                },
+            ),
+        ):
+            report = pm.run_cycle(dry_run=True)
+        self.assertEqual(report["status"], "paused")
+        self.assertEqual(report.get("pause_kind"), "budget")
+        self.assertIn("budget", report.get("blocked") or [])
+
     def test_get_status_zeros_prior_day_spend(self):
         """PM must not report critical pressure from yesterday's spend.json (#634/#660)."""
         with tempfile.TemporaryDirectory() as tmp:
