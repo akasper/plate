@@ -319,6 +319,96 @@ def estimate_op_cost(
     }
 
 
+# Ops that open a #644 fleet handoff on live (non-dry-run) start (#641 residual).
+# Critical/human publish ops never auto-dispatch (stay packet + Task path).
+_OP_FLEET_DISPATCH: dict[str, dict[str, Any]] = {
+    "scheduled-refactor": {
+        "to_agent": "implementer",
+        "task": "Scheduled refactor: pick one safe debt item; TDD PR from origin/release; babysit low-risk",
+        "risk": "medium",
+    },
+    "implement-epic-slice": {
+        "to_agent": "implementer",
+        "task": "Implement ready Feature under open Epic; run feature_loop to merge-eligible",
+        "risk": "medium",
+    },
+}
+
+
+def dispatch_fleet_for_scheduled_op(
+    op_id: str,
+    *,
+    run_id: str | None = None,
+    risk_tolerance: str = "medium",
+    budget_remaining: int | None = None,
+    fleet_base_dir: Path | None = None,
+    record_ledger: bool = True,
+) -> dict[str, Any]:
+    """Open a #644 fleet handoff for safe scheduled ops (refactor / implement slice).
+
+    Does not accept/complete the handoff; does not deploy or publish.
+    Unknown or human-gated ops return skipped.
+    """
+    spec = _OP_FLEET_DISPATCH.get(op_id)
+    if not spec:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": f"op {op_id} has no fleet auto-dispatch (human/ceremony path)",
+        }
+    try:
+        from .fleet import create_handoff
+    except Exception as exc:
+        return {"ok": False, "error": f"fleet unavailable: {exc}"}
+
+    risk = str(spec.get("risk") or "medium")
+    # Cap handoff risk by caller tolerance (never escalate above op)
+    rank = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+    tol = (risk_tolerance or "medium").lower()
+    if rank.get(risk, 2) > rank.get(tol, 2) and tol != "off":
+        risk = tol if tol in ("low", "medium", "high") else "medium"
+    if tol == "off":
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "risk_tolerance=off: no fleet handoff for scheduled op",
+        }
+
+    out = create_handoff(
+        from_agent="scheduled-ops",
+        to_agent=str(spec["to_agent"]),
+        task=str(spec["task"]),
+        risk=risk,
+        context={
+            "scheduled_op": op_id,
+            "scheduled_run_id": run_id,
+            "source": "scheduled_ops",
+        },
+        constraints=["quiet_ops", "github_as_truth", "no_auto_merge"],
+        budget_remaining=budget_remaining,
+        use_live_budget=budget_remaining is None,
+        open_checkpoint=False,
+        base_dir=fleet_base_dir,
+        record_ledger=record_ledger,
+    )
+    if not out.get("ok"):
+        return {
+            "ok": False,
+            "error": out.get("error"),
+            "blocked": out.get("blocked"),
+            "reason": out.get("reason"),
+            "result": out,
+        }
+    ho = out.get("handoff") or {}
+    return {
+        "ok": True,
+        "handoff_id": ho.get("handoff_id"),
+        "to_agent": ho.get("to_agent"),
+        "status": ho.get("status"),
+        "result": out,
+    }
+
+
 def run_scheduled_op(
     op_id: str,
     *,
@@ -328,15 +418,20 @@ def run_scheduled_op(
     checkpoint_id: str | None = None,
     note: str = "",
     base_dir: Path | None = None,
+    fleet_base_dir: Path | None = None,
     record_ledger: bool = True,
     budget_remaining: int | None = None,
     use_live_budget: bool = True,
+    dispatch_fleet: bool = True,
 ) -> dict[str, Any]:
     """Start/record a scheduled op run. dry_run default — no side effects beyond local ledger.
 
     #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
     hydrate remaining tokens from durable budget snapshot and block if est exceeds remaining.
     Explicit ``budget_remaining`` wins; ``use_live_budget=False`` skips live hydrate.
+
+    #641/#644: on live (non-dry-run) unblocked runs for safe ops, open a fleet handoff
+    when ``dispatch_fleet`` is True (refactor / implement-epic-slice). Never auto-publishes.
     """
     op = get_op(op_id)
     if not op:
@@ -535,6 +630,52 @@ def run_scheduled_op(
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:
             pass
+
+    # #641 residual: live safe ops open #644 fleet handoffs (accept → loops via #820)
+    if dispatch_fleet and not blocked and not dry_run:
+        try:
+            fleet_out = dispatch_fleet_for_scheduled_op(
+                op_id,
+                run_id=run.id,
+                risk_tolerance=risk_tolerance,
+                budget_remaining=effective_budget,
+                fleet_base_dir=fleet_base_dir,
+                record_ledger=record_ledger,
+            )
+        except Exception as exc:
+            fleet_out = {"ok": False, "error": str(exc)}
+        out["fleet_dispatch"] = fleet_out
+        if fleet_out.get("handoff_id"):
+            # Persist handoff id on the run record
+            data2 = _load(base_dir)
+            for r in data2.get("runs") or []:
+                if r.get("id") == run.id:
+                    meta = dict(r.get("metadata") or {})
+                    meta["fleet_handoff_id"] = fleet_out.get("handoff_id")
+                    r["metadata"] = meta
+                    r["updated_at"] = _now()
+                    out["run"] = r
+                    break
+            _save(data2, base_dir)
+            out.setdefault("notes", [])
+            if isinstance(out["notes"], list):
+                out["notes"].append(
+                    f"fleet handoff {fleet_out.get('handoff_id')} → {fleet_out.get('to_agent')}"
+                )
+        elif fleet_out.get("skipped"):
+            out.setdefault("notes", [])
+            if isinstance(out["notes"], list) and fleet_out.get("reason"):
+                out["notes"].append(str(fleet_out["reason"]))
+    elif dry_run and not blocked and op_id in _OP_FLEET_DISPATCH:
+        # Preview only — no handoff write
+        spec = _OP_FLEET_DISPATCH[op_id]
+        out["fleet_dispatch"] = {
+            "ok": True,
+            "dry_run": True,
+            "would_create_handoff": True,
+            "to_agent": spec.get("to_agent"),
+            "task": spec.get("task"),
+        }
     return out
 
 
