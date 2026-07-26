@@ -1,0 +1,10 @@
+{
+  "slug": "634-budget-pressure-per-cycle-align",
+  "change_type": "fix",
+  "surface": "src/plate_core/autonomy.py,costs.py",
+  "summary": "Align budget_pressure when remaining is below per_cycle to critical on get_budget_snapshot; cost dashboard projects would_pause_next_cycle under risk=off and no longer marks exhausted solely from engine pause when tokens remain.",
+  "migration_impact": "Snapshots/dashboards with rem < per_cycle report critical (not elevated) and surface would_pause_next_cycle even when autonomy risk=off. Feed budget_gate fires more consistently.",
+  "agent_notes": "Treat rem < per_cycle as critical pressure + would_pause_next_cycle. enforcement_active still false under risk=off.",
+  "breaking": false,
+  "links": ["#634", "#653", "#787"]
+}
