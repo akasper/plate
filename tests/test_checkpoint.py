@@ -127,11 +127,34 @@ class TestCheckpoint648(unittest.TestCase):
             "predicted_side_effects": ["push to prod"],
             "gate_preview": ["human checkpoint"],
         }
+        # Defaults risk=off / autonomy disabled → advisory (no pause freeze)
         cp = create_checkpoint_for_shadow(shadow, base_dir=self.base)
         self.assertEqual(cp["status"], CheckpointStatus.PENDING.value)
         self.assertEqual(cp["shadow_id"], "shadow-deploy-1")
         self.assertEqual(cp["action_kind"], "deploy")
         self.assertEqual(cp["impact"], "critical")
+        self.assertFalse(cp.get("pause_autonomy"))
+        self.assertEqual(list_open_checkpoints(base_dir=self.base), [])
+
+    def test_shadow_bridge_pauses_when_autonomy_on(self):
+        shadow = {
+            "action_kind": "deploy",
+            "impact": "critical",
+            "shadow_id": "shadow-deploy-pause-1",
+            "approval_reasons": ["critical impact always requires human"],
+            "estimated_tokens": 8000,
+            "estimated_cost_usd": 0.02,
+            "predicted_side_effects": ["push to prod"],
+            "gate_preview": ["human checkpoint"],
+        }
+        cp = create_checkpoint_for_shadow(
+            shadow,
+            risk_tolerance="low",
+            autonomy_enabled=True,
+            base_dir=self.base,
+        )
+        self.assertTrue(cp.get("pause_autonomy"))
+        self.assertEqual(len(list_open_checkpoints(base_dir=self.base)), 1)
 
     def test_create_checkpoint_for_shadow_dedupes(self):
         from plate_core.checkpoint import find_open_checkpoint, list_open_checkpoints
@@ -146,10 +169,20 @@ class TestCheckpoint648(unittest.TestCase):
             "predicted_side_effects": ["push to prod"],
             "gate_preview": ["human checkpoint"],
         }
-        cp1 = create_checkpoint_for_shadow(shadow, base_dir=self.base)
+        cp1 = create_checkpoint_for_shadow(
+            shadow,
+            risk_tolerance="low",
+            autonomy_enabled=True,
+            base_dir=self.base,
+        )
         shadow2 = dict(shadow)
         shadow2["shadow_id"] = "shadow-deploy-dedupe-b"
-        cp2 = create_checkpoint_for_shadow(shadow2, base_dir=self.base)
+        cp2 = create_checkpoint_for_shadow(
+            shadow2,
+            risk_tolerance="low",
+            autonomy_enabled=True,
+            base_dir=self.base,
+        )
         self.assertEqual(cp1["id"], cp2["id"])
         self.assertTrue(cp2.get("deduped"))
         deploy = [
@@ -161,6 +194,31 @@ class TestCheckpoint648(unittest.TestCase):
         found = find_open_checkpoint(action_kind="deploy", base_dir=self.base)
         self.assertIsNotNone(found)
         self.assertEqual(found["id"], cp1["id"])
+
+    def test_create_checkpoint_for_shadow_dedupes_advisory(self):
+        """risk=off shadow gates still dedupe pending advisory records."""
+        shadow = {
+            "action_kind": "deploy",
+            "impact": "critical",
+            "shadow_id": "shadow-deploy-adv-a",
+            "approval_reasons": ["risk_tolerance=off"],
+            "estimated_tokens": 1000,
+            "estimated_cost_usd": 0.01,
+            "predicted_side_effects": [],
+            "gate_preview": [],
+        }
+        cp1 = create_checkpoint_for_shadow(shadow, base_dir=self.base)
+        cp2 = create_checkpoint_for_shadow(shadow, base_dir=self.base)
+        self.assertEqual(cp1["id"], cp2["id"])
+        self.assertTrue(cp2.get("deduped"))
+        self.assertFalse(cp1.get("pause_autonomy"))
+        pending = [
+            c
+            for c in list_checkpoints(status="pending", base_dir=self.base)
+            if c.get("action_kind") == "deploy"
+        ]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(list_open_checkpoints(base_dir=self.base), [])
 
     def test_autonomy_paused_helper(self):
         create_checkpoint("block engine", "need approval", impact="high", base_dir=self.base)

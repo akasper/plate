@@ -434,18 +434,43 @@ def create_checkpoint_for_shadow(
 
     When ``dedupe`` is True (default), reuses an open pending checkpoint for the
     same action_kind/shadow_id instead of opening another pause gate.
+
+    When autonomy is disabled or ``risk_tolerance`` is ``off``, the artifact is
+    **advisory only** (``pause_autonomy=False``): live high-impact execution is
+    already impossible, so freezing PM/AutonomyEngine on every shadow preview
+    would deadlock v1.0 orchestration. Pause gates apply when autonomy is on and
+    a human must approve before a gated live action proceeds (#645/#648/#660).
     """
     impact = (shadow_report or {}).get("impact") or "high"
     action = (shadow_report or {}).get("action_kind") or "unknown"
     reasons = (shadow_report or {}).get("approval_reasons") or []
     reason = "; ".join(reasons) if reasons else f"Shadow preview requires approval for {action}"
     sid = shadow_report.get("shadow_id")
+    risk_n = (risk_tolerance or "off").lower()
+    # Advisory when unsupervised autonomy cannot run the action anyway.
+    advisory = (not autonomy_enabled) or risk_n == "off"
     if dedupe:
         existing = find_open_checkpoint(
             action_kind=str(action),
             shadow_id=str(sid) if sid else None,
             base_dir=base_dir,
         )
+        # Also reuse pending advisory (pause_autonomy=False) for same action/shadow
+        if not existing:
+            try:
+                for c in list_checkpoints(status="pending", base_dir=base_dir, limit=100):
+                    if str(c.get("action_kind") or "") != str(action).lower().replace("-", "_"):
+                        continue
+                    if sid and str(c.get("shadow_id") or "") == str(sid):
+                        existing = c
+                        break
+                    if not sid and str(c.get("action_kind") or "") == str(action).lower().replace(
+                        "-", "_"
+                    ):
+                        existing = c
+                        break
+            except Exception:
+                existing = None
         if existing:
             out = dict(existing)
             out["deduped"] = True
@@ -473,10 +498,13 @@ def create_checkpoint_for_shadow(
             "estimated_cost_usd": shadow_report.get("estimated_cost_usd"),
             "predicted_side_effects": shadow_report.get("predicted_side_effects"),
             "gate_preview": shadow_report.get("gate_preview"),
+            "advisory": advisory,
         },
         shadow_id=sid,
         created_by=created_by,
         risk_tolerance=risk_tolerance,
         autonomy_enabled=autonomy_enabled,
+        # Do not freeze PM/engine when risk=off / autonomy disabled (#645/#660).
+        pause_autonomy=False if advisory else None,
         base_dir=base_dir,
     )
