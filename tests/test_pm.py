@@ -312,6 +312,74 @@ class TestPMCycle(unittest.TestCase):
             q = pm.list_queue(status="proposed")
             self.assertEqual(len(q), 1)
 
+    def test_approve_and_run_promotes_risk_off_proposed(self):
+        """Explicit Approve & run (status=run) delegates under risk=off."""
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo=None, state_dir=Path(tmp), dispatch_fleet=False, dispatch_loops=False)
+            asg = assign_work(
+                {"id": "f-run", "title": "Explicit ship", "type": "feature", "impact": "medium"},
+                risk_tolerance="off",
+                budget_remaining=50000,
+            )
+            self.assertEqual(asg["status"], "proposed")
+            pm._assignments = [asg]
+            pm._save_queue()
+            out = pm.complete_assignment(asg["assignment_id"], status="run", note="human ok")
+            self.assertTrue(out.get("ok"))
+            self.assertEqual(out.get("action"), "approve_run")
+            self.assertEqual(out["assignment"]["status"], "delegated")
+            self.assertTrue(out["assignment"]["packet"].get("human_approved"))
+            self.assertTrue(out["assignment"]["packet"].get("auto_delegate"))
+            q = pm.list_queue(status="delegated")
+            self.assertEqual(len(q), 1)
+
+    def test_approve_and_run_waits_on_pending_checkpoint(self):
+        from plate_core.checkpoint import create_checkpoint
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cp_dir = root / "cp"
+            pm = ProjectManager(
+                repo=None,
+                state_dir=root / "pm",
+                checkpoint_base_dir=cp_dir,
+                dispatch_fleet=False,
+                dispatch_loops=False,
+            )
+            cp = create_checkpoint(
+                "Need approve",
+                "high impact",
+                impact="high",
+                base_dir=cp_dir,
+            )
+            asg = assign_work(
+                {"id": "hi-1", "title": "High impact work", "impact": "high"},
+                risk_tolerance="medium",
+                budget_remaining=50000,
+            )
+            asg["status"] = "proposed"
+            asg["requires_checkpoint"] = True
+            asg["checkpoint_id"] = cp["id"]
+            asg.setdefault("packet", {})["checkpoint_id"] = cp["id"]
+            pm._assignments = [asg]
+            pm._save_queue()
+            out = pm.complete_assignment(asg["assignment_id"], status="approve")
+            self.assertFalse(out.get("ok"))
+            self.assertIn("pending", out.get("error", ""))
+
+    def test_tui_hint_mentions_status_run(self):
+        tui = build_assignment_tui(
+            {
+                "assignment_id": "asg-run",
+                "work_title": "X",
+                "agent_name": "Dev",
+                "status": "proposed",
+            }
+        )
+        self.assertIn("status=run", tui["host_hint"])
+        ids = [o.get("id") for o in tui["options"]]
+        self.assertIn("approve_run", ids)
+
     def test_paused_on_budget_pressure(self):
         pm = ProjectManager(repo=None)
         with patch.object(
