@@ -174,6 +174,50 @@ class TestRunGates(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertTrue(out.get("shadow_id"))
 
+    def test_live_critical_requires_shadow_ack(self):
+        """#879/#645: live high-impact ops need shadow_ack, not approve alone."""
+        # approved without shadow_ack → blocked
+        blocked = run_scheduled_op(
+            "deploy-production",
+            dry_run=False,
+            risk_tolerance="high",
+            approved=True,
+            base_dir=self.base,
+            record_ledger=False,
+            use_live_budget=False,
+            dispatch_fleet=False,
+        )
+        self.assertFalse(blocked["ok"], blocked)
+        self.assertTrue(blocked["blocked"])
+        self.assertIn("shadow", (blocked.get("error") or "").lower())
+        self.assertTrue(blocked.get("shadow_id"))
+
+        # dry-run first for shadow_id, then live with ack + approve
+        preview = run_scheduled_op(
+            "deploy-production",
+            dry_run=True,
+            risk_tolerance="high",
+            approved=False,
+            base_dir=self.base,
+            record_ledger=False,
+            use_live_budget=False,
+        )
+        sid = preview.get("shadow_id")
+        self.assertTrue(sid)
+        ok = run_scheduled_op(
+            "deploy-production",
+            dry_run=False,
+            risk_tolerance="high",
+            approved=True,
+            shadow_ack=sid,
+            base_dir=self.base,
+            record_ledger=False,
+            use_live_budget=False,
+            dispatch_fleet=False,
+        )
+        self.assertTrue(ok["ok"], ok)
+        self.assertFalse(ok.get("blocked"))
+
     def test_plan_and_status(self):
         p = plan_op("release-cut-prep")
         self.assertTrue(p["ok"])

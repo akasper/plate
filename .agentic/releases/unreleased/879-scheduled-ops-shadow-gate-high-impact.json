@@ -1,0 +1,10 @@
+{
+  "slug": "879-scheduled-ops-shadow-gate-high-impact",
+  "change_type": "fix",
+  "surface": "src/plate_core/scheduled_ops.py",
+  "summary": "Live high/critical scheduled ops hard-block via AutonomyEngine.gate_high_impact (shadow_ack + approval); dry-run remains preview-only; new shadow_ack param (#645/#879).",
+  "migration_impact": "Live deploy/release/marketplace scheduled ops require shadow_ack from a prior simulate/dry-run (or approved checkpoint with shadow_id) plus approved=true. Dry-run path unchanged for obtaining shadow_id.",
+  "agent_notes": "Always dry-run or plate_autonomy_simulate first; pass shadow_ack on live run_scheduled_op for high/critical. Do not treat approved=true alone as sufficient for live high-impact ops.",
+  "breaking": false,
+  "links": ["#879", "#645", "#641", "#648", "#654"]
+}
