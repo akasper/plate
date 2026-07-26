@@ -14,6 +14,7 @@ Dry-run reports would-create / would-skip / would-conflict without side effects.
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -201,6 +202,12 @@ def _next_steps(report: ImportPayloadReport) -> list[str]:
     if report.would_conflict or report.conflicts:
         steps.insert(
             0,
+            "Hard conflicts: run with --escape-hatch DIR (or plate_import_payload escape_hatch_dir) "
+            "to write plan.json + PLAN.md + DRAFT_PR_BODY.md for human review (#622); "
+            "do not use --strategy force without explicit human approval on high-value paths.",
+        )
+        steps.insert(
+            1,
             "Resolve would_conflict paths manually or re-run with --strategy force only if intentional overwrite is desired.",
         )
     if report.apply_mode and (report.created or report.overwritten):
@@ -449,27 +456,6 @@ def _seed_current_md_if_missing(
         report.created.append("CURRENT.md")
 
 
-def import_payload(
-    target_dir: str | Path = ".",
-    *,
-    strategy: str = "safe",
-    template_repo: str | None = None,
-    dry_run: bool = True,
-    apply: bool = False,
-    namespace_scripts: bool | None = None,
-) -> dict[str, Any]:
-    """Public entry: dry-run by default; set apply=True (or dry_run=False) to write."""
-    do_apply = bool(apply) or (dry_run is False)
-    report = plan_import_payload(
-        target_dir,
-        strategy=strategy,
-        template_repo=template_repo,
-        apply=do_apply,
-        namespace_scripts=namespace_scripts,
-    )
-    return report.to_dict()
-
-
 def copy_template_payload_local(
     dest_root: str | Path,
     *,
@@ -529,4 +515,210 @@ def format_import_payload_report(report: dict[str, Any] | ImportPayloadReport) -
         lines.append("- Next steps:")
         for s in steps:
             lines.append(f"  - {s}")
+    if data.get("escape_hatch"):
+        eh = data["escape_hatch"]
+        lines.append(f"- Escape hatch (#622): dir={eh.get('dir')}")
+        for k in ("plan_json", "plan_md", "draft_pr_body"):
+            if eh.get(k):
+                lines.append(f"  - {k}: {eh.get(k)}")
     return "\n".join(lines) + "\n"
+
+
+def render_import_plan_markdown(report: dict[str, Any] | ImportPayloadReport) -> str:
+    """Rich plan markdown for agent/human review (#622)."""
+    data = report.to_dict() if isinstance(report, ImportPayloadReport) else dict(report)
+    counts = data.get("counts") or {}
+    lines = [
+        "# PLATE import-payload plan (#622 escape hatch)",
+        "",
+        f"- Strategy: `{data.get('strategy')}`",
+        f"- Mode: `{'apply' if data.get('apply_mode') else 'dry-run'}`",
+        f"- Target: `{data.get('target_dir')}`",
+        f"- Source: `{data.get('template_source')}` (`{data.get('template_root')}`)",
+        f"- Counts: create={counts.get('would_create', 0)} skip={counts.get('would_skip', 0)} "
+        f"conflict={counts.get('would_conflict', 0)} overwrite={counts.get('would_overwrite', 0)}",
+        "",
+        "## Payload additions (would_create)",
+    ]
+    for p in data.get("would_create") or []:
+        lines.append(f"- `{p}`")
+    if not (data.get("would_create") or []):
+        lines.append("- _(none)_")
+    lines.extend(["", "## Preserved / skipped (would_skip)"])
+    for p in (data.get("would_skip") or [])[:40]:
+        lines.append(f"- `{p}`")
+    if len(data.get("would_skip") or []) > 40:
+        lines.append(f"- … +{len(data['would_skip']) - 40} more")
+    if not (data.get("would_skip") or []):
+        lines.append("- _(none)_")
+    lines.extend(["", "## Conflicts (need human judgment)"])
+    for p in data.get("would_conflict") or data.get("conflicts") or []:
+        lines.append(f"- `{p}`")
+    if not (data.get("would_conflict") or data.get("conflicts") or []):
+        lines.append("- _(none)_")
+    lines.extend(["", "## Would overwrite (force strategy only)"])
+    for p in data.get("would_overwrite") or data.get("overwritten") or []:
+        lines.append(f"- `{p}`")
+    if not (data.get("would_overwrite") or data.get("overwritten") or []):
+        lines.append("- _(none)_")
+    lines.extend(["", "## Suggested renames / install_as"])
+    renamed = [
+        f
+        for f in (data.get("files") or [])
+        if isinstance(f, dict)
+        and f.get("target_path")
+        and f.get("target_path") != f.get("path")
+    ]
+    for f in renamed[:30]:
+        lines.append(f"- `{f.get('path')}` → `{f.get('target_path')}` ({f.get('action')})")
+    if not renamed:
+        lines.append("- _(none detected in plan)_")
+    lines.extend(["", "## Next steps"])
+    for s in data.get("next_steps") or []:
+        lines.append(f"- {s}")
+    lines.extend(
+        [
+            "",
+            "## Human approval gate",
+            "- Do **not** use `force` overwrite on product-owned roots without explicit human approval.",
+            "- Prefer draft PR / worktree review for irreducible conflicts (AGENTS.md human checkpoints).",
+            "- SPEC.md / AGENTS.md / workflows / secrets remain high-risk paths.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_import_draft_pr_body(report: dict[str, Any] | ImportPayloadReport) -> str:
+    """Draft PR body sections for human review of hard import merges (#622)."""
+    data = report.to_dict() if isinstance(report, ImportPayloadReport) else dict(report)
+    counts = data.get("counts") or {}
+    conflicts = list(data.get("would_conflict") or data.get("conflicts") or [])
+    creates = list(data.get("would_create") or data.get("created") or [])
+    skips = list(data.get("would_skip") or data.get("skipped") or [])
+    overwrites = list(data.get("would_overwrite") or data.get("overwritten") or [])
+
+    def _bullets(items: list[str], *, limit: int = 50) -> str:
+        if not items:
+            return "_(none)_\n"
+        lines = [f"- `{p}`" for p in items[:limit]]
+        if len(items) > limit:
+            lines.append(f"- … +{len(items) - limit} more")
+        return "\n".join(lines) + "\n"
+
+    body = f"""## Summary
+PLATE template payload import plan for human review (Epic #615 / Feature #622).
+Strategy: `{data.get('strategy')}` · Mode: `{'apply' if data.get('apply_mode') else 'dry-run'}`.
+Target: `{data.get('target_dir')}` · Source: `{data.get('template_source')}`.
+
+Counts: would_create={counts.get('would_create', 0)}, would_skip={counts.get('would_skip', 0)}, \
+would_conflict={counts.get('would_conflict', 0)}, would_overwrite={counts.get('would_overwrite', 0)}.
+
+## Payload additions
+{_bullets(creates)}
+## Preserved user files
+{_bullets(skips)}
+## Conflicts requiring judgment
+{_bullets(conflicts)}
+## Suggested renames/merges
+"""
+    renamed = [
+        f
+        for f in (data.get("files") or [])
+        if isinstance(f, dict)
+        and f.get("target_path")
+        and f.get("target_path") != f.get("path")
+    ]
+    if renamed:
+        for f in renamed[:40]:
+            body += f"- `{f.get('path')}` → `{f.get('target_path')}` ({f.get('action')})\n"
+    else:
+        body += "_(none in plan)_\n"
+    if overwrites:
+        body += "\n## Force overwrites (only if intentional)\n"
+        body += _bullets(overwrites)
+    body += """
+## Human review checklist
+- [ ] No silent overwrite of product CI, package.json, CODEOWNERS, or root product docs without approval
+- [ ] Conflicts listed above have an explicit keep/merge/rename decision
+- [ ] PLATE methodology files land under expected paths (`scripts/plate/` when namespaced)
+- [ ] `gh plate health` planned after merge
+- [ ] Risk-sensitive paths (AGENTS.md, workflows, secrets, SPEC.md) reviewed if touched
+
+## Links
+- Epic #615 · Feature #622 · adoption guide `docs/migration/adoption-guide.md`
+- AGENTS.md authority: humans keep judgment on high-risk merges
+- Follow-up: `gh plate bootstrap --adopt` after safe payload land
+"""
+    return body
+
+
+def write_import_escape_hatch(
+    report: dict[str, Any] | ImportPayloadReport,
+    dest_dir: str | Path,
+) -> dict[str, Any]:
+    """Write plan.json + PLAN.md + DRAFT_PR_BODY.md for hard-merge review (#622).
+
+    Never applies payload files. Callers may open a draft PR from DRAFT_PR_BODY.md.
+    """
+    data = report.to_dict() if isinstance(report, ImportPayloadReport) else dict(report)
+    out = Path(dest_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    plan_json = out / "plan.json"
+    plan_md = out / "PLAN.md"
+    draft_body = out / "DRAFT_PR_BODY.md"
+    plan_json.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    plan_md.write_text(render_import_plan_markdown(data), encoding="utf-8")
+    draft_body.write_text(render_import_draft_pr_body(data), encoding="utf-8")
+    return {
+        "ok": True,
+        "dir": str(out.resolve()),
+        "plan_json": str(plan_json.resolve()),
+        "plan_md": str(plan_md.resolve()),
+        "draft_pr_body": str(draft_body.resolve()),
+        "has_conflicts": bool(data.get("would_conflict") or data.get("conflicts")),
+        "human_approval_required": True,
+        "notes": [
+            "Escape hatch does not write payload files.",
+            "Open a draft PR with DRAFT_PR_BODY.md when conflicts need multi-file review.",
+            "Never force-overwrite high-value product paths without explicit human approval.",
+        ],
+    }
+
+
+def import_payload(
+    target_dir: str | Path = ".",
+    *,
+    strategy: str = "safe",
+    template_repo: str | None = None,
+    dry_run: bool = True,
+    apply: bool = False,
+    namespace_scripts: bool | None = None,
+    escape_hatch_dir: str | Path | None = None,
+    escape_hatch_on_conflict: bool = False,
+) -> dict[str, Any]:
+    """Public entry: dry-run by default; set apply=True (or dry_run=False) to write.
+
+    ``escape_hatch_dir`` (#622): always write plan/PR-body bundle under this directory.
+    ``escape_hatch_on_conflict``: when True and conflicts exist, write bundle under
+    ``escape_hatch_dir`` or default ``.agentic/import-escape-hatch`` inside target.
+    """
+    do_apply = bool(apply) or (dry_run is False)
+    report = plan_import_payload(
+        target_dir,
+        strategy=strategy,
+        template_repo=template_repo,
+        apply=do_apply,
+        namespace_scripts=namespace_scripts,
+    )
+    data = report.to_dict()
+    hatch_dir: Path | None = None
+    if escape_hatch_dir is not None:
+        hatch_dir = Path(escape_hatch_dir)
+    elif escape_hatch_on_conflict and (
+        data.get("would_conflict") or data.get("conflicts")
+    ):
+        hatch_dir = Path(target_dir) / ".agentic" / "import-escape-hatch"
+    if hatch_dir is not None:
+        data["escape_hatch"] = write_import_escape_hatch(data, hatch_dir)
+    return data
