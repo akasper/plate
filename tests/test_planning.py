@@ -32,6 +32,27 @@ class TestFeaturePlanning630(unittest.TestCase):
         self.assertIn("acceptance_criteria", ids)
         self.assertIn("media_plan", ids)
 
+    def test_preview_persist_false_never_charges(self):
+        from plate_core.autonomy import load_budget_spend
+
+        root_before = int((load_budget_spend() or {}).get("spent_today") or 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            start = start_planning_session(
+                "feature",
+                base_dir=base,
+                persist=False,
+                use_live_budget=True,
+            )
+            self.assertTrue(start.get("ok", True))
+            self.assertNotIn("budget_charge", start)
+            self.assertTrue(
+                any("skipped budget charge" in n for n in (start.get("notes") or []))
+            )
+            self.assertEqual(
+                int((load_budget_spend() or {}).get("spent_today") or 0), root_before
+            )
+
     def test_session_advances_and_builds(self):
         start = start_planning_session(
             "feature", persist=False, use_live_budget=False
