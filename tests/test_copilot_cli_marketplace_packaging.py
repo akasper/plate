@@ -95,7 +95,22 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         self.assertIn("pip install plate-core", readme)
         self.assertIn("There is no separate GitHub-run submission process for Copilot CLI or Grok Build marketplaces", readme)
         self.assertIn("Marketplace release checklist", readme)
-        self.assertIn("Complete the human-owned publication tasks tracked in #380 and #381.", readme)
+        self.assertIn("#380 and #381", readme)
+        self.assertIn("docs/bootstrap/marketplace-install-checklist.md", readme)
+
+    def test_maintainer_marketplace_checklist_doc(self):
+        """#379: dedicated maintainer checklist links human Tasks and both host surfaces."""
+        checklist = read_text("docs/bootstrap/marketplace-install-checklist.md")
+        self.assertIn("#378", checklist)
+        self.assertIn("#379", checklist)
+        self.assertIn("#380", checklist)
+        self.assertIn("#381", checklist)
+        self.assertIn(".github/plugin/marketplace.json", checklist)
+        self.assertIn(".grok-plugin/marketplace.json", checklist)
+        self.assertIn("source: \"plugin\"", checklist)
+        self.assertIn("pip install plate-core", checklist)
+        self.assertIn("do not agent-complete", checklist)
+        self.assertIn("Never auto-publish", checklist)
 
     def test_ci_uses_repo_marketplace_as_prelaunch_surface(self):
         workflow = read_text(".github/workflows/ci.yml")
