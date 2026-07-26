@@ -389,8 +389,18 @@ def cmd_context_show(args: argparse.Namespace) -> int:
 
 
 def cmd_bootstrap(args: argparse.Namespace) -> int:
+    adopt: bool | None = None
+    if getattr(args, "adopt", False) or getattr(args, "existing_repo", False):
+        adopt = True
+    elif getattr(args, "greenfield", False):
+        adopt = False
     try:
-        report = run_bootstrap(args.repo, apply_mode=args.apply)
+        report = run_bootstrap(
+            args.repo,
+            apply_mode=args.apply,
+            adopt=adopt,
+            local_root=getattr(args, "local_root", None),
+        )
     except (RuntimeError, GhApiError) as exc:
         if args.json:
             print(json.dumps({"error": str(exc)}))
@@ -403,9 +413,14 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
 
     print(f"Repo: {report.repo}")
     print(f"Mode: {'APPLY' if report.apply_mode else 'DRY-RUN'}")
+    print(f"Adoption mode: {report.adoption_mode}")
     print(f"Template source: {report.template_source}")
     for action in report.actions:
         print(f"- {action.name}: {action.state} ({action.detail})")
+    if report.next_steps:
+        print("Next steps:")
+        for step in report.next_steps:
+            print(f"  - {step}")
     return 0
 
 
@@ -3510,6 +3525,25 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap = sub.add_parser("bootstrap", help="Plan/apply baseline PLATE bootstrap actions")
     bootstrap.add_argument("--repo", help="owner/name; defaults to git remote origin")
     bootstrap.add_argument("--apply", action="store_true", help="Apply supported actions instead of dry-run planning")
+    bootstrap.add_argument(
+        "--adopt",
+        action="store_true",
+        help="Force adoption mode for existing/mature repos (#619)",
+    )
+    bootstrap.add_argument(
+        "--existing-repo",
+        action="store_true",
+        help="Alias for --adopt",
+    )
+    bootstrap.add_argument(
+        "--greenfield",
+        action="store_true",
+        help="Force greenfield new-repo bootstrap (disable auto-adopt detect)",
+    )
+    bootstrap.add_argument(
+        "--local-root",
+        help="Local checkout path for adoption heuristics (default: cwd)",
+    )
     bootstrap.add_argument("--json", action="store_true", help="Output JSON")
     bootstrap.set_defaults(func=cmd_bootstrap)
     # Note: Goals page init (per #266) is included automatically when wiki enabled and page absent (plan in dry-run, apply with --apply). Flag/interactive refinement in future.

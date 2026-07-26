@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from plate_core.bootstrap import run_bootstrap
+from plate_core.bootstrap import detect_adoption_mode, run_bootstrap
 from plate_core.github_client import GhApiError
 from plate_core.health import HealthReport
 
@@ -75,6 +75,97 @@ class BootstrapTests(unittest.TestCase):
         self.assertIsNotNone(seed_action, "seed-initial-questions action must be present")
         self.assertEqual(seed_action.state, "planned")
         self.assertIn("Seed", seed_action.detail)
+
+    def test_detect_adoption_mode_force_and_heuristics(self):
+        """#619 pure detector: flags win; mature signals flip adopt when .plate missing."""
+        health = HealthReport(
+            repo="o/r",
+            label_coverage_ok=False,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=False,
+            open_epic_count=2,
+            status="warn",
+            goals_page_present=False,
+            open_question_count=1,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        adopt, signals = detect_adoption_mode(
+            health=health,
+            repo_obj={"size": 9000, "open_issues_count": 12, "description": "app"},
+            force_adopt=None,
+            local_root=Path(tempfile.mkdtemp()),
+        )
+        self.assertTrue(adopt)
+        self.assertTrue(any("open_epics" in s for s in signals))
+
+        forced, sig = detect_adoption_mode(force_adopt=True)
+        self.assertTrue(forced)
+        self.assertIn("flag:--adopt", sig)
+
+        green, gsig = detect_adoption_mode(force_adopt=False, health=health)
+        self.assertFalse(green)
+        self.assertIn("flag:greenfield", gsig)
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_adopt_mode_tailors_copy_detail_and_next_steps(self, mock_get_health):
+        """#619: --adopt surfaces import-payload guidance and next_steps."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/mature",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=3,
+            status="pass",
+            goals_page_present=False,
+            open_question_count=2,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            if endpoint == "repos/akasper/mature":
+                return {
+                    "has_wiki": True,
+                    "default_branch": "main",
+                    "size": 8000,
+                    "open_issues_count": 20,
+                    "description": "mature app",
+                }
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return [{"title": "[Question]: existing"}]
+            if "/branches/" in endpoint:
+                return {"name": "release"}
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                report = run_bootstrap(
+                    "akasper/mature",
+                    apply_mode=False,
+                    client=client,
+                    adopt=True,
+                )
+        self.assertTrue(report.adoption_mode)
+        self.assertTrue(report.next_steps)
+        self.assertTrue(any("import-payload" in s for s in report.next_steps))
+        copy_action = next(a for a in report.actions if a.name == "copy-template-payload")
+        self.assertIn("import-payload", copy_action.detail)
+        epic = next(a for a in report.actions if a.name == "create-initial-epic")
+        self.assertEqual(epic.state, "already-configured")
+        seed = next(a for a in report.actions if a.name == "seed-initial-questions")
+        self.assertEqual(seed.state, "already-configured")
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_wiki_passes_bool_not_string(self, mock_get_health):
