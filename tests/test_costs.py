@@ -190,54 +190,87 @@ class CostDashboard653Tests(unittest.TestCase):
                         or dash["budget"]["budget_pressure"] in ("critical", "exhausted"))
 
     def test_dashboard_durable_spend_and_gate(self):
-        """#634: durable spend.json informs remaining when autonomy_status omits it."""
-        import json
-        import tempfile
-        from pathlib import Path
+        """#634: day-aware durable spend informs remaining when autonomy_status omits it."""
         from unittest.mock import patch
 
         client = self._client_two_reports()
-        with tempfile.TemporaryDirectory() as tmp:
-            bdir = Path(tmp)
-            (bdir / "spend.json").write_text(
-                json.dumps(
-                    {
-                        "date": "2099-01-01",  # stale day ignored by load? still returns file
-                        "spent_today": 48000,
-                        "spent_this_cycle": 100,
-                        "spent_usd_today": 0.1,
-                    }
-                ),
-                encoding="utf-8",
-            )
-            # load_budget_spend checks date match — patch it to return our counters
-            with patch(
-                "plate_core.autonomy.load_budget_spend",
-                return_value={
-                    "date": "today",
-                    "spent_today": 48000,
-                    "spent_usd_today": 0.1,
+        with patch(
+            "plate_core.autonomy.get_budget_snapshot",
+            return_value={
+                "spent_today": 48000,
+                "spent_this_cycle": 100,
+                "spent_usd_today": 0.1,
+                "daily_limit": 50000,
+                "per_cycle_limit": 8000,
+                "remaining_tokens": 2000,
+                "remaining_usd": 9.9,
+                "burn_rate": 96.0,
+                "budget_pressure": "critical",
+                "spend_is_today": True,
+                "spend_day": "2026-07-26",
+                "would_pause": False,
+            },
+        ):
+            dash = get_cost_dashboard(
+                repo="akasper/plate",
+                client=client,
+                autonomy_status={
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    # omit remaining → durable snapshot fills in
+                    "burn_rate": 0.0,
+                    "autopilot_score": 50,
+                    "open_human_checkpoints": [],
+                    "due_procedures": [],
                 },
-            ):
-                dash = get_cost_dashboard(
-                    repo="akasper/plate",
-                    client=client,
-                    autonomy_status={
-                        "enabled": True,
-                        "risk_tolerance": "medium",
-                        # omit remaining → durable fills in
-                        "burn_rate": 0.0,
-                        "autopilot_score": 50,
-                        "open_human_checkpoints": [],
-                        "due_procedures": [],
-                    },
-                    health={},
-                )
+                health={},
+            )
         self.assertEqual(dash["budget"]["spent_today_durable"], 48000)
         daily = int(dash["budget"]["daily_tokens"])
         self.assertEqual(dash["budget"]["remaining_tokens"], max(0, daily - 48000))
         self.assertIn(dash["budget"]["budget_pressure"], ("critical", "exhausted", "elevated"))
         self.assertTrue(any(i.get("type") == "budget_gate" for i in dash["feed_items"]))
+
+    def test_dashboard_zeros_prior_day_spend(self):
+        """Prior-day spend.json must not raise cost/feed budget_pressure (#634/#653)."""
+        from unittest.mock import patch
+
+        client = self._client_two_reports()
+        # Raw file would show 939804; snapshot day-rollovers to 0
+        with patch(
+            "plate_core.autonomy.get_budget_snapshot",
+            return_value={
+                "spent_today": 0,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+                "daily_limit": 50000,
+                "per_cycle_limit": 8000,
+                "remaining_tokens": 50000,
+                "remaining_usd": 10.0,
+                "burn_rate": 0.0,
+                "budget_pressure": "ok",
+                "spend_is_today": False,
+                "spend_day": "2020-01-01",
+                "would_pause": False,
+            },
+        ):
+            dash = get_cost_dashboard(
+                repo="akasper/plate",
+                client=client,
+                autonomy_status={
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "burn_rate": 0.0,
+                    "autopilot_score": 0,
+                    "open_human_checkpoints": [],
+                    "due_procedures": [],
+                },
+                health={},
+            )
+        self.assertEqual(dash["budget"]["spent_today_durable"], 0)
+        self.assertEqual(dash["budget"]["remaining_tokens"], 50000)
+        self.assertEqual(dash["budget"]["budget_pressure"], "ok")
+        self.assertFalse(any(i.get("type") == "budget_gate" for i in dash["feed_items"]))
 
 
 if __name__ == "__main__":
