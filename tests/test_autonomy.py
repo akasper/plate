@@ -158,6 +158,57 @@ class TestAutonomyEngine(unittest.TestCase):
         self.assertGreaterEqual(status.autopilot_score, 0)
         self.assertLessEqual(status.autopilot_score, 100)
         self.assertIn("due_procedures", status.to_dict())
+        d = status.to_dict()
+        self.assertIn("budget_pressure", d)
+        self.assertIn("would_pause_next_cycle", d)
+
+    def test_get_status_includes_budget_pressure_from_snapshot(self):
+        """#634/#653: plate_autonomy_status surfaces pressure + next-cycle pause."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import AutonomyEngine, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 9500,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 2000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                eng = AutonomyEngine(repo=None)
+                eng.budget_base_dir = bdir
+                st = eng.get_status()
+            self.assertEqual(st.budget_remaining_tokens, 500)
+            self.assertEqual(st.budget_pressure, "critical")
+            self.assertTrue(st.would_pause_next_cycle)
+            self.assertEqual(st.spent_today_durable, 9500)
+            self.assertEqual(st.daily_limit, 10000)
+            self.assertEqual(st.per_cycle_limit, 2000)
 
     def test_run_cycle_dry_run(self):
         engine = AutonomyEngine(repo=None)
