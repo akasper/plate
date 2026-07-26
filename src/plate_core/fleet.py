@@ -280,6 +280,8 @@ def create_handoff(
 
     effective_remaining = budget_remaining
     budget_notes: list[str] = []
+    surface_budget_pause = False
+    surface_budget_pressure: str | None = None
     if effective_remaining is None and use_live_budget:
         try:
             from .autonomy import get_budget_snapshot
@@ -295,10 +297,48 @@ def create_handoff(
                     f"budget hydrated: remaining_tokens={effective_remaining} "
                     f"pressure={snap.get('budget_pressure')}"
                 )
+            # #634/#869: honor durable next-cycle pause rails (same as loops/PM/engine)
+            surface_budget_pressure = (
+                str(snap.get("budget_pressure") or "").lower() or None
+            )
+            would_pause = bool(
+                snap.get("would_pause_next_cycle")
+                if snap.get("would_pause_next_cycle") is not None
+                else snap.get("would_pause")
+            )
+            if (
+                surface_budget_pressure in ("critical", "exhausted")
+                or would_pause
+                or (effective_remaining is not None and int(effective_remaining) <= 0)
+            ):
+                surface_budget_pause = True
+                budget_notes.append(
+                    snap.get("gate_reason")
+                    or "blocked: durable budget would_pause / pressure gate"
+                )
         except Exception as exc:
             budget_notes.append(f"budget hydrate skipped: {exc}")
 
     # #644/#634: hard budget gate before opening work
+    if surface_budget_pause:
+        rem_out = (
+            int(effective_remaining) if effective_remaining is not None else 0
+        )
+        return {
+            "ok": False,
+            "error": (
+                f"budget: durable rails pause handoff "
+                f"(pressure={surface_budget_pressure} remaining={rem_out})"
+            ),
+            "blocked": True,
+            "reason": "budget",
+            "cost_estimate_tokens": int(effective_tokens) if effective_tokens is not None else None,
+            "budget_remaining": rem_out,
+            "budget_pressure": surface_budget_pressure,
+            "would_pause_next_cycle": True,
+            "cost_estimate": cost_est,
+            "notes": budget_notes,
+        }
     if (
         effective_remaining is not None
         and effective_tokens is not None
@@ -916,6 +956,8 @@ def plan_fleet_from_intent(
     budget_notes: list[str] = []
     effective_budget = budget_tokens
     budget_base: Path | None = None
+    surface_budget_pause = False
+    surface_budget_pressure: str | None = None
     if base_dir is not None:
         budget_base = Path(base_dir) / "budget"
     if effective_budget is None and use_live_budget:
@@ -929,6 +971,26 @@ def plan_fleet_from_intent(
                 budget_notes.append(
                     f"budget hydrated: remaining_tokens={effective_budget} "
                     f"pressure={snap.get('budget_pressure')}"
+                )
+            # #634/#869: block fleet plan/create when next cycle cannot fund work
+            # (independent of risk_tolerance; mirrors loops/PM/AutonomyEngine).
+            surface_budget_pressure = (
+                str(snap.get("budget_pressure") or "").lower() or None
+            )
+            would_pause = bool(
+                snap.get("would_pause_next_cycle")
+                if snap.get("would_pause_next_cycle") is not None
+                else snap.get("would_pause")
+            )
+            if (
+                surface_budget_pressure in ("critical", "exhausted")
+                or would_pause
+                or (effective_budget is not None and int(effective_budget) <= 0)
+            ):
+                surface_budget_pause = True
+                budget_notes.append(
+                    snap.get("gate_reason")
+                    or "blocked: durable budget would_pause / pressure gate"
                 )
         except Exception as exc:
             budget_notes.append(f"budget hydrate skipped: {exc}")
@@ -1003,8 +1065,8 @@ def plan_fleet_from_intent(
             }
         )
 
-    # Zero remaining: plan shape only, do not allocate or create
-    if int(effective_budget) <= 0:
+    # Zero remaining or durable pause rails: plan shape only, do not allocate or create
+    if int(effective_budget) <= 0 or surface_budget_pause:
         plan = [
             {
                 **s,
@@ -1014,15 +1076,26 @@ def plan_fleet_from_intent(
             }
             for s in steps
         ]
+        rem_out = int(effective_budget) if not surface_budget_pause else int(effective_budget)
+        err = (
+            f"budget: remaining {rem_out} tokens; cannot allocate fleet"
+            if not surface_budget_pause
+            else (
+                f"budget: durable rails pause fleet "
+                f"(pressure={surface_budget_pressure} remaining={rem_out})"
+            )
+        )
         return {
             "ok": False,
             "blocked": True,
             "reason": "budget",
-            "error": f"budget: remaining {effective_budget} tokens; cannot allocate fleet",
+            "error": err,
             "intent": intent,
             "plan": plan,
             "budget": None,
-            "budget_remaining_tokens": int(effective_budget),
+            "budget_remaining_tokens": rem_out,
+            "budget_pressure": surface_budget_pressure,
+            "would_pause_next_cycle": bool(surface_budget_pause),
             "created": [],
             "n_created": 0,
             "dry_run": not create,
