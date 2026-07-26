@@ -278,13 +278,37 @@ class TestBudgetAndPlan(unittest.TestCase):
         self.assertTrue(any(h.get("status") == "blocked" for h in active))
         feed = handoff_feed_items(base_dir=self.base)
         self.assertTrue(any(f.get("status") == "blocked" for f in feed))
-        acc = update_handoff(
+        # #883: accept without shadow_ack blocked
+        blocked_acc = update_handoff(
             hi["handoff"]["handoff_id"],
             status="accepted",
             base_dir=self.base,
             record_ledger=False,
             dispatch_work=True,
         )
+        self.assertFalse(blocked_acc.get("ok"), blocked_acc)
+        self.assertTrue(blocked_acc.get("blocked"))
+        self.assertIn("shadow", (blocked_acc.get("error") or "").lower())
+        # Accept with shadow_ack + approved
+        from plate_core.autonomy import AutonomyEngine
+
+        eng = AutonomyEngine(repo=None)
+        eng.shadow_base_dir = self.base / "shadow"
+        eng.checkpoint_base_dir = self.base / "checkpoints"
+        shadow = eng.simulate_action(
+            "fleet_handoff",
+            scope={"risk_level": "high", "procedure_risk": "high", "fleet_handoff": True},
+        )
+        acc = update_handoff(
+            hi["handoff"]["handoff_id"],
+            status="accepted",
+            base_dir=self.base,
+            record_ledger=False,
+            dispatch_work=True,
+            shadow_ack=shadow.shadow_id,
+            approved=True,
+        )
+        self.assertTrue(acc.get("ok"), acc)
         self.assertEqual(acc["handoff"]["status"], "accepted")
         # deployer → packet_only (no silent deploy)
         self.assertEqual((acc.get("dispatch") or {}).get("dispatch_kind"), "packet_only")
@@ -471,6 +495,57 @@ class TestBudgetAndPlan(unittest.TestCase):
         )
         self.assertEqual(st.get("budget_remaining_tokens"), 8000)
         self.assertIsNotNone(st.get("budget"))
+
+
+class TestFleetAcceptShadowGate883(unittest.TestCase):
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.base = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_medium_accept_unchanged(self):
+        r = create_handoff(
+            from_agent="orchestrator",
+            to_agent="implementer",
+            task="normal work",
+            risk="medium",
+            use_live_budget=False,
+            budget_remaining=50_000,
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        acc = update_handoff(
+            r["handoff"]["handoff_id"],
+            status="accepted",
+            base_dir=self.base,
+            record_ledger=False,
+            dispatch_work=False,
+        )
+        self.assertTrue(acc["ok"])
+        self.assertEqual(acc["handoff"]["status"], "accepted")
+
+    def test_cli_parser_shadow_ack_for_fleet_update(self):
+        from plate_core.cli import build_parser
+
+        p = build_parser()
+        ns = p.parse_args(
+            [
+                "fleet",
+                "--update",
+                "ho-abc",
+                "--handoff-status",
+                "accepted",
+                "--shadow-ack",
+                "shad-1",
+                "--approved",
+            ]
+        )
+        self.assertEqual(ns.update, "ho-abc")
+        self.assertEqual(ns.handoff_status, "accepted")
+        self.assertEqual(ns.shadow_ack, "shad-1")
+        self.assertTrue(ns.approved)
 
 
 if __name__ == "__main__":
