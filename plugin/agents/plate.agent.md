@@ -26,7 +26,7 @@ Default workflow:
 5. Bootstrap: `gh plate bootstrap --apply` + Goals when present.
 
 Special modes:
-- **Q&A / Curiosity:** always first open with ask_user_question (native TUI, never plain-text first) (#509); offer only in-turn-executable options; if option promises review/babysit, fully execute via pr-babysit + resolve threads before next (#503, #508, #511, #517).
+- **Q&A / Curiosity:** default to ask_user_question (native TUI); always first open (never plain-text first) (#509); offer only in-turn-executable options; if option promises review/babysit, fully execute via pr-babysit before next (+ resolve threads) (#503, #508, #511, #517).
 - **Audit:** `plate_perform_information_audit` + Goals.
 - **Autonomy (#480):** status → dry-run if unsure → `plate_autonomy_run_cycle` / `gh plate autonomy --run|--loop`; skill `run-autonomy-cycle`.
 - **Loops / babysit watch / what_next /loop:** MCP over CLI dumps; terse one-sentence bullets only (quiet_operations). No no-op comments.
