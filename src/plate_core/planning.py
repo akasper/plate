@@ -829,6 +829,7 @@ def _planning_budget_gate(
     phase: str,
     budget_remaining: int | None,
     use_live_budget: bool,
+    budget_base_dir: Path | None = None,
 ) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
     cost_est = estimate_planning_cost(kind=kind, phase=phase)
     est = int(cost_est.get("estimated_tokens") or 0)
@@ -838,7 +839,10 @@ def _planning_budget_gate(
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot(estimate_tokens=est)
+            snap = get_budget_snapshot(
+                estimate_tokens=est,
+                base_dir=budget_base_dir,
+            )
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective = int(rem)
@@ -878,13 +882,18 @@ def start_planning_session(
     """Begin a Q&A planning session; returns first question + session state.
 
     #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
+    Charge durable spend only when ``persist=True`` (preview sessions are free).
     """
     k = "product" if kind == "product" else "feature"
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     cost_est, effective_remaining, budget_notes, blocked = _planning_budget_gate(
         kind=k,
         phase="start",
         budget_remaining=budget_remaining,
         use_live_budget=use_live_budget,
+        budget_base_dir=budget_base,
     )
     if blocked is not None:
         return blocked
@@ -923,18 +932,24 @@ def start_planning_session(
             "record free-text answer with plate_planning_answer; session_id is durable."
         ),
     }
-    try:
-        from .autonomy import apply_live_budget_charge
+    if persist and use_live_budget and est_tokens > 0:
+        try:
+            from .autonomy import apply_live_budget_charge
 
-        apply_live_budget_charge(
-            out,
-            tokens=est_tokens,
-            use_live_budget=use_live_budget,
-            action_kind="planning_start",
-            reason=f"start_planning_session:{k}:{sdict.get('id')}",
-        )
-    except Exception:
-        pass
+            apply_live_budget_charge(
+                out,
+                tokens=est_tokens,
+                use_live_budget=use_live_budget,
+                action_kind="planning_start",
+                reason=f"start_planning_session:{k}:{sdict.get('id')}",
+                base_dir=budget_base,
+            )
+        except Exception:
+            pass
+    elif (not persist) and use_live_budget and est_tokens > 0:
+        out["notes"] = list(out.get("notes") or []) + [
+            f"preview: skipped budget charge of est {est_tokens} tokens"
+        ]
     return out
 
 
@@ -1229,11 +1244,15 @@ def build_plan_from_session(
         sid = str(session.get("id") or "")
     if not complete and not answers:
         return {"ok": False, "error": "session incomplete or empty"}
+    budget_base: Path | None = None
+    if planning_root is not None:
+        budget_base = Path(planning_root) / "budget"
     cost_est, effective_remaining, budget_notes, blocked = _planning_budget_gate(
         kind=str(kind),
         phase="build",
         budget_remaining=budget_remaining,
         use_live_budget=use_live_budget,
+        budget_base_dir=budget_base,
     )
     if blocked is not None:
         return blocked
@@ -1269,18 +1288,24 @@ def build_plan_from_session(
         "cost_estimate": cost_est,
         "notes": list(budget_notes),
     }
-    try:
-        from .autonomy import apply_live_budget_charge
+    if persist_pending and use_live_budget and est_tokens > 0:
+        try:
+            from .autonomy import apply_live_budget_charge
 
-        apply_live_budget_charge(
-            out,
-            tokens=est_tokens,
-            use_live_budget=use_live_budget,
-            action_kind="planning_build",
-            reason=f"build_plan:{kind}:{sid or plan.get('id')}",
-        )
-    except Exception:
-        pass
+            apply_live_budget_charge(
+                out,
+                tokens=est_tokens,
+                use_live_budget=use_live_budget,
+                action_kind="planning_build",
+                reason=f"build_plan:{kind}:{sid or plan.get('id')}",
+                base_dir=budget_base,
+            )
+        except Exception:
+            pass
+    elif (not persist_pending) and use_live_budget and est_tokens > 0:
+        out["notes"] = list(out.get("notes") or []) + [
+            f"preview: skipped budget charge of est {est_tokens} tokens"
+        ]
     return out
 
 

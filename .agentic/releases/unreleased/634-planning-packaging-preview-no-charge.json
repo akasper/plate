@@ -1,0 +1,26 @@
+{
+  "slug": "634-planning-packaging-preview-no-charge",
+  "change_type": "fix",
+  "surface": "src/plate_core/planning.py, packaging.py, epic_release_planning.py",
+  "summary": "Planning start/build, packaging build, and epic/release planning charge durable #634 spend only when persist/persist_pending=True; previews skip charge and hydrate/charge under base_dir/budget when provided (#634/#628/#630/#629/#640/#652).",
+  "migration_impact": "Local only. persist=False / persist_pending=False previews no longer deplete spend.json. Live persist still charges.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release with this fix.",
+    "2. Use persist=False for free previews; persist=True for durable sessions/packages.",
+    "3. If spend was polluted: gh plate autonomy --budget-reset."
+  ],
+  "agent_notes": "Charge only on durable success (persist). Pairs with scheduled-ops, stubs, monitor dry_run fixes.",
+  "breaking": false,
+  "links": [
+    "#634",
+    "#628",
+    "#630",
+    "#629",
+    "#640",
+    "#652",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
