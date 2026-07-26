@@ -108,11 +108,56 @@ def extract_spec_headings(spec_text: str) -> list[str]:
     return heads
 
 
+# Host / CLI surface tokens often appear in backticks but are not repo paths.
+_HOST_SLASH_COMMANDS = frozenset(
+    {
+        "/loop",
+        "/mcp",
+        "/agent",
+        "/delegate",
+        "/question-batch",
+        "/plate",
+    }
+)
+
+# Known alternate locations when SPEC cites a short root path.
+_PATH_ALIASES: dict[str, tuple[str, ...]] = {
+    ".mcp.json": ("plugin/.mcp.json", ".mcp.json"),
+}
+
+
+def _is_non_path_citation(cite: str) -> bool:
+    """Return True when a backticked token should not be filesystem-probed."""
+    p = (cite or "").strip()
+    if not p:
+        return True
+    # Host slash-commands: `/loop`, `/mcp` (single segment, no further path)
+    if p in _HOST_SLASH_COMMANDS:
+        return True
+    if re.fullmatch(r"/[A-Za-z][A-Za-z0-9_-]*", p):
+        return True
+    # Ellipsis placeholders: docs/foo/… or docs/foo/...
+    if "…" in p or "..." in p:
+        return True
+    # Absolute-looking host-only tokens without further structure
+    if p.startswith("/") and p.count("/") == 1 and not p.endswith(
+        (".md", ".yml", ".yaml", ".py", ".json", ".sh", ".toml")
+    ):
+        return True
+    return False
+
+
 def extract_path_citations(spec_text: str) -> list[str]:
-    """Heuristic paths cited in SPEC (backticked or bare relative paths)."""
+    """Heuristic paths cited in SPEC (backticked or bare relative paths).
+
+    Skips host slash-commands (`/loop`, `/mcp`) and ellipsis placeholders so
+    they do not produce false ``stale_evidence`` findings.
+    """
     paths: list[str] = []
     for m in re.finditer(r"`([^`\n]+)`", spec_text):
         p = m.group(1).strip()
+        if _is_non_path_citation(p):
+            continue
         if "/" in p or p.startswith(".") or p.endswith((".md", ".yml", ".yaml", ".py", ".json")):
             if " " not in p and not p.startswith("http"):
                 paths.append(p)
@@ -182,29 +227,35 @@ def audit_spec(
         if cite in {"SPEC.md", "AGENTS.md", "CURRENT.md"}:
             # existence check still useful
             pass
-        candidate = root / cite
         # only check repo-relative file-like citations
         if any(ch in cite for ch in ("*", "{", "}")):
             continue
         if cite.startswith("gh ") or cite.startswith("plate_"):
             continue
+        if _is_non_path_citation(cite):
+            continue
         if "/" not in cite and not cite.startswith("."):
             # bare names like AutonomyEngine — skip filesystem probe
             if not cite.endswith((".md", ".yml", ".yaml", ".py", ".json", ".sh")):
                 continue
-        if not candidate.exists() and not (root / cite.lstrip("./")).exists():
-            # Only flag if looks like a concrete path
-            if "/" in cite or cite.startswith("."):
-                findings.append(
-                    SpecFinding(
-                        kind="stale_evidence",
-                        title=f"SPEC cites missing path: {cite}",
-                        confidence="medium",
-                        evidence=[f"SPEC citation `{cite}`", f"missing on disk under {root}"],
-                        recommendation="Update SPEC evidence path or restore the artifact.",
-                        metadata={"path": cite},
-                    )
+        # Resolve aliases (e.g. .mcp.json → plugin/.mcp.json) before flagging stale
+        candidates = [root / cite, root / cite.lstrip("./")]
+        for alt in _PATH_ALIASES.get(cite, ()):
+            candidates.append(root / alt)
+        if any(c.exists() for c in candidates):
+            continue
+        # Only flag if looks like a concrete path
+        if "/" in cite or cite.startswith("."):
+            findings.append(
+                SpecFinding(
+                    kind="stale_evidence",
+                    title=f"SPEC cites missing path: {cite}",
+                    confidence="medium",
+                    evidence=[f"SPEC citation `{cite}`", f"missing on disk under {root}"],
+                    recommendation="Update SPEC evidence path or restore the artifact.",
+                    metadata={"path": cite},
                 )
+            )
 
     # Fragments as implemented evidence
     fragments: list[dict[str, Any]] = []

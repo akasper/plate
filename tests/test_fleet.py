@@ -153,6 +153,15 @@ class TestBudgetAndPlan(unittest.TestCase):
         self.assertTrue(hi["ok"])
         self.assertEqual(hi["handoff"]["status"], "blocked")
         self.assertIsNotNone(hi.get("cost_estimate_tokens"))
+        # Checkpoint isolation: must land under fleet base_dir, not repo root
+        cp_id = hi.get("checkpoint_id")
+        self.assertIsNotNone(cp_id)
+        isolated = self.base / "checkpoints"
+        self.assertTrue(
+            isolated.is_dir(),
+            "fleet base_dir must own checkpoints to avoid polluting .agentic/checkpoints",
+        )
+        self.assertTrue(any(isolated.glob(f"{cp_id}*.json")))
         # active includes blocked
         active = list_handoffs(status="active", base_dir=self.base)
         self.assertTrue(any(h.get("status") == "blocked" for h in active))

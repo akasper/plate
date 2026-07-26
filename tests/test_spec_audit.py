@@ -84,6 +84,36 @@ class TestSpecAudit(unittest.TestCase):
             stale = [f for f in r.findings if f.kind == "stale_evidence"]
             self.assertTrue(any("does-not-exist" in f.title for f in stale))
 
+    def test_host_slash_commands_and_ellipsis_not_stale(self):
+        from plate_core.spec_audit import audit_spec, extract_path_citations
+
+        cites = extract_path_citations(
+            "host `/loop` and `/mcp` plus `docs/curiosity/answers/…` and `plugin/.mcp.json`."
+        )
+        self.assertNotIn("/loop", cites)
+        self.assertNotIn("/mcp", cites)
+        self.assertNotIn("docs/curiosity/answers/…", cites)
+        self.assertIn("plugin/.mcp.json", cites)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "SPEC.md").write_text(
+                "# Spec\n\nHost `/loop` and MCP via `/mcp`. "
+                "Plugin wiring in `.mcp.json` (alias) and `docs/curiosity/answers/…`.\n",
+                encoding="utf-8",
+            )
+            (root / "plugin").mkdir()
+            (root / "plugin" / ".mcp.json").write_text("{}\n", encoding="utf-8")
+            (root / ".agentic" / "releases" / "unreleased").mkdir(parents=True)
+            r = audit_spec(root)
+            self.assertTrue(r.ok)
+            stale = [f for f in r.findings if f.kind == "stale_evidence"]
+            titles = " ".join(f.title for f in stale)
+            self.assertNotIn("/loop", titles)
+            self.assertNotIn("/mcp", titles)
+            self.assertNotIn(".mcp.json", titles)
+            self.assertNotIn("…", titles)
+
     def test_cli_registers(self):
         from plate_core.cli import build_parser
 

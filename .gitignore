@@ -168,6 +168,9 @@ tests/e2e/package-lock.json
 # Ephemeral #647 decision ledger entries (local provenance)
 .agentic/ledger/
 
+# Ephemeral #648 checkpoint/approval records (local pause gates; not release artifacts)
+.agentic/checkpoints/
+
 # Ephemeral #651 path/branch ownership claims (local collab pauses)
 .agentic/collab/
 

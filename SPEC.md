@@ -2,7 +2,7 @@
 spec_version: "2.1"
 process_version: "PLATE 1.0 (target)"
 owner: "akasper"
-updated_at: "2026-07-24"
+updated_at: "2026-07-26"
 ---
 
 # Project Specification
@@ -23,17 +23,17 @@ GitHub is the default single source of truth: Issues for planning, Milestones fo
 
 `plate_core` is a single-binary (or lightweight), multi-surface library that makes PLATE project state inspectable, actionable, and agent-accessible from any interface. It is the runtime layer that connects human developers and AI agents to the live health, structure, operating rules, and autonomous capabilities of any PLATE repository.
 
-At the center of that runtime is the **AutonomyEngine** (Epic #470): software that introspects project state (health, epics, costs, `.plate` config, due procedures), enforces budgets, decides the next safe action, and executes or delegates — so autonomy is engine-driven, not only persona prose + host `/loop` scripts. Humans keep judgment; agents and the engine do the toil.
+At the center of that runtime is the **AutonomyEngine** (Epic #470): software that introspects project state (health, epics, costs, `.plate` config, due procedures), enforces budgets, decides the next safe action, and executes or delegates — so autonomy is engine-driven, not only persona prose + host loop scripts. Humans keep judgment; agents and the engine do the toil.
 
 The project ships in three primary forms from one codebase:
 
 | Surface              | Install command                          | Target user                  | Invocation style                          |
 |----------------------|------------------------------------------|------------------------------|-------------------------------------------|
 | `gh plate` extension | `gh extension install akasper/gh-plate`    | Human developers & scripts   | Terminal commands (`gh plate health`, `gh plate autonomy`) |
-| `plate-mcp` server   | Binary or `npx plate-mcp`                | AI agents                    | Structured tool calls via `/mcp`          |
+| `plate-mcp` server   | Binary or `npx plate-mcp`                | AI agents                    | Structured MCP tool calls (`plate-mcp`)   |
 | Copilot CLI plugin   | `copilot plugin install akasper/plate`   | Conversational users         | Agent chat (`/agent plate`)               |
 
-**plate_core** provides shared logic (health engine, AutonomyEngine, epic/feature queries, bootstrap, baseline catalog, agent guidance, feed/planning/PM surfaces). The plugin surface bundles `plate.agent.md` (proactive context gathering, default plate persona) and `.mcp.json` wiring. Future surfaces (VS Code, Raycast, CI actions) are additive.
+**plate_core** provides shared logic (health engine, AutonomyEngine, epic/feature queries, bootstrap, baseline catalog, agent guidance, feed/planning/PM surfaces, SPEC audit). The plugin surface bundles `plate.agent.md` (proactive context gathering, default plate persona) and `plugin/.mcp.json` wiring. Future surfaces (VS Code, Raycast, CI actions) are additive.
 
 PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workflows, AGENTS.md, SPEC/CURRENT separation, test-first) with progressive enhancement and extensibility. It is designed for deep GitHub/Microsoft integration while planning for future adapters to other platforms.
 
@@ -99,7 +99,11 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
   - Procedures registry (`.agentic/procedures/`) + built-ins (drift, feedback integration, cost rollup, …)
   - Safety: shadow/simulate gates, checkpoints (`.agentic/checkpoints/`), decision ledger (`.agentic/ledger/`)
   - PM orchestrator (`pm.py`) coordinates persona team assignments above the engine
-- **Surfaces**: `gh plate *` and MCP `plate_*` stay parity for health, epic, release, autonomy, feed, planning, checkpoint, ledger, pm.
+  - Feature/bug loops (`feature_loop.py`, `bug_loop.py`) hydrate live #634 remaining and charge durable spend on start even when `risk_tolerance=off`
+  - Fleet handoffs (`fleet.py`): accept dispatches implementer→feature/bug loop, researcher/design→#632 artifact, reviewer→babysit; high-risk handoffs open checkpoints
+- **SPEC audit** (`spec_audit.py`): structured findings (aligned/undocumented/stale_evidence); `gh plate spec-audit --followups` / MCP `plate_spec_audit_followups` route to Documentation/Bug/Question with human gate on SPEC writes
+- **Adoption import**: `import_payload.py` + `template_payload_manifest.yml` path_rules (safe|conservative|force, install_as, conflict strategies); `gh plate import-payload` / `plate_import_payload`
+- **Surfaces**: `gh plate *` and MCP `plate_*` stay parity for health, epic, release, autonomy, feed, planning, checkpoint, ledger, pm, fleet, import-payload, spec-audit.
 - **Progressive features**: Playwright E2E, skill marketplace, visualization dashboards, multi-agent team runtime depth, hybrid/non-code workflows.
 
 ---
@@ -188,7 +192,7 @@ Priority order for remaining work (agents: prefer finishing open PRs, then Phase
   Evolve ContemplationEngine to the Design #143 contract: full transcript, deterministic `answer_signal`, forward-progress artifacts, revision_of, unblock/resume, close only when criteria met + USAGE REPORT. Core engine that turns Curiosity answers into durable progress (Epic #139 invariants).
 
 - **Epic: Curiosity Answer Model — Committed Storage, Indexing, and Query**  
-  Secondary committed layer (`docs/curiosity/answers/…` + index) on top of GitHub comment provenance; richer `plate_get_answers` / query tools; backfill. GitHub remains source of truth.
+  Secondary committed layer (`docs/curiosity/answers/` + index) on top of GitHub comment provenance; richer `plate_get_answers` / query tools; backfill. GitHub remains source of truth.
 
 - **Epic: .plate Root Config Lifecycle — CLI/MCP Surfaces + Extension Support + Health Integration**  
   Complete config surfaces (`gh plate config` init/configure/validate/upgrade + MCP), extension deep merge, schema evolution, health/bootstrap/CI wiring. Design: `docs/design/plate-root-config-schema-lifecycle.md` (Epic #89 / #108 / #129). Autonomy section is already first-class; lifecycle polish continues.
