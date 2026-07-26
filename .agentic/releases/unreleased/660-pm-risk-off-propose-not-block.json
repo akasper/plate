@@ -1,0 +1,21 @@
+{
+  "slug": "660-pm-risk-off-propose-not-block",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py",
+  "summary": "PM under risk_tolerance=off proposes implement/bugfix packets instead of status=blocked; auto-delegate stays off until human/explicit apply (aligns risk=off with AGENTS.md / #654 posture).",
+  "migration_impact": "Existing queue rows with status=blocked solely due to risk=off remain blocked until cancelled or re-cycled; new cycles create proposed + packet.auto_delegate=false. Agents should treat proposed rows as actionable via plate_pm_complete / human approve, not as hard stops.",
+  "migration_guidance": [
+    "1. Upgrade plate-core including this fix.",
+    "2. Optional: cancel stale PM queue assignments blocked only for risk=off.",
+    "3. Run plate_pm_run_cycle dry_run=true \u2014 expect proposed (not blocked) implement rows when budget ok.",
+    "4. Explicit apply still leaves risk=off rows proposed; raise risk or complete assignment to proceed with delegate/fleet/loops."
+  ],
+  "agent_notes": "risk=off blocks AutonomyEngine autopilot only. PM still builds persona packets for the feed/TUI. Do not treat risk=off proposed assignments as failures. Budget exhaustion still blocks. High-impact still waits on #648 checkpoint before promote.",
+  "breaking": false,
+  "links": [
+    "#889",
+    "#660",
+    "#654",
+    "#648"
+  ]
+}
