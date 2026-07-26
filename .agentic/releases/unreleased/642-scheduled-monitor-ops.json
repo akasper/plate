@@ -1,0 +1,16 @@
+{
+  "slug": "642-scheduled-monitor-ops",
+  "change_type": "feature",
+  "surface": "src/plate_core/scheduled_ops.py",
+  "summary": "Add #642 scheduled ops review-discussions and monitor-market (low risk): wire monitoring procedures on run, fleet handoff to market-monitor on live start, dry-run previews dispatch.",
+  "migration_impact": "New op ids in scheduled-ops catalog. Live runs open market-monitor handoffs; monitoring proposals still require human decide before Issues. No auto-fetch of GitHub Discussions unless host enables fetch path later.",
+  "migration_guidance": [
+    "1. Upgrade plate-core.",
+    "2. gh plate scheduled-ops / plate_scheduled_op_run op_id=review-discussions dry_run=true.",
+    "3. Live: dry_run=false opens fleet handoff; accept to run market-monitor follow-through.",
+    "4. Approve monitor proposals via plate_monitoring_decide before creating Issues."
+  ],
+  "agent_notes": "Does not auto-create Issues from discussions. Market signals must be injected by host (no silent network scrape in scheduled op path).",
+  "breaking": false,
+  "links": ["#642", "#641", "#644", "#654", "#659"]
+}
