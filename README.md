@@ -99,21 +99,24 @@ The marketplace flow is the supported public install path. The plugin still expe
 
 #### Marketplace release checklist
 
-Before cutting the release that includes this marketplace path:
+Full maintainer checklist (surfaces, smoke, human Tasks): [`docs/bootstrap/marketplace-install-checklist.md`](docs/bootstrap/marketplace-install-checklist.md) (#378 / #379).
 
-1. Confirm `.github/plugin/marketplace.json` (Copilot) and `.grok-plugin/marketplace.json` (Grok) still point at the intended plugin source (`.plugin/` for the committed payload used by generator + e2e).
+Before cutting a release that ships marketplace install:
+
+1. Confirm `.github/plugin/marketplace.json` (Copilot → `source: "plugin"`) and `.grok-plugin/marketplace.json` (Grok → `./.plugin`) still point at the intended plugin payloads; versions match `plate-core`.
 2. If baseline catalog skills changed, run `python3 scripts/generate-plugin-skills.py` (and commit) so `plugin/SKILLS.md`, `plugin/skills/*/SKILL.md`, and the mirrored `.plugin/` copies stay in sync; then `python3 scripts/generate-plugin-skills.py --check`.
 3. Re-run `python3 scripts/generate-grok-plugin-index.py` (and commit) if `plugin/agents/`, `plugin/skills/`, `.mcp.json`, or manifest keys changed; then `python3 scripts/generate-grok-plugin-index.py --check`.
-4. Verify the runtime prerequisite is available with `pip install plate-core`.
+4. Verify the runtime prerequisite is available with `pip install plate-core` (`plate-mcp` on `PATH`).
 5. Smoke-test the pre-launch install flows (Copilot + generator for Grok):
    ```sh
    copilot plugin marketplace add akasper/plate
    copilot plugin install plate-core@plate-marketplace
    python3 scripts/generate-plugin-skills.py --check
    python3 scripts/generate-grok-plugin-index.py --check
+   pytest tests/test_copilot_cli_marketplace_packaging.py -q
    ```
-6. Complete the human-owned publication tasks tracked in #380 and #381.
-7. Fold the finished Epic into the active release issue (#376) and cut the release through the normal PLATE release ceremony.
+6. Complete the human-owned publication tasks tracked in #380 and #381 (and #625/#626 when PyPI pins require them). Agents must not complete those Tasks.
+7. Fold marketplace work into the active **Next Release** issue (#612) and cut through the normal PLATE release ceremony.
 
 See the grok-build epic for full CLI-agnostic details and verification that no vendor-specific language remains in the plugin files. (This release also closes the Grok marketplace discovery gap reported in #570.)
 
