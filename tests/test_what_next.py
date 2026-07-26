@@ -71,6 +71,37 @@ class TestRecommendWhatNext(unittest.TestCase):
         self.assertEqual(out["state_snapshot"]["ready_issue_count"], 2)
         self.assertEqual(len(out["ready_issues"]), 2)
 
+    def test_spec_audit_actionable_before_ready_issue(self):
+        """#340: actionable SPEC drift from health outranks ready Features."""
+        out = recommend_what_next(
+            health={
+                "label_coverage_ok": True,
+                "open_epic_count": 5,
+                "spec_audit_status": "actionable",
+                "spec_audit_actionable_count": 4,
+                "spec_audit_next_step": "gh plate spec-audit --followups",
+            },
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            ready_issues=[{"number": 340, "title": "health surface", "labels": ["Feature"]}],
+        )
+        self.assertEqual(out["priority"], "spec_audit")
+        self.assertIn("SPEC", out["next_action"])
+        self.assertEqual(out["state_snapshot"]["spec_audit_actionable_count"], 4)
+
+    def test_open_pr_still_beats_spec_audit(self):
+        out = recommend_what_next(
+            health={
+                "label_coverage_ok": True,
+                "open_epic_count": 2,
+                "spec_audit_status": "actionable",
+                "spec_audit_actionable_count": 3,
+            },
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[{"number": 804, "title": "in flight", "baseRefName": "release"}],
+        )
+        self.assertEqual(out["priority"], "open_pr")
+
     def test_open_pr_still_beats_ready_issue(self):
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 2},
