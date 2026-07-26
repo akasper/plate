@@ -1,0 +1,24 @@
+{
+  "slug": "634-641-scheduled-ops-dry-run-no-charge",
+  "change_type": "fix",
+  "surface": "src/plate_core/scheduled_ops.py",
+  "summary": "run_scheduled_op no longer charges durable #634 spend on dry_run previews; when base_dir is set, budget hydrate/charge uses base_dir/budget and ledger writes use base_dir/ledger so dry-run loops cannot exhaust operator spend.json (#634/#641).",
+  "migration_impact": "Local only. dry_run scheduled ops skip budget_charge; live apply still charges. Callers with base_dir get isolated budget+ledger like fleet handoffs.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release with this fix.",
+    "2. Prefer dry_run=true for previews; only dry_run=false applies spend.",
+    "3. If spend was already polluted, gh plate autonomy --budget-reset."
+  ],
+  "agent_notes": "dry_run must never call apply_live_budget_charge. Mirror this rule for any new gated surface. Pairs with fleet base_dir isolation and budget-reset.",
+  "breaking": false,
+  "links": [
+    "#634",
+    "#641",
+    "#647",
+    "#654",
+    "#835"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

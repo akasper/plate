@@ -235,6 +235,76 @@ class TestRunGates(unittest.TestCase):
         self.assertIn("cost_estimate_tokens", out)
         self.assertNotIn("budget_charge", out)
 
+    def test_dry_run_never_charges_live_budget(self):
+        """dry_run previews must not deplete durable spend even with use_live_budget."""
+        from plate_core.autonomy import load_budget_spend, save_budget_spend
+        from plate_core.ledger import list_decisions
+
+        bdir = self.base / "budget"
+        bdir.mkdir(parents=True, exist_ok=True)
+        save_budget_spend(
+            {
+                "date": __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat(),
+                "spent_today": 100,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+            },
+            base_dir=bdir,
+        )
+        root_before = int((load_budget_spend() or {}).get("spent_today") or 0)
+        root_ledger = len(list_decisions(limit=500))
+        out = run_scheduled_op(
+            "scheduled-refactor",
+            dry_run=True,
+            risk_tolerance="medium",
+            base_dir=self.base,
+            record_ledger=True,
+            use_live_budget=True,
+        )
+        self.assertTrue(out["ok"])
+        self.assertNotIn("budget_charge", out)
+        self.assertTrue(
+            any("skipped budget charge" in n for n in (out.get("notes") or []))
+        )
+        local = load_budget_spend(base_dir=bdir)
+        self.assertEqual(int(local.get("spent_today") or 0), 100)
+        self.assertEqual(
+            int((load_budget_spend() or {}).get("spent_today") or 0), root_before
+        )
+        # Ledger isolated under base_dir/ledger
+        local_led = list_decisions(limit=20, base_dir=self.base / "ledger")
+        self.assertTrue(any(x.get("id") == out.get("ledger_id") for x in local_led))
+        self.assertEqual(len(list_decisions(limit=500)), root_ledger)
+
+    def test_live_apply_charges_isolated_budget(self):
+        """Non-dry_run charge stays under base_dir/budget, not repo root."""
+        from plate_core.autonomy import load_budget_spend
+
+        root_before = int((load_budget_spend() or {}).get("spent_today") or 0)
+        est = estimate_op_cost("scheduled-refactor", dry_run=False)["estimated_tokens"]
+        out = run_scheduled_op(
+            "scheduled-refactor",
+            dry_run=False,
+            risk_tolerance="medium",
+            approved=True,
+            base_dir=self.base,
+            record_ledger=False,
+            budget_remaining=est + 5000,
+            use_live_budget=True,
+            dispatch_fleet=False,
+        )
+        self.assertTrue(out["ok"], out)
+        self.assertIn("budget_charge", out)
+        self.assertTrue((out.get("budget_charge") or {}).get("ok"))
+        local = load_budget_spend(base_dir=self.base / "budget")
+        self.assertEqual(int(local.get("spent_today") or 0), est)
+        self.assertEqual(
+            int((load_budget_spend() or {}).get("spent_today") or 0), root_before
+        )
+
     def test_plan_includes_cost_estimate(self):
         p = plan_op("scheduled-refactor")
         self.assertTrue(p["ok"])
