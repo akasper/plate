@@ -345,7 +345,20 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_features":
             payload = get_features(args.get("repo")).to_dict()
         elif name == "plate_bootstrap":
-            payload = run_bootstrap(args.get("repo"), apply_mode=bool(args.get("apply", False))).to_dict()
+            adopt_arg = args.get("adopt")
+            if adopt_arg is None and args.get("existing_repo") is not None:
+                adopt_arg = args.get("existing_repo")
+            adopt_flag: bool | None
+            if adopt_arg is True or adopt_arg is False:
+                adopt_flag = bool(adopt_arg)
+            else:
+                adopt_flag = None
+            payload = run_bootstrap(
+                args.get("repo"),
+                apply_mode=bool(args.get("apply", False)),
+                adopt=adopt_flag,
+                local_root=args.get("local_root"),
+            ).to_dict()
         elif name == "plate_config_get":
             payload = get_plate_config_report(args.get("repo_root")).to_dict()
         elif name == "plate_config_validate":
@@ -2049,7 +2062,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_bootstrap",
-                                "description": "Plan or apply baseline PLATE bootstrap actions for a repository.",
+                                "description": "Plan or apply baseline PLATE bootstrap actions. Supports adoption mode (#619) via adopt=true for existing/mature repos.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -2060,6 +2073,18 @@ def run() -> None:
                                         "apply": {
                                             "type": "boolean",
                                             "description": "When true, apply supported actions; default false (dry-run).",
+                                        },
+                                        "adopt": {
+                                            "type": "boolean",
+                                            "description": "Force adoption mode (true) or leave null for auto-detect; false forces greenfield.",
+                                        },
+                                        "existing_repo": {
+                                            "type": "boolean",
+                                            "description": "Alias for adopt=true.",
+                                        },
+                                        "local_root": {
+                                            "type": "string",
+                                            "description": "Local checkout path for adoption heuristics (default cwd).",
                                         },
                                     },
                                 },
