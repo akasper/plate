@@ -1,0 +1,10 @@
+{
+  "slug": "634-autonomy-status-budget-pressure",
+  "change_type": "fix",
+  "surface": "src/plate_core/autonomy.py",
+  "summary": "AutonomyStatus/get_status (plate_autonomy_status) includes budget_pressure, would_pause_next_cycle, would_throttle_next_cycle, spent_today_durable, and daily/per_cycle limits from durable get_budget_snapshot; open checkpoints respect checkpoint_base_dir.",
+  "migration_impact": "MCP/CLI autonomy status JSON gains additive fields. Feed and what_next consumers can read pressure/pause without a separate cost dashboard call.",
+  "agent_notes": "Prefer plate_autonomy_status.budget_pressure and would_pause_next_cycle for surface gates under risk=off. Set AutonomyEngine.budget_base_dir in tests for isolation.",
+  "breaking": false,
+  "links": ["#634", "#653", "#470"]
+}

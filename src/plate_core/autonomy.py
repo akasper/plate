@@ -490,6 +490,13 @@ class AutonomyStatus:
     due_procedures: list[str] = field(default_factory=list)
     open_human_checkpoints: list[str] = field(default_factory=list)
     throttled_actions: int = 0
+    # #634/#653 surface fields (from durable get_budget_snapshot) for feed/MCP/what_next
+    budget_pressure: str | None = None  # ok | elevated | critical | exhausted
+    would_pause_next_cycle: bool = False
+    would_throttle_next_cycle: bool = False
+    spent_today_durable: int | None = None
+    daily_limit: int | None = None
+    per_cycle_limit: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -1241,7 +1248,7 @@ class AutonomyEngine:
         open_cps: list[str] = []
         try:
             from .checkpoint import list_open_checkpoints
-            for c in list_open_checkpoints(limit=20):
+            for c in list_open_checkpoints(limit=20, base_dir=self.checkpoint_base_dir):
                 open_cps.append(f"{c.get('id')}: {c.get('title')}")
         except Exception:
             pass
@@ -1257,10 +1264,53 @@ class AutonomyEngine:
         if ceiling_f is not None:
             remaining_usd = max(0.0, round(ceiling_f - float(self._spent_usd_today), 6))
 
+        # Prefer durable snapshot for remaining/pressure/next-cycle pause (#634/#653).
+        budget_pressure: str | None = None
+        would_pause_next = False
+        would_throttle_next = False
+        spent_today_durable: int | None = None
+        daily_limit: int | None = int(daily) if daily else None
+        per_cycle_limit: int | None = None
+        remaining_tokens = max(0, int(daily) - int(self._spent_today))
+        try:
+            snap = get_budget_snapshot(base_dir=self.budget_base_dir) or {}
+            if snap.get("remaining_tokens") is not None:
+                remaining_tokens = max(0, int(snap.get("remaining_tokens") or 0))
+            if snap.get("burn_rate") is not None:
+                try:
+                    burn_rate = float(snap.get("burn_rate") or burn_rate)
+                except (TypeError, ValueError):
+                    pass
+            if snap.get("budget_pressure") is not None:
+                budget_pressure = str(snap.get("budget_pressure"))
+            would_pause_next = bool(
+                snap.get("would_pause_next_cycle")
+                if snap.get("would_pause_next_cycle") is not None
+                else snap.get("would_pause")
+            )
+            would_throttle_next = bool(
+                snap.get("would_throttle_next_cycle")
+                if snap.get("would_throttle_next_cycle") is not None
+                else snap.get("would_throttle")
+            )
+            if snap.get("spent_today") is not None:
+                spent_today_durable = int(snap.get("spent_today") or 0)
+            if snap.get("daily_limit") is not None:
+                daily_limit = int(snap.get("daily_limit") or daily_limit or 0)
+            if snap.get("per_cycle_limit") is not None:
+                per_cycle_limit = int(snap.get("per_cycle_limit") or 0)
+            if snap.get("remaining_usd") is not None and remaining_usd is None:
+                try:
+                    remaining_usd = float(snap.get("remaining_usd"))
+                except (TypeError, ValueError):
+                    pass
+        except Exception:
+            pass
+
         return AutonomyStatus(
             enabled=self.enabled,
             risk_tolerance=self.risk_tolerance,
-            budget_remaining_tokens=max(0, daily - self._spent_today),
+            budget_remaining_tokens=remaining_tokens,
             budget_remaining_usd=remaining_usd,
             last_cycle=datetime.now(timezone.utc).isoformat(),
             autopilot_score=autopilot,
@@ -1268,6 +1318,12 @@ class AutonomyEngine:
             due_procedures=due_ids,
             open_human_checkpoints=open_cps,
             throttled_actions=getattr(self, "throttled_actions", 0),
+            budget_pressure=budget_pressure,
+            would_pause_next_cycle=would_pause_next,
+            would_throttle_next_cycle=would_throttle_next,
+            spent_today_durable=spent_today_durable,
+            daily_limit=daily_limit,
+            per_cycle_limit=per_cycle_limit,
         )
 
     def introspect(self) -> ProjectSnapshot:
