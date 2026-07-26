@@ -144,6 +144,62 @@ class TestRecommendWhatNext(unittest.TestCase):
         )
         self.assertEqual(out["priority"], "fragments")
 
+    def test_release_repair_when_tracks_missing(self):
+        """#814: missing multi-track branches outrank SPEC/PM/epic."""
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 5, "spec_audit_status": "ok"},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            release_status={
+                "release_branch_mode": "legacy",
+                "release_track_branches": {
+                    "release": True,
+                    "release-major": False,
+                    "release-minor": False,
+                    "release-patch": False,
+                },
+            },
+        )
+        self.assertEqual(out["priority"], "release_repair")
+        self.assertIn("release-major", out["missing_release_tracks"])
+        self.assertIn("repair", out["next_action"])
+
+    def test_open_pr_beats_release_repair(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[{"number": 813, "title": "docs", "baseRefName": "release"}],
+            release_status={
+                "release_branch_mode": "legacy",
+                "release_track_branches": {
+                    "release": True,
+                    "release-major": False,
+                    "release-minor": False,
+                    "release-patch": False,
+                },
+            },
+        )
+        self.assertEqual(out["priority"], "open_pr")
+
+    def test_healthy_multi_track_skips_repair(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            release_status={
+                "release_branch_mode": "multi-track",
+                "release_track_branches": {
+                    "release": True,
+                    "release-major": True,
+                    "release-minor": True,
+                    "release-patch": True,
+                },
+            },
+            pm_status={"open_checkpoints": 0, "delegated": 0, "queue_size": 0},
+        )
+        self.assertEqual(out["priority"], "pm")
+        self.assertEqual(out["state_snapshot"]["missing_release_tracks"], [])
+
     def test_open_pr_still_beats_ready_issue(self):
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 2},

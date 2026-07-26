@@ -4,17 +4,42 @@ Priority (cheap → specific):
 1. Critical/exhausted durable budget pressure (surface gates still apply under risk=off)
 2. Open PRs targeting integration base (babysit to green)
 3. Missing labels → bootstrap
-4. Actionable local SPEC audit findings (#340 health/drift)
-5. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
-6. Project Manager orchestrator (#660): checkpoints → tick delegated loops → dry-run cycle
-7. Open Epics → advance ready child Feature/Bug (generic when no candidates)
-8. Pending fragments / release status
+4. Missing multi-track release standing branches → release repair (#320/#814)
+5. Actionable local SPEC audit findings (#340 health/drift)
+6. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
+7. Project Manager orchestrator (#660): checkpoints → tick delegated loops → dry-run cycle
+8. Open Epics → advance ready child Feature/Bug (generic when no candidates)
+9. Pending fragments / release status
 """
 
 from __future__ import annotations
 
 from typing import Any
 from urllib.parse import quote_plus
+
+
+def _missing_release_tracks(release_status: dict[str, Any]) -> list[str]:
+    """Return missing multi-track standing branch names from get_release_status shape."""
+    tracks = release_status.get("release_track_branches") or {}
+    if not isinstance(tracks, dict):
+        tracks = {}
+    missing: list[str] = []
+    for name in ("release-major", "release-minor", "release-patch"):
+        # Explicit false, or absent while mode is legacy / needs repair
+        present = tracks.get(name)
+        if present is False or (
+            present is None
+            and str(release_status.get("release_branch_mode") or "") == "legacy"
+        ):
+            missing.append(name)
+    # Also honor repair diagnosis when attached
+    diag = release_status.get("diagnosis") or {}
+    if isinstance(diag, dict):
+        for name in diag.get("missing_branches") or []:
+            n = str(name)
+            if n.startswith("release-") and n not in missing and n != "release":
+                missing.append(n)
+    return missing
 
 
 def recommend_what_next(
@@ -26,6 +51,7 @@ def recommend_what_next(
     pending_fragment_count: int | None = None,
     ready_issues: list[dict[str, Any]] | None = None,
     pm_status: dict[str, Any] | None = None,
+    release_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure recommendation from pre-fetched state (testable).
 
@@ -34,14 +60,17 @@ def recommend_what_next(
     ``open_prs``: list of {number, title, baseRefName, mergeable?} for open PRs.
     ``ready_issues``: list of {number, title, labels?} implementable Feature/Bug candidates.
     ``pm_status``: get_pm_status().to_dict() shape for #660 orchestrator ranking.
+    ``release_status``: get_release_status() shape for multi-track standing repair (#814).
     """
     h = dict(health or {})
     b = dict(budget or {})
     prs = list(open_prs or [])
     ready = list(ready_issues or [])
     pm = dict(pm_status or {})
+    rel = dict(release_status or {})
     labels_ok = bool(h.get("label_coverage_ok", False))
     open_epics = int(h.get("open_epic_count") or 0)
+    missing_tracks = _missing_release_tracks(rel) if rel else []
     pressure = str(
         b.get("budget_pressure")
         or h.get("budget_pressure")
@@ -99,6 +128,8 @@ def recommend_what_next(
         "pm_open_assignments": pm_open,
         "pm_budget_pressure": pm_pressure,
         "pm_risk_tolerance": pm_risk,
+        "release_branch_mode": rel.get("release_branch_mode"),
+        "missing_release_tracks": missing_tracks,
     }
 
     # 1) Budget critical/exhausted — even under risk=off (surface gates)
@@ -176,7 +207,31 @@ def recommend_what_next(
             "priority": "bootstrap",
         }
 
-    # 4) Actionable SPEC audit findings from health (#340)
+    # 4) Multi-track standing release repair (#320 / #814)
+    if missing_tracks:
+        names = ", ".join(missing_tracks)
+        return {
+            "next_action": (
+                f"repair missing release track branches ({names}) "
+                "via gh plate release repair"
+            ),
+            "prompt_segment": (
+                "Release standing state is drifted/legacy: multi-track branches "
+                f"missing ({names}). Run `gh plate release status`, then "
+                "`gh plate release repair` (dry-run) and `--apply` when safe "
+                "(or MCP plate_release_repair). Creates release-major/minor/patch "
+                "from default branch without duplicating Next Release. Do not start "
+                "new Feature work on wrong base while tracks are missing."
+                + quiet
+            ),
+            "rationale": f"missing release tracks: {names} (#320/#814)",
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "release_repair",
+            "missing_release_tracks": missing_tracks,
+        }
+
+    # 5) Actionable SPEC audit findings from health (#340)
     if sa_status == "actionable" or sa_actionable_n > 0:
         step = str(sa_next or "").strip() or (
             "Run gh plate spec-audit --json then plan follow-ups "
@@ -495,14 +550,16 @@ def get_what_next(
     include_fragments: bool = True,
     include_ready_issues: bool = True,
     include_pm: bool = True,
+    include_release: bool = True,
 ) -> dict[str, Any]:
-    """Live what-next: health + budget + optional open PRs + ready issues + PM status."""
+    """Live what-next: health + budget + PRs + ready issues + PM + release standing."""
     health: dict[str, Any] = {}
     budget: dict[str, Any] = {}
     open_prs: list[dict[str, Any]] = []
     ready_issues: list[dict[str, Any]] = []
     pending_fragment_count: int | None = None
     pm_status: dict[str, Any] | None = None
+    release_status: dict[str, Any] | None = None
 
     try:
         from .health import get_health
@@ -581,6 +638,15 @@ def get_what_next(
         except Exception:
             pending_fragment_count = None
 
+    if include_release and not open_prs:
+        try:
+            from .release import get_release_status
+
+            rs = get_release_status(repo=repo)
+            release_status = rs.to_dict() if hasattr(rs, "to_dict") else dict(rs or {})
+        except Exception:
+            release_status = None
+
     if include_pm and not open_prs and not ready_issues:
         # Local PM queue/status only when pipeline is empty (avoid work when PRs win).
         try:
@@ -599,4 +665,5 @@ def get_what_next(
         pending_fragment_count=pending_fragment_count,
         ready_issues=ready_issues,
         pm_status=pm_status,
+        release_status=release_status,
     )
