@@ -285,11 +285,12 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
             )
         tb = auto.get("token_budget", {})
         if isinstance(tb, dict):
-            for k in ("daily", "per_cycle"):
+            for k in ("daily", "per_cycle", "per_action"):
                 v = tb.get(k)
                 if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
                     raise PlateConfigError(f"autonomy.token_budget.{k} must be integer number, got {v!r}")
-            allowed_tb = {"daily", "per_cycle", "action"}
+            # per_action: optional single-action token ceiling (#634); action = policy string
+            allowed_tb = {"daily", "per_cycle", "per_action", "action"}
             unk_tb = set(tb) - allowed_tb
             if unk_tb:
                 raise PlateConfigError(f"unknown autonomy.token_budget keys: {', '.join(sorted(unk_tb))}")
