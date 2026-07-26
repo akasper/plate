@@ -348,11 +348,17 @@ def build_package(
     est_tokens = int(cost_est.get("estimated_tokens") or 0)
     effective_remaining = budget_remaining
     budget_notes: list[str] = []
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     if effective_remaining is None and use_live_budget:
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot(estimate_tokens=est_tokens)
+            snap = get_budget_snapshot(
+                estimate_tokens=est_tokens,
+                base_dir=budget_base,
+            )
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective_remaining = int(rem)
@@ -457,18 +463,25 @@ def build_package(
             }
         ),
     }
-    try:
-        from .autonomy import apply_live_budget_charge
+    # Charge only when persisting a package (preview/persist=False is free).
+    if persist and use_live_budget and est_tokens > 0:
+        try:
+            from .autonomy import apply_live_budget_charge
 
-        apply_live_budget_charge(
-            out,
-            tokens=est_tokens,
-            use_live_budget=use_live_budget,
-            action_kind="package_build",
-            reason=f"build_package:{ver}:{pid}",
-        )
-    except Exception:
-        pass
+            apply_live_budget_charge(
+                out,
+                tokens=est_tokens,
+                use_live_budget=use_live_budget,
+                action_kind="package_build",
+                reason=f"build_package:{ver}:{pid}",
+                base_dir=budget_base,
+            )
+        except Exception:
+            pass
+    elif (not persist) and use_live_budget and est_tokens > 0:
+        out["notes"] = list(out.get("notes") or []) + [
+            f"preview: skipped budget charge of est {est_tokens} tokens"
+        ]
     return out
 
 
