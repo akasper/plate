@@ -343,6 +343,82 @@ class TestPMCycle(unittest.TestCase):
             self.assertEqual(out["loop_kind"], "bug")
             self.assertTrue(out["run_id"])
 
+    def test_dispatch_loop_from_assignment_research_artifact(self):
+        """#660: design/research PM work opens a #632 pending artifact proposal."""
+        from plate_core.design_research_approval import get_proposal
+        from plate_core.pm import dispatch_loop_from_assignment
+
+        with tempfile.TemporaryDirectory() as tmp:
+            adir = Path(tmp) / "artifacts"
+            out = dispatch_loop_from_assignment(
+                {
+                    "work_type": "research",
+                    "work_title": "Survey competitor onboarding",
+                    "work_id": "issue-42",
+                    "number": 42,
+                    "risk": "low",
+                    "risk_tolerance": "medium",
+                    "packet": {"summary": "Compare install friction metrics."},
+                },
+                artifact_base_dir=adir,
+                budget_remaining=100_000,
+                record_ledger=False,
+            )
+            self.assertTrue(out["ok"], out)
+            self.assertEqual(out["loop_kind"], "artifact")
+            self.assertTrue(out["run_id"])
+            self.assertEqual(out["stage"], "pending")
+            prop = get_proposal(out["run_id"], base_dir=adir)
+            self.assertIsNotNone(prop)
+            self.assertEqual(prop["kind"], "research")
+            self.assertEqual(prop["related_issue"], 42)
+
+    def test_tick_artifact_assignment_completes_on_approve(self):
+        """#660 tick path: approved artifact completes the PM assignment."""
+        from plate_core.design_research_approval import decide_proposal, propose_artifact
+        from plate_core.pm import ProjectManager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pm_dir = Path(tmp) / "pm"
+            adir = Path(tmp) / "artifacts"
+            prop = propose_artifact(
+                "design",
+                "Wireframes for feed",
+                "Rough layout for endless Q+Task feed",
+                related_issue=7,
+                base_dir=adir,
+                use_live_budget=False,
+                budget_remaining=100_000,
+            )
+            self.assertTrue(prop.get("ok"), prop)
+            pid = prop["id"]
+            decide_proposal(pid, "approve", decided_by="test", base_dir=adir)
+            pm = ProjectManager(
+                repo=None,
+                state_dir=pm_dir,
+                artifact_base_dir=adir,
+                dispatch_fleet=False,
+                dispatch_loops=False,
+            )
+            pm._assignments = [
+                {
+                    "assignment_id": "asg-art1",
+                    "work_id": "7",
+                    "work_title": "Wireframes for feed",
+                    "work_type": "design",
+                    "status": "delegated",
+                    "loop_run_id": pid,
+                    "loop_kind": "artifact",
+                    "packet": {},
+                }
+            ]
+            pm._save_queue()
+            ticks = pm.tick_delegated_loops(dry_run=False, complete_when_done=True)
+            self.assertEqual(len(ticks), 1)
+            self.assertTrue(ticks[0]["completed_assignment"])
+            self.assertEqual(pm._assignments[0]["status"], "done")
+            self.assertEqual(pm._assignments[0]["loop_stage"], "approved")
+
     def test_tick_delegated_loops_completes_when_done(self):
         from plate_core.bug_loop import start_bug_loop, update_bug_loop
         from plate_core.pm import ProjectManager
