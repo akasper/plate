@@ -571,21 +571,33 @@ def fetch_ready_issue_candidates(
     except Exception:
         pass
 
-    # 2) Fallback: open Feature/Bug without refinement/stub/implemented
+    # 2) Fallback: open Feature / Bug / Documentation without refinement/stub/implemented.
+    # Run separate label queries — GitHub search often returns 0 hits for parenthesized
+    # OR groups of label: qualifiers, which starved ready candidates (#654/#660).
     if len(out) < limit:
-        try:
-            q2 = (
-                f"repo:{target} is:issue is:open "
-                f"(label:Feature OR label:Bug) "
-                f"-label:status:implemented -label:status:stub "
-                f"-label:need:refinement -label:need:human-review -label:status:blocked"
-            )
-            data = client.api(f"search/issues?q={quote_plus(q2)}&per_page={min(limit * 2, 30)}") or {}
-            items = data.get("items") if isinstance(data, dict) else None
-            if isinstance(items, list):
-                _absorb(items, require_ready_label=False)
-        except Exception:
-            pass
+        exclude = (
+            "-label:status:implemented -label:status:stub "
+            "-label:need:refinement -label:need:human-review -label:status:blocked"
+        )
+        for type_label in ("Feature", "Bug", "Documentation"):
+            if len(out) >= limit:
+                break
+            try:
+                q2 = (
+                    f"repo:{target} is:issue is:open "
+                    f"label:{type_label} {exclude}"
+                )
+                data = (
+                    client.api(
+                        f"search/issues?q={quote_plus(q2)}&per_page={min(limit * 2, 30)}"
+                    )
+                    or {}
+                )
+                items = data.get("items") if isinstance(data, dict) else None
+                if isinstance(items, list):
+                    _absorb(items, require_ready_label=False)
+            except Exception:
+                pass
 
     return out[:limit]
 
