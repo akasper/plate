@@ -319,7 +319,11 @@ def start_bug_loop(
 
     When ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
     hydrate remaining tokens from durable #634 budget snapshot (same rails as feature_loop).
+    When ``base_dir`` is set and ``budget_base_dir`` is omitted, hydrate/charge under
+    ``base_dir/budget`` so tests and isolated runs do not touch operator spend.
     """
+    if budget_base_dir is None and base_dir is not None:
+        budget_base_dir = Path(base_dir) / "budget"
     title = (bug_title or "").strip() or (f"Bug #{bug_number}" if bug_number else "Untitled bug")
     est = estimate_bug_cost(size=size, needs_repro=needs_repro, e2e=e2e)
     human = assess_human_required(
@@ -438,6 +442,7 @@ def start_bug_loop(
         try:
             from .ledger import record_decision
 
+            ledger_base = Path(base_dir) / "ledger" if base_dir is not None else None
             rec = record_decision(
                 action_kind="bug_loop_start",
                 decision="pause" if blocked else "proceed",
@@ -454,6 +459,7 @@ def start_bug_loop(
                 actor="bug_loop",
                 cost_estimate_tokens=est["estimated_tokens"],
                 metadata={"run_id": run.id, "blocked": blocked},
+                base_dir=ledger_base,
             )
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:
