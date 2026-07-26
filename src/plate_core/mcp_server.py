@@ -1837,6 +1837,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 dry_run=dry,
                 apply=apply_mode,
                 namespace_scripts=ns,
+                escape_hatch_dir=args.get("escape_hatch_dir") or args.get("escape_hatch"),
+                escape_hatch_on_conflict=bool(args.get("escape_hatch_on_conflict", False)),
             )
         elif name == "plate_payload_list":
             from .payload_surface import list_payload_files
@@ -4531,7 +4533,13 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_import_payload",
-                                "description": "Import PLATE template payload into a local checkout (#616). Dry-run by default; set apply=true to write. Strategies: safe|conservative|force. namespace_scripts installs under scripts/plate/ when product scripts/ exists (#621).",
+                                "description": (
+                                    "Import PLATE template payload into a local checkout (#616). "
+                                    "Dry-run by default; set apply=true to write. Strategies: safe|conservative|force. "
+                                    "namespace_scripts installs under scripts/plate/ when product scripts/ exists (#621). "
+                                    "escape_hatch_dir writes plan.json+PLAN.md+DRAFT_PR_BODY.md for hard merges (#622); "
+                                    "never force-overwrite high-value paths without human approval."
+                                ),
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -4560,6 +4568,14 @@ def run() -> None:
                                         "namespace_scripts": {
                                             "type": "boolean",
                                             "description": "Force scripts/plate/ install; omit for auto-detect.",
+                                        },
+                                        "escape_hatch_dir": {
+                                            "type": "string",
+                                            "description": "Write #622 escape-hatch bundle under this directory.",
+                                        },
+                                        "escape_hatch_on_conflict": {
+                                            "type": "boolean",
+                                            "description": "Auto-write escape hatch under target/.agentic/import-escape-hatch when conflicts exist.",
                                         },
                                     },
                                 },
