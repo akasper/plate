@@ -1516,6 +1516,49 @@ class AutonomyEngine:
         except Exception:
             pass
 
+        # #634/#653/#867 surface budget rails: pause when durable snapshot says the
+        # next cycle cannot fund work. risk_tolerance=off / enabled=false only
+        # disables decide/execute autopilot — they must not hide budget stop signals
+        # (symmetric with PM run_cycle #865/#866).
+        try:
+            st = self.get_status()
+            pressure = (st.budget_pressure or "").lower()
+            remaining = st.budget_remaining_tokens
+            would_pause = bool(st.would_pause_next_cycle)
+            remaining_exhausted = remaining is not None and int(remaining) <= 0
+            if pressure in ("critical", "exhausted") or would_pause or remaining_exhausted:
+                reason = (
+                    f"budget_pressure={st.budget_pressure} remaining={remaining} "
+                    f"would_pause={would_pause} risk={self.risk_tolerance} "
+                    f"enabled={self.enabled}"
+                )
+                led = self._ledger_record(
+                    "run_cycle",
+                    "pause",
+                    f"durable budget rails paused cycle: {reason}",
+                    sources=["autonomy_engine", "get_budget_snapshot", "#634", "#867"],
+                    session=ts,
+                    metadata={
+                        "budget_pressure": st.budget_pressure,
+                        "remaining": remaining,
+                        "would_pause_next_cycle": would_pause,
+                    },
+                )
+                taken = [f"paused: durable budget rails ({reason})"]
+                if led and led.get("id"):
+                    taken.append(f"ledger: {led['id']} decision=pause")
+                return CycleReport(
+                    status="paused",
+                    actions_taken=taken,
+                    throttled=["budget"],
+                    paused=True,
+                    budget_decision="pause",
+                    snapshot=snap.to_dict(),
+                    timestamp=ts,
+                )
+        except Exception:
+            pass
+
         self._spent_this_cycle = 0  # fresh per cycle
         decided = self.decide_next(snap)
         if not decided:
