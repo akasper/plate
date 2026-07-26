@@ -239,30 +239,63 @@ def get_cost_dashboard(
     open_cps = list((autonomy_status or {}).get("open_human_checkpoints") or [])
     due_procs = list((autonomy_status or {}).get("due_procedures") or [])
 
-    # #634 harden: hydrate durable spend.json so dashboard/feed match governor across restarts
+    # #634 harden: hydrate durable spend via get_budget_snapshot (UTC day rollover)
+    # so dashboard/feed/PM match AutonomyEngine and never treat prior-day spend.json
+    # as live (#653/#660; pairs with PM day-rollover fix).
     durable_spend: dict[str, Any] = {}
     spent_today_durable: int | None = None
     try:
-        from .autonomy import load_budget_spend, tokens_to_usd
+        from .autonomy import get_budget_snapshot, tokens_to_usd
 
-        durable_spend = load_budget_spend() or {}
-        if durable_spend.get("spent_today") is not None:
-            spent_today_durable = int(durable_spend.get("spent_today") or 0)
-            if not remaining_from_status:
+        snap = get_budget_snapshot() or {}
+        durable_spend = {
+            "date": snap.get("spend_day"),
+            "spent_today": snap.get("spent_today"),
+            "spent_this_cycle": snap.get("spent_this_cycle"),
+            "spent_usd_today": snap.get("spent_usd_today"),
+            "spend_is_today": snap.get("spend_is_today"),
+        }
+        try:
+            spent_today_durable = int(snap.get("spent_today") or 0)
+        except (TypeError, ValueError):
+            spent_today_durable = 0
+        if snap.get("daily_limit") is not None:
+            try:
+                daily = int(snap.get("daily_limit") or daily)
+            except (TypeError, ValueError):
+                pass
+        if snap.get("per_cycle_limit") is not None:
+            try:
+                per_cycle = int(snap.get("per_cycle_limit") or per_cycle)
+            except (TypeError, ValueError):
+                pass
+        if not remaining_from_status and snap.get("remaining_tokens") is not None:
+            try:
+                remaining_tokens = int(snap.get("remaining_tokens") or 0)
+            except (TypeError, ValueError):
                 remaining_tokens = max(0, int(daily) - spent_today_durable)
-            if cost_ceiling is not None and not remaining_usd_from_status:
-                # Recompute remaining USD from durable when status did not supply it
-                try:
+        elif not remaining_from_status:
+            remaining_tokens = max(0, int(daily) - spent_today_durable)
+        if cost_ceiling is not None and not remaining_usd_from_status:
+            try:
+                if snap.get("remaining_usd") is not None:
+                    remaining_usd = float(snap.get("remaining_usd"))
+                else:
                     spent_usd = float(
-                        durable_spend.get("spent_usd_today")
-                        or tokens_to_usd(spent_today_durable)
+                        snap.get("spent_usd_today") or tokens_to_usd(spent_today_durable)
                     )
                     remaining_usd = max(0.0, float(cost_ceiling) - spent_usd)
-                except (TypeError, ValueError):
-                    pass
-            # Prefer durable burn when autonomy_status burn is idle but spend exists
-            if burn <= 0 and daily and spent_today_durable:
-                burn = round(min(100.0, (spent_today_durable / float(daily)) * 100.0), 1)
+            except (TypeError, ValueError):
+                pass
+        # Prefer snapshot burn when autonomy_status burn is idle but spend is today
+        try:
+            snap_burn = float(snap.get("burn_rate") or 0.0)
+        except (TypeError, ValueError):
+            snap_burn = 0.0
+        if burn <= 0 and snap_burn > 0:
+            burn = snap_burn
+        elif burn <= 0 and daily and spent_today_durable and snap.get("spend_is_today"):
+            burn = round(min(100.0, (spent_today_durable / float(daily)) * 100.0), 1)
     except Exception:
         durable_spend = {}
         spent_today_durable = None
