@@ -124,6 +124,56 @@ class TestBudgetAndPlan(unittest.TestCase):
         self.assertEqual(out.get("n_created"), 0)
         self.assertIn("budget", out.get("error") or "")
 
+    def test_plan_and_status_hydrate_budget_under_base_dir(self):
+        """base_dir alone hydrates remaining from base_dir/budget (#634/#644)."""
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        bdir = self.base / "budget"
+        today = (
+            __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .date()
+            .isoformat()
+        )
+        save_budget_spend(
+            {
+                "date": today,
+                "spent_today": 8000,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+            },
+            base_dir=bdir,
+        )
+
+        class _Cfg:
+            autonomy = {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "token_budget": {
+                    "daily": 10000,
+                    "per_cycle": 2000,
+                    "action": "pause",
+                },
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            plan = plan_fleet_from_intent(
+                "Implement features",
+                use_live_budget=True,
+                create=False,
+                base_dir=self.base,
+            )
+            st = fleet_status(base_dir=self.base, use_live_budget=True)
+        self.assertTrue(plan.get("ok"), plan)
+        self.assertEqual(plan.get("budget_remaining_tokens"), 2000)
+        self.assertTrue(
+            any("budget hydrated" in n for n in (plan.get("notes") or [])),
+            plan.get("notes"),
+        )
+        self.assertEqual(st.get("budget_remaining_tokens"), 2000)
+
     def test_budget_gate_and_blocked_high_risk(self):
         blocked = create_handoff(
             from_agent="orchestrator",

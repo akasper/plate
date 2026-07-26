@@ -1859,12 +1859,14 @@ def get_budget_snapshot(
             elif over_usd:
                 gate_reason = f"{gate_reason}: cost_ceiling_usd"
 
-    # Pressure without estimate: remaining under 10% of daily
+    # Pressure without estimate — vocabulary shared with costs dashboard / what_next /
+    # PM gates (#634/#653): ok | elevated | critical | exhausted (never "high").
     pressure = "ok"
     if remaining_tokens <= 0 or (remaining_usd is not None and remaining_usd <= 0):
         pressure = "exhausted"
     elif burn_rate >= 90 or remaining_tokens < max(1, int(daily * 0.1)):
-        pressure = "high"
+        # Align with get_cost_dashboard "critical" so feed/what_next budget_gate fires.
+        pressure = "critical"
     elif burn_rate >= 70:
         pressure = "elevated"
 
