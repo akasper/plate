@@ -1,0 +1,10 @@
+{
+  "slug": "881-scheduled-ops-cli-mcp-shadow-ack",
+  "change_type": "fix",
+  "surface": "src/plate_core/cli.py",
+  "summary": "Wire shadow_ack through gh plate scheduled-ops --shadow-ack and MCP plate_scheduled_op_run so live high/critical ops can satisfy #879 gate_high_impact (#645/#881).",
+  "migration_impact": "Agents must pass shadow_ack from dry-run/simulate when applying live high/critical scheduled ops via CLI or MCP. Dry-run still returns shadow_id for the next apply.",
+  "agent_notes": "After dry-run, copy shadow_id into --shadow-ack / shadow_ack with --apply --approved for deploy/release/marketplace ops.",
+  "breaking": false,
+  "links": ["#881", "#879", "#645", "#641", "#654"]
+}
