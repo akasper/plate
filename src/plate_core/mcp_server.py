@@ -1823,12 +1823,38 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             dry = bool(args.get("dry_run", True))
             if apply_mode:
                 dry = False
+            ns = args.get("namespace_scripts")
+            if ns is not None:
+                ns = bool(ns)
             payload = import_payload(
                 target_dir=args.get("target_dir") or args.get("target") or ".",
                 strategy=str(args.get("strategy") or "safe"),
                 template_repo=args.get("template_repo"),
                 dry_run=dry,
                 apply=apply_mode,
+                namespace_scripts=ns,
+            )
+        elif name == "plate_payload_list":
+            from .payload_surface import list_payload_files
+
+            payload = list_payload_files(
+                args.get("template_repo"),
+                include_excluded=bool(args.get("include_excluded", False)),
+            )
+        elif name == "plate_payload_root":
+            from .payload_surface import resolve_payload_root
+
+            payload = resolve_payload_root(args.get("template_repo"))
+        elif name == "plate_payload_manifest":
+            from .payload_surface import show_manifest
+
+            payload = show_manifest()
+        elif name == "plate_payload_classify":
+            from .payload_surface import classify_path
+
+            payload = classify_path(
+                str(args.get("path") or ""),
+                args.get("template_repo"),
             )
         elif name == "plate_perform_test_coverage_audit":
             from .mcp.audit_tools import PerformTestCoverageAuditTool
@@ -4464,7 +4490,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_import_payload",
-                                "description": "Import PLATE template payload into a local checkout (#616). Dry-run by default; set apply=true to write. Strategies: safe (skip existing), conservative (conflict on differ), force (overwrite).",
+                                "description": "Import PLATE template payload into a local checkout (#616). Dry-run by default; set apply=true to write. Strategies: safe|conservative|force. namespace_scripts installs under scripts/plate/ when product scripts/ exists (#621).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -4490,7 +4516,47 @@ def run() -> None:
                                             "description": "Write files (default false).",
                                             "default": False,
                                         },
+                                        "namespace_scripts": {
+                                            "type": "boolean",
+                                            "description": "Force scripts/plate/ install; omit for auto-detect.",
+                                        },
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_payload_list",
+                                "description": "List PLATE template payload files with classification and path_rules (#621).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "template_repo": {"type": "string"},
+                                        "include_excluded": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_payload_root",
+                                "description": "Resolve package payload root path and source kind (#621).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"template_repo": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_payload_manifest",
+                                "description": "Show template payload manifest including path_rules (#621).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_payload_classify",
+                                "description": "Classify a relative path against the payload manifest (#621).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "path": {"type": "string"},
+                                        "template_repo": {"type": "string"},
+                                    },
+                                    "required": ["path"],
                                 },
                             },
                             {

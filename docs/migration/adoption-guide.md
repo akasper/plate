@@ -58,3 +58,9 @@ Dry-run shows `create_as` / `conflict` / `skip` per file. Customize rules only i
 `gh plate import-payload` seeds a minimal `CURRENT.md` when missing (#618) so
 `validate_plate_repo` and feature detection do not fail after adopt. Prefer
 durable evidence in `.agentic/releases/`; treat CURRENT.md as a short index.
+
+## scripts/plate convention
+
+When the target already has product scripts under `scripts/`, import installs
+PLATE helpers under `scripts/plate/` and rewrites workflow references (#621).
+Discover payload files with `gh plate payload list --json`.
