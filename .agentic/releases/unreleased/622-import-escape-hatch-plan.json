@@ -1,0 +1,16 @@
+{
+  "slug": "622-import-escape-hatch-plan",
+  "change_type": "feature",
+  "surface": "src/plate_core/import_payload.py, cli.py, mcp_server.py",
+  "summary": "Import-payload agentic escape hatch first slice (#622): write plan.json + PLAN.md + DRAFT_PR_BODY.md via --escape-hatch / --escape-hatch-on-conflict and MCP fields; rich human-review PR body sections; never auto-force high-value overwrites.",
+  "migration_impact": "New optional CLI flags and MCP args on import-payload. On conflicts, agents should emit escape-hatch artifacts instead of improvising multi-turn cp. Draft PR open/worktree apply remain follow-ups; human approval still required for force overwrites.",
+  "migration_guidance": [
+    "1. Upgrade plate-core.",
+    "2. On mature adoption with conflicts: gh plate import-payload --strategy conservative --escape-hatch-on-conflict --json.",
+    "3. Open a draft PR using DRAFT_PR_BODY.md when multi-file judgment is required.",
+    "4. Do not use --strategy force without explicit human approval on product-owned paths."
+  ],
+  "agent_notes": "Escape hatch does not write payload files. Prefer conservative + escape hatch over force. Residual: automatic draft PR create + worktree apply (still human-gated). need:human-review on #622 reflects product human-judgment gate, not a block on shipping this surface.",
+  "breaking": false,
+  "links": ["#622", "#615", "#616", "#617", "#619", "#654"]
+}

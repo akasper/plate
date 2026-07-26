@@ -3444,6 +3444,8 @@ def cmd_import_payload(args: argparse.Namespace) -> int:
         dry_run=not do_apply,
         apply=do_apply,
         namespace_scripts=ns,
+        escape_hatch_dir=getattr(args, "escape_hatch", None),
+        escape_hatch_on_conflict=bool(getattr(args, "escape_hatch_on_conflict", False)),
     )
     if getattr(args, "json", False):
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -4626,6 +4628,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-namespace-scripts",
         action="store_true",
         help="Keep PLATE scripts at scripts/ even if target has scripts/",
+    )
+    import_payload_p.add_argument(
+        "--escape-hatch",
+        dest="escape_hatch",
+        metavar="DIR",
+        help="Write #622 plan.json + PLAN.md + DRAFT_PR_BODY.md under DIR (never auto-force)",
+    )
+    import_payload_p.add_argument(
+        "--escape-hatch-on-conflict",
+        action="store_true",
+        help="If conflicts exist, write escape-hatch bundle under target/.agentic/import-escape-hatch (#622)",
     )
     import_payload_p.add_argument("--json", action="store_true", help="Output JSON report")
     import_payload_p.set_defaults(func=cmd_import_payload)
