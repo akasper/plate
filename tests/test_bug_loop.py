@@ -138,8 +138,19 @@ class TestRunLifecycle(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
             save_budget_spend(
-                {"spent_today": 9800, "spent_this_cycle": 0, "spent_usd_today": 0.0},
+                {
+                    "date": today,
+                    "spent_today": 9800,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
                 base_dir=bdir,
             )
 
