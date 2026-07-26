@@ -285,6 +285,7 @@ def _stub_budget_gate(
     dry_run: bool = True,
     budget_remaining: int | None,
     use_live_budget: bool,
+    budget_base_dir: Path | None = None,
 ) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
     cost_est = estimate_stub_cost(
         n_acceptance=n_acceptance, create=create, dry_run=dry_run
@@ -296,7 +297,10 @@ def _stub_budget_gate(
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot(estimate_tokens=est)
+            snap = get_budget_snapshot(
+                estimate_tokens=est,
+                base_dir=budget_base_dir,
+            )
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective = int(rem)
@@ -568,6 +572,10 @@ def create_stub_issue(
     if not found:
         return {"ok": False, "error": "draft required", "dry_run": dry_run}
 
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
+
     n_ac = len(list(found.get("acceptance_criteria") or []))
     cost_est, effective_remaining, budget_notes, blocked = _stub_budget_gate(
         n_acceptance=n_ac,
@@ -575,6 +583,7 @@ def create_stub_issue(
         dry_run=dry_run,
         budget_remaining=budget_remaining,
         use_live_budget=use_live_budget,
+        budget_base_dir=budget_base,
     )
     if blocked is not None:
         blocked["dry_run"] = dry_run
@@ -606,10 +615,6 @@ def create_stub_issue(
         milestone_num = milestone
     elif isinstance(milestone, str) and milestone.isdigit():
         milestone_num = int(milestone)
-
-    budget_base: Path | None = None
-    if base_dir is not None:
-        budget_base = Path(base_dir) / "budget"
 
     def _charge(out: dict[str, Any]) -> dict[str, Any]:
         try:
