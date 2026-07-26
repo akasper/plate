@@ -1,0 +1,15 @@
+{
+  "slug": "814-what-next-release-repair",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
+  "summary": "Empty-pipeline what_next ranks release standing-track repair (#814/#320) when release-major/minor/patch are missing (legacy drift) ahead of SPEC/PM/epic work; live get_what_next loads get_release_status when no open PRs.",
+  "migration_impact": "Agents following plate_what_next will be steered to gh plate release repair (dry-run then apply) when multi-track standing branches are absent. Open PRs and budget gates still win. Idempotent repair already exists (#320).",
+  "migration_guidance": [
+    "1. Upgrade plate-core.",
+    "2. On priority=release_repair: gh plate release status then gh plate release repair (dry-run) and --apply when safe.",
+    "3. Re-run what-next; mode should become multi-track when tracks exist."
+  ],
+  "agent_notes": "akasper/plate standing tracks were repaired 2026-07-26 (multi-track healthy). This ranking prevents silent legacy fallback for adopters. Do not force-delete branches; repair never auto-closes duplicate Next Release issues.",
+  "breaking": false,
+  "links": ["#814", "#320", "#306", "#654", "#612"]
+}
