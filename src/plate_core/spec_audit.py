@@ -338,3 +338,291 @@ def format_spec_audit_markdown(report: SpecAuditReport | dict[str, Any]) -> str:
                 f"  - [{f.get('kind')}|{f.get('confidence')}] {f.get('title')}"
             )
     return "\n".join(lines) + "\n"
+
+
+# --- Follow-ups from findings (#339) ---
+
+FOLLOWUP_MARKER = "<!-- PLATE-SPEC-AUDIT-FOLLOWUP:"
+FOLLOWUP_MARKER_END = "-->"
+
+# kind -> (issue type label, extra labels, title prefix)
+_FINDING_ROUTE: dict[str, tuple[str, list[str], str]] = {
+    "undocumented": (
+        "Documentation",
+        ["area:docs", "area:product"],
+        "SPEC gap: document implemented behavior",
+    ),
+    "stale_evidence": (
+        "Bug",
+        ["area:docs", "area:product"],
+        "SPEC stale evidence path",
+    ),
+    "conflict": (
+        "Question",
+        ["area:product", "need:decision"],
+        "SPEC conflict needs owner vision",
+    ),
+    # low confidence → Question even when undocumented-like
+}
+
+
+def route_finding_to_issue(finding: SpecFinding | dict[str, Any]) -> dict[str, Any]:
+    """Map a finding to GitHub issue type/labels/title (pure; #339)."""
+    f = finding.to_dict() if isinstance(finding, SpecFinding) else dict(finding)
+    kind = str(f.get("kind") or "")
+    confidence = str(f.get("confidence") or "medium").lower()
+    title_base = str(f.get("title") or kind)
+
+    if kind in ("aligned", "future_ok"):
+        return {
+            "actionable": False,
+            "reason": f"kind={kind} does not require follow-up issues",
+            "kind": kind,
+        }
+
+    issue_type, extra, prefix = _FINDING_ROUTE.get(
+        kind, ("Question", ["area:product", "need:decision"], "SPEC audit finding")
+    )
+    # Low-confidence insertions → Question for owner vision (planning #335)
+    if kind == "undocumented" and confidence == "low":
+        issue_type, extra, prefix = (
+            "Question",
+            ["area:product", "need:decision"],
+            "SPEC insertion needs owner vision",
+        )
+
+    slug = ""
+    meta = f.get("metadata") or {}
+    if isinstance(meta, dict):
+        slug = str(meta.get("slug") or meta.get("path") or "")
+    dedupe_key = re.sub(r"[^a-zA-Z0-9._-]+", "-", f"{kind}-{slug or title_base}")[:80]
+
+    labels: list[str] = []
+    for x in [issue_type, *extra]:
+        if x not in labels:
+            labels.append(x)
+
+    title = f"[SPEC audit] {prefix}: {title_base}"
+    if len(title) > 200:
+        title = title[:197] + "..."
+
+    body_lines = [
+        f"{FOLLOWUP_MARKER}{dedupe_key} {FOLLOWUP_MARKER_END}",
+        "",
+        "## Origin",
+        f"- Finding kind: `{kind}`",
+        f"- Confidence: `{confidence}`",
+        f"- Title: {title_base}",
+        "",
+        "## Evidence",
+    ]
+    for ev in f.get("evidence") or []:
+        body_lines.append(f"- {ev}")
+    if f.get("recommendation"):
+        body_lines.extend(["", "## Recommendation", str(f.get("recommendation"))])
+    if f.get("section"):
+        body_lines.extend(["", f"## SPEC section", str(f.get("section"))])
+    body_lines.extend(
+        [
+            "",
+            "## Human checkpoint",
+            "Any change that alters product intent or public claims requires human review.",
+            "Do not merge SPEC intent changes without an Approved human review.",
+            "",
+            "Related: #338 audit engine, #339 follow-ups, Epic SPEC auditing.",
+        ]
+    )
+
+    return {
+        "actionable": True,
+        "kind": kind,
+        "confidence": confidence,
+        "dedupe_key": dedupe_key,
+        "title": title,
+        "labels": labels,
+        "body": "\n".join(body_lines),
+        "issue_type": issue_type,
+    }
+
+
+def draft_spec_update_from_findings(
+    findings: list[SpecFinding | dict[str, Any]],
+    *,
+    max_items: int = 20,
+) -> dict[str, Any]:
+    """Prepare an additive SPEC markdown draft from undocumented findings (#339).
+
+    Never auto-applies. Human review required before editing SPEC.md.
+    """
+    undoc: list[dict[str, Any]] = []
+    for raw in findings:
+        f = raw.to_dict() if isinstance(raw, SpecFinding) else dict(raw)
+        if f.get("kind") != "undocumented":
+            continue
+        undoc.append(f)
+        if len(undoc) >= max_items:
+            break
+
+    if not undoc:
+        return {
+            "ok": True,
+            "needs_human_approval": True,
+            "items": 0,
+            "markdown": "",
+            "note": "No undocumented findings to propose.",
+        }
+
+    lines = [
+        "<!-- PLATE-SPEC-AUDIT-DRAFT:BEGIN -->",
+        "## Proposed additive SPEC updates (from audit #339)",
+        "",
+        "> **Human checkpoint:** review citations and confidence before merging into SPEC.md.",
+        "> Low-confidence rows should also open a Question for owner vision.",
+        "",
+        "| Capability / change | Status | Evidence | Confidence |",
+        "|---|---|---|---|",
+    ]
+    for f in undoc:
+        meta = f.get("metadata") or {}
+        slug = meta.get("slug") if isinstance(meta, dict) else ""
+        conf = f.get("confidence") or "medium"
+        ev = "; ".join(str(x)[:80] for x in (f.get("evidence") or [])[:2])
+        title = str(f.get("title") or slug or "item").replace("|", "/")
+        lines.append(f"| {title} | Implemented (proposed) | {ev or slug} | {conf} |")
+    lines.extend(
+        [
+            "",
+            "### Provenance",
+        ]
+    )
+    for f in undoc:
+        meta = f.get("metadata") or {}
+        slug = meta.get("slug") if isinstance(meta, dict) else ""
+        lines.append(f"- `{slug or f.get('title')}`: {f.get('recommendation') or ''}")
+    lines.append("<!-- PLATE-SPEC-AUDIT-DRAFT:END -->")
+    lines.append("")
+
+    return {
+        "ok": True,
+        "needs_human_approval": True,
+        "items": len(undoc),
+        "markdown": "\n".join(lines),
+        "note": "Draft only — do not auto-write SPEC.md.",
+    }
+
+
+def plan_audit_followups(
+    report: SpecAuditReport | dict[str, Any],
+    *,
+    max_issues: int = 15,
+    include_aligned: bool = False,
+) -> dict[str, Any]:
+    """Build issue proposals + SPEC draft from an audit report (dry-run)."""
+    data = report.to_dict() if isinstance(report, SpecAuditReport) else dict(report)
+    findings = data.get("findings") or []
+    proposals: list[dict[str, Any]] = []
+    for raw in findings:
+        routed = route_finding_to_issue(raw)
+        if not routed.get("actionable"):
+            if include_aligned:
+                proposals.append(routed)
+            continue
+        proposals.append(routed)
+        if len([p for p in proposals if p.get("actionable")]) >= max_issues:
+            break
+
+    actionable = [p for p in proposals if p.get("actionable")]
+    draft = draft_spec_update_from_findings(findings, max_items=max_issues)
+    return {
+        "ok": True,
+        "dry_run": True,
+        "actionable_count": len(actionable),
+        "proposals": proposals,
+        "spec_draft": draft,
+        "human_checkpoint": (
+            "Creating issues is reversible; applying SPEC draft requires human merge approval."
+        ),
+    }
+
+
+def apply_audit_followups(
+    report: SpecAuditReport | dict[str, Any],
+    *,
+    repo: str | None = None,
+    apply: bool = False,
+    max_issues: int = 10,
+    client: Any | None = None,
+) -> dict[str, Any]:
+    """Create follow-up issues from audit findings when apply=True (#339).
+
+    Default dry-run. Dedupes by searching open issues for FOLLOWUP_MARKER + key.
+    Never writes SPEC.md.
+    """
+    plan = plan_audit_followups(report, max_issues=max_issues)
+    if not apply:
+        return plan
+
+    from .github_client import GhClient
+    from .health import resolve_repo
+
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+
+    for prop in plan.get("proposals") or []:
+        if not prop.get("actionable"):
+            continue
+        key = str(prop.get("dedupe_key") or "")
+        marker = f"{FOLLOWUP_MARKER}{key}"
+        # best-effort dedupe search
+        try:
+            from urllib.parse import quote_plus
+
+            q = f"repo:{target} is:issue is:open {key}"
+            search = gh.api(f"search/issues?q={quote_plus(q)}&per_page=5") or {}
+            items = search.get("items") if isinstance(search, dict) else []
+            if isinstance(items, list):
+                for it in items:
+                    body = str(it.get("body") or "")
+                    if marker in body:
+                        skipped.append(
+                            {
+                                "dedupe_key": key,
+                                "existing": it.get("number"),
+                                "reason": "marker present",
+                            }
+                        )
+                        break
+                else:
+                    items = []
+                if any(marker in str(it.get("body") or "") for it in items):
+                    continue
+        except Exception:
+            pass
+
+        fields = {
+            "title": prop.get("title"),
+            "body": prop.get("body"),
+            "labels": prop.get("labels") or [],
+        }
+        try:
+            issue = gh.api(f"repos/{target}/issues", method="POST", fields=fields) or {}
+            created.append(
+                {
+                    "number": issue.get("number"),
+                    "url": issue.get("html_url"),
+                    "dedupe_key": key,
+                    "issue_type": prop.get("issue_type"),
+                }
+            )
+        except Exception as exc:
+            skipped.append({"dedupe_key": key, "error": str(exc)})
+
+    plan["dry_run"] = False
+    plan["created"] = created
+    plan["skipped"] = skipped
+    plan["spec_draft"]["note"] = (
+        "Draft only — SPEC.md was not modified; open a Documentation PR to apply."
+    )
+    return plan
