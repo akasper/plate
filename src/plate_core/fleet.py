@@ -262,6 +262,15 @@ def create_handoff(
     risk_n = (risk or "medium").lower()
     need_human = bool(requires_human) or risk_n in ("high", "critical")
 
+    # Isolate budget + ledger under fleet base_dir when provided so tests /
+    # alternate roots never charge or write repo-root .agentic/budget|ledger.
+    budget_base: Path | None = None
+    ledger_base: Path | None = None
+    if base_dir is not None:
+        root = Path(base_dir)
+        budget_base = root / "budget"
+        ledger_base = root / "ledger"
+
     cost_est = estimate_handoff_cost(
         to_agent=ta, risk=risk_n, budget_tokens=budget_tokens
     )
@@ -275,7 +284,10 @@ def create_handoff(
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot(estimate_tokens=int(effective_tokens or 0))
+            snap = get_budget_snapshot(
+                estimate_tokens=int(effective_tokens or 0),
+                base_dir=budget_base,
+            )
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective_remaining = int(rem)
@@ -369,6 +381,7 @@ def create_handoff(
             use_live_budget=use_live_budget,
             action_kind="fleet_handoff",
             reason=f"create_handoff:{packet.handoff_id}",
+            base_dir=budget_base,
         )
     except Exception:
         pass
@@ -434,6 +447,7 @@ def create_handoff(
                     "to_agent": ta,
                     "budget_remaining": effective_remaining,
                 },
+                base_dir=ledger_base,
             )
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:

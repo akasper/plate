@@ -178,6 +178,41 @@ class TestBudgetAndPlan(unittest.TestCase):
         # deployer → packet_only (no silent deploy)
         self.assertEqual((acc.get("dispatch") or {}).get("dispatch_kind"), "packet_only")
 
+    def test_create_handoff_isolates_budget_and_ledger(self):
+        """use_live_budget + base_dir must not touch repo-root spend.json / ledger."""
+        from plate_core.autonomy import get_budget_snapshot, load_budget_spend
+        from plate_core.ledger import list_decisions
+
+        before_root = load_budget_spend() or {}
+        before_spent = int(before_root.get("spent_today") or 0)
+        before_ledger_n = len(list_decisions(limit=500))
+
+        r = create_handoff(
+            from_agent="orchestrator",
+            to_agent="implementer",
+            task="Isolate budget charge",
+            budget_tokens=1500,
+            use_live_budget=True,
+            base_dir=self.base,
+            record_ledger=True,
+        )
+        self.assertTrue(r["ok"])
+        self.assertIsNotNone(r.get("ledger_id"))
+        # Charge only under base_dir/budget
+        local_spend = load_budget_spend(base_dir=self.base / "budget")
+        self.assertEqual(int(local_spend.get("spent_today") or 0), 1500)
+        # Repo-root spend unchanged
+        after_root = load_budget_spend() or {}
+        self.assertEqual(int(after_root.get("spent_today") or 0), before_spent)
+        # Ledger under base_dir/ledger only
+        local_led = list_decisions(limit=50, base_dir=self.base / "ledger")
+        self.assertTrue(any(x.get("id") == r.get("ledger_id") for x in local_led))
+        after_ledger_n = len(list_decisions(limit=500))
+        self.assertEqual(after_ledger_n, before_ledger_n)
+        # Isolated hydrate also sees local remaining
+        snap = get_budget_snapshot(base_dir=self.base / "budget")
+        self.assertEqual(snap.get("spent_today"), 1500)
+
     def test_accept_implementer_dispatches_feature_loop(self):
         """#644: accepting implementer handoff opens a durable feature loop."""
         import tempfile
