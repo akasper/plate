@@ -218,6 +218,43 @@ class TestLifecycle(unittest.TestCase):
             est = int(r["run"]["cost_estimate_tokens"] or 0)
             self.assertEqual(load_budget_spend(base_dir=bdir).get("spent_today"), est)
 
+    def test_live_start_isolates_budget_under_base_dir(self):
+        """base_dir alone charges under base_dir/budget (#634)."""
+        from unittest.mock import patch
+
+        from plate_core.autonomy import load_budget_spend
+
+        class _Cfg:
+            autonomy = {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "token_budget": {
+                    "daily": 100_000,
+                    "per_cycle": 50_000,
+                    "action": "pause",
+                },
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            r = start_feature_loop(
+                feature_number=76,
+                feature_title="Isolated base_dir charge",
+                size="trivial",
+                needs_media_approval=False,
+                use_live_budget=True,
+                budget_remaining=100_000,
+                base_dir=self.base,
+                record_ledger=False,
+            )
+        self.assertTrue(r["ok"], r)
+        charge = r.get("budget_charge") or {}
+        self.assertTrue(charge.get("ok"), charge)
+        est = int(r["run"]["cost_estimate_tokens"] or 0)
+        self.assertEqual(
+            load_budget_spend(base_dir=self.base / "budget").get("spent_today"), est
+        )
+        self.assertIn(str(self.base), str(charge.get("path") or ""))
+
     def test_advance_low_risk_to_done(self):
         r = start_feature_loop(
             feature_number=12,
