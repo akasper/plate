@@ -1,0 +1,10 @@
+{
+  "slug": "877-monitor-stub-media-loop-budget-pause",
+  "change_type": "fix",
+  "surface": "src/plate_core/monitoring.py",
+  "summary": "Wire durable_budget_surface_pause into monitoring, stubs, feature media, and feature/bug loop live gates; author_stub isolates budget under base_dir (#634/#877).",
+  "migration_impact": "Live monitoring, stub authoring, media plans, and loop starts may refuse under risk=off when remaining is below per_cycle even if est fits. Raise token_budget, wait for UTC day rollover, or pass use_live_budget=false.",
+  "agent_notes": "All surface gates should call durable_budget_surface_pause on live hydrate. Do not start loops/media/stubs/monitoring when would_pause_next_cycle is true.",
+  "breaking": false,
+  "links": ["#877", "#634", "#636", "#637", "#638", "#639", "#642", "#653", "#873", "#654"]
+}

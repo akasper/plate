@@ -171,7 +171,7 @@ def _feature_media_budget_gate(
     effective = budget_remaining
     if effective is None and use_live_budget:
         try:
-            from .autonomy import get_budget_snapshot
+            from .autonomy import durable_budget_surface_pause, get_budget_snapshot
 
             snap = get_budget_snapshot(estimate_tokens=est, base_dir=budget_base_dir)
             rem = snap.get("remaining_tokens")
@@ -180,6 +180,39 @@ def _feature_media_budget_gate(
                 notes.append(
                     f"budget hydrated: remaining_tokens={effective} "
                     f"pressure={snap.get('budget_pressure')}"
+                )
+            # #634/#877: hard-block on durable would_pause / critical pressure
+            surface = durable_budget_surface_pause(snap)
+            if surface.get("pause"):
+                notes.append(surface.get("reason") or "blocked: durable budget rails")
+                rem_out = (
+                    int(effective)
+                    if effective is not None
+                    else (
+                        surface.get("remaining")
+                        if surface.get("remaining") is not None
+                        else 0
+                    )
+                )
+                return (
+                    cost_est,
+                    int(rem_out) if rem_out is not None else effective,
+                    notes,
+                    {
+                        "ok": False,
+                        "blocked": True,
+                        "reason": "budget",
+                        "error": (
+                            f"budget: durable rails pause feature media "
+                            f"(pressure={surface.get('pressure')} remaining={rem_out})"
+                        ),
+                        "cost_estimate_tokens": est,
+                        "budget_remaining": int(rem_out) if rem_out is not None else 0,
+                        "budget_pressure": surface.get("pressure"),
+                        "would_pause_next_cycle": True,
+                        "cost_estimate": cost_est,
+                        "notes": notes,
+                    },
                 )
         except Exception as exc:
             notes.append(f"budget hydrate skipped: {exc}")
