@@ -219,6 +219,59 @@ class TestRunGates(unittest.TestCase):
         self.assertEqual(out.get("cost_estimate_tokens"), est)
         self.assertEqual(out.get("budget_remaining"), max(0, est - 1))
 
+    def test_budget_blocks_on_durable_would_pause_risk_off(self):
+        """#871/#634: hard-block when remaining > 0 but next cycle would pause."""
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        bdir = self.base / "budget"
+        today = (
+            __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .date()
+            .isoformat()
+        )
+        save_budget_spend(
+            {
+                "date": today,
+                "spent_today": 9000,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+            },
+            base_dir=bdir,
+        )
+
+        class _Cfg:
+            autonomy = {
+                "enabled": False,
+                "risk_tolerance": "off",
+                "token_budget": {
+                    "daily": 10000,
+                    "per_cycle": 2000,
+                    "action": "pause",
+                },
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            # review-discussions dry_run est is small (750) < remaining 1000,
+            # so est-exceeds-remaining would NOT fire — would_pause must hard-block.
+            out = run_scheduled_op(
+                "review-discussions",
+                dry_run=True,
+                risk_tolerance="off",
+                base_dir=self.base,
+                record_ledger=False,
+                use_live_budget=True,
+            )
+
+        self.assertFalse(out["ok"], out)
+        self.assertTrue(out["blocked"])
+        self.assertIn("budget", out.get("error") or "")
+        self.assertTrue(out.get("would_pause_next_cycle"))
+        self.assertEqual(out.get("budget_remaining"), 1000)
+        self.assertEqual(out.get("budget_pressure"), "critical")
+
     def test_budget_allows_when_remaining_sufficient_no_charge(self):
         est = estimate_op_cost("scheduled-refactor", dry_run=True)["estimated_tokens"]
         out = run_scheduled_op(
