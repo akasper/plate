@@ -1,0 +1,16 @@
+{
+  "slug": "509-511-512-agent-collab-closeout",
+  "change_type": "docs",
+  "surface": "docs/research/508-510-qa-and-pr-green-follow-through.md, AGENTS.md, plugin/agents/plate.agent.md",
+  "summary": "Close agent collab Bugs #509/#511/#512: research note maps TUI-default, thread resolve, and parent doc gap to shipped #508/#510 checklists + babysit helpers; AGENTS/persona tighten first-move TUI and resolve-after-address rules.",
+  "migration_impact": "Docs/persona only. Agents must open Q&A with ask_user_question first and resolve review threads after addressing feedback so feedback-resolution goes green.",
+  "migration_guidance": [
+    "1. No package upgrade required for docs alone.",
+    "2. Read docs/research/508-510-qa-and-pr-green-follow-through.md for the #508–#512 matrix.",
+    "3. Prefer plate_pr_babysit --act + plate_resolve_review_thread; never hand-roll GraphQL.",
+    "4. Do not re-open #509–#512 for host auto-TUI work without a new Feature."
+  ],
+  "agent_notes": "Runtime helpers already shipped (#496/#516/#605). This closes remaining process Bugs that were status:stub after #508/#510 guidance.",
+  "breaking": false,
+  "links": ["#509", "#511", "#512", "#508", "#510", "#496", "#516", "#605", "#654"]
+}
