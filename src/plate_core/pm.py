@@ -259,25 +259,36 @@ def build_assignment_tui(assignment: dict[str, Any]) -> dict[str, Any]:
         "question": f"PM assignment [{status}]: {title} → {agent}?",
         "options": [
             {
+                "id": "approve_run",
                 "label": "Approve & run (Recommended)",
-                "description": f"Proceed with {agent} for this packet",
+                "description": (
+                    f"Explicit human approve → delegate to {agent} "
+                    f"(plate_pm_complete status=run; works under risk=off)"
+                ),
             },
             {
+                "id": "reassign",
                 "label": "Reassign",
                 "description": "Pick a different persona",
             },
             {
+                "id": "defer",
                 "label": "Defer",
                 "description": "Leave proposed; revisit next cycle",
             },
             {
+                "id": "cancel",
                 "label": "Cancel",
-                "description": "Mark assignment cancelled",
+                "description": "Mark assignment cancelled (plate_pm_complete status=cancelled)",
             },
         ],
         "multi_select": False,
         "assignment_id": aid,
-        "host_hint": "Present via ask_user_question; call plate_pm_complete after run.",
+        "host_hint": (
+            "Present via ask_user_question. Approve & run → "
+            f"plate_pm_complete {aid} status=run (or gh plate pm --complete {aid} "
+            "--complete-status run). Done after agent finishes → status=done."
+        ),
     }
 
 
@@ -880,16 +891,224 @@ class ProjectManager:
             self._save_queue()
         return results
 
+    def approve_and_run_assignment(
+        self,
+        assignment_id: str,
+        *,
+        note: str = "",
+        dispatch_fleet: bool | None = None,
+        dispatch_loops: bool | None = None,
+        budget_remaining: int | None = None,
+    ) -> dict[str, Any]:
+        """Human/agent explicit Approve & run: proposed → delegated + dispatch (#660/#889).
+
+        Overrides ``packet.auto_delegate=false`` under risk=off — explicit consent is the
+        gate, matching AGENTS.md (risk=off disables autopilot only). High-impact rows
+        that still require a pending #648 checkpoint are refused until approved.
+        """
+        do_fleet = self.dispatch_fleet if dispatch_fleet is None else bool(dispatch_fleet)
+        do_loops = self.dispatch_loops if dispatch_loops is None else bool(dispatch_loops)
+        found: dict[str, Any] | None = None
+        for a in self._assignments:
+            if a.get("assignment_id") == assignment_id or str(a.get("assignment_id", "")).startswith(
+                str(assignment_id)
+            ):
+                found = a
+                break
+        if not found:
+            return {"ok": False, "error": f"assignment not found: {assignment_id}"}
+
+        cur = str(found.get("status") or "")
+        if cur in ("done", "cancelled"):
+            return {
+                "ok": False,
+                "error": f"assignment already terminal: {cur}",
+                "assignment": found,
+            }
+        if cur == "delegated":
+            return {
+                "ok": True,
+                "action": "already_delegated",
+                "assignment": found,
+                "note": "already delegated; tick loops / complete when done",
+            }
+
+        # High-impact: require approved checkpoint when one was opened
+        if found.get("requires_checkpoint"):
+            cid = found.get("checkpoint_id") or (found.get("packet") or {}).get(
+                "checkpoint_id"
+            )
+            if cid:
+                try:
+                    from .checkpoint import get_checkpoint
+
+                    cp = get_checkpoint(str(cid), base_dir=self.checkpoint_base_dir)
+                except Exception as exc:
+                    return {
+                        "ok": False,
+                        "error": f"checkpoint lookup failed: {exc}",
+                        "checkpoint_id": cid,
+                    }
+                if not cp:
+                    return {
+                        "ok": False,
+                        "error": f"checkpoint not found: {cid}",
+                        "checkpoint_id": cid,
+                    }
+                cp_st = str(cp.get("status") or "").lower()
+                if cp_st == "pending":
+                    return {
+                        "ok": False,
+                        "error": "checkpoint still pending; decide first",
+                        "checkpoint_id": cid,
+                        "checkpoint_status": cp_st,
+                        "resume_hint": f"gh plate checkpoint decide {cid} --decision approve",
+                    }
+                if cp_st in ("rejected", "cancelled"):
+                    return {
+                        "ok": False,
+                        "error": f"checkpoint {cp_st}; cannot approve & run",
+                        "checkpoint_id": cid,
+                        "checkpoint_status": cp_st,
+                    }
+
+        if budget_remaining is None:
+            try:
+                st = self.get_status()
+                budget_remaining = st.budget_remaining_tokens
+            except Exception:
+                budget_remaining = None
+
+        found["status"] = "delegated"
+        found["updated_at"] = _now()
+        pkt = found.setdefault("packet", {})
+        pkt["auto_delegate"] = True
+        pkt["human_approved"] = True
+        pkt["approved_at"] = _now()
+        if note:
+            pkt["approval_note"] = note
+
+        out: dict[str, Any] = {
+            "ok": True,
+            "action": "approve_run",
+            "assignment_id": found.get("assignment_id"),
+            "assignment": found,
+        }
+
+        if do_fleet:
+            try:
+                from .fleet import handoff_from_pm_assignment
+
+                ho = handoff_from_pm_assignment(
+                    found,
+                    budget_remaining=budget_remaining,
+                    open_checkpoint=False,
+                    base_dir=self.fleet_base_dir,
+                    record_ledger=True,
+                )
+                out["fleet"] = {
+                    "ok": ho.get("ok"),
+                    "handoff_id": (ho.get("handoff") or {}).get("handoff_id"),
+                    "blocked": ho.get("blocked"),
+                    "error": ho.get("error"),
+                }
+                if ho.get("ok"):
+                    hid = (ho.get("handoff") or {}).get("handoff_id")
+                    found["fleet_handoff_id"] = hid
+                    pkt["fleet_handoff_id"] = hid
+                elif ho.get("blocked"):
+                    found["status"] = "blocked"
+                    pkt["fleet_block"] = ho.get("error")
+                    out["ok"] = False
+                    out["error"] = ho.get("error") or "fleet handoff blocked"
+            except Exception as exc:
+                out["fleet"] = {"ok": False, "error": str(exc)}
+
+        if do_loops and found.get("status") == "delegated":
+            try:
+                found["risk_tolerance"] = found.get("risk_tolerance") or pkt.get(
+                    "risk_tolerance"
+                )
+                loop_out = dispatch_loop_from_assignment(
+                    found,
+                    budget_remaining=budget_remaining,
+                    feature_loop_base_dir=self.feature_loop_base_dir,
+                    bug_loop_base_dir=self.bug_loop_base_dir,
+                    artifact_base_dir=self.artifact_base_dir,
+                    budget_base_dir=self.budget_base_dir,
+                    record_ledger=True,
+                )
+                out["loop"] = {
+                    "ok": loop_out.get("ok"),
+                    "loop_kind": loop_out.get("loop_kind"),
+                    "run_id": loop_out.get("run_id"),
+                    "blocked": loop_out.get("blocked"),
+                    "error": loop_out.get("error"),
+                    "skipped": loop_out.get("skipped"),
+                }
+                if loop_out.get("ok") or loop_out.get("run_id"):
+                    found["loop_run_id"] = loop_out.get("run_id")
+                    found["loop_kind"] = loop_out.get("loop_kind")
+                    pkt["loop_run_id"] = loop_out.get("run_id")
+                    pkt["loop_kind"] = loop_out.get("loop_kind")
+                    if loop_out.get("blocked"):
+                        found["status"] = "blocked"
+                        pkt["loop_block"] = loop_out.get("error")
+            except Exception as exc:
+                out["loop"] = {"ok": False, "error": str(exc)}
+
+        try:
+            from .baseline_catalog import delegate_to_agent
+
+            if found.get("status") == "delegated":
+                delegate_to_agent(
+                    agent_id="plate",
+                    prompt_segment=pkt.get("prompt_segment", ""),
+                    context={
+                        "pm_assignment": found.get("assignment_id"),
+                        "persona": found.get("agent_id"),
+                        "work_type": found.get("work_type"),
+                        "human_approved": True,
+                    },
+                )
+        except Exception:
+            pass
+
+        self._save_queue()
+        out["assignment"] = found
+        _ledger_pm(
+            "pm_approve_run",
+            "proceed" if found.get("status") == "delegated" else "block",
+            note
+            or f"explicit approve & run {found.get('assignment_id')} → {found.get('status')}",
+            metadata={
+                "assignment_id": found.get("assignment_id"),
+                "work_type": found.get("work_type"),
+                "status": found.get("status"),
+            },
+        )
+        return out
+
     def complete_assignment(
         self,
         assignment_id: str,
         *,
         status: str = "done",
         note: str = "",
+        dispatch_fleet: bool | None = None,
+        dispatch_loops: bool | None = None,
     ) -> dict[str, Any]:
-        """Mark an assignment done/cancelled and persist queue."""
+        """Mark an assignment done/cancelled, or Approve & run via status=run|approve."""
+        st = (status or "done").lower().strip()
+        # Explicit human Approve & run (TUI option + plate_pm_complete status=run)
+        if st in ("run", "approve", "approved", "approve_run", "approve-and-run"):
+            return self.approve_and_run_assignment(
+                assignment_id,
+                note=note,
+                dispatch_fleet=dispatch_fleet,
+                dispatch_loops=dispatch_loops,
+            )
         allowed = {"done", "cancelled", "blocked", "proposed", "delegated"}
-        st = (status or "done").lower()
         if st not in allowed:
             st = "done"
         found: dict[str, Any] | None = None
@@ -1879,9 +2098,16 @@ def complete_pm_assignment(
     note: str = "",
     state_dir: Path | None = None,
     repo: str | None = None,
+    dispatch_fleet: bool | None = None,
+    dispatch_loops: bool | None = None,
 ) -> dict[str, Any]:
+    """Complete or Approve & run (status=run|approve) a PM assignment (#660)."""
     return ProjectManager(repo=repo, state_dir=state_dir).complete_assignment(
-        assignment_id, status=status, note=note
+        assignment_id,
+        status=status,
+        note=note,
+        dispatch_fleet=dispatch_fleet,
+        dispatch_loops=dispatch_loops,
     )
 
 

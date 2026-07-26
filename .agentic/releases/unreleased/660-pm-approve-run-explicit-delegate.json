@@ -1,0 +1,22 @@
+{
+  "slug": "660-pm-approve-run-explicit-delegate",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py, cli.py, mcp_server.py",
+  "summary": "Wire PM TUI Approve & run to plate_pm_complete status=run: explicit promote proposed\u2192delegated with fleet/loop dispatch, including under risk=off (#660/#889).",
+  "migration_impact": "Agents/hosts that only called plate_pm_complete with status=done after manual work should use status=run for the Approve & run option. Pending high-impact checkpoints still block approve&run until decided.",
+  "migration_guidance": [
+    "1. Upgrade plate-core with this fix.",
+    "2. For proposed PM rows: plate_pm_complete assignment_id status=run (or gh plate pm --complete ID --complete-status run).",
+    "3. After agent finishes: plate_pm_complete status=done.",
+    "4. High-impact: approve #648 checkpoint first, then status=run (or rely on promote_checkpoint_ready on next cycle)."
+  ],
+  "agent_notes": "status=run|approve|approve_run is the explicit consent path that overrides packet.auto_delegate=false under risk=off. Does not re-enable AutonomyEngine autopilot. Host TUI host_hint documents the call.",
+  "breaking": false,
+  "links": [
+    "#891",
+    "#660",
+    "#889",
+    "#654",
+    "#648"
+  ]
+}

@@ -3053,13 +3053,16 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_pm_complete",
-                                "description": "Mark a PM assignment done/cancelled and persist queue (#660).",
+                                "description": "Mark a PM assignment done/cancelled, or Approve & run (status=run|approve) to promote proposed→delegated with fleet/loop dispatch under explicit human consent (#660). Works when risk=off.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "repo": {"type": "string"},
                                         "assignment_id": {"type": "string"},
-                                        "status": {"type": "string"},
+                                        "status": {
+                                            "type": "string",
+                                            "description": "done|cancelled|run|approve|delegated|proposed|blocked",
+                                        },
                                         "note": {"type": "string"},
                                     },
                                     "required": ["assignment_id"],
