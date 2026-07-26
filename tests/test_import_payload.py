@@ -107,6 +107,29 @@ class TestImportPayload(unittest.TestCase):
         help_text = build_parser().format_help()
         self.assertIn("import-payload", help_text)
 
+    def test_copy_template_payload_local_alias(self):
+        """#620: bootstrap/agents can call copy_template_payload_local."""
+        from plate_core.import_payload import copy_template_payload_local
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = copy_template_payload_local(tmp, dry_run=True)
+            self.assertTrue(report["ok"])
+            self.assertGreater(report["counts"]["would_create"], 0)
+            applied = copy_template_payload_local(tmp, dry_run=False, strategy="safe")
+            self.assertGreater(applied["counts"]["created"], 0)
+
+    def test_bootstrap_shares_payload_path_planner(self):
+        """#620: bootstrap remote applier uses same relative path set as local."""
+        from plate_core.bootstrap import _template_payload_relative_paths
+        from plate_core.import_payload import list_payload_relative_paths
+        from plate_core.template_payload import resolve_template_source
+
+        root, _ = resolve_template_source()
+        self.assertEqual(
+            _template_payload_relative_paths(root),
+            list_payload_relative_paths(root),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

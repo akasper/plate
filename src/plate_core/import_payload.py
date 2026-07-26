@@ -301,6 +301,28 @@ def import_payload(
     return report.to_dict()
 
 
+def copy_template_payload_local(
+    dest_root: str | Path,
+    *,
+    source_root: str | Path | None = None,
+    strategy: str = "safe",
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """#620 local FS applier — same report as import_payload / plan_import_payload.
+
+    ``source_root`` maps to ``template_repo`` (explicit template root). Default uses
+    package payload. Prefer this name from bootstrap/agent code that already thinks
+    in copy(source, dest) terms; CLI remains ``gh plate import-payload``.
+    """
+    return import_payload(
+        dest_root,
+        strategy=strategy,
+        template_repo=str(source_root) if source_root is not None else None,
+        dry_run=dry_run,
+        apply=not dry_run,
+    )
+
+
 def format_import_payload_report(report: dict[str, Any] | ImportPayloadReport) -> str:
     """Human-readable summary for CLI."""
     data = report.to_dict() if isinstance(report, ImportPayloadReport) else report
