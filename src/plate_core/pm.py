@@ -1196,17 +1196,15 @@ class ProjectManager:
                 pass
             return report
 
-        # #660 harden: pause unsupervised PM when budget pressure is critical/exhausted
+        # #660/#634 harden: pause PM when durable budget cannot fund a cycle.
+        # risk_tolerance=off / enabled=false only disables AutonomyEngine autopilot —
+        # surface rails (what_next, costs feed, live loops) still apply (#785/#787).
         if (
-            status.enabled
-            and status.risk_tolerance not in ("off", "")
-            and (
-                status.budget_pressure in ("critical", "exhausted")
-                or status.would_pause_next_cycle
-                or (
-                    status.budget_remaining_tokens is not None
-                    and int(status.budget_remaining_tokens) <= 0
-                )
+            status.budget_pressure in ("critical", "exhausted")
+            or status.would_pause_next_cycle
+            or (
+                status.budget_remaining_tokens is not None
+                and int(status.budget_remaining_tokens) <= 0
             )
         ):
             report = {
@@ -1214,7 +1212,8 @@ class ProjectManager:
                 "reason": (
                     f"budget_pressure={status.budget_pressure} "
                     f"remaining={status.budget_remaining_tokens} "
-                    f"would_pause={status.would_pause_next_cycle}"
+                    f"would_pause={status.would_pause_next_cycle} "
+                    f"risk={status.risk_tolerance} enabled={status.enabled}"
                 ),
                 "pause_kind": "budget",
                 "assignments": [],
