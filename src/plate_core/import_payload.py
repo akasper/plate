@@ -21,6 +21,7 @@ from typing import Any, Literal
 from .template_payload import (
     classify_template_file,
     load_template_payload_manifest,
+    resolve_conflict_plan,
     resolve_template_source,
     should_include_template_file,
 )
@@ -32,9 +33,11 @@ VALID_STRATEGIES: tuple[str, ...] = ("safe", "conservative", "force")
 @dataclass
 class PayloadFileDecision:
     path: str
-    action: str  # create | skip | conflict | overwrite
+    action: str  # create | skip | conflict | overwrite | create_as
     classification: str
     detail: str = ""
+    target_path: str = ""  # write destination (may differ for install_as)
+    rule: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -120,53 +123,33 @@ def _decide_file(
     dest: Path,
     strategy: Strategy,
     classification: str,
+    manifest: Any = None,
 ) -> PayloadFileDecision:
-    if not dest.exists():
-        return PayloadFileDecision(
-            path=rel,
-            action="create",
-            classification=classification,
-            detail="missing at target",
-        )
+    from .template_payload import load_template_payload_manifest
 
-    # Existing path
+    mf = manifest if manifest is not None else load_template_payload_manifest()
     identical = False
-    if dest.is_file() and source.is_file():
+    if dest.exists() and dest.is_file() and source.is_file():
         try:
             identical = _file_sha256(dest) == _file_sha256(source)
         except OSError:
             identical = False
 
-    if identical:
-        return PayloadFileDecision(
-            path=rel,
-            action="skip",
-            classification=classification,
-            detail="identical content",
-        )
-
-    if strategy == "force":
-        return PayloadFileDecision(
-            path=rel,
-            action="overwrite",
-            classification=classification,
-            detail="existing differs; force overwrites",
-        )
-
-    if strategy == "conservative":
-        return PayloadFileDecision(
-            path=rel,
-            action="conflict",
-            classification=classification,
-            detail="existing differs; conservative never overwrites",
-        )
-
-    # safe: skip any existing path without treating as hard conflict
+    plan = resolve_conflict_plan(
+        rel,
+        dest_exists=dest.exists(),
+        identical=identical,
+        strategy=strategy,
+        manifest=mf,
+    )
+    target = str(plan.get("target_path") or rel)
     return PayloadFileDecision(
         path=rel,
-        action="skip",
+        action=str(plan.get("action") or "skip"),
         classification=classification,
-        detail="exists at target (safe strategy skips)",
+        detail=str(plan.get("detail") or ""),
+        target_path=target,
+        rule=plan.get("rule") if isinstance(plan.get("rule"), dict) else None,
     )
 
 
@@ -254,20 +237,31 @@ def plan_import_payload(
             dest=dest,
             strategy=strat,  # type: ignore[arg-type]
             classification=classification,
+            manifest=manifest,
         )
         report.files.append(decision)
+        write_rel = decision.target_path or rel
+        write_dest = target / write_rel
 
-        if decision.action == "create":
-            report.would_create.append(rel)
-            if apply:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(source.read_bytes())
-                report.created.append(rel)
+        if decision.action in ("create", "create_as"):
+            label = f"{rel} -> {write_rel}" if write_rel != rel else rel
+            if decision.action == "create_as" and write_dest.exists():
+                report.would_conflict.append(label)
+                if apply:
+                    report.conflicts.append(label)
+                decision.action = "conflict"
+                decision.detail = f"{decision.detail}; install_as path also exists"
+            else:
+                report.would_create.append(label)
+                if apply:
+                    write_dest.parent.mkdir(parents=True, exist_ok=True)
+                    write_dest.write_bytes(source.read_bytes())
+                    report.created.append(label)
         elif decision.action == "overwrite":
             report.would_overwrite.append(rel)
             if apply:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(source.read_bytes())
+                write_dest.parent.mkdir(parents=True, exist_ok=True)
+                write_dest.write_bytes(source.read_bytes())
                 report.overwritten.append(rel)
         elif decision.action == "conflict":
             report.would_conflict.append(rel)
