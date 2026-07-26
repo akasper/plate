@@ -48,6 +48,18 @@ class TestPMTeamAndAssign(unittest.TestCase):
         self.assertEqual(asg["status"], "blocked")
         self.assertIn("budget", asg["rationale"])
 
+    def test_assign_risk_off_proposes_not_blocks(self):
+        """risk=off disables auto-delegate only — still propose implement packets (#660)."""
+        asg = assign_work(
+            {"id": "risk-off-1", "title": "Implement feature Z", "type": "feature", "impact": "medium"},
+            risk_tolerance="off",
+            budget_remaining=50000,
+        )
+        self.assertEqual(asg["status"], "proposed")
+        self.assertFalse(asg["packet"].get("auto_delegate"))
+        self.assertIn("auto-delegate disabled", asg["rationale"])
+        self.assertNotIn("blocked: risk_tolerance=off", asg["rationale"])
+
     def test_assign_ok(self):
         asg = assign_work(
             {"id": "2", "title": "Implement feature Y", "type": "feature", "impact": "medium"},
@@ -57,6 +69,7 @@ class TestPMTeamAndAssign(unittest.TestCase):
         self.assertEqual(asg["work_type"], "implement")
         self.assertIn(asg["status"], ("proposed", "delegated"))
         self.assertTrue(asg["agent_id"].startswith("dev-"))
+        self.assertTrue(asg["packet"].get("auto_delegate"))
         self.assertIn("packet", asg)
         self.assertIn("ask_user_question", asg)
         self.assertIn("options", asg["ask_user_question"])
@@ -263,6 +276,41 @@ class TestPMCycle(unittest.TestCase):
             self.assertEqual(st.open_checkpoints, 0)
             report = pm.run_cycle(dry_run=True, max_assignments=1)
             self.assertNotEqual(report.get("pause_kind"), "checkpoints")
+
+    def test_run_cycle_risk_off_proposes_without_delegate(self):
+        """Apply under risk=off leaves implement assignments proposed (no autopilot)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo=None, state_dir=Path(tmp))
+            with patch.object(
+                pm,
+                "get_status",
+                return_value=self._fake_status(
+                    enabled=False,
+                    risk_tolerance="off",
+                    budget_remaining_tokens=50000,
+                    budget_pressure="ok",
+                ),
+            ), patch.object(
+                pm,
+                "collect_work",
+                return_value=[
+                    {
+                        "id": "feat-1",
+                        "title": "Ship slice",
+                        "type": "feature",
+                        "impact": "medium",
+                    }
+                ],
+            ):
+                report = pm.run_cycle(
+                    dry_run=False, max_assignments=1, dispatch_fleet=False, dispatch_loops=False
+                )
+            self.assertEqual(report.get("status"), "completed")
+            asg = report["assignments"][0]
+            self.assertEqual(asg["status"], "proposed")
+            self.assertFalse(asg.get("packet", {}).get("auto_delegate"))
+            q = pm.list_queue(status="proposed")
+            self.assertEqual(len(q), 1)
 
     def test_paused_on_budget_pressure(self):
         pm = ProjectManager(repo=None)
