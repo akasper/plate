@@ -1,0 +1,10 @@
+{
+  "slug": "634-budget-pressure-critical-fleet-base-dir",
+  "change_type": "fix",
+  "surface": "src/plate_core/autonomy.py,fleet.py",
+  "summary": "Align get_budget_snapshot pressure vocabulary with costs/what_next (critical not high) so budget gates fire on low remaining; fleet plan_fleet_from_intent + fleet_status hydrate remaining under base_dir/budget.",
+  "migration_impact": "budget_pressure value 'high' is no longer emitted from get_budget_snapshot; consumers that only checked critical/exhausted now correctly treat low remaining as critical. Fleet status/plan with base_dir no longer read operator spend.json.",
+  "agent_notes": "Treat budget_pressure as ok|elevated|critical|exhausted only. Prefer base_dir for fleet plan/status isolation in tests.",
+  "breaking": false,
+  "links": ["#634", "#653", "#644", "#660"]
+}

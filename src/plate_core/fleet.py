@@ -915,11 +915,14 @@ def plan_fleet_from_intent(
     steps: list[dict[str, Any]] = []
     budget_notes: list[str] = []
     effective_budget = budget_tokens
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     if effective_budget is None and use_live_budget:
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot()
+            snap = get_budget_snapshot(base_dir=budget_base)
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective_budget = int(rem)
@@ -1107,11 +1110,14 @@ def fleet_status(
             human_needed += 1
 
     effective_remaining = budget_remaining
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     if effective_remaining is None and use_live_budget:
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot()
+            snap = get_budget_snapshot(base_dir=budget_base)
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective_remaining = int(rem)
