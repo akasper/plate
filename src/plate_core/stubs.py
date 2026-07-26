@@ -607,6 +607,10 @@ def create_stub_issue(
     elif isinstance(milestone, str) and milestone.isdigit():
         milestone_num = int(milestone)
 
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
+
     def _charge(out: dict[str, Any]) -> dict[str, Any]:
         try:
             from .autonomy import apply_live_budget_charge
@@ -617,6 +621,7 @@ def create_stub_issue(
                 use_live_budget=use_live_budget,
                 action_kind="stub_create",
                 reason=f"create_stub_issue:{found.get('id')}",
+                base_dir=budget_base,
             )
         except Exception:
             pass
@@ -625,7 +630,12 @@ def create_stub_issue(
     if dry_run:
         payload["would_create"] = True
         payload["milestone"] = milestone_num
-        return _charge(payload)
+        # Preview only — never charge durable spend on dry_run (#634).
+        if use_live_budget and est_tokens > 0:
+            payload["notes"] = list(payload.get("notes") or []) + [
+                f"dry_run: skipped budget charge of est {est_tokens} tokens"
+            ]
+        return payload
 
     gh = client or GhClient()
     fields: dict[str, Any] = {
