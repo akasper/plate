@@ -1,0 +1,10 @@
+{
+  "slug": "867-autonomy-budget-pause-risk-off",
+  "change_type": "fix",
+  "surface": "src/plate_core/autonomy.py",
+  "summary": "AutonomyEngine.run_cycle pauses on durable critical/exhausted budget or would_pause_next_cycle even when enabled=false or risk_tolerance=off, matching PM surface-gate doctrine (#634/#653/#867).",
+  "migration_impact": "Autonomous cycles may pause under risk=off when spend leaves remaining below per_cycle or pressure is critical/exhausted. Raise token_budget, wait for UTC day rollover, or reset spend to resume.",
+  "agent_notes": "Do not treat risk=off as permission to run cycles when budget_pressure is critical or would_pause_next_cycle is true. Resolve budget_gate first; mirrors PM #866.",
+  "breaking": false,
+  "links": ["#867", "#634", "#653", "#865", "#866", "#654"]
+}
