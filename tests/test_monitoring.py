@@ -168,6 +168,56 @@ class TestReviewPersist(unittest.TestCase):
         )
         self.assertTrue(ok["ok"])
 
+    def test_budget_blocks_on_durable_would_pause_risk_off(self):
+        """#877: monitoring blocks on would_pause even when est < remaining."""
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        bdir = self.base / "budget"
+        today = (
+            __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .date()
+            .isoformat()
+        )
+        # remaining=5000, per_cycle=10000 → would_pause; discussion est ~2.6k < 5k
+        save_budget_spend(
+            {
+                "date": today,
+                "spent_today": 45000,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+            },
+            base_dir=bdir,
+        )
+
+        class _Cfg:
+            autonomy = {
+                "enabled": False,
+                "risk_tolerance": "off",
+                "token_budget": {
+                    "daily": 50000,
+                    "per_cycle": 10000,
+                    "action": "pause",
+                },
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            out = review_discussions(
+                [{"number": 1, "title": "Add feature X for autonomy", "body": "detail"}],
+                min_score=10,
+                persist=False,
+                use_live_budget=True,
+                base_dir=self.base,
+            )
+
+        self.assertFalse(out.get("ok"), out)
+        self.assertTrue(out.get("blocked"))
+        self.assertIn("budget", out.get("error") or "")
+        self.assertTrue(out.get("would_pause_next_cycle"))
+        self.assertEqual(out.get("budget_remaining"), 5000)
+
 
 class TestScoreDiscussion(unittest.TestCase):
     def test_score_includes_body(self):

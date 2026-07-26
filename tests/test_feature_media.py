@@ -127,6 +127,54 @@ class TestFeatureMediaBudgetGate(unittest.TestCase):
         self.assertIn("budget", blocked.get("error") or "")
         self.assertEqual(list_feature_media(base_dir=self.base), [])
 
+    def test_budget_blocks_on_durable_would_pause_risk_off(self):
+        """#877: plan_feature_media blocks on would_pause even when est < remaining."""
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        bdir = self.base / "budget"
+        today = (
+            __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .date()
+            .isoformat()
+        )
+        # remaining=5000, per_cycle=10000 → would_pause; plan est=4500 < 5000
+        save_budget_spend(
+            {
+                "date": today,
+                "spent_today": 45000,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+            },
+            base_dir=bdir,
+        )
+
+        class _Cfg:
+            autonomy = {
+                "enabled": False,
+                "risk_tolerance": "off",
+                "token_budget": {
+                    "daily": 50000,
+                    "per_cycle": 10000,
+                    "action": "pause",
+                },
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            out = plan_feature_media(
+                feature_title="Paused media",
+                base_dir=self.base,
+                use_live_budget=True,
+            )
+
+        self.assertFalse(out.get("ok"), out)
+        self.assertTrue(out.get("blocked"))
+        self.assertIn("budget", out.get("error") or "")
+        self.assertTrue(out.get("would_pause_next_cycle"))
+        self.assertEqual(out.get("budget_remaining"), 5000)
+
     def test_budget_gate_allows_when_enough(self):
         ok = plan_feature_media(
             feature_title="Allowed media",

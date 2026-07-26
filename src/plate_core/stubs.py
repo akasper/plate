@@ -295,7 +295,7 @@ def _stub_budget_gate(
     effective = budget_remaining
     if effective is None and use_live_budget:
         try:
-            from .autonomy import get_budget_snapshot
+            from .autonomy import durable_budget_surface_pause, get_budget_snapshot
 
             snap = get_budget_snapshot(
                 estimate_tokens=est,
@@ -307,6 +307,39 @@ def _stub_budget_gate(
                 notes.append(
                     f"budget hydrated: remaining_tokens={effective} "
                     f"pressure={snap.get('budget_pressure')}"
+                )
+            # #634/#877: hard-block on durable would_pause / critical pressure
+            surface = durable_budget_surface_pause(snap)
+            if surface.get("pause"):
+                notes.append(surface.get("reason") or "blocked: durable budget rails")
+                rem_out = (
+                    int(effective)
+                    if effective is not None
+                    else (
+                        surface.get("remaining")
+                        if surface.get("remaining") is not None
+                        else 0
+                    )
+                )
+                return (
+                    cost_est,
+                    int(rem_out) if rem_out is not None else effective,
+                    notes,
+                    {
+                        "ok": False,
+                        "blocked": True,
+                        "reason": "budget",
+                        "error": (
+                            f"budget: durable rails pause stub authoring "
+                            f"(pressure={surface.get('pressure')} remaining={rem_out})"
+                        ),
+                        "cost_estimate_tokens": est,
+                        "budget_remaining": int(rem_out) if rem_out is not None else 0,
+                        "budget_pressure": surface.get("pressure"),
+                        "would_pause_next_cycle": True,
+                        "cost_estimate": cost_est,
+                        "notes": notes,
+                    },
                 )
         except Exception as exc:
             notes.append(f"budget hydrate skipped: {exc}")
@@ -354,11 +387,15 @@ def author_stub(
     if not text and not title:
         return {"ok": False, "error": "intent or title required"}
     ac = list(acceptance_criteria or [])
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     cost_est, effective_remaining, budget_notes, blocked = _stub_budget_gate(
         n_acceptance=len(ac),
         create=False,
         budget_remaining=budget_remaining,
         use_live_budget=use_live_budget,
+        budget_base_dir=budget_base,
     )
     if blocked is not None:
         return blocked
