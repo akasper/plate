@@ -1,0 +1,23 @@
+{
+  "slug": "645-648-checkpoint-dedupe-high-impact",
+  "change_type": "fix",
+  "surface": "src/plate_core/checkpoint.py, src/plate_core/autonomy.py",
+  "summary": "Dedupe #648 open checkpoints for the same action_kind/shadow_id when #645 gate_high_impact / create_checkpoint_for_shadow opens pause gates — repeated blocked gates no longer spam pending Deploy/approve checkpoints that pause PM (#645/#648).",
+  "migration_impact": "Local only. Existing duplicate pending checkpoints remain until cancelled; new gate calls reuse one open checkpoint per action_kind.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release with this fix.",
+    "2. Optional cleanup: gh plate checkpoint list --open; cancel obsolete deploy spam with decide cancel.",
+    "3. Re-run gate_high_impact / plate autonomy simulate + gate; second call should return the same checkpoint_id."
+  ],
+  "agent_notes": "create_checkpoint_for_shadow(dedupe=True) is default. Prefer find_open_checkpoint before opening new high-impact pause gates. Tests must still isolate checkpoint_base_dir.",
+  "breaking": false,
+  "links": [
+    "#645",
+    "#648",
+    "#660",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
