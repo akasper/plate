@@ -716,11 +716,17 @@ def update_handoff(
     bug_loop_base_dir: Path | None = None,
     artifact_base_dir: Path | None = None,
     budget_base_dir: Path | None = None,
+    shadow_ack: str | None = None,
+    approved: bool = False,
+    checkpoint_id: str | None = None,
 ) -> dict[str, Any]:
     """Accept/complete/block/cancel a handoff.
 
     When status becomes ``accepted`` and ``dispatch_work`` is True, open the matching
     work surface (feature/bug loop, artifact proposal, or babysit hint) (#644).
+
+    #645/#883: accepting high/critical handoffs requires ``gate_high_impact``
+    (shadow_ack + approval or approved checkpoint) before dispatch.
     """
     data = _load(base_dir)
     hid = (handoff_id or "").strip()
@@ -737,6 +743,75 @@ def update_handoff(
         st = status.lower().strip()
         if st not in ("open", "accepted", "done", "blocked", "cancelled"):
             return {"ok": False, "error": f"invalid status: {status}"}
+        # #645/#883: high/critical accept must pass gate_high_impact before clear+dispatch
+        if st == "accepted" and found.get("status") != "accepted":
+            risk_n = str(found.get("risk") or "medium").lower()
+            if risk_n in ("high", "critical"):
+                try:
+                    from .autonomy import AutonomyEngine
+
+                    eng = AutonomyEngine(repo=None)
+                    if base_dir is not None:
+                        root = Path(base_dir)
+                        eng.checkpoint_base_dir = root / "checkpoints"
+                        eng.ledger_base_dir = root / "ledger"
+                        eng.shadow_base_dir = root / "shadow"
+                    # Prefer explicit checkpoint_id, then create-time handoff checkpoint
+                    cp_id = checkpoint_id or found.get("checkpoint_id")
+                    if not cp_id:
+                        cp_id = (found.get("context") or {}).get("checkpoint_id")
+                    scope = {
+                        "fleet_handoff": hid,
+                        "to_agent": found.get("to_agent"),
+                        "risk_level": risk_n,
+                        "procedure_risk": risk_n,
+                    }
+                    action_kind = "deploy" if risk_n == "critical" else "fleet_handoff"
+                    gate = eng.gate_high_impact(
+                        action_kind,
+                        shadow_ack=shadow_ack or None,
+                        approved=approved,
+                        checkpoint_id=str(cp_id) if cp_id else None,
+                        scope=scope,
+                        create_checkpoint=True,
+                    )
+                    if gate.get("blocked"):
+                        return {
+                            "ok": False,
+                            "blocked": True,
+                            "reason": "shadow_required",
+                            "error": gate.get("reason")
+                            or "high-impact fleet accept requires shadow_ack + approval (#645)",
+                            "shadow_gate": {
+                                "blocked": True,
+                                "mode": gate.get("mode"),
+                                "reason": gate.get("reason"),
+                                "checkpoint_id": gate.get("checkpoint_id"),
+                            },
+                            "shadow_report": gate.get("shadow_report"),
+                            "shadow_id": (gate.get("shadow_report") or {}).get("shadow_id"),
+                            "checkpoint_id": gate.get("checkpoint_id"),
+                            "handoff": found,
+                        }
+                    # Persist gate evidence on handoff context
+                    ctx_gate = dict(found.get("context") or {})
+                    if shadow_ack:
+                        ctx_gate["shadow_ack"] = shadow_ack
+                    if gate.get("shadow_report"):
+                        ctx_gate["shadow_id"] = (
+                            gate.get("shadow_report") or {}
+                        ).get("shadow_id")
+                    if gate.get("checkpoint_id"):
+                        ctx_gate["checkpoint_id"] = gate.get("checkpoint_id")
+                    found["context"] = ctx_gate
+                except Exception as exc:
+                    return {
+                        "ok": False,
+                        "blocked": True,
+                        "reason": "shadow_required",
+                        "error": f"high-impact fleet accept blocked: shadow gate unavailable ({exc})",
+                        "handoff": found,
+                    }
         # Accepting a blocked human/high-risk handoff clears block
         if st == "accepted" and found.get("status") == "blocked":
             ctx = dict(found.get("context") or {})
