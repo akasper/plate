@@ -435,6 +435,212 @@ def create_handoff(
     return out
 
 
+def dispatch_work_from_handoff(
+    handoff: dict[str, Any],
+    *,
+    feature_loop_base_dir: Path | None = None,
+    bug_loop_base_dir: Path | None = None,
+    artifact_base_dir: Path | None = None,
+    budget_base_dir: Path | None = None,
+    record_ledger: bool = True,
+) -> dict[str, Any]:
+    """Open real work surfaces when a fleet handoff is accepted (#644 residual).
+
+    - implementer (or implement/fix/build task) → feature or bug loop (#638/#639)
+    - researcher / design personas → #632 design or research artifact proposal
+    - reviewer → babysit hint only (no auto PR mutation)
+    - deployer/planner/market → packet hint only (ceremony/human gates)
+
+    Never merges or auto-approves; durable ids stored on handoff.context.
+    """
+    if not isinstance(handoff, dict):
+        return {"ok": False, "error": "handoff required"}
+    to_agent = str(handoff.get("to_agent") or "").lower().strip()
+    task = str(handoff.get("task") or "")
+    task_l = task.lower()
+    related = handoff.get("related_issue")
+    try:
+        issue_n = int(related) if related is not None else None
+    except (TypeError, ValueError):
+        issue_n = None
+    # Remaining pool for gates: prefer create-time remaining, never budget_tokens (allocation)
+    ctx0 = dict(handoff.get("context") or {})
+    rem_raw = ctx0.get("budget_remaining_at_create")
+    try:
+        remaining_i = int(rem_raw) if rem_raw is not None else None
+    except (TypeError, ValueError):
+        remaining_i = None
+    use_live = remaining_i is None
+    risk = str(handoff.get("risk") or "medium").lower()
+    if risk not in ("low", "medium", "high"):
+        risk = "medium"
+    hid = handoff.get("handoff_id")
+    ctx = dict(ctx0)
+
+    # Researcher / design → pending artifact for human approval
+    want_design = to_agent in ("designer", "design-minimal", "design-storyteller") or (
+        "design" in task_l and to_agent in ("planner", "researcher", "market-monitor")
+    )
+    want_research = to_agent in ("researcher", "research-analyst", "market-monitor") or any(
+        k in task_l for k in ("research", "survey", "competitor", "market signal")
+    )
+    if want_design or (want_research and not any(k in task_l for k in ("implement", "bug", "fix"))):
+        kind = "design" if want_design else "research"
+        try:
+            from .design_research_approval import propose_artifact
+
+            out = propose_artifact(
+                kind,
+                title=task[:120] or f"{kind} from fleet",
+                summary=task[:2000] or f"Fleet handoff {hid} → {kind}",
+                related_issue=issue_n,
+                actor="fleet",
+                base_dir=artifact_base_dir,
+                budget_remaining=remaining_i,
+                use_live_budget=use_live,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": str(exc), "dispatch_kind": "artifact"}
+        if out.get("blocked") or out.get("reason") == "budget":
+            return {
+                "ok": False,
+                "blocked": True,
+                "dispatch_kind": "artifact",
+                "error": out.get("error") or out.get("reason") or "budget",
+                "result": out,
+            }
+        pid = out.get("id")
+        ctx["dispatched"] = "artifact"
+        ctx["artifact_proposal_id"] = pid
+        ctx["artifact_kind"] = kind
+        if record_ledger:
+            try:
+                from .ledger import record_decision
+
+                record_decision(
+                    action_kind="fleet_dispatch_artifact",
+                    decision="proposed",
+                    reason=f"handoff {hid} → {kind} artifact {pid}",
+                    sources=["fleet", "#644", "#632"],
+                    actor="fleet",
+                    related_issue=issue_n,
+                    cost_estimate_tokens=out.get("cost_estimate_tokens"),
+                    metadata={"handoff_id": hid, "proposal_id": pid},
+                )
+            except Exception:
+                pass
+        return {
+            "ok": bool(out.get("ok", True)),
+            "dispatch_kind": "artifact",
+            "run_id": pid,
+            "stage": out.get("status") or "pending",
+            "context_patch": ctx,
+            "ask_user_question": out.get("ask_user_question"),
+            "result": out,
+        }
+
+    # Implementer → feature or bug loop
+    want_bug = to_agent in ("implementer",) and any(
+        k in task_l for k in ("bug", "fix", "regression", "flake")
+    )
+    want_impl = to_agent in (
+        "implementer",
+        "dev-cautious",
+        "dev-pragmatic",
+        "dev-refactorer",
+    ) or any(k in task_l for k in ("implement", "build", "code", "feature", "ship"))
+    if want_bug:
+        try:
+            from .bug_loop import start_bug_loop
+
+            out = start_bug_loop(
+                bug_number=issue_n,
+                bug_title=task[:200] or "Fleet bugfix",
+                risk=risk,
+                risk_tolerance=risk,
+                budget_remaining=remaining_i,
+                use_live_budget=use_live,
+                budget_base_dir=budget_base_dir,
+                base_dir=bug_loop_base_dir,
+                record_ledger=record_ledger,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": str(exc), "dispatch_kind": "bug_loop"}
+        run = out.get("run") or {}
+        rid = run.get("id")
+        ctx["dispatched"] = "bug_loop"
+        ctx["loop_run_id"] = rid
+        ctx["loop_kind"] = "bug"
+        return {
+            "ok": bool(out.get("ok", True)),
+            "dispatch_kind": "bug_loop",
+            "run_id": rid,
+            "stage": run.get("stage"),
+            "blocked": bool(out.get("blocked")),
+            "error": out.get("error"),
+            "context_patch": ctx,
+            "result": out,
+        }
+    if want_impl:
+        try:
+            from .feature_loop import start_feature_loop
+
+            out = start_feature_loop(
+                feature_number=issue_n,
+                feature_title=task[:200] or "Fleet implement",
+                risk=risk,
+                size="medium",
+                risk_tolerance=risk,
+                needs_media_approval=False,
+                budget_remaining=remaining_i,
+                use_live_budget=use_live,
+                budget_base_dir=budget_base_dir,
+                base_dir=feature_loop_base_dir,
+                record_ledger=record_ledger,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": str(exc), "dispatch_kind": "feature_loop"}
+        run = out.get("run") or {}
+        rid = run.get("id")
+        ctx["dispatched"] = "feature_loop"
+        ctx["loop_run_id"] = rid
+        ctx["loop_kind"] = "feature"
+        return {
+            "ok": bool(out.get("ok", True)),
+            "dispatch_kind": "feature_loop",
+            "run_id": rid,
+            "stage": run.get("stage"),
+            "blocked": bool(out.get("blocked")),
+            "error": out.get("error"),
+            "context_patch": ctx,
+            "result": out,
+        }
+
+    if to_agent == "reviewer" or "babysit" in task_l or "review" in task_l:
+        pr = handoff.get("related_pr")
+        hint = (
+            f"gh plate pr babysit {pr} --act"
+            if pr
+            else "gh plate pr babysit <N> --act / plate_pr_babysit"
+        )
+        ctx["dispatched"] = "babysit_hint"
+        ctx["babysit_hint"] = hint
+        return {
+            "ok": True,
+            "dispatch_kind": "babysit_hint",
+            "hint": hint,
+            "context_patch": ctx,
+        }
+
+    ctx["dispatched"] = "packet_only"
+    return {
+        "ok": True,
+        "dispatch_kind": "packet_only",
+        "reason": f"to_agent={to_agent} has no auto work surface; execute packet manually",
+        "context_patch": ctx,
+    }
+
+
 def update_handoff(
     handoff_id: str,
     *,
@@ -444,8 +650,17 @@ def update_handoff(
     context_patch: dict[str, Any] | None = None,
     base_dir: Path | None = None,
     record_ledger: bool = True,
+    dispatch_work: bool = True,
+    feature_loop_base_dir: Path | None = None,
+    bug_loop_base_dir: Path | None = None,
+    artifact_base_dir: Path | None = None,
+    budget_base_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """Accept/complete/block/cancel a handoff."""
+    """Accept/complete/block/cancel a handoff.
+
+    When status becomes ``accepted`` and ``dispatch_work`` is True, open the matching
+    work surface (feature/bug loop, artifact proposal, or babysit hint) (#644).
+    """
     data = _load(base_dir)
     hid = (handoff_id or "").strip()
     found: dict[str, Any] | None = None
@@ -456,6 +671,7 @@ def update_handoff(
     if not found:
         return {"ok": False, "error": f"handoff not found: {hid}"}
 
+    became_accepted = False
     if status:
         st = status.lower().strip()
         if st not in ("open", "accepted", "done", "blocked", "cancelled"):
@@ -465,6 +681,8 @@ def update_handoff(
             ctx = dict(found.get("context") or {})
             ctx.pop("block_reason", None)
             found["context"] = ctx
+        if st == "accepted" and found.get("status") != "accepted":
+            became_accepted = True
         found["status"] = st
         if st in ("done", "cancelled"):
             found["completed_at"] = _now()
@@ -499,6 +717,48 @@ def update_handoff(
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:
             pass
+
+    # #644 residual: accept → open durable work surface once (idempotent via context.dispatched)
+    if became_accepted and dispatch_work:
+        existing_ctx = dict(found.get("context") or {})
+        if existing_ctx.get("dispatched"):
+            out["dispatch"] = {
+                "ok": True,
+                "skipped": True,
+                "reason": "already_dispatched",
+                "dispatch_kind": existing_ctx.get("dispatched"),
+            }
+        else:
+            try:
+                disp = dispatch_work_from_handoff(
+                    found,
+                    feature_loop_base_dir=feature_loop_base_dir,
+                    bug_loop_base_dir=bug_loop_base_dir,
+                    artifact_base_dir=artifact_base_dir,
+                    budget_base_dir=budget_base_dir,
+                    record_ledger=record_ledger,
+                )
+            except Exception as exc:
+                disp = {"ok": False, "error": str(exc)}
+            out["dispatch"] = disp
+            patch = disp.get("context_patch") if isinstance(disp, dict) else None
+            if isinstance(patch, dict) and patch:
+                # reload + persist patch
+                data2 = _load(base_dir)
+                for h in data2["handoffs"]:
+                    if h.get("handoff_id") == hid:
+                        ctx2 = dict(h.get("context") or {})
+                        ctx2.update(patch)
+                        h["context"] = ctx2
+                        h["updated_at"] = _now()
+                        out["handoff"] = h
+                        break
+                _save(data2, base_dir)
+            if isinstance(disp, dict) and disp.get("blocked"):
+                # surface budget block without undoing accept
+                out.setdefault("notes", [])
+                if isinstance(out["notes"], list):
+                    out["notes"].append(disp.get("error") or "dispatch blocked")
     return out
 
 
@@ -654,6 +914,7 @@ def plan_fleet_from_intent(
 
     # Always start with planner unless pure ops
     want_research = any(k in text for k in ("market", "research", "discuss", "competitor"))
+    want_design = any(k in text for k in ("design", "wireframe", "ux", "visual", "mock"))
     want_plan = any(k in text for k in ("plan", "release", "epic", "feature", "roadmap")) or True
     want_impl = any(k in text for k in ("implement", "build", "code", "fix", "ship", "start"))
     want_review = any(k in text for k in ("review", "babysit", "pr", "feedback")) or want_impl
@@ -664,6 +925,14 @@ def plan_fleet_from_intent(
             {
                 "to_agent": "researcher",
                 "task": f"Research signals related to: {intent[:200]}",
+                "risk": "low",
+            }
+        )
+    if want_design:
+        steps.append(
+            {
+                "to_agent": "researcher",
+                "task": f"Produce design artifact for approval: {intent[:200]}",
                 "risk": "low",
             }
         )
@@ -953,8 +1222,9 @@ def handoff_from_pm_assignment(
         "dev-cautious": "implementer",
         "dev-pragmatic": "implementer",
         "dev-refactorer": "implementer",
-        "design-minimal": "planner",
-        "design-storyteller": "market-monitor",
+        # Design personas open #632 artifacts on accept (not planner stubs)
+        "design-minimal": "researcher",
+        "design-storyteller": "researcher",
         "research-analyst": "researcher",
         "release-engineer": "deployer",
         "pm-orchestrator": "planner",

@@ -163,8 +163,94 @@ class TestBudgetAndPlan(unittest.TestCase):
             status="accepted",
             base_dir=self.base,
             record_ledger=False,
+            dispatch_work=True,
         )
         self.assertEqual(acc["handoff"]["status"], "accepted")
+        # deployer → packet_only (no silent deploy)
+        self.assertEqual((acc.get("dispatch") or {}).get("dispatch_kind"), "packet_only")
+
+    def test_accept_implementer_dispatches_feature_loop(self):
+        """#644: accepting implementer handoff opens a durable feature loop."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.fleet import create_handoff, update_handoff
+        from plate_core.feature_loop import list_feature_loops
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fleet_dir = Path(tmp) / "fleet"
+            feat_dir = Path(tmp) / "feats"
+            created = create_handoff(
+                from_agent="orchestrator",
+                to_agent="implementer",
+                task="Implement feed ranking",
+                related_issue=88,
+                risk="medium",
+                budget_tokens=4000,
+                budget_remaining=50_000,
+                use_live_budget=False,
+                base_dir=fleet_dir,
+                record_ledger=False,
+            )
+            self.assertTrue(created["ok"], created)
+            hid = created["handoff"]["handoff_id"]
+            acc = update_handoff(
+                hid,
+                status="accepted",
+                base_dir=fleet_dir,
+                record_ledger=False,
+                feature_loop_base_dir=feat_dir,
+            )
+            self.assertEqual(acc["handoff"]["status"], "accepted")
+            disp = acc.get("dispatch") or {}
+            self.assertTrue(disp.get("ok"), disp)
+            self.assertEqual(disp.get("dispatch_kind"), "feature_loop")
+            self.assertTrue(disp.get("run_id"))
+            self.assertEqual(
+                (acc["handoff"].get("context") or {}).get("loop_run_id"),
+                disp.get("run_id"),
+            )
+            loops = list_feature_loops(status="active", base_dir=feat_dir)
+            self.assertTrue(any(r.get("id") == disp.get("run_id") for r in loops))
+
+    def test_accept_researcher_dispatches_artifact(self):
+        """#644: accepting researcher handoff opens a #632 pending artifact."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.design_research_approval import get_proposal
+        from plate_core.fleet import create_handoff, update_handoff
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fleet_dir = Path(tmp) / "fleet"
+            art_dir = Path(tmp) / "artifacts"
+            created = create_handoff(
+                from_agent="orchestrator",
+                to_agent="researcher",
+                task="Research competitor onboarding friction",
+                related_issue=42,
+                risk="low",
+                budget_tokens=2000,
+                budget_remaining=50_000,
+                use_live_budget=False,
+                base_dir=fleet_dir,
+                record_ledger=False,
+            )
+            hid = created["handoff"]["handoff_id"]
+            acc = update_handoff(
+                hid,
+                status="accepted",
+                base_dir=fleet_dir,
+                record_ledger=False,
+                artifact_base_dir=art_dir,
+            )
+            disp = acc.get("dispatch") or {}
+            self.assertTrue(disp.get("ok"), disp)
+            self.assertEqual(disp.get("dispatch_kind"), "artifact")
+            prop = get_proposal(disp["run_id"], base_dir=art_dir)
+            self.assertIsNotNone(prop)
+            self.assertEqual(prop["kind"], "research")
+            self.assertEqual(prop["related_issue"], 42)
 
     def test_pm_assignment_bridge(self):
         out = handoff_from_pm_assignment(
@@ -184,6 +270,24 @@ class TestBudgetAndPlan(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertEqual(out["handoff"]["to_agent"], "implementer")
         self.assertEqual(out["pm_assignment_id"], "asg-1")
+
+    def test_pm_design_persona_maps_to_researcher(self):
+        out = handoff_from_pm_assignment(
+            {
+                "assignment_id": "asg-d1",
+                "agent_id": "design-minimal",
+                "work_title": "Wireframes for feed",
+                "work_type": "design",
+                "estimated_tokens": 2000,
+                "impact": "low",
+            },
+            budget_remaining=10000,
+            use_live_budget=False,
+            base_dir=self.base,
+            record_ledger=False,
+        )
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["handoff"]["to_agent"], "researcher")
 
     def test_estimate_handoff_cost(self):
         est = estimate_handoff_cost(to_agent="implementer", risk="medium")
