@@ -78,6 +78,59 @@ class TestImportPayload(unittest.TestCase):
             self.assertFalse(report["ok"])
             self.assertIn("Invalid strategy", report["error"] or "")
 
+    def test_escape_hatch_writes_plan_and_draft_pr_body(self):
+        """#622: hard-merge escape hatch never writes payload; emits review artifacts."""
+        from plate_core.import_payload import import_payload, write_import_escape_hatch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "tgt"
+            hatch = Path(tmp) / "hatch"
+            target.mkdir()
+            first = import_payload(target, strategy="safe", apply=True)
+            rel = first["created"][0]
+            (target / rel).write_text(
+                (target / rel).read_text(encoding="utf-8") + "\n# local\n",
+                encoding="utf-8",
+            )
+            report = import_payload(
+                target,
+                strategy="conservative",
+                dry_run=True,
+                escape_hatch_dir=hatch,
+            )
+            self.assertTrue(report["ok"])
+            self.assertIn(rel, report["would_conflict"])
+            eh = report.get("escape_hatch") or {}
+            self.assertTrue(eh.get("ok"))
+            self.assertTrue(Path(eh["plan_json"]).is_file())
+            self.assertTrue(Path(eh["plan_md"]).is_file())
+            self.assertTrue(Path(eh["draft_pr_body"]).is_file())
+            body = Path(eh["draft_pr_body"]).read_text(encoding="utf-8")
+            self.assertIn("Payload additions", body)
+            self.assertIn("Human review checklist", body)
+            self.assertIn("Conflicts requiring judgment", body)
+            # payload not force-written by hatch
+            self.assertIn("local", (target / rel).read_text(encoding="utf-8"))
+
+    def test_escape_hatch_on_conflict_default_dir(self):
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "tgt"
+            target.mkdir()
+            first = import_payload(target, strategy="safe", apply=True)
+            rel = first["created"][0]
+            (target / rel).write_text("changed\n", encoding="utf-8")
+            report = import_payload(
+                target,
+                strategy="conservative",
+                dry_run=True,
+                escape_hatch_on_conflict=True,
+            )
+            eh = report.get("escape_hatch") or {}
+            self.assertTrue(eh.get("has_conflicts"))
+            self.assertTrue((target / ".agentic" / "import-escape-hatch" / "plan.json").is_file())
+
     def test_cli_dry_run_json(self):
         import argparse
         from io import StringIO
