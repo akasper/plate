@@ -4524,12 +4524,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="Filter queue: proposed|delegated|blocked|done|cancelled|all",
     )
-    pm.add_argument("--complete", metavar="ASSIGNMENT_ID", help="Mark assignment done/cancelled")
+    pm.add_argument(
+        "--complete",
+        metavar="ASSIGNMENT_ID",
+        help="Mark assignment done/cancelled, or Approve & run with --complete-status run",
+    )
     pm.add_argument(
         "--complete-status",
         dest="complete_status",
         default="done",
-        help="Status for --complete (default done)",
+        help="Status for --complete: done|cancelled|run|approve (run = explicit delegate + dispatch)",
     )
     pm.add_argument("--note", default="", help="Note for --complete")
     pm.add_argument("--apply", action="store_true", help="With --run/--loop: attempt delegation (default dry-run)")
