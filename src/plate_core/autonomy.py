@@ -375,6 +375,59 @@ def record_budget_spend(
         }
 
 
+def reset_budget_spend(
+    *,
+    base_dir: Path | None = None,
+    reason: str | None = None,
+    keep_throttled: bool = True,
+) -> dict[str, Any]:
+    """Zero durable #634 spend counters for the current UTC day (operator hygiene).
+
+    Use when local test/loop debris exhausted ``spend.json`` and process routing
+    (``plate_what_next`` budget_gate) or surface gates block work. Does **not**
+    change ``.plate`` token_budget limits or risk_tolerance. Safe if file missing.
+    """
+    today = datetime.now(timezone.utc).date().isoformat()
+    try:
+        prior = load_budget_spend(base_dir=base_dir) or {}
+        prior_spent = 0
+        try:
+            prior_spent = int(prior.get("spent_today") or 0)
+        except (TypeError, ValueError):
+            prior_spent = 0
+        throttled = 0
+        if keep_throttled:
+            try:
+                throttled = int(prior.get("throttled_actions") or 0)
+            except (TypeError, ValueError):
+                throttled = 0
+        data: dict[str, Any] = {
+            "date": today,
+            "spent_today": 0,
+            "spent_this_cycle": 0,
+            "spent_usd_today": 0.0,
+            "throttled_actions": throttled,
+            "last_action_kind": "budget_reset",
+            "last_reason": (reason or "operator reset of durable spend counters")[:200],
+            "reset_from_spent_today": prior_spent,
+            "reset_from_date": prior.get("date") or prior.get("day"),
+        }
+        path = save_budget_spend(data, base_dir=base_dir)
+        snap = get_budget_snapshot(base_dir=base_dir)
+        return {
+            "ok": True,
+            "path": str(path),
+            "date": today,
+            "prior_spent_today": prior_spent,
+            "spent_today": 0,
+            "remaining_tokens": snap.get("remaining_tokens"),
+            "budget_pressure": snap.get("budget_pressure"),
+            "snapshot": snap,
+        }
+    except OSError as exc:
+        return {"ok": False, "error": str(exc), "spent_today": None}
+
+
 def apply_live_budget_charge(
     out: dict[str, Any],
     *,
