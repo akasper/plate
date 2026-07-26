@@ -130,6 +130,30 @@ class TestImportPayload(unittest.TestCase):
             list_payload_relative_paths(root),
         )
 
+    def test_ci_yml_install_as_on_conflict(self):
+        """#617: existing product ci.yml → write plate-ci.yml, preserve original."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ci = Path(tmp) / ".github" / "workflows" / "ci.yml"
+            ci.parent.mkdir(parents=True, exist_ok=True)
+            ci.write_text("# product CI\n", encoding="utf-8")
+
+            report = import_payload(tmp, strategy="safe", apply=True)
+            self.assertTrue(report["ok"])
+            # original preserved
+            self.assertEqual(ci.read_text(encoding="utf-8"), "# product CI\n")
+            plate_ci = Path(tmp) / ".github" / "workflows" / "plate-ci.yml"
+            self.assertTrue(plate_ci.is_file(), msg=report["created"][:10])
+            # decision recorded
+            decisions = [f for f in report["files"] if f["path"] == ".github/workflows/ci.yml"]
+            self.assertEqual(len(decisions), 1)
+            self.assertIn(decisions[0]["action"], ("create_as", "create"))
+            if decisions[0]["action"] == "create_as":
+                self.assertEqual(
+                    decisions[0]["target_path"], ".github/workflows/plate-ci.yml"
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

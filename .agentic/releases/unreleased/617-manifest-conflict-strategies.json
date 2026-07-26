@@ -1,0 +1,16 @@
+{
+  "slug": "617-manifest-conflict-strategies",
+  "change_type": "feature",
+  "surface": "src/plate_core/data/template_payload_manifest.yml, template_payload.py, import_payload.py",
+  "summary": "Manifest path_rules conflict strategies (#617): schema v2 path_rules (install_as for ci.yml→plate-ci.yml, conflict root product files, overwrite labels/templates); resolve_conflict_plan drives import-payload dry-run/apply decisions.",
+  "migration_impact": "Manifest schema_version is now 2 with additive path_rules. Greenfield create behavior unchanged. Adoption imports may install PLATE CI as .github/workflows/plate-ci.yml when ci.yml already exists. Loaders accept schema 1 or 2.",
+  "migration_guidance": [
+    "1. Upgrade plate-core so import-payload honors path_rules.",
+    "2. On adopt dry-run, look for create_as entries (e.g. ci.yml -> plate-ci.yml).",
+    "3. Wire plate-ci.yml into branch protection/status checks if product CI remains ci.yml.",
+    "4. Customize path_rules in a fork only if needed; defaults cover common collisions."
+  ],
+  "agent_notes": "When import-payload reports create_as for ci.yml, do not overwrite product CI. Point humans at plate-ci.yml for PLATE process jobs. Prefer --strategy conservative for root package.json/SPEC conflicts.",
+  "breaking": false,
+  "links": ["#617", "#616", "#619", "#615", "#633"]
+}
