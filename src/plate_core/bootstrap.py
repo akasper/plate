@@ -11,11 +11,8 @@ from urllib.parse import quote
 from .github_client import GhApiError, GhClient
 from .health import REQUIRED_LABELS, get_health, resolve_repo
 from .plate_config import DEFAULT_CONFIG
-from .template_payload import (
-    load_template_payload_manifest,
-    resolve_template_source,
-    should_include_template_file,
-)
+from .import_payload import list_payload_relative_paths
+from .template_payload import resolve_template_source
 
 
 DEFAULT_LABEL_COLOR = "5319e7"
@@ -53,15 +50,8 @@ def _is_missing_content_error(error: GhApiError) -> bool:
 
 
 def _template_payload_relative_paths(template_root: Path) -> list[str]:
-    manifest = load_template_payload_manifest()
-    rel_paths: list[str] = []
-    for path in sorted(template_root.rglob("*")):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(template_root).as_posix()
-        if should_include_template_file(rel, manifest):
-            rel_paths.append(rel)
-    return rel_paths
+    """Shared planner with import_payload (#620) — same manifest-filtered paths."""
+    return list_payload_relative_paths(template_root)
 
 
 def _copy_template_payload(repo: str, default_branch: str, gh: GhClient, template_root: Path) -> tuple[int, int]:
