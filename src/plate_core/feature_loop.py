@@ -409,15 +409,14 @@ def start_feature_loop(
     effective_budget = budget_remaining
     if effective_budget is None and use_live_budget:
         try:
-            from .autonomy import get_budget_snapshot
+            from .autonomy import durable_budget_surface_pause, get_budget_snapshot
 
             budget_snap = get_budget_snapshot(
                 estimated_tokens=int(est["estimated_tokens"]),
                 base_dir=budget_base_dir,
             )
-            # Only enforce live rails when autonomy is enabled (risk != off)
             # Honor durable remaining even when risk_tolerance=off (engine disabled).
-            # risk-off only skips AutonomyEngine cycles; surface gates still apply (#634).
+            # risk-off only skips AutonomyEngine cycles; surface gates still apply (#634/#877).
             if budget_snap.get("remaining_tokens") is not None:
                 effective_budget = int(budget_snap.get("remaining_tokens") or 0)
                 notes.append(
@@ -425,13 +424,14 @@ def start_feature_loop(
                     f"pressure={budget_snap.get('budget_pressure')} "
                     f"enabled={budget_snap.get('enabled')}"
                 )
-                if budget_snap.get("would_pause") or budget_snap.get("would_throttle"):
-                    # Mirror engine: pause/throttle both block start of large Features
-                    blocked = True
-                    notes.append(
-                        budget_snap.get("gate_reason")
-                        or "blocked: live budget estimate gate"
-                    )
+            surface = durable_budget_surface_pause(budget_snap)
+            if surface.get("pause") or budget_snap.get("would_throttle"):
+                blocked = True
+                notes.append(
+                    surface.get("reason")
+                    or budget_snap.get("gate_reason")
+                    or "blocked: live budget estimate gate"
+                )
         except Exception as exc:
             notes.append(f"budget hydrate skipped: {exc}")
 

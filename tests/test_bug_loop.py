@@ -129,6 +129,64 @@ class TestRunLifecycle(unittest.TestCase):
         self.assertEqual(r["run"]["status"], "blocked")
         self.assertIsNotNone(r["run"]["cost_estimate_tokens"])
 
+    def test_budget_blocks_on_durable_would_pause_risk_off(self):
+        """#877: bug loop blocks via durable_budget_surface_pause under risk-off."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            bdir = base / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            # remaining=5000, per_cycle=10000 → would_pause; small bug est=3300 < 5000
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 45000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 50000,
+                        "per_cycle": 10000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                r = start_bug_loop(
+                    bug_number=77,
+                    bug_title="paused rails",
+                    size="small",
+                    risk_tolerance="off",
+                    use_live_budget=True,
+                    base_dir=base,
+                    record_ledger=False,
+                )
+
+        self.assertFalse(r["ok"], r)
+        self.assertTrue(r["blocked"])
+        joined = " ".join(r.get("run", {}).get("notes") or r.get("notes") or [])
+        self.assertTrue(
+            "budget" in joined.lower() or "pause" in joined.lower() or "remaining" in joined.lower(),
+            joined,
+        )
+
     def test_live_budget_hydrate_blocks(self):
         import tempfile
         from pathlib import Path
