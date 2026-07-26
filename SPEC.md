@@ -67,8 +67,8 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
   - **Procedures:** data-driven definitions under `.agentic/procedures/` (cadence, risk_level, allow-listed steps).
   - **Surfaces:** MCP `plate_autonomy_status` / `run_cycle` / `run_procedure` / `list_procedures` / `simulate`; CLI `gh plate autonomy status|run|loop|--simulate|--dashboard`.
   - **Safety stack (v1.0 path):** shadow/simulation for high-impact actions (#645), unified checkpoint/approval primitive (#648), provenance/decision ledger (#647), cost+risk dashboard (#653/#634). Engine pauses on open checkpoints; high/critical actions require shadow_ack + approval when gates apply.
-  - **Coordination:** Q+Task feed (#631), Q&A planning surfaces (#628/#630/#629/#640), Project Manager orchestrator (#660) assign work above AutonomyEngine without replacing it.
-  - See Epic #470 + children #471–482, design `docs/design/autonomous-plate-engine.md`, and AGENTS.md §Autonomous Mode.
+  - **Coordination:** Q+Task feed (#631), Q&A planning surfaces (#628/#630/#629/#640), Project Manager orchestrator (#660) assign work above AutonomyEngine without replacing it. Architecture/personas/API sketch: `docs/design/pm-orchestrator-architecture-and-browser.md` (#662). Browser surface (#661) is future; TUI feed is current.
+  - See Epic #470 + children #471–482, design `docs/design/autonomous-plate-engine.md`, and AGENTS.md §Autonomous Mode + Project Manager guidance.
 - Observability: health, velocity, cost (harvested USAGE REPORTs), drift detection, autopilot_score / burn_rate, cost+risk dashboard feed items, and decision ledger queries.
 - Acquisition readiness: clean architecture, strong GitHub integration, measurable Copilot impact.
 - Extensibility: future multi-host adapters while staying GitHub-first.
