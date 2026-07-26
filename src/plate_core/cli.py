@@ -3362,6 +3362,23 @@ def cmd_migrate_apply(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_spec_audit(args: argparse.Namespace) -> int:
+    """#338: audit SPEC.md against release fragments + path evidence."""
+    from .spec_audit import audit_spec, format_spec_audit_markdown
+
+    report = audit_spec(
+        getattr(args, "repo_root", None) or ".",
+        releases_dir=getattr(args, "releases_dir", None),
+        spec_path=getattr(args, "spec", None),
+    )
+    data = report.to_dict()
+    if getattr(args, "json", False):
+        print(json.dumps(data, indent=2, sort_keys=True))
+    else:
+        print(format_spec_audit_markdown(report), end="")
+    return 0 if data.get("ok", False) else 1
+
+
 def cmd_import_payload(args: argparse.Namespace) -> int:
     """#616: plan/apply template payload into a local target checkout."""
     from .import_payload import format_import_payload_report, import_payload
@@ -4553,6 +4570,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     import_payload_p.add_argument("--json", action="store_true", help="Output JSON report")
     import_payload_p.set_defaults(func=cmd_import_payload)
+
+    spec_audit_p = sub.add_parser(
+        "spec-audit",
+        help="Audit SPEC.md vs release fragments and path citations (#338)",
+    )
+    spec_audit_p.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repository root containing SPEC.md (default: cwd)",
+    )
+    spec_audit_p.add_argument(
+        "--spec",
+        help="Optional path to SPEC.md",
+    )
+    spec_audit_p.add_argument(
+        "--releases-dir",
+        help="Optional path to .agentic/releases",
+    )
+    spec_audit_p.add_argument("--json", action="store_true", help="Output JSON report")
+    spec_audit_p.set_defaults(func=cmd_spec_audit)
 
     payload = sub.add_parser(
         "payload",
