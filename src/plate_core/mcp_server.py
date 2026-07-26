@@ -300,7 +300,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
 
     try:
         if name == "plate_health":
-            report = get_health(args.get("repo"))
+            report = get_health(
+                args.get("repo"),
+                repo_root=args.get("repo_root"),
+                include_spec_audit=not bool(args.get("no_spec_audit", False)),
+            )
             payload = report.to_dict()
         elif name == "plate_epic_status":
             report = get_epic_status(args.get("repo"))
@@ -1945,14 +1949,28 @@ def run() -> None:
                         "tools": [
                             {
                                 "name": "plate_health",
-                                "description": "Return PLATE health summary for a repository.",
+                                "description": (
+                                    "Return PLATE health summary for a repository, "
+                                    "including local SPEC audit drift signals (#340)."
+                                ),
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "repo": {
                                             "type": "string",
                                             "description": "owner/name. Optional if running inside repo clone.",
-                                        }
+                                        },
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": (
+                                                "Local checkout root for SPEC audit filesystem "
+                                                "signals. Defaults to current working directory."
+                                            ),
+                                        },
+                                        "no_spec_audit": {
+                                            "type": "boolean",
+                                            "description": "When true, skip local SPEC audit summary.",
+                                        },
                                     },
                                 },
                             },

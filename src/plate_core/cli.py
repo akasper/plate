@@ -208,7 +208,11 @@ from .plate_config import (
 
 
 def cmd_health(args: argparse.Namespace) -> int:
-    report = get_health(args.repo)
+    report = get_health(
+        args.repo,
+        repo_root=getattr(args, "repo_root", None) or ".",
+        include_spec_audit=not bool(getattr(args, "no_spec_audit", False)),
+    )
     if args.json:
         print(json.dumps(report.to_dict()))
         return 0
@@ -248,6 +252,19 @@ def cmd_health(args: argparse.Namespace) -> int:
             f"Budget (#634): remaining={rem}/{daily} spent_today={spent} "
             f"burn={burn}% pressure={pressure} risk={risk} enabled={en}"
         )
+    if report.spec_audit_status:
+        counts = report.spec_audit_counts or {}
+        act = (
+            report.spec_audit_actionable_count
+            if report.spec_audit_actionable_count is not None
+            else "?"
+        )
+        print(
+            f"SPEC audit (#340): status={report.spec_audit_status} "
+            f"actionable={act} counts={counts}"
+        )
+        if report.spec_audit_next_step:
+            print(f"SPEC audit next: {report.spec_audit_next_step}")
     return 0 if report.status != "fail" else 1
 
 
@@ -3554,6 +3571,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     health = sub.add_parser("health", help="Show PLATE health summary")
     health.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    health.add_argument(
+        "--repo-root",
+        dest="repo_root",
+        default=".",
+        help="Local checkout root for SPEC audit / filesystem signals (#340)",
+    )
+    health.add_argument(
+        "--no-spec-audit",
+        action="store_true",
+        help="Skip local SPEC audit summary in health output (#340)",
+    )
     health.add_argument("--json", action="store_true", help="Output JSON")
     health.set_defaults(func=cmd_health)
 
