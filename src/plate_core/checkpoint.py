@@ -386,6 +386,40 @@ def checkpoint_approval_for_gate(
     }
 
 
+def find_open_checkpoint(
+    *,
+    action_kind: str | None = None,
+    shadow_id: str | None = None,
+    base_dir: Path | None = None,
+) -> dict[str, Any] | None:
+    """Return a pending open checkpoint matching action_kind and/or shadow_id.
+
+    Used to dedupe #645/#648 gate spam: repeated gate_high_impact calls for the
+    same action must not create a new pause_autonomy checkpoint each time.
+    Prefer exact shadow_id match; else same action_kind with pause_autonomy.
+    """
+    action_n = (action_kind or "").lower().replace("-", "_").strip()
+    sid = (shadow_id or "").strip() or None
+    if not action_n and not sid:
+        return None
+    try:
+        open_cps = list_open_checkpoints(base_dir=base_dir, limit=100)
+    except Exception:
+        return None
+    # 1) exact shadow_id
+    if sid:
+        for cp in open_cps:
+            if str(cp.get("shadow_id") or "") == sid:
+                return cp
+    # 2) same action_kind (pending pause gates only)
+    if action_n:
+        for cp in open_cps:
+            if str(cp.get("action_kind") or "").lower().replace("-", "_") == action_n:
+                if cp.get("pause_autonomy", True):
+                    return cp
+    return None
+
+
 def create_checkpoint_for_shadow(
     shadow_report: dict[str, Any],
     *,
@@ -394,12 +428,41 @@ def create_checkpoint_for_shadow(
     autonomy_enabled: bool = False,
     created_by: str = "agent",
     base_dir: Path | None = None,
+    dedupe: bool = True,
 ) -> dict[str, Any]:
-    """Bridge #645 ShadowReport → #648 checkpoint when approval required."""
+    """Bridge #645 ShadowReport → #648 checkpoint when approval required.
+
+    When ``dedupe`` is True (default), reuses an open pending checkpoint for the
+    same action_kind/shadow_id instead of opening another pause gate.
+    """
     impact = (shadow_report or {}).get("impact") or "high"
     action = (shadow_report or {}).get("action_kind") or "unknown"
     reasons = (shadow_report or {}).get("approval_reasons") or []
     reason = "; ".join(reasons) if reasons else f"Shadow preview requires approval for {action}"
+    sid = shadow_report.get("shadow_id")
+    if dedupe:
+        existing = find_open_checkpoint(
+            action_kind=str(action),
+            shadow_id=str(sid) if sid else None,
+            base_dir=base_dir,
+        )
+        if existing:
+            out = dict(existing)
+            out["deduped"] = True
+            # Refresh shadow_id on the open record when a newer preview arrives
+            if sid and not out.get("shadow_id"):
+                try:
+                    path = Path(str(out.get("path") or _path_for(str(out["id"]), base_dir)))
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    data["shadow_id"] = sid
+                    data["updated_at"] = _now()
+                    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+                    out = data
+                    out["path"] = str(path)
+                    out["deduped"] = True
+                except Exception:
+                    pass
+            return out
     return create_checkpoint(
         title=title or f"Approve {action} ({impact})",
         reason=reason,
@@ -411,7 +474,7 @@ def create_checkpoint_for_shadow(
             "predicted_side_effects": shadow_report.get("predicted_side_effects"),
             "gate_preview": shadow_report.get("gate_preview"),
         },
-        shadow_id=shadow_report.get("shadow_id"),
+        shadow_id=sid,
         created_by=created_by,
         risk_tolerance=risk_tolerance,
         autonomy_enabled=autonomy_enabled,
