@@ -1124,6 +1124,44 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertTrue(charge["ok"])
             self.assertEqual(charge["spent_today"], 100)
 
+    def test_durable_budget_surface_pause_helper(self):
+        """#873: shared helper for risk-independent surface budget rails."""
+        from plate_core.autonomy import durable_budget_surface_pause
+
+        empty = durable_budget_surface_pause(None)
+        self.assertFalse(empty["pause"])
+        ok = durable_budget_surface_pause(
+            {
+                "budget_pressure": "ok",
+                "remaining_tokens": 50000,
+                "would_pause": False,
+                "would_pause_next_cycle": False,
+            }
+        )
+        self.assertFalse(ok["pause"])
+        paused = durable_budget_surface_pause(
+            {
+                "budget_pressure": "critical",
+                "remaining_tokens": 1500,
+                "would_pause": True,
+                "would_pause_next_cycle": True,
+                "gate_reason": "remaining below per_cycle",
+            }
+        )
+        self.assertTrue(paused["pause"])
+        self.assertTrue(paused["would_pause_next_cycle"])
+        self.assertEqual(paused["pressure"], "critical")
+        self.assertEqual(paused["remaining"], 1500)
+        self.assertIn("remaining below per_cycle", paused["reason"] or "")
+        zero = durable_budget_surface_pause(
+            {
+                "budget_pressure": "exhausted",
+                "remaining_tokens": 0,
+                "would_pause_next_cycle": False,
+            }
+        )
+        self.assertTrue(zero["pause"])
+
     def test_get_budget_snapshot_estimate_tokens_alias(self):
         """Surface gates pass estimate_tokens; alias must hydrate gate reasons."""
         import tempfile

@@ -320,6 +320,59 @@ class TestPlanningBudget634(unittest.TestCase):
         self.assertNotIn("budget_charge", ok)
         self.assertNotIn("budget_charge", b_block)
 
+    def test_budget_blocks_on_durable_would_pause_risk_off(self):
+        """#873: block when est fits remaining but next cycle would pause."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            bdir = base / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            # remaining=5000, per_cycle=10000 → would_pause; start est=4000 < 5000
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 45000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 50000,
+                        "per_cycle": 10000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                out = start_planning_session(
+                    "feature",
+                    base_dir=base,
+                    persist=False,
+                    use_live_budget=True,
+                )
+
+        self.assertFalse(out.get("ok"), out)
+        self.assertTrue(out.get("blocked"))
+        self.assertIn("budget", out.get("error") or "")
+        self.assertTrue(out.get("would_pause_next_cycle"))
+        self.assertEqual(out.get("budget_remaining"), 5000)
+
 
 
 if __name__ == "__main__":
