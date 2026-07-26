@@ -956,27 +956,34 @@ class ProjectManager:
         pressure = "ok"
         would_pause = False
         spent_durable: int | None = None
-        # Durable spend first (no network) so PM honors #634 rails offline
+        # Durable spend first (no network) so PM honors #634 rails offline.
+        # Must use get_budget_snapshot (UTC day rollover) — raw load_budget_spend
+        # keeps prior-day counters and falsely reports critical pressure (#660/#634).
         try:
-            from .autonomy import load_budget_spend
+            from .autonomy import get_budget_snapshot
 
-            spend = load_budget_spend() or {}
-            if spend.get("spent_today") is not None:
-                spent_durable = int(spend.get("spent_today") or 0)
+            snap = get_budget_snapshot() or {}
+            try:
+                spent_durable = int(snap.get("spent_today") or 0)
+            except (TypeError, ValueError):
+                spent_durable = 0
+            try:
+                daily = int(snap.get("daily_limit") or 50000)
+            except (TypeError, ValueError):
                 daily = 50000
-                try:
-                    from .plate_config import load_plate_config
-
-                    tb = ((load_plate_config().to_dict() or {}).get("autonomy") or {}).get(
-                        "token_budget"
-                    ) or {}
-                    daily = int(tb.get("daily") or daily)
-                    per_cycle = int(tb.get("per_cycle") or 8000)
-                except Exception:
-                    per_cycle = 8000
-                if remaining is None:
-                    remaining = max(0, daily - spent_durable)
-                # lightweight pressure without harvesting USAGE reports
+            try:
+                per_cycle = int(snap.get("per_cycle_limit") or 8000)
+            except (TypeError, ValueError):
+                per_cycle = 8000
+            if snap.get("remaining_tokens") is not None:
+                remaining = int(snap.get("remaining_tokens") or 0)
+            elif remaining is None:
+                remaining = max(0, daily - spent_durable)
+            # Prefer snapshot pressure when present (matches AutonomyEngine rails)
+            snap_pressure = str(snap.get("budget_pressure") or "").lower()
+            if snap_pressure in ("ok", "elevated", "critical", "exhausted"):
+                pressure = snap_pressure
+            else:
                 rem_i = int(remaining or 0)
                 if rem_i <= 0:
                     pressure = "exhausted"
@@ -986,10 +993,18 @@ class ProjectManager:
                     would_pause = True
                 elif rem_i <= int(daily * 0.25):
                     pressure = "elevated"
-                burn = round(min(100.0, (spent_durable / float(daily)) * 100.0), 1) if daily else 0.0
-                if burn >= 80 and pressure == "ok":
-                    pressure = "critical"
-                auto["burn_rate"] = burn
+            would_pause = bool(snap.get("would_pause") or would_pause)
+            try:
+                burn = float(snap.get("burn_rate") or 0.0)
+            except (TypeError, ValueError):
+                burn = (
+                    round(min(100.0, (spent_durable / float(daily)) * 100.0), 1)
+                    if daily
+                    else 0.0
+                )
+            if burn >= 80 and pressure == "ok":
+                pressure = "critical"
+            auto["burn_rate"] = burn
         except Exception:
             pass
         # Full cost dashboard only when repo is set (may hit GitHub harvest)
