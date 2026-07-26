@@ -1856,6 +1856,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 str(args.get("path") or ""),
                 args.get("template_repo"),
             )
+        elif name == "plate_spec_audit":
+            from .spec_audit import audit_spec
+
+            payload = audit_spec(
+                args.get("repo_root") or ".",
+                releases_dir=args.get("releases_dir"),
+                spec_path=args.get("spec_path") or args.get("spec"),
+            ).to_dict()
         elif name == "plate_perform_test_coverage_audit":
             from .mcp.audit_tools import PerformTestCoverageAuditTool
             payload = PerformTestCoverageAuditTool.execute(repo=repo, dry_run=args.get("dry_run", True))
@@ -4557,6 +4565,27 @@ def run() -> None:
                                         "template_repo": {"type": "string"},
                                     },
                                     "required": ["path"],
+                                },
+                            },
+                            {
+                                "name": "plate_spec_audit",
+                                "description": "Audit SPEC.md against unreleased fragments and path citations (#338). Returns structured findings (aligned/undocumented/stale_evidence/future_ok).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local repo root (default .).",
+                                        },
+                                        "spec_path": {
+                                            "type": "string",
+                                            "description": "Optional path to SPEC.md.",
+                                        },
+                                        "releases_dir": {
+                                            "type": "string",
+                                            "description": "Optional .agentic/releases path.",
+                                        },
+                                    },
                                 },
                             },
                             {

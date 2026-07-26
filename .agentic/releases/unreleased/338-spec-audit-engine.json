@@ -1,0 +1,16 @@
+{
+  "slug": "338-spec-audit-engine",
+  "change_type": "feature",
+  "surface": "src/plate_core/spec_audit.py, gh plate spec-audit, plate_spec_audit MCP",
+  "summary": "SPEC audit engine first slice (#338): structured findings (aligned/undocumented/stale_evidence/future_ok) from SPEC.md + unreleased fragments + path citations; CLI gh plate spec-audit and MCP plate_spec_audit for agent consumption.",
+  "migration_impact": "New optional audit surface. Does not auto-edit SPEC.md. Agents can list undocumented fragments for Documentation PRs. Follow-ups #339/#340 add issue generation and health exposure.",
+  "migration_guidance": [
+    "1. Upgrade plate-core for gh plate spec-audit / plate_spec_audit.",
+    "2. Run from repo root: gh plate spec-audit --json.",
+    "3. Triage undocumented findings into Documentation PRs that add implemented+tested behavior to SPEC.",
+    "4. Do not treat future-only SPEC sections as errors."
+  ],
+  "agent_notes": "Use plate_spec_audit before claiming SPEC is current. Prefer additive SPEC updates for undocumented features with tests. Quiet ops: one-line summary of counts unless asked for full findings.",
+  "breaking": false,
+  "links": ["#338", "#335", "#337", "#339", "#340", "#654"]
+}
