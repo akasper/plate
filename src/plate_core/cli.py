@@ -3345,6 +3345,25 @@ def cmd_migrate_apply(args: argparse.Namespace) -> int:
         print(f"  {r}")
     print("Checkpoint/rollback available via MigrationApplier.")
     return 0
+
+
+def cmd_import_payload(args: argparse.Namespace) -> int:
+    """#616: plan/apply template payload into a local target checkout."""
+    from .import_payload import format_import_payload_report, import_payload
+
+    do_apply = bool(getattr(args, "apply", False))
+    report = import_payload(
+        target_dir=getattr(args, "target_dir", None) or ".",
+        strategy=getattr(args, "strategy", None) or "safe",
+        template_repo=getattr(args, "template_repo", None),
+        dry_run=not do_apply,
+        apply=do_apply,
+    )
+    if getattr(args, "json", False):
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(format_import_payload_report(report), end="")
+    return 0 if report.get("ok", True) else 1
     print(f"Task: {result.task_description}")
     print()
     print("Delegation prompt:")
@@ -4408,6 +4427,39 @@ def build_parser() -> argparse.ArgumentParser:
     m_apply.add_argument("--repo", help="owner/name")
     m_apply.add_argument("--json", action="store_true")
     m_apply.set_defaults(func=cmd_migrate_apply)
+
+    import_payload_p = sub.add_parser(
+        "import-payload",
+        help="Import PLATE template payload into a local checkout (dry-run/apply; #616)",
+    )
+    import_payload_p.add_argument(
+        "--target-dir",
+        default=".",
+        help="Local target directory (default: cwd)",
+    )
+    import_payload_p.add_argument(
+        "--strategy",
+        choices=["safe", "conservative", "force"],
+        default="safe",
+        help="safe=skip existing; conservative=report conflicts; force=overwrite",
+    )
+    import_payload_p.add_argument(
+        "--template-repo",
+        help="Optional explicit template root path (default: package payload)",
+    )
+    import_payload_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+        help="Plan only (default). Use --apply to write files.",
+    )
+    import_payload_p.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write files according to strategy (disables dry-run).",
+    )
+    import_payload_p.add_argument("--json", action="store_true", help="Output JSON report")
+    import_payload_p.set_defaults(func=cmd_import_payload)
 
     qanda = sub.add_parser("qanda", help="Curiosity / Q&A Mode (list, view, record answers on Question issues; Epic #139)")
     qanda.add_argument("--repo", help="owner/name; defaults to git remote origin")
