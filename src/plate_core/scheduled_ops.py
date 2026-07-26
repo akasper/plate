@@ -496,11 +496,21 @@ def run_scheduled_op(
     est_tokens = int(cost_est.get("estimated_tokens") or 0)
     effective_budget = budget_remaining
     budget_notes: list[str] = []
+    # Isolate budget + ledger under base_dir when provided (tests / alternate roots).
+    budget_base: Path | None = None
+    ledger_base: Path | None = None
+    if base_dir is not None:
+        root = Path(base_dir)
+        budget_base = root / "budget"
+        ledger_base = root / "ledger"
     if effective_budget is None and use_live_budget:
         try:
             from .autonomy import get_budget_snapshot
 
-            budget_snap = get_budget_snapshot(estimate_tokens=est_tokens)
+            budget_snap = get_budget_snapshot(
+                estimate_tokens=est_tokens,
+                base_dir=budget_base,
+            )
             rem = budget_snap.get("remaining_tokens")
             if rem is not None:
                 effective_budget = int(rem)
@@ -640,7 +650,8 @@ def run_scheduled_op(
     if blocked:
         out["error"] = "; ".join(reasons)
         out["reason"] = out["error"]
-    elif use_live_budget and est_tokens > 0:
+    # Charge durable spend only on live unblocked apply — never on dry_run previews.
+    elif (not dry_run) and use_live_budget and est_tokens > 0:
         try:
             from .autonomy import apply_live_budget_charge
 
@@ -650,9 +661,17 @@ def run_scheduled_op(
                 use_live_budget=True,
                 action_kind="scheduled_op",
                 reason=f"run_scheduled_op:{op_id}:{run.id}",
+                base_dir=budget_base,
             )
         except Exception:
             pass
+    elif dry_run and use_live_budget and est_tokens > 0:
+        budget_notes.append(
+            f"dry_run: skipped budget charge of est {est_tokens} tokens"
+        )
+        out["notes"] = list(out.get("notes") or []) + [
+            f"dry_run: skipped budget charge of est {est_tokens} tokens"
+        ]
 
     if record_ledger:
         try:
@@ -675,6 +694,7 @@ def run_scheduled_op(
                     "cost_estimate_tokens": est_tokens,
                     "budget_remaining": effective_budget,
                 },
+                base_dir=ledger_base,
             )
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:
