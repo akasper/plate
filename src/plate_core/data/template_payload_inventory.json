@@ -396,6 +396,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "scripts/plate/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "scripts/question_batch.sh",
       "classification": "copy_to_downstream"
     },

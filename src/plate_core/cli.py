@@ -3367,18 +3367,67 @@ def cmd_import_payload(args: argparse.Namespace) -> int:
     from .import_payload import format_import_payload_report, import_payload
 
     do_apply = bool(getattr(args, "apply", False))
+    ns = None
+    if getattr(args, "namespace_scripts", False):
+        ns = True
+    elif getattr(args, "no_namespace_scripts", False):
+        ns = False
     report = import_payload(
         target_dir=getattr(args, "target_dir", None) or ".",
         strategy=getattr(args, "strategy", None) or "safe",
         template_repo=getattr(args, "template_repo", None),
         dry_run=not do_apply,
         apply=do_apply,
+        namespace_scripts=ns,
     )
     if getattr(args, "json", False):
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         print(format_import_payload_report(report), end="")
     return 0 if report.get("ok", True) else 1
+
+
+def cmd_payload(args: argparse.Namespace) -> int:
+    """#621: payload discoverability (list / root / manifest / classify)."""
+    from .payload_surface import (
+        classify_path,
+        list_payload_files,
+        resolve_payload_root,
+        show_manifest,
+    )
+
+    sub = getattr(args, "payload_command", None) or "list"
+    if sub == "root":
+        out = resolve_payload_root(getattr(args, "template_repo", None))
+    elif sub == "manifest":
+        out = show_manifest()
+    elif sub == "classify":
+        path = getattr(args, "path", None)
+        if not path:
+            print("Error: classify requires a path", file=sys.stderr)
+            return 1
+        out = classify_path(path, getattr(args, "template_repo", None))
+    else:
+        out = list_payload_files(
+            getattr(args, "template_repo", None),
+            include_excluded=bool(getattr(args, "include_excluded", False)),
+        )
+    if getattr(args, "json", False) or sub in ("manifest", "classify", "root", "list"):
+        # default json-friendly for automation; still pretty for humans without --json
+        if getattr(args, "json", False):
+            print(json.dumps(out, indent=2, sort_keys=True))
+        elif sub == "list":
+            print(f"Payload root: {out.get('template_root')} ({out.get('source_kind')})")
+            print(f"Files: {out.get('count')}")
+            for f in (out.get("files") or [])[:50]:
+                rule = f.get("path_rule") or {}
+                extra = f" rule={rule.get('on_conflict')}" if rule else ""
+                print(f"  {f.get('path')} [{f.get('classification')}]{extra}")
+            if (out.get("count") or 0) > 50:
+                print(f"  ... and {(out.get('count') or 0) - 50} more (use --json)")
+        else:
+            print(json.dumps(out, indent=2, sort_keys=True))
+    return 0 if out.get("ok", True) else 1
     print(f"Task: {result.task_description}")
     print()
     print("Delegation prompt:")
@@ -4492,8 +4541,42 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write files according to strategy (disables dry-run).",
     )
+    import_payload_p.add_argument(
+        "--namespace-scripts",
+        action="store_true",
+        help="Force install PLATE scripts under scripts/plate/ (#621)",
+    )
+    import_payload_p.add_argument(
+        "--no-namespace-scripts",
+        action="store_true",
+        help="Keep PLATE scripts at scripts/ even if target has scripts/",
+    )
     import_payload_p.add_argument("--json", action="store_true", help="Output JSON report")
     import_payload_p.set_defaults(func=cmd_import_payload)
+
+    payload = sub.add_parser(
+        "payload",
+        help="Discover PLATE template payload (list/root/manifest/classify; #621)",
+    )
+    payload_sub = payload.add_subparsers(dest="payload_command")
+    p_list = payload_sub.add_parser("list", help="List payload files + classification")
+    p_list.add_argument("--template-repo", help="Optional explicit template root")
+    p_list.add_argument("--include-excluded", action="store_true")
+    p_list.add_argument("--json", action="store_true")
+    p_list.set_defaults(func=cmd_payload, payload_command="list")
+    p_root = payload_sub.add_parser("root", help="Resolve payload root path")
+    p_root.add_argument("--template-repo", help="Optional explicit template root")
+    p_root.add_argument("--json", action="store_true")
+    p_root.set_defaults(func=cmd_payload, payload_command="root")
+    p_man = payload_sub.add_parser("manifest", help="Show template payload manifest")
+    p_man.add_argument("--json", action="store_true")
+    p_man.set_defaults(func=cmd_payload, payload_command="manifest")
+    p_cls = payload_sub.add_parser("classify", help="Classify a relative payload path")
+    p_cls.add_argument("path", help="Relative path e.g. scripts/validate_plate_repo.sh")
+    p_cls.add_argument("--template-repo", help="Optional explicit template root")
+    p_cls.add_argument("--json", action="store_true")
+    p_cls.set_defaults(func=cmd_payload, payload_command="classify")
+    payload.set_defaults(func=cmd_payload, payload_command="list")
 
     qanda = sub.add_parser("qanda", help="Curiosity / Q&A Mode (list, view, record answers on Question issues; Epic #139)")
     qanda.add_argument("--repo", help="owner/name; defaults to git remote origin")

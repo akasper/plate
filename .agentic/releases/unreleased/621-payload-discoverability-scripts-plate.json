@@ -1,0 +1,16 @@
+{
+  "slug": "621-payload-discoverability-scripts-plate",
+  "change_type": "feature",
+  "surface": "src/plate_core/payload_surface.py, import_payload, gh plate payload, plate_payload_* MCP",
+  "summary": "Payload discoverability + scripts/plate convention (#621): gh plate payload list|root|manifest|classify and MCP tools; import-payload auto-namespaces PLATE scripts under scripts/plate/ when product scripts/ exists and rewrites workflow script refs.",
+  "migration_impact": "New CLI/MCP surfaces. Adoption imports into repos with existing scripts/ install helpers under scripts/plate/ (auto). Force with --namespace-scripts / --no-namespace-scripts. Greenfield empty scripts/ keeps top-level scripts/ paths.",
+  "migration_guidance": [
+    "1. Use gh plate payload list --json instead of hand-locating package payload paths.",
+    "2. On adopt with existing scripts/: expect scripts/plate/* and workflows pointing at scripts/plate/.",
+    "3. Wire scripts/plate/validate_plate_repo.sh into CI if namespaced.",
+    "4. Read scripts/plate/README.md in the payload for the convention."
+  ],
+  "agent_notes": "Prefer plate_payload_list / gh plate payload list before improvising cp from site-packages. Prefer import-payload over manual script copies.",
+  "breaking": false,
+  "links": ["#621", "#616", "#617", "#619", "#615", "#633"]
+}
