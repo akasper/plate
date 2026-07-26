@@ -248,9 +248,14 @@ def cmd_health(args: argparse.Namespace) -> int:
         spent = report.budget_spent_today if report.budget_spent_today is not None else "?"
         risk = report.budget_risk_tolerance or "?"
         en = "on" if report.budget_enabled else "off"
+        pause = getattr(report, "budget_would_pause_next_cycle", None)
+        throttle = getattr(report, "budget_would_throttle_next_cycle", None)
+        gate = ""
+        if pause is not None or throttle is not None:
+            gate = f" would_pause={pause} would_throttle={throttle}"
         print(
             f"Budget (#634): remaining={rem}/{daily} spent_today={spent} "
-            f"burn={burn}% pressure={pressure} risk={risk} enabled={en}"
+            f"burn={burn}% pressure={pressure} risk={risk} enabled={en}{gate}"
         )
     if report.spec_audit_status:
         counts = report.spec_audit_counts or {}
@@ -294,7 +299,8 @@ def cmd_what_next(args: argparse.Namespace) -> int:
             f"epics={snap.get('open_epic_count')} "
             f"prs={snap.get('open_pr_count')} "
             f"budget={snap.get('budget_pressure')} "
-            f"remaining={snap.get('budget_remaining_tokens')}"
+            f"remaining={snap.get('budget_remaining_tokens')} "
+            f"would_pause={snap.get('would_pause_next_cycle')}"
         )
     if out.get("prompt_segment"):
         print(f"Prompt: {out.get('prompt_segment')}")
@@ -2875,10 +2881,30 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         print(f"Autopilot score: {status.get('autopilot_score')}")
         print(f"Burn rate: {status.get('burn_rate', 0)}%")
         if status.get("budget_remaining_tokens") is not None:
-            print(f"Budget remaining tokens: {status.get('budget_remaining_tokens')}")
+            daily = status.get("daily_limit")
+            rem = status.get("budget_remaining_tokens")
+            if daily is not None:
+                print(f"Budget remaining tokens: {rem}/{daily}")
+            else:
+                print(f"Budget remaining tokens: {rem}")
+        # #634/#653 surface fields from durable snapshot (also in --json)
+        if status.get("budget_pressure") is not None:
+            print(f"Budget pressure: {status.get('budget_pressure')}")
+        if status.get("would_pause_next_cycle") is not None or status.get(
+            "would_throttle_next_cycle"
+        ):
+            print(
+                f"Next cycle gate: would_pause={status.get('would_pause_next_cycle')} "
+                f"would_throttle={status.get('would_throttle_next_cycle')}"
+            )
+        if status.get("spent_today_durable") is not None:
+            print(f"Spent today (durable): {status.get('spent_today_durable')}")
         print(f"Due procedures: {status.get('due_procedures', [])}")
         if status.get("throttled_actions"):
             print(f"Throttled actions: {status.get('throttled_actions')}")
+        if status.get("open_human_checkpoints"):
+            cps = status.get("open_human_checkpoints") or []
+            print(f"Open checkpoints: {len(cps)}")
         print(f"Last cycle: {status.get('last_cycle')}")
         return 0
 
