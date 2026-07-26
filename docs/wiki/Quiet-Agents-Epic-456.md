@@ -1,6 +1,6 @@
 # Quiet Agents (Epic #456) — outcomes summary
 
-**Status:** Children complete; epic closed via Documentation PR (2026-07-26).  
+**Status:** **Closed** — children #457/#458 complete; closeout docs on `release` (2026-07-26).  
 **Parent context:** Long-running autonomous loops (`/loop`, babysit watch, autonomy cycles) must stay readable and low-noise without weakening traceability.
 
 ## Problem
@@ -34,7 +34,7 @@ Primary sources: `plugin/agents/plate.agent.md`, `src/plate_core/agent_guidance.
 ## Follow-ons (out of this epic)
 
 - Further cost/context trims and persona thinness under autonomy/PM epics (#470, #660).
-- Bug #512 (process docs gaps) remains a separate stub if still open.
+- Agent collab docs #509–#512 closed via guidance + research note (PR #825).
 
 ## Links
 
