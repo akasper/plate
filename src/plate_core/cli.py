@@ -3363,8 +3363,13 @@ def cmd_migrate_apply(args: argparse.Namespace) -> int:
 
 
 def cmd_spec_audit(args: argparse.Namespace) -> int:
-    """#338: audit SPEC.md against release fragments + path evidence."""
-    from .spec_audit import audit_spec, format_spec_audit_markdown
+    """#338/#339: audit SPEC.md; optional follow-up issue plan/apply."""
+    from .spec_audit import (
+        apply_audit_followups,
+        audit_spec,
+        format_spec_audit_markdown,
+        plan_audit_followups,
+    )
 
     report = audit_spec(
         getattr(args, "repo_root", None) or ".",
@@ -3372,6 +3377,32 @@ def cmd_spec_audit(args: argparse.Namespace) -> int:
         spec_path=getattr(args, "spec", None),
     )
     data = report.to_dict()
+    followups = bool(getattr(args, "followups", False) or getattr(args, "apply_followups", False))
+    if followups:
+        out = apply_audit_followups(
+            report,
+            repo=getattr(args, "repo", None),
+            apply=bool(getattr(args, "apply_followups", False)),
+            max_issues=int(getattr(args, "max_followups", 10) or 10),
+        )
+        if getattr(args, "json", False):
+            print(json.dumps({"audit": data, "followups": out}, indent=2, sort_keys=True))
+        else:
+            print(format_spec_audit_markdown(report), end="")
+            print(f"\nFollow-ups: actionable={out.get('actionable_count')} dry_run={out.get('dry_run')}")
+            if out.get("created"):
+                for c in out["created"]:
+                    print(f"  created #{c.get('number')} {c.get('url')}")
+            draft = (out.get("spec_draft") or {}).get("markdown") or ""
+            if draft and getattr(args, "show_draft", False):
+                print("\n" + draft)
+            elif (out.get("spec_draft") or {}).get("items"):
+                print(
+                    f"SPEC draft items: {(out.get('spec_draft') or {}).get('items')} "
+                    f"(use --show-draft; human approval required to edit SPEC.md)"
+                )
+        return 0 if data.get("ok", False) else 1
+
     if getattr(args, "json", False):
         print(json.dumps(data, indent=2, sort_keys=True))
     else:
@@ -4589,6 +4620,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path to .agentic/releases",
     )
     spec_audit_p.add_argument("--json", action="store_true", help="Output JSON report")
+    spec_audit_p.add_argument(
+        "--followups",
+        action="store_true",
+        help="Plan follow-up issues + SPEC draft from findings (#339)",
+    )
+    spec_audit_p.add_argument(
+        "--apply-followups",
+        action="store_true",
+        help="Create follow-up GitHub issues (never writes SPEC.md; #339)",
+    )
+    spec_audit_p.add_argument(
+        "--max-followups",
+        type=int,
+        default=10,
+        help="Max actionable issues to plan/create (default 10)",
+    )
+    spec_audit_p.add_argument(
+        "--show-draft",
+        action="store_true",
+        help="Print proposed additive SPEC markdown draft",
+    )
+    spec_audit_p.add_argument(
+        "--repo",
+        help="owner/name for issue creation (default: git remote)",
+    )
     spec_audit_p.set_defaults(func=cmd_spec_audit)
 
     payload = sub.add_parser(
