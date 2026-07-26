@@ -2,7 +2,7 @@
   "slug": "660-what-next-pm-orchestrator",
   "change_type": "feature",
   "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
-  "summary": "Empty-pipeline what_next prefers Project Manager (#660): checkpoints → tick delegated loops → plate_pm_run_cycle dry-run before generic epic prose; live get_what_next loads local pm_status when no open PRs/ready issues.",
+  "summary": "Empty-pipeline what_next prefers Project Manager (#660): checkpoints \u2192 tick delegated loops \u2192 plate_pm_run_cycle dry-run before generic epic prose; live get_what_next loads local pm_status when no open PRs/ready issues.",
   "migration_impact": "Agents following plate_what_next / gh plate what-next will be steered to gh plate pm --status|--run|--tick-loops instead of only 'advance an open Epic' text when the PR pipeline is empty. risk_tolerance=off still dry-runs PM; no auto-merge.",
   "migration_guidance": [
     "1. Upgrade plate-core for what_next PM priorities.",
@@ -10,7 +10,15 @@
     "3. Use plate_pm_run_cycle dry_run first; --apply only when risk and human judgment allow.",
     "4. Ready Features and open PRs still outrank PM."
   ],
-  "agent_notes": "Closes a Phase-3 gap: orchestrator loop (what_next → assign → budget → checkpoints) is discoverable from the default recommender. Epic #660 may stay open for fuller multi-agent runtime; this slice does not claim browser #661.",
+  "agent_notes": "Closes a Phase-3 gap: orchestrator loop (what_next \u2192 assign \u2192 budget \u2192 checkpoints) is discoverable from the default recommender. Epic #660 may stay open for fuller multi-agent runtime; this slice does not claim browser #661.",
   "breaking": false,
-  "links": ["#660", "#654", "#648", "#631", "#470", "#793"]
+  "links": [
+    "#660",
+    "#654",
+    "#648",
+    "#631",
+    "#470",
+    "#793",
+    "#811"
+  ]
 }
