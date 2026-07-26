@@ -465,6 +465,7 @@ def run_scheduled_op(
     risk_tolerance: str = "medium",
     approved: bool = False,
     checkpoint_id: str | None = None,
+    shadow_ack: str | None = None,
     note: str = "",
     base_dir: Path | None = None,
     fleet_base_dir: Path | None = None,
@@ -478,6 +479,9 @@ def run_scheduled_op(
     #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
     hydrate remaining tokens from durable budget snapshot and block if est exceeds remaining.
     Explicit ``budget_remaining`` wins; ``use_live_budget=False`` skips live hydrate.
+
+    #645: live high/critical ops must pass ``gate_high_impact`` (shadow_ack + approval
+    or approved checkpoint). Dry-run only attaches a shadow preview.
 
     #641/#644: on live (non-dry-run) unblocked runs for safe ops, open a fleet handoff
     when ``dispatch_fleet`` is True (refactor / implement-epic-slice). Never auto-publishes.
@@ -573,6 +577,14 @@ def run_scheduled_op(
     # #645: always attach a shadow/simulate preview for medium+ scheduled ops
     shadow_report: dict[str, Any] | None = None
     shadow_id: str | None = None
+    shadow_gate: dict[str, Any] | None = None
+    action_kind = str(op.get("action_kind") or op_id).replace("-", "_")
+    scope = {
+        "scheduled_op": op_id,
+        "risk_level": risk,
+        "procedure_risk": risk,
+        "skip_git_preview": False,
+    }
     if risk in ("medium", "high", "critical") or needs_human:
         try:
             from .autonomy import AutonomyEngine
@@ -584,17 +596,16 @@ def run_scheduled_op(
                 "enabled": eng.enabled,
                 "risk_tolerance": risk_tolerance,
             }
-            # Map op id to action_kind when catalog uses hyphens
-            action_kind = str(op.get("action_kind") or op_id).replace("-", "_")
-            shadow = eng.simulate_action(
-                action_kind,
-                scope={
-                    "scheduled_op": op_id,
-                    "risk_level": risk,
-                    "procedure_risk": risk,
-                    "skip_git_preview": False,
-                },
-            )
+            if base_dir is not None:
+                root = Path(base_dir)
+                eng.checkpoint_base_dir = root / "checkpoints"
+                eng.ledger_base_dir = root / "ledger"
+                # durable shadow store under op base for isolated tests
+                try:
+                    eng.shadow_base_dir = root / "shadow"  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+            shadow = eng.simulate_action(action_kind, scope=scope)
             shadow_report = shadow.to_dict()
             shadow_id = shadow.shadow_id
             packet = dict(packet)
@@ -608,8 +619,36 @@ def run_scheduled_op(
                 "worktree_plan": shadow_report.get("worktree_plan"),
                 "gate_preview": shadow_report.get("gate_preview"),
             }
+            # Live high/critical: hard gate_high_impact (shadow_ack + approval).
+            # Dry-run stays preview-only so operators can inspect shadow_id first.
+            if (not dry_run) and risk in ("high", "critical") and not blocked:
+                gate = eng.gate_high_impact(
+                    action_kind if risk != "critical" else "deploy",
+                    shadow_ack=shadow_ack or None,
+                    approved=approved,
+                    checkpoint_id=checkpoint_id,
+                    scope=scope,
+                    create_checkpoint=True,
+                )
+                shadow_gate = gate
+                if gate.get("shadow_report"):
+                    shadow_report = gate.get("shadow_report")
+                    shadow_id = (shadow_report or {}).get("shadow_id") or shadow_id
+                if gate.get("blocked"):
+                    blocked = True
+                    reasons.append(
+                        gate.get("reason")
+                        or "high-impact scheduled op requires shadow_ack + approval (#645)"
+                    )
+                    if gate.get("checkpoint_id") and not checkpoint_id:
+                        checkpoint_id = str(gate.get("checkpoint_id"))
         except Exception as exc:
             reasons.append(f"shadow preview unavailable: {exc}")
+            if (not dry_run) and risk in ("high", "critical") and not blocked:
+                blocked = True
+                reasons.append(
+                    "high-impact live op blocked: shadow gate unavailable"
+                )
 
     ts = _now()
     merged_notes = list(budget_notes) + list(reasons) + ([note] if note else [])
@@ -676,6 +715,17 @@ def run_scheduled_op(
     if shadow_report is not None:
         out["shadow_report"] = shadow_report
         out["shadow_id"] = shadow_id
+    if shadow_gate is not None:
+        out["shadow_gate"] = {
+            "blocked": shadow_gate.get("blocked"),
+            "mode": shadow_gate.get("mode"),
+            "reason": shadow_gate.get("reason"),
+            "checkpoint_id": shadow_gate.get("checkpoint_id"),
+        }
+        if shadow_gate.get("checkpoint_id"):
+            out["checkpoint_id"] = shadow_gate.get("checkpoint_id")
+    if checkpoint_id:
+        out["checkpoint_id"] = checkpoint_id
     if blocked:
         out["error"] = "; ".join(reasons)
         out["reason"] = out["error"]
