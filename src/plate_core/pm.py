@@ -311,15 +311,17 @@ def dispatch_loop_from_assignment(
     budget_remaining: int | None = None,
     feature_loop_base_dir: Path | None = None,
     bug_loop_base_dir: Path | None = None,
+    artifact_base_dir: Path | None = None,
     budget_base_dir: Path | None = None,
     record_ledger: bool = True,
 ) -> dict[str, Any]:
-    """Open durable #638/#639 loop from a delegated PM assignment (#660 bridge).
+    """Open durable #638/#639 loop or #632 artifact from a delegated PM assignment (#660 bridge).
 
     - work_type ``implement`` / feature-like → ``start_feature_loop`` (live budget hydrate)
     - work_type ``bugfix`` → ``start_bug_loop``
-    Other types are skipped (design/research/release stay as packets/fleet only).
-    Never merges; loops emit agent packets only.
+    - work_type ``design`` / ``research`` → ``propose_artifact`` (#632 pending approval)
+    Other types are skipped (release/qanda stay as packets/fleet only).
+    Never merges; loops emit agent packets only; artifacts stay pending until human decide.
     """
     work_type = str(asg.get("work_type") or "").lower()
     title = str(asg.get("work_title") or asg.get("title") or "PM work")
@@ -393,10 +395,75 @@ def dispatch_loop_from_assignment(
             "result": out,
         }
 
+    if work_type in ("design", "research"):
+        from .design_research_approval import propose_artifact
+
+        packet = asg.get("packet") if isinstance(asg.get("packet"), dict) else {}
+        summary = str(
+            asg.get("summary")
+            or packet.get("summary")
+            or packet.get("prompt_segment")
+            or f"PM-proposed {work_type} for approval: {title}"
+        )[:2000]
+        content_path = str(
+            asg.get("content_path") or packet.get("content_path") or ""
+        )
+        content_excerpt = str(
+            asg.get("content_excerpt") or packet.get("content_excerpt") or ""
+        )[:2000]
+        out = propose_artifact(
+            work_type,
+            title,
+            summary,
+            content_path=content_path,
+            content_excerpt=content_excerpt,
+            related_issue=issue_n,
+            actor="pm",
+            base_dir=artifact_base_dir,
+            budget_remaining=budget_remaining,
+            use_live_budget=budget_remaining is None,
+        )
+        if out.get("blocked") or out.get("reason") == "budget":
+            return {
+                "ok": False,
+                "loop_kind": "artifact",
+                "run_id": out.get("id"),
+                "stage": "blocked",
+                "blocked": True,
+                "error": out.get("error") or out.get("reason") or "budget",
+                "budget_remaining": out.get("budget_remaining"),
+                "result": out,
+            }
+        if record_ledger:
+            _ledger_pm(
+                "pm_dispatch_artifact",
+                "proposed",
+                f"PM proposed {work_type} artifact for #{issue_n or 'n/a'}: {title[:80]}",
+                cost=out.get("cost_estimate_tokens"),
+                risk=risk_tol,
+                impact=risk,
+                metadata={
+                    "proposal_id": out.get("id"),
+                    "work_type": work_type,
+                    "assignment_id": asg.get("assignment_id"),
+                },
+            )
+        return {
+            "ok": bool(out.get("ok", True)),
+            "loop_kind": "artifact",
+            "run_id": out.get("id"),
+            "stage": out.get("status") or "pending",
+            "blocked": False,
+            "error": out.get("error"),
+            "budget_remaining": out.get("budget_remaining"),
+            "ask_user_question": out.get("ask_user_question"),
+            "result": out,
+        }
+
     return {
         "ok": False,
         "skipped": True,
-        "reason": f"work_type={work_type} has no bug/feature loop mapping",
+        "reason": f"work_type={work_type} has no bug/feature/artifact mapping",
         "loop_kind": None,
     }
 
@@ -551,6 +618,7 @@ class ProjectManager:
         fleet_base_dir: Path | None = None,
         feature_loop_base_dir: Path | None = None,
         bug_loop_base_dir: Path | None = None,
+        artifact_base_dir: Path | None = None,
         budget_base_dir: Path | None = None,
         dispatch_fleet: bool = True,
         dispatch_loops: bool = True,
@@ -561,6 +629,7 @@ class ProjectManager:
         self.fleet_base_dir = fleet_base_dir
         self.feature_loop_base_dir = feature_loop_base_dir
         self.bug_loop_base_dir = bug_loop_base_dir
+        self.artifact_base_dir = artifact_base_dir
         self.budget_base_dir = budget_base_dir
         self.dispatch_fleet = dispatch_fleet
         self.dispatch_loops = dispatch_loops
@@ -659,11 +728,12 @@ class ProjectManager:
         limit: int = 10,
         complete_when_done: bool = True,
     ) -> list[dict[str, Any]]:
-        """Refresh #638/#639 loop state for delegated PM assignments (#660 deepen).
+        """Refresh #638/#639 loop and #632 artifact state for delegated PM assignments (#660 deepen).
 
         - Syncs ``loop_stage`` / packet from durable feature/bug loop runs
+        - Syncs artifact proposal status (pending/approved/revise/reject)
         - On babysit + fetch_gates + not dry_run: may advance when gates clean
-        - When loop reaches ``done``, marks assignment done (if complete_when_done)
+        - When loop reaches ``done`` or artifact is terminal, marks assignment done
         Does not invent git/PR work; agents still execute stage packets.
         """
         results: list[dict[str, Any]] = []
@@ -678,9 +748,77 @@ class ProjectManager:
             kind = str(
                 asg.get("loop_kind") or (asg.get("packet") or {}).get("loop_kind") or ""
             ).lower()
-            if not rid or kind not in ("feature", "bug"):
+            if not rid or kind not in ("feature", "bug", "artifact"):
                 continue
             n += 1
+
+            # #632 artifact proposals: sync decide status; complete on terminal outcomes
+            if kind == "artifact":
+                try:
+                    from .design_research_approval import get_proposal
+
+                    prop = get_proposal(str(rid), base_dir=self.artifact_base_dir)
+                except Exception as exc:
+                    results.append(
+                        {
+                            "assignment_id": asg.get("assignment_id"),
+                            "loop_run_id": rid,
+                            "loop_kind": kind,
+                            "ok": False,
+                            "error": str(exc),
+                        }
+                    )
+                    continue
+                if not prop:
+                    results.append(
+                        {
+                            "assignment_id": asg.get("assignment_id"),
+                            "loop_run_id": rid,
+                            "loop_kind": kind,
+                            "ok": False,
+                            "error": f"artifact proposal not found: {rid}",
+                        }
+                    )
+                    continue
+                stage = str(prop.get("status") or "pending")
+                asg["loop_stage"] = stage
+                asg.setdefault("packet", {})["loop_stage"] = stage
+                asg.setdefault("packet", {})["loop_status"] = stage
+                asg.setdefault("packet", {})["artifact_proposal_id"] = prop.get("id") or rid
+                if prop.get("ask_user_question"):
+                    asg.setdefault("packet", {})["artifact_ask_user_question"] = prop[
+                        "ask_user_question"
+                    ]
+                completed = False
+                terminal = stage in ("approved", "rejected", "reject", "cancelled")
+                if complete_when_done and terminal:
+                    asg["status"] = "done" if stage == "approved" else "cancelled"
+                    if stage in ("rejected", "reject"):
+                        asg["status"] = "cancelled"
+                    asg["updated_at"] = _now()
+                    asg.setdefault("packet", {})["completion_note"] = (
+                        f"artifact {rid} → {stage}"
+                    )
+                    completed = True
+                    changed = True
+                else:
+                    asg["updated_at"] = _now()
+                    changed = True
+                results.append(
+                    {
+                        "assignment_id": asg.get("assignment_id"),
+                        "loop_run_id": rid,
+                        "loop_kind": kind,
+                        "ok": True,
+                        "stage": stage,
+                        "run_status": stage,
+                        "completed_assignment": completed,
+                        "advanced": False,
+                        "dry_run": dry_run,
+                    }
+                )
+                continue
+
             tick: dict[str, Any]
             try:
                 if kind == "feature":
@@ -1177,6 +1315,7 @@ class ProjectManager:
                                     budget_remaining=budget,
                                     feature_loop_base_dir=self.feature_loop_base_dir,
                                     bug_loop_base_dir=self.bug_loop_base_dir,
+                                    artifact_base_dir=self.artifact_base_dir,
                                     budget_base_dir=self.budget_base_dir,
                                     record_ledger=True,
                                 )
@@ -1196,6 +1335,14 @@ class ProjectManager:
                                     asg.setdefault("packet", {})["loop_stage"] = loop_out.get(
                                         "stage"
                                     )
+                                    if loop_out.get("loop_kind") == "artifact":
+                                        asg.setdefault("packet", {})[
+                                            "artifact_proposal_id"
+                                        ] = loop_out.get("run_id")
+                                        if loop_out.get("ask_user_question"):
+                                            asg.setdefault("packet", {})[
+                                                "artifact_ask_user_question"
+                                            ] = loop_out["ask_user_question"]
                                     if loop_out.get("blocked"):
                                         asg["status"] = "blocked"
                                         asg.setdefault("packet", {})["loop_block"] = loop_out.get(
