@@ -377,6 +377,12 @@ def create_handoff(
         try:
             from .checkpoint import create_checkpoint
 
+            # Isolate checkpoints under fleet base_dir when provided so tests /
+            # alternate roots never pollute repo-root .agentic/checkpoints
+            # (which pause PM/AutonomyEngine via pause_autonomy).
+            cp_base = None
+            if base_dir is not None:
+                cp_base = Path(base_dir) / "checkpoints"
             cp = create_checkpoint(
                 title=f"Fleet handoff {fa} → {ta}",
                 reason=task_s[:200],
@@ -392,6 +398,7 @@ def create_handoff(
                 },
                 created_by="fleet",
                 pause_autonomy=True,
+                base_dir=cp_base,
             )
             if isinstance(cp, dict) and cp.get("id"):
                 out["checkpoint_id"] = cp["id"]

@@ -1,0 +1,27 @@
+{
+  "slug": "644-648-fleet-checkpoint-base-dir-spec-audit-paths",
+  "change_type": "fix",
+  "surface": "src/plate_core/fleet.py, src/plate_core/spec_audit.py, SPEC.md, .gitignore",
+  "summary": "Isolate fleet handoff checkpoints under handoff base_dir (stop test/deploy pollution of .agentic/checkpoints that paused PM); harden SPEC audit to skip host slash-commands/ellipsis and alias plugin/.mcp.json; align SPEC architecture with payload import, SPEC audit followups, loop budget hydrate, and fleet accept-dispatch (#644/#648/#338/#340).",
+  "migration_impact": "Local only: existing junk pending Deploy-prod checkpoints under .agentic/checkpoints/ may be cancelled (gh plate checkpoint decide <id> --decision cancel) or deleted; directory is now gitignored like other ephemeral .agentic runtime state. SPEC path wording and audit heuristics change; no template payload force-copy.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release branch containing this fix.",
+    "2. If plate_pm_status or autonomy shows open_checkpoints from test Deploy prod handoffs, cancel them: gh plate checkpoint list --open then decide cancel.",
+    "3. Re-run gh plate spec-audit; stale /loop /mcp findings should clear; remaining undocumented findings need real SPEC intent updates.",
+    "4. Optional: rm -rf .agentic/checkpoints/ after cancelling if only local test debris remains."
+  ],
+  "agent_notes": "create_handoff(base_dir=...) now writes checkpoints to base_dir/checkpoints. Never create high-risk fleet handoffs against the real repo root during unit tests. SPEC is human-owned; this PR only fixes false path citations and documents already-landed surfaces.",
+  "breaking": false,
+  "links": [
+    "#644",
+    "#648",
+    "#338",
+    "#340",
+    "#654",
+    "#634",
+    "#616"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
