@@ -141,6 +141,24 @@ class TestRecommendWhatNext(unittest.TestCase):
         self.assertEqual(out["priority"], "pm_tick")
         self.assertIn("tick", out["next_action"])
 
+    def test_pm_proposed_prefers_approve_run(self):
+        """Proposed queue rows must route to status=run, not another dry-run assign (#892)."""
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 5},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            pm_status={
+                "open_checkpoints": 0,
+                "delegated": 0,
+                "proposed": 3,
+                "queue_size": 3,
+                "risk_tolerance": "off",
+            },
+        )
+        self.assertEqual(out["priority"], "pm_propose_run")
+        self.assertIn("approve", out["next_action"].lower())
+        self.assertIn("status=run", out["prompt_segment"])
+
     def test_ready_issue_still_beats_pm(self):
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 5},

@@ -370,7 +370,32 @@ def recommend_what_next(
             "priority": "pm_tick",
         }
 
-    if open_epics > 0 or pm_queue > 0 or pm_proposed > 0 or pm_open > 0:
+    # Proposed rows first: explicit Approve & run before opening more assigns (#891/#892)
+    if pm_proposed > 0:
+        return {
+            "next_action": (
+                f"approve & run {pm_proposed} proposed PM assignment(s) "
+                f"(plate_pm_complete status=run / feed Approve & run)"
+            ),
+            "prompt_segment": (
+                "PM queue has proposed assignments awaiting explicit consent (#660/#892). "
+                "1) plate_pm_queue / gh plate pm --queue --status proposed  "
+                "2) Present feed/TUI Approve & run  "
+                "3) plate_pm_complete <assignment_id> status=run "
+                "(or gh plate pm --complete ID --complete-status run) to promote→delegated "
+                "with fleet/loop dispatch — works under risk=off  "
+                "4) implement/tick the delegated packet, then plate_pm_complete status=done. "
+                "Do not open more PM assigns until proposed rows are run, deferred, or cancelled. "
+                "Do not start browser #661."
+                + quiet
+            ),
+            "rationale": f"pm proposed={pm_proposed} need explicit approve&run (#660/#892)",
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "pm_propose_run",
+        }
+
+    if open_epics > 0 or pm_queue > 0 or pm_open > 0:
         action = (
             "run Project Manager cycle dry-run then assign/tick "
             f"(epics={open_epics}, queue={pm_queue}, proposed={pm_proposed})"
@@ -380,10 +405,9 @@ def recommend_what_next(
             "1) gh plate release status  2) plate_pm_status / gh plate pm --status  "
             "3) plate_pm_run_cycle dry_run=true (or gh plate pm --run) to propose "
             "persona assignments from what_next+feed  4) with human judgment, "
-            "--apply only if risk allows; when risk_tolerance=off keep dry-run and "
-            "implement the top assignment yourself on a feature/ branch targeting "
-            "release. Use plate_pm_tick_loops for delegated loops. Do not start "
-            "browser #661."
+            "Approve & run via plate_pm_complete status=run (works under risk=off); "
+            "do not rely on autopilot when risk_tolerance=off. "
+            "Use plate_pm_tick_loops for delegated loops. Do not start browser #661."
             + quiet
         )
         return {
