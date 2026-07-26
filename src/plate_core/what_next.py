@@ -6,8 +6,9 @@ Priority (cheap → specific):
 3. Missing labels → bootstrap
 4. Actionable local SPEC audit findings (#340 health/drift)
 5. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
-6. Open Epics → advance ready child Feature/Bug (generic when no candidates)
-7. Pending fragments / release status
+6. Project Manager orchestrator (#660): checkpoints → tick delegated loops → dry-run cycle
+7. Open Epics → advance ready child Feature/Bug (generic when no candidates)
+8. Pending fragments / release status
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ def recommend_what_next(
     agent_type: str | None = None,
     pending_fragment_count: int | None = None,
     ready_issues: list[dict[str, Any]] | None = None,
+    pm_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure recommendation from pre-fetched state (testable).
 
@@ -31,11 +33,13 @@ def recommend_what_next(
     ``budget``: get_budget_snapshot() or cost dashboard budget dict.
     ``open_prs``: list of {number, title, baseRefName, mergeable?} for open PRs.
     ``ready_issues``: list of {number, title, labels?} implementable Feature/Bug candidates.
+    ``pm_status``: get_pm_status().to_dict() shape for #660 orchestrator ranking.
     """
     h = dict(health or {})
     b = dict(budget or {})
     prs = list(open_prs or [])
     ready = list(ready_issues or [])
+    pm = dict(pm_status or {})
     labels_ok = bool(h.get("label_coverage_ok", False))
     open_epics = int(h.get("open_epic_count") or 0)
     pressure = str(
@@ -62,6 +66,20 @@ def recommend_what_next(
         sa_actionable_n = 0
     sa_next = h.get("spec_audit_next_step")
 
+    def _pm_int(key: str) -> int:
+        try:
+            return int(pm.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    pm_checkpoints = _pm_int("open_checkpoints")
+    pm_delegated = _pm_int("delegated")
+    pm_proposed = _pm_int("proposed")
+    pm_queue = _pm_int("queue_size")
+    pm_open = _pm_int("open_assignments")
+    pm_pressure = str(pm.get("budget_pressure") or "ok").lower()
+    pm_risk = str(pm.get("risk_tolerance") or risk or "off")
+
     state = {
         "label_coverage_ok": labels_ok,
         "open_epic_count": open_epics,
@@ -74,6 +92,13 @@ def recommend_what_next(
         "ready_issue_count": len(ready),
         "spec_audit_status": sa_status,
         "spec_audit_actionable_count": sa_actionable_n,
+        "pm_open_checkpoints": pm_checkpoints,
+        "pm_delegated": pm_delegated,
+        "pm_proposed": pm_proposed,
+        "pm_queue_size": pm_queue,
+        "pm_open_assignments": pm_open,
+        "pm_budget_pressure": pm_pressure,
+        "pm_risk_tolerance": pm_risk,
     }
 
     # 1) Budget critical/exhausted — even under risk=off (surface gates)
@@ -226,7 +251,74 @@ def recommend_what_next(
             ],
         }
 
-    # 5) Open Epics → advance ready child (generic when no candidates listed)
+    # 6) Project Manager orchestrator (#660) — empty pipeline prefers PM over generic epic
+    if pm_checkpoints > 0:
+        return {
+            "next_action": (
+                f"resolve {pm_checkpoints} open PM/human checkpoint(s) before new assignments"
+            ),
+            "prompt_segment": (
+                "PM is paused on open checkpoints (#648/#660). Run plate_pm_status / "
+                "gh plate pm --status, list open checkpoints, and only proceed after "
+                "human approval or checkpoint resolution. Do not plate_pm_run_cycle "
+                "--apply while checkpoints remain."
+                + quiet
+            ),
+            "rationale": "pm_status.open_checkpoints > 0 (#660)",
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "pm_checkpoint",
+        }
+
+    if pm_delegated > 0:
+        return {
+            "next_action": (
+                f"tick {pm_delegated} delegated PM loop assignment(s) "
+                f"(plate_pm_tick_loops / gh plate pm --tick-loops)"
+            ),
+            "prompt_segment": (
+                "PM queue has delegated feature/bug loops (#660). Run "
+                "`gh plate pm --tick-loops` or plate_pm_tick_loops (dry_run first), "
+                "babysit any open PRs those loops surface, then plate_pm_complete when "
+                "done. risk_tolerance=off still allows tick/status; avoid unsupervised "
+                "AutonomyEngine --loop."
+                + quiet
+            ),
+            "rationale": f"pm delegated={pm_delegated} (#660)",
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "pm_tick",
+        }
+
+    if open_epics > 0 or pm_queue > 0 or pm_proposed > 0 or pm_open > 0:
+        action = (
+            "run Project Manager cycle dry-run then assign/tick "
+            f"(epics={open_epics}, queue={pm_queue}, proposed={pm_proposed})"
+        )
+        prompt = (
+            "Pipeline empty — prefer the #660 PM orchestrator over ad-hoc epic browsing. "
+            "1) gh plate release status  2) plate_pm_status / gh plate pm --status  "
+            "3) plate_pm_run_cycle dry_run=true (or gh plate pm --run) to propose "
+            "persona assignments from what_next+feed  4) with human judgment, "
+            "--apply only if risk allows; when risk_tolerance=off keep dry-run and "
+            "implement the top assignment yourself on a feature/ branch targeting "
+            "release. Use plate_pm_tick_loops for delegated loops. Do not start "
+            "browser #661."
+            + quiet
+        )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": (
+                f"empty pipeline → PM orchestrator (#660); "
+                f"open_epics={open_epics} queue={pm_queue} pressure={pm_pressure}"
+            ),
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "pm",
+        }
+
+    # 7) Open Epics fallback when PM signals unavailable
     if open_epics > 0:
         action = (
             "advance an open Epic: pick a child Feature/Bug with tests sketched, "
@@ -237,7 +329,7 @@ def recommend_what_next(
             "Feature: read full issue, add/update tests first, implement smallest "
             "change, author fragment in .agentic/releases/unreleased/, PR with clean "
             "title + labels (Feature + area) + Closes #N in body only, babysit with "
-            "gh plate pr babysit. Prefer v1.0 path (#654): safety → feed → PM."
+            "gh plate pr babysit. Prefer plate_pm_run_cycle when available (#660)."
             + quiet
         )
         return {
@@ -402,13 +494,15 @@ def get_what_next(
     include_budget: bool = True,
     include_fragments: bool = True,
     include_ready_issues: bool = True,
+    include_pm: bool = True,
 ) -> dict[str, Any]:
-    """Live what-next: health + budget snapshot + optional open PRs + ready issues."""
+    """Live what-next: health + budget + optional open PRs + ready issues + PM status."""
     health: dict[str, Any] = {}
     budget: dict[str, Any] = {}
     open_prs: list[dict[str, Any]] = []
     ready_issues: list[dict[str, Any]] = []
     pending_fragment_count: int | None = None
+    pm_status: dict[str, Any] | None = None
 
     try:
         from .health import get_health
@@ -487,6 +581,16 @@ def get_what_next(
         except Exception:
             pending_fragment_count = None
 
+    if include_pm and not open_prs and not ready_issues:
+        # Local PM queue/status only when pipeline is empty (avoid work when PRs win).
+        try:
+            from .pm import get_pm_status
+
+            # repo=None keeps status offline-safe (queue + .plate); live autonomy optional.
+            pm_status = get_pm_status(None)
+        except Exception:
+            pm_status = None
+
     return recommend_what_next(
         health=health,
         budget=budget,
@@ -494,4 +598,5 @@ def get_what_next(
         agent_type=agent_type,
         pending_fragment_count=pending_fragment_count,
         ready_issues=ready_issues,
+        pm_status=pm_status,
     )

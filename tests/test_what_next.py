@@ -48,12 +48,14 @@ class TestRecommendWhatNext(unittest.TestCase):
         self.assertEqual(out["priority"], "bootstrap")
 
     def test_epic_when_healthy(self):
+        """Empty pipeline + open epics prefer PM orchestrator (#660) over bare epic prose."""
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 2},
             budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
             open_prs=[],
         )
-        self.assertEqual(out["priority"], "epic")
+        self.assertEqual(out["priority"], "pm")
+        self.assertIn("Project Manager", out["next_action"])
 
     def test_ready_issue_before_generic_epic(self):
         out = recommend_what_next(
@@ -101,6 +103,46 @@ class TestRecommendWhatNext(unittest.TestCase):
             open_prs=[{"number": 804, "title": "in flight", "baseRefName": "release"}],
         )
         self.assertEqual(out["priority"], "open_pr")
+
+    def test_pm_checkpoint_before_cycle(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 3},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            pm_status={"open_checkpoints": 2, "delegated": 1, "queue_size": 3},
+        )
+        self.assertEqual(out["priority"], "pm_checkpoint")
+        self.assertEqual(out["state_snapshot"]["pm_open_checkpoints"], 2)
+
+    def test_pm_tick_when_delegated(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 1},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            pm_status={"open_checkpoints": 0, "delegated": 2, "proposed": 0, "queue_size": 2},
+        )
+        self.assertEqual(out["priority"], "pm_tick")
+        self.assertIn("tick", out["next_action"])
+
+    def test_ready_issue_still_beats_pm(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 5},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            ready_issues=[{"number": 793, "title": "ready", "labels": ["Feature"]}],
+            pm_status={"open_checkpoints": 0, "delegated": 4, "queue_size": 4},
+        )
+        self.assertEqual(out["priority"], "ready_issue")
+
+    def test_epic_fallback_without_pm_and_zero_epics_uses_fragments(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 0},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            pending_fragment_count=3,
+            pm_status={},
+        )
+        self.assertEqual(out["priority"], "fragments")
 
     def test_open_pr_still_beats_ready_issue(self):
         out = recommend_what_next(
