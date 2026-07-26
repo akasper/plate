@@ -485,13 +485,17 @@ def assign_work(
     ts = _now()
 
     blocked = False
+    # risk=off disables AutonomyEngine auto-delegate only — still propose packets
+    # for human/agent explicit apply (AGENTS.md + #654 posture). Budget can block.
+    auto_delegate = (risk_tolerance or "off").lower() not in ("off", "")
     reason_parts = [f"matched skill for {work_type} → {agent['id']}"]
     if budget_remaining is not None and est > budget_remaining:
         blocked = True
         reason_parts.append(f"blocked: est {est} > budget remaining {budget_remaining}")
-    if risk_tolerance == "off" and work_type not in ("qanda", "checkpoint"):
-        blocked = True
-        reason_parts.append("blocked: risk_tolerance=off")
+    if not auto_delegate and work_type not in ("qanda", "checkpoint"):
+        reason_parts.append(
+            "auto-delegate disabled: risk_tolerance=off (propose only; human/explicit apply)"
+        )
 
     work_number = item.get("number") or item.get("issue_number") or item.get("feature_number") or item.get("bug_number")
     try:
@@ -517,6 +521,7 @@ def assign_work(
             or f"Execute {work_type} for: {item.get('title')}. Follow TDD, quiet ops, Closes in PR body.",
             "impact": impact,
             "risk_tolerance": risk_tolerance,
+            "auto_delegate": bool(auto_delegate) and not blocked,
             "number": work_number_int,
             "issue_number": work_number_int,
             "labels": list(item.get("labels") or []) or None,
@@ -1459,9 +1464,16 @@ class ProjectManager:
                 if budget is not None:
                     budget = max(0, int(budget) - int(asg["estimated_tokens"]))
                 if not dry_run:
-                    if asg.get("requires_checkpoint") and asg.get("checkpoint_id"):
-                        # leave proposed until checkpoint approved
+                    risk_off = str(status.risk_tolerance or "off").lower() in ("off", "")
+                    needs_cp = bool(asg.get("requires_checkpoint") and asg.get("checkpoint_id"))
+                    # risk=off: propose only (no autopilot delegate). Checkpoint path also
+                    # stays proposed until approve. Matches AGENTS.md: off disables engine
+                    # autopilot, not human/agent explicit Feature/Bug work (#654/#660).
+                    if needs_cp or risk_off or asg.get("packet", {}).get("auto_delegate") is False:
                         asg["status"] = "proposed"
+                        asg.setdefault("packet", {})["auto_delegate"] = False if risk_off else asg.get(
+                            "packet", {}
+                        ).get("auto_delegate", not needs_cp)
                     else:
                         asg["status"] = "delegated"
                         try:
