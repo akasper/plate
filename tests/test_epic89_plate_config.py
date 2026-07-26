@@ -361,6 +361,21 @@ class PlateConfigRuntimeTests(unittest.TestCase):
         # Unknown under token_budget
         with self.assertRaises(PlateConfigError):
             validate_plate_config({"version": "1.2", "autonomy": {"token_budget": {"foo": 1}}}, strict=True)
+        # #634 per_action is a first-class optional token_budget key
+        validate_plate_config(
+            {
+                "version": "1.2",
+                "autonomy": {
+                    "token_budget": {
+                        "daily": 50000,
+                        "per_cycle": 8000,
+                        "per_action": 2000,
+                        "action": "throttle",
+                    }
+                },
+            },
+            strict=True,
+        )
 
     def test_local_overrides_win_over_extension_contribution(self):
         with tempfile.TemporaryDirectory() as tmp:
