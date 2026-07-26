@@ -1,0 +1,15 @@
+{
+  "slug": "619-bootstrap-adoption-mode",
+  "change_type": "feature",
+  "surface": "src/plate_core/bootstrap.py, gh plate bootstrap --adopt, plate_bootstrap MCP, docs/migration/adoption-guide.md",
+  "summary": "Adoption mode for bootstrap (#619): detect mature/existing repos, --adopt/--existing-repo/--greenfield flags, tailored copy guidance toward import-payload conservative, skip duplicate Epic/Question seeds when present, adoption next_steps + adoption-guide.md.",
+  "migration_impact": "Bootstrap report JSON gains adoption_mode, adoption_signals, next_steps. CLI gains --adopt/--existing-repo/--greenfield/--local-root. Greenfield path unchanged when --greenfield or no mature signals.",
+  "migration_guidance": [
+    "1. For existing repos: gh plate import-payload --strategy conservative --dry-run then --apply.",
+    "2. Then gh plate bootstrap --adopt --apply for GitHub-side baseline.",
+    "3. Read docs/migration/adoption-guide.md; greenfield still uses docs/bootstrap/new-repository-checklist.md."
+  ],
+  "agent_notes": "Prefer --adopt or auto-detect when adopting; never seed duplicate Epics/Questions over existing planning work. Local payload via import-payload first.",
+  "breaking": false,
+  "links": ["#619", "#616", "#620", "#633", "#615"]
+}
