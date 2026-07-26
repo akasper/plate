@@ -1,0 +1,10 @@
+{
+  "slug": "660-pm-budget-pause-risk-off",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py",
+  "summary": "ProjectManager.run_cycle pauses on durable critical/exhausted budget or would_pause_next_cycle even when autonomy enabled=false or risk_tolerance=off, matching surface-gate doctrine for what_next/costs feed (#634/#785).",
+  "migration_impact": "PM cycles may pause under risk=off when spend leaves remaining below per_cycle. Operators raise token_budget or wait for UTC day rollover / reset spend to resume.",
+  "agent_notes": "Do not treat risk=off as permission to assign work when budget_pressure is critical or would_pause_next_cycle is true. Resolve budget_gate first.",
+  "breaking": false,
+  "links": ["#660", "#634", "#653", "#785", "#787"]
+}
