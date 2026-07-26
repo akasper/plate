@@ -73,8 +73,12 @@ class TestFeed631(unittest.TestCase):
         self.assertEqual(feed["generated_for"], "user_feed")
         self.assertEqual(feed["counts"]["questions"], 1)
         self.assertEqual(feed["counts"]["tasks"], 1)
-        self.assertEqual(feed["counts"]["returned"], 2)
-        self.assertEqual(len(feed["presentation"]), 2)
+        # May include durable local fleet/planning signals; require injected Q+T present
+        types = {i.get("item_type") for i in feed.get("items") or []}
+        self.assertIn("question", types)
+        self.assertIn("task", types)
+        self.assertGreaterEqual(feed["counts"]["returned"], 2)
+        self.assertGreaterEqual(len(feed["presentation"]), 2)
         self.assertIn("PLATE Feed", feed["markdown"])
         self.assertIn("PLATE-FEED:BEGIN", feed["marker"])
         self.assertIn("ask_user_question", feed["tui_hint"])
@@ -231,6 +235,7 @@ class TestFeed631(unittest.TestCase):
         self.assertEqual(items[0].item_type, "pm_assignment")
         self.assertEqual(items[0].id, "asg-abc")
         self.assertIn("plate_pm_complete", items[0].prompt_segment)
+        self.assertIn("status=run", items[0].prompt_segment)
         self.assertIn("Cautious", items[0].title)
 
     def test_ask_user_question_pm_assignment(self):
@@ -244,10 +249,14 @@ class TestFeed631(unittest.TestCase):
                 title="Ship X → Dev",
                 rank=20,
                 impact="medium",
+                badges=["pm", "proposed", "implement", "medium"],
+                labels=["implement", "proposed"],
             )
         )
         self.assertTrue(any(o["id"] == "approve_run" for o in payload["options"]))
         self.assertTrue(any(o["id"] == "cancel" for o in payload["options"]))
+        approve = next(o for o in payload["options"] if o["id"] == "approve_run")
+        self.assertIn("status=run", approve["description"])
 
     def test_loop_stage_rank_and_tui(self):
         from plate_core.feed import ask_user_question_payload, loop_stage_feed_rank
