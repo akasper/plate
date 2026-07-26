@@ -23,6 +23,23 @@ class TestRecommendWhatNext(unittest.TestCase):
         self.assertIn("budget", out["next_action"].lower())
         self.assertEqual(out["state_snapshot"]["budget_pressure"], "exhausted")
 
+    def test_budget_gate_on_would_pause_next_cycle_elevated(self):
+        """#634: elevated pressure + next-cycle pause still ranks budget_gate first."""
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 5},
+            budget={
+                "budget_pressure": "elevated",
+                "remaining_tokens": 3000,
+                "daily_limit": 10000,
+                "would_pause_next_cycle": True,
+                "risk_tolerance": "medium",
+            },
+            open_prs=[{"number": 1, "title": "x", "baseRefName": "release"}],
+        )
+        self.assertEqual(out["priority"], "budget_gate")
+        self.assertTrue(out["state_snapshot"]["would_pause_next_cycle"])
+        self.assertIn("would_pause", out["next_action"])
+
     def test_open_pr_before_epic(self):
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 3},
