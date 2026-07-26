@@ -18,8 +18,9 @@ class TemplatePayloadManifestTests(unittest.TestCase):
     def test_manifest_exists_and_loads(self):
         self.assertTrue(manifest_path().exists())
         manifest = load_template_payload_manifest()
-        self.assertEqual(manifest.schema_version, 1)
+        self.assertIn(manifest.schema_version, (1, 2))
         self.assertGreater(len(manifest.include_globs), 0)
+        self.assertGreater(len(manifest.path_rules), 0)
 
     def test_manifest_classifies_payload_files_as_scaffolding(self):
         manifest = load_template_payload_manifest()
@@ -33,6 +34,49 @@ class TemplatePayloadManifestTests(unittest.TestCase):
         manifest = load_template_payload_manifest()
         self.assertFalse(should_include_template_file(".agentic/COSTS.md", manifest))
         self.assertEqual(classify_template_file(".agentic/COSTS.md", manifest), "exclude")
+
+    def test_path_rules_ci_install_as(self):
+        """#617: differing ci.yml plans install as plate-ci.yml."""
+        from plate_core.template_payload import match_path_rule, resolve_conflict_plan
+
+        manifest = load_template_payload_manifest()
+        rule = match_path_rule(".github/workflows/ci.yml", manifest)
+        self.assertIsNotNone(rule)
+        self.assertEqual(rule.on_conflict, "install_as")
+        self.assertEqual(rule.install_as, ".github/workflows/plate-ci.yml")
+
+        plan = resolve_conflict_plan(
+            ".github/workflows/ci.yml",
+            dest_exists=True,
+            identical=False,
+            strategy="safe",
+            manifest=manifest,
+        )
+        self.assertEqual(plan["action"], "create_as")
+        self.assertEqual(plan["target_path"], ".github/workflows/plate-ci.yml")
+
+        green = resolve_conflict_plan(
+            ".github/workflows/ci.yml",
+            dest_exists=False,
+            identical=False,
+            strategy="safe",
+            manifest=manifest,
+        )
+        self.assertEqual(green["action"], "create")
+        self.assertEqual(green["target_path"], ".github/workflows/ci.yml")
+
+    def test_path_rules_root_conflict(self):
+        from plate_core.template_payload import resolve_conflict_plan
+
+        manifest = load_template_payload_manifest()
+        plan = resolve_conflict_plan(
+            "package.json",
+            dest_exists=True,
+            identical=False,
+            strategy="safe",
+            manifest=manifest,
+        )
+        self.assertEqual(plan["action"], "conflict")
 
 
 class TemplatePayloadInventoryTests(unittest.TestCase):
