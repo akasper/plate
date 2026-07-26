@@ -353,7 +353,7 @@ def build_package(
         budget_base = Path(base_dir) / "budget"
     if effective_remaining is None and use_live_budget:
         try:
-            from .autonomy import get_budget_snapshot
+            from .autonomy import durable_budget_surface_pause, get_budget_snapshot
 
             snap = get_budget_snapshot(
                 estimate_tokens=est_tokens,
@@ -366,6 +366,36 @@ def build_package(
                     f"budget hydrated: remaining_tokens={effective_remaining} "
                     f"pressure={snap.get('budget_pressure')}"
                 )
+            # #634/#875: hard-block on durable would_pause / critical pressure
+            surface = durable_budget_surface_pause(snap)
+            if surface.get("pause"):
+                budget_notes.append(
+                    surface.get("reason") or "blocked: durable budget rails"
+                )
+                rem_out = (
+                    int(effective_remaining)
+                    if effective_remaining is not None
+                    else (
+                        surface.get("remaining")
+                        if surface.get("remaining") is not None
+                        else 0
+                    )
+                )
+                return {
+                    "ok": False,
+                    "blocked": True,
+                    "reason": "budget",
+                    "error": (
+                        f"budget: durable rails pause packaging "
+                        f"(pressure={surface.get('pressure')} remaining={rem_out})"
+                    ),
+                    "cost_estimate_tokens": est_tokens,
+                    "budget_remaining": int(rem_out) if rem_out is not None else 0,
+                    "budget_pressure": surface.get("pressure"),
+                    "would_pause_next_cycle": True,
+                    "cost_estimate": cost_est,
+                    "notes": budget_notes,
+                }
         except Exception as exc:
             budget_notes.append(f"budget hydrate skipped: {exc}")
 
