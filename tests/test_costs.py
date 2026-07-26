@@ -328,6 +328,79 @@ class CostDashboard653Tests(unittest.TestCase):
         self.assertEqual(dash["budget"]["spent_today_durable"], 9200)
         self.assertEqual(dash["budget"]["remaining_tokens"], 800)
         self.assertIn(dash["budget"]["budget_pressure"], ("critical", "exhausted"))
+        # rem < per_cycle projects next-cycle pause or throttle depending on action policy
+        self.assertTrue(
+            dash["budget"]["would_pause_next_cycle"]
+            or dash["budget"]["would_throttle_next_cycle"]
+        )
+
+    def test_dashboard_pause_surface_under_risk_off(self):
+        """#634: risk=off still projects next-cycle pause/throttle when rem < per_cycle."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        client = self._client_two_reports()
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 43000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                def to_dict(self):
+                    return {
+                        "autonomy": {
+                            "enabled": False,
+                            "risk_tolerance": "off",
+                            "token_budget": {
+                                "daily": 50000,
+                                "per_cycle": 8000,
+                                "action": "pause",
+                            },
+                        }
+                    }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()), patch(
+                "plate_core.plate_config.load_plate_config", return_value=_Cfg()
+            ):
+                dash = get_cost_dashboard(
+                    repo="akasper/plate",
+                    client=client,
+                    autonomy_status={
+                        "enabled": False,
+                        "risk_tolerance": "off",
+                        "burn_rate": 0.0,
+                        "autopilot_score": 10,
+                        "open_human_checkpoints": [],
+                        "due_procedures": [],
+                    },
+                    health={},
+                    budget_base_dir=bdir,
+                )
+        self.assertFalse(dash["budget"]["enforcement_active"])
+        self.assertEqual(dash["budget"]["remaining_tokens"], 7000)
+        self.assertEqual(dash["budget"]["budget_pressure"], "critical")
+        self.assertTrue(
+            dash["budget"]["would_pause_next_cycle"]
+            or dash["budget"]["would_throttle_next_cycle"]
+        )
+        gates = [i for i in dash["feed_items"] if i.get("type") == "budget_gate"]
+        self.assertTrue(gates, dash["feed_items"])
 
 
 if __name__ == "__main__":

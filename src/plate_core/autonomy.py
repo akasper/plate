@@ -1944,7 +1944,12 @@ def get_budget_snapshot(
     pressure = "ok"
     if remaining_tokens <= 0 or (remaining_usd is not None and remaining_usd <= 0):
         pressure = "exhausted"
-    elif burn_rate >= 90 or remaining_tokens < max(1, int(daily * 0.1)):
+    elif (
+        burn_rate >= 90
+        or remaining_tokens < max(1, int(daily * 0.1))
+        # Match cost dashboard: remaining below per_cycle ⇒ next cycle cannot fit.
+        or remaining_tokens < max(1, int(per_cycle))
+    ):
         # Align with get_cost_dashboard "critical" so feed/what_next budget_gate fires.
         pressure = "critical"
     elif burn_rate >= 70:

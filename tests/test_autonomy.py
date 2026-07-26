@@ -813,6 +813,51 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertTrue(snap["would_pause_next_cycle"])
             self.assertIn("per_cycle", snap.get("gate_reason") or "")
 
+    def test_get_budget_snapshot_rem_below_per_cycle_is_critical(self):
+        """remaining < per_cycle ⇒ critical pressure (align cost dashboard / feed)."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            # remaining 7000, daily 50000 → not <10%; burn 86% elevated alone;
+            # per_cycle 8000 forces critical.
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 43000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 50000,
+                        "per_cycle": 8000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["remaining_tokens"], 7000)
+            self.assertEqual(snap["budget_pressure"], "critical")
+            self.assertTrue(snap["would_pause_next_cycle"])
+
     def test_get_budget_snapshot_exhausted_projects_next_cycle_pause(self):
         """#634: remaining 0 → would_pause_next_cycle without requiring estimate."""
         import tempfile
