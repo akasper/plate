@@ -1,0 +1,15 @@
+{
+  "slug": "795-budget-snapshot-day-rollover",
+  "change_type": "fix",
+  "surface": "src/plate_core/autonomy.py get_budget_snapshot, plate_what_next budget_gate, gh plate costs/autonomy budget UX",
+  "summary": "Fix #795: get_budget_snapshot ignores prior-UTC-day durable spend (match AutonomyEngine._load_durable_spend) so what_next/feed no longer report false exhausted after day rollover.",
+  "migration_impact": "After upgrade, budget snapshots and plate_what_next treat yesterday's spend.json counters as zero until a same-day charge rewrites the file. Same-day spend behavior unchanged.",
+  "migration_guidance": [
+    "1. Upgrade plate-core so get_budget_snapshot applies UTC day rollover.",
+    "2. Optional: delete stale .agentic/budget/spend.json if operators want a clean same-day file (not required).",
+    "3. No .plate schema change."
+  ],
+  "agent_notes": "If what_next says budget_gate exhausted but autonomy --status shows full remaining, ensure this fix is present. Prefer status remaining from snapshot after day rollover. Do not delete spend without cause when date is today.",
+  "breaking": false,
+  "links": ["#795", "#634", "#653", "#787"]
+}
