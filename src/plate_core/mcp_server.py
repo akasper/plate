@@ -1864,6 +1864,21 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 releases_dir=args.get("releases_dir"),
                 spec_path=args.get("spec_path") or args.get("spec"),
             ).to_dict()
+        elif name == "plate_spec_audit_followups":
+            from .spec_audit import apply_audit_followups, audit_spec
+
+            report = audit_spec(
+                args.get("repo_root") or ".",
+                releases_dir=args.get("releases_dir"),
+                spec_path=args.get("spec_path") or args.get("spec"),
+            )
+            payload = apply_audit_followups(
+                report,
+                repo=args.get("repo"),
+                apply=bool(args.get("apply", False)),
+                max_issues=int(args.get("max_issues") or 10),
+            )
+            payload["audit_counts"] = report.counts
         elif name == "plate_perform_test_coverage_audit":
             from .mcp.audit_tools import PerformTestCoverageAuditTool
             payload = PerformTestCoverageAuditTool.execute(repo=repo, dry_run=args.get("dry_run", True))
@@ -4585,6 +4600,31 @@ def run() -> None:
                                             "type": "string",
                                             "description": "Optional .agentic/releases path.",
                                         },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_spec_audit_followups",
+                                "description": "From SPEC audit findings, plan (default) or create follow-up issues and a SPEC draft table (#339). Never writes SPEC.md. apply=true creates GitHub issues with human-checkpoint bodies.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {"type": "string"},
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name for issue creation",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "Create issues when true (default false dry-run).",
+                                            "default": False,
+                                        },
+                                        "max_issues": {
+                                            "type": "integer",
+                                            "description": "Cap actionable issues (default 10).",
+                                        },
+                                        "spec_path": {"type": "string"},
+                                        "releases_dir": {"type": "string"},
                                     },
                                 },
                             },

@@ -89,6 +89,75 @@ class TestSpecAudit(unittest.TestCase):
 
         self.assertIn("spec-audit", build_parser().format_help())
 
+    def test_route_finding_kinds(self):
+        from plate_core.spec_audit import SpecFinding, route_finding_to_issue
+
+        undoc = route_finding_to_issue(
+            SpecFinding(
+                kind="undocumented",
+                title="Fragment not in SPEC: foo",
+                confidence="medium",
+                evidence=["surface x"],
+                metadata={"slug": "foo-bar"},
+            )
+        )
+        self.assertTrue(undoc["actionable"])
+        self.assertEqual(undoc["issue_type"], "Documentation")
+        self.assertIn("PLATE-SPEC-AUDIT-FOLLOWUP", undoc["body"])
+
+        low = route_finding_to_issue(
+            SpecFinding(
+                kind="undocumented",
+                title="low conf",
+                confidence="low",
+                evidence=[],
+                metadata={"slug": "low"},
+            )
+        )
+        self.assertEqual(low["issue_type"], "Question")
+
+        stale = route_finding_to_issue(
+            SpecFinding(kind="stale_evidence", title="missing path", confidence="medium")
+        )
+        self.assertEqual(stale["issue_type"], "Bug")
+
+        aligned = route_finding_to_issue(
+            SpecFinding(kind="aligned", title="ok", confidence="high")
+        )
+        self.assertFalse(aligned["actionable"])
+
+    def test_plan_followups_and_draft(self):
+        from plate_core.spec_audit import (
+            SpecAuditReport,
+            SpecFinding,
+            draft_spec_update_from_findings,
+            plan_audit_followups,
+        )
+
+        report = SpecAuditReport(
+            ok=True,
+            repo_root=".",
+            spec_path="SPEC.md",
+            findings=[
+                SpecFinding(
+                    kind="undocumented",
+                    title="Fragment not reflected: widget",
+                    confidence="medium",
+                    evidence=["widget surface"],
+                    metadata={"slug": "widget"},
+                    recommendation="Add to SPEC",
+                ),
+                SpecFinding(kind="aligned", title="ok", confidence="high"),
+            ],
+        )
+        plan = plan_audit_followups(report, max_issues=5)
+        self.assertEqual(plan["actionable_count"], 1)
+        self.assertTrue(plan["dry_run"])
+        draft = draft_spec_update_from_findings(report.findings)
+        self.assertTrue(draft["needs_human_approval"])
+        self.assertIn("PLATE-SPEC-AUDIT-DRAFT", draft["markdown"])
+        self.assertGreaterEqual(draft["items"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
