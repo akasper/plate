@@ -1859,6 +1859,30 @@ def get_budget_snapshot(
             elif over_usd:
                 gate_reason = f"{gate_reason}: cost_ceiling_usd"
 
+    # Project next-cycle gate when no estimate (or estimate did not trip) — match
+    # get_cost_dashboard: remaining < per_cycle means a typical cycle would breach
+    # (#634/#653 feed/PM would_pause_next_cycle). Surface-visible even under risk=off.
+    if not would_pause and not would_throttle:
+        next_cycle_est = max(1, int(per_cycle))
+        next_would_breach = remaining_tokens < next_cycle_est or (
+            remaining_usd is not None and remaining_usd <= 0
+        )
+        if next_would_breach:
+            if action_policy == "warn":
+                if not gate_reason:
+                    gate_reason = (
+                        "remaining below per_cycle (warn policy — would proceed next cycle)"
+                    )
+            elif action_policy == "throttle":
+                would_throttle = True
+                if not gate_reason:
+                    gate_reason = "remaining below per_cycle (next cycle would throttle)"
+            else:
+                # pause (default) and any other policy treat as pause for visibility
+                would_pause = True
+                if not gate_reason:
+                    gate_reason = "remaining below per_cycle (next cycle would pause)"
+
     # Pressure without estimate — vocabulary shared with costs dashboard / what_next /
     # PM gates (#634/#653): ok | elevated | critical | exhausted (never "high").
     pressure = "ok"

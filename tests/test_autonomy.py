@@ -757,6 +757,53 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertEqual(snap["remaining_tokens"], 500)
             self.assertEqual(snap["budget_pressure"], "critical")
             self.assertNotEqual(snap["budget_pressure"], "high")
+            # Next-cycle projection without estimate (remaining < per_cycle).
+            self.assertTrue(snap["would_pause"])
+            self.assertTrue(snap["would_pause_next_cycle"])
+            self.assertIn("per_cycle", snap.get("gate_reason") or "")
+
+    def test_get_budget_snapshot_exhausted_projects_next_cycle_pause(self):
+        """#634: remaining 0 → would_pause_next_cycle without requiring estimate."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 10000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 2000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["remaining_tokens"], 0)
+            self.assertEqual(snap["budget_pressure"], "exhausted")
+            self.assertTrue(snap["would_pause_next_cycle"])
 
     def test_get_budget_snapshot_stale_day_zeros_spend(self):
         """#795: prior UTC day spend must not exhaust snapshot/what_next after rollover."""

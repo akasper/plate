@@ -1,0 +1,10 @@
+{
+  "slug": "634-budget-snapshot-next-cycle-projection",
+  "change_type": "fix",
+  "surface": "src/plate_core/autonomy.py",
+  "summary": "get_budget_snapshot projects would_pause/would_throttle (and next-cycle aliases) when remaining is below per_cycle even without an estimate, matching cost dashboard next-cycle breach semantics for feed/PM/ops status.",
+  "migration_impact": "Snapshots with low remaining now set would_pause_next_cycle=true without requiring estimated_tokens. Consumers that only checked would_pause after an estimate now see the gate earlier.",
+  "agent_notes": "Treat would_pause_next_cycle as true when remaining < per_cycle (or remaining=0). Pressure remains critical/exhausted independently.",
+  "breaking": false,
+  "links": ["#634", "#653", "#660"]
+}
