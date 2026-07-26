@@ -299,6 +299,11 @@ class TestRecommendWhatNext(unittest.TestCase):
                             "labels": [{"name": "Feature"}],
                         },
                         {
+                            "number": 453,
+                            "title": "Licensing docs",
+                            "labels": [{"name": "Documentation"}],
+                        },
+                        {
                             "number": 634,
                             "title": "budgets",
                             "labels": [
@@ -313,6 +318,7 @@ class TestRecommendWhatNext(unittest.TestCase):
         nums = [i["number"] for i in out]
         self.assertIn(793, nums)
         self.assertIn(340, nums)
+        self.assertIn(453, nums)  # Documentation is agent-actionable
         self.assertNotIn(999, nums)
         self.assertNotIn(634, nums)
 

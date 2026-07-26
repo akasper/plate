@@ -215,7 +215,7 @@ def _ready_issue_candidates_from_what_next(wn: dict[str, Any]) -> list[dict[str,
             "item_type": "feature",
             "labels": labs,
             "impact": "medium",
-            "reason": f"what_next ready candidate #{n}",
+            "reason": f"ready candidate #{n}",
             "source": source,
             "prompt_segment": (
                 f"Implement GitHub issue #{n}: {title}. "
@@ -223,13 +223,22 @@ def _ready_issue_candidates_from_what_next(wn: dict[str, Any]) -> list[dict[str,
                 f"with Closes #{n} in body only. Quiet ops."
             ),
         }
-        # refine type from labels for bugfix etc.
+        # refine type from labels for bugfix / docs etc.
         wt = classify_work_type(row)
         if wt == "bugfix":
             row["type"] = "bug"
             row["item_type"] = "bug"
             row["prompt_segment"] = (
                 f"Fix GitHub Bug #{n}: {title}. Reproduce, regression test, PR to "
+                f"release with Closes #{n} in body only. Quiet ops."
+            )
+        elif "documentation" in {
+            str(x.get("name") if isinstance(x, dict) else x).lower() for x in labs
+        }:
+            row["type"] = "documentation"
+            row["item_type"] = "documentation"
+            row["prompt_segment"] = (
+                f"Documentation issue #{n}: {title}. Commit docs artifact, PR to "
                 f"release with Closes #{n} in body only. Quiet ops."
             )
         out.append(row)
@@ -1552,6 +1561,26 @@ class ProjectManager:
                 }
             )
             return items[:limit]
+        # Always harvest ready Feature/Bug/Documentation candidates directly.
+        # what_next may prioritize pm_propose_run / pm_tick / checkpoints and omit
+        # ready_issues even when implementable issues exist (#660/#895/#654).
+        issue_nums: set[int] = set()
+        try:
+            from .what_next import fetch_ready_issue_candidates
+
+            fetched = fetch_ready_issue_candidates(self.repo, limit=limit) or []
+            ready_from_fetch = _ready_issue_candidates_from_what_next(
+                {"ready_issues": fetched}
+            )
+            for row in ready_from_fetch:
+                try:
+                    issue_nums.add(int(row.get("number")))
+                except (TypeError, ValueError):
+                    pass
+            items.extend(ready_from_fetch)
+        except Exception:
+            pass
+
         try:
             from .what_next import get_what_next
 
@@ -1561,12 +1590,21 @@ class ProjectManager:
                 if wn.get("priority") in ("budget_gate", "open_pr", "ready_issue")
                 else "medium"
             )
-            # Prefer concrete ready Feature/Bug issues over a process blob so
-            # assign_work / approve&run can open #638/#639 loops with issue numbers (#660).
-            ready_rows = _ready_issue_candidates_from_what_next(wn if isinstance(wn, dict) else {})
-            if ready_rows:
-                items.extend(ready_rows)
-            else:
+            # Merge any what_next-attached ready rows not already fetched
+            ready_rows = _ready_issue_candidates_from_what_next(
+                wn if isinstance(wn, dict) else {}
+            )
+            for row in ready_rows:
+                try:
+                    n = int(row.get("number"))
+                except (TypeError, ValueError):
+                    continue
+                if n in issue_nums:
+                    continue
+                issue_nums.add(n)
+                items.append(row)
+            # Process blob only when we have no concrete issue candidates
+            if not issue_nums:
                 row: dict[str, Any] = {
                     "id": "what_next",
                     "title": wn.get("next_action"),
@@ -1585,14 +1623,15 @@ class ProjectManager:
                     row["ready_issues"] = wn.get("ready_issues")
                 items.append(row)
         except Exception:
-            items.append(
-                {
-                    "id": "what_next-fallback",
-                    "title": "Inspect plate_health and open Epics",
-                    "type": "process",
-                    "impact": "medium",
-                }
-            )
+            if not issue_nums:
+                items.append(
+                    {
+                        "id": "what_next-fallback",
+                        "title": "Inspect plate_health and open Epics",
+                        "type": "process",
+                        "impact": "medium",
+                    }
+                )
         try:
             from .feed import get_user_feed
 
