@@ -503,6 +503,8 @@ def run_scheduled_op(
         root = Path(base_dir)
         budget_base = root / "budget"
         ledger_base = root / "ledger"
+    surface_budget_pause = False
+    surface_budget_pressure: str | None = None
     if effective_budget is None and use_live_budget:
         try:
             from .autonomy import get_budget_snapshot
@@ -518,15 +520,28 @@ def run_scheduled_op(
                     f"budget hydrated: remaining_tokens={effective_budget} "
                     f"pressure={budget_snap.get('budget_pressure')}"
                 )
+            # #634/#871: hard-block on durable next-cycle pause rails (same as
+            # fleet/PM/AutonomyEngine). risk_tolerance=off only disables autopilot —
+            # surface gates still apply. Prior note-only path was a no-op when
+            # remaining already exceeded est.
+            surface_budget_pressure = (
+                str(budget_snap.get("budget_pressure") or "").lower() or None
+            )
             would_pause_snap = bool(
                 budget_snap.get("would_pause_next_cycle")
                 if budget_snap.get("would_pause_next_cycle") is not None
                 else budget_snap.get("would_pause")
             )
-            if would_pause_snap and effective_budget is not None:
-                # Mirror dashboard pressure: treat would_pause as zero room for new spend
-                if int(effective_budget) < est_tokens:
-                    budget_notes.append("budget snapshot would_pause_next_cycle")
+            if (
+                surface_budget_pressure in ("critical", "exhausted")
+                or would_pause_snap
+                or (effective_budget is not None and int(effective_budget) <= 0)
+            ):
+                surface_budget_pause = True
+                budget_notes.append(
+                    budget_snap.get("gate_reason")
+                    or "blocked: durable budget would_pause / pressure gate"
+                )
         except Exception as exc:
             budget_notes.append(f"budget hydrate skipped: {exc}")
 
@@ -541,6 +556,13 @@ def run_scheduled_op(
     if risk == "critical" and not approved:
         blocked = True
         reasons.append("critical op always needs explicit approved=true")
+    if surface_budget_pause:
+        blocked = True
+        rem_out = int(effective_budget) if effective_budget is not None else 0
+        reasons.append(
+            f"budget: durable rails pause scheduled op "
+            f"(pressure={surface_budget_pressure} remaining={rem_out})"
+        )
     if effective_budget is not None and est_tokens > int(effective_budget):
         blocked = True
         reasons.append(
@@ -643,6 +665,8 @@ def run_scheduled_op(
         "cost_estimate_tokens": est_tokens,
         "cost_estimate": cost_est,
         "budget_remaining": effective_budget,
+        "budget_pressure": surface_budget_pressure,
+        "would_pause_next_cycle": bool(surface_budget_pause),
         "notes": list(merged_notes),
         "log_marker": (
             f"<!-- PLATE-PROCEDURE-RUN:{op_id} cadence={op.get('cadence')} "
