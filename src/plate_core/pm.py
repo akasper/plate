@@ -567,11 +567,15 @@ def assign_work(
 
 
 def _count_open_checkpoints(checkpoint_base_dir: Path | None = None) -> int:
-    """Count pending #648 checkpoints (local durable) plus best-effort."""
-    try:
-        from .checkpoint import list_checkpoints
+    """Count pending #648 checkpoints that pause unsupervised cycles.
 
-        rows = list_checkpoints(status="pending", base_dir=checkpoint_base_dir, limit=100)
+    Uses ``list_open_checkpoints`` (filters ``pause_autonomy``) so advisory
+    shadow-gate records under risk=off do not freeze PM forever (#645/#648/#660).
+    """
+    try:
+        from .checkpoint import list_open_checkpoints
+
+        rows = list_open_checkpoints(base_dir=checkpoint_base_dir, limit=100)
         return len(rows)
     except Exception:
         return 0

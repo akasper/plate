@@ -234,6 +234,36 @@ class TestPMCycle(unittest.TestCase):
             st = pm.get_status()
             self.assertGreaterEqual(st.open_checkpoints, 1)
 
+    def test_status_ignores_advisory_shadow_checkpoints(self):
+        """risk=off shadow gates must not freeze PM open_checkpoints count."""
+        with tempfile.TemporaryDirectory() as tmp_pm, tempfile.TemporaryDirectory() as tmp_cp:
+            from plate_core.checkpoint import create_checkpoint_for_shadow
+
+            create_checkpoint_for_shadow(
+                {
+                    "action_kind": "deploy",
+                    "impact": "critical",
+                    "shadow_id": "shadow-adv-pm",
+                    "approval_reasons": ["risk_tolerance=off"],
+                    "estimated_tokens": 1000,
+                    "estimated_cost_usd": 0.01,
+                    "predicted_side_effects": [],
+                    "gate_preview": [],
+                },
+                risk_tolerance="off",
+                autonomy_enabled=False,
+                base_dir=Path(tmp_cp),
+            )
+            pm = ProjectManager(
+                repo=None,
+                state_dir=Path(tmp_pm),
+                checkpoint_base_dir=Path(tmp_cp),
+            )
+            st = pm.get_status()
+            self.assertEqual(st.open_checkpoints, 0)
+            report = pm.run_cycle(dry_run=True, max_assignments=1)
+            self.assertNotEqual(report.get("pause_kind"), "checkpoints")
+
     def test_paused_on_budget_pressure(self):
         pm = ProjectManager(repo=None)
         with patch.object(

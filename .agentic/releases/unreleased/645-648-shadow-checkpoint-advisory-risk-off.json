@@ -1,0 +1,22 @@
+{
+  "slug": "645-648-shadow-checkpoint-advisory-risk-off",
+  "change_type": "fix",
+  "surface": "src/plate_core/checkpoint.py, src/plate_core/pm.py",
+  "summary": "Shadow-gate checkpoints under risk_tolerance=off / autonomy disabled are advisory (pause_autonomy=False); PM counts only pause_autonomy open checkpoints so risk=off shadow previews no longer freeze orchestration forever (#645/#648/#660).",
+  "migration_impact": "Existing pending shadow-deploy checkpoints created under risk=off may still have pause_autonomy=true; cancel them once (gh plate checkpoint decide <id> --decision cancel) or re-run gate after upgrade. New shadow gates at risk=off are advisory only.",
+  "migration_guidance": [
+    "1. Upgrade plate-core to a release that includes this fix.",
+    "2. List open pause gates: gh plate checkpoint list (or inspect .agentic/checkpoints).",
+    "3. Cancel stale risk=off shadow-only pending checkpoints that should not freeze PM.",
+    "4. Confirm plate_pm_status open_checkpoints drops when only advisory gates remain."
+  ],
+  "agent_notes": "create_checkpoint_for_shadow(risk=off or autonomy_enabled=False) records pending approval artifacts for feed/ledger but does not pause PM/AutonomyEngine. Live pause still applies when autonomy is enabled and risk > off. PM _count_open_checkpoints uses list_open_checkpoints (pause_autonomy filter).",
+  "breaking": false,
+  "links": [
+    "#887",
+    "#645",
+    "#648",
+    "#660",
+    "#654"
+  ]
+}
