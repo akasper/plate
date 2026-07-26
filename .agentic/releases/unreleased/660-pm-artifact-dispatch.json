@@ -1,0 +1,16 @@
+{
+  "slug": "660-pm-artifact-dispatch",
+  "change_type": "feature",
+  "surface": "src/plate_core/pm.py",
+  "summary": "Wire #660 PM dispatch for design/research work types to #632 propose_artifact (loop_kind=artifact); tick syncs proposal status and completes assignments on approve/reject.",
+  "migration_impact": "PM run_cycle with dispatch_loops now opens pending Design/Research proposals instead of loop_skip for design/research. Hosts should surface packet.artifact_ask_user_question / plate_artifact_decide. release/qanda types still skip loop mapping.",
+  "migration_guidance": [
+    "1. Upgrade plate-core.",
+    "2. On PM apply cycles, design/research assignments get loop_kind=artifact and loop_run_id=proposal id.",
+    "3. Present artifact ask_user_question; decide via plate_artifact_decide / gh plate artifact.",
+    "4. plate_pm_tick_loops / run_cycle ticks complete the assignment when proposal is approved or rejected."
+  ],
+  "agent_notes": "Does not auto-approve artifacts. Browser #661 still out of scope. Release work types remain checkpoint/fleet oriented.",
+  "breaking": false,
+  "links": ["#660", "#632", "#654", "#656"]
+}
