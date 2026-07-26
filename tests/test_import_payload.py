@@ -154,6 +154,28 @@ class TestImportPayload(unittest.TestCase):
                     decisions[0]["target_path"], ".github/workflows/plate-ci.yml"
                 )
 
+    def test_seeds_current_md_when_missing(self):
+        """#618: import seeds CURRENT.md when absent; skips when present."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dry = import_payload(tmp, strategy="safe", dry_run=True)
+            self.assertIn("CURRENT.md", dry["would_create"])
+            self.assertFalse((Path(tmp) / "CURRENT.md").exists())
+
+            applied = import_payload(tmp, strategy="safe", apply=True)
+            self.assertIn("CURRENT.md", applied["created"])
+            text = (Path(tmp) / "CURRENT.md").read_text(encoding="utf-8")
+            self.assertIn("Adoption note", text)
+            self.assertIn(".agentic/releases/", text)
+            self.assertNotIn(
+                "Project-specific CI commands are not defined by the generic template",
+                text,
+            )
+
+            again = import_payload(tmp, strategy="safe", dry_run=True)
+            self.assertIn("CURRENT.md", again["would_skip"])
+
 
 if __name__ == "__main__":
     unittest.main()
