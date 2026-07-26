@@ -103,6 +103,24 @@ class TestDesignContracts(unittest.TestCase):
         self.assertTrue(ok["ok"])
         self.assertEqual(ok.get("budget_remaining"), est["estimated_tokens"] + 1000)
 
+    def test_propose_live_budget_isolates_under_base_dir(self):
+        from plate_core.autonomy import load_budget_spend
+
+        root_before = int((load_budget_spend() or {}).get("spent_today") or 0)
+        r = propose_contract(
+            feature_title="Isolated charge",
+            base_dir=self.base,
+            use_live_budget=True,
+        )
+        self.assertTrue(r["ok"], r)
+        self.assertIn("budget_charge", r)
+        self.assertTrue((r.get("budget_charge") or {}).get("ok"))
+        local = load_budget_spend(base_dir=self.base / "budget")
+        self.assertGreater(int(local.get("spent_today") or 0), 0)
+        self.assertEqual(
+            int((load_budget_spend() or {}).get("spent_today") or 0), root_before
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
