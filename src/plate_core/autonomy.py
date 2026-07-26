@@ -1830,6 +1830,60 @@ def get_autonomy_status(repo: str | None = None) -> dict[str, Any]:
     return engine.get_status().to_dict()
 
 
+def durable_budget_surface_pause(
+    snap: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Evaluate #634 durable rails for live surface gates (risk-independent).
+
+    Surfaces (planning, fleet, scheduled ops, loops) should hard-block when the
+    durable snapshot says the next cycle cannot fund work — even if estimate
+    still fits remaining tokens. risk_tolerance=off only disables AutonomyEngine
+    autopilot; it must not hide budget stop signals (#634/#873).
+
+    Returns:
+        pause (bool), pressure (str|None), remaining (int|None),
+        would_pause_next_cycle (bool), reason (str|None).
+    """
+    if not snap:
+        return {
+            "pause": False,
+            "pressure": None,
+            "remaining": None,
+            "would_pause_next_cycle": False,
+            "reason": None,
+        }
+    pressure = str(snap.get("budget_pressure") or "").lower() or None
+    rem = snap.get("remaining_tokens")
+    remaining: int | None
+    try:
+        remaining = int(rem) if rem is not None else None
+    except (TypeError, ValueError):
+        remaining = None
+    would_pause = bool(
+        snap.get("would_pause_next_cycle")
+        if snap.get("would_pause_next_cycle") is not None
+        else snap.get("would_pause")
+    )
+    pause = bool(
+        pressure in ("critical", "exhausted")
+        or would_pause
+        or (remaining is not None and remaining <= 0)
+    )
+    reason = None
+    if pause:
+        reason = snap.get("gate_reason") or (
+            f"budget: durable rails pause "
+            f"(pressure={pressure} remaining={remaining})"
+        )
+    return {
+        "pause": pause,
+        "pressure": pressure,
+        "remaining": remaining,
+        "would_pause_next_cycle": bool(would_pause or pause),
+        "reason": reason,
+    }
+
+
 def get_budget_snapshot(
     repo: str | None = None,
     *,

@@ -173,6 +173,56 @@ class TestDesignResearchApproval632(unittest.TestCase):
         self.assertTrue(ok.get("ok", True))
         self.assertEqual(ok.get("budget_remaining"), est["estimated_tokens"] + 1000)
 
+    def test_budget_blocks_on_durable_would_pause_risk_off(self):
+        """#873: propose_artifact blocks on would_pause even when est < remaining."""
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        bdir = self.base / "budget"
+        today = (
+            __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .date()
+            .isoformat()
+        )
+        # remaining=5000, per_cycle=10000 → would_pause; design est=3500 < 5000
+        save_budget_spend(
+            {
+                "date": today,
+                "spent_today": 45000,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+            },
+            base_dir=bdir,
+        )
+
+        class _Cfg:
+            autonomy = {
+                "enabled": False,
+                "risk_tolerance": "off",
+                "token_budget": {
+                    "daily": 50000,
+                    "per_cycle": 10000,
+                    "action": "pause",
+                },
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            out = propose_artifact(
+                "design",
+                "Paused rails",
+                "summary",
+                base_dir=self.base,
+                use_live_budget=True,
+            )
+
+        self.assertFalse(out.get("ok"), out)
+        self.assertTrue(out.get("blocked"))
+        self.assertIn("budget", out.get("error") or "")
+        self.assertTrue(out.get("would_pause_next_cycle"))
+        self.assertEqual(out.get("budget_remaining"), 5000)
+
     def test_propose_live_budget_isolates_under_base_dir(self):
         from plate_core.autonomy import load_budget_spend
 

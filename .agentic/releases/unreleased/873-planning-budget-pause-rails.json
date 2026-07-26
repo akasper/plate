@@ -1,0 +1,10 @@
+{
+  "slug": "873-planning-budget-pause-rails",
+  "change_type": "fix",
+  "surface": "src/plate_core/autonomy.py",
+  "summary": "Add durable_budget_surface_pause helper and hard-block planning/ER/artifact live budget gates on would_pause_next_cycle or critical/exhausted pressure even when est fits remaining (#634/#873).",
+  "migration_impact": "Q&A planning start, epic/release planning start, and Design/Research propose may refuse live hydrate under risk=off when remaining is below per_cycle. Raise token_budget, wait for UTC day rollover, or pass use_live_budget=false with caller-owned remaining.",
+  "agent_notes": "Prefer durable_budget_surface_pause(snap) for new surface gates. Do not start planning/artifact work when would_pause_next_cycle is true.",
+  "breaking": false,
+  "links": ["#873", "#634", "#628", "#630", "#629", "#640", "#632", "#653", "#654"]
+}
