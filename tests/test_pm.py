@@ -95,10 +95,34 @@ class TestPMTeamAndAssign(unittest.TestCase):
                 "rationale": "ready",
             }
             with patch("plate_core.what_next.get_what_next", return_value=fake_wn), patch(
+                "plate_core.what_next.fetch_ready_issue_candidates", return_value=[]
+            ), patch(
                 "plate_core.feed.get_user_feed", return_value={"items": []}
             ):
                 items = pm.collect_work(limit=5)
             self.assertTrue(any(i.get("number") == 364 for i in items))
+            self.assertFalse(any(i.get("id") == "what_next" for i in items))
+
+    def test_collect_work_fetches_ready_even_when_what_next_is_pm_tick(self):
+        """Direct fetch must supply issues when what_next prioritizes PM tick (#895 follow-up)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo="akasper/plate", state_dir=Path(tmp))
+            fake_wn = {
+                "priority": "pm_tick",
+                "next_action": "tick delegated loops",
+                "prompt_segment": "tick",
+                "rationale": "delegated",
+            }
+            fetched = [
+                {"number": 453, "title": "Licensing docs", "labels": ["Documentation"]},
+            ]
+            with patch("plate_core.what_next.get_what_next", return_value=fake_wn), patch(
+                "plate_core.what_next.fetch_ready_issue_candidates", return_value=fetched
+            ), patch(
+                "plate_core.feed.get_user_feed", return_value={"items": []}
+            ):
+                items = pm.collect_work(limit=5)
+            self.assertTrue(any(i.get("number") == 453 for i in items))
             self.assertFalse(any(i.get("id") == "what_next" for i in items))
 
     def test_assign_ok(self):

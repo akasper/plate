@@ -1,0 +1,21 @@
+{
+  "slug": "660-pm-collect-fetch-ready-direct",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py, src/plate_core/what_next.py",
+  "summary": "PM collect_work always fetch_ready_issue_candidates (not only nested in what_next); ready search includes Documentation; avoids process-only queue when implementable issues exist under pm_tick/pm_propose_run priorities (#660/#654).",
+  "migration_impact": "PM cycles may propose Documentation and Feature/Bug ready rows even when what_next priority is pm_tick or pm_propose_run. Empty-ready repos still fall back to process what_next blob.",
+  "migration_guidance": [
+    "1. Upgrade plate-core with this fix.",
+    "2. Ensure implementable work has Feature/Bug/Documentation labels without need:refinement/status:stub.",
+    "3. plate_pm_run_cycle dry_run should list issue-N rows when such issues are open."
+  ],
+  "agent_notes": "fetch_ready_issue_candidates fallback query now includes label:Documentation. collect_work dedupes by issue number across direct fetch + what_next expansion.",
+  "breaking": false,
+  "links": [
+    "#897",
+    "#660",
+    "#654",
+    "#895",
+    "#896"
+  ]
+}
