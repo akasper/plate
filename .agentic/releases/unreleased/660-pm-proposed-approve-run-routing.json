@@ -1,0 +1,22 @@
+{
+  "slug": "660-pm-proposed-approve-run-routing",
+  "change_type": "fix",
+  "surface": "src/plate_core/what_next.py, src/plate_core/feed.py",
+  "summary": "Route proposed PM queue rows through explicit Approve & run: what_next priority pm_propose_run + feed TUI status=run (aligns #892 complete path with endless feed/#654 risk=off posture).",
+  "migration_impact": "Agents following plate_what_next with proposed>0 now get approve&run instructions instead of another dry-run assign cycle. Feed Approve & run descriptions call plate_pm_complete status=run.",
+  "migration_guidance": [
+    "1. Upgrade plate-core including this fix.",
+    "2. When what_next priority is pm_propose_run: list proposed queue and plate_pm_complete status=run.",
+    "3. Do not open new PM assigns until proposed rows are run, deferred, or cancelled."
+  ],
+  "agent_notes": "Order: open_pr \u2192 ready_issue \u2192 pm_checkpoint \u2192 pm_tick (delegated) \u2192 pm_propose_run (proposed) \u2192 pm assign cycle. Feed recovers assignment status from badges/labels when FeedItem has no status field.",
+  "breaking": false,
+  "links": [
+    "#893",
+    "#660",
+    "#892",
+    "#891",
+    "#654",
+    "#631"
+  ]
+}
