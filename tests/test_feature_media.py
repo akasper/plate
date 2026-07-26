@@ -180,6 +180,41 @@ class TestFeatureMediaBudgetGate(unittest.TestCase):
         self.assertEqual(data.get("spent_today"), est)
         self.assertEqual(data.get("last_action_kind"), "feature_media_plan")
 
+    def test_live_plan_isolates_budget_under_base_dir(self):
+        """base_dir alone must hydrate/charge under base_dir/budget (#634)."""
+        from plate_core.autonomy import load_budget_spend
+        from unittest.mock import patch
+
+        class _Cfg:
+            autonomy = {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "token_budget": {
+                    "daily": 100_000,
+                    "per_cycle": 50_000,
+                    "action": "pause",
+                },
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            ok = plan_feature_media(
+                feature_title="Isolated media charge",
+                base_dir=self.base,
+                use_live_budget=True,
+                budget_remaining=100_000,
+            )
+        self.assertTrue(ok.get("ok"), ok)
+        charge = ok.get("budget_charge") or {}
+        self.assertTrue(charge.get("ok"), charge)
+        est = int(ok.get("cost_estimate_tokens") or 0)
+        self.assertGreater(est, 0)
+        data = load_budget_spend(base_dir=self.base / "budget")
+        self.assertEqual(data.get("spent_today"), est)
+        self.assertEqual(data.get("last_action_kind"), "feature_media_plan")
+        # path should not be the operator default when base_dir is set
+        path = str(charge.get("path") or "")
+        self.assertIn(str(self.base), path)
+
 
 if __name__ == "__main__":
     unittest.main()

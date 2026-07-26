@@ -382,7 +382,11 @@ def start_feature_loop(
     When ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
     hydrate remaining tokens from durable #634 budget snapshot so starts honor the
     same rails as AutonomyEngine without a manual CLI flag.
+    When ``base_dir`` is set and ``budget_base_dir`` is omitted, hydrate/charge under
+    ``base_dir/budget`` so tests and isolated runs do not touch operator spend.
     """
+    if budget_base_dir is None and base_dir is not None:
+        budget_base_dir = Path(base_dir) / "budget"
     title = (feature_title or "").strip() or (
         f"Feature #{feature_number}" if feature_number else "Untitled feature"
     )
@@ -517,6 +521,7 @@ def start_feature_loop(
         try:
             from .ledger import record_decision
 
+            ledger_base = Path(base_dir) / "ledger" if base_dir is not None else None
             rec = record_decision(
                 action_kind="feature_loop_start",
                 decision="pause" if blocked else "proceed",
@@ -529,6 +534,7 @@ def start_feature_loop(
                 cost_estimate_tokens=est["estimated_tokens"],
                 actor="feature_loop",
                 metadata={"run_id": run.id},
+                base_dir=ledger_base,
             )
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:

@@ -220,7 +220,11 @@ def plan_feature_media(
     #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
     hydrate remaining tokens from durable budget snapshot and block if est exceeds remaining.
     Successful live plans charge durable spend via ``record_budget_spend``.
+    When ``base_dir`` is set and ``budget_base_dir`` is omitted, hydrate/charge under
+    ``base_dir/budget`` so tests and isolated runs do not touch operator spend.
     """
+    if budget_base_dir is None and base_dir is not None:
+        budget_base_dir = Path(base_dir) / "budget"
     cost_est, effective_remaining, budget_notes, blocked = _feature_media_budget_gate(
         phase="plan",
         quality=quality or "medium",

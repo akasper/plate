@@ -222,6 +222,43 @@ class TestRunLifecycle(unittest.TestCase):
             self.assertEqual(r["budget_remaining"], 1000)
             self.assertEqual(r["run"]["metadata"].get("budget_source"), "live")
 
+    def test_live_start_isolates_budget_under_base_dir(self):
+        """base_dir alone charges under base_dir/budget (#634)."""
+        from unittest.mock import patch
+
+        from plate_core.autonomy import load_budget_spend
+
+        class _Cfg:
+            autonomy = {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "token_budget": {
+                    "daily": 100_000,
+                    "per_cycle": 50_000,
+                    "action": "pause",
+                },
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            r = start_bug_loop(
+                bug_number=75,
+                bug_title="Isolated base_dir charge",
+                size="trivial",
+                needs_repro=False,
+                use_live_budget=True,
+                budget_remaining=100_000,
+                base_dir=self.base,
+                record_ledger=False,
+            )
+        self.assertTrue(r["ok"], r)
+        charge = r.get("budget_charge") or {}
+        self.assertTrue(charge.get("ok"), charge)
+        est = int(r["run"]["cost_estimate_tokens"] or 0)
+        self.assertEqual(
+            load_budget_spend(base_dir=self.base / "budget").get("spent_today"), est
+        )
+        self.assertIn(str(self.base), str(charge.get("path") or ""))
+
     def test_babysit_gate_blocks_advance(self):
         r = start_bug_loop(
             bug_number=1,
