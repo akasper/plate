@@ -1,0 +1,10 @@
+{
+  "slug": "883-fleet-accept-shadow-gate-high-impact",
+  "change_type": "fix",
+  "surface": "src/plate_core/fleet.py",
+  "summary": "Accepting high/critical fleet handoffs hard-blocks via gate_high_impact (shadow_ack + approved or checkpoint); CLI/MCP fleet update wires shadow_ack (#645/#883).",
+  "migration_impact": "Agents must pass shadow_ack (from plate_autonomy_simulate) and approved when updating high/critical handoffs to accepted. Low/medium accepts unchanged. Create still queues blocked+checkpoint.",
+  "agent_notes": "Do not accept high/critical fleet handoffs without shadow_ack. Use gh plate fleet --update ID --handoff-status accepted --shadow-ack … --approved.",
+  "breaking": false,
+  "links": ["#883", "#645", "#644", "#648", "#879", "#654"]
+}

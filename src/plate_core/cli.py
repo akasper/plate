@@ -2656,11 +2656,19 @@ def cmd_fleet(args: argparse.Namespace) -> int:
             str(args.update),
             status=getattr(args, "handoff_status", None),
             notes=str(getattr(args, "note", None) or "") or None,
+            shadow_ack=getattr(args, "shadow_ack", None) or None,
+            approved=bool(getattr(args, "approved", False)),
+            checkpoint_id=getattr(args, "checkpoint_id", None) or None,
         )
         if args.json:
             print(json.dumps(out))
             return 0 if out.get("ok") else 1
-        print(f"update: ok={out.get('ok')} status={(out.get('handoff') or {}).get('status')}")
+        print(
+            f"update: ok={out.get('ok')} status={(out.get('handoff') or {}).get('status')} "
+            f"shadow_id={out.get('shadow_id')}"
+        )
+        if out.get("blocked") and out.get("error"):
+            print(f"error={out.get('error')}")
         return 0 if out.get("ok") else 1
 
     if getattr(args, "list_handoffs", False):
@@ -4452,6 +4460,23 @@ def build_parser() -> argparse.ArgumentParser:
         dest="handoff_status",
         default=None,
         help="Status for --update: open|accepted|done|blocked|cancelled",
+    )
+    fleet.add_argument(
+        "--shadow-ack",
+        dest="shadow_ack",
+        default="",
+        help="shadow_id for accepting high/critical handoffs (#645/#883)",
+    )
+    fleet.add_argument(
+        "--approved",
+        action="store_true",
+        help="Human approved high/critical handoff accept (#645)",
+    )
+    fleet.add_argument(
+        "--checkpoint-id",
+        dest="checkpoint_id",
+        default="",
+        help="Approved #648 checkpoint id for high/critical accept",
     )
     fleet.add_argument("--list-handoffs", action="store_true", help="List handoffs")
     fleet.add_argument("--status", default="active", help="Filter: open|active|done|all")

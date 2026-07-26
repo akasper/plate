@@ -858,6 +858,9 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 notes=args.get("notes") or args.get("note"),
                 artifacts=list(args.get("artifacts") or []) or None,
                 context_patch=args.get("context") if isinstance(args.get("context"), dict) else None,
+                shadow_ack=args.get("shadow_ack") or None,
+                approved=bool(args.get("approved") or False),
+                checkpoint_id=args.get("checkpoint_id") or None,
             )
         elif name == "plate_fleet_complete":
             payload = complete_handoff(
@@ -3125,7 +3128,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_fleet_update",
-                                "description": "Update handoff status (accepted|done|blocked|cancelled) (#644).",
+                                "description": "Update handoff status (accepted|done|blocked|cancelled); high/critical accept needs shadow_ack + approved (#644/#645).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -3135,6 +3138,18 @@ def run() -> None:
                                         "notes": {"type": "string"},
                                         "artifacts": {"type": "array", "items": {"type": "string"}},
                                         "context": {"type": "object"},
+                                        "shadow_ack": {
+                                            "type": "string",
+                                            "description": "shadow_id for high/critical accept (#645/#883).",
+                                        },
+                                        "approved": {
+                                            "type": "boolean",
+                                            "description": "Human approval for high/critical accept.",
+                                        },
+                                        "checkpoint_id": {
+                                            "type": "string",
+                                            "description": "Approved #648 checkpoint id supplying shadow/approval.",
+                                        },
                                     },
                                 },
                             },
