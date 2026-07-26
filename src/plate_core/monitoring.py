@@ -369,6 +369,7 @@ def _budget_gate(
     fetch_live: bool = False,
     budget_remaining: int | None,
     use_live_budget: bool,
+    budget_base_dir: Path | None = None,
 ) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
     """Return (cost_est, effective_remaining, notes, block_result_or_None)."""
     cost_est = estimate_monitor_cost(
@@ -381,7 +382,10 @@ def _budget_gate(
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot(estimate_tokens=est)
+            snap = get_budget_snapshot(
+                estimate_tokens=est,
+                base_dir=budget_base_dir,
+            )
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective = int(rem)
@@ -425,6 +429,9 @@ def review_discussions(
     #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
     """
     items = list(discussions or [])
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     # Pre-count for estimate (live fetch may add items later; include live overhead when requested)
     cost_est, effective_remaining, budget_notes, blocked = _budget_gate(
         kind="discussion",
@@ -433,6 +440,7 @@ def review_discussions(
         fetch_live=fetch_live,
         budget_remaining=budget_remaining,
         use_live_budget=use_live_budget,
+        budget_base_dir=budget_base,
     )
     if blocked is not None:
         blocked["n_scanned"] = 0
@@ -482,9 +490,6 @@ def review_discussions(
             proposals.append(s)
 
     est_tokens = int(cost_est.get("estimated_tokens") or 0)
-    budget_base: Path | None = None
-    if base_dir is not None:
-        budget_base = Path(base_dir) / "budget"
     out: dict[str, Any] = {
         "ok": True,
         "n_scanned": len(items),
@@ -544,6 +549,9 @@ def monitor_market_signals(
     #634: hydrate remaining from durable budget when use_live_budget; block if est exceeds remaining.
     """
     items = list(signals or [])
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     cost_est, effective_remaining, budget_notes, blocked = _budget_gate(
         kind="market",
         n_items=len(items),
@@ -551,6 +559,7 @@ def monitor_market_signals(
         fetch_live=False,
         budget_remaining=budget_remaining,
         use_live_budget=use_live_budget,
+        budget_base_dir=budget_base,
     )
     if blocked is not None:
         blocked["n_signals"] = len(items)
@@ -572,9 +581,6 @@ def monitor_market_signals(
             proposals.append(s)
 
     est_tokens = int(cost_est.get("estimated_tokens") or 0)
-    budget_base: Path | None = None
-    if base_dir is not None:
-        budget_base = Path(base_dir) / "budget"
     out: dict[str, Any] = {
         "ok": True,
         "n_signals": len(items),
