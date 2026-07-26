@@ -686,6 +686,191 @@ class ProjectManager:
             out.append(item)
         return out
 
+    def promote_checkpoint_ready_assignments(
+        self,
+        *,
+        dry_run: bool = True,
+        dispatch_fleet: bool | None = None,
+        dispatch_loops: bool | None = None,
+        budget_remaining: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Promote proposed high-impact assignments after #648 checkpoint approve (#885).
+
+        When ``run_cycle`` opens a checkpoint for high-impact work it leaves the
+        assignment ``proposed``. After the human approves the checkpoint, the next
+        PM cycle must promote to ``delegated`` and run fleet/loop dispatch — this
+        was previously a no-op comment only.
+        """
+        do_fleet = self.dispatch_fleet if dispatch_fleet is None else bool(dispatch_fleet)
+        do_loops = self.dispatch_loops if dispatch_loops is None else bool(dispatch_loops)
+        results: list[dict[str, Any]] = []
+        changed = False
+        for asg in self._assignments:
+            if asg.get("status") != "proposed":
+                continue
+            if not asg.get("requires_checkpoint"):
+                continue
+            cid = asg.get("checkpoint_id") or (asg.get("packet") or {}).get(
+                "checkpoint_id"
+            )
+            if not cid:
+                continue
+            try:
+                from .checkpoint import get_checkpoint
+
+                cp = get_checkpoint(str(cid), base_dir=self.checkpoint_base_dir)
+            except Exception as exc:
+                results.append(
+                    {
+                        "assignment_id": asg.get("assignment_id"),
+                        "ok": False,
+                        "error": f"checkpoint lookup failed: {exc}",
+                    }
+                )
+                continue
+            if not cp:
+                results.append(
+                    {
+                        "assignment_id": asg.get("assignment_id"),
+                        "ok": False,
+                        "error": f"checkpoint not found: {cid}",
+                    }
+                )
+                continue
+            cp_st = str(cp.get("status") or "").lower()
+            if cp_st == "pending":
+                results.append(
+                    {
+                        "assignment_id": asg.get("assignment_id"),
+                        "ok": True,
+                        "action": "wait",
+                        "checkpoint_id": cid,
+                        "checkpoint_status": cp_st,
+                    }
+                )
+                continue
+            if cp_st in ("rejected", "cancelled"):
+                if not dry_run:
+                    asg["status"] = "cancelled" if cp_st == "cancelled" else "blocked"
+                    asg["updated_at"] = _now()
+                    asg.setdefault("packet", {})["checkpoint_decision"] = cp_st
+                    changed = True
+                results.append(
+                    {
+                        "assignment_id": asg.get("assignment_id"),
+                        "ok": True,
+                        "action": "cancel" if cp_st == "cancelled" else "block",
+                        "checkpoint_id": cid,
+                        "checkpoint_status": cp_st,
+                        "dry_run": dry_run,
+                    }
+                )
+                continue
+            if cp_st not in ("approved",):
+                # revised etc. — keep proposed
+                results.append(
+                    {
+                        "assignment_id": asg.get("assignment_id"),
+                        "ok": True,
+                        "action": "hold",
+                        "checkpoint_id": cid,
+                        "checkpoint_status": cp_st,
+                    }
+                )
+                continue
+
+            # Approved → promote + dispatch (same as run_cycle delegated path)
+            row: dict[str, Any] = {
+                "assignment_id": asg.get("assignment_id"),
+                "ok": True,
+                "action": "promote",
+                "checkpoint_id": cid,
+                "checkpoint_status": cp_st,
+                "dry_run": dry_run,
+            }
+            if dry_run:
+                results.append(row)
+                continue
+
+            asg["status"] = "delegated"
+            asg["updated_at"] = _now()
+            asg.setdefault("packet", {})["checkpoint_decision"] = "approved"
+            changed = True
+
+            if do_fleet:
+                try:
+                    from .fleet import handoff_from_pm_assignment
+
+                    ho = handoff_from_pm_assignment(
+                        asg,
+                        budget_remaining=budget_remaining,
+                        open_checkpoint=False,
+                        base_dir=self.fleet_base_dir,
+                        record_ledger=True,
+                    )
+                    row["fleet"] = {
+                        "ok": ho.get("ok"),
+                        "handoff_id": (ho.get("handoff") or {}).get("handoff_id"),
+                        "blocked": ho.get("blocked"),
+                        "error": ho.get("error"),
+                    }
+                    if ho.get("ok"):
+                        hid = (ho.get("handoff") or {}).get("handoff_id")
+                        asg["fleet_handoff_id"] = hid
+                        asg.setdefault("packet", {})["fleet_handoff_id"] = hid
+                except Exception as exc:
+                    row["fleet"] = {"ok": False, "error": str(exc)}
+
+            if do_loops:
+                try:
+                    asg["risk_tolerance"] = asg.get("risk_tolerance") or (
+                        asg.get("packet") or {}
+                    ).get("risk_tolerance")
+                    loop_out = dispatch_loop_from_assignment(
+                        asg,
+                        budget_remaining=budget_remaining,
+                        feature_loop_base_dir=self.feature_loop_base_dir,
+                        bug_loop_base_dir=self.bug_loop_base_dir,
+                        artifact_base_dir=self.artifact_base_dir,
+                        budget_base_dir=self.budget_base_dir,
+                        record_ledger=True,
+                    )
+                    row["loop"] = {
+                        "ok": loop_out.get("ok"),
+                        "loop_kind": loop_out.get("loop_kind"),
+                        "run_id": loop_out.get("run_id"),
+                        "blocked": loop_out.get("blocked"),
+                        "error": loop_out.get("error"),
+                        "skipped": loop_out.get("skipped"),
+                    }
+                    if loop_out.get("ok") or loop_out.get("run_id"):
+                        asg["loop_run_id"] = loop_out.get("run_id")
+                        asg["loop_kind"] = loop_out.get("loop_kind")
+                        asg.setdefault("packet", {})["loop_run_id"] = loop_out.get(
+                            "run_id"
+                        )
+                        asg.setdefault("packet", {})["loop_kind"] = loop_out.get(
+                            "loop_kind"
+                        )
+                except Exception as exc:
+                    row["loop"] = {"ok": False, "error": str(exc)}
+
+            _ledger_pm(
+                "pm_promote_checkpoint",
+                "proceed",
+                f"promoted {asg.get('assignment_id')} after checkpoint {cid} approved",
+                checkpoint_id=str(cid),
+                metadata={
+                    "assignment_id": asg.get("assignment_id"),
+                    "work_type": asg.get("work_type"),
+                },
+            )
+            results.append(row)
+
+        if changed and not dry_run:
+            self._save_queue()
+        return results
+
     def complete_assignment(
         self,
         assignment_id: str,
@@ -1242,6 +1427,14 @@ class ProjectManager:
             return report
 
         budget = status.budget_remaining_tokens
+        # #885: after open-checkpoint + budget gates clear, promote proposed
+        # high-impact assignments whose #648 checkpoints are approved.
+        promotions = self.promote_checkpoint_ready_assignments(
+            dry_run=dry_run,
+            dispatch_fleet=do_fleet,
+            dispatch_loops=do_loops,
+            budget_remaining=budget,
+        )
         seen = self._existing_work_ids()
         for item in work:
             if len(new_assignments) >= max_assignments:
@@ -1437,6 +1630,7 @@ class ProjectManager:
             "fleet_handoffs": fleet_handoffs,
             "loop_dispatches": loop_dispatches,
             "loop_ticks": loop_ticks,
+            "promotions": promotions,
             "human_paused": [
                 {
                     "id": x.get("id") or x.get("number"),
@@ -1453,12 +1647,12 @@ class ProjectManager:
             "dispatch_loops": do_loops and not dry_run,
             "tick_loops": bool(tick_loops),
             "queue_size": len(self._assignments),
-            "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'completed', 'n': len(new_assignments), 'fleet': len(fleet_handoffs), 'loops': len(loop_dispatches), 'ticks': len(loop_ticks), 'ts': ts})}\n{MARKER_END}",
+            "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'completed', 'n': len(new_assignments), 'fleet': len(fleet_handoffs), 'loops': len(loop_dispatches), 'ticks': len(loop_ticks), 'promotions': len(promotions), 'ts': ts})}\n{MARKER_END}",
         }
         _ledger_pm(
             "pm_cycle",
             "proceed" if not dry_run else "shadow",
-            f"cycle completed n={len(new_assignments)} blocked={len(blocked)} fleet={len(fleet_handoffs)} loops={len(loop_dispatches)} ticks={len(loop_ticks)}",
+            f"cycle completed n={len(new_assignments)} blocked={len(blocked)} fleet={len(fleet_handoffs)} loops={len(loop_dispatches)} ticks={len(loop_ticks)} promotions={len(promotions)}",
             cost=sum(int(a.get("estimated_tokens") or 0) for a in new_assignments),
             risk=status.risk_tolerance,
             metadata={
@@ -1466,6 +1660,7 @@ class ProjectManager:
                 "n": len(new_assignments),
                 "n_fleet": len(fleet_handoffs),
                 "n_loop_ticks": len(loop_ticks),
+                "n_promotions": len(promotions),
             },
         )
         return report
