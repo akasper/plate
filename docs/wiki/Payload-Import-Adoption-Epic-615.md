@@ -1,6 +1,6 @@
-# Payload import / adoption (Epic #615) — status summary
+# Payload import / adoption (Epic #615) — closeout summary
 
-**Status (2026-07-26):** Core adoption surfaces **shipped** on `release`; Epic remains **open** until human-gated residual **#622** (agentic escape hatch for hard merges) is resolved or explicitly deferred.
+**Status (2026-07-26):** **Complete** on `release`. All children **#616–#622** closed with `status:implemented`; this Epic closes via Documentation PR.
 
 **Epic:** #615 — Safe first-class PLATE template payload import for adoption into existing repos.
 
@@ -18,29 +18,32 @@ Greenfield bootstrap assumed template-shaped trees. Mature repos needed a safe, 
 | **#619** | Bootstrap adoption mode (`--adopt` / auto-detect mature repos) |
 | **#620** | Shared payload planner for local + remote/bootstrap paths |
 | **#621** | Payload discoverability CLI/MCP + `scripts/plate/` namespacing |
+| **#622** | Agentic escape hatch: `plan.json` + `PLAN.md` + `DRAFT_PR_BODY.md` via `--escape-hatch` / `--escape-hatch-on-conflict` (and MCP); never silent force on high-value paths |
 
-Fragments live under `.agentic/releases/unreleased/` (`616-*` … `621-*`) and adoption narrative in `docs/migration/adoption-guide.md`.
+Fragments live under `.agentic/releases/unreleased/` (`616-*` … `622-*`) and adoption narrative in `docs/migration/adoption-guide.md`.
 
 ## Operator path (current)
 
 ```bash
 gh plate import-payload --dry-run --strategy conservative --json
 gh plate import-payload --apply --strategy conservative
+# Hard conflicts → reviewable plan + draft PR body (no auto-force):
+gh plate import-payload --strategy conservative --escape-hatch-on-conflict --json
 gh plate bootstrap --repo OWNER/REPO --adopt --apply
 gh plate health
 ```
 
-Prefer **conservative** for mature trees; never `force` without human approval on product-owned roots.
+Prefer **conservative** for mature trees; never `force` without human approval on product-owned roots. On irreducible conflicts, emit escape-hatch artifacts and open a human-reviewed draft PR from `DRAFT_PR_BODY.md`.
 
-## Open residual
+## Residual (out of epic scope / follow-on)
 
-| Issue | Blocker | Notes |
-|---|---|---|
-| **#622** | `need:human-review` | Agentic escape hatch: rich plan + diffs/worktree + optional draft PR / delegated review for irreducible hard conflicts. **Agents must not complete this as a silent full-auto overwrite path**; human judgment stays on complex merges. |
+| Item | Notes |
+|---|---|
+| Auto draft-PR create + worktree apply | Explicit follow-up under #622 notes; still human-gated |
+| Epic #633 | Frictionless <30m onboarding polish may absorb remaining UX |
+| Epic #649 | Self-update / self-migrate for adopters (separate track) |
 
-Until #622 lands, hard cases still use: import dry-run report → human-approved selective apply → optional draft PR opened by human/agent with explicit review checklist.
-
-## Non-goals
+## Non-goals (unchanged)
 
 - Marketplace publish human Tasks (#380/#381)
 - Claiming frictionless <30m for every monorepo without review
@@ -48,6 +51,6 @@ Until #622 lands, hard cases still use: import dry-run report → human-approved
 
 ## Links
 
-- Epic #615; children #616–#622
+- Epic #615; children #616–#622 (all closed)
 - Design/migration: `docs/migration/adoption-guide.md`
-- Related Epic #633 (frictionless integration) may absorb remaining onboarding polish
+- Related: #633 (frictionless integration), #649 (self-updating adopters)
