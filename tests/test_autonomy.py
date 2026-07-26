@@ -789,6 +789,52 @@ class TestShadowSimulation645(unittest.TestCase):
             snap = get_budget_snapshot(base_dir=bdir)
             self.assertEqual(snap["spent_today"], 350)
 
+    def test_reset_budget_spend_zeros_today(self):
+        """Operator hygiene: reset clears durable spend without changing limits."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.autonomy import (
+            get_budget_snapshot,
+            load_budget_spend,
+            record_budget_spend,
+            reset_budget_spend,
+            save_budget_spend,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": __import__("datetime")
+                    .datetime.now(__import__("datetime").timezone.utc)
+                    .date()
+                    .isoformat(),
+                    "spent_today": 59850,
+                    "spent_this_cycle": 29700,
+                    "spent_usd_today": 0.12,
+                    "throttled_actions": 6,
+                },
+                base_dir=bdir,
+            )
+            out = reset_budget_spend(base_dir=bdir, reason="unit-test reset")
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["prior_spent_today"], 59850)
+            self.assertEqual(out["spent_today"], 0)
+            self.assertEqual(out["budget_pressure"], "ok")
+            data = load_budget_spend(base_dir=bdir)
+            self.assertEqual(data.get("spent_today"), 0)
+            self.assertEqual(data.get("spent_this_cycle"), 0)
+            self.assertEqual(data.get("throttled_actions"), 6)
+            self.assertEqual(data.get("last_action_kind"), "budget_reset")
+            snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["spent_today"], 0)
+            self.assertGreater(snap["remaining_tokens"], 0)
+            # Subsequent charge still works
+            charge = record_budget_spend(100, base_dir=bdir, action_kind="post_reset")
+            self.assertTrue(charge["ok"])
+            self.assertEqual(charge["spent_today"], 100)
+
     def test_get_budget_snapshot_estimate_tokens_alias(self):
         """Surface gates pass estimate_tokens; alias must hydrate gate reasons."""
         import tempfile

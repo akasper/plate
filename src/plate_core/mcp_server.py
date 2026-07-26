@@ -737,11 +737,18 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_autonomy_status":
             payload = get_autonomy_status(args.get("repo"))
         elif name == "plate_autonomy_budget":
-            est = args.get("estimated_tokens") or args.get("estimate_tokens")
-            payload = get_budget_snapshot(
-                args.get("repo"),
-                estimated_tokens=int(est) if est is not None else None,
-            )
+            if bool(args.get("reset")):
+                from .autonomy import reset_budget_spend
+
+                payload = reset_budget_spend(
+                    reason=str(args.get("reset_reason") or "mcp plate_autonomy_budget reset=true"),
+                )
+            else:
+                est = args.get("estimated_tokens") or args.get("estimate_tokens")
+                payload = get_budget_snapshot(
+                    args.get("repo"),
+                    estimated_tokens=int(est) if est is not None else None,
+                )
         elif name == "plate_pm_status":
             payload = get_pm_status(args.get("repo"))
         elif name == "plate_pm_team":
@@ -2941,7 +2948,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_autonomy_budget",
-                                "description": "Durable #634 budget snapshot: limits, spend.json counters, remaining tokens/USD, pressure, optional estimate would_pause/throttle. Use before long feature loops.",
+                                "description": "Durable #634 budget snapshot: limits, spend.json counters, remaining tokens/USD, pressure, optional estimate would_pause/throttle. Set reset=true to zero today's spend counters (operator hygiene; does not change .plate limits).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -2953,6 +2960,14 @@ def run() -> None:
                                         "estimate_tokens": {
                                             "type": "integer",
                                             "description": "Alias for estimated_tokens.",
+                                        },
+                                        "reset": {
+                                            "type": "boolean",
+                                            "description": "When true, zero durable spend.json for the current UTC day and return post-reset snapshot fields.",
+                                        },
+                                        "reset_reason": {
+                                            "type": "string",
+                                            "description": "Optional note stored on spend.json when reset=true.",
                                         },
                                     },
                                 },
