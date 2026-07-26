@@ -29,6 +29,42 @@ from .template_payload import (
 Strategy = Literal["safe", "conservative", "force"]
 VALID_STRATEGIES: tuple[str, ...] = ("safe", "conservative", "force")
 
+# Minimal CURRENT.md for adoption/import when absent (#618).
+# Not in payload include_globs (repo-specific); seeded by importer.
+# Avoids validate_plate_repo placeholder phrase about generic template CI.
+MINIMAL_CURRENT_MD = """# CURRENT — implemented state (starter)
+
+> **Preferred durable evidence:** `.agentic/releases/` fragments and versioned
+> release notes. This file is a lightweight index for older tooling
+> (`scripts/validate_plate_repo.sh`, feature detection) and adoption.
+
+## Adoption note
+
+This repository adopted PLATE via `gh plate import-payload` / bootstrap.
+Product claims live in the project's existing README, CHANGELOG, roadmap, or
+docs — do not treat this file as the product source of truth.
+
+## Implemented capability index
+
+| Capability | Status | Evidence |
+|---|---|---|
+| PLATE process scaffolding present | Started | `.plate` (after bootstrap), `.github/` PLATE workflows, `AGENTS.md` if installed |
+| Release fragments layout | Planned / partial | `.agentic/releases/unreleased/` |
+| Demo / E2E evidence | Optional | Playwright / media paths when configured |
+
+## CI / toolchain
+
+CI is project-owned. After adoption, keep product CI (e.g. `.github/workflows/ci.yml`)
+and enable PLATE process workflows (e.g. `plate-ci.yml` when installed via path_rules).
+Update this table when real test commands are documented for agents.
+
+## Next steps
+
+1. Run `gh plate health` and close remaining gaps.
+2. Author fragments under `.agentic/releases/unreleased/` for Feature work.
+3. Replace placeholder rows above with real capability rows + links to PRs/tests.
+"""
+
 
 @dataclass
 class PayloadFileDecision:
@@ -156,8 +192,9 @@ def _decide_file(
 def _next_steps(report: ImportPayloadReport) -> list[str]:
     steps = [
         "Review would_create / would_conflict lists before --apply on real repos.",
-        "After local apply: commit scaffolding, run `gh plate bootstrap --apply` for labels/wiki/.plate GitHub-side setup.",
+        "After local apply: commit scaffolding, run `gh plate bootstrap --apply` (or `--adopt`) for labels/wiki/.plate GitHub-side setup.",
         "Run `gh plate health` and open the first Curiosity Q&A session when healthy.",
+        "Prefer `.agentic/releases/unreleased/` fragments for durable implemented-state; keep CURRENT.md as a short index (#618).",
     ]
     if report.would_conflict or report.conflicts:
         steps.insert(
@@ -166,6 +203,11 @@ def _next_steps(report: ImportPayloadReport) -> list[str]:
         )
     if report.apply_mode and (report.created or report.overwritten):
         steps.insert(0, "git status + review diffs for newly written payload files.")
+    if any(x == "CURRENT.md" or x.endswith("CURRENT.md") for x in report.would_create):
+        steps.insert(
+            0,
+            "Fill CURRENT.md capability rows (or deprecate to fragments) once real features land.",
+        )
     return steps
 
 
@@ -272,8 +314,74 @@ def plan_import_payload(
             if apply:
                 report.skipped.append(rel)
 
+    # #618: CURRENT.md is repo-specific (not in payload globs) but required by
+    # validate_plate_repo + feature detection — seed when missing.
+    _seed_current_md_if_missing(target, report, apply=bool(apply))
+
     report.next_steps = _next_steps(report)
     return report
+
+
+def build_minimal_current_md(*, has_playwright: bool = False) -> str:
+    """Return starter CURRENT.md body (#618)."""
+    body = MINIMAL_CURRENT_MD
+    if has_playwright:
+        body = body.replace(
+            "| Demo / E2E evidence | Optional | Playwright / media paths when configured |",
+            "| Demo / E2E evidence | Detected | `playwright.config.ts` / `tests/e2e` present |",
+        )
+    return body
+
+
+def _seed_current_md_if_missing(
+    target: Path,
+    report: ImportPayloadReport,
+    *,
+    apply: bool,
+) -> None:
+    """Append CURRENT.md create decision when absent; write on apply."""
+    dest = target / "CURRENT.md"
+    decision_base = {
+        "path": "CURRENT.md",
+        "classification": "adoption_seed",
+        "target_path": "CURRENT.md",
+        "rule": None,
+    }
+    if dest.exists():
+        report.files.append(
+            PayloadFileDecision(
+                action="skip",
+                detail="CURRENT.md already present",
+                **decision_base,  # type: ignore[arg-type]
+            )
+        )
+        report.would_skip.append("CURRENT.md")
+        if apply:
+            report.skipped.append("CURRENT.md")
+        return
+
+    has_pw = (target / "playwright.config.ts").is_file() or (
+        target / "tests" / "e2e"
+    ).is_dir()
+    # Also detect if we just planned/created playwright from payload
+    if not has_pw:
+        for item in report.would_create + report.created:
+            if "playwright.config.ts" in item or "tests/e2e" in item:
+                has_pw = True
+                break
+
+    content = build_minimal_current_md(has_playwright=has_pw)
+    report.files.append(
+        PayloadFileDecision(
+            action="create",
+            detail="seed minimal CURRENT.md for validate + feature detection (#618)",
+            **decision_base,  # type: ignore[arg-type]
+        )
+    )
+    report.would_create.append("CURRENT.md")
+    if apply:
+        dest.write_text(content, encoding="utf-8")
+        report.created.append("CURRENT.md")
 
 
 def import_payload(
