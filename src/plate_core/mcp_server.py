@@ -1803,6 +1803,20 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
+        elif name == "plate_import_payload":
+            from .import_payload import import_payload
+
+            apply_mode = bool(args.get("apply", False))
+            dry = bool(args.get("dry_run", True))
+            if apply_mode:
+                dry = False
+            payload = import_payload(
+                target_dir=args.get("target_dir") or args.get("target") or ".",
+                strategy=str(args.get("strategy") or "safe"),
+                template_repo=args.get("template_repo"),
+                dry_run=dry,
+                apply=apply_mode,
+            )
         elif name == "plate_perform_test_coverage_audit":
             from .mcp.audit_tools import PerformTestCoverageAuditTool
             payload = PerformTestCoverageAuditTool.execute(repo=repo, dry_run=args.get("dry_run", True))
@@ -4420,6 +4434,37 @@ def run() -> None:
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "dry_run": {"type": "boolean", "description": "Simulate only (default true for safety)."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_import_payload",
+                                "description": "Import PLATE template payload into a local checkout (#616). Dry-run by default; set apply=true to write. Strategies: safe (skip existing), conservative (conflict on differ), force (overwrite).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "target_dir": {
+                                            "type": "string",
+                                            "description": "Local target directory (default .).",
+                                        },
+                                        "strategy": {
+                                            "type": "string",
+                                            "description": "safe | conservative | force (default safe).",
+                                        },
+                                        "template_repo": {
+                                            "type": "string",
+                                            "description": "Optional explicit template root path.",
+                                        },
+                                        "dry_run": {
+                                            "type": "boolean",
+                                            "description": "Plan only (default true).",
+                                            "default": True,
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "Write files (default false).",
+                                            "default": False,
+                                        },
                                     },
                                 },
                             },
