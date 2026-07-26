@@ -1,0 +1,10 @@
+{
+  "slug": "660-pm-status-budget-base-dir",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py",
+  "summary": "ProjectManager.get_status hydrates #634 durable spend via get_budget_snapshot(base_dir=budget_base_dir) so isolated PM runs honor configured budget rails instead of operator .agentic/budget/spend.json.",
+  "migration_impact": "No downstream config change. Callers that construct ProjectManager(budget_base_dir=...) now get matching status/pressure for run_cycle budget pauses.",
+  "agent_notes": "When testing or running PM under an isolated root, pass budget_base_dir (typically root/budget) so get_status and budget gates do not read the operator spend file.",
+  "breaking": false,
+  "links": ["#660", "#634", "#653"]
+}
