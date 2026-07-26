@@ -1558,6 +1558,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 risk_tolerance=str(args.get("risk_tolerance") or "medium"),
                 approved=bool(args.get("approved") or False),
                 checkpoint_id=args.get("checkpoint_id"),
+                shadow_ack=args.get("shadow_ack") or None,
                 note=str(args.get("note") or ""),
                 budget_remaining=br,
                 use_live_budget=bool(use_live),
@@ -4126,7 +4127,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_scheduled_op_run",
-                                "description": "Run/record scheduled op (dry_run default; high/critical need approved; #634 budget gate) (#641).",
+                                "description": "Run/record scheduled op (dry_run default; live high/critical need approved + shadow_ack; #634 budget gate) (#641/#645).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -4135,6 +4136,10 @@ def run() -> None:
                                         "risk_tolerance": {"type": "string"},
                                         "approved": {"type": "boolean"},
                                         "checkpoint_id": {"type": "string"},
+                                        "shadow_ack": {
+                                            "type": "string",
+                                            "description": "shadow_id from prior dry-run or plate_autonomy_simulate for live high/critical (#645/#879).",
+                                        },
                                         "note": {"type": "string"},
                                         "budget_remaining": {
                                             "type": "integer",
