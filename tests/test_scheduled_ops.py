@@ -465,5 +465,41 @@ class TestRunGates(unittest.TestCase):
         self.assertFalse(st.get("would_pause_next_cycle"))
 
 
+class TestScheduledOpsSurfaceShadowAck881(unittest.TestCase):
+    """#881: CLI/MCP must expose shadow_ack for live high-impact runs."""
+
+    def test_cli_parser_has_shadow_ack(self):
+        from plate_core.cli import build_parser
+
+        p = build_parser()
+        # parse scheduled-ops --run with --shadow-ack
+        ns = p.parse_args(
+            [
+                "scheduled-ops",
+                "--run",
+                "deploy-production",
+                "--apply",
+                "--approved",
+                "--shadow-ack",
+                "shad-test-id",
+            ]
+        )
+        self.assertEqual(ns.run, "deploy-production")
+        self.assertTrue(ns.apply)
+        self.assertTrue(ns.approved)
+        self.assertEqual(ns.shadow_ack, "shad-test-id")
+
+    def test_mcp_tool_schema_includes_shadow_ack(self):
+        import json
+        from pathlib import Path
+
+        # Schema is embedded in mcp_server module source; assert property present.
+        src = Path("src/plate_core/mcp_server.py").read_text(encoding="utf-8")
+        self.assertIn("plate_scheduled_op_run", src)
+        self.assertIn('"shadow_ack"', src)
+        # Handler must pass the kwarg through
+        self.assertIn("shadow_ack=args.get(\"shadow_ack\")", src)
+
+
 if __name__ == "__main__":
     unittest.main()

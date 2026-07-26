@@ -1567,6 +1567,7 @@ def cmd_scheduled_ops(args: argparse.Namespace) -> int:
             risk_tolerance=str(getattr(args, "risk_tolerance", None) or "medium"),
             approved=bool(getattr(args, "approved", False)),
             checkpoint_id=getattr(args, "checkpoint_id", None) or None,
+            shadow_ack=getattr(args, "shadow_ack", None) or None,
             note=getattr(args, "note", None) or "",
             budget_remaining=budget_remaining,
             use_live_budget=not bool(getattr(args, "no_live_budget", False)),
@@ -1576,8 +1577,11 @@ def cmd_scheduled_ops(args: argparse.Namespace) -> int:
             return 0 if out.get("ok") else 1
         print(
             f"ok={out.get('ok')} status={out.get('status')} blocked={out.get('blocked')} "
-            f"est={out.get('cost_estimate_tokens')} budget_remaining={out.get('budget_remaining')}"
+            f"est={out.get('cost_estimate_tokens')} budget_remaining={out.get('budget_remaining')} "
+            f"shadow_id={out.get('shadow_id')}"
         )
+        if out.get("blocked") and out.get("error"):
+            print(f"error={out.get('error')}")
         return 0 if out.get("ok") else 1
 
     if getattr(args, "runs", False):
@@ -4089,6 +4093,12 @@ def build_parser() -> argparse.ArgumentParser:
     sops.add_argument("--apply", action="store_true", help="Non-dry-run when risk allows")
     sops.add_argument("--approved", action="store_true", help="Human approved high/critical op")
     sops.add_argument("--checkpoint-id", dest="checkpoint_id", default="")
+    sops.add_argument(
+        "--shadow-ack",
+        dest="shadow_ack",
+        default="",
+        help="shadow_id from prior dry-run/simulate for live high/critical ops (#645/#879)",
+    )
     sops.add_argument("--risk-tolerance", dest="risk_tolerance", default="medium")
     sops.add_argument("--runs", action="store_true", help="List recorded runs")
     sops.add_argument("--op", default="", help="Filter runs by op id")
