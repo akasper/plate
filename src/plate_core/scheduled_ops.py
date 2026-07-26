@@ -8,6 +8,8 @@ Ops (via .agentic/procedures/ + AutonomyEngine):
 - marketing-site-deploy
 - marketplace-package (human Tasks for real publish)
 - implement-epic-slice
+- review-discussions (#642)
+- monitor-market (#642)
 
 First slice: durable catalog, last-run ledger, dry-run agent packets with
 risk/checkpoint gates. Does not auto-tag or force-deploy.
@@ -144,6 +146,43 @@ OPS_CATALOG: list[dict[str, Any]] = [
             "Stop at human_checkpoint when required",
         ],
         "tools": ["plate_feature_loop_start", "plate_pm_run_cycle", "plate_what_next"],
+    },
+    {
+        "id": "review-discussions",
+        "cadence": "daily",
+        "risk_level": "low",
+        "description": "Review GitHub Discussions; draft stub Issue proposals for human approve (#642)",
+        "requires_human": False,
+        "impact": "low",
+        "steps": [
+            "run_discussion_review_procedure (dry_run first; fetch_live only when approved path)",
+            "Surface proposals on feed: monitoring_feed_items / plate_monitoring_feed",
+            "Human approve/reject via decide_proposal — never auto-create Issues without approve",
+            "Fleet handoff to market-monitor on live start for agent follow-through",
+        ],
+        "tools": [
+            "plate_review_discussions",
+            "plate_monitoring_feed",
+            "plate_monitoring_decide",
+        ],
+    },
+    {
+        "id": "monitor-market",
+        "cadence": "weekly",
+        "risk_level": "low",
+        "description": "Monitor market/condition signals; draft Question stubs for human (#642)",
+        "requires_human": False,
+        "impact": "low",
+        "steps": [
+            "Host injects signals (web/x search); monitor_market_signals scores + persists proposals",
+            "Surface on feed for human decide; no silent external publish",
+            "Fleet handoff to market-monitor on live start",
+        ],
+        "tools": [
+            "plate_monitor_market",
+            "plate_monitoring_feed",
+            "plate_monitoring_decide",
+        ],
     },
 ]
 
@@ -332,6 +371,16 @@ _OP_FLEET_DISPATCH: dict[str, dict[str, Any]] = {
         "task": "Implement ready Feature under open Epic; run feature_loop to merge-eligible",
         "risk": "medium",
     },
+    "review-discussions": {
+        "to_agent": "market-monitor",
+        "task": "Review Discussions; draft stub proposals for human approve (no auto-Issue create)",
+        "risk": "low",
+    },
+    "monitor-market": {
+        "to_agent": "market-monitor",
+        "task": "Score injected market signals; draft Question proposals for human decide",
+        "risk": "low",
+    },
 }
 
 
@@ -347,7 +396,7 @@ def dispatch_fleet_for_scheduled_op(
     """Open a #644 fleet handoff for safe scheduled ops (refactor / implement slice).
 
     Does not accept/complete the handoff; does not deploy or publish.
-    Unknown or human-gated ops return skipped.
+    Unknown or human-gated ops return skipped. Covers refactor/implement + #642 monitors.
     """
     spec = _OP_FLEET_DISPATCH.get(op_id)
     if not spec:
@@ -630,6 +679,50 @@ def run_scheduled_op(
             out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
         except Exception:
             pass
+
+    # #642: attach monitoring procedure result for discussion/market ops
+    if not blocked and op_id in ("review-discussions", "monitor-market"):
+        try:
+            mon_base = None
+            if base_dir is not None:
+                mon_base = Path(base_dir) / "monitoring"
+            if op_id == "review-discussions":
+                from .monitoring import run_discussion_review_procedure
+
+                mon = run_discussion_review_procedure(
+                    dry_run=dry_run,
+                    fetch_live=False,  # live GH fetch only when host sets fetch path explicitly
+                    discussions=[],
+                    base_dir=mon_base,
+                    budget_remaining=effective_budget,
+                    use_live_budget=False if effective_budget is not None else use_live_budget,
+                )
+            else:
+                from .monitoring import run_market_monitor_procedure
+
+                mon = run_market_monitor_procedure(
+                    dry_run=dry_run,
+                    signals=[],
+                    base_dir=mon_base,
+                    budget_remaining=effective_budget,
+                    use_live_budget=False if effective_budget is not None else use_live_budget,
+                )
+            out["monitor"] = mon
+            if mon.get("blocked"):
+                # do not flip whole op to blocked if fleet can still open; note only
+                out.setdefault("notes", [])
+                if isinstance(out["notes"], list):
+                    out["notes"].append(
+                        f"monitor procedure blocked: {mon.get('error') or mon.get('reason')}"
+                    )
+            elif mon.get("n_proposed") is not None:
+                out.setdefault("notes", [])
+                if isinstance(out["notes"], list):
+                    out["notes"].append(
+                        f"monitor proposals={mon.get('n_proposed')} status={mon.get('status')}"
+                    )
+        except Exception as exc:
+            out["monitor"] = {"ok": False, "error": str(exc)}
 
     # #641 residual: live safe ops open #644 fleet handoffs (accept → loops via #820)
     if dispatch_fleet and not blocked and not dry_run:

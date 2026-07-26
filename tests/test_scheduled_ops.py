@@ -27,9 +27,12 @@ class TestCatalog(unittest.TestCase):
             "deploy-production",
             "marketplace-package",
             "implement-epic-slice",
+            "review-discussions",
+            "monitor-market",
         ):
             self.assertIn(need, ids)
         self.assertIsNotNone(get_op("scheduled-refactor"))
+        self.assertEqual(get_op("review-discussions")["risk_level"], "low")
 
 
 class TestRunGates(unittest.TestCase):
@@ -99,6 +102,48 @@ class TestRunGates(unittest.TestCase):
 
         out = dispatch_fleet_for_scheduled_op("deploy-production")
         self.assertTrue(out.get("skipped"))
+
+    def test_review_discussions_dry_run_and_live_fleet(self):
+        """#642: review-discussions dry-run attaches monitor; live opens market-monitor handoff."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.fleet import list_handoffs
+        from plate_core.scheduled_ops import run_scheduled_op
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ops_dir = Path(tmp) / "ops"
+            fleet_dir = Path(tmp) / "fleet"
+            dry = run_scheduled_op(
+                "review-discussions",
+                dry_run=True,
+                risk_tolerance="medium",
+                base_dir=ops_dir,
+                record_ledger=False,
+                budget_remaining=100_000,
+                use_live_budget=False,
+            )
+            self.assertTrue(dry["ok"], dry)
+            self.assertIn("monitor", dry)
+            self.assertTrue((dry.get("fleet_dispatch") or {}).get("dry_run"))
+            self.assertEqual((dry.get("fleet_dispatch") or {}).get("to_agent"), "market-monitor")
+
+            live = run_scheduled_op(
+                "review-discussions",
+                dry_run=False,
+                risk_tolerance="low",
+                base_dir=ops_dir,
+                fleet_base_dir=fleet_dir,
+                record_ledger=False,
+                budget_remaining=100_000,
+                use_live_budget=False,
+            )
+            self.assertTrue(live["ok"], live)
+            fd = live.get("fleet_dispatch") or {}
+            self.assertTrue(fd.get("ok"), fd)
+            self.assertEqual(fd.get("to_agent"), "market-monitor")
+            rows = list_handoffs(status="active", base_dir=fleet_dir)
+            self.assertTrue(any(h.get("handoff_id") == fd.get("handoff_id") for h in rows))
 
     def test_critical_blocked_without_approve(self):
         out = run_scheduled_op(
