@@ -96,6 +96,59 @@ class TestAutonomyEngine(unittest.TestCase):
             # Over per_cycle -> pause returns Decision.PAUSE
             self.assertEqual(engine.enforce_budget(200, "test"), Decision.PAUSE)
 
+    def test_enforce_budget_per_action_pause(self):
+        """#634: token_budget.per_action caps a single estimate even when daily/cycle have room."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.autonomy_config = {
+                "token_budget": {
+                    "daily": 100_000,
+                    "per_cycle": 50_000,
+                    "per_action": 500,
+                    "action": "pause",
+                }
+            }
+            engine.risk_tolerance = "high"
+            engine.enabled = True
+            engine._spent_this_cycle = 0
+            engine._spent_today = 0
+            engine._spent_usd_today = 0.0
+            self.assertEqual(engine.enforce_budget(400, "test"), Decision.PROCEED)
+            self.assertEqual(engine._spent_this_cycle, 400)
+            # Single action over per_action → pause, no charge
+            self.assertEqual(engine.enforce_budget(600, "test"), Decision.PAUSE)
+            self.assertEqual(engine._spent_this_cycle, 400)
+
+    def test_enforce_budget_per_action_throttle(self):
+        """#634: throttle policy charges at most per_action when that is the breach."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.autonomy_config = {
+                "token_budget": {
+                    "daily": 100_000,
+                    "per_cycle": 50_000,
+                    "per_action": 1000,
+                    "action": "throttle",
+                }
+            }
+            engine.risk_tolerance = "medium"
+            engine.enabled = True
+            engine._spent_this_cycle = 0
+            engine._spent_today = 0
+            engine._spent_usd_today = 0.0
+            self.assertEqual(engine.enforce_budget(2000, "test"), Decision.THROTTLE)
+            # half of 2000 = 1000, also capped by per_action=1000
+            self.assertEqual(engine._spent_this_cycle, 1000)
+            self.assertGreaterEqual(engine.throttled_actions, 1)
+
     def test_get_status_and_autopilot(self):
         engine = AutonomyEngine(repo=None)
         engine.risk_tolerance = "high"
@@ -762,6 +815,38 @@ class TestShadowSimulation645(unittest.TestCase):
                 )
             self.assertTrue(snap["would_pause"])
             self.assertIn("daily", snap.get("gate_reason") or "")
+
+    def test_get_budget_snapshot_per_action_gate(self):
+        """#634: snapshot reports per_action_limit and gates estimates above it."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import format_budget_snapshot_markdown, get_budget_snapshot
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 100_000,
+                        "per_cycle": 50_000,
+                        "per_action": 300,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir, estimated_tokens=900)
+            self.assertEqual(snap["per_action_limit"], 300)
+            self.assertTrue(snap["would_pause"])
+            self.assertIn("per_action", snap.get("gate_reason") or "")
+            md = format_budget_snapshot_markdown(snap)
+            self.assertIn("Per-action", md)
+            self.assertIn("300", md)
 
     def test_apply_live_budget_charge(self):
         """#777 helper charges only on live path and adjusts remaining."""

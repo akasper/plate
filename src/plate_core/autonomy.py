@@ -1249,7 +1249,7 @@ class AutonomyEngine:
 
         estimate_cost (wired #471 heuristics) is called by caller (decide_next/run_cycle) and passed here.
         On breach: throttle (partial spend + continue), pause (stop), warn (continue full).
-        Daily UTC reset + per_cycle/daily caps + optional cost_ceiling_usd.
+        Daily UTC reset + per_cycle/daily caps + optional per_action + cost_ceiling_usd.
         Spend is durable under .agentic/budget/spend.json so long /loop runs stay safe across processes.
         Always respects risk_tolerance=='off'.
         """
@@ -1265,9 +1265,20 @@ class AutonomyEngine:
             self._last_reset = today
             self._persist_spend()
 
-        cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000) or 8000
-        daily_cap = self.autonomy_config.get("token_budget", {}).get("daily", 50000) or 50000
-        policy = self.autonomy_config.get("token_budget", {}).get("action", "throttle")
+        tb = self.autonomy_config.get("token_budget") or {}
+        if not isinstance(tb, dict):
+            tb = {}
+        cap = tb.get("per_cycle", 8000) or 8000
+        daily_cap = tb.get("daily", 50000) or 50000
+        policy = tb.get("action", "throttle")
+        # Optional single-action ceiling (#634); unset/None = unlimited
+        per_action_raw = tb.get("per_action")
+        try:
+            per_action_cap = int(per_action_raw) if per_action_raw is not None else None
+            if per_action_cap is not None and per_action_cap <= 0:
+                per_action_cap = None
+        except (TypeError, ValueError):
+            per_action_cap = None
         cost_ceiling = self.autonomy_config.get("cost_ceiling_usd")
         try:
             cost_ceiling_f = float(cost_ceiling) if cost_ceiling is not None else None
@@ -1279,7 +1290,8 @@ class AutonomyEngine:
         projected_daily = self._spent_today + estimated
         projected_usd = self._spent_usd_today + est_usd
 
-        token_breach = projected_cycle > cap or projected_daily > daily_cap
+        per_action_breach = per_action_cap is not None and estimated > per_action_cap
+        token_breach = projected_cycle > cap or projected_daily > daily_cap or per_action_breach
         usd_breach = cost_ceiling_f is not None and projected_usd > cost_ceiling_f
 
         def _charge(tokens: int) -> None:
@@ -1298,7 +1310,10 @@ class AutonomyEngine:
         if usd_breach and policy != "warn":
             return Decision.PAUSE
         if policy == "throttle" and token_breach and not usd_breach:
+            # Cap throttle charge by remaining room under per_action when that is the breach
             half = max(1, estimated // 2)
+            if per_action_breach and per_action_cap is not None:
+                half = min(half, max(1, per_action_cap))
             _charge(half)
             self.throttled_actions += 1
             return Decision.THROTTLE
@@ -1699,6 +1714,14 @@ def get_budget_snapshot(
         per_cycle = int(tb.get("per_cycle") if tb.get("per_cycle") is not None else 8000)
     except (TypeError, ValueError):
         per_cycle = 8000
+    per_action: int | None
+    try:
+        raw_pa = tb.get("per_action")
+        per_action = int(raw_pa) if raw_pa is not None else None
+        if per_action is not None and per_action <= 0:
+            per_action = None
+    except (TypeError, ValueError):
+        per_action = None
     action_policy = str(tb.get("action") or auto.get("action") or "pause").lower()
     if action_policy not in ("pause", "throttle", "warn"):
         action_policy = "pause"
@@ -1756,11 +1779,12 @@ def get_budget_snapshot(
     if est is not None and est > 0:
         over_daily = spent_today + est > daily
         over_cycle = spent_this_cycle + est > per_cycle
+        over_per_action = per_action is not None and est > per_action
         over_usd = (
             cost_ceiling_usd is not None
             and (spent_usd_today + tokens_to_usd(est)) > cost_ceiling_usd
         )
-        breach = over_daily or over_cycle or over_usd
+        breach = over_daily or over_cycle or over_per_action or over_usd
         if breach:
             if action_policy == "warn":
                 gate_reason = "estimate exceeds budget (warn policy — would proceed)"
@@ -1770,10 +1794,15 @@ def get_budget_snapshot(
             else:
                 would_pause = True
                 gate_reason = "estimate exceeds budget (pause)"
-            if over_daily:
+            # Prefer the most specific single-action reason when that alone breaches
+            if over_per_action and not over_daily and not over_cycle and not over_usd:
+                gate_reason = f"{gate_reason}: per_action"
+            elif over_daily:
                 gate_reason = f"{gate_reason}: daily"
             elif over_cycle:
                 gate_reason = f"{gate_reason}: per_cycle"
+            elif over_per_action:
+                gate_reason = f"{gate_reason}: per_action"
             elif over_usd:
                 gate_reason = f"{gate_reason}: cost_ceiling_usd"
 
@@ -1793,6 +1822,7 @@ def get_budget_snapshot(
         "action_policy": action_policy,
         "daily_limit": daily,
         "per_cycle_limit": per_cycle,
+        "per_action_limit": per_action,
         "cost_ceiling_usd": cost_ceiling_usd,
         "spent_today": spent_today,
         "spent_this_cycle": spent_this_cycle,
@@ -1814,6 +1844,7 @@ def get_budget_snapshot(
         "note": (
             "Durable spend under .agentic/budget/spend.json (#634). "
             "UTC day rollover zeros spend for snapshot (matches AutonomyEngine). "
+            "Optional token_budget.per_action caps a single estimate. "
             "risk_tolerance=off skips AutonomyEngine enforce; snapshot still shows limits."
         ),
         "repo": repo,
@@ -1829,6 +1860,7 @@ def format_budget_snapshot_markdown(snap: dict[str, Any]) -> str:
         f"(remaining {snap.get('remaining_tokens')}, burn {snap.get('burn_rate')}%)",
         f"- Per-cycle: {snap.get('spent_this_cycle')}/{snap.get('per_cycle_limit')} "
         f"(remaining {snap.get('remaining_cycle_tokens')})",
+        f"- Per-action limit: {snap.get('per_action_limit') if snap.get('per_action_limit') is not None else '(none)'}",
         f"- USD: spent={snap.get('spent_usd_today')} ceiling={snap.get('cost_ceiling_usd')} "
         f"remaining={snap.get('remaining_usd')}",
         f"- Pressure: {snap.get('budget_pressure')}",

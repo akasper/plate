@@ -412,7 +412,7 @@ When PLATE signals are present (`.plate/`, `AGENTS.md`, Epic labels, release art
 ### Quiet + budget rules inside autonomy loops
 - Terminal output: **only** terse one-sentence bullets (same as quiet_operations). Never dump full cycle JSON unless the user asked for `--json` / debug.
 - GitHub comments: only on meaningful forward progress or required markers (`PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`, USAGE REPORT). No "cycle N complete, 0 actions" spam.
-- Respect `token_budget.per_cycle` / daily caps and `cost_ceiling_usd`. When status shows throttle or ceiling hit, exit the loop cleanly with one bullet naming the constraint.
+- Respect `token_budget.per_cycle` / daily / optional `per_action` caps and `cost_ceiling_usd`. When status shows throttle or ceiling hit, exit the loop cleanly with one bullet naming the constraint.
 - At `risk_tolerance: low`, prefer dry-run / shadow simulation (#645) and human checkpoints before high-impact actions (deploy, release cut, force-push, secretful ops). Use `plate_autonomy_simulate` / `gh plate autonomy --simulate ACTION` for a structured ShadowReport (impact, cost, side effects, gate_preview, shadow_id); high/critical live runs need shadow_ack + approved.
 - At `high`, still never skip human Tasks (real-world credentials, marketplace publish, PyPI) or merge policy gates.
 
