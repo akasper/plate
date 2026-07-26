@@ -1,0 +1,23 @@
+{
+  "slug": "634-632-646-design-budget-base-dir",
+  "change_type": "fix",
+  "surface": "src/plate_core/design_research_approval.py, design_validation.py",
+  "summary": "Design/Research artifact propose+resubmit and design-contract propose isolate #634 budget hydrate/charge under base_dir/budget so tests/live calls with base_dir cannot exhaust repo-root spend.json (#634/#632/#646).",
+  "migration_impact": "Local only. Production base_dir=None still uses repo-root .agentic/budget. Callers passing base_dir get fully isolated spend.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release with this fix.",
+    "2. Tests with base_dir can use_live_budget=True safely.",
+    "3. If spend polluted: gh plate autonomy --budget-reset."
+  ],
+  "agent_notes": "Completes budget base_dir isolation for remaining design surfaces after fleet/scheduled/stub/monitor/planning/packaging. Charge still happens on durable propose (intentional).",
+  "breaking": false,
+  "links": [
+    "#634",
+    "#632",
+    "#646",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

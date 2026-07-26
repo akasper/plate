@@ -173,6 +173,26 @@ class TestDesignResearchApproval632(unittest.TestCase):
         self.assertTrue(ok.get("ok", True))
         self.assertEqual(ok.get("budget_remaining"), est["estimated_tokens"] + 1000)
 
+    def test_propose_live_budget_isolates_under_base_dir(self):
+        from plate_core.autonomy import load_budget_spend
+
+        root_before = int((load_budget_spend() or {}).get("spent_today") or 0)
+        out = propose_artifact(
+            "design",
+            "Isolated charge",
+            "summary",
+            base_dir=self.base,
+            use_live_budget=True,
+        )
+        self.assertTrue(out.get("ok", True), out)
+        self.assertIn("budget_charge", out)
+        self.assertTrue((out.get("budget_charge") or {}).get("ok"))
+        local = load_budget_spend(base_dir=self.base / "budget")
+        self.assertGreater(int(local.get("spent_today") or 0), 0)
+        self.assertEqual(
+            int((load_budget_spend() or {}).get("spent_today") or 0), root_before
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -290,11 +290,17 @@ def propose_contract(
     est_tokens = int(cost_est.get("estimated_tokens") or 0)
     effective_remaining = budget_remaining
     budget_notes: list[str] = []
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     if effective_remaining is None and use_live_budget:
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot(estimate_tokens=est_tokens)
+            snap = get_budget_snapshot(
+                estimate_tokens=est_tokens,
+                base_dir=budget_base,
+            )
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective_remaining = int(rem)
@@ -390,6 +396,7 @@ def propose_contract(
             use_live_budget=use_live_budget,
             action_kind="design_contract_propose",
             reason=f"propose_contract:{contract.id}",
+            base_dir=budget_base,
         )
     except Exception:
         pass
