@@ -1,0 +1,21 @@
+{
+  "slug": "660-pm-collect-ready-issues",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py",
+  "summary": "PM collect_work expands what_next ready_issue / issue_number into concrete issue-# rows with Closes prompts so approve&run can open feature/bug loops (#660/#654).",
+  "migration_impact": "PM cycles that previously queued a single process what_next blob now propose issue-N assignments when what_next returns ready candidates. Agents should Approve & run those rows (status=run) instead of inventing process-only packets.",
+  "migration_guidance": [
+    "1. Upgrade plate-core with this fix.",
+    "2. plate_pm_run_cycle dry_run \u2192 expect issue-<n> work_ids when ready Features/Bugs exist.",
+    "3. plate_pm_complete status=run on those rows to dispatch loops linked to the GitHub issue."
+  ],
+  "agent_notes": "When ready_issues present, process what_next blob is omitted to avoid duplicate non-actionable queue noise. classify_work_type uses Bug/Feature labels for bugfix vs implement.",
+  "breaking": false,
+  "links": [
+    "#895",
+    "#660",
+    "#654",
+    "#892",
+    "#894"
+  ]
+}
