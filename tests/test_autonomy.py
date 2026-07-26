@@ -706,6 +706,10 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertEqual(snap["remaining_tokens"], 6000)
             self.assertTrue(snap["spend_is_today"])
             self.assertTrue(snap["would_pause"])
+            # Dashboard/feed/PM field aliases must mirror would_pause/throttle (#634).
+            self.assertTrue(snap["would_pause_next_cycle"])
+            self.assertEqual(snap["would_pause_next_cycle"], snap["would_pause"])
+            self.assertEqual(snap["would_throttle_next_cycle"], snap["would_throttle"])
             self.assertIn("daily", snap["gate_reason"] or "")
             md = format_budget_snapshot_markdown(snap)
             self.assertIn("Budget snapshot", md)

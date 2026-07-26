@@ -518,7 +518,12 @@ def run_scheduled_op(
                     f"budget hydrated: remaining_tokens={effective_budget} "
                     f"pressure={budget_snap.get('budget_pressure')}"
                 )
-            if budget_snap.get("would_pause_next_cycle") and effective_budget is not None:
+            would_pause_snap = bool(
+                budget_snap.get("would_pause_next_cycle")
+                if budget_snap.get("would_pause_next_cycle") is not None
+                else budget_snap.get("would_pause")
+            )
+            if would_pause_snap and effective_budget is not None:
                 # Mirror dashboard pressure: treat would_pause as zero room for new spend
                 if int(effective_budget) < est_tokens:
                     budget_notes.append("budget snapshot would_pause_next_cycle")
@@ -888,10 +893,21 @@ def scheduled_ops_status(
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot()
+            budget_base = Path(base_dir) / "budget" if base_dir is not None else None
+            snap = get_budget_snapshot(base_dir=budget_base)
             out["budget_remaining_tokens"] = snap.get("remaining_tokens")
             out["budget_pressure"] = snap.get("budget_pressure")
-            out["would_pause_next_cycle"] = snap.get("would_pause_next_cycle")
+            # Prefer next-cycle alias; fall back to would_pause for older callers.
+            out["would_pause_next_cycle"] = bool(
+                snap.get("would_pause_next_cycle")
+                if snap.get("would_pause_next_cycle") is not None
+                else snap.get("would_pause")
+            )
+            out["would_throttle_next_cycle"] = bool(
+                snap.get("would_throttle_next_cycle")
+                if snap.get("would_throttle_next_cycle") is not None
+                else snap.get("would_throttle")
+            )
         except Exception as exc:
             out["budget_error"] = str(exc)
     return out
