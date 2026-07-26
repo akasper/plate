@@ -711,6 +711,49 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertIn("Budget snapshot", md)
             self.assertIn("4000/10000", md)
 
+    def test_get_budget_snapshot_low_remaining_is_critical(self):
+        """#634/#653: low remaining uses critical (not high) so what_next/feed gates fire."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 9500,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 2000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["remaining_tokens"], 500)
+            self.assertEqual(snap["budget_pressure"], "critical")
+            self.assertNotEqual(snap["budget_pressure"], "high")
+
     def test_get_budget_snapshot_stale_day_zeros_spend(self):
         """#795: prior UTC day spend must not exhaust snapshot/what_next after rollover."""
         import tempfile

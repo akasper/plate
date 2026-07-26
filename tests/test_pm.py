@@ -323,7 +323,7 @@ class TestPMCycle(unittest.TestCase):
             with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
                 st = pm.get_status()
             self.assertLessEqual(int(st.budget_remaining_tokens or 0), 1)
-            self.assertIn(st.budget_pressure, ("critical", "exhausted", "high"))
+            self.assertIn(st.budget_pressure, ("critical", "exhausted"))
             self.assertEqual(st.spent_today_durable, 9999)
 
     def test_get_status_ignores_stale_spend_file_without_snapshot_patch(self):
