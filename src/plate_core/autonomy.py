@@ -1890,6 +1890,9 @@ def get_budget_snapshot(
         "estimated_tokens": est,
         "would_pause": would_pause,
         "would_throttle": would_throttle,
+        # Aliases matching costs dashboard / feed / PM / scheduled_ops field names (#634/#653).
+        "would_pause_next_cycle": would_pause,
+        "would_throttle_next_cycle": would_throttle,
         "gate_reason": gate_reason,
         "spend_path": spend_path,
         "spend_day": today if spend_is_today else (stored_day or None),

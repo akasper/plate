@@ -1024,6 +1024,7 @@ class ProjectManager:
                         "open_human_checkpoints": auto.get("open_human_checkpoints")
                         or [],
                     },
+                    budget_base_dir=self.budget_base_dir,
                 )
                 b = dash.get("budget") or {}
                 if b.get("remaining_tokens") is not None:
