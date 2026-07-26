@@ -1713,17 +1713,27 @@ def get_budget_snapshot(
     enabled = bool(auto.get("enabled", False)) and risk != "off"
 
     spend = load_budget_spend(base_dir=base_dir) or {}
-    try:
-        spent_today = int(spend.get("spent_today") or 0)
-    except (TypeError, ValueError):
+    today = datetime.now(timezone.utc).date().isoformat()
+    # Match AutonomyEngine._load_durable_spend + record_budget_spend: ignore prior UTC day.
+    stored_day = str(spend.get("date") or spend.get("day") or "")
+    spend_is_today = bool(stored_day) and stored_day == today
+    if spend_is_today:
+        try:
+            spent_today = int(spend.get("spent_today") or 0)
+        except (TypeError, ValueError):
+            spent_today = 0
+        try:
+            spent_this_cycle = int(spend.get("spent_this_cycle") or 0)
+        except (TypeError, ValueError):
+            spent_this_cycle = 0
+        try:
+            spent_usd_today = float(spend.get("spent_usd_today") or 0.0)
+        except (TypeError, ValueError):
+            spent_usd_today = 0.0
+    else:
+        # Stale or missing day → full remaining (engine status already zeros counters).
         spent_today = 0
-    try:
-        spent_this_cycle = int(spend.get("spent_this_cycle") or 0)
-    except (TypeError, ValueError):
         spent_this_cycle = 0
-    try:
-        spent_usd_today = float(spend.get("spent_usd_today") or 0.0)
-    except (TypeError, ValueError):
         spent_usd_today = 0.0
     # Prefer recomputed USD when token spend present (keeps heuristic consistent)
     if spent_usd_today <= 0 and spent_today > 0:
@@ -1797,11 +1807,13 @@ def get_budget_snapshot(
         "would_throttle": would_throttle,
         "gate_reason": gate_reason,
         "spend_path": spend_path,
-        "spend_day": spend.get("day"),
-        "updated_at": spend.get("updated_at"),
+        "spend_day": today if spend_is_today else (stored_day or None),
+        "spend_is_today": spend_is_today,
+        "updated_at": spend.get("updated_at") if spend_is_today else None,
         "usd_per_1k_tokens": _USD_PER_1K_TOKENS,
         "note": (
             "Durable spend under .agentic/budget/spend.json (#634). "
+            "UTC day rollover zeros spend for snapshot (matches AutonomyEngine). "
             "risk_tolerance=off skips AutonomyEngine enforce; snapshot still shows limits."
         ),
         "repo": repo,

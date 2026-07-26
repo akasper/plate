@@ -607,9 +607,15 @@ class TestShadowSimulation645(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
             save_budget_spend(
                 {
-                    "day": "2026-07-25",
+                    "date": today,
                     "spent_today": 4000,
                     "spent_this_cycle": 500,
                     "spent_usd_today": 0.008,
@@ -631,11 +637,48 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertEqual(snap["daily_limit"], 10000)
             self.assertEqual(snap["spent_today"], 4000)
             self.assertEqual(snap["remaining_tokens"], 6000)
+            self.assertTrue(snap["spend_is_today"])
             self.assertTrue(snap["would_pause"])
             self.assertIn("daily", snap["gate_reason"] or "")
             md = format_budget_snapshot_markdown(snap)
             self.assertIn("Budget snapshot", md)
             self.assertIn("4000/10000", md)
+
+    def test_get_budget_snapshot_stale_day_zeros_spend(self):
+        """#795: prior UTC day spend must not exhaust snapshot/what_next after rollover."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": "2020-01-01",
+                    "spent_today": 999_999,
+                    "spent_this_cycle": 50_000,
+                    "spent_usd_today": 9.99,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {"daily": 50000, "per_cycle": 8000, "action": "pause"},
+                    "cost_ceiling_usd": 10.0,
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["spent_today"], 0)
+            self.assertEqual(snap["spent_this_cycle"], 0)
+            self.assertEqual(snap["remaining_tokens"], 50000)
+            self.assertEqual(snap["budget_pressure"], "ok")
+            self.assertFalse(snap["spend_is_today"])
 
     def test_record_budget_spend_public(self):
         """#634/#775: gated surfaces charge durable spend outside AutonomyEngine."""
