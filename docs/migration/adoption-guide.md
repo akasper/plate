@@ -52,3 +52,9 @@ Import decisions are driven by `template_payload_manifest.yml` `path_rules` (#61
 - `.github/labels.yml` and issue templates → **overwrite** (PLATE taxonomy).
 
 Dry-run shows `create_as` / `conflict` / `skip` per file. Customize rules only in a deliberate fork.
+
+## CURRENT.md seeding
+
+`gh plate import-payload` seeds a minimal `CURRENT.md` when missing (#618) so
+`validate_plate_repo` and feature detection do not fail after adopt. Prefer
+durable evidence in `.agentic/releases/`; treat CURRENT.md as a short index.

@@ -1,0 +1,15 @@
+{
+  "slug": "618-seed-current-md",
+  "change_type": "feature",
+  "surface": "src/plate_core/import_payload.py, docs/migration/adoption-guide.md",
+  "summary": "Seed minimal CURRENT.md on import-payload when absent (#618): adoption note, capability index, CI guidance without generic-template placeholder; skip if present; points agents to .agentic/releases/ for durable evidence.",
+  "migration_impact": "import-payload dry-run/apply may create CURRENT.md when missing. Existing CURRENT.md is never overwritten. Greenfield and adopt checkouts satisfy validate_plate_repo current-md presence check.",
+  "migration_guidance": [
+    "1. Upgrade plate-core so import-payload seeds CURRENT.md.",
+    "2. After apply, edit CURRENT.md rows or migrate claims into .agentic/releases/ fragments.",
+    "3. Do not reintroduce the generic-template CI placeholder phrase in CURRENT.md."
+  ],
+  "agent_notes": "After import, if CURRENT.md was created, fill real capability rows when Features land. Prefer fragments under .agentic/releases/unreleased/ for process changes.",
+  "breaking": false,
+  "links": ["#618", "#616", "#619", "#615", "#633"]
+}
