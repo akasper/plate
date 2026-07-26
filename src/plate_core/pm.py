@@ -959,10 +959,11 @@ class ProjectManager:
         # Durable spend first (no network) so PM honors #634 rails offline.
         # Must use get_budget_snapshot (UTC day rollover) — raw load_budget_spend
         # keeps prior-day counters and falsely reports critical pressure (#660/#634).
+        # Honor budget_base_dir so isolated/test runs do not read operator spend.
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot() or {}
+            snap = get_budget_snapshot(base_dir=self.budget_base_dir) or {}
             try:
                 spent_durable = int(snap.get("spent_today") or 0)
             except (TypeError, ValueError):

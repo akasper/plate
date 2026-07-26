@@ -281,6 +281,51 @@ class TestPMCycle(unittest.TestCase):
             self.assertEqual(st.budget_remaining_tokens, 50000)
             self.assertFalse(st.would_pause_next_cycle)
 
+    def test_get_status_honors_budget_base_dir(self):
+        """Isolated budget_base_dir must drive PM pressure, not operator spend (#634/#660)."""
+        from plate_core.autonomy import save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bdir = root / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 9999,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 2000,
+                        "action": "pause",
+                    },
+                }
+
+            pm = ProjectManager(
+                repo=None,
+                state_dir=root / "pm",
+                budget_base_dir=bdir,
+            )
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                st = pm.get_status()
+            self.assertLessEqual(int(st.budget_remaining_tokens or 0), 1)
+            self.assertIn(st.budget_pressure, ("critical", "exhausted", "high"))
+            self.assertEqual(st.spent_today_durable, 9999)
+
     def test_get_status_ignores_stale_spend_file_without_snapshot_patch(self):
         """Integration: stale prior-day spend.json must not make pressure critical."""
         with tempfile.TemporaryDirectory() as tmp:
