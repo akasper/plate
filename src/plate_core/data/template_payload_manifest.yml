@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 
 # Files selected into the canonical template payload used for downstream scaffolding.
 include_globs:
@@ -27,3 +27,31 @@ copy_to_downstream_globs:
 
 # No files in this payload should be consumed as plate runtime-only config.
 tool_runtime_only_globs: []
+
+# Per-path conflict strategies for adoption (#617). First match wins.
+# on_conflict: skip | overwrite | conflict | install_as | preserve_existing
+path_rules:
+  - globs:
+      - ".github/workflows/ci.yml"
+    on_conflict: install_as
+    install_as: ".github/workflows/plate-ci.yml"
+    reason: "Preserve product CI; install PLATE process workflow as plate-ci.yml"
+  - globs:
+      - "package.json"
+      - "playwright.config.ts"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "SPEC.md"
+    on_conflict: conflict
+    reason: "Root product files need human merge; do not clobber"
+  - globs:
+      - ".github/labels.yml"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+    on_conflict: overwrite
+    reason: "PLATE taxonomy/templates are safe to refresh on adopt"
+  - globs:
+      - "AGENTS.md"
+      - ".github/CODEOWNERS"
+    on_conflict: conflict
+    reason: "May contain local customizations; review before replace"

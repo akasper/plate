@@ -42,3 +42,13 @@ Greenfield path: `docs/bootstrap/new-repository-checklist.md`.
 - #619 adoption mode
 - #616 / #620 import-payload + shared planner
 - #633 frictionless onboarding epic
+
+## Conflict strategies (manifest path_rules)
+
+Import decisions are driven by `template_payload_manifest.yml` `path_rules` (#617), e.g.:
+
+- Existing `.github/workflows/ci.yml` → install PLATE process as `.github/workflows/plate-ci.yml` (product CI preserved).
+- Root `package.json` / `SPEC.md` / `README.md` → **conflict** (human merge).
+- `.github/labels.yml` and issue templates → **overwrite** (PLATE taxonomy).
+
+Dry-run shows `create_as` / `conflict` / `skip` per file. Customize rules only in a deliberate fork.
