@@ -1,0 +1,16 @@
+{
+  "slug": "378-379-marketplace-install-checklist",
+  "change_type": "docs",
+  "surface": "docs/bootstrap/marketplace-install-checklist.md, README.md, tests/test_copilot_cli_marketplace_packaging.py",
+  "summary": "Close #378/#379: durable maintainer marketplace install checklist (Copilot plugin/ + Grok .plugin surfaces), README link + corrected source paths, tests assert checklist and human Tasks #380/#381/#625/#626 boundaries.",
+  "migration_impact": "Docs only. Operators use docs/bootstrap/marketplace-install-checklist.md before release cut. Real publish still human Tasks; agents must not complete them.",
+  "migration_guidance": [
+    "1. No package change required for docs alone.",
+    "2. Before marketplace-facing release: follow docs/bootstrap/marketplace-install-checklist.md.",
+    "3. Run pytest tests/test_copilot_cli_marketplace_packaging.py -q.",
+    "4. Leave #380/#381/#625/#626 to human owners."
+  ],
+  "agent_notes": "Packaging artifacts already present (manifests + CI smoke). This closes documentation/verification Features, not human publish Tasks.",
+  "breaking": false,
+  "links": ["#378", "#379", "#380", "#381", "#625", "#626", "#652", "#654"]
+}
