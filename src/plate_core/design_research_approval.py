@@ -111,6 +111,7 @@ def _artifact_budget_gate(
     resubmit: bool = False,
     budget_remaining: int | None,
     use_live_budget: bool,
+    budget_base_dir: Path | None = None,
 ) -> tuple[dict[str, Any], int | None, list[str], dict[str, Any] | None]:
     cost_est = estimate_artifact_cost(kind=kind, n_media=n_media, resubmit=resubmit)
     est = int(cost_est.get("estimated_tokens") or 0)
@@ -120,7 +121,10 @@ def _artifact_budget_gate(
         try:
             from .autonomy import get_budget_snapshot
 
-            snap = get_budget_snapshot(estimate_tokens=est)
+            snap = get_budget_snapshot(
+                estimate_tokens=est,
+                base_dir=budget_base_dir,
+            )
             rem = snap.get("remaining_tokens")
             if rem is not None:
                 effective = int(rem)
@@ -171,12 +175,16 @@ def propose_artifact(
     """
     k = "research" if (kind or "").lower().startswith("res") else "design"
     media = list(media_links or [])
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     cost_est, effective_remaining, budget_notes, blocked = _artifact_budget_gate(
         kind=k,
         n_media=len(media),
         resubmit=False,
         budget_remaining=budget_remaining,
         use_live_budget=use_live_budget,
+        budget_base_dir=budget_base,
     )
     if blocked is not None:
         return blocked
@@ -228,6 +236,7 @@ def propose_artifact(
             use_live_budget=use_live_budget,
             action_kind="artifact_propose",
             reason=f"propose_artifact:{pid}",
+            base_dir=budget_base,
         )
     except Exception:
         pass
@@ -351,12 +360,16 @@ def resubmit_proposal(
                 "proposal": rec.to_dict(),
             }
     media = list(media_links) if media_links is not None else list(rec.media_links or [])
+    budget_base: Path | None = None
+    if base_dir is not None:
+        budget_base = Path(base_dir) / "budget"
     cost_est, effective_remaining, budget_notes, blocked = _artifact_budget_gate(
         kind=str(rec.kind or "design"),
         n_media=len(media),
         resubmit=True,
         budget_remaining=budget_remaining,
         use_live_budget=use_live_budget,
+        budget_base_dir=budget_base,
     )
     if blocked is not None:
         blocked["proposal_id"] = rec.id
@@ -416,6 +429,7 @@ def resubmit_proposal(
             use_live_budget=use_live_budget,
             action_kind="artifact_resubmit",
             reason=f"resubmit_proposal:{rec.id}",
+            base_dir=budget_base,
         )
     except Exception:
         pass
