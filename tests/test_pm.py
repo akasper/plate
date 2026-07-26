@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -255,6 +256,59 @@ class TestPMCycle(unittest.TestCase):
             report = pm.run_cycle(dry_run=True)
         self.assertEqual(report["status"], "paused")
         self.assertEqual(report.get("pause_kind"), "budget")
+
+    def test_get_status_zeros_prior_day_spend(self):
+        """PM must not report critical pressure from yesterday's spend.json (#634/#660)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo=None, state_dir=Path(tmp))
+            # Simulate get_budget_snapshot after UTC day rollover (spent zeroed).
+            with patch(
+                "plate_core.autonomy.get_budget_snapshot",
+                return_value={
+                    "spent_today": 0,
+                    "spent_this_cycle": 0,
+                    "daily_limit": 50000,
+                    "per_cycle_limit": 8000,
+                    "remaining_tokens": 50000,
+                    "budget_pressure": "ok",
+                    "burn_rate": 0.0,
+                    "would_pause": False,
+                },
+            ):
+                st = pm.get_status()
+            self.assertEqual(st.budget_pressure, "ok")
+            self.assertEqual(st.spent_today_durable, 0)
+            self.assertEqual(st.budget_remaining_tokens, 50000)
+            self.assertFalse(st.would_pause_next_cycle)
+
+    def test_get_status_ignores_stale_spend_file_without_snapshot_patch(self):
+        """Integration: stale prior-day spend.json must not make pressure critical."""
+        with tempfile.TemporaryDirectory() as tmp:
+            spend_path = Path(tmp) / "spend.json"
+            spend_path.write_text(
+                json.dumps(
+                    {
+                        "date": "2020-01-01",
+                        "spent_today": 939804,
+                        "spent_this_cycle": 321809,
+                        "spent_usd_today": 1.88,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            def _load_spend(*, base_dir=None):
+                return json.loads(spend_path.read_text(encoding="utf-8"))
+
+            pm = ProjectManager(repo=None, state_dir=Path(tmp))
+            with patch("plate_core.autonomy.load_budget_spend", side_effect=_load_spend):
+                # Real get_budget_snapshot + patched load → prior day zeros
+                st = pm.get_status()
+            self.assertEqual(st.spent_today_durable, 0)
+            self.assertEqual(st.budget_remaining_tokens, 50000)
+            self.assertEqual(st.budget_pressure, "ok")
+            self.assertLess(st.burn_rate, 80.0)
 
     def test_pm_feed_items_gates(self):
         with tempfile.TemporaryDirectory() as tmp:
