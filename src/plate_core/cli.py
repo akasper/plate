@@ -2882,6 +2882,23 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
         print(f"Last cycle: {status.get('last_cycle')}")
         return 0
 
+    if getattr(args, "budget_reset", False):
+        from .autonomy import reset_budget_spend
+
+        out = reset_budget_spend(reason=getattr(args, "budget_reset_reason", None) or "cli --budget-reset")
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(f"Budget reset failed: {out.get('error')}", file=sys.stderr)
+            return 1
+        print(
+            f"Budget spend reset for {out.get('date')}: "
+            f"prior_spent_today={out.get('prior_spent_today')} → 0; "
+            f"remaining={out.get('remaining_tokens')} pressure={out.get('budget_pressure')}"
+        )
+        return 0
+
     if getattr(args, "budget", False):
         from .autonomy import format_budget_snapshot_markdown, get_budget_snapshot
 
@@ -2918,7 +2935,7 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
 
     if not getattr(args, "run", False) and not getattr(args, "loop", False):
         print(
-            "No --run, --loop, --budget, or --simulate specified; "
+            "No --run, --loop, --budget, --budget-reset, or --simulate specified; "
             "execution skipped (use --status or --budget for info only)."
         )
         return 0
@@ -2931,7 +2948,7 @@ def cmd_autonomy(args: argparse.Namespace) -> int:
     if not run and not loop:
         print(
             "Usage: gh plate autonomy --status | --budget [--estimate-tokens N] | "
-            "--simulate ACTION | --run [--dry-run] | --loop [--max-cycles N]",
+            "--budget-reset | --simulate ACTION | --run [--dry-run] | --loop [--max-cycles N]",
             file=sys.stderr,
         )
         return 1
@@ -4486,6 +4503,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--budget",
         action="store_true",
         help="Show durable #634 budget snapshot (limits, spend, remaining, pressure; pairs with feature-loop hydrate)",
+    )
+    autonomy.add_argument(
+        "--budget-reset",
+        dest="budget_reset",
+        action="store_true",
+        help="Zero durable spend.json counters for the current UTC day (operator hygiene; does not change .plate limits)",
+    )
+    autonomy.add_argument(
+        "--budget-reset-reason",
+        dest="budget_reset_reason",
+        default=None,
+        help="Optional note stored on spend.json when using --budget-reset",
     )
     autonomy.add_argument(
         "--estimate-tokens",

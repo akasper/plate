@@ -1,0 +1,23 @@
+{
+  "slug": "634-budget-spend-reset",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, cli.py, mcp_server.py",
+  "summary": "Operator hygiene for #634 durable spend: reset_budget_spend zeros today's spend.json counters; CLI gh plate autonomy --budget-reset and MCP plate_autonomy_budget reset=true restore remaining without changing .plate limits (#634/#653).",
+  "migration_impact": "Additive CLI/MCP flags. Local spend.json may be zeroed intentionally; does not alter token_budget or risk_tolerance. Downstream adopters get a safe way to clear test/loop debris that false-exhausted what_next budget_gate.",
+  "migration_guidance": [
+    "1. When plate_what_next prioritizes budget_gate but risk_tolerance=off and spend is test debris: gh plate autonomy --budget-reset (or plate_autonomy_budget reset=true).",
+    "2. Re-run gh plate autonomy --budget / plate_what_next; remaining should restore to daily limit.",
+    "3. Prefer use_live_budget=False in unit tests so spend.json is not charged outside isolated base_dir."
+  ],
+  "agent_notes": "reset_budget_spend is operator hygiene, not a bypass of live gates for unsupervised AutonomyEngine runs. Keep risk_off vs enforce semantics. Always isolate tests via base_dir.",
+  "breaking": false,
+  "links": [
+    "#634",
+    "#653",
+    "#654",
+    "#787"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}
