@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 from .github_client import GhClient
@@ -175,6 +176,7 @@ def get_cost_dashboard(
     *,
     autonomy_status: dict[str, Any] | None = None,
     health: dict[str, Any] | None = None,
+    budget_base_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Cost + risk observability dashboard for the endless what-next feed (#653 / #634).
 
@@ -186,6 +188,8 @@ def get_cost_dashboard(
     - ranked feed_items for #631 consumers
 
     Network-light: pass autonomy_status/health to avoid extra GH calls in tests.
+    Pass ``budget_base_dir`` to hydrate durable spend from an isolated root
+    (e.g. PM ``budget_base_dir``) instead of operator ``.agentic/budget``.
     """
     report = get_cost_report(repo=repo, client=client, epic_label=epic_label)
     cost_dict = report.to_dict()
@@ -247,7 +251,7 @@ def get_cost_dashboard(
     try:
         from .autonomy import get_budget_snapshot, tokens_to_usd
 
-        snap = get_budget_snapshot() or {}
+        snap = get_budget_snapshot(base_dir=budget_base_dir) or {}
         durable_spend = {
             "date": snap.get("spend_day"),
             "spent_today": snap.get("spent_today"),

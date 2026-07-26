@@ -1,0 +1,10 @@
+{
+  "slug": "634-budget-snapshot-aliases-dashboard-base-dir",
+  "change_type": "fix",
+  "surface": "src/plate_core/autonomy.py,costs.py,pm.py,scheduled_ops.py",
+  "summary": "get_budget_snapshot emits would_pause_next_cycle/would_throttle_next_cycle aliases for feed/PM/ops; get_cost_dashboard accepts budget_base_dir (PM forwards it); scheduled_ops_status hydrates spend under base_dir/budget.",
+  "migration_impact": "No downstream config. Consumers may read would_pause_next_cycle from snapshots; isolated PM/dashboard/ops status no longer clobber operator spend.",
+  "agent_notes": "Prefer would_pause_next_cycle (alias of would_pause) when wiring feed/PM. Pass budget_base_dir into get_cost_dashboard when ProjectManager.budget_base_dir is set.",
+  "breaking": false,
+  "links": ["#634", "#653", "#660", "#641"]
+}
