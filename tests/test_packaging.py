@@ -172,6 +172,28 @@ class TestBuildPackage(unittest.TestCase):
         self.assertTrue(ok["ok"])
         self.assertEqual(ok.get("budget_remaining"), est["estimated_tokens"] + 5000)
 
+    def test_preview_persist_false_never_charges(self):
+        from plate_core.autonomy import load_budget_spend
+
+        root_before = int((load_budget_spend() or {}).get("spent_today") or 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            out = build_package(
+                "0.9.1",
+                [{"slug": "a", "summary": "A"}],
+                persist=False,
+                base_dir=base,
+                use_live_budget=True,
+            )
+            self.assertTrue(out["ok"])
+            self.assertNotIn("budget_charge", out)
+            self.assertTrue(
+                any("skipped budget charge" in n for n in (out.get("notes") or []))
+            )
+            self.assertEqual(
+                int((load_budget_spend() or {}).get("spent_today") or 0), root_before
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
