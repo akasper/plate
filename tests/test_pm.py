@@ -60,6 +60,47 @@ class TestPMTeamAndAssign(unittest.TestCase):
         self.assertIn("auto-delegate disabled", asg["rationale"])
         self.assertNotIn("blocked: risk_tolerance=off", asg["rationale"])
 
+    def test_ready_issue_candidates_from_what_next(self):
+        from plate_core.pm import _ready_issue_candidates_from_what_next
+
+        rows = _ready_issue_candidates_from_what_next(
+            {
+                "priority": "ready_issue",
+                "issue_number": 364,
+                "issue_title": "Coverage gaps",
+                "ready_issues": [
+                    {"number": 364, "title": "Coverage gaps", "labels": ["Feature"]},
+                    {"number": 999, "title": "Fix crash", "labels": ["Bug"]},
+                ],
+            }
+        )
+        nums = {r["number"] for r in rows}
+        self.assertEqual(nums, {364, 999})
+        bug = next(r for r in rows if r["number"] == 999)
+        self.assertEqual(bug["item_type"], "bug")
+        self.assertIn("Closes #999", bug["prompt_segment"])
+
+    def test_collect_work_expands_ready_issues(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo="akasper/plate", state_dir=Path(tmp))
+            fake_wn = {
+                "priority": "ready_issue",
+                "next_action": "implement ready issue #364",
+                "issue_number": 364,
+                "issue_title": "Coverage gaps",
+                "ready_issues": [
+                    {"number": 364, "title": "Coverage gaps", "labels": ["Feature"]},
+                ],
+                "prompt_segment": "do it",
+                "rationale": "ready",
+            }
+            with patch("plate_core.what_next.get_what_next", return_value=fake_wn), patch(
+                "plate_core.feed.get_user_feed", return_value={"items": []}
+            ):
+                items = pm.collect_work(limit=5)
+            self.assertTrue(any(i.get("number") == 364 for i in items))
+            self.assertFalse(any(i.get("id") == "what_next" for i in items))
+
     def test_assign_ok(self):
         asg = assign_work(
             {"id": "2", "title": "Implement feature Y", "type": "feature", "impact": "medium"},

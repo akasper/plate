@@ -169,21 +169,88 @@ def classify_work_type(item: dict[str, Any]) -> str:
     """Map feed/what_next item to work type for assignment."""
     t = str(item.get("item_type") or item.get("type") or item.get("kind") or "").lower()
     title = str(item.get("title") or item.get("next_action") or "").lower()
+    labels = item.get("labels") or []
+    lab_lower = {
+        str(x.get("name") if isinstance(x, dict) else x).lower() for x in labels
+    }
     if t in ("task", "checkpoint") or "checkpoint" in title:
         return "checkpoint"
-    if t == "question" or "question" in title:
+    if t == "question" or "question" in title or "question" in lab_lower:
         return "qanda"
-    if "design" in title or t == "design":
+    if "design" in title or t == "design" or "design" in lab_lower:
         return "design"
-    if "research" in title or t == "research":
+    if "research" in title or t == "research" or "research" in lab_lower:
         return "research"
-    if "release" in title or "cut" in title or "finalize" in title:
+    if "release" in title or "cut" in title or "finalize" in title or "release" in lab_lower:
         return "release"
-    if "bug" in title or "fix" in title:
+    if "bug" in title or "fix" in title or t == "bug" or "bug" in lab_lower:
         return "bugfix"
     if "refactor" in title or "rearch" in title:
         return "refactor"
+    if t in ("feature", "implement") or "feature" in lab_lower:
+        return "implement"
     return "implement"
+
+
+def _ready_issue_candidates_from_what_next(wn: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expand what_next ready_issue / issue_number into assignable PM work rows (#660)."""
+    out: list[dict[str, Any]] = []
+    seen: set[int] = set()
+
+    def _add(num: Any, title: str, labels: list[Any] | None = None, *, source: str) -> None:
+        try:
+            n = int(num)
+        except (TypeError, ValueError):
+            return
+        if n in seen or n <= 0:
+            return
+        seen.add(n)
+        labs = list(labels or [])
+        row = {
+            "id": f"issue-{n}",
+            "number": n,
+            "issue_number": n,
+            "title": (title or f"Issue #{n}").strip() or f"Issue #{n}",
+            "type": "feature",
+            "item_type": "feature",
+            "labels": labs,
+            "impact": "medium",
+            "reason": f"what_next ready candidate #{n}",
+            "source": source,
+            "prompt_segment": (
+                f"Implement GitHub issue #{n}: {title}. "
+                "TDD, fragment under .agentic/releases/unreleased/, PR to release "
+                f"with Closes #{n} in body only. Quiet ops."
+            ),
+        }
+        # refine type from labels for bugfix etc.
+        wt = classify_work_type(row)
+        if wt == "bugfix":
+            row["type"] = "bug"
+            row["item_type"] = "bug"
+            row["prompt_segment"] = (
+                f"Fix GitHub Bug #{n}: {title}. Reproduce, regression test, PR to "
+                f"release with Closes #{n} in body only. Quiet ops."
+            )
+        out.append(row)
+
+    if wn.get("issue_number") is not None:
+        _add(
+            wn.get("issue_number"),
+            str(wn.get("issue_title") or wn.get("next_action") or ""),
+            None,
+            source="what_next.issue_number",
+        )
+    for ri in wn.get("ready_issues") or []:
+        if not isinstance(ri, dict):
+            continue
+        _add(
+            ri.get("number") or ri.get("issue_number"),
+            str(ri.get("title") or ""),
+            list(ri.get("labels") or []) or None,
+            source="what_next.ready_issues",
+        )
+    return out
 
 
 def estimate_assignment_tokens(work_type: str) -> int:
@@ -1494,23 +1561,29 @@ class ProjectManager:
                 if wn.get("priority") in ("budget_gate", "open_pr", "ready_issue")
                 else "medium"
             )
-            row: dict[str, Any] = {
-                "id": "what_next",
-                "title": wn.get("next_action"),
-                "type": "process",
-                "prompt_segment": wn.get("prompt_segment"),
-                "impact": impact,
-                "reason": wn.get("rationale") or "what_next",
-                "priority": wn.get("priority"),
-                "state_snapshot": wn.get("state_snapshot"),
-            }
-            if wn.get("issue_number") is not None:
-                row["issue_number"] = wn.get("issue_number")
-            if wn.get("pr_number") is not None:
-                row["pr_number"] = wn.get("pr_number")
-            if wn.get("ready_issues"):
-                row["ready_issues"] = wn.get("ready_issues")
-            items.append(row)
+            # Prefer concrete ready Feature/Bug issues over a process blob so
+            # assign_work / approve&run can open #638/#639 loops with issue numbers (#660).
+            ready_rows = _ready_issue_candidates_from_what_next(wn if isinstance(wn, dict) else {})
+            if ready_rows:
+                items.extend(ready_rows)
+            else:
+                row: dict[str, Any] = {
+                    "id": "what_next",
+                    "title": wn.get("next_action"),
+                    "type": "process",
+                    "prompt_segment": wn.get("prompt_segment"),
+                    "impact": impact,
+                    "reason": wn.get("rationale") or "what_next",
+                    "priority": wn.get("priority"),
+                    "state_snapshot": wn.get("state_snapshot"),
+                }
+                if wn.get("issue_number") is not None:
+                    row["issue_number"] = wn.get("issue_number")
+                if wn.get("pr_number") is not None:
+                    row["pr_number"] = wn.get("pr_number")
+                if wn.get("ready_issues"):
+                    row["ready_issues"] = wn.get("ready_issues")
+                items.append(row)
         except Exception:
             items.append(
                 {
