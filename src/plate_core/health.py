@@ -42,12 +42,102 @@ class HealthReport:
     budget_burn_rate: float | None = None
     budget_pressure: str | None = None
     budget_remaining_usd: float | None = None
+    # #340 SPEC audit health/drift surface (local, best-effort)
+    spec_audit_status: str | None = None  # ok | actionable | advisory | missing | error | skipped
+    spec_audit_counts: dict[str, int] = field(default_factory=dict)
+    spec_audit_actionable_count: int | None = None
+    spec_audit_next_step: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
         if not d.get("errors"):
             d.pop("errors", None)
         return d
+
+
+_ACTIONABLE_SPEC_KINDS = frozenset({"undocumented", "stale_evidence", "conflict"})
+
+
+def summarize_spec_audit_for_health(
+    repo_root: str | None = None,
+    *,
+    enabled: bool = True,
+) -> dict:
+    """Local SPEC audit summary for health/drift surfaces (#340).
+
+    Never raises; returns status=skipped|missing|error|actionable|advisory|ok.
+    Does not auto-edit SPEC.md.
+    """
+    empty_counts: dict[str, int] = {}
+    if not enabled:
+        return {
+            "spec_audit_status": "skipped",
+            "spec_audit_counts": empty_counts,
+            "spec_audit_actionable_count": 0,
+            "spec_audit_next_step": None,
+        }
+    try:
+        from .spec_audit import audit_spec
+
+        report = audit_spec(repo_root or ".")
+    except Exception as exc:
+        return {
+            "spec_audit_status": "error",
+            "spec_audit_counts": empty_counts,
+            "spec_audit_actionable_count": 0,
+            "spec_audit_next_step": f"SPEC audit failed: {exc}; run gh plate spec-audit for details",
+        }
+
+    counts = dict(report.counts or {})
+    actionable = sum(int(counts.get(k, 0) or 0) for k in _ACTIONABLE_SPEC_KINDS)
+
+    if report.error or not report.ok:
+        err = str(report.error or "audit failed")
+        status = "missing" if "not found" in err.lower() else "error"
+        step = (
+            "Create or restore SPEC.md then re-run gh plate health / gh plate spec-audit"
+            if status == "missing"
+            else f"SPEC audit error: {err}; run gh plate spec-audit"
+        )
+        return {
+            "spec_audit_status": status,
+            "spec_audit_counts": counts,
+            "spec_audit_actionable_count": actionable,
+            "spec_audit_next_step": step,
+        }
+
+    if actionable > 0:
+        return {
+            "spec_audit_status": "actionable",
+            "spec_audit_counts": counts,
+            "spec_audit_actionable_count": actionable,
+            "spec_audit_next_step": (
+                f"Resolve {actionable} SPEC audit finding(s) "
+                f"(undocumented={counts.get('undocumented', 0)}, "
+                f"stale_evidence={counts.get('stale_evidence', 0)}, "
+                f"conflict={counts.get('conflict', 0)}): "
+                "gh plate spec-audit --json then --followups / Documentation PR "
+                "(never auto-write SPEC.md without human approval)"
+            ),
+        }
+
+    if int(counts.get("future_ok", 0) or 0) > 0 and int(counts.get("aligned", 0) or 0) == 0:
+        return {
+            "spec_audit_status": "advisory",
+            "spec_audit_counts": counts,
+            "spec_audit_actionable_count": 0,
+            "spec_audit_next_step": (
+                "SPEC has future_ok sections without aligned fragment evidence; "
+                "review with gh plate spec-audit (not an error)"
+            ),
+        }
+
+    return {
+        "spec_audit_status": "ok",
+        "spec_audit_counts": counts,
+        "spec_audit_actionable_count": 0,
+        "spec_audit_next_step": None,
+    }
 
 
 def _repo_from_git_remote() -> str:
@@ -84,7 +174,13 @@ def resolve_repo(repo: str | None) -> str:
     return repo if repo else _repo_from_git_remote()
 
 
-def get_health(repo: str | None = None, client: GhClient | None = None) -> HealthReport:
+def get_health(
+    repo: str | None = None,
+    client: GhClient | None = None,
+    *,
+    repo_root: str | None = None,
+    include_spec_audit: bool = True,
+) -> HealthReport:
     gh = client or GhClient()
     # resolve_repo (and _repo_from_git_remote) raise RuntimeError with clear messages on failure;
     # the previous try/except wrapper added no value (unnecessary per review of #609).
@@ -275,6 +371,26 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
     except Exception as e:
         errors.append(f"budget: {e}")
 
+    # #340: local SPEC audit drift signal (best-effort; does not fail health alone)
+    spec_audit_status: str | None = None
+    spec_audit_counts: dict[str, int] = {}
+    spec_audit_actionable_count: int | None = None
+    spec_audit_next_step: str | None = None
+    try:
+        sa = summarize_spec_audit_for_health(
+            repo_root if repo_root is not None else ".",
+            enabled=include_spec_audit,
+        )
+        spec_audit_status = sa.get("spec_audit_status")
+        spec_audit_counts = dict(sa.get("spec_audit_counts") or {})
+        if sa.get("spec_audit_actionable_count") is not None:
+            spec_audit_actionable_count = int(sa.get("spec_audit_actionable_count") or 0)
+        spec_audit_next_step = sa.get("spec_audit_next_step")
+    except Exception as e:
+        errors.append(f"spec_audit: {e}")
+        spec_audit_status = "error"
+        spec_audit_next_step = f"SPEC audit health summary failed: {e}"
+
     report = HealthReport(
         repo=target,
         label_coverage_ok=label_ok,
@@ -302,5 +418,9 @@ def get_health(repo: str | None = None, client: GhClient | None = None) -> Healt
         budget_burn_rate=budget_burn_rate,
         budget_pressure=budget_pressure,
         budget_remaining_usd=budget_remaining_usd,
+        spec_audit_status=spec_audit_status,
+        spec_audit_counts=spec_audit_counts,
+        spec_audit_actionable_count=spec_audit_actionable_count,
+        spec_audit_next_step=spec_audit_next_step,
     )
     return report

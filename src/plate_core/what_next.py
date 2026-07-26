@@ -4,9 +4,10 @@ Priority (cheap → specific):
 1. Critical/exhausted durable budget pressure (surface gates still apply under risk=off)
 2. Open PRs targeting integration base (babysit to green)
 3. Missing labels → bootstrap
-4. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
-5. Open Epics → advance ready child Feature/Bug (generic when no candidates)
-6. Pending fragments / release status
+4. Actionable local SPEC audit findings (#340 health/drift)
+5. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
+6. Open Epics → advance ready child Feature/Bug (generic when no candidates)
+7. Pending fragments / release status
 """
 
 from __future__ import annotations
@@ -53,6 +54,14 @@ def recommend_what_next(
         "post comments only on meaningful progress (quiet_operations guidance)."
     )
 
+    sa_status = str(h.get("spec_audit_status") or "").lower() or None
+    sa_actionable = h.get("spec_audit_actionable_count")
+    try:
+        sa_actionable_n = int(sa_actionable) if sa_actionable is not None else 0
+    except (TypeError, ValueError):
+        sa_actionable_n = 0
+    sa_next = h.get("spec_audit_next_step")
+
     state = {
         "label_coverage_ok": labels_ok,
         "open_epic_count": open_epics,
@@ -63,6 +72,8 @@ def recommend_what_next(
         "open_pr_count": len(prs),
         "pending_fragment_count": pending_fragment_count,
         "ready_issue_count": len(ready),
+        "spec_audit_status": sa_status,
+        "spec_audit_actionable_count": sa_actionable_n,
     }
 
     # 1) Budget critical/exhausted — even under risk=off (surface gates)
@@ -140,7 +151,49 @@ def recommend_what_next(
             "priority": "bootstrap",
         }
 
-    # 4) Concrete ready Feature/Bug — prefer over generic epic text (#793)
+    # 4) Actionable SPEC audit findings from health (#340)
+    if sa_status == "actionable" or sa_actionable_n > 0:
+        step = str(sa_next or "").strip() or (
+            "Run gh plate spec-audit --json then plan follow-ups "
+            "(gh plate spec-audit --followups); never auto-write SPEC.md"
+        )
+        action = (
+            f"resolve actionable SPEC audit findings "
+            f"(actionable={sa_actionable_n}, status={sa_status or 'actionable'})"
+        )
+        prompt = (
+            "Health reports actionable SPEC drift (#340). "
+            f"Next: {step}. Prefer plate_spec_audit / plate_spec_audit_followups "
+            "or Documentation PRs that add implemented+tested behavior to SPEC. "
+            "Human-approval gate for SPEC.md writes."
+            + quiet
+        )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": "spec_audit_status actionable via plate_health (#340)",
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "spec_audit",
+        }
+
+    # 4b) Advisory-only SPEC audit — surface before generic epic when no ready work
+    if sa_status == "advisory" and not ready:
+        step = str(sa_next or "").strip() or "Review SPEC with gh plate spec-audit"
+        return {
+            "next_action": f"review advisory SPEC audit: {step[:120]}",
+            "prompt_segment": (
+                "Health reports advisory-only SPEC audit status. "
+                f"{step} Then continue with ready Features or open Epics."
+                + quiet
+            ),
+            "rationale": "spec_audit_status advisory (#340)",
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "spec_audit_advisory",
+        }
+
+    # 5) Concrete ready Feature/Bug — prefer over generic epic text (#793)
     if ready:
         first = ready[0]
         num = first.get("number") or first.get("issue_number")
