@@ -133,6 +133,35 @@ class TestCheckpoint648(unittest.TestCase):
         self.assertEqual(cp["action_kind"], "deploy")
         self.assertEqual(cp["impact"], "critical")
 
+    def test_create_checkpoint_for_shadow_dedupes(self):
+        from plate_core.checkpoint import find_open_checkpoint, list_open_checkpoints
+
+        shadow = {
+            "action_kind": "deploy",
+            "impact": "critical",
+            "shadow_id": "shadow-deploy-dedupe-a",
+            "approval_reasons": ["critical impact always requires human"],
+            "estimated_tokens": 8000,
+            "estimated_cost_usd": 0.02,
+            "predicted_side_effects": ["push to prod"],
+            "gate_preview": ["human checkpoint"],
+        }
+        cp1 = create_checkpoint_for_shadow(shadow, base_dir=self.base)
+        shadow2 = dict(shadow)
+        shadow2["shadow_id"] = "shadow-deploy-dedupe-b"
+        cp2 = create_checkpoint_for_shadow(shadow2, base_dir=self.base)
+        self.assertEqual(cp1["id"], cp2["id"])
+        self.assertTrue(cp2.get("deduped"))
+        deploy = [
+            c
+            for c in list_open_checkpoints(base_dir=self.base)
+            if c.get("action_kind") == "deploy"
+        ]
+        self.assertEqual(len(deploy), 1)
+        found = find_open_checkpoint(action_kind="deploy", base_dir=self.base)
+        self.assertIsNotNone(found)
+        self.assertEqual(found["id"], cp1["id"])
+
     def test_autonomy_paused_helper(self):
         create_checkpoint("block engine", "need approval", impact="high", base_dir=self.base)
         info = autonomy_is_paused_by_checkpoints(base_dir=self.base)

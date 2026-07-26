@@ -394,6 +394,20 @@ class TestShadowSimulation645(unittest.TestCase):
             self.assertTrue(shadow.to_dict()["requires_approval"])
             blocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=False)
             self.assertTrue(blocked["blocked"])
+            cid1 = blocked.get("checkpoint_id")
+            # Repeated gate must reuse the same open checkpoint (#648 dedupe)
+            blocked2 = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=False)
+            self.assertTrue(blocked2["blocked"])
+            self.assertEqual(blocked2.get("checkpoint_id"), cid1)
+            from plate_core.checkpoint import list_open_checkpoints
+
+            open_cps = list_open_checkpoints(base_dir=engine.checkpoint_base_dir)
+            deploy_cps = [
+                c
+                for c in open_cps
+                if str(c.get("action_kind") or "").lower() == "deploy"
+            ]
+            self.assertEqual(len(deploy_cps), 1)
             unblocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=True)
             self.assertFalse(unblocked["blocked"])
 
