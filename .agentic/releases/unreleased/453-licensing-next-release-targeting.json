@@ -1,0 +1,14 @@
+{
+  "slug": "453-licensing-next-release-targeting",
+  "change_type": "docs",
+  "surface": "docs/research/453-licensing-next-release-targeting.md, Epic #390",
+  "summary": "Close #453: retarget Licensing Epic #390 from closed Next Release #449 (v0.6.0) to standing Next Release #612; research closeout note for release-status hygiene.",
+  "migration_impact": "None for adopters. Operators viewing Epic #390 should treat #612 as the standing packaging negotiation target until the next rename/cut.",
+  "migration_guidance": [
+    "1. No product code change required.",
+    "2. When linking Epics to a release, use the open issue titled Next Release (currently #612), not historical versioned Release issues."
+  ],
+  "agent_notes": "what_next may still surface #453 until this PR merges. Do not re-point #390 at #654 (v1.0 roadmap) unless human prioritizes licensing into that far-future release.",
+  "breaking": false,
+  "links": ["#453", "#390", "#612", "#449", "#654"]
+}
