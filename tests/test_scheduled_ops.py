@@ -54,6 +54,51 @@ class TestRunGates(unittest.TestCase):
         self.assertTrue(out["packet"]["steps"])
         # #645: medium+ ops attach shadow preview (diff/worktree)
         self.assertTrue(out.get("shadow_id") or out["packet"].get("shadow_id"))
+        # #641: dry-run previews fleet handoff without writing
+        fd = out.get("fleet_dispatch") or {}
+        self.assertTrue(fd.get("dry_run"))
+        self.assertEqual(fd.get("to_agent"), "implementer")
+
+    def test_live_refactor_dispatches_fleet_handoff(self):
+        """#641: live scheduled-refactor opens a #644 implementer handoff."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.fleet import list_handoffs
+        from plate_core.scheduled_ops import run_scheduled_op
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ops_dir = Path(tmp) / "ops"
+            fleet_dir = Path(tmp) / "fleet"
+            out = run_scheduled_op(
+                "scheduled-refactor",
+                dry_run=False,
+                risk_tolerance="medium",
+                base_dir=ops_dir,
+                fleet_base_dir=fleet_dir,
+                record_ledger=False,
+                budget_remaining=100_000,
+                use_live_budget=False,
+            )
+            self.assertTrue(out["ok"], out)
+            self.assertEqual(out["status"], "executed")
+            fd = out.get("fleet_dispatch") or {}
+            self.assertTrue(fd.get("ok"), fd)
+            self.assertTrue(fd.get("handoff_id"))
+            self.assertEqual(fd.get("to_agent"), "implementer")
+            rows = list_handoffs(status="active", base_dir=fleet_dir)
+            self.assertTrue(any(h.get("handoff_id") == fd.get("handoff_id") for h in rows))
+            self.assertEqual(
+                (out.get("run") or {}).get("metadata", {}).get("fleet_handoff_id"),
+                fd.get("handoff_id"),
+            )
+
+    def test_deploy_op_skips_fleet_auto_dispatch(self):
+        """Critical deploy never auto-opens fleet handoffs without human path."""
+        from plate_core.scheduled_ops import dispatch_fleet_for_scheduled_op
+
+        out = dispatch_fleet_for_scheduled_op("deploy-production")
+        self.assertTrue(out.get("skipped"))
 
     def test_critical_blocked_without_approve(self):
         out = run_scheduled_op(
