@@ -42,6 +42,8 @@ class HealthReport:
     budget_burn_rate: float | None = None
     budget_pressure: str | None = None
     budget_remaining_usd: float | None = None
+    budget_would_pause_next_cycle: bool | None = None
+    budget_would_throttle_next_cycle: bool | None = None
     # #340 SPEC audit health/drift surface (local, best-effort)
     spec_audit_status: str | None = None  # ok | actionable | advisory | missing | error | skipped
     spec_audit_counts: dict[str, int] = field(default_factory=dict)
@@ -347,6 +349,8 @@ def get_health(
     budget_burn_rate: float | None = None
     budget_pressure: str | None = None
     budget_remaining_usd: float | None = None
+    budget_would_pause_next_cycle: bool | None = None
+    budget_would_throttle_next_cycle: bool | None = None
     try:
         from .autonomy import get_budget_snapshot
 
@@ -368,6 +372,16 @@ def get_health(
                 budget_pressure = str(snap.get("budget_pressure"))
             if snap.get("remaining_usd") is not None:
                 budget_remaining_usd = float(snap.get("remaining_usd"))
+            if snap.get("would_pause_next_cycle") is not None:
+                budget_would_pause_next_cycle = bool(snap.get("would_pause_next_cycle"))
+            elif snap.get("would_pause") is not None:
+                budget_would_pause_next_cycle = bool(snap.get("would_pause"))
+            if snap.get("would_throttle_next_cycle") is not None:
+                budget_would_throttle_next_cycle = bool(
+                    snap.get("would_throttle_next_cycle")
+                )
+            elif snap.get("would_throttle") is not None:
+                budget_would_throttle_next_cycle = bool(snap.get("would_throttle"))
     except Exception as e:
         errors.append(f"budget: {e}")
 
@@ -418,6 +432,8 @@ def get_health(
         budget_burn_rate=budget_burn_rate,
         budget_pressure=budget_pressure,
         budget_remaining_usd=budget_remaining_usd,
+        budget_would_pause_next_cycle=budget_would_pause_next_cycle,
+        budget_would_throttle_next_cycle=budget_would_throttle_next_cycle,
         spec_audit_status=spec_audit_status,
         spec_audit_counts=spec_audit_counts,
         spec_audit_actionable_count=spec_audit_actionable_count,

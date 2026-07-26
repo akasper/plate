@@ -81,6 +81,23 @@ def recommend_what_next(
         rem = h.get("budget_remaining_tokens")
     daily = b.get("daily_limit") or h.get("budget_daily_limit")
     risk = str(b.get("risk_tolerance") or h.get("budget_risk_tolerance") or "off")
+    # Next-cycle pause from snapshot/dashboard (may be true while pressure is only elevated)
+    def _truthy(v: object) -> bool:
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return False
+        return str(v).lower() in ("1", "true", "yes")
+
+    would_pause_next = _truthy(
+        b.get("would_pause_next_cycle")
+        if b.get("would_pause_next_cycle") is not None
+        else b.get("would_pause")
+    ) or _truthy(
+        h.get("budget_would_pause_next_cycle")
+        if h.get("budget_would_pause_next_cycle") is not None
+        else h.get("would_pause_next_cycle")
+    )
 
     quiet = (
         " For any looped execution, use terse one-sentence bullet turn summaries and "
@@ -116,6 +133,7 @@ def recommend_what_next(
         "budget_remaining_tokens": rem,
         "budget_daily_limit": daily,
         "budget_risk_tolerance": risk,
+        "would_pause_next_cycle": would_pause_next,
         "open_pr_count": len(prs),
         "pending_fragment_count": pending_fragment_count,
         "ready_issue_count": len(ready),
@@ -132,27 +150,34 @@ def recommend_what_next(
         "missing_release_tracks": missing_tracks,
     }
 
-    # 1) Budget critical/exhausted — even under risk=off (surface gates)
-    if pressure in ("critical", "exhausted") or (
-        rem is not None and daily is not None and int(rem) <= 0
+    # 1) Budget critical/exhausted OR next-cycle pause — even under risk=off (surface gates).
+    # would_pause_next_cycle can be true while pressure is only elevated (remaining < per_cycle).
+    if (
+        pressure in ("critical", "exhausted")
+        or would_pause_next
+        or (rem is not None and daily is not None and int(rem) <= 0)
     ):
         action = (
             "resolve durable budget pressure before starting large work "
-            f"(pressure={pressure}, remaining={rem}/{daily})"
+            f"(pressure={pressure}, remaining={rem}/{daily}"
+            f"{', would_pause_next_cycle' if would_pause_next else ''})"
         )
         prompt = (
-            "Budget gate is critical/exhausted. Present ask_user_question from "
-            "plate_costs dashboard=true / feed budget_gate options (raise .plate "
-            "token_budget, wait for UTC day reset, or pause large starts). "
-            "Do not open large Feature/Bug loops or planning builds until remaining "
-            "recovers. risk_tolerance=off only disables AutonomyEngine cycles — "
-            "surface live gates still apply."
+            "Budget gate is critical/exhausted or next-cycle pause is projected. "
+            "Present ask_user_question from plate_costs dashboard=true / feed "
+            "budget_gate options (raise .plate token_budget, wait for UTC day reset, "
+            "or pause large starts). Do not open large Feature/Bug loops or planning "
+            "builds until remaining recovers. risk_tolerance=off only disables "
+            "AutonomyEngine cycles — surface live gates still apply."
             + quiet
         )
         return {
             "next_action": action,
             "prompt_segment": prompt,
-            "rationale": "budget_pressure critical/exhausted (#634/#653/#787)",
+            "rationale": (
+                "budget_pressure critical/exhausted or would_pause_next_cycle "
+                "(#634/#653/#787)"
+            ),
             "state_snapshot": state,
             "agent_type": agent_type or "general",
             "priority": "budget_gate",
