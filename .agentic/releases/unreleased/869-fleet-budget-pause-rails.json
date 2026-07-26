@@ -1,0 +1,10 @@
+{
+  "slug": "869-fleet-budget-pause-rails",
+  "change_type": "fix",
+  "surface": "src/plate_core/fleet.py",
+  "summary": "Fleet create_handoff and plan_fleet_from_intent block on durable would_pause_next_cycle or critical/exhausted budget pressure even when remaining tokens > 0, matching loops/PM/AutonomyEngine surface rails (#634/#869).",
+  "migration_impact": "Live fleet plans/handoffs may refuse create under risk=off when remaining is below per_cycle. Raise token_budget, wait for UTC day rollover, or pass explicit use_live_budget=false with caller-owned remaining.",
+  "agent_notes": "Do not open fleet handoffs when budget_pressure is critical/exhausted or would_pause_next_cycle is true. Resolve budget_gate first; PM dispatch inherits via create_handoff.",
+  "breaking": false,
+  "links": ["#869", "#634", "#644", "#653", "#865", "#867", "#654"]
+}
