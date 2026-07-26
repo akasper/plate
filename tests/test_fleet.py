@@ -124,6 +124,67 @@ class TestBudgetAndPlan(unittest.TestCase):
         self.assertEqual(out.get("n_created"), 0)
         self.assertIn("budget", out.get("error") or "")
 
+    def test_plan_and_create_block_on_durable_would_pause(self):
+        """#869/#634: fleet blocks when remaining > 0 but next cycle would pause."""
+        from plate_core.autonomy import save_budget_spend
+
+        bdir = self.base / "budget"
+        today = (
+            __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .date()
+            .isoformat()
+        )
+        save_budget_spend(
+            {
+                "date": today,
+                "spent_today": 9000,
+                "spent_this_cycle": 0,
+                "spent_usd_today": 0.0,
+            },
+            base_dir=bdir,
+        )
+
+        class _Cfg:
+            autonomy = {
+                "enabled": False,
+                "risk_tolerance": "off",
+                "token_budget": {
+                    "daily": 10000,
+                    "per_cycle": 2000,
+                    "action": "pause",
+                },
+            }
+
+        with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+            plan = plan_fleet_from_intent(
+                "Implement features",
+                use_live_budget=True,
+                create=True,
+                base_dir=self.base,
+            )
+            ho = create_handoff(
+                from_agent="orchestrator",
+                to_agent="implementer",
+                task="blocked by rails",
+                budget_tokens=500,
+                use_live_budget=True,
+                base_dir=self.base,
+                record_ledger=False,
+            )
+
+        self.assertFalse(plan.get("ok"), plan)
+        self.assertTrue(plan.get("blocked"))
+        self.assertEqual(plan.get("reason"), "budget")
+        self.assertEqual(plan.get("n_created"), 0)
+        self.assertTrue(plan.get("would_pause_next_cycle"))
+        self.assertEqual(plan.get("budget_remaining_tokens"), 1000)
+
+        self.assertFalse(ho.get("ok"), ho)
+        self.assertTrue(ho.get("blocked"))
+        self.assertEqual(ho.get("reason"), "budget")
+        self.assertTrue(ho.get("would_pause_next_cycle"))
+
     def test_plan_and_status_hydrate_budget_under_base_dir(self):
         """base_dir alone hydrates remaining from base_dir/budget (#634/#644)."""
         from unittest.mock import patch
