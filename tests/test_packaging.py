@@ -172,6 +172,58 @@ class TestBuildPackage(unittest.TestCase):
         self.assertTrue(ok["ok"])
         self.assertEqual(ok.get("budget_remaining"), est["estimated_tokens"] + 5000)
 
+    def test_budget_blocks_on_durable_would_pause_risk_off(self):
+        """#875: build_package blocks on would_pause even when est < remaining."""
+        from unittest.mock import patch
+
+        from plate_core.autonomy import save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            bdir = base / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            # remaining=7000, per_cycle=10000 → would_pause; empty pkg est=6000 < 7000
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 43000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 50000,
+                        "per_cycle": 10000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                out = build_package(
+                    "0.9.2",
+                    [],
+                    persist=False,
+                    base_dir=base,
+                    use_live_budget=True,
+                )
+
+        self.assertFalse(out.get("ok"), out)
+        self.assertTrue(out.get("blocked"))
+        self.assertIn("budget", out.get("error") or "")
+        self.assertTrue(out.get("would_pause_next_cycle"))
+        self.assertEqual(out.get("budget_remaining"), 7000)
+
     def test_preview_persist_false_never_charges(self):
         from plate_core.autonomy import load_budget_spend
 
