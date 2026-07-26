@@ -1,0 +1,10 @@
+{
+  "slug": "634-cli-autonomy-status-pressure",
+  "change_type": "fix",
+  "surface": "src/plate_core/cli.py",
+  "summary": "gh plate autonomy --status prints budget_pressure, next-cycle would_pause/throttle, durable spend, daily remaining, and open checkpoint count; health and what-next human output include pause gate fields.",
+  "migration_impact": "CLI text output only (JSON already had fields from AutonomyStatus). Operators see pressure without --json.",
+  "agent_notes": "Prefer autonomy --status for human scans of #634 rails; use --json for machine parsing of budget_pressure and would_pause_next_cycle.",
+  "breaking": false,
+  "links": ["#634", "#653", "#470"]
+}
