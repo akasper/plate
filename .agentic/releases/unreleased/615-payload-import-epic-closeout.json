@@ -1,0 +1,16 @@
+{
+  "slug": "615-payload-import-epic-closeout",
+  "change_type": "docs",
+  "surface": "docs/wiki/Payload-Import-Adoption-Epic-615.md",
+  "summary": "Close Epic #615 payload-import adoption: wiki status marks children #616–#622 complete (including #622 escape hatch); residual auto-PR/worktree apply deferred to follow-ons under #633/#649.",
+  "migration_impact": "No runtime change. Operators treating #615 as done should use conservative import-payload plus --escape-hatch-on-conflict for hard merges; wiki closeout is the durable epic memory.",
+  "migration_guidance": [
+    "1. No package upgrade required for this docs closeout alone.",
+    "2. Prefer gh plate import-payload --strategy conservative --escape-hatch-on-conflict for mature trees.",
+    "3. Read docs/wiki/Payload-Import-Adoption-Epic-615.md for operator path and non-goals.",
+    "4. Route remaining onboarding polish to #633; self-update track to #649."
+  ],
+  "agent_notes": "Epic close is documentation only. Do not reopen #616–#622 for polish without a new Feature. Marketplace publish Tasks remain human-only.",
+  "breaking": false,
+  "links": ["#615", "#616", "#617", "#618", "#619", "#620", "#621", "#622", "#633", "#649", "#654"]
+}
