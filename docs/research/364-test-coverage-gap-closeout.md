@@ -35,7 +35,8 @@ links.
 ## Recommendation
 
 - Close Feature #364 as high-priority gap work complete.
-- Leave Epic #350 open only if remaining work is classification tooling or low-priority inventory (not re-open #364 for deferred safety items).
+- Close Epic #350 (first slice) when all children are complete — see wiki `docs/wiki/Test-Coverage-Audit-Epic-350.md` and `V1-Autonomy-Surfaces-Epic-Closeouts.md`.
+- Do not re-open #364/#350 for deferred live auto-push or live-network ceremony; open new Features instead.
 - Agents cite this note + audit closeout addendum when claiming #350 progress.
 
 ## Answer signal
