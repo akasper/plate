@@ -171,6 +171,37 @@ def _criterion_satisfied(
     return bool(supporting_answers), supporting_answers
 
 
+def _classify_followup_issue_type(answer_text: str) -> tuple[str, str]:
+    """Heuristic typed child for incomplete contemplation progress (#921).
+
+    Returns (type_label, title_prefix) for Feature | Research | Design.
+    """
+    lower = (answer_text or "").lower()
+    if any(
+        t in lower
+        for t in (
+            "docs/research/",
+            "research:",
+            "investigate",
+            "[research]",
+            "needs research",
+        )
+    ):
+        return "Research", "[Research]"
+    if any(
+        t in lower
+        for t in (
+            "docs/design/",
+            "design:",
+            "architecture",
+            "[design]",
+            "needs design",
+        )
+    ):
+        return "Design", "[Design]"
+    return "Feature", "[Feature]"
+
+
 def _format_usage_report() -> str:
     return "\n".join(
         [
@@ -215,6 +246,7 @@ class ContemplationEngine:
         ) or []
         comments_list = comments if isinstance(comments, list) else []
         issue_body = (issue.get("body") or "") if isinstance(issue, dict) else ""
+        issue_title = (issue.get("title") or "") if isinstance(issue, dict) else ""
 
         criteria, criterion_warnings = _parse_answer_signal_criteria(issue_body)
         answers = _build_answer_records(
@@ -251,9 +283,11 @@ class ContemplationEngine:
             )
         ):
             try:
-                title = f"[Feature]: Follow-up from answer to Question #{question_number}"
+                type_label, title_prefix = _classify_followup_issue_type(answer_text)
+                title = f"{title_prefix}: Follow-up from answer to Question #{question_number}"
                 body = (
                     f"Contemplation-driven follow-up from answer to Question #{question_number}.\n\n"
+                    f"**Parent Question:** #{question_number}\n\n"
                     f"**Original answer excerpt:**\n\n> {answer_text[:300]}\n\n"
                     "**Next steps (agent/human):** Refine scope, split if needed, and implement.\n\n"
                     f"<!-- plate-contemplation-ref: q{question_number} @{timestamp} -->"
@@ -261,23 +295,34 @@ class ContemplationEngine:
                 new_issue = self.gh.api(
                     f"repos/{target}/issues",
                     method="POST",
-                    fields={"title": title, "body": body, "labels": ["Feature"]},
+                    fields={"title": title, "body": body, "labels": [type_label]},
                 )
                 created_issues.append(
-                    {"number": new_issue.get("number"), "title": title, "url": new_issue.get("html_url")}
+                    {
+                        "number": new_issue.get("number"),
+                        "title": title,
+                        "url": new_issue.get("html_url"),
+                        "type": type_label,
+                    }
                 )
-                actions.append(f"Created: #{new_issue.get('number')}")
+                actions.append(f"Created {type_label}: #{new_issue.get('number')}")
             except GhApiError as exc:
                 actions.append(f"Create issue failed: {exc}")
 
+        # Full non-destructive transcript: keep excerpt for scannability + full answer (#921)
+        body_excerpt = " ".join((issue_body or "").split())[:200]
         log_lines = [
             "<!-- PLATE-CONTEMPLATION:BEGIN -->",
             f"Question: {question_number}",
+            f"Question title: {issue_title or '(none)'}",
+            f"Question body excerpt: {body_excerpt or '(empty)'}",
             f"Answered by: {answered_by}",
             f"Timestamp: {timestamp}",
             f"Source: {source}",
             f"Session: {session or 'none'}",
             f"Answer excerpt: {answer_text[:180]}{'...' if len(answer_text) > 180 else ''}",
+            "Answer full:",
+            answer_text if answer_text else "(empty)",
             f"Answer signal criteria: {len(criteria)}",
             f"Effective answers considered: {len(effective_answers)}",
         ]
