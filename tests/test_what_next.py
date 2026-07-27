@@ -725,5 +725,84 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
         self.assertEqual(live["priority"], "pm_tick")
 
 
+class TestScheduledOpsWhatNext(unittest.TestCase):
+    """Proves: scheduled ops rank on what_next (#933 / #659)."""
+
+    def test_active_scheduled_op_after_ready_before_pm(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 5},
+            budget={
+                "budget_pressure": "ok",
+                "remaining_tokens": 40000,
+                "daily_limit": 50000,
+                "risk_tolerance": "off",
+            },
+            open_prs=[],
+            ready_issues=[],
+            pm_status={"open_checkpoints": 2, "delegated": 1, "queue_size": 3},
+            scheduled_ops={
+                "active_runs": [
+                    {"op_id": "release-cut-prep", "status": "blocked"},
+                ],
+                "runnable_at_tolerance": [],
+            },
+        )
+        self.assertEqual(out["priority"], "scheduled_op")
+        self.assertEqual(out["op_id"], "release-cut-prep")
+        self.assertIn("release-cut-prep", out["next_action"])
+        self.assertEqual(out["state_snapshot"]["scheduled_ops_active_count"], 1)
+
+    def test_open_pr_still_beats_active_scheduled_op(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 1},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[{"number": 99, "title": "x", "baseRefName": "release"}],
+            scheduled_ops={
+                "active_runs": [{"op_id": "release-cut-prep", "status": "running"}],
+            },
+        )
+        self.assertEqual(out["priority"], "open_pr")
+
+    def test_runnable_scheduled_ops_plan_when_pm_idle(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 10},
+            budget={
+                "budget_pressure": "ok",
+                "remaining_tokens": 40000,
+                "daily_limit": 50000,
+                "risk_tolerance": "medium",
+            },
+            open_prs=[],
+            ready_issues=[],
+            pm_status={"open_checkpoints": 0, "delegated": 0, "proposed": 0, "queue_size": 0},
+            epic_closeout_candidates=[],
+            scheduled_ops={
+                "active_runs": [],
+                "runnable_at_tolerance": [
+                    {"id": "scheduled-refactor", "risk_level": "low"},
+                    {"id": "release-cut-prep", "risk_level": "medium"},
+                ],
+            },
+        )
+        self.assertEqual(out["priority"], "scheduled_ops_plan")
+        self.assertEqual(out["op_id"], "scheduled-refactor")
+        self.assertIn("dry-run", out["next_action"].lower())
+        self.assertEqual(out["state_snapshot"]["scheduled_ops_runnable_count"], 2)
+
+    def test_ready_issue_beats_runnable_scheduled_ops(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            ready_issues=[{"number": 933, "title": "Rank scheduled ops"}],
+            pm_status={"queue_size": 0},
+            scheduled_ops={
+                "runnable_at_tolerance": [{"id": "scheduled-refactor", "risk_level": "low"}],
+            },
+        )
+        self.assertEqual(out["priority"], "ready_issue")
+        self.assertEqual(out["issue_number"], 933)
+
+
 if __name__ == "__main__":
     unittest.main()

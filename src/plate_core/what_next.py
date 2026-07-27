@@ -7,10 +7,12 @@ Priority (cheap → specific):
 4. Missing multi-track release standing branches → release repair (#320/#814)
 5. Actionable local SPEC audit findings (#340 health/drift)
 6. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
-7. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
-8. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
+7. Active scheduled op runs (blocked/running/planned) (#933 / #659 / #641)
+8. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
+9. Runnable scheduled ops dry-run plan when pipeline + PM idle (#933)
+10. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
    — when available, name concrete complete-child Epic candidates (#909)
-9. Pending fragments / release status
+11. Pending fragments / release status
 """
 
 from __future__ import annotations
@@ -54,6 +56,7 @@ def recommend_what_next(
     pm_status: dict[str, Any] | None = None,
     release_status: dict[str, Any] | None = None,
     epic_closeout_candidates: list[dict[str, Any]] | None = None,
+    scheduled_ops: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure recommendation from pre-fetched state (testable).
 
@@ -64,6 +67,7 @@ def recommend_what_next(
     ``pm_status``: get_pm_status().to_dict() shape for #660 orchestrator ranking.
     ``release_status``: get_release_status() shape for multi-track standing repair (#814).
     ``epic_closeout_candidates``: open Epics with all children closed (#909).
+    ``scheduled_ops``: scheduled_ops_status-like summary + optional active_runs (#933).
     """
     h = dict(health or {})
     b = dict(budget or {})
@@ -72,6 +76,7 @@ def recommend_what_next(
     pm = dict(pm_status or {})
     rel = dict(release_status or {})
     closeouts = list(epic_closeout_candidates or [])
+    sops = dict(scheduled_ops or {})
     labels_ok = bool(h.get("label_coverage_ok", False))
     open_epics = int(h.get("open_epic_count") or 0)
     missing_tracks = _missing_release_tracks(rel) if rel else []
@@ -153,7 +158,15 @@ def recommend_what_next(
         "release_branch_mode": rel.get("release_branch_mode"),
         "missing_release_tracks": missing_tracks,
         "epic_closeout_candidate_count": len(closeouts),
+        "scheduled_ops_active_count": len(list(sops.get("active_runs") or [])),
+        "scheduled_ops_runnable_count": len(
+            list(sops.get("runnable_at_tolerance") or sops.get("runnable") or [])
+        ),
+        "scheduled_ops_gated_count": len(list(sops.get("gated") or [])),
     }
+
+    active_sop_runs = list(sops.get("active_runs") or [])
+    runnable_sops = list(sops.get("runnable_at_tolerance") or sops.get("runnable") or [])
 
     # 1) Budget critical/exhausted OR next-cycle pause — even under risk=off (surface gates).
     # would_pause_next_cycle can be true while pressure is only elevated (remaining < per_cycle).
@@ -336,7 +349,40 @@ def recommend_what_next(
             ],
         }
 
-    # 6) Project Manager orchestrator (#660) — empty pipeline prefers PM over generic epic
+    # 6) Active scheduled op runs (blocked/running/planned) — ceremony attention (#933)
+    if active_sop_runs:
+        first = active_sop_runs[0]
+        oid = str(first.get("op_id") or first.get("id") or "unknown")
+        st = str(first.get("status") or "active")
+        action = f"advance scheduled op run [{st}]: {oid}"
+        prompt = (
+            f"Active scheduled op needs attention: `{oid}` status={st} (#641/#659). "
+            f"1) `gh plate scheduled-ops --status` / plate_scheduled_ops_status  "
+            f"2) dry-run plan: `gh plate scheduled-ops --plan {oid}`  "
+            f"3) For blocked high-impact: checkpoint approve + shadow_ack before live  "
+            f"4) Complete via plate_scheduled_op_complete when done. "
+            f"risk_tolerance=off still allows dry-run plan/status."
+            + quiet
+        )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": f"{len(active_sop_runs)} active scheduled op run(s) (#933/#659)",
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "scheduled_op",
+            "op_id": oid,
+            "scheduled_op_status": st,
+            "active_scheduled_ops": [
+                {
+                    "op_id": r.get("op_id") or r.get("id"),
+                    "status": r.get("status"),
+                }
+                for r in active_sop_runs[:10]
+            ],
+        }
+
+    # 7) Project Manager orchestrator (#660) — empty pipeline prefers PM over generic epic
     if pm_checkpoints > 0:
         return {
             "next_action": (
@@ -429,7 +475,38 @@ def recommend_what_next(
             "priority": "pm",
         }
 
-    # 7) Open Epics, PM idle, no ready issues — closeouts / stub refine (#905/#909)
+    # 8) Runnable scheduled ops (dry-run plan) when pipeline + PM idle (#933/#659)
+    if runnable_sops:
+        first = runnable_sops[0]
+        oid = str(first.get("id") or first.get("op_id") or "unknown")
+        action = f"dry-run plan next runnable scheduled op: {oid}"
+        prompt = (
+            f"Empty pipeline and idle PM; scheduled catalog has "
+            f"{len(runnable_sops)} op(s) runnable at current risk_tolerance (#933/#641). "
+            f"Start with dry-run: `gh plate scheduled-ops --plan {oid}` / "
+            f"plate_scheduled_op_plan, then `--run` only if dry_run and gates allow. "
+            f"High/critical still need shadow_ack + approval. Prefer ceremony prep "
+            f"(release-cut-prep) over deploy/marketplace human Tasks."
+            + quiet
+        )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": (
+                f"{len(runnable_sops)} runnable scheduled op(s) at risk_tolerance "
+                f"(#933/#659)"
+            ),
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "scheduled_ops_plan",
+            "op_id": oid,
+            "runnable_scheduled_ops": [
+                {"id": o.get("id") or o.get("op_id"), "risk_level": o.get("risk_level")}
+                for o in runnable_sops[:10]
+            ],
+        }
+
+    # 9) Open Epics, PM idle, no ready issues — closeouts / stub refine (#905/#909)
     if open_epics > 0:
         cand_bits: list[str] = []
         structured: list[dict[str, Any]] = []
@@ -761,8 +838,9 @@ def get_what_next(
     include_ready_issues: bool = True,
     include_pm: bool = True,
     include_release: bool = True,
+    include_scheduled_ops: bool = True,
 ) -> dict[str, Any]:
-    """Live what-next: health + budget + PRs + ready issues + PM + release standing."""
+    """Live what-next: health + budget + PRs + ready issues + PM + release + scheduled ops."""
     health: dict[str, Any] = {}
     budget: dict[str, Any] = {}
     open_prs: list[dict[str, Any]] = []
@@ -770,6 +848,7 @@ def get_what_next(
     pending_fragment_count: int | None = None
     pm_status: dict[str, Any] | None = None
     release_status: dict[str, Any] | None = None
+    scheduled_ops: dict[str, Any] | None = None
 
     try:
         from .health import get_health
@@ -881,6 +960,31 @@ def get_what_next(
             )
         except (TypeError, ValueError):
             pm_active = False
+    if include_scheduled_ops and not open_prs and not ready_issues:
+        try:
+            from .scheduled_ops import (
+                list_op_runs,
+                scheduled_ops_status,
+            )
+
+            risk = str(
+                (budget or {}).get("risk_tolerance")
+                or health.get("budget_risk_tolerance")
+                or "off"
+            )
+            st = scheduled_ops_status(risk_tolerance=risk, include_budget=False)
+            active_runs = [
+                r
+                for r in list_op_runs(status="all", limit=20)
+                if r.get("status") in ("blocked", "running", "planned")
+            ]
+            scheduled_ops = {
+                **st,
+                "active_runs": active_runs,
+            }
+        except Exception:
+            scheduled_ops = None
+
     if not open_prs and not ready_issues and not pm_active:
         try:
             epic_closeout_candidates = fetch_epic_closeout_candidates(repo, limit=8)
@@ -897,4 +1001,5 @@ def get_what_next(
         pm_status=pm_status,
         release_status=release_status,
         epic_closeout_candidates=epic_closeout_candidates,
+        scheduled_ops=scheduled_ops,
     )
