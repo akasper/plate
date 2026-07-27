@@ -1,0 +1,15 @@
+{
+  "slug": "921-contemplation-full-transcript-typed-followups",
+  "change_type": "feature",
+  "surface": "src/plate_core/contemplation.py, tests/test_contemplation.py",
+  "summary": "Contemplation transcript keeps full answer + question title/body excerpt; incomplete progress creates typed Research/Design/Feature follow-ups with parent Question link (#921/#364 residual).",
+  "migration_impact": "Contemplation comments gain Answer full: block; follow-up issues may be Research/Design not only Feature. Agents should not assume Feature-only labels from plate_contemplate.",
+  "migration_guidance": [
+    "1. Pull release after merge; run pytest tests/test_contemplation.py.",
+    "2. Prefer reading Answer full: in PLATE-CONTEMPLATION logs for audit.",
+    "3. Residual #364: artifact mutations via PR and Playwright compound e2e still open."
+  ],
+  "agent_notes": "Closes #921 only. Partial Contemplation v2 contract gap close from research enumeration; not full Design #143.",
+  "breaking": false,
+  "links": ["#921", "#364", "#257", "#143", "#654"]
+}
