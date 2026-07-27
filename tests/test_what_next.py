@@ -752,6 +752,54 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
         self.assertEqual(live["priority"], "pm_tick")
 
 
+class TestAdoptionSessionWhatNext(unittest.TestCase):
+    """Proves: active adoption session ranks on what_next (#957 / #955)."""
+
+    def test_active_session_before_ready_issue(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={
+                "budget_pressure": "ok",
+                "remaining_tokens": 40000,
+                "daily_limit": 50000,
+            },
+            open_prs=[],
+            ready_issues=[{"number": 300, "title": "Feature"}],
+            adoption={
+                "core_ready": True,
+                "first_qa": {"seeded": True},
+            },
+            adoption_session={
+                "active": True,
+                "elapsed_minutes": 12.5,
+                "within_30m_so_far": True,
+                "core_ready": True,
+                "first_qa_seeded": True,
+            },
+        )
+        self.assertEqual(out["priority"], "adoption_session")
+        self.assertIn("complete-session", out.get("next_command") or "")
+        self.assertEqual(out.get("elapsed_minutes"), 12.5)
+
+    def test_active_session_seed_phase(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 0},
+            budget={
+                "budget_pressure": "ok",
+                "remaining_tokens": 40000,
+                "daily_limit": 50000,
+            },
+            open_prs=[],
+            adoption={
+                "core_ready": True,
+                "first_qa": {"seeded": False},
+            },
+            adoption_session={"active": True, "elapsed_minutes": 5},
+        )
+        self.assertEqual(out["priority"], "adoption_session")
+        self.assertIn("first-qa-plan", out.get("next_command") or "")
+
+
 class TestSelfMigrateWhatNext(unittest.TestCase):
     """Proves: self-migrate drift ranks on what_next (#941 / #649)."""
 
