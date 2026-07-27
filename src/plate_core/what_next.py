@@ -7,8 +7,8 @@ Priority (cheap → specific):
 4. Missing multi-track release standing branches → release repair (#320/#814)
 5. Actionable local SPEC audit findings (#340 health/drift)
 6. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
-7. Project Manager orchestrator (#660): checkpoints → tick delegated loops → dry-run cycle
-8. Open Epics → advance ready child Feature/Bug (generic when no candidates)
+7. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
+8. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
 9. Pending fragments / release status
 """
 
@@ -395,13 +395,15 @@ def recommend_what_next(
             "priority": "pm_propose_run",
         }
 
-    if open_epics > 0 or pm_queue > 0 or pm_open > 0:
+    # Active PM work only — do not force PM dry-run solely because open_epic_count > 0
+    # (#905). First-slice Epics stay open under #654, so open_epics is almost always high.
+    if pm_queue > 0 or pm_open > 0:
         action = (
             "run Project Manager cycle dry-run then assign/tick "
             f"(epics={open_epics}, queue={pm_queue}, proposed={pm_proposed})"
         )
         prompt = (
-            "Pipeline empty — prefer the #660 PM orchestrator over ad-hoc epic browsing. "
+            "Pipeline empty with active PM queue — prefer the #660 orchestrator. "
             "1) gh plate release status  2) plate_pm_status / gh plate pm --status  "
             "3) plate_pm_run_cycle dry_run=true (or gh plate pm --run) to propose "
             "persona assignments from what_next+feed  4) with human judgment, "
@@ -422,24 +424,31 @@ def recommend_what_next(
             "priority": "pm",
         }
 
-    # 7) Open Epics fallback when PM signals unavailable
+    # 7) Open Epics, PM idle, no ready issues — closeouts / stub refine (#905)
     if open_epics > 0:
         action = (
-            "advance an open Epic: pick a child Feature/Bug with tests sketched, "
-            "no need:refinement"
+            "advance open Epics: first-slice closeout for Epics with all children "
+            "closed (wiki + status:implemented); else refine a need:refinement "
+            "stub into status:ready-to-work and implement"
         )
         prompt = (
-            "Use plate_epic_status or gh plate epic status to list children. For a "
-            "Feature: read full issue, add/update tests first, implement smallest "
-            "change, author fragment in .agentic/releases/unreleased/, PR with clean "
-            "title + labels (Feature + area) + Closes #N in body only, babysit with "
-            "gh plate pr babysit. Prefer plate_pm_run_cycle when available (#660)."
+            "Pipeline empty, PM queue idle, no ready Features/Bugs. Do not run "
+            "plate_pm_run_cycle just because open_epic_count > 0 (#905). "
+            "1) gh plate release status  2) For Epics whose children are all closed "
+            "(e.g. #656/#657/#658/#470 first slices), document outcomes in "
+            "docs/wiki/ (extend V1-Autonomy-Surfaces-Epic-Closeouts.md), add "
+            "status:implemented, post a summary comment — residual E2E stays under "
+            "#654. 3) Otherwise refine a need:refinement/status:stub Feature into "
+            "ACs + status:ready-to-work and implement the smallest slice with tests + "
+            "fragment + PR to release. Prefer v1.0 path over marketplace human Tasks."
             + quiet
         )
         return {
             "next_action": action,
             "prompt_segment": prompt,
-            "rationale": f"{open_epics} open Epic(s)",
+            "rationale": (
+                f"{open_epics} open Epic(s); PM idle (queue=0) — closeout or refine (#905)"
+            ),
             "state_snapshot": state,
             "agent_type": agent_type or "general",
             "priority": "epic",

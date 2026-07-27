@@ -64,12 +64,25 @@ class TestRecommendWhatNext(unittest.TestCase):
         )
         self.assertEqual(out["priority"], "bootstrap")
 
-    def test_epic_when_healthy(self):
-        """Empty pipeline + open epics prefer PM orchestrator (#660) over bare epic prose."""
+    def test_epic_when_healthy_pm_idle(self):
+        """#905: empty pipeline + open epics + idle PM → epic closeout/refine, not PM dry-run."""
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 2},
             budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
             open_prs=[],
+            pm_status={"open_checkpoints": 0, "delegated": 0, "proposed": 0, "queue_size": 0},
+        )
+        self.assertEqual(out["priority"], "epic")
+        self.assertIn("closeout", out["next_action"].lower())
+        self.assertNotIn("Project Manager cycle", out["next_action"])
+
+    def test_pm_when_active_queue_even_with_open_epics(self):
+        """Active PM queue still ranks PM over generic epic prose (#660)."""
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            pm_status={"open_checkpoints": 0, "delegated": 0, "proposed": 0, "queue_size": 2},
         )
         self.assertEqual(out["priority"], "pm")
         self.assertIn("Project Manager", out["next_action"])
@@ -232,7 +245,8 @@ class TestRecommendWhatNext(unittest.TestCase):
             },
             pm_status={"open_checkpoints": 0, "delegated": 0, "queue_size": 0},
         )
-        self.assertEqual(out["priority"], "pm")
+        # #905: idle PM + open epics → epic closeout/refine (not forced PM dry-run)
+        self.assertEqual(out["priority"], "epic")
         self.assertEqual(out["state_snapshot"]["missing_release_tracks"], [])
 
     def test_open_pr_still_beats_ready_issue(self):
