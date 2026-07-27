@@ -394,6 +394,140 @@ class TestWhatNextCLI(unittest.TestCase):
         self.assertIn("what-next", help_text)
 
 
+class TestWhatNextCompoundPriorityLadder(unittest.TestCase):
+    """Proves: compound empty-pipeline ranking ladder for plate_what_next (#919/#364).
+
+    Claim (AGENTS / agent_guidance what_next order): budget_gate beats open PR;
+    open PR beats ready Feature; ready beats PM; PM active beats epic; named
+    closeout when candidates present; empty candidates → stub refine (#915).
+    Unit-level compound proof — Playwright babysit/release e2e still deferred.
+    """
+
+    _healthy = {"label_coverage_ok": True, "open_epic_count": 8}
+    _budget_ok = {
+        "budget_pressure": "ok",
+        "remaining_tokens": 40000,
+        "daily_limit": 50000,
+        "risk_tolerance": "off",
+    }
+
+    def test_compound_priority_ladder_order(self):
+        cases = [
+            (
+                "budget_gate",
+                {
+                    "budget": {
+                        "budget_pressure": "exhausted",
+                        "remaining_tokens": 0,
+                        "daily_limit": 50000,
+                    },
+                    "open_prs": [{"number": 1, "title": "pr", "baseRefName": "release"}],
+                    "ready_issues": [{"number": 2, "title": "feat", "labels": ["Feature"]}],
+                    "pm_status": {"queue_size": 3, "delegated": 1},
+                },
+            ),
+            (
+                "open_pr",
+                {
+                    "budget": dict(self._budget_ok),
+                    "open_prs": [{"number": 10, "title": "in flight", "baseRefName": "release"}],
+                    "ready_issues": [{"number": 11, "title": "ready", "labels": ["Feature"]}],
+                    "pm_status": {"queue_size": 2, "delegated": 1},
+                },
+            ),
+            (
+                "ready_issue",
+                {
+                    "budget": dict(self._budget_ok),
+                    "open_prs": [],
+                    "ready_issues": [
+                        {"number": 20, "title": "ready feat", "labels": ["Feature"]}
+                    ],
+                    "pm_status": {"queue_size": 2, "delegated": 1},
+                },
+            ),
+            (
+                "pm_tick",
+                {
+                    "budget": dict(self._budget_ok),
+                    "open_prs": [],
+                    "ready_issues": [],
+                    "pm_status": {
+                        "open_checkpoints": 0,
+                        "delegated": 2,
+                        "proposed": 0,
+                        "queue_size": 2,
+                    },
+                },
+            ),
+            (
+                "pm",
+                {
+                    "budget": dict(self._budget_ok),
+                    "open_prs": [],
+                    "ready_issues": [],
+                    "pm_status": {
+                        "open_checkpoints": 0,
+                        "delegated": 0,
+                        "proposed": 0,
+                        "queue_size": 2,
+                        "open_assignments": 2,
+                    },
+                },
+            ),
+            (
+                "epic",
+                {
+                    "budget": dict(self._budget_ok),
+                    "open_prs": [],
+                    "ready_issues": [],
+                    "pm_status": {"queue_size": 0, "open_assignments": 0},
+                    "epic_closeout_candidates": [
+                        {
+                            "number": 656,
+                            "title": "feed",
+                            "children_total": 6,
+                            "children_completed": 6,
+                        }
+                    ],
+                },
+            ),
+            (
+                "epic",
+                {
+                    "budget": dict(self._budget_ok),
+                    "open_prs": [],
+                    "ready_issues": [],
+                    "pm_status": {"queue_size": 0},
+                    "epic_closeout_candidates": [],
+                },
+            ),
+        ]
+        seen: list[str] = []
+        for expected, kwargs in cases:
+            out = recommend_what_next(health=dict(self._healthy), **kwargs)
+            self.assertEqual(
+                out["priority"],
+                expected,
+                msg=f"ladder step failed for expected={expected} got={out['priority']} action={out['next_action'][:80]}",
+            )
+            seen.append(out["priority"])
+        # Last epic step with empty candidates must be stub-refine prose
+        last = recommend_what_next(
+            health=dict(self._healthy),
+            budget=dict(self._budget_ok),
+            open_prs=[],
+            ready_issues=[],
+            pm_status={"queue_size": 0},
+            epic_closeout_candidates=[],
+        )
+        self.assertIn("stub", last["next_action"].lower())
+        self.assertEqual(
+            seen,
+            ["budget_gate", "open_pr", "ready_issue", "pm_tick", "pm", "epic", "epic"],
+        )
+
+
 class TestEpicCloseoutCandidates(unittest.TestCase):
     """Proves: complete-child open Epics are named on idle epic priority (#909)."""
 

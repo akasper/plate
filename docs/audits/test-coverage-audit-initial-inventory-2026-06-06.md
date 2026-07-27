@@ -170,5 +170,7 @@ Post-#470 / #654 landings added substantial feature-proof coverage that this Jun
 
 **Closed (first slice) under #917:** template_payload adopter harness parity — `TemplatePayloadAdopterClaimsTests` proves payload ships AGENTS/SPEC, e2e README+example specs, core workflows; `list_payload_files` + import dry-run plan those paths. Monorepo-only `plugin-structure.spec.ts` / `catalog-discovery.spec.ts` (hardcoded `.plugin` layout) intentionally **not** copied into payload; adopters get example harness + import-payload instead.
 
+**Closed (unit compound) under #919:** `TestWhatNextCompoundPriorityLadder` proves budget → open PR → ready → PM tick/active → named closeout → empty-closeout stub refine in one compound suite (#905/#913/#915). Playwright compound e2e still open.
+
 ---
 *This report follows the template in `docs/audits/audit-report-template.md`. Per PLATE Issue Artifact Rules for Audit/Epic work, findings live in `docs/audits/`.*
