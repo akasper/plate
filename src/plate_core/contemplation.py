@@ -355,6 +355,172 @@ def _format_mutation_pr_draft(
     return "\n".join(lines)
 
 
+def build_mutation_pr_plan(
+    question_number: int,
+    answer_text: str,
+    intents: list[dict[str, Any]],
+    git_commit: str,
+    *,
+    base: str = "release",
+) -> dict[str, Any]:
+    """Structured executable plan for PR-only process mutations (#929).
+
+    Pure helper: no git, no network. Agents (or apply_mutation_pr_plan) execute later.
+    Default base is legacy ``release`` (confirm with ``gh plate release status``).
+    """
+    if not intents:
+        return {
+            "ok": False,
+            "error": "no_mutation_intents",
+            "question_number": question_number,
+        }
+
+    paths = [str(i.get("path") or "") for i in intents if i.get("path")]
+    high_risk = any(i.get("need_human_review") for i in intents)
+    branch = f"docs/contemplation-q{question_number}-artifact-mutation"
+    title = f"Apply contemplation process updates for Question #{question_number}"
+    body = _format_mutation_pr_draft(
+        question_number=question_number,
+        answer_text=answer_text,
+        intents=intents,
+        git_commit=git_commit,
+    )
+    labels = ["Documentation"]
+    if high_risk:
+        labels.append("need:human-review")
+    labels_csv = ",".join(labels)
+
+    git_steps = [
+        f"git fetch origin {base}",
+        f"git checkout -b {branch} origin/{base}",
+        "apply minimal edits to: " + ", ".join(paths),
+        "git add -- " + " ".join(paths),
+        f'git commit -m "Apply contemplation process updates for #{question_number}"',
+        f"git push -u origin {branch}",
+    ]
+    # gh argv as discrete tokens for spawn/tests (body via --body-file in real runs).
+    gh_argv = [
+        "gh",
+        "pr",
+        "create",
+        "--base",
+        base,
+        "--head",
+        branch,
+        "--title",
+        title,
+        "--body",
+        body,
+        "--label",
+        labels_csv,
+    ]
+    return {
+        "ok": True,
+        "mode": "pr_only",
+        "question_number": question_number,
+        "base": base,
+        "branch": branch,
+        "title": title,
+        "body": body,
+        "labels": labels,
+        "paths": paths,
+        "high_risk": high_risk,
+        "need_human_review": high_risk,
+        "git_commit": git_commit,
+        "git_steps": git_steps,
+        "gh_argv": gh_argv,
+        "auto_push": False,
+        "note": "Default apply is dry_run; live open requires apply_mutation_pr_plan(dry_run=False).",
+    }
+
+
+def apply_mutation_pr_plan(
+    plan: dict[str, Any] | None,
+    *,
+    dry_run: bool = True,
+    allow_high_risk: bool = False,
+    runner: Any | None = None,
+) -> dict[str, Any]:
+    """Apply (or dry-run) a structured mutation PR plan (#929).
+
+    - ``dry_run=True`` (default): returns would_execute steps; **no** git/network.
+    - ``dry_run=False``: invokes ``runner(plan)`` if provided; otherwise reports blocked
+      with guidance (engine never auto-pushes without an injectable runner).
+    - High-risk plans require ``allow_high_risk=True`` for non-dry apply.
+    """
+    if not plan or not plan.get("ok"):
+        return {
+            "ok": False,
+            "applied": False,
+            "dry_run": dry_run,
+            "error": (plan or {}).get("error") or "invalid_plan",
+        }
+
+    high_risk = bool(plan.get("high_risk") or plan.get("need_human_review"))
+    steps = list(plan.get("git_steps") or []) + [
+        " ".join(str(x) for x in (plan.get("gh_argv") or [])[:8]) + " ..."
+    ]
+
+    if dry_run:
+        return {
+            "ok": True,
+            "applied": False,
+            "dry_run": True,
+            "would_execute": steps,
+            "high_risk": high_risk,
+            "branch": plan.get("branch"),
+            "base": plan.get("base"),
+            "title": plan.get("title"),
+            "note": "Dry-run only; no git push or gh pr create executed.",
+        }
+
+    if high_risk and not allow_high_risk:
+        return {
+            "ok": False,
+            "applied": False,
+            "dry_run": False,
+            "error": "high_risk_requires_allow_high_risk",
+            "high_risk": True,
+            "note": "Set allow_high_risk=True after human review for AGENTS.md/SPEC/workflows.",
+        }
+
+    if runner is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "dry_run": False,
+            "error": "runner_required",
+            "would_execute": steps,
+            "note": "Provide runner(plan)->dict to open PR; default engine never auto-pushes.",
+        }
+
+    try:
+        result = runner(plan)
+    except Exception as exc:  # noqa: BLE001 — surface to caller
+        return {
+            "ok": False,
+            "applied": False,
+            "dry_run": False,
+            "error": f"runner_failed: {exc}",
+            "high_risk": high_risk,
+        }
+
+    out = {
+        "ok": True,
+        "applied": True,
+        "dry_run": False,
+        "high_risk": high_risk,
+        "branch": plan.get("branch"),
+        "base": plan.get("base"),
+        "title": plan.get("title"),
+        "runner_result": result,
+    }
+    if isinstance(result, dict):
+        out["pr_url"] = result.get("pr_url") or result.get("url")
+        out["pr_number"] = result.get("pr_number") or result.get("number")
+    return out
+
+
 def _git_head_sha() -> str:
     """Best-effort HEAD SHA for contemplation provenance (#923)."""
     try:
@@ -412,6 +578,8 @@ class ContemplationEngine:
         created_issues: list[dict[str, Any]] = []
         mutation_intents: list[dict[str, Any]] = []
         mutation_pr_draft: str | None = None
+        mutation_pr_plan: dict[str, Any] | None = None
+        mutation_pr_apply: dict[str, Any] | None = None
         log_url = None
         close_ready_comment_url = None
 
@@ -461,11 +629,24 @@ class ContemplationEngine:
                 intents=mutation_intents,
                 git_commit=git_commit,
             )
+            mutation_pr_plan = build_mutation_pr_plan(
+                question_number=question_number,
+                answer_text=answer_text,
+                intents=mutation_intents,
+                git_commit=git_commit,
+            )
+            # Safe-by-default: always dry-run apply during contemplate (#929).
+            mutation_pr_apply = apply_mutation_pr_plan(mutation_pr_plan, dry_run=True)
             high = sum(1 for i in mutation_intents if i.get("need_human_review"))
             actions.append(
                 f"Detected {len(mutation_intents)} artifact mutation intent(s) "
                 f"({high} high-risk); PR-only mode"
             )
+            if mutation_pr_plan.get("ok"):
+                actions.append(
+                    f"Built mutation PR plan branch={mutation_pr_plan.get('branch')} "
+                    f"base={mutation_pr_plan.get('base')} (dry-run apply only)"
+                )
 
         # Prefer Documentation mutation plan issue over generic Feature when intents fire.
         if mutation_intents and not close_signal_met:
@@ -573,6 +754,18 @@ class ContemplationEngine:
                 f"risk={intent.get('risk')} mode={intent.get('mode')}{hr} "
                 f"— {intent.get('rationale')}"
             )
+        if mutation_pr_plan and mutation_pr_plan.get("ok"):
+            log_lines.append(
+                f"Mutation PR plan: branch={mutation_pr_plan.get('branch')} "
+                f"base={mutation_pr_plan.get('base')} "
+                f"high_risk={mutation_pr_plan.get('high_risk')} "
+                f"auto_push={mutation_pr_plan.get('auto_push')}"
+            )
+            log_lines.append(
+                "Mutation PR apply: dry_run="
+                f"{(mutation_pr_apply or {}).get('dry_run', True)} "
+                f"applied={(mutation_pr_apply or {}).get('applied', False)}"
+            )
         for warning in criterion_warnings:
             log_lines.append(f"Warning: {warning}")
         for index, evaluation in enumerate(answer_signal_evaluation, start=1):
@@ -678,7 +871,9 @@ class ContemplationEngine:
             "git_commit": git_commit,
             "mutation_intents": mutation_intents,
             "mutation_pr_draft": mutation_pr_draft,
-            "note": "Strict checklist-based contemplation engine. Questions become PR-close-ready only when every answer-signal checklist item is backed by cited evidence from effective answers. Process artifacts mutate via PR draft plans only (#925).",
+            "mutation_pr_plan": mutation_pr_plan,
+            "mutation_pr_apply": mutation_pr_apply,
+            "note": "Strict checklist-based contemplation engine. Questions become PR-close-ready only when every answer-signal checklist item is backed by cited evidence from effective answers. Process artifacts use structured PR plans with dry-run apply by default (#925/#929).",
         }
 
 
