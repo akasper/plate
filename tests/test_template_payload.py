@@ -108,6 +108,65 @@ class TemplatePayloadInventoryTests(unittest.TestCase):
             self.assertEqual(item.get("classification"), "copy_to_downstream")
 
 
+class TemplatePayloadAdopterClaimsTests(unittest.TestCase):
+    """Proves: template_payload ships adopter harness claims (#917 / #364 residual).
+
+    Claim: greenfield import gets AGENTS/SPEC, e2e scaffolding, and core PLATE
+    workflows — without requiring monorepo-only plugin-structure.spec.ts paths.
+    """
+
+    REQUIRED_PATHS = (
+        "AGENTS.md",
+        "SPEC.md",
+        "README.md",
+        "playwright.config.ts",
+        "tests/e2e/README.md",
+        "tests/e2e/specs/example.spec.ts",
+        ".github/workflows/ci.yml",
+        ".github/workflows/feedback-resolution-check.yml",
+        ".github/workflows/pr-title-check.yml",
+        ".github/workflows/label-check.yml",
+    )
+
+    def test_payload_contains_adopter_harness_files(self):
+        root = payload_root()
+        missing = [p for p in self.REQUIRED_PATHS if not (root / p).is_file()]
+        self.assertEqual(missing, [], f"payload missing adopter files: {missing}")
+
+    def test_list_payload_files_includes_adopter_paths(self):
+        from plate_core.payload_surface import list_payload_files
+
+        listing = list_payload_files()
+        self.assertTrue(listing.get("ok"))
+        paths = {f["path"] for f in listing.get("files") or []}
+        for p in self.REQUIRED_PATHS:
+            self.assertIn(p, paths, f"list_payload_files missing {p}")
+
+    def test_import_dry_run_plans_adopter_scaffold(self):
+        """Proves: import-payload dry-run would create key adopter scaffold files."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = import_payload(tmp, strategy="safe", dry_run=True)
+            would = set(report.get("would_create") or [])
+            # Paths may be namespaced for scripts; AGENTS and e2e should be direct
+            for p in (
+                "AGENTS.md",
+                "playwright.config.ts",
+                "tests/e2e/README.md",
+                ".github/workflows/ci.yml",
+            ):
+                self.assertTrue(
+                    any(w == p or w.endswith("/" + p) for w in would),
+                    f"dry-run would_create missing {p}; sample={sorted(would)[:12]}",
+                )
+
+    def test_e2e_readme_documents_harness_purpose(self):
+        text = (payload_root() / "tests" / "e2e" / "README.md").read_text(encoding="utf-8")
+        self.assertIn("CLI-agnostic", text)
+        self.assertIn("npm test", text)
+
+
 class InitPlaywrightPayloadTests(unittest.TestCase):
     def test_init_playwright_uses_payload_source(self):
         with tempfile.TemporaryDirectory() as tmpdir:
