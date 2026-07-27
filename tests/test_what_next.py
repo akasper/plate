@@ -65,7 +65,7 @@ class TestRecommendWhatNext(unittest.TestCase):
         self.assertEqual(out["priority"], "bootstrap")
 
     def test_epic_when_healthy_pm_idle(self):
-        """#905/#915: empty pipeline + idle PM + no closeout cands → stub refine, not PM."""
+        """#905/#915/#981: empty pipeline + idle PM + no closeout cands → v1 residual, not PM."""
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 2},
             budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
@@ -73,13 +73,13 @@ class TestRecommendWhatNext(unittest.TestCase):
             pm_status={"open_checkpoints": 0, "delegated": 0, "proposed": 0, "queue_size": 0},
             epic_closeout_candidates=[],
         )
-        self.assertEqual(out["priority"], "epic")
-        self.assertIn("refine", out["next_action"].lower())
-        self.assertIn("no first-slice closeout candidates", out["next_action"].lower())
+        self.assertEqual(out["priority"], "v1_residual")
+        self.assertIn("first-slices", out["next_action"].lower())
+        self.assertIn("#661", out["next_action"])
         self.assertNotIn("Project Manager cycle", out["next_action"])
 
-    def test_empty_closeout_candidates_prefer_stub_refine(self):
-        """#915: after #913 filters, empty candidates must not lead with closeout prose."""
+    def test_empty_closeout_candidates_prefer_v1_residual(self):
+        """#915/#981: empty candidates → human-gated residual, not stub-refine loop."""
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 20},
             budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
@@ -87,10 +87,11 @@ class TestRecommendWhatNext(unittest.TestCase):
             pm_status={"queue_size": 0, "open_assignments": 0},
             epic_closeout_candidates=[],
         )
-        self.assertEqual(out["priority"], "epic")
-        self.assertIn("stub", out["next_action"].lower())
+        self.assertEqual(out["priority"], "v1_residual")
+        self.assertIn("human", out["next_action"].lower())
         self.assertNotIn("first-slice closeout for complete-child", out["next_action"])
         self.assertIn("915", out["rationale"])
+        self.assertIn("981", out["rationale"])
 
     def test_pm_when_active_queue_even_with_open_epics(self):
         """Active PM queue still ranks PM over generic epic prose (#660)."""
@@ -261,8 +262,8 @@ class TestRecommendWhatNext(unittest.TestCase):
             },
             pm_status={"open_checkpoints": 0, "delegated": 0, "queue_size": 0},
         )
-        # #905: idle PM + open epics → epic closeout/refine (not forced PM dry-run)
-        self.assertEqual(out["priority"], "epic")
+        # #905/#981: idle PM + open epics, no candidates → v1 residual (not forced PM)
+        self.assertEqual(out["priority"], "v1_residual")
         self.assertEqual(out["state_snapshot"]["missing_release_tracks"], [])
 
     def test_open_pr_still_beats_ready_issue(self):
@@ -399,7 +400,7 @@ class TestWhatNextCompoundPriorityLadder(unittest.TestCase):
 
     Claim (AGENTS / agent_guidance what_next order): budget_gate beats open PR;
     open PR beats ready Feature; ready beats PM; PM active beats epic; named
-    closeout when candidates present; empty candidates → stub refine (#915).
+    closeout when candidates present; empty candidates → v1_residual (#915/#981).
     Unit-level compound proof — Playwright babysit/release e2e still deferred.
     """
 
@@ -493,7 +494,7 @@ class TestWhatNextCompoundPriorityLadder(unittest.TestCase):
                 },
             ),
             (
-                "epic",
+                "v1_residual",
                 {
                     "budget": dict(self._budget_ok),
                     "open_prs": [],
@@ -512,7 +513,7 @@ class TestWhatNextCompoundPriorityLadder(unittest.TestCase):
                 msg=f"ladder step failed for expected={expected} got={out['priority']} action={out['next_action'][:80]}",
             )
             seen.append(out["priority"])
-        # Last epic step with empty candidates must be stub-refine prose
+        # Last step with empty candidates is v1 residual / human gates (#981)
         last = recommend_what_next(
             health=dict(self._healthy),
             budget=dict(self._budget_ok),
@@ -521,10 +522,11 @@ class TestWhatNextCompoundPriorityLadder(unittest.TestCase):
             pm_status={"queue_size": 0},
             epic_closeout_candidates=[],
         )
-        self.assertIn("stub", last["next_action"].lower())
+        self.assertEqual(last["priority"], "v1_residual")
+        self.assertIn("661", last["next_action"])
         self.assertEqual(
             seen,
-            ["budget_gate", "open_pr", "ready_issue", "pm_tick", "pm", "epic", "epic"],
+            ["budget_gate", "open_pr", "ready_issue", "pm_tick", "pm", "epic", "v1_residual"],
         )
 
 
@@ -640,7 +642,8 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
 
         return H()
 
-    def test_get_what_next_idle_pm_ranks_epic_not_pm(self):
+    def test_get_what_next_idle_pm_ranks_v1_residual_not_pm(self):
+        """Proves: idle PM + empty closeouts ranks v1_residual not PM (#981/#907)."""
         from unittest.mock import patch
 
         from plate_core.what_next import get_what_next
@@ -667,27 +670,32 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
                 "risk_tolerance": "off",
             }):
                 with patch("plate_core.what_next.fetch_ready_issue_candidates", return_value=[]):
-                    with patch("plate_core.pm.get_pm_status", return_value=idle_pm):
-                        with patch("plate_core.release.get_release_status", side_effect=Exception("skip")):
-                            with patch("plate_core.release.collect_fragments", return_value=[]):
-                                with patch(
-                                    "plate_core.adoption.assess_adoption_readiness",
-                                    return_value=adopt_ready,
-                                ):
+                    with patch("plate_core.what_next.fetch_epic_closeout_candidates", return_value=[]):
+                        with patch("plate_core.pm.get_pm_status", return_value=idle_pm):
+                            with patch("plate_core.release.get_release_status", side_effect=Exception("skip")):
+                                with patch("plate_core.release.collect_fragments", return_value=[]):
                                     with patch(
-                                        "plate_core.self_migrate.plan_self_migrate",
-                                        return_value={"drift": False},
+                                        "plate_core.adoption.assess_adoption_readiness",
+                                        return_value=adopt_ready,
                                     ):
-                                        out = get_what_next(
-                                            "akasper/plate",
-                                            include_prs=False,
-                                            include_fragments=True,
-                                            include_ready_issues=True,
-                                            include_pm=True,
-                                            include_release=True,
-                                        )
-        self.assertEqual(out["priority"], "epic")
-        self.assertIn("closeout", out["next_action"].lower())
+                                        with patch(
+                                            "plate_core.self_migrate.verify_self_migrate",
+                                            return_value={
+                                                "ok": True,
+                                                "ready": True,
+                                                "migrate": {"drift": False, "target_version": "0.7.2"},
+                                            },
+                                        ):
+                                            out = get_what_next(
+                                                "akasper/plate",
+                                                include_prs=False,
+                                                include_fragments=True,
+                                                include_ready_issues=True,
+                                                include_pm=True,
+                                                include_release=True,
+                                            )
+        self.assertEqual(out["priority"], "v1_residual")
+        self.assertIn("654", out["next_action"])
         self.assertEqual(out["state_snapshot"]["pm_queue_size"], 0)
 
     def test_get_what_next_open_assignments_ranks_pm(self):
