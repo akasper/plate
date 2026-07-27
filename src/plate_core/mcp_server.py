@@ -370,6 +370,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 args.get("repo_root") or ".",
                 include_optional=not bool(args.get("no_optional", False)),
             )
+        elif name == "plate_self_migrate_plan":
+            from .self_migrate import plan_self_migrate
+
+            payload = plan_self_migrate(
+                args.get("repo_root") or ".",
+                target_version=args.get("target_version"),
+                include_payload=not bool(args.get("no_payload", False)),
+            )
         elif name == "plate_config_get":
             payload = get_plate_config_report(args.get("repo_root")).to_dict()
         elif name == "plate_config_validate":
@@ -2189,6 +2197,27 @@ def run() -> None:
                                         "no_optional": {
                                             "type": "boolean",
                                             "description": "When true, skip optional SPEC.md/CURRENT.md checks.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_self_migrate_plan",
+                                "description": "Dry-run self-migrate plan for plate-core pin/payload drift (#939/#649). No apply, no network by default.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "target_version": {
+                                            "type": "string",
+                                            "description": "Optional target plate-core semver; default installed version.",
+                                        },
+                                        "no_payload": {
+                                            "type": "boolean",
+                                            "description": "When true, omit import-payload step from the plan.",
                                         },
                                     },
                                 },
