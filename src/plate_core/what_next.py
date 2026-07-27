@@ -6,13 +6,14 @@ Priority (cheap → specific):
 3. Missing labels → bootstrap
 4. Missing multi-track release standing branches → release repair (#320/#814)
 5. Actionable local SPEC audit findings (#340 health/drift)
-6. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
-7. Active scheduled op runs (blocked/running/planned) (#933 / #659 / #641)
-8. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
-9. Runnable scheduled ops dry-run plan when pipeline + PM idle (#933)
-10. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
+6. Local adoption not core_ready → gh plate adopt / import-payload (#937 / #633 / #935)
+7. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
+8. Active scheduled op runs (blocked/running/planned) (#933 / #659 / #641)
+9. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
+10. Runnable scheduled ops dry-run plan when pipeline + PM idle (#933)
+11. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
    — when available, name concrete complete-child Epic candidates (#909)
-11. Pending fragments / release status
+12. Pending fragments / release status
 """
 
 from __future__ import annotations
@@ -57,6 +58,7 @@ def recommend_what_next(
     release_status: dict[str, Any] | None = None,
     epic_closeout_candidates: list[dict[str, Any]] | None = None,
     scheduled_ops: dict[str, Any] | None = None,
+    adoption: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure recommendation from pre-fetched state (testable).
 
@@ -68,6 +70,7 @@ def recommend_what_next(
     ``release_status``: get_release_status() shape for multi-track standing repair (#814).
     ``epic_closeout_candidates``: open Epics with all children closed (#909).
     ``scheduled_ops``: scheduled_ops_status-like summary + optional active_runs (#933).
+    ``adoption``: assess_adoption_readiness() shape (#937/#935); ranks when core_ready is false.
     """
     h = dict(health or {})
     b = dict(budget or {})
@@ -77,6 +80,7 @@ def recommend_what_next(
     rel = dict(release_status or {})
     closeouts = list(epic_closeout_candidates or [])
     sops = dict(scheduled_ops or {})
+    adopt = dict(adoption or {})
     labels_ok = bool(h.get("label_coverage_ok", False))
     open_epics = int(h.get("open_epic_count") or 0)
     missing_tracks = _missing_release_tracks(rel) if rel else []
@@ -163,10 +167,15 @@ def recommend_what_next(
             list(sops.get("runnable_at_tolerance") or sops.get("runnable") or [])
         ),
         "scheduled_ops_gated_count": len(list(sops.get("gated") or [])),
+        "adoption_core_ready": adopt.get("core_ready") if adopt else None,
+        "adoption_minutes_remaining": adopt.get("estimated_minutes_remaining")
+        if adopt
+        else None,
     }
 
     active_sop_runs = list(sops.get("active_runs") or [])
     runnable_sops = list(sops.get("runnable_at_tolerance") or sops.get("runnable") or [])
+    adoption_not_ready = bool(adopt) and adopt.get("core_ready") is False
 
     # 1) Budget critical/exhausted OR next-cycle pause — even under risk=off (surface gates).
     # would_pause_next_cycle can be true while pressure is only elevated (remaining < per_cycle).
@@ -316,7 +325,41 @@ def recommend_what_next(
             "priority": "spec_audit_advisory",
         }
 
-    # 5) Concrete ready Feature/Bug — prefer over generic epic text (#793)
+    # 5) Local adoption incomplete — finish <30m path before new Features (#937/#633)
+    if adoption_not_ready:
+        mins = adopt.get("estimated_minutes_remaining")
+        next_cmd = str(adopt.get("next_command") or "gh plate adopt --json")
+        action = (
+            f"complete local PLATE adoption (~{mins}m remaining): "
+            f"{next_cmd}"
+        )
+        prompt = (
+            "Local checkout fails core adoption readiness (#935/#633). "
+            "1) `gh plate adopt --json` / plate_adoption_status  "
+            "2) Follow next_command (usually import-payload dry-run then apply, "
+            "then bootstrap --adopt)  "
+            "3) Re-check adopt until core_ready; stay within 30m budget. "
+            "Do not start ready Feature work or epic refine until adoption core_ready. "
+            "Status only — never auto-apply without human/agent explicit apply."
+            + quiet
+        )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": (
+                f"adoption core_ready=false; "
+                f"minutes_remaining={mins} (#937/#935/#633)"
+            ),
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "adoption",
+            "next_command": next_cmd,
+            "estimated_minutes_remaining": mins,
+            "within_30m_budget": adopt.get("within_30m_budget"),
+            "ask_user_question": adopt.get("ask_user_question"),
+        }
+
+    # 6) Concrete ready Feature/Bug — prefer over generic epic text (#793)
     if ready:
         first = ready[0]
         num = first.get("number") or first.get("issue_number")
@@ -839,8 +882,9 @@ def get_what_next(
     include_pm: bool = True,
     include_release: bool = True,
     include_scheduled_ops: bool = True,
+    include_adoption: bool = True,
 ) -> dict[str, Any]:
-    """Live what-next: health + budget + PRs + ready issues + PM + release + scheduled ops."""
+    """Live what-next: health + budget + PRs + adoption + ready issues + PM + release + scheduled ops."""
     health: dict[str, Any] = {}
     budget: dict[str, Any] = {}
     open_prs: list[dict[str, Any]] = []
@@ -849,6 +893,7 @@ def get_what_next(
     pm_status: dict[str, Any] | None = None
     release_status: dict[str, Any] | None = None
     scheduled_ops: dict[str, Any] | None = None
+    adoption: dict[str, Any] | None = None
 
     try:
         from .health import get_health
@@ -960,6 +1005,14 @@ def get_what_next(
             )
         except (TypeError, ValueError):
             pm_active = False
+    if include_adoption and not open_prs:
+        try:
+            from .adoption import assess_adoption_readiness
+
+            adoption = assess_adoption_readiness(".", include_optional=False)
+        except Exception:
+            adoption = None
+
     if include_scheduled_ops and not open_prs and not ready_issues:
         try:
             from .scheduled_ops import (
@@ -1002,4 +1055,5 @@ def get_what_next(
         release_status=release_status,
         epic_closeout_candidates=epic_closeout_candidates,
         scheduled_ops=scheduled_ops,
+        adoption=adoption,
     )
