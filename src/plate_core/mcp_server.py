@@ -378,6 +378,18 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 target_version=args.get("target_version"),
                 include_payload=not bool(args.get("no_payload", False)),
             )
+        elif name == "plate_self_migrate_merge_markers":
+            from .self_migrate import plan_marker_merge
+
+            paths = args.get("paths")
+            if isinstance(paths, str):
+                paths = [paths]
+            payload = plan_marker_merge(
+                args.get("repo_root") or ".",
+                paths=paths,
+                upstream_root=args.get("upstream_root") or args.get("upstream_dir"),
+                apply=bool(args.get("apply", False)),
+            )
         elif name == "plate_config_get":
             payload = get_plate_config_report(args.get("repo_root")).to_dict()
         elif name == "plate_config_validate":
@@ -2218,6 +2230,32 @@ def run() -> None:
                                         "no_payload": {
                                             "type": "boolean",
                                             "description": "When true, omit import-payload step from the plan.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_self_migrate_merge_markers",
+                                "description": "Plan/apply PLATES-CORE marker sectional merge vs upstream files (#943/#649). Dry-run unless apply=true; no network.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "upstream_root": {
+                                            "type": "string",
+                                            "description": "Directory of upstream files mirroring relative paths.",
+                                        },
+                                        "paths": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "Relative paths to merge; default marker-bearing refresh files.",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "When true, write merged content. Default false (dry-run).",
                                         },
                                     },
                                 },

@@ -1,15 +1,17 @@
-"""Self-migrate dry-run plan for adopter plate-core / payload drift (#939 / Epic #649).
+"""Self-migrate dry-run plan + marker merge executor (#939/#943 / Epic #649).
 
-Status/plan only — no pip install, no file writes, no network by default.
+Plan mode: no pip install, no file writes, no network by default.
+Marker merge: dry-run by default; optional explicit apply of PLATES-CORE sections only.
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from . import __version__ as _INSTALLED_VERSION
+from .markers import MarkerParseError, merge_with_diagnostics
 
 _VERSION_RE = re.compile(
     r"(?i)(?:plate-core\s*[=><!~]+\s*|version\s*=\s*)[\"']?v?(\d+\.\d+\.\d+)"
@@ -202,8 +204,8 @@ def plan_self_migrate(
         {
             "id": "5_marker_aware_review",
             "description": (
-                "Review PLATES-CORE marked sections in AGENTS.md/process files; "
-                "preserve local edits outside markers"
+                "gh plate self-migrate --merge-markers --upstream-dir <upstream> --json "
+                "(optional --apply-markers after review); preserve local outside markers"
             ),
             "dry_run_only": True,
         }
@@ -268,8 +270,146 @@ def plan_self_migrate(
                     "label": "Upgrade plate-core pin",
                     "description": f"pip install plate-core=={target}",
                 },
+                {
+                    "label": "Marker merge plan",
+                    "description": "gh plate self-migrate --merge-markers --json",
+                },
                 {"label": "Health only", "description": "gh plate health"},
                 {"label": "Defer", "description": "Keep plan artifact only"},
             ],
         },
+    }
+
+
+def _default_marker_paths(repo_root: Path) -> list[str]:
+    """Prefer high-signal files that actually exist and contain markers."""
+    out: list[str] = []
+    for rel in _REFRESH_PATHS:
+        p = repo_root / rel
+        if not p.is_file():
+            continue
+        text = _read_text(p) or ""
+        if "PLATES-CORE" in text:
+            out.append(rel)
+    if not out and (repo_root / "AGENTS.md").is_file():
+        out.append("AGENTS.md")
+    return out
+
+
+def plan_marker_merge(
+    repo_root: str | Path | None = None,
+    *,
+    paths: list[str] | None = None,
+    upstream_root: str | Path | None = None,
+    upstream_texts: Mapping[str, str] | None = None,
+    base_texts: Mapping[str, str] | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    """Plan (and optionally apply) PLATES-CORE sectional merges (#943 / #649).
+
+    For each path: 3-way merge via ``merge_with_diagnostics``.
+    When base is omitted for a path, base defaults to local content so unedited
+    marker blocks accept upstream while content outside markers is preserved
+    from local (and local marker customizations only win when a true base is
+    supplied that differs from local).
+
+    Dry-run by default (``apply=False``). Never performs network I/O.
+    Upstream content comes from ``upstream_root`` files and/or ``upstream_texts``.
+    """
+    root = Path(repo_root or ".").resolve()
+    up_root = Path(upstream_root).resolve() if upstream_root else None
+    up_map = dict(upstream_texts or {})
+    base_map = dict(base_texts or {})
+    rels = list(paths) if paths else _default_marker_paths(root)
+
+    files: list[dict[str, Any]] = []
+    would_write = 0
+    written = 0
+    errors: list[str] = []
+
+    for rel in rels:
+        local_path = root / rel
+        entry: dict[str, Any] = {
+            "path": rel,
+            "action": "skip",
+            "changed": False,
+            "preserved_local_sections": [],
+            "warnings": [],
+            "applied": False,
+        }
+        if not local_path.is_file():
+            entry["action"] = "missing_local"
+            entry["warnings"] = [f"Local file not found: {rel}"]
+            files.append(entry)
+            continue
+
+        local = _read_text(local_path) or ""
+        upstream: str | None = up_map.get(rel)
+        if upstream is None and up_root is not None:
+            upstream = _read_text(up_root / rel)
+        if upstream is None:
+            entry["action"] = "missing_upstream"
+            entry["warnings"] = [
+                "No upstream text (pass --upstream-dir or upstream_texts)"
+            ]
+            files.append(entry)
+            continue
+
+        base = base_map.get(rel, local)
+        try:
+            result = merge_with_diagnostics(base, local, upstream)
+        except MarkerParseError as exc:
+            entry["action"] = "parse_error"
+            entry["warnings"] = [str(exc)]
+            errors.append(f"{rel}: {exc}")
+            files.append(entry)
+            continue
+
+        merged = result.text
+        changed = merged != local
+        entry["preserved_local_sections"] = list(result.preserved_local_sections)
+        entry["warnings"] = list(result.warnings)
+        entry["changed"] = changed
+        if not changed:
+            entry["action"] = "unchanged"
+        else:
+            entry["action"] = "update_markers"
+            would_write += 1
+            if apply:
+                try:
+                    local_path.write_text(merged, encoding="utf-8")
+                    entry["applied"] = True
+                    written += 1
+                except OSError as exc:
+                    entry["action"] = "write_error"
+                    entry["warnings"] = entry["warnings"] + [str(exc)]
+                    errors.append(f"{rel}: write failed: {exc}")
+            else:
+                # Dry-run preview: truncated unified-ish note
+                entry["preview_len"] = len(merged)
+        files.append(entry)
+
+    mode = "apply" if apply else "dry_run"
+    return {
+        "ok": len(errors) == 0,
+        "mode": mode,
+        "repo_root": str(root),
+        "upstream_root": str(up_root) if up_root else None,
+        "paths": rels,
+        "files": files,
+        "would_write": would_write,
+        "written": written,
+        "auto_apply": False,
+        "apply_requested": apply,
+        "errors": errors,
+        "note": (
+            "Marker merge only touches PLATES-CORE sections (via merge_with_diagnostics). "
+            "Outside-marker local content is preserved. Dry-run unless apply=true (#943)."
+        ),
+        "related_issues": ["#943", "#649", "#939", "#633", "#654"],
+        "next_command": (
+            "gh plate self-migrate --merge-markers --upstream-dir <upstream> --json"
+            if not apply
+            else "gh plate health"
+        ),
     }
