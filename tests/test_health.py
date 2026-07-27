@@ -231,6 +231,55 @@ class HealthTests(unittest.TestCase):
         self.assertTrue(report.first_qa_seeded)
         self.assertEqual(report.adoption_minutes_remaining, 0)
 
+    def test_health_includes_self_migrate_fields(self):
+        """Proves: get_health merges local self-migrate verify into report (#967)."""
+        fake_sm = {
+            "ok": True,
+            "ready": False,
+            "next_command": "gh plate self-migrate --plan --json",
+            "migrate": {
+                "drift": True,
+                "target_version": "0.7.2",
+            },
+        }
+        with patch(
+            "plate_core.self_migrate.verify_self_migrate",
+            return_value=fake_sm,
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+            )
+        self.assertTrue(report.self_migrate_drift)
+        self.assertFalse(report.self_migrate_ready)
+        self.assertEqual(report.self_migrate_target, "0.7.2")
+        self.assertIn("self-migrate", report.self_migrate_next_command or "")
+        d = report.to_dict()
+        self.assertIn("self_migrate_drift", d)
+        self.assertIn("self_migrate_ready", d)
+
+    def test_health_self_migrate_ready(self):
+        """Proves: ready path surfaces ready=true without failing health (#967)."""
+        fake_sm = {
+            "ok": True,
+            "ready": True,
+            "next_command": "gh plate self-migrate --verify --json",
+            "migrate": {"drift": False, "target_version": "0.7.2"},
+        }
+        with patch(
+            "plate_core.self_migrate.verify_self_migrate",
+            return_value=fake_sm,
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+            )
+        self.assertFalse(report.self_migrate_drift)
+        self.assertTrue(report.self_migrate_ready)
+        self.assertEqual(report.self_migrate_target, "0.7.2")
+
     def test_health_partial_on_failures(self):
         """Degraded mode with errors list when some calls fail (rate, 404 etc)."""
         client = FailingClient()
