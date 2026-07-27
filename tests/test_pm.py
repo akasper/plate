@@ -60,6 +60,27 @@ class TestPMTeamAndAssign(unittest.TestCase):
         self.assertIn("auto-delegate disabled", asg["rationale"])
         self.assertNotIn("blocked: risk_tolerance=off", asg["rationale"])
 
+    def test_queue_size_ignores_cancelled_and_done(self):
+        from plate_core.pm import count_active_queue
+
+        rows = [
+            {"status": "proposed"},
+            {"status": "delegated"},
+            {"status": "blocked"},
+            {"status": "cancelled"},
+            {"status": "done"},
+        ]
+        self.assertEqual(count_active_queue(rows), 3)
+        with tempfile.TemporaryDirectory() as tmp:
+            pm = ProjectManager(repo=None, state_dir=Path(tmp))
+            pm._assignments = rows
+            st = pm.get_status()
+            self.assertEqual(st.queue_size, 3)
+            self.assertEqual(st.proposed, 1)
+            self.assertEqual(st.delegated, 1)
+            self.assertEqual(st.blocked, 1)
+            self.assertEqual(st.done, 1)
+
     def test_migrate_legacy_risk_off_blocked(self):
         from plate_core.pm import migrate_legacy_risk_off_blocked_assignment
 
