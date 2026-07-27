@@ -76,6 +76,119 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(seed_action.state, "planned")
         self.assertIn("Seed", seed_action.detail)
 
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_seed_writes_first_qa_marker(self, mock_get_health):
+        """Proves: bootstrap apply seed writes .agentic/adoption first_qa marker (#951)."""
+        from plate_core.adoption import first_qa_seed_status
+
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/new-repo",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            if endpoint == "repos/akasper/new-repo":
+                return {"has_wiki": True, "default_branch": "main"}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint == "repos/akasper/new-repo/issues" and k.get("method") == "POST":
+                return {"number": 1}
+            if endpoint.startswith("repos/akasper/new-repo/contents/"):
+                return {"type": "file"}
+            return {}
+
+        client.api.side_effect = api_side
+        with tempfile.TemporaryDirectory() as local_tmp:
+            local_root = Path(local_tmp)
+            with _make_template_root() as tmpdir:
+                template_root = Path(tmpdir)
+                with patch(
+                    "plate_core.bootstrap.resolve_template_source",
+                    return_value=(template_root, "explicit_path"),
+                ):
+                    report = run_bootstrap(
+                        "akasper/new-repo",
+                        apply_mode=True,
+                        client=client,
+                        local_root=local_root,
+                    )
+            seed = next(a for a in report.actions if a.name == "seed-initial-questions")
+            self.assertEqual(seed.state, "applied")
+            self.assertIn("first_qa marker", seed.detail)
+            status = first_qa_seed_status(local_root)
+            self.assertTrue(status["seeded"])
+            self.assertGreaterEqual(status["count"], 3)
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_already_seeded_syncs_first_qa_marker(self, mock_get_health):
+        """Proves: apply with existing Questions syncs offline first_qa marker (#951)."""
+        from plate_core.adoption import first_qa_seed_status
+
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/mature",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=2,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=3,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            if endpoint == "repos/akasper/mature":
+                return {"has_wiki": True, "default_branch": "main", "size": 9000}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return [
+                    {"title": "[Question]: What is the primary purpose or value proposition of this software?"},
+                    {"title": "[Question]: Who are the primary users or customers of this software?"},
+                    {"title": "[Question]: What are the biggest risks or unknowns for this project right now?"},
+                ]
+            if endpoint.startswith("repos/akasper/mature/contents/"):
+                return {"type": "file"}
+            if "/issues?" in endpoint and "labels=Epic" in endpoint:
+                return [{"number": 1}]
+            return {}
+
+        client.api.side_effect = api_side
+        with tempfile.TemporaryDirectory() as local_tmp:
+            local_root = Path(local_tmp)
+            with _make_template_root() as tmpdir:
+                template_root = Path(tmpdir)
+                with patch(
+                    "plate_core.bootstrap.resolve_template_source",
+                    return_value=(template_root, "explicit_path"),
+                ):
+                    report = run_bootstrap(
+                        "akasper/mature",
+                        apply_mode=True,
+                        client=client,
+                        adopt=True,
+                        local_root=local_root,
+                    )
+            seed = next(a for a in report.actions if a.name == "seed-initial-questions")
+            self.assertEqual(seed.state, "already-configured")
+            self.assertIn("marker", seed.detail.lower())
+            self.assertTrue(first_qa_seed_status(local_root)["seeded"])
+
     def test_detect_adoption_mode_force_and_heuristics(self):
         """#619 pure detector: flags win; mature signals flip adopt when .plate missing."""
         health = HealthReport(
