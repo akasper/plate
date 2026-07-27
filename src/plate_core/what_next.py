@@ -570,6 +570,7 @@ def fetch_epic_closeout_candidates(
 
     Uses GraphQL ``subIssuesSummary`` when available. Degrades to [] on failure (#909).
     Only returns Epics with ``total > 0`` and ``completed == total`` (skips empty stubs).
+    Skips Epics already labeled ``status:implemented`` (first-slice recorded; #913).
     """
     from .github_client import GhClient
     from .health import resolve_repo
@@ -591,6 +592,11 @@ def fetch_epic_closeout_candidates(
           nodes {
             number
             title
+            labels(first: 20) {
+              nodes {
+                name
+              }
+            }
             subIssuesSummary {
               total
               completed
@@ -616,6 +622,15 @@ def fetch_epic_closeout_candidates(
     out: list[dict[str, Any]] = []
     for node in nodes:
         if not isinstance(node, dict):
+            continue
+        lab_nodes = ((node.get("labels") or {}).get("nodes")) or []
+        lab_names = {
+            str(x.get("name") or "")
+            for x in lab_nodes
+            if isinstance(x, dict)
+        }
+        # First-slice already recorded — do not re-queue every idle cycle (#913)
+        if "status:implemented" in lab_names:
             continue
         summary = node.get("subIssuesSummary") or {}
         try:

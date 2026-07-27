@@ -1,0 +1,15 @@
+{
+  "slug": "913-skip-implemented-epic-closeouts",
+  "change_type": "fix",
+  "surface": "src/plate_core/what_next.py",
+  "summary": "fetch_epic_closeout_candidates skips Epics already labeled status:implemented so idle what_next does not re-queue first-slice closeouts every cycle (#913).",
+  "migration_impact": "After first-slice wiki + status:implemented, those Epics drop out of plate_what_next closeout candidates. Agents should refine stubs or implement ready Features instead of re-documenting the same Epics.",
+  "migration_guidance": [
+    "1. Pull release after merge.",
+    "2. When recording first-slice closeout, add status:implemented so the Epic leaves the candidate list.",
+    "3. Residual E2E still under #654 — do not re-check boxes without proof."
+  ],
+  "agent_notes": "Pairs with #909/#911. GraphQL now requests labels(first:20).",
+  "breaking": false,
+  "links": ["#913", "#909", "#911", "#905", "#654"]
+}
