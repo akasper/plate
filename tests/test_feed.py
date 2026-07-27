@@ -61,6 +61,78 @@ class TestFeed631(unittest.TestCase):
         # first item should be high-priority task or checkpoint, not low process
         self.assertIn(items[0].item_type, ("task", "checkpoint"))
 
+    def test_adoption_session_process_ranks_above_generic(self):
+        """Proves: adoption_session process rank beats generic process (#959/#633)."""
+        items = build_feed_items(
+            process_items=[
+                {
+                    "title": "continue adoption session",
+                    "rank": 15,
+                    "impact": "high",
+                    "priority": "adoption_session",
+                    "next_command": "gh plate adopt --complete-session --json",
+                    "ask_user_question": {
+                        "question": "Continue?",
+                        "options": [{"label": "Yes"}],
+                    },
+                },
+                {"title": "generic process", "rank": 50, "priority": "epic"},
+            ]
+        )
+        by_title = {i.title: i for i in items}
+        self.assertLess(
+            by_title["continue adoption session"].rank,
+            by_title["generic process"].rank,
+        )
+        self.assertIn("adoption_session", by_title["continue adoption session"].badges)
+        self.assertIn(
+            "complete-session",
+            by_title["continue adoption session"].body_excerpt,
+        )
+
+    def test_what_next_adoption_priority_maps_to_high_rank(self):
+        """Proves: get_user_feed maps adoption* what_next to rank 15 (#959)."""
+        fake_wn = {
+            "priority": "adoption_session",
+            "next_action": "continue adoption session",
+            "prompt_segment": "Active session",
+            "rationale": "session active",
+            "next_command": "gh plate adopt --session-status --json",
+            "ask_user_question": {
+                "question": "Continue under-30m?",
+                "options": [{"label": "Status"}],
+            },
+            "state_snapshot": {},
+        }
+        with patch("plate_core.what_next.get_what_next", return_value=fake_wn):
+            feed = get_user_feed(
+                repo="akasper/plate",
+                limit=5,
+                include_process=True,
+                include_autonomy=False,
+                questions=[],
+                tasks=[],
+            )
+        process = [
+            i
+            for i in (feed.get("items") or [])
+            if i.get("item_type") == "process"
+            or "adoption_session" in (i.get("badges") or [])
+        ]
+        # process item may be first-class process type
+        proc = next(
+            (
+                i
+                for i in (feed.get("items") or [])
+                if i.get("item_type") == "process"
+            ),
+            None,
+        )
+        self.assertIsNotNone(proc)
+        self.assertEqual(proc["rank"], 15)
+        self.assertEqual(proc["impact"], "high")
+        self.assertIn("adoption_session", proc.get("badges") or [])
+
     def test_get_user_feed_injected_offline(self):
         feed = get_user_feed(
             repo="akasper/plate",

@@ -1,0 +1,14 @@
+{
+  "slug": "959-feed-adoption-priority",
+  "change_type": "feature",
+  "surface": "src/plate_core/feed.py, tests/test_feed.py",
+  "summary": "Rank adoption/session/first_qa what_next priorities higher in endless feed (#959/#633): rank 15 high impact, badges + next_command excerpt, ask_user_question pre_payloads for process items.",
+  "migration_impact": "Feed process items for adoption*, adoption_session, first_qa_seed surface above generic process (rank 50). No CLI change.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_feed.py -q -k adoption.",
+    "2. Start adoption session; gh plate feed --json should show process item rank 15 when what_next priority is adoption_session."
+  ],
+  "agent_notes": "Closes #959. Epic #633 remains open for full <30m E2E proof.",
+  "breaking": false,
+  "links": ["#959", "#633", "#957", "#955", "#631", "#654"]
+}
