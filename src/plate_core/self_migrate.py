@@ -1,17 +1,26 @@
-"""Self-migrate dry-run plan + marker merge executor (#939/#943 / Epic #649).
+"""Self-migrate dry-run plan + marker merge + optional upstream resolve (#939/#943/#945 / Epic #649).
 
 Plan mode: no pip install, no file writes, no network by default.
 Marker merge: dry-run by default; optional explicit apply of PLATES-CORE sections only.
+Upstream resolve: injectable fetcher; network only when allow_network=True.
 """
 
 from __future__ import annotations
 
+import json
 import re
+import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from . import __version__ as _INSTALLED_VERSION
 from .markers import MarkerParseError, merge_with_diagnostics
+
+# Callable returns raw text or mapping with a version field; never required at import time.
+UpstreamFetcher = Callable[[], Any]
+
+_PYPI_JSON_URL = "https://pypi.org/pypi/plate-core/json"
 
 _VERSION_RE = re.compile(
     r"(?i)(?:plate-core\s*[=><!~]+\s*|version\s*=\s*)[\"']?v?(\d+\.\d+\.\d+)"
@@ -111,22 +120,180 @@ def _compare(a: str | None, b: str | None) -> str:
     return "ahead"
 
 
+def _extract_version_from_payload(payload: Any) -> str | None:
+    """Parse a version from PyPI JSON, plain text, or mapping."""
+    if payload is None:
+        return None
+    if isinstance(payload, (bytes, bytearray)):
+        try:
+            payload = payload.decode("utf-8", errors="replace")
+        except Exception:
+            return None
+    if isinstance(payload, str):
+        text = payload.strip()
+        if not text:
+            return None
+        # Prefer JSON info.version when payload looks like PyPI JSON
+        if text.startswith("{"):
+            try:
+                data = json.loads(text)
+                return _extract_version_from_payload(data)
+            except json.JSONDecodeError:
+                pass
+        return _parse_semver(text.splitlines()[0])
+    if isinstance(payload, Mapping):
+        info = payload.get("info")
+        if isinstance(info, Mapping) and info.get("version"):
+            return _parse_semver(str(info["version"]))
+        if payload.get("version"):
+            return _parse_semver(str(payload["version"]))
+        # releases map: pick highest semver key if present
+        releases = payload.get("releases")
+        if isinstance(releases, Mapping) and releases:
+            best: str | None = None
+            for key in releases.keys():
+                ver = _parse_semver(str(key))
+                if ver is None:
+                    continue
+                if best is None or _compare(ver, best) == "ahead":
+                    best = ver
+            return best
+    return None
+
+
+def default_pypi_fetcher(timeout: float = 5.0) -> Any:
+    """Fetch plate-core PyPI JSON (network). Used only when allow_network=True."""
+    req = urllib.request.Request(
+        _PYPI_JSON_URL,
+        headers={"Accept": "application/json", "User-Agent": "plate-core-self-migrate"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — fixed HTTPS URL
+        return resp.read()
+
+
+def resolve_upstream_version(
+    *,
+    allow_network: bool = False,
+    fetcher: UpstreamFetcher | None = None,
+    package: str = "plate-core",
+) -> dict[str, Any]:
+    """Resolve an upstream plate-core version (#945).
+
+    Default is offline: without ``fetcher`` and without ``allow_network``, returns
+    ok with version=None and source=offline_default (no network).
+    When ``fetcher`` is provided it is always used (tests inject).
+    When ``allow_network`` is True and no fetcher, uses :func:`default_pypi_fetcher`.
+    """
+    _ = package  # reserved for multi-package later
+    used_network = False
+    source = "offline_default"
+    err: str | None = None
+    version: str | None = None
+
+    active: UpstreamFetcher | None = fetcher
+    if active is None and allow_network:
+        active = default_pypi_fetcher
+        used_network = True
+        source = "pypi_json"
+    elif active is not None:
+        source = "injected_fetcher"
+        # Injected fetchers may or may not hit network; we do not force network.
+
+    if active is None:
+        return {
+            "ok": True,
+            "version": None,
+            "source": source,
+            "allow_network": allow_network,
+            "used_network": False,
+            "error": None,
+            "note": "No resolve (offline default). Pass fetcher= or allow_network=True.",
+        }
+
+    try:
+        payload = active()
+        version = _extract_version_from_payload(payload)
+        if version is None:
+            err = "Fetcher returned no parseable version"
+            return {
+                "ok": False,
+                "version": None,
+                "source": source,
+                "allow_network": allow_network,
+                "used_network": used_network,
+                "error": err,
+                "note": "Upstream resolve failed to parse a semver.",
+            }
+        return {
+            "ok": True,
+            "version": version,
+            "source": source,
+            "allow_network": allow_network,
+            "used_network": used_network,
+            "error": None,
+            "note": f"Resolved upstream plate-core=={version} via {source}.",
+        }
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        return {
+            "ok": False,
+            "version": None,
+            "source": source,
+            "allow_network": allow_network,
+            "used_network": used_network,
+            "error": str(exc),
+            "note": "Upstream resolve failed; plan falls back to installed version.",
+        }
+    except Exception as exc:  # noqa: BLE001 — surface any fetcher failure cleanly
+        return {
+            "ok": False,
+            "version": None,
+            "source": source,
+            "allow_network": allow_network,
+            "used_network": used_network,
+            "error": str(exc),
+            "note": "Upstream resolve failed; plan falls back to installed version.",
+        }
+
+
 def plan_self_migrate(
     repo_root: str | Path | None = None,
     *,
     target_version: str | None = None,
     include_payload: bool = True,
+    resolve_upstream: bool = False,
+    allow_network: bool = False,
+    upstream_fetcher: UpstreamFetcher | None = None,
 ) -> dict[str, Any]:
-    """Build a dry-run self-migrate plan for the local checkout (#939).
+    """Build a dry-run self-migrate plan for the local checkout (#939 / #945).
 
     When ``target_version`` is omitted, uses installed plate-core ``__version__``
     as the upgrade target (no network). Pin files are compared to that target.
+
+    When ``resolve_upstream`` is True, attempts :func:`resolve_upstream_version`
+    (offline unless ``allow_network`` or ``upstream_fetcher``). On success the
+    resolved version becomes the target (unless ``target_version`` was explicit).
     """
     root = Path(repo_root or ".").resolve()
     installed = _parse_semver(_INSTALLED_VERSION) or str(_INSTALLED_VERSION)
     pin = _detect_pin(root)
     pin_ver = pin.get("version")
-    target = _parse_semver(target_version) if target_version else installed
+
+    upstream_meta: dict[str, Any] | None = None
+    resolved_target: str | None = None
+    if resolve_upstream or upstream_fetcher is not None:
+        upstream_meta = resolve_upstream_version(
+            allow_network=allow_network,
+            fetcher=upstream_fetcher,
+        )
+        if upstream_meta.get("ok") and upstream_meta.get("version"):
+            resolved_target = str(upstream_meta["version"])
+
+    if target_version:
+        target = _parse_semver(target_version) or installed
+    elif resolved_target:
+        target = resolved_target
+    else:
+        target = installed
     if target is None:
         target = installed
 
@@ -134,7 +301,7 @@ def plan_self_migrate(
     installed_vs_target = _compare(installed, target)
     pin_vs_installed = _compare(pin_ver, installed)
 
-    drift = pin_vs_target == "behind" or (
+    drift = pin_vs_target == "behind" or installed_vs_target == "behind" or (
         pin_ver is not None and pin_ver != installed and pin_vs_installed != "equal"
     )
 
@@ -230,8 +397,25 @@ def plan_self_migrate(
         next_cmd = (
             "gh plate import-payload --dry-run --strategy conservative --json"
         )
-    elif pin_vs_target == "behind":
+    elif pin_vs_target == "behind" or installed_vs_target == "behind":
         next_cmd = f"pip install 'plate-core=={target}'"
+
+    used_net = bool(upstream_meta and upstream_meta.get("used_network"))
+    note = (
+        "Plan only — no pip install or file writes. "
+        "Human/agent executes steps after review (#649)."
+    )
+    if used_net:
+        note = (
+            "Plan only — no pip install or file writes. "
+            "Upstream version resolved via network (allow_network); "
+            "still no auto-apply (#945/#649)."
+        )
+    elif resolve_upstream or upstream_fetcher is not None:
+        note = (
+            "Plan only — no pip install or file writes. "
+            "Upstream resolve attempted (see upstream field); default offline (#945)."
+        )
 
     return {
         "ok": True,
@@ -240,6 +424,8 @@ def plan_self_migrate(
         "installed_version": installed,
         "pin": pin,
         "target_version": target,
+        "upstream": upstream_meta,
+        "resolve_upstream": bool(resolve_upstream or upstream_fetcher is not None),
         "comparisons": {
             "pin_vs_target": pin_vs_target,
             "installed_vs_target": installed_vs_target,
@@ -252,11 +438,8 @@ def plan_self_migrate(
         "refresh_paths_missing": missing_refresh,
         "next_command": next_cmd,
         "auto_apply": False,
-        "note": (
-            "Plan only — no pip install, file writes, or network. "
-            "Human/agent executes steps after review (#649)."
-        ),
-        "related_issues": ["#939", "#649", "#633", "#615", "#654"],
+        "note": note,
+        "related_issues": ["#939", "#945", "#649", "#633", "#615", "#654"],
         "ask_user_question": {
             "question": (
                 f"Self-migrate plan ready (target {target}, drift={drift}). Proceed?"

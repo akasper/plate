@@ -512,6 +512,8 @@ def cmd_self_migrate(args: argparse.Namespace) -> int:
         getattr(args, "repo_root", ".") or ".",
         target_version=getattr(args, "target_version", None),
         include_payload=not bool(getattr(args, "no_payload", False)),
+        resolve_upstream=bool(getattr(args, "resolve_upstream", False)),
+        allow_network=bool(getattr(args, "allow_network", False)),
     )
     if args.json:
         print(json.dumps(report))
@@ -521,6 +523,12 @@ def cmd_self_migrate(args: argparse.Namespace) -> int:
     pin = report.get("pin") or {}
     print(f"Pin: {pin.get('version')} (source={pin.get('source')})")
     print(f"Target: {report.get('target_version')}")
+    up = report.get("upstream")
+    if up:
+        print(
+            f"Upstream: version={up.get('version')} source={up.get('source')} "
+            f"ok={up.get('ok')} used_network={up.get('used_network')}"
+        )
     print(f"Drift: {report.get('drift')}  Risk: {report.get('risk')}")
     comps = report.get("comparisons") or {}
     print(f"Comparisons: {comps}")
@@ -3849,6 +3857,16 @@ def build_parser() -> argparse.ArgumentParser:
     self_mig.add_argument(
         "--target-version",
         help="Optional target plate-core version (default: installed __version__)",
+    )
+    self_mig.add_argument(
+        "--resolve-upstream",
+        action="store_true",
+        help="Resolve upstream plate-core version for target (#945); offline unless --allow-network",
+    )
+    self_mig.add_argument(
+        "--allow-network",
+        action="store_true",
+        help="Permit live PyPI fetch when used with --resolve-upstream (default: no network)",
     )
     self_mig.add_argument(
         "--no-payload",

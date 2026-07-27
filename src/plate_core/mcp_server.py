@@ -377,6 +377,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 args.get("repo_root") or ".",
                 target_version=args.get("target_version"),
                 include_payload=not bool(args.get("no_payload", False)),
+                resolve_upstream=bool(args.get("resolve_upstream", False)),
+                allow_network=bool(args.get("allow_network", False)),
             )
         elif name == "plate_self_migrate_merge_markers":
             from .self_migrate import plan_marker_merge
@@ -2215,7 +2217,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_self_migrate_plan",
-                                "description": "Dry-run self-migrate plan for plate-core pin/payload drift (#939/#649). No apply, no network by default.",
+                                "description": "Dry-run self-migrate plan for plate-core pin/payload drift (#939/#945/#649). No apply; network only if resolve_upstream+allow_network.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -2230,6 +2232,14 @@ def run() -> None:
                                         "no_payload": {
                                             "type": "boolean",
                                             "description": "When true, omit import-payload step from the plan.",
+                                        },
+                                        "resolve_upstream": {
+                                            "type": "boolean",
+                                            "description": "Attempt upstream version resolve (#945). Offline unless allow_network.",
+                                        },
+                                        "allow_network": {
+                                            "type": "boolean",
+                                            "description": "Permit live PyPI JSON fetch for resolve_upstream. Default false.",
                                         },
                                     },
                                 },
