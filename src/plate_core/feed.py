@@ -725,18 +725,25 @@ def build_feed_items(
             )
         )
     for i, p in enumerate(process_items or []):
+        prio = str(p.get("priority") or "")
+        badges = ["process"]
+        if prio:
+            badges.append(prio)
+        if p.get("next_command"):
+            badges.append("has_next_command")
         items.append(
             FeedItem(
-                id=f"process-{i}",
+                id=f"process-{i}" + (f"-{prio}" if prio else ""),
                 item_type="process",
                 number=None,
                 title=str(p.get("title") or p.get("next_action") or "process step"),
                 rank=int(p.get("rank") or (55 + i)),
                 impact=str(p.get("impact") or "medium"),
-                badges=["process"],
+                badges=badges,
                 prompt_segment=str(p.get("prompt_segment") or p.get("title") or ""),
                 reason=str(p.get("reason") or "process recommendation"),
                 source=str(p.get("source") or "what_next"),
+                body_excerpt=str(p.get("next_command") or "")[:240],
             )
         )
     items.sort(key=lambda x: (x.rank, x.item_type, x.title.lower()))
@@ -783,12 +790,19 @@ def get_user_feed(
     if include_process:
         try:
             # Shared helper (no MCP import) — budget/PR priority (#789/#791)
+            # Adoption path ranks high for <30m onboarding (#959/#633)
             from .what_next import get_what_next
 
             wn = get_what_next(target, "general")
             prio = str(wn.get("priority") or "")
-            rank = 8 if prio == "budget_gate" else (12 if prio == "open_pr" else 50)
-            impact = "high" if prio in ("budget_gate", "open_pr") else "medium"
+            if prio == "budget_gate":
+                rank, impact = 8, "high"
+            elif prio == "open_pr":
+                rank, impact = 12, "high"
+            elif prio in ("adoption", "adoption_session", "first_qa_seed"):
+                rank, impact = 15, "high"
+            else:
+                rank, impact = 50, "medium"
             process_items.append(
                 {
                     "title": wn.get("next_action"),
@@ -798,6 +812,8 @@ def get_user_feed(
                     "impact": impact,
                     "source": "what_next",
                     "priority": prio,
+                    "next_command": wn.get("next_command"),
+                    "ask_user_question": wn.get("ask_user_question"),
                     "state_snapshot": wn.get("state_snapshot"),
                 }
             )
@@ -1289,6 +1305,13 @@ def get_user_feed(
     top = items[: max(1, limit)]
     # Prefer pre-shaped ask_user_question from approval/plan/PM/cost sources when present
     pre_payloads: dict[str, Any] = {}
+    for i, p in enumerate(process_items):
+        auj = p.get("ask_user_question")
+        if not auj:
+            continue
+        prio = str(p.get("priority") or "")
+        pid = f"process-{i}" + (f"-{prio}" if prio else "")
+        pre_payloads[pid] = auj
     for ap in approval_items:
         if ap.get("id") and ap.get("ask_user_question"):
             pre_payloads[str(ap["id"])] = ap["ask_user_question"]
