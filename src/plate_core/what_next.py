@@ -77,7 +77,8 @@ def recommend_what_next(
     ``scheduled_ops``: scheduled_ops_status-like summary + optional active_runs (#933).
     ``adoption``: assess_adoption_readiness() shape (#937/#935); ranks when core_ready is false.
     ``adoption_session``: adoption_session_status() shape (#957/#955); ranks when active.
-    ``self_migrate``: plan_self_migrate() shape (#941/#939); ranks when drift is true.
+    ``self_migrate``: plan or verify shape (#941/#939/#969); ranks when drift is true
+    or when verify ``ready`` is false (post-migrate residual after pin aligned).
     """
     h = dict(health or {})
     b = dict(budget or {})
@@ -189,12 +190,14 @@ def recommend_what_next(
         else None,
         "self_migrate_drift": smig.get("drift") if smig else None,
         "self_migrate_target": smig.get("target_version") if smig else None,
+        "self_migrate_ready": smig.get("ready") if smig and "ready" in smig else None,
     }
 
     active_sop_runs = list(sops.get("active_runs") or [])
     runnable_sops = list(sops.get("runnable_at_tolerance") or sops.get("runnable") or [])
     adoption_not_ready = bool(adopt) and adopt.get("core_ready") is False
     self_migrate_drift = bool(smig) and smig.get("drift") is True
+    self_migrate_not_ready = bool(smig) and smig.get("ready") is False
 
     # 1) Budget critical/exhausted OR next-cycle pause — even under risk=off (surface gates).
     # would_pause_next_cycle can be true while pressure is only elevated (remaining < per_cycle).
@@ -511,7 +514,41 @@ def recommend_what_next(
             "ask_user_question": smig.get("ask_user_question"),
         }
 
-    # 7) Concrete ready Feature/Bug — prefer over generic epic text (#793)
+    # 7b) Post-migrate verify residual — pin aligned but ready=false (#969/#965/#649)
+    if self_migrate_not_ready:
+        target = smig.get("target_version") or "?"
+        next_cmd = str(
+            smig.get("next_command") or "gh plate self-migrate --verify --json"
+        )
+        failures = list(smig.get("failures") or [])
+        fail_s = ",".join(str(f) for f in failures) if failures else "not_ready"
+        action = f"run post-migrate verify ({fail_s}): {next_cmd}"
+        prompt = (
+            "Self-migrate pin/payload looks aligned but offline verify is not ready "
+            "(#965/#969/#649). "
+            "1) `gh plate self-migrate --verify --json` / plate_self_migrate_verify  "
+            "2) Address failures (adoption, .plate validity) then re-verify  "
+            "3) `gh plate health` for remote signals. "
+            "Do not start ready Feature work until verify ready or explicitly deferred."
+            + quiet
+        )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": (
+                f"self_migrate ready=false failures={fail_s} target={target} "
+                f"(#969/#965/#649)"
+            ),
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "self_migrate_verify",
+            "next_command": next_cmd,
+            "target_version": target,
+            "failures": failures,
+            "ask_user_question": smig.get("ask_user_question"),
+        }
+
+    # 7c) Concrete ready Feature/Bug — prefer over generic epic text (#793)
     if ready:
         first = ready[0]
         num = first.get("number") or first.get("issue_number")
@@ -1185,9 +1222,22 @@ def get_what_next(
     )
     if include_self_migrate and not open_prs and adopt_ready:
         try:
-            from .self_migrate import plan_self_migrate
+            from .self_migrate import verify_self_migrate
 
-            self_migrate = plan_self_migrate(".", include_payload=True)
+            # Prefer verify report (#969): includes drift + ready + failures offline.
+            _sm = verify_self_migrate(".", include_payload=True)
+            migrate = (_sm or {}).get("migrate") or {}
+            self_migrate = {
+                "drift": bool(migrate.get("drift")),
+                "target_version": migrate.get("target_version"),
+                "pin": migrate.get("pin"),
+                "risk": migrate.get("risk"),
+                "ready": (_sm or {}).get("ready"),
+                "failures": list((_sm or {}).get("failures") or []),
+                "next_command": (_sm or {}).get("next_command"),
+                "ask_user_question": (_sm or {}).get("ask_user_question"),
+                "installed_version": migrate.get("installed_version"),
+            }
         except Exception:
             self_migrate = None
 

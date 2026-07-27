@@ -801,6 +801,8 @@ def get_user_feed(
                 rank, impact = 12, "high"
             elif prio in ("adoption", "adoption_session", "first_qa_seed"):
                 rank, impact = 15, "high"
+            elif prio in ("self_migrate", "self_migrate_verify"):
+                rank, impact = 16, "high"
             else:
                 rank, impact = 50, "medium"
             process_items.append(
