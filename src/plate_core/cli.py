@@ -447,6 +447,36 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_adopt(args: argparse.Namespace) -> int:
+    """Local adoption readiness status (#935 / Epic #633)."""
+    from .adoption import assess_adoption_readiness
+
+    report = assess_adoption_readiness(
+        getattr(args, "repo_root", ".") or ".",
+        include_optional=not bool(getattr(args, "no_optional", False)),
+    )
+    if args.json:
+        print(json.dumps(report))
+        return 0
+    print(f"Repo root: {report.get('repo_root')}")
+    print(f"Core ready: {report.get('core_ready')}")
+    print(
+        f"Estimated minutes remaining (core): {report.get('estimated_minutes_remaining')} "
+        f"(within 30m budget: {report.get('within_30m_budget')})"
+    )
+    print(f"Checks: {report.get('passed')}/{len(report.get('checks') or [])} passed")
+    for c in report.get("checks") or []:
+        mark = "ok" if c.get("ok") else "MISSING"
+        print(f"  [{mark}] {c.get('id')}: {c.get('title')}")
+        if not c.get("ok") and c.get("fix_command"):
+            print(f"         fix: {c.get('fix_command')}")
+    print(f"Next command: {report.get('next_command')}")
+    for step in report.get("next_steps") or []:
+        print(f"  - {step}")
+    print(f"Guide: {report.get('guide')}")
+    return 0 if report.get("ok") else 1
+
+
 def cmd_config_show(args: argparse.Namespace) -> int:
     report = get_plate_config_report(Path(args.repo_root))
     if args.json:
@@ -3729,6 +3759,23 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--json", action="store_true", help="Output JSON")
     bootstrap.set_defaults(func=cmd_bootstrap)
     # Note: Goals page init (per #266) is included automatically when wiki enabled and page absent (plan in dry-run, apply with --apply). Flag/interactive refinement in future.
+
+    adopt = sub.add_parser(
+        "adopt",
+        help="Local adoption readiness status for <30m onboarding (#935/#633); status only",
+    )
+    adopt.add_argument(
+        "--repo-root",
+        default=".",
+        help="Local checkout root (default: current directory)",
+    )
+    adopt.add_argument(
+        "--no-optional",
+        action="store_true",
+        help="Skip optional SPEC.md/CURRENT.md checks",
+    )
+    adopt.add_argument("--json", action="store_true", help="Output JSON")
+    adopt.set_defaults(func=cmd_adopt)
 
     config = sub.add_parser("config", help="Inspect and initialize local .plate configuration")
     config_sub = config.add_subparsers(dest="config_command", required=True)
