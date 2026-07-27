@@ -151,4 +151,22 @@ This skeleton report serves as the starting artifact. Future passes (via child R
 **Status**: Initial skeleton complete. Broad inventory + classification pass done. Ready for Research child to deepen + first doc convention updates.
 
 ---
+
+## Addendum (2026-07-27) — v1.0 autonomy surface proofs (#907 / #364 batch)
+
+Post-#470 / #654 landings added substantial feature-proof coverage that this June skeleton did not list. Classification for agent routing:
+
+| Test File | Primary claim proved | Classification | Notes |
+|-----------|----------------------|----------------|-------|
+| `tests/test_what_next.py` | Empty-pipeline ranking: budget → open PR → ready issue → PM active queue → epic closeout/refine when PM idle (#905/#907); CLI `what-next` | Feature-proof | Live `get_what_next` wiring mocked for PM idle vs active; pure `recommend_what_next` matrix |
+| `tests/test_pm.py` | PM assign/tick/queue; `queue_size` active-only (`proposed\|delegated\|blocked`, not done/cancelled) (#903/#904); loop idle stop | Feature-proof | Core #660 surface |
+| `tests/test_autonomy.py` | AutonomyEngine config, budget, procedures, risk gates (#470) | Feature-proof | Heart of autonomy runtime |
+| `tests/test_ledger.py` | Provenance / decision ledger (#647) | Feature-proof | Safety stack |
+| `tests/test_cost_control_thin_surfaces.py` | Cost/risk thin surfaces toward feed (#653) | Feature-proof (thin) | Complements costs tests |
+
+**Gap closed in this batch (#907):** Bidirectional proof that idle PM + open epics does **not** force PM dry-run; active `open_assignments` / delegated rows still rank PM/tick. Tests declare `Proves:` claims in docstrings.
+
+**Still open under #364 (not claimed done here):** Contemplation Engine v2 full contract matrix; compound Playwright e2e (babysit→merge, release cut+finalize); template_payload adopter audit parity.
+
+---
 *This report follows the template in `docs/audits/audit-report-template.md`. Per PLATE Issue Artifact Rules for Audit/Epic work, findings live in `docs/audits/`.*
