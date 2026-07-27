@@ -1,0 +1,15 @@
+{
+  "slug": "937-what-next-adoption-readiness",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
+  "summary": "plate_what_next ranks local adoption readiness (priority adoption) when core_ready is false, before ready issues; get_what_next loads assess_adoption_readiness (#937/#633/#935).",
+  "migration_impact": "recommend_what_next gains optional adoption dict; new priority adoption. Mature core_ready checkouts unchanged.",
+  "migration_guidance": [
+    "1. Pull release after merge; pytest tests/test_what_next.py -k Adoption.",
+    "2. Incomplete adopters see next_action pointing at gh plate adopt / import-payload.",
+    "3. Open PRs and bootstrap (labels) still outrank adoption."
+  ],
+  "agent_notes": "Closes #937. Complements #935; does not close Epic #633.",
+  "breaking": false,
+  "links": ["#937", "#935", "#633", "#654"]
+}
