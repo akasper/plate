@@ -175,6 +175,73 @@ Blocking example
         unblock_posts = [endpoint for endpoint, _body, _ in client.posted if endpoint.endswith("/issues/999/comments")]
         self.assertEqual(len(unblock_posts), 1)
 
+    def test_transcript_includes_full_answer_and_question_title(self):
+        """Proves: non-destructive transcript keeps full answer + question title (#921)."""
+        long_answer = (
+            "FULL_ANSWER_MARKER " + ("word " * 80) + " docs/research/example.md #42 end."
+        )
+        body = """
+## Question
+Should we document X?
+
+## Answer signal
+Document a recommendation without a checklist so follow-up may spawn.
+"""
+        client = _FakeGhClient(body, comments=[])
+        ContemplationEngine(client).contemplate(
+            question_number=326,
+            answer_text=long_answer,
+            repo="owner/repo",
+            answered_by="user",
+        )
+        logs = [
+            body
+            for endpoint, body, _ in client.posted
+            if endpoint.endswith("/issues/326/comments") and "PLATE-CONTEMPLATION:BEGIN" in body
+        ]
+        self.assertEqual(len(logs), 1)
+        log = logs[0]
+        self.assertIn("Question title: Question 326", log)
+        self.assertIn("Answer full:", log)
+        self.assertIn("FULL_ANSWER_MARKER", log)
+        self.assertIn(long_answer[-20:], log)
+        # Excerpt may truncate; full block must not
+        self.assertIn("Answer excerpt:", log)
+
+    def test_typed_research_followup_from_answer_heuristic(self):
+        """Proves: incomplete contemplation creates typed Research follow-up (#921)."""
+        body = """
+## Question
+What should we research?
+
+## Answer signal
+Document a recommendation without a checklist so follow-up may spawn.
+"""
+        answer = (
+            "We need research into docs/research/example.md covering risk and unknown "
+            "tradeoffs before implement. This answer is long enough to trigger follow-up."
+        )
+        client = _FakeGhClient(body, comments=[])
+        result = ContemplationEngine(client).contemplate(
+            question_number=326,
+            answer_text=answer,
+            repo="owner/repo",
+            answered_by="user",
+        )
+        self.assertFalse(result["close_signal_met"])
+        self.assertEqual(len(result["created_issues"]), 1)
+        self.assertEqual(result["created_issues"][0]["type"], "Research")
+        create_posts = [
+            (endpoint, fields)
+            for endpoint, _body, fields in client.posted
+            if endpoint.endswith("/issues") and fields
+        ]
+        self.assertEqual(len(create_posts), 1)
+        fields = create_posts[0][1]
+        self.assertEqual(fields.get("labels"), ["Research"])
+        self.assertIn("[Research]", fields.get("title") or "")
+        self.assertIn("**Parent Question:** #326", fields.get("body") or "")
+
 
 if __name__ == "__main__":
     unittest.main()
