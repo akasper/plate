@@ -803,6 +803,8 @@ def get_user_feed(
                 rank, impact = 15, "high"
             elif prio in ("self_migrate", "self_migrate_verify"):
                 rank, impact = 16, "high"
+            elif prio == "v1_residual":
+                rank, impact = 40, "medium"
             else:
                 rank, impact = 50, "medium"
             process_items.append(

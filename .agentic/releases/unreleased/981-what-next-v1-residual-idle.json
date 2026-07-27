@@ -1,0 +1,16 @@
+{
+  "slug": "981-what-next-v1-residual-idle",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py, src/plate_core/feed.py, tests/test_what_next.py",
+  "summary": "Idle what_next after first-slice closeouts uses priority v1_residual (#981): human-gated #654 live E2E and marketplace Tasks; do not implement deferred browser #661 or re-loop stub refine.",
+  "migration_impact": "Agents see priority=v1_residual when pipeline empty and no closeout candidates. Stop refining deferred stubs by default; surface human gates instead.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_what_next.py -q.",
+    "2. Empty pipeline: plate_what_next may return v1_residual — hand off live E2E / Tasks to humans.",
+    "3. Do not start #661 browser unless human scopes it."
+  ],
+  "agent_notes": "Closes #981. Replaces #915 stub-refine default after first-slices landed.",
+  "breaking": false,
+  "links": ["#981", "#915", "#913", "#661", "#654"],
+  "requires": ["0.7.2"]
+}
