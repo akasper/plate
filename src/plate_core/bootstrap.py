@@ -374,22 +374,10 @@ def run_bootstrap(
             BootstrapAction(name="create-initial-epic", state="already-configured", detail="At least one open Epic exists")
         )
 
-    # Feature #153: Seed initial Curiosity / informational goal Questions (per Epic #139)
-    # These give new PLATE projects immediate value from the Q&A / Curiosity mode.
-    starter_questions = [
-        {
-            "title": "[Question]: What is the primary purpose or value proposition of this software?",
-            "body": "What problem does this project solve? Who benefits and how?\n\n**Answer signal:** A clear, one-paragraph statement that can guide all future work and prioritization.",
-        },
-        {
-            "title": "[Question]: Who are the primary users or customers of this software?",
-            "body": "Describe the main personas or organizations that will use or pay for this.\n\n**Answer signal:** A concise description of the target users that can be used for roadmap and design decisions.",
-        },
-        {
-            "title": "[Question]: What are the biggest risks or unknowns for this project right now?",
-            "body": "Technical, market, team, or other uncertainties that could derail success.\n\n**Answer signal:** A short prioritized list that the team can actively de-risk.",
-        },
-    ]
+    # Feature #153 / #949: shared starter Curiosity Questions catalog (adoption.STARTER_QUESTIONS).
+    from .adoption import STARTER_QUESTIONS
+
+    starter_questions = list(STARTER_QUESTIONS)
 
     # Check if any starter Questions already exist (simple heuristic for now)
     # Use direct API call (per_page=100 sufficient; matches labels/epics patterns in health.py)
