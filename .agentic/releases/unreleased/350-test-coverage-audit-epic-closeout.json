@@ -1,0 +1,15 @@
+{
+  "slug": "350-test-coverage-audit-epic-closeout",
+  "change_type": "docs",
+  "surface": "docs/wiki/Test-Coverage-Audit-Epic-350.md, docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md, docs/research/364-test-coverage-gap-closeout.md",
+  "summary": "Close Epic #350 Test Coverage Audit first slice: wiki closeout page, V1 closeouts table row, #364 research note points at epic close; children 4/4 complete.",
+  "migration_impact": "Documentation only. Epic #350 marked first-slice closed; residuals (live auto-push, live-network ceremony) stay deferred follow-ons.",
+  "migration_guidance": [
+    "1. Pull release after merge; read docs/wiki/Test-Coverage-Audit-Epic-350.md.",
+    "2. Prefer V1-Autonomy-Surfaces-Epic-Closeouts.md when ranking epic closeouts in what_next.",
+    "3. Open new Features for deferred residuals; do not re-open #350 children."
+  ],
+  "agent_notes": "Closes #350. Docs-only Documentation PR after all children closed (#361–#364).",
+  "breaking": false,
+  "links": ["#350", "#361", "#362", "#363", "#364", "#654"]
+}
