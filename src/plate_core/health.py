@@ -54,6 +54,11 @@ class HealthReport:
     first_qa_seeded: bool | None = None
     adoption_minutes_remaining: int | None = None
     adoption_next_command: str | None = None
+    # #967 / #649 self-migrate verify (local, best-effort; never fails health alone)
+    self_migrate_drift: bool | None = None
+    self_migrate_ready: bool | None = None
+    self_migrate_target: str | None = None
+    self_migrate_next_command: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -434,6 +439,31 @@ def get_health(
     except Exception as e:
         errors.append(f"adoption: {e}")
 
+    # #967 / #649: local self-migrate verify (best-effort; does not fail health alone)
+    self_migrate_drift: bool | None = None
+    self_migrate_ready: bool | None = None
+    self_migrate_target: str | None = None
+    self_migrate_next_command: str | None = None
+    try:
+        from .self_migrate import verify_self_migrate
+
+        sm = verify_self_migrate(repo_root if repo_root is not None else ".")
+        if sm.get("ok"):
+            migrate = sm.get("migrate") or {}
+            if "drift" in migrate:
+                self_migrate_drift = bool(migrate.get("drift"))
+            elif "drift" in sm:
+                self_migrate_drift = bool(sm.get("drift"))
+            if "ready" in sm:
+                self_migrate_ready = bool(sm.get("ready"))
+            target = migrate.get("target_version") or sm.get("target_version")
+            if target:
+                self_migrate_target = str(target)
+            if sm.get("next_command"):
+                self_migrate_next_command = str(sm.get("next_command"))
+    except Exception as e:
+        errors.append(f"self_migrate: {e}")
+
     report = HealthReport(
         repo=target,
         label_coverage_ok=label_ok,
@@ -471,5 +501,9 @@ def get_health(
         first_qa_seeded=first_qa_seeded,
         adoption_minutes_remaining=adoption_minutes_remaining,
         adoption_next_command=adoption_next_command,
+        self_migrate_drift=self_migrate_drift,
+        self_migrate_ready=self_migrate_ready,
+        self_migrate_target=self_migrate_target,
+        self_migrate_next_command=self_migrate_next_command,
     )
     return report
