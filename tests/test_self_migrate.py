@@ -8,8 +8,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from plate_core.self_migrate import (
+    apply_self_migrate_pr,
     plan_marker_merge,
     plan_self_migrate,
+    plan_self_migrate_pr,
     resolve_upstream_version,
 )
 from plate_core.cli import cmd_self_migrate
@@ -87,6 +89,11 @@ class PlanSelfMigrateTests(unittest.TestCase):
                     "path": None,
                     "resolve_upstream": False,
                     "allow_network": False,
+                    "pr_plan": False,
+                    "apply_pr": False,
+                    "allow_high_risk": False,
+                    "base": "release",
+                    "closes": None,
                 },
             )()
             import io
@@ -191,6 +198,116 @@ class ResolveUpstreamVersionTests(unittest.TestCase):
                 include_payload=False,
             )
         self.assertEqual(report["target_version"], "0.8.0")
+
+
+class PlanSelfMigratePrTests(unittest.TestCase):
+    def test_no_drift_not_eligible(self):
+        """Proves: matching pin/target yields no PR eligibility (#947)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VERSION").write_text("0.7.2\n", encoding="utf-8")
+            report = plan_self_migrate_pr(
+                root, target_version="0.7.2", include_payload=False
+            )
+        self.assertTrue(report["ok"])
+        self.assertFalse(report.get("eligible"))
+        self.assertEqual(report.get("reason"), "no_drift")
+
+    def test_pin_behind_eligible_low_risk(self):
+        """Proves: VERSION pin behind target is low-risk eligible PR plan (#947)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VERSION").write_text("0.6.0\n", encoding="utf-8")
+            report = plan_self_migrate_pr(
+                root,
+                target_version="0.7.2",
+                include_payload=False,
+                closes="#947",
+            )
+        self.assertTrue(report["ok"])
+        self.assertTrue(report["eligible"])
+        self.assertEqual(report["risk"], "low")
+        self.assertFalse(report["high_risk"])
+        self.assertEqual(report["base"], "release")
+        self.assertIn("0.7.2", report["title"])
+        self.assertIn("Closes #947", report["body"])
+        self.assertIn("gh", report["gh_argv"][0])
+        self.assertIn("VERSION", report["paths"][0] if report["paths"] else "")
+
+    def test_apply_dry_run_default(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VERSION").write_text("0.6.0\n", encoding="utf-8")
+            plan = plan_self_migrate_pr(root, target_version="0.7.2", include_payload=False)
+            applied = apply_self_migrate_pr(plan, dry_run=True)
+        self.assertTrue(applied["ok"])
+        self.assertTrue(applied["dry_run"])
+        self.assertFalse(applied["applied"])
+        self.assertTrue(applied["would_execute"])
+
+    def test_apply_live_without_runner_blocked(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VERSION").write_text("0.6.0\n", encoding="utf-8")
+            plan = plan_self_migrate_pr(root, target_version="0.7.2", include_payload=False)
+            applied = apply_self_migrate_pr(plan, dry_run=False, runner=None)
+        self.assertFalse(applied["ok"])
+        self.assertEqual(applied["error"], "runner_required")
+
+    def test_apply_live_with_runner(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VERSION").write_text("0.6.0\n", encoding="utf-8")
+            plan = plan_self_migrate_pr(root, target_version="0.7.2", include_payload=False)
+
+            def runner(p):
+                return {"pr_url": "https://example.test/pr/1", "branch": p["branch"]}
+
+            applied = apply_self_migrate_pr(plan, dry_run=False, runner=runner)
+        self.assertTrue(applied["ok"])
+        self.assertTrue(applied["applied"])
+        self.assertEqual(applied["runner_result"]["pr_url"], "https://example.test/pr/1")
+
+    def test_cmd_pr_plan_json(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VERSION").write_text("0.6.0\n", encoding="utf-8")
+            ns = type(
+                "NS",
+                (),
+                {
+                    "repo_root": str(root),
+                    "target_version": "0.7.2",
+                    "no_payload": True,
+                    "plan": False,
+                    "json": True,
+                    "merge_markers": False,
+                    "apply_markers": False,
+                    "upstream_dir": None,
+                    "path": None,
+                    "resolve_upstream": False,
+                    "allow_network": False,
+                    "pr_plan": True,
+                    "apply_pr": False,
+                    "allow_high_risk": False,
+                    "base": "release",
+                    "closes": "#947",
+                },
+            )()
+            import io
+            import sys
+
+            buf = io.StringIO()
+            old = sys.stdout
+            try:
+                sys.stdout = buf
+                rc = cmd_self_migrate(ns)
+            finally:
+                sys.stdout = old
+            self.assertEqual(rc, 0)
+            data = json.loads(buf.getvalue())
+            self.assertTrue(data["ok"])
+            self.assertTrue(data["eligible"])
 
 
 class PlanMarkerMergeTests(unittest.TestCase):

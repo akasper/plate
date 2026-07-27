@@ -478,8 +478,13 @@ def cmd_adopt(args: argparse.Namespace) -> int:
 
 
 def cmd_self_migrate(args: argparse.Namespace) -> int:
-    """Self-migrate dry-run plan or marker merge (#939/#943 / Epic #649)."""
-    from .self_migrate import plan_marker_merge, plan_self_migrate
+    """Self-migrate dry-run plan, marker merge, or PR plan (#939/#943/#947 / Epic #649)."""
+    from .self_migrate import (
+        apply_self_migrate_pr,
+        plan_marker_merge,
+        plan_self_migrate,
+        plan_self_migrate_pr,
+    )
 
     if bool(getattr(args, "merge_markers", False)):
         paths = getattr(args, "path", None) or None
@@ -507,6 +512,45 @@ def cmd_self_migrate(args: argparse.Namespace) -> int:
         print(f"Next: {report.get('next_command')}")
         print(report.get("note"))
         return 0 if report.get("ok") else 1
+
+    if bool(getattr(args, "pr_plan", False)):
+        pr_plan = plan_self_migrate_pr(
+            getattr(args, "repo_root", ".") or ".",
+            target_version=getattr(args, "target_version", None),
+            include_payload=not bool(getattr(args, "no_payload", False)),
+            resolve_upstream=bool(getattr(args, "resolve_upstream", False)),
+            allow_network=bool(getattr(args, "allow_network", False)),
+            base=getattr(args, "base", None) or "release",
+            closes=getattr(args, "closes", None),
+        )
+        apply_report = None
+        if bool(getattr(args, "apply_pr", False)):
+            apply_report = apply_self_migrate_pr(
+                pr_plan,
+                dry_run=False,
+                allow_high_risk=bool(getattr(args, "allow_high_risk", False)),
+                runner=None,  # never auto-run without injectable runner
+            )
+            report = {"plan": pr_plan, "apply": apply_report}
+        else:
+            report = pr_plan
+        if args.json:
+            print(json.dumps(report))
+            ok = pr_plan.get("ok") and (
+                apply_report is None or apply_report.get("ok") or apply_report.get("dry_run")
+            )
+            # apply without runner returns ok=False with runner_required — expected surface
+            if apply_report and apply_report.get("error") == "runner_required":
+                return 0 if pr_plan.get("ok") else 1
+            return 0 if (pr_plan.get("ok") and (apply_report is None or apply_report.get("ok"))) else 1
+        print(f"PR plan ok={pr_plan.get('ok')} eligible={pr_plan.get('eligible')} risk={pr_plan.get('risk')}")
+        print(f"Branch: {pr_plan.get('branch')} base={pr_plan.get('base')}")
+        print(f"Title: {pr_plan.get('title')}")
+        print(f"Paths: {pr_plan.get('paths')}")
+        print(pr_plan.get("note"))
+        if apply_report:
+            print(f"Apply: ok={apply_report.get('ok')} error={apply_report.get('error')} note={apply_report.get('note')}")
+        return 0 if pr_plan.get("ok") else 1
 
     report = plan_self_migrate(
         getattr(args, "repo_root", ".") or ".",
@@ -3892,6 +3936,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--apply-markers",
         action="store_true",
         help="Write merged marker content (requires --merge-markers); default dry-run",
+    )
+    self_mig.add_argument(
+        "--pr-plan",
+        action="store_true",
+        help="Emit low-risk migration PR plan (dry-run; no git) (#947)",
+    )
+    self_mig.add_argument(
+        "--apply-pr",
+        action="store_true",
+        help="Attempt live PR apply (requires --pr-plan; needs injectable runner; blocked without it)",
+    )
+    self_mig.add_argument(
+        "--allow-high-risk",
+        action="store_true",
+        help="Permit apply of non-low-risk PR plans (still requires runner)",
+    )
+    self_mig.add_argument(
+        "--base",
+        default="release",
+        help="PR base branch for --pr-plan (default: release)",
+    )
+    self_mig.add_argument(
+        "--closes",
+        help="Optional issue ref for PR body (e.g. #947)",
     )
     self_mig.add_argument("--json", action="store_true", help="Output JSON")
     self_mig.set_defaults(func=cmd_self_migrate)

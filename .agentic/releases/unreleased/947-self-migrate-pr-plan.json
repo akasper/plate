@@ -1,0 +1,16 @@
+{
+  "slug": "947-self-migrate-pr-plan",
+  "change_type": "feature",
+  "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+  "summary": "Low-risk self-migrate migration PR plan (#947/#649): plan_self_migrate_pr + apply_self_migrate_pr (dry-run default, injectable runner); CLI --pr-plan/--apply-pr; MCP plate_self_migrate_pr_plan; pin-only eligible, no auto-merge.",
+  "migration_impact": "New --pr-plan flags on gh plate self-migrate and MCP plate_self_migrate_pr_plan. Live apply requires injectable runner and low-risk pin-only eligibility; high risk blocked without allow_high_risk.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_self_migrate.py -q.",
+    "2. Dry-run: gh plate self-migrate --pr-plan --json.",
+    "3. Live open only via agent runner injection after review; CLI --apply-pr alone reports runner_required.",
+    "4. Epic #649 first-slice surfaces complete: plan, what_next, markers, upstream resolve, PR plan."
+  ],
+  "agent_notes": "Closes #947. Fourth #649 slice; mark Epic residual status in issue comments (first-slice complete).",
+  "breaking": false,
+  "links": ["#947", "#649", "#945", "#943", "#941", "#939", "#654"]
+}
