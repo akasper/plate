@@ -184,6 +184,53 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.spec_audit_status, "skipped")
         self.assertEqual(report.spec_audit_actionable_count, 0)
 
+    def test_health_includes_adoption_fields(self):
+        """#953: get_health merges local adoption readiness into report."""
+        fake_adopt = {
+            "ok": True,
+            "core_ready": False,
+            "first_qa": {"seeded": False},
+            "estimated_minutes_remaining": 12,
+            "next_command": "gh plate import-payload --dry-run --json",
+        }
+        with patch(
+            "plate_core.adoption.assess_adoption_readiness",
+            return_value=fake_adopt,
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+            )
+        self.assertFalse(report.adoption_core_ready)
+        self.assertFalse(report.first_qa_seeded)
+        self.assertEqual(report.adoption_minutes_remaining, 12)
+        self.assertIn("import-payload", report.adoption_next_command or "")
+        d = report.to_dict()
+        self.assertIn("adoption_core_ready", d)
+        self.assertEqual(d["adoption_minutes_remaining"], 12)
+
+    def test_health_adoption_ready_and_seeded(self):
+        fake_adopt = {
+            "ok": True,
+            "core_ready": True,
+            "first_qa": {"seeded": True},
+            "estimated_minutes_remaining": 0,
+            "next_command": "gh plate health && gh plate feed --json",
+        }
+        with patch(
+            "plate_core.adoption.assess_adoption_readiness",
+            return_value=fake_adopt,
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+            )
+        self.assertTrue(report.adoption_core_ready)
+        self.assertTrue(report.first_qa_seeded)
+        self.assertEqual(report.adoption_minutes_remaining, 0)
+
     def test_health_partial_on_failures(self):
         """Degraded mode with errors list when some calls fail (rate, 404 etc)."""
         client = FailingClient()

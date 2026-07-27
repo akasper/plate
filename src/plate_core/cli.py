@@ -270,6 +270,14 @@ def cmd_health(args: argparse.Namespace) -> int:
         )
         if report.spec_audit_next_step:
             print(f"SPEC audit next: {report.spec_audit_next_step}")
+    if report.adoption_core_ready is not None:
+        print(
+            f"Adoption (#953/#633): core_ready={report.adoption_core_ready} "
+            f"first_qa_seeded={report.first_qa_seeded} "
+            f"minutes_remaining={report.adoption_minutes_remaining}"
+        )
+        if report.adoption_next_command:
+            print(f"Adoption next: {report.adoption_next_command}")
     return 0 if report.status != "fail" else 1
 
 
