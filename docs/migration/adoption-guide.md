@@ -6,6 +6,15 @@ Greenfield path: `docs/bootstrap/new-repository-checklist.md`.
 
 ## Recommended sequence
 
+0. **Readiness status (status only, #935)**  
+   ```bash
+   gh plate adopt --json
+   ```
+   Machine-checkable checklist against Epic #633 <30m criteria: `.plate`, `AGENTS.md`,
+   Goals wiki, `.agentic/releases`, labels/plate workflows, optional SPEC/CURRENT.
+   Reports `estimated_minutes_remaining`, `within_30m_budget`, and `next_command`.
+   MCP: `plate_adoption_status`. Does **not** apply changes.
+
 1. **Local payload (reviewable diffs)**  
    ```bash
    gh plate import-payload --dry-run --strategy conservative --json
@@ -27,22 +36,22 @@ Greenfield path: `docs/bootstrap/new-repository-checklist.md`.
    ```bash
    gh plate health
    gh plate config show
+   gh plate adopt --json   # re-check readiness
    ```
    Write real mission text in `docs/wiki/Goals.md`. Replace CODEOWNERS placeholders.
 
 4. **Optional cutover**  
    If the repo was previously template-derived: `gh plate migrate plan` then review before apply.
-
 ## Auto-detect
 
 `gh plate bootstrap` sets `adoption_mode` when heuristics fire (e.g. missing `.plate` plus local CI/package.json, open issues, open Epics/Questions). Force with `--adopt` / `--existing-repo`, or force greenfield with `--greenfield`.
 
 ## Related issues
 
+- #935 adoption readiness status (`gh plate adopt` / `plate_adoption_status`)
 - #619 adoption mode
 - #616 / #620 import-payload + shared planner
 - #633 frictionless onboarding epic
-
 ## Conflict strategies (manifest path_rules)
 
 Import decisions are driven by `template_payload_manifest.yml` `path_rules` (#617), e.g.:

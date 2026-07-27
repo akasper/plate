@@ -363,6 +363,13 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 adopt=adopt_flag,
                 local_root=args.get("local_root"),
             ).to_dict()
+        elif name == "plate_adoption_status":
+            from .adoption import assess_adoption_readiness
+
+            payload = assess_adoption_readiness(
+                args.get("repo_root") or ".",
+                include_optional=not bool(args.get("no_optional", False)),
+            )
         elif name == "plate_config_get":
             payload = get_plate_config_report(args.get("repo_root")).to_dict()
         elif name == "plate_config_validate":
@@ -2165,6 +2172,23 @@ def run() -> None:
                                         "local_root": {
                                             "type": "string",
                                             "description": "Local checkout path for adoption heuristics (default cwd).",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_adoption_status",
+                                "description": "Local adoption readiness checklist for <30m onboarding (#935/#633). Status only — no apply.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "no_optional": {
+                                            "type": "boolean",
+                                            "description": "When true, skip optional SPEC.md/CURRENT.md checks.",
                                         },
                                     },
                                 },
