@@ -852,6 +852,50 @@ class TestSelfMigrateWhatNext(unittest.TestCase):
         )
         self.assertEqual(out["priority"], "ready_issue")
 
+    def test_verify_not_ready_before_ready_issue(self):
+        """Proves: ready=false ranks self_migrate_verify ahead of ready Feature (#969)."""
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={
+                "budget_pressure": "ok",
+                "remaining_tokens": 40000,
+                "daily_limit": 50000,
+            },
+            open_prs=[],
+            ready_issues=[{"number": 302, "title": "Feature"}],
+            adoption={"core_ready": True, "first_qa": {"seeded": True}},
+            self_migrate={
+                "drift": False,
+                "ready": False,
+                "target_version": "0.7.2",
+                "failures": ["plate_config_invalid"],
+                "next_command": "gh plate self-migrate --verify --json",
+            },
+            pm_status={"queue_size": 0},
+        )
+        self.assertEqual(out["priority"], "self_migrate_verify")
+        self.assertIn("verify", out.get("next_command") or "")
+        self.assertFalse(out["state_snapshot"]["self_migrate_ready"])
+        self.assertIn("plate_config_invalid", out.get("failures") or [])
+
+    def test_drift_beats_verify_not_ready(self):
+        """Proves: drift plan ranking wins when both drift and ready=false (#969)."""
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 1},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            adoption={"core_ready": True, "first_qa": {"seeded": True}},
+            self_migrate={
+                "drift": True,
+                "ready": False,
+                "target_version": "0.8.0",
+                "pin": {"version": "0.6.0"},
+                "failures": ["pin_or_payload_drift"],
+                "next_command": "gh plate self-migrate --plan --json",
+            },
+        )
+        self.assertEqual(out["priority"], "self_migrate")
+
 
 class TestAdoptionWhatNext(unittest.TestCase):
     """Proves: adoption readiness ranks on what_next (#937 / #633)."""

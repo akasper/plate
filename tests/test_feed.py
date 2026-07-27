@@ -133,6 +133,38 @@ class TestFeed631(unittest.TestCase):
         self.assertEqual(proc["impact"], "high")
         self.assertIn("adoption_session", proc.get("badges") or [])
 
+    def test_what_next_self_migrate_verify_maps_to_high_rank(self):
+        """Proves: get_user_feed maps self_migrate_verify to rank 16 (#969/#649)."""
+        fake_wn = {
+            "priority": "self_migrate_verify",
+            "next_action": "run post-migrate verify",
+            "prompt_segment": "Verify residual",
+            "rationale": "ready=false",
+            "next_command": "gh plate self-migrate --verify --json",
+            "state_snapshot": {"self_migrate_ready": False},
+        }
+        with patch("plate_core.what_next.get_what_next", return_value=fake_wn):
+            feed = get_user_feed(
+                repo="akasper/plate",
+                limit=5,
+                include_process=True,
+                include_autonomy=False,
+                questions=[],
+                tasks=[],
+            )
+        proc = next(
+            (
+                i
+                for i in (feed.get("items") or [])
+                if i.get("item_type") == "process"
+            ),
+            None,
+        )
+        self.assertIsNotNone(proc)
+        self.assertEqual(proc["rank"], 16)
+        self.assertEqual(proc["impact"], "high")
+        self.assertIn("self_migrate_verify", proc.get("badges") or [])
+
     def test_get_user_feed_injected_offline(self):
         feed = get_user_feed(
             repo="akasper/plate",
