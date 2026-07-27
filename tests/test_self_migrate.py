@@ -1,4 +1,4 @@
-"""Tests for self-migrate dry-run plan (#939 / Epic #649)."""
+"""Tests for self-migrate dry-run plan and marker merge (#939/#943 / Epic #649)."""
 
 from __future__ import annotations
 
@@ -6,9 +6,8 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
-from plate_core.self_migrate import plan_self_migrate
+from plate_core.self_migrate import plan_marker_merge, plan_self_migrate
 from plate_core.cli import cmd_self_migrate
 
 
@@ -78,6 +77,10 @@ class PlanSelfMigrateTests(unittest.TestCase):
                     "no_payload": False,
                     "plan": True,
                     "json": True,
+                    "merge_markers": False,
+                    "apply_markers": False,
+                    "upstream_dir": None,
+                    "path": None,
                 },
             )()
             import io
@@ -94,6 +97,161 @@ class PlanSelfMigrateTests(unittest.TestCase):
             data = json.loads(buf.getvalue())
             self.assertTrue(data["ok"])
             self.assertIn("steps", data)
+
+
+_LOCAL_AGENTS = """# Local title
+
+Local intro outside markers.
+
+<!-- PLATES-CORE:BEGIN demo -->
+old core block
+<!-- PLATES-CORE:END demo -->
+
+Local footer stays.
+"""
+
+_UPSTREAM_AGENTS = """# Upstream title (should not replace outside)
+
+Upstream intro.
+
+<!-- PLATES-CORE:BEGIN demo -->
+new core block from upstream
+<!-- PLATES-CORE:END demo -->
+
+Upstream footer.
+"""
+
+
+class PlanMarkerMergeTests(unittest.TestCase):
+    def test_dry_run_updates_marker_preserves_outside(self):
+        """Proves: dry-run plans marker update without writing; outside local kept (#943)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text(_LOCAL_AGENTS, encoding="utf-8")
+            report = plan_marker_merge(
+                root,
+                paths=["AGENTS.md"],
+                upstream_texts={"AGENTS.md": _UPSTREAM_AGENTS},
+                apply=False,
+            )
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["mode"], "dry_run")
+        self.assertEqual(report["would_write"], 1)
+        self.assertEqual(report["written"], 0)
+        f0 = report["files"][0]
+        self.assertEqual(f0["action"], "update_markers")
+        self.assertTrue(f0["changed"])
+        # File on disk unchanged
+        with TemporaryDirectory() as tmp2:
+            root = Path(tmp2)
+            agents = root / "AGENTS.md"
+            agents.write_text(_LOCAL_AGENTS, encoding="utf-8")
+            plan_marker_merge(
+                root,
+                paths=["AGENTS.md"],
+                upstream_texts={"AGENTS.md": _UPSTREAM_AGENTS},
+                apply=False,
+            )
+            self.assertEqual(agents.read_text(encoding="utf-8"), _LOCAL_AGENTS)
+
+    def test_apply_writes_markers_keeps_local_outside(self):
+        """Proves: apply writes upstream marker body and keeps local outside text (#943)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agents = root / "AGENTS.md"
+            agents.write_text(_LOCAL_AGENTS, encoding="utf-8")
+            report = plan_marker_merge(
+                root,
+                paths=["AGENTS.md"],
+                upstream_texts={"AGENTS.md": _UPSTREAM_AGENTS},
+                apply=True,
+            )
+            text = agents.read_text(encoding="utf-8")
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["written"], 1)
+        self.assertIn("new core block from upstream", text)
+        self.assertIn("Local intro outside markers.", text)
+        self.assertIn("Local footer stays.", text)
+        self.assertNotIn("Upstream intro.", text)
+        self.assertNotIn("old core block", text)
+
+    def test_local_edit_preserved_when_base_differs(self):
+        """Proves: local marker customization wins when base is old upstream (#943)."""
+        base = """<!-- PLATES-CORE:BEGIN demo -->
+old core block
+<!-- PLATES-CORE:END demo -->
+"""
+        local = """header local
+
+<!-- PLATES-CORE:BEGIN demo -->
+user customized core
+<!-- PLATES-CORE:END demo -->
+
+footer local
+"""
+        upstream = """<!-- PLATES-CORE:BEGIN demo -->
+new core block from upstream
+<!-- PLATES-CORE:END demo -->
+"""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text(local, encoding="utf-8")
+            report = plan_marker_merge(
+                root,
+                paths=["AGENTS.md"],
+                upstream_texts={"AGENTS.md": upstream},
+                base_texts={"AGENTS.md": base},
+                apply=True,
+            )
+            text = (root / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("user customized core", text)
+        self.assertNotIn("new core block from upstream", text)
+        self.assertIn("demo", report["files"][0]["preserved_local_sections"])
+
+    def test_missing_upstream_reports_skip(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text(_LOCAL_AGENTS, encoding="utf-8")
+            report = plan_marker_merge(root, paths=["AGENTS.md"], apply=False)
+        self.assertEqual(report["files"][0]["action"], "missing_upstream")
+        self.assertEqual(report["would_write"], 0)
+
+    def test_cmd_merge_markers_json(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text(_LOCAL_AGENTS, encoding="utf-8")
+            up = root / "upstream"
+            up.mkdir()
+            (up / "AGENTS.md").write_text(_UPSTREAM_AGENTS, encoding="utf-8")
+            ns = type(
+                "NS",
+                (),
+                {
+                    "repo_root": str(root),
+                    "target_version": None,
+                    "no_payload": False,
+                    "plan": False,
+                    "json": True,
+                    "merge_markers": True,
+                    "apply_markers": False,
+                    "upstream_dir": str(up),
+                    "path": ["AGENTS.md"],
+                },
+            )()
+            import io
+            import sys
+
+            buf = io.StringIO()
+            old = sys.stdout
+            try:
+                sys.stdout = buf
+                rc = cmd_self_migrate(ns)
+            finally:
+                sys.stdout = old
+            self.assertEqual(rc, 0)
+            data = json.loads(buf.getvalue())
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["would_write"], 1)
 
 
 if __name__ == "__main__":

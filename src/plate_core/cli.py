@@ -478,8 +478,35 @@ def cmd_adopt(args: argparse.Namespace) -> int:
 
 
 def cmd_self_migrate(args: argparse.Namespace) -> int:
-    """Self-migrate dry-run plan (#939 / Epic #649)."""
-    from .self_migrate import plan_self_migrate
+    """Self-migrate dry-run plan or marker merge (#939/#943 / Epic #649)."""
+    from .self_migrate import plan_marker_merge, plan_self_migrate
+
+    if bool(getattr(args, "merge_markers", False)):
+        paths = getattr(args, "path", None) or None
+        if paths is not None and not isinstance(paths, list):
+            paths = [paths]
+        report = plan_marker_merge(
+            getattr(args, "repo_root", ".") or ".",
+            paths=paths,
+            upstream_root=getattr(args, "upstream_dir", None),
+            apply=bool(getattr(args, "apply_markers", False)),
+        )
+        if args.json:
+            print(json.dumps(report))
+            return 0 if report.get("ok") else 1
+        print(f"Repo root: {report.get('repo_root')}")
+        print(f"Mode: {report.get('mode')}  would_write={report.get('would_write')} written={report.get('written')}")
+        for f in report.get("files") or []:
+            print(
+                f"  - {f.get('path')}: {f.get('action')} changed={f.get('changed')} "
+                f"preserved={f.get('preserved_local_sections')}"
+            )
+        if report.get("errors"):
+            for e in report["errors"]:
+                print(f"Error: {e}")
+        print(f"Next: {report.get('next_command')}")
+        print(report.get("note"))
+        return 0 if report.get("ok") else 1
 
     report = plan_self_migrate(
         getattr(args, "repo_root", ".") or ".",
@@ -3807,7 +3834,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     self_mig = sub.add_parser(
         "self-migrate",
-        help="Dry-run plan for plate-core pin/payload self-migrate (#939/#649); no apply",
+        help="Pin/payload plan or PLATES-CORE marker merge (#939/#943/#649); dry-run default",
     )
     self_mig.add_argument(
         "--repo-root",
@@ -3827,6 +3854,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-payload",
         action="store_true",
         help="Omit import-payload step from the plan",
+    )
+    self_mig.add_argument(
+        "--merge-markers",
+        action="store_true",
+        help="Plan/apply PLATES-CORE sectional merge vs upstream (#943)",
+    )
+    self_mig.add_argument(
+        "--upstream-dir",
+        help="Directory of upstream files for --merge-markers (mirrors relative paths)",
+    )
+    self_mig.add_argument(
+        "--path",
+        action="append",
+        dest="path",
+        help="Relative path to merge (repeatable); default: marker-bearing refresh files",
+    )
+    self_mig.add_argument(
+        "--apply-markers",
+        action="store_true",
+        help="Write merged marker content (requires --merge-markers); default dry-run",
     )
     self_mig.add_argument("--json", action="store_true", help="Output JSON")
     self_mig.set_defaults(func=cmd_self_migrate)
