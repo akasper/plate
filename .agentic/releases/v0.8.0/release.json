@@ -1,0 +1,3958 @@
+{
+  "version": "0.8.0",
+  "summary": "PLATE 0.8.0 \u2014 Autonomy, adoption, and packaging foundations (188 changes). Ships durable budget rails, decision ledger, checkpoints/shadow gates, endless feed + Q&A planning, PM/fleet/bug/feature loops, scheduled ops, release media + marketplace packaging helpers, hybrid project kinds, import-payload + adoption under-30m path, self-migrate dry-run/verify, SPEC audit, and Contemplation provenance/mutation plans. Human Tasks remain for PyPI/marketplace publish (#626/#625/#380/#381). v1.0 browser PM client (#661) deferred.",
+  "cut_at": "2026-07-27T12:59:01Z",
+  "fragment_count": 188,
+  "fragment_slugs": [
+    "320-release-repair-standing",
+    "338-spec-audit-engine",
+    "339-spec-audit-followups",
+    "340-spec-audit-health-surface",
+    "350-test-coverage-audit-epic-closeout",
+    "359-create-task-surface",
+    "360-detect-human-blockers",
+    "364-test-coverage-gap-closeout",
+    "378-379-marketplace-install-checklist",
+    "427-auto-close-integration-merge",
+    "451-licensing-research-closeout",
+    "453-licensing-next-release-targeting",
+    "480-persona-autonomy-guidance",
+    "488-spec-autonomy-engine-align",
+    "496-pr-review-scope-autonomous-feedback",
+    "508-510-qa-pr-green-checklists",
+    "509-511-512-agent-collab-closeout",
+    "594-github-release-status",
+    "605-auto-resolve-outdated-review-threads",
+    "613-gh-plate-auto-tag",
+    "614-gh-plate-core-version-lock",
+    "615-payload-import-epic-closeout",
+    "616-import-payload-local",
+    "617-manifest-conflict-strategies",
+    "618-seed-current-md",
+    "619-bootstrap-adoption-mode",
+    "620-shared-payload-local-applier",
+    "621-payload-discoverability-scripts-plate",
+    "622-import-escape-hatch-plan",
+    "628-630-planning-durable-tui",
+    "629-640-er-planning-durable-tui",
+    "630-628-planning-decide-feed",
+    "630-628-qa-planning-workflows",
+    "630-planning-resubmit-actionable",
+    "631-660-feed-pm-queue",
+    "631-feed-ask-user-question-payloads",
+    "631-loop-feed-stage-tui",
+    "631-q-task-user-feed",
+    "632-artifact-approval-tui-ledger",
+    "632-artifact-resubmit-actionable",
+    "632-design-research-approval",
+    "634-630-planning-budget-gate",
+    "634-632-646-design-budget-base-dir",
+    "634-632-artifact-budget-gate",
+    "634-636-feature-media-budget-gate",
+    "634-637-stub-budget-gate",
+    "634-640-er-planning-budget-gate",
+    "634-641-scheduled-ops-budget-gate",
+    "634-641-scheduled-ops-dry-run-no-charge",
+    "634-642-monitor-budget-gate",
+    "634-644-fleet-budget-hydrate",
+    "634-644-fleet-budget-ledger-base-dir",
+    "634-644-plan-fleet-budget-hydrate",
+    "634-646-design-contract-budget-gate",
+    "634-652-packaging-budget-gate",
+    "634-653-costs-budget-day-rollover",
+    "634-660-pm-budget-day-rollover",
+    "634-autonomy-status-budget-pressure",
+    "634-budget-gate-feed-when-risk-off",
+    "634-budget-pressure-critical-fleet-base-dir",
+    "634-budget-pressure-per-cycle-align",
+    "634-budget-snapshot-aliases-dashboard-base-dir",
+    "634-budget-snapshot-next-cycle-projection",
+    "634-budget-snapshot-ux",
+    "634-budget-spend-reset",
+    "634-charge-gated-surfaces",
+    "634-charge-loop-starts",
+    "634-charge-remaining-surfaces",
+    "634-cli-autonomy-status-pressure",
+    "634-durable-budget-enforcement",
+    "634-feature-media-loop-budget-base-dir",
+    "634-health-budget-signal",
+    "634-loop-hydrate-when-risk-off",
+    "634-per-action-token-budget",
+    "634-planning-packaging-preview-no-charge",
+    "634-record-budget-spend-charge",
+    "634-stub-monitor-dry-run-no-charge",
+    "634-what-next-pause-budget-gate",
+    "635-release-notes-media",
+    "636-feature-media-capture",
+    "637-stub-issue-lifecycle",
+    "638-639-loop-advance-gates",
+    "638-bug-loop-budget-hydrate",
+    "638-bug-resolution-loop",
+    "639-feature-implementation-loop",
+    "640-629-epic-release-qa-planning",
+    "640-629-er-planning-decide-feed",
+    "640-629-er-planning-resubmit-actionable",
+    "641-scheduled-op-fleet-dispatch",
+    "641-scheduled-ops",
+    "642-discussion-market-monitoring",
+    "642-scheduled-monitor-ops",
+    "643-human-collab-first-slice",
+    "644-648-fleet-checkpoint-base-dir-spec-audit-paths",
+    "644-fleet-blocked-budget-pm-bridge",
+    "644-handoff-accept-dispatch",
+    "644-multi-agent-fleet-handoffs",
+    "645-648-checkpoint-dedupe-high-impact",
+    "645-648-shadow-checkpoint-advisory-risk-off",
+    "645-durable-shadow-checkpoint-bridge",
+    "645-shadow-diff-worktree",
+    "645-shadow-simulation-high-impact",
+    "646-design-validation-contracts",
+    "647-ledger-feed-gates",
+    "647-ledger-pause-gate-visibility",
+    "647-provenance-decision-ledger",
+    "648-checkpoint-approval-primitive",
+    "648-checkpoint-gate-feed-bridge",
+    "648-loop-checkpoint-bridge",
+    "650-hybrid-noncode-project-kinds",
+    "651-branch-path-ownership",
+    "652-marketplace-packaging-media-proof",
+    "653-budget-gate-feed",
+    "653-cost-risk-dashboard",
+    "654-v1-epic-closeouts-wiki",
+    "654-what-next-budget-and-prs",
+    "654-what-next-cli-pm-feed-wire",
+    "656-feed-approval-rank-glue",
+    "660-pm-approve-run-explicit-delegate",
+    "660-pm-artifact-dispatch",
+    "660-pm-budget-gate-feed",
+    "660-pm-budget-pause-risk-off",
+    "660-pm-collect-fetch-ready-direct",
+    "660-pm-collect-ready-issues",
+    "660-pm-fleet-dispatch",
+    "660-pm-loop-dispatch",
+    "660-pm-loop-ticks",
+    "660-pm-migrate-legacy-risk-off-blocked",
+    "660-pm-orchestrator-core",
+    "660-pm-orchestrator-loop",
+    "660-pm-proposed-approve-run-routing",
+    "660-pm-queue-size-active-only",
+    "660-pm-risk-off-propose-not-block",
+    "660-pm-status-budget-base-dir",
+    "660-pm-tick-loops-surface",
+    "660-what-next-pm-orchestrator",
+    "662-pm-vision-design-agents",
+    "793-what-next-ready-issues",
+    "795-budget-snapshot-day-rollover",
+    "814-what-next-release-repair",
+    "867-autonomy-budget-pause-risk-off",
+    "869-fleet-budget-pause-rails",
+    "871-scheduled-ops-budget-pause-rails",
+    "873-planning-budget-pause-rails",
+    "875-packaging-design-budget-pause-rails",
+    "877-monitor-stub-media-loop-budget-pause",
+    "879-scheduled-ops-shadow-gate-high-impact",
+    "881-scheduled-ops-cli-mcp-shadow-ack",
+    "883-fleet-accept-shadow-gate-high-impact",
+    "885-pm-promote-on-checkpoint-approve",
+    "905-what-next-idle-pm-not-open-epics",
+    "907-what-next-pm-idle-proving-tests",
+    "909-what-next-epic-closeout-candidates",
+    "911-licensing-gh-plate-epic-closeouts",
+    "913-skip-implemented-epic-closeouts",
+    "915-what-next-empty-closeout-stub-refine",
+    "917-template-payload-adopter-claim-proofs",
+    "919-what-next-compound-priority-ladder",
+    "921-contemplation-full-transcript-typed-followups",
+    "923-contemplation-git-provenance",
+    "925-contemplation-artifact-mutation-intent",
+    "927-compound-playwright-e2e-flows",
+    "929-contemplation-mutation-pr-plan-apply",
+    "933-what-next-scheduled-ops",
+    "935-adoption-readiness-status",
+    "937-what-next-adoption-readiness",
+    "939-self-migrate-plan",
+    "941-what-next-self-migrate",
+    "943-marker-merge-executor",
+    "945-upstream-version-resolve",
+    "947-self-migrate-pr-plan",
+    "949-adoption-first-qa-seed",
+    "951-bootstrap-first-qa-marker",
+    "953-health-adoption-fields",
+    "955-adoption-session-timer",
+    "957-what-next-adoption-session",
+    "959-feed-adoption-priority",
+    "961-adoption-guide-session-path",
+    "963-spec-audit-907-917-align",
+    "965-self-migrate-verify",
+    "967-health-self-migrate-fields",
+    "969-what-next-self-migrate-verify",
+    "971-649-633-first-slice-closeout",
+    "973-compound-adoption-path-proof",
+    "975-660-633-first-slice-closeout",
+    "977-readme-plate-align",
+    "979-remaining-epic-first-slice-closeouts",
+    "981-what-next-v1-residual-idle"
+  ],
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/release.py, cli.py, mcp_server.py",
+      "migration_impact": "New repair path. Does not force-delete branches or auto-close extra Next Release issues. Complements bootstrap --apply (still valid for full bootstrap).",
+      "agent_notes": "Addresses legacy-mode warning when track branches missing. Prefer dry-run first. Closes #320.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate release repair (dry-run) to see missing tracks / Next Release drift.",
+        "3. gh plate release repair --apply (or release init --apply) to create missing branches/issue.",
+        "4. If multiple Next Release issues exist, human closes extras \u2014 tool will not auto-dedupe."
+      ],
+      "links": [
+        "#320",
+        "#306",
+        "#654",
+        "#612"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/spec_audit.py, gh plate spec-audit, plate_spec_audit MCP",
+      "migration_impact": "New optional audit surface. Does not auto-edit SPEC.md. Agents can list undocumented fragments for Documentation PRs. Follow-ups #339/#340 add issue generation and health exposure.",
+      "agent_notes": "Use plate_spec_audit before claiming SPEC is current. Prefer additive SPEC updates for undocumented features with tests. Quiet ops: one-line summary of counts unless asked for full findings.",
+      "migration_guidance": [
+        "1. Upgrade plate-core for gh plate spec-audit / plate_spec_audit.",
+        "2. Run from repo root: gh plate spec-audit --json.",
+        "3. Triage undocumented findings into Documentation PRs that add implemented+tested behavior to SPEC.",
+        "4. Do not treat future-only SPEC sections as errors."
+      ],
+      "links": [
+        "#338",
+        "#335",
+        "#337",
+        "#339",
+        "#340",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/spec_audit.py, gh plate spec-audit --followups, plate_spec_audit_followups MCP",
+      "migration_impact": "New optional flags on gh plate spec-audit and MCP plate_spec_audit_followups. Default remains audit-only. Creating issues requires explicit --apply-followups / apply=true.",
+      "agent_notes": "Never write SPEC.md from followups. Low-confidence undocumented findings become Questions. Prefer dry-run plan in loops; only apply when user requests issue creation.",
+      "migration_guidance": [
+        "1. Upgrade plate-core for follow-up surfaces.",
+        "2. Dry-run: gh plate spec-audit --followups --show-draft.",
+        "3. Create issues only with --apply-followups after human review of plan.",
+        "4. Apply SPEC draft only via a Documentation PR with human approval."
+      ],
+      "links": [
+        "#339",
+        "#338",
+        "#335",
+        "#337",
+        "#340",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/health.py, what_next.py, cli.py, mcp_server.py",
+      "migration_impact": "Health JSON gains additive fields (spec_audit_status, spec_audit_counts, spec_audit_actionable_count, spec_audit_next_step). Agents should route actionable status to gh plate spec-audit / --followups before generic epic work. Optional --no-spec-audit skips the local audit.",
+      "agent_notes": "CLI/MCP audit already from #338/#339. Prefer finishing open PRs over SPEC drift. Never auto-write SPEC.md; human-approval gate remains. Quiet: one-line health SPEC audit status unless asked for full findings.",
+      "migration_guidance": [
+        "1. Upgrade plate-core for health SPEC audit fields (#340).",
+        "2. Run gh plate health [--repo-root PATH] or plate_health; inspect spec_audit_*.",
+        "3. When status=actionable, run gh plate spec-audit --json then --followups as needed.",
+        "4. Use --no-spec-audit / no_spec_audit only for pure remote label/protection checks."
+      ],
+      "links": [
+        "#340",
+        "#338",
+        "#339",
+        "#335",
+        "#337",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/wiki/Test-Coverage-Audit-Epic-350.md, docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md, docs/research/364-test-coverage-gap-closeout.md",
+      "migration_impact": "Documentation only. Epic #350 marked first-slice closed; residuals (live auto-push, live-network ceremony) stay deferred follow-ons.",
+      "agent_notes": "Closes #350. Docs-only Documentation PR after all children closed (#361\u2013#364).",
+      "migration_guidance": [
+        "1. Pull release after merge; read docs/wiki/Test-Coverage-Audit-Epic-350.md.",
+        "2. Prefer V1-Autonomy-Surfaces-Epic-Closeouts.md when ranking epic closeouts in what_next.",
+        "3. Open new Features for deferred residuals; do not re-open #350 children."
+      ],
+      "links": [
+        "#350",
+        "#361",
+        "#362",
+        "#363",
+        "#364",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/tasks.py, mcp_server.py, cli.py",
+      "migration_impact": "New MCP tools and CLI subcommand. Agents should create Task issues for human-only blockers instead of trapping work in chat. Agents never complete human work or invent PLATE-TASK-CLOSED.",
+      "agent_notes": "Implements #359 explicit creation path. Detection-driven auto Tasks are #360 follow-up. Never paste secrets into Task bodies (redaction is best-effort only).",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. When user asks for a human Task or a human-only blocker appears: plate_task_create / gh plate task --create with human_action, why, context, instructions.",
+        "3. Optional --epic-milestone / milestone inheritance for Epic-related Tasks (no Epic: label required).",
+        "4. After human completes: plate_task_close / --close N posts <!-- PLATE-TASK-CLOSED --> then closes."
+      ],
+      "links": [
+        "#359",
+        "#360",
+        "#349",
+        "#654",
+        "#626"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/tasks.py, mcp_server.py, cli.py",
+      "migration_impact": "New detect path defaults to classification-only. create/apply opens Tasks using #359 contract. Dedupe skips when an open Task already tracks the blocker class.",
+      "agent_notes": "Complements #359 explicit create. Agent-solvable signals must not open Tasks. Closes #360.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. On CI/session signals that look human-only: plate_task_detect (dry) first.",
+        "3. When confirmed: plate_task_detect create=true dry_run=false or gh plate task --detect --signal '...' --apply.",
+        "4. Never invent PLATE-TASK-CLOSED; humans complete external work."
+      ],
+      "links": [
+        "#360",
+        "#359",
+        "#349",
+        "#654",
+        "#626",
+        "#625"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md, docs/research/364-test-coverage-gap-closeout.md, docs/design/contemplation-engine-contract.md",
+      "migration_impact": "Documentation only. #364 high-priority inventory gaps marked closed; Epic #350 may remain for broader tooling. No runtime change.",
+      "agent_notes": "Closes #364. Docs-only Documentation PR; status:implemented may be applied on release merge.",
+      "migration_guidance": [
+        "1. Pull release after merge; read docs/research/364-test-coverage-gap-closeout.md for the PR/test matrix.",
+        "2. Do not re-open #364 for intentionally deferred live auto-push or live-network ceremony.",
+        "3. Prefer new Features under #257/#350 for deferred residual work."
+      ],
+      "links": [
+        "#364",
+        "#350",
+        "#921",
+        "#923",
+        "#925",
+        "#927",
+        "#929",
+        "#917",
+        "#919",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/bootstrap/marketplace-install-checklist.md, README.md, tests/test_copilot_cli_marketplace_packaging.py",
+      "migration_impact": "Docs only. Operators use docs/bootstrap/marketplace-install-checklist.md before release cut. Real publish still human Tasks; agents must not complete them.",
+      "agent_notes": "Packaging artifacts already present (manifests + CI smoke). This closes documentation/verification Features, not human publish Tasks.",
+      "migration_guidance": [
+        "1. No package change required for docs alone.",
+        "2. Before marketplace-facing release: follow docs/bootstrap/marketplace-install-checklist.md.",
+        "3. Run pytest tests/test_copilot_cli_marketplace_packaging.py -q.",
+        "4. Leave #380/#381/#625/#626 to human owners."
+      ],
+      "links": [
+        "#378",
+        "#379",
+        "#380",
+        "#381",
+        "#625",
+        "#626",
+        "#652",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/workflows/pr-issue-link-check.yml, src/plate_core/integration_close.py",
+      "migration_impact": "Workflows that merge to release/epic/* will close linked Feature/Bug/Doc issues after merge (not only on main). Epic/Task/Release issues stay open. main behavior unchanged (native GitHub close).",
+      "agent_notes": "Helpers in plate_core.integration_close for tests/reuse. Workflow owns live close (permissions). Complements #556 status:implemented. Addresses stuck open issues after release merges.",
+      "migration_guidance": [
+        "1. Upgrade plate_core / pull workflow updates.",
+        "2. Prefer Closes #N in PR bodies targeting release; issues close via CI with PLATE-INTEGRATION-CLOSE marker.",
+        "3. Do not put Closes on Epic/Task/Release when the work is only a partial slice \u2014 use Related to #N or omit keyword.",
+        "4. main Release PRs still rely on native GitHub auto-close."
+      ],
+      "links": [
+        "#427",
+        "#556",
+        "#654",
+        "#488"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/research/451-licensing-text-and-cla-decision.md",
+      "migration_impact": "None. Confirms existing LICENSE/README/CONTRIBUTING; no new license change.",
+      "agent_notes": "Research issue closes via Documentation PR with Closes #451. Epic #390 remains open until human epic-close ceremony if any children remain.",
+      "migration_guidance": [
+        "1. Treat root LICENSE as source of truth for license text.",
+        "2. Do not re-open #451 for text drafting unless legal counsel requests a rewrite.",
+        "3. Revisit CLA only if commercial dual-license or high-volume external contribution program starts."
+      ],
+      "links": [
+        "#451",
+        "#390",
+        "#453",
+        "#455",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/research/453-licensing-next-release-targeting.md, Epic #390",
+      "migration_impact": "None for adopters. Operators viewing Epic #390 should treat #612 as the standing packaging negotiation target until the next rename/cut.",
+      "agent_notes": "what_next may still surface #453 until this PR merges. Do not re-point #390 at #654 (v1.0 roadmap) unless human prioritizes licensing into that far-future release.",
+      "migration_guidance": [
+        "1. No product code change required.",
+        "2. When linking Epics to a release, use the open issue titled Next Release (currently #612), not historical versioned Release issues."
+      ],
+      "links": [
+        "#453",
+        "#390",
+        "#612",
+        "#449",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plugin/agents/plate.agent.md, agent_guidance.py, baseline_catalog.yml, AGENTS.md",
+      "migration_impact": "Agents using the plate persona will call plate_autonomy_status before unsupervised loops and follow quiet + budget rules. New skill run-autonomy-cycle appears in agents/skills list under project-manager. No breaking config changes.",
+      "agent_notes": "Routing: what_next for process step; autonomy_status for budgeted loops. See autonomy_loops in agent_guidance.py.",
+      "migration_guidance": [
+        "1. Reload plate persona / plugin after upgrade.",
+        "2. For /loop or overnight runs: plate_autonomy_status then plate_autonomy_run_cycle within risk_tolerance.",
+        "3. Keep terminal turn summaries as terse bullets; exempt PLATE-AUTONOMY-CYCLE markers."
+      ],
+      "links": [
+        "#480",
+        "#470",
+        "#456"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "SPEC.md",
+      "migration_impact": "Product intent document only. No code or template payload change. Downstream repos should re-read SPEC when upgrading process docs; no forced file copy.",
+      "agent_notes": "SPEC is human-owned intent. After this PR, agents must not re-assert pre-#470 roadmap language. Cross-ref docs/design/autonomous-plate-engine.md and AGENTS.md \u00a7Autonomous Mode. Closes #488.",
+      "migration_guidance": [
+        "1. Review SPEC.md Vision/Goals/Architecture for AutonomyEngine and .plate autonomy.risk_tolerance as single source of truth.",
+        "2. Prefer .plate autonomy over legacy .github/AUTONOMOUS_MODE; delete the marker after migrating.",
+        "3. Use plate_autonomy_status / gh plate autonomy --status before long-running loops; risk off disables engine autopilot only.",
+        "4. Treat Release #654 Phase 1\u20133 (safety \u2192 feed/planning \u2192 PM) as the v1.0 path; do not claim 1.0 without E2E proof."
+      ],
+      "links": [
+        "#488",
+        "#470",
+        "#654",
+        "#645",
+        "#648",
+        "#647",
+        "#653",
+        "#660",
+        "#631"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pr_babysit.py, plate_config.py, cli.py, mcp_server.py, AGENTS.md",
+      "migration_impact": "Default pr_review_scope is all: more review threads may appear actionable than the old bot-only filter. Set autonomy.pr_review_scope to bot-only for conservative behavior. New CLI --scope and MCP scope parameters available.",
+      "agent_notes": "Default scope=all includes Copilot. Use plate_pr_babysit / --act; resolve outdated via #605 auto-resolve. High-risk paths need need:human-review.",
+      "migration_guidance": [
+        "1. Optionally set autonomy.pr_review_scope in .plate (all|bot-only|human-only); default all.",
+        "2. Prefer gh plate pr babysit --scope and plate_get_actionable_review_threads with scope.",
+        "3. Apply suggestion blocks when prefer_apply_suggestion; skip high-risk paths.",
+        "4. Do not re-request Copilot review in a loop; work existing threads first."
+      ],
+      "links": [
+        "#496",
+        "#605",
+        "#612"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "src/plate_core/agent_guidance.py, plugin/agents/plate.agent.md, docs/research/508-510-qa-and-pr-green-follow-through.md",
+      "migration_impact": "Process guidance only. Downstream agents pick up via plate_core upgrade / template persona sync.",
+      "agent_notes": "Treat checklist headers as hard stop criteria. Tests assert headers so do not rename without updating tests.",
+      "migration_guidance": [
+        "1. Upgrade plate_core / copy thin persona + agent_guidance sections if customized.",
+        "2. Q&A: only offer options fully executable in-turn; run pr-babysit before next question when promised.",
+        "3. PR green: one-pass Merge Gates Checklist via plate_pr_babysit + plate_get_pr_merge_gates.",
+        "4. On mismatch, open Bug stub + corrective PR before more planning."
+      ],
+      "links": [
+        "#508",
+        "#510",
+        "#503",
+        "#517",
+        "#519",
+        "#528"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/research/508-510-qa-and-pr-green-follow-through.md, AGENTS.md, plugin/agents/plate.agent.md",
+      "migration_impact": "Docs/persona only. Agents must open Q&A with ask_user_question first and resolve review threads after addressing feedback so feedback-resolution goes green.",
+      "agent_notes": "Runtime helpers already shipped (#496/#516/#605). This closes remaining process Bugs that were status:stub after #508/#510 guidance.",
+      "migration_guidance": [
+        "1. No package upgrade required for docs alone.",
+        "2. Read docs/research/508-510-qa-and-pr-green-follow-through.md for the #508\u2013#512 matrix.",
+        "3. Prefer plate_pr_babysit --act + plate_resolve_review_thread; never hand-roll GraphQL.",
+        "4. Do not re-open #509\u2013#512 for host auto-TUI work without a new Feature."
+      ],
+      "links": [
+        "#509",
+        "#511",
+        "#512",
+        "#508",
+        "#510",
+        "#496",
+        "#516",
+        "#605",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/release.py, cli.py",
+      "migration_impact": "Additive fields on ReleaseStatusReport / get_release_status JSON. No breaking schema changes. CLI prints three new lines after version.",
+      "agent_notes": "Complements #592 create_github_release and #591 ceremony gap. Use for post-finalize verification. Closes #594.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Run gh plate release status (or --json) and read github_release_* fields.",
+        "3. If exists=false for the current version, run finalize / gh release create to publish the missing Release object."
+      ],
+      "links": [
+        "#594",
+        "#591",
+        "#592",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pr_babysit.py, cli.py, tests/test_pr_babysit.py, gh-plate, tests/e2e",
+      "migration_impact": "Agents running gh plate pr babysit --act after addressing feedback no longer need a separate resolve pass for outdated threads.",
+      "agent_notes": "Outdated+unresolved threads resolve on act=True. Non-outdated still need plate_resolve_review_thread.",
+      "migration_guidance": [
+        "1. Prefer babysit --act after pushes that address review lines.",
+        "2. Still resolve non-outdated threads explicitly after applying suggestions."
+      ],
+      "links": [
+        "#605",
+        "#671",
+        "#496"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/workflows/publish-gh-plate-extension.yml, src/plate_core/release.py, cli.py",
+      "migration_impact": "Release PR merge \u2192 plate tag push continues to trigger publish-gh-plate-extension.yml. Thin repo gets matching vX.Y.Z tag + Release when missing. Requires THIN_SHIM_DEPLOY_TOKEN (existing). Not template methodology content.",
+      "agent_notes": "Publishing-only workflow (not template_payload). Complements #614 version lock and #599 sync. Closes #613.",
+      "migration_guidance": [
+        "1. Ensure THIN_SHIM_DEPLOY_TOKEN has contents:write on akasper/gh-plate.",
+        "2. On each plate tag v*, workflow syncs launcher + VERSION + PLATE_CORE_VERSION, tags, creates gh-plate GitHub Release if missing.",
+        "3. Repair: Actions \u2192 Publish gh-plate thin shim \u2192 workflow_dispatch with version.",
+        "4. gh plate release finalize prints the gh-plate sync plan for operators."
+      ],
+      "links": [
+        "#613",
+        "#614",
+        "#599",
+        "#591",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "gh-plate, .github/workflows/publish-gh-plate-extension.yml",
+      "migration_impact": "After upgrade, `gh plate` from the thin extension enforces matching plate-core. Dev monorepo runs unchanged unless PLATE_CORE_FORCE_PIN=1. Requires PyPI plate-core publish for each tag for pin to resolve.",
+      "agent_notes": "Human Tasks for PyPI/trusted publisher remain out of scope. Do not claim lock works end-to-end without published plate-core wheels. Closes #614.",
+      "migration_guidance": [
+        "1. Upgrade gh-plate extension / plate launcher.",
+        "2. Ensure plate-core==X.Y.Z is published on PyPI for each gh-plate tag (human Task #626 if blocked).",
+        "3. Fresh install: gh extension install akasper/gh-plate@vX.Y.Z should auto-install matching plate-core.",
+        "4. Override pin only with PLATE_CORE_VERSION env or PLATE_CORE_FORCE_PIN for diagnostics."
+      ],
+      "links": [
+        "#614",
+        "#626",
+        "#654",
+        "#591"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/wiki/Payload-Import-Adoption-Epic-615.md",
+      "migration_impact": "No runtime change. Operators treating #615 as done should use conservative import-payload plus --escape-hatch-on-conflict for hard merges; wiki closeout is the durable epic memory.",
+      "agent_notes": "Epic close is documentation only. Do not reopen #616\u2013#622 for polish without a new Feature. Marketplace publish Tasks remain human-only.",
+      "migration_guidance": [
+        "1. No package upgrade required for this docs closeout alone.",
+        "2. Prefer gh plate import-payload --strategy conservative --escape-hatch-on-conflict for mature trees.",
+        "3. Read docs/wiki/Payload-Import-Adoption-Epic-615.md for operator path and non-goals.",
+        "4. Route remaining onboarding polish to #633; self-update track to #649."
+      ],
+      "links": [
+        "#615",
+        "#616",
+        "#617",
+        "#618",
+        "#619",
+        "#620",
+        "#621",
+        "#622",
+        "#633",
+        "#649",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/import_payload.py, gh plate import-payload, plate_import_payload MCP",
+      "migration_impact": "New optional surface for adoption. Existing bootstrap GitHub Contents copy is unchanged. Agents should prefer gh plate import-payload --dry-run then --apply on checkouts before bootstrap GitHub-side steps.",
+      "agent_notes": "For #633 adoption: plan with import-payload dry-run first; never force-overwrite customer files without human confirmation. GitHub remote-only import remains via bootstrap copy-template-payload; this surface is local-checkout first-class.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / gh-plate so import-payload is available.",
+        "2. On an existing repo checkout: gh plate import-payload --dry-run --json to review would_create/would_conflict.",
+        "3. Apply with --strategy safe (default) or conservative; use force only when overwrite is intentional.",
+        "4. Then run gh plate bootstrap --apply for labels/wiki/.plate remote setup as needed."
+      ],
+      "links": [
+        "#616",
+        "#615",
+        "#633",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/data/template_payload_manifest.yml, template_payload.py, import_payload.py",
+      "migration_impact": "Manifest schema_version is now 2 with additive path_rules. Greenfield create behavior unchanged. Adoption imports may install PLATE CI as .github/workflows/plate-ci.yml when ci.yml already exists. Loaders accept schema 1 or 2.",
+      "agent_notes": "When import-payload reports create_as for ci.yml, do not overwrite product CI. Point humans at plate-ci.yml for PLATE process jobs. Prefer --strategy conservative for root package.json/SPEC conflicts.",
+      "migration_guidance": [
+        "1. Upgrade plate-core so import-payload honors path_rules.",
+        "2. On adopt dry-run, look for create_as entries (e.g. ci.yml -> plate-ci.yml).",
+        "3. Wire plate-ci.yml into branch protection/status checks if product CI remains ci.yml.",
+        "4. Customize path_rules in a fork only if needed; defaults cover common collisions."
+      ],
+      "links": [
+        "#617",
+        "#616",
+        "#619",
+        "#615",
+        "#633"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/import_payload.py, docs/migration/adoption-guide.md",
+      "migration_impact": "import-payload dry-run/apply may create CURRENT.md when missing. Existing CURRENT.md is never overwritten. Greenfield and adopt checkouts satisfy validate_plate_repo current-md presence check.",
+      "agent_notes": "After import, if CURRENT.md was created, fill real capability rows when Features land. Prefer fragments under .agentic/releases/unreleased/ for process changes.",
+      "migration_guidance": [
+        "1. Upgrade plate-core so import-payload seeds CURRENT.md.",
+        "2. After apply, edit CURRENT.md rows or migrate claims into .agentic/releases/ fragments.",
+        "3. Do not reintroduce the generic-template CI placeholder phrase in CURRENT.md."
+      ],
+      "links": [
+        "#618",
+        "#616",
+        "#619",
+        "#615",
+        "#633"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/bootstrap.py, gh plate bootstrap --adopt, plate_bootstrap MCP, docs/migration/adoption-guide.md",
+      "migration_impact": "Bootstrap report JSON gains adoption_mode, adoption_signals, next_steps. CLI gains --adopt/--existing-repo/--greenfield/--local-root. Greenfield path unchanged when --greenfield or no mature signals.",
+      "agent_notes": "Prefer --adopt or auto-detect when adopting; never seed duplicate Epics/Questions over existing planning work. Local payload via import-payload first.",
+      "migration_guidance": [
+        "1. For existing repos: gh plate import-payload --strategy conservative --dry-run then --apply.",
+        "2. Then gh plate bootstrap --adopt --apply for GitHub-side baseline.",
+        "3. Read docs/migration/adoption-guide.md; greenfield still uses docs/bootstrap/new-repository-checklist.md."
+      ],
+      "links": [
+        "#619",
+        "#616",
+        "#620",
+        "#633",
+        "#615"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/import_payload.py, src/plate_core/bootstrap.py",
+      "migration_impact": "No behavior change for remote bootstrap. New public alias copy_template_payload_local for local FS apply (same as import_payload). Agents should use gh plate import-payload or the alias instead of hand-crafted cp.",
+      "agent_notes": "After local apply, run gh plate bootstrap --apply for labels/wiki/.plate only. Do not hand-write selective cp from package payload.",
+      "migration_guidance": [
+        "1. Prefer gh plate import-payload --dry-run then --apply for local adoption.",
+        "2. Code callers may use copy_template_payload_local(dest, dry_run=...) from plate_core.import_payload.",
+        "3. Bootstrap remote path still uses GitHub Contents API with the shared path list."
+      ],
+      "links": [
+        "#620",
+        "#616",
+        "#615",
+        "#633"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/payload_surface.py, import_payload, gh plate payload, plate_payload_* MCP",
+      "migration_impact": "New CLI/MCP surfaces. Adoption imports into repos with existing scripts/ install helpers under scripts/plate/ (auto). Force with --namespace-scripts / --no-namespace-scripts. Greenfield empty scripts/ keeps top-level scripts/ paths.",
+      "agent_notes": "Prefer plate_payload_list / gh plate payload list before improvising cp from site-packages. Prefer import-payload over manual script copies.",
+      "migration_guidance": [
+        "1. Use gh plate payload list --json instead of hand-locating package payload paths.",
+        "2. On adopt with existing scripts/: expect scripts/plate/* and workflows pointing at scripts/plate/.",
+        "3. Wire scripts/plate/validate_plate_repo.sh into CI if namespaced.",
+        "4. Read scripts/plate/README.md in the payload for the convention."
+      ],
+      "links": [
+        "#621",
+        "#616",
+        "#617",
+        "#619",
+        "#615",
+        "#633"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/import_payload.py, cli.py, mcp_server.py",
+      "migration_impact": "New optional CLI flags and MCP args on import-payload. On conflicts, agents should emit escape-hatch artifacts instead of improvising multi-turn cp. Draft PR open/worktree apply remain follow-ups; human approval still required for force overwrites.",
+      "agent_notes": "Escape hatch does not write payload files. Prefer conservative + escape hatch over force. Residual: automatic draft PR create + worktree apply (still human-gated). need:human-review on #622 reflects product human-judgment gate, not a block on shipping this surface.",
+      "migration_guidance": [
+        "1. Upgrade plate-core.",
+        "2. On mature adoption with conflicts: gh plate import-payload --strategy conservative --escape-hatch-on-conflict --json.",
+        "3. Open a draft PR using DRAFT_PR_BODY.md when multi-file judgment is required.",
+        "4. Do not use --strategy force without explicit human approval on product-owned paths."
+      ],
+      "links": [
+        "#622",
+        "#615",
+        "#616",
+        "#617",
+        "#619",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/planning.py, feed.py, tests/test_planning.py",
+      "migration_impact": "New local paths .agentic/planning/{sessions,pending}/ (gitignored). plate_planning_* responses gain session_id and ask_user_question. Feed may include pending plan stubs as approval-class items.",
+      "agent_notes": "Never create GitHub Feature/Epic issues until plan approval. Session files are durable memory; do not skip questions. ER planning (#629/#640) remains a separate module.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. plate_planning_start \u2192 present ask_user_question; keep session_id across turns.",
+        "3. plate_planning_answer with free text; resume via load if process restarts.",
+        "4. plate_planning_build persists pending plan; present approval options before creating GitHub issues.",
+        "5. plate_feed surfaces pending plans alongside #632 artifact approvals."
+      ],
+      "links": [
+        "#628",
+        "#630",
+        "#631",
+        "#632",
+        "#654",
+        "#656"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/epic_release_planning.py, tests/test_epic_release_planning.py",
+      "migration_impact": "New .agentic/planning/er_sessions/ (under gitignored planning/). plate_er_planning_* returns session_id + ask_user_question. Built plans can land in .agentic/planning/pending/ for feed.",
+      "agent_notes": "Parity with #628/#630 durable planning. Never cut release or open Epic children without human approval of the plan stub.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. plate_er_planning_start \u2192 present ask_user_question; keep session_id.",
+        "3. plate_er_planning_answer free text; resume via load_er_session if process restarts.",
+        "4. plate_er_planning_build \u2192 present approval options; host creates GitHub Epic/Release only after approve.",
+        "5. plate_feed lists pending ER plans with feature/product pending plans."
+      ],
+      "links": [
+        "#629",
+        "#640",
+        "#628",
+        "#630",
+        "#631",
+        "#654",
+        "#656"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/planning.py, feed.py, cli.py, mcp_server.py",
+      "migration_impact": "New MCP tools plate_planning_decide and plate_planning_list_pending; CLI gh plate plan --decide/--list-pending/--feed. Pending plans always carry ask_user_question. Approve does not auto-create GitHub issues. No config break.",
+      "agent_notes": "Never create issues until plan status=approved. Feed ranks planning_approval ~16 and incomplete sessions ~22. Decided plans archive under .agentic/planning/decided/.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. After plate_planning_build, present plan ask_user_question from feed or plan payload.",
+        "3. Human/host: plate_planning_decide plan_id approve|revise|reject (or gh plate plan --decide ID --decision approve).",
+        "4. On approve: agent creates GitHub stubs from plan body/labels; on revise: resume session_id."
+      ],
+      "links": [
+        "#630",
+        "#628",
+        "#631",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/planning.py, mcp_server.py, cli.py",
+      "migration_impact": "New planning MCP tools and gh plate plan. Host still creates GitHub issues after human approval. No breaking changes to plate_plan_epic.",
+      "agent_notes": "Use native ask_user_question for each next_question. Closes planning stubs for #630/#628 first slice; full define-feature-requirements skill integration is follow-up.",
+      "migration_guidance": [
+        "1. Upgrade plate_core surfaces.",
+        "2. Feature planning: plate_planning_start kind=feature \u2192 answer loop \u2192 plate_planning_build \u2192 present plan for approval.",
+        "3. Product planning: kind=product for multi-Epic stub proposals.",
+        "4. Do not create issues until user approves the plan."
+      ],
+      "links": [
+        "#630",
+        "#628",
+        "#654",
+        "#656",
+        "#631"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/planning.py, cli.py, mcp_server.py, tests/test_planning.py",
+      "migration_impact": "Revise no longer archives plans out of the feed. Approve after revise requires resubmit first. New MCP tools and CLI flags. History under .agentic/planning/pending/*.history.jsonl (local).",
+      "agent_notes": "Parity with #632 artifact resubmit. Does not auto-create GitHub issues on approve. Epic/release plans remain on er_planning surfaces.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. On revise: plan stays pending; feed shows resubmit option.",
+        "3. After edits: gh plate plan --resubmit ID or plate_planning_resubmit.",
+        "4. Then plate_planning_decide approve. Use --actionable / --history for ops."
+      ],
+      "links": [
+        "#743",
+        "#630",
+        "#628",
+        "#632",
+        "#656",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feed.py",
+      "migration_impact": "Additive feed item_type pm_assignment and counts.pm_assignments. Hosts should present new options (approve_run|defer|cancel). No breaking changes to existing feed consumers.",
+      "agent_notes": "Deepens #631 feed + #660 PM loop bridge. Prefer pre-shaped ask_user_question from PM packets when present. Related to #654 Phase 2\u20133.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate feed / plate_feed will include PM assignments when .agentic/pm/queue.json has proposed/delegated rows.",
+        "3. After user approves a packet, run persona work then plate_pm_complete ASSIGNMENT_ID.",
+        "4. Dry-run PM cycles populate queue without execute; still appear in feed for review."
+      ],
+      "links": [
+        "#631",
+        "#660",
+        "#654",
+        "#648"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feed.py, tests/test_feed.py",
+      "migration_impact": "plate_feed / gh plate feed presentation[] gains ask_user_question object. counts.approvals added. No breaking schema for prior fields.",
+      "agent_notes": "Prefer plate_feed before ad-hoc issue scans for user-facing work. Checkpoints and approvals outrank low-risk Questions. Full Projects v2 ranking remains follow-up.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Hosts: call ask_user_question with presentation[i].ask_user_question.question and option labels one-at-a-time.",
+        "3. Map option ids (approve/revise/reject/answer_now/done_signal) to plate_checkpoint_decide / plate_artifact_decide / contemplation / Task done-signal rules.",
+        "4. Never auto-complete Task items; wait for <!-- PLATE-TASK-CLOSED -->."
+      ],
+      "links": [
+        "#631",
+        "#632",
+        "#654",
+        "#656",
+        "#648"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feed.py, tests/test_feed.py",
+      "migration_impact": "Feed presentation options for loop items change to stage-specific follow-through ids. Rank order prefers gate stages over plan/impl. No schema/config change.",
+      "agent_notes": "Do not re-request Copilot from babysit option; use pr babysit --act. risk-off still requires human merge on merge_eligible. Pairs with #638/#639/#660 loop dispatch+ticks.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Hosts present presentation[].ask_user_question for feature_loop/bug_loop using option ids advance|babysit|tick_gates|approve_checkpoint.",
+        "3. PM queue rows with loop_run_id expose tick_loop; re-run plate_pm_run_cycle to sync stages."
+      ],
+      "links": [
+        "#741",
+        "#631",
+        "#656",
+        "#638",
+        "#639",
+        "#660",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feed.py, mcp_server.py, cli.py, agent_guidance.py",
+      "migration_impact": "New plate_feed MCP tool and gh plate feed CLI. No breaking changes to plate_what_next or qanda.",
+      "agent_notes": "Feed ranks Tasks and need:human-review ahead of low-risk Questions. Integrates open autonomy checkpoints when available. Full host TUI bridge is follow-up under #656.",
+      "migration_guidance": [
+        "1. Upgrade plate_core surfaces.",
+        "2. Prefer plate_feed for user-facing endless feed; keep plate_what_next for agent process steps.",
+        "3. Present presentation[] items via native ask_user_question one-at-a-time; never auto-complete Task items."
+      ],
+      "links": [
+        "#631",
+        "#654",
+        "#656",
+        "#139"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/design_research_approval.py, feed.py, tests/test_design_research_approval.py",
+      "migration_impact": "plate_artifact_propose / list returns ask_user_question. decide may set ledger_id. Feed presentation uses richer artifact approval options. No config schema change.",
+      "agent_notes": "Never treat Design/Research content as authoritative until status=approved. Revised requires new content + re-approval. Media links are present on the TUI payload.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. After plate_artifact_propose, present ask_user_question payload to the user.",
+        "3. Map approve/revise/reject option ids to plate_artifact_decide.",
+        "4. Treat approved-* pointers under .agentic/approvals/ as authoritative for planning.",
+        "5. plate_feed ranks pending artifacts with other approvals/checkpoints."
+      ],
+      "links": [
+        "#632",
+        "#631",
+        "#647",
+        "#654",
+        "#656"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/design_research_approval.py, feed.py, cli.py, mcp_server.py",
+      "migration_impact": "New plate_artifact_resubmit / plate_artifact_history; list supports status=actionable. Revised artifacts stay in feed until resubmit+approve. Approve still writes authoritative pointer. No config break.",
+      "agent_notes": "Never treat revised/rejected as authoritative. list_authoritative remains the source of truth for approved design/research. Optional --open-checkpoint on revise when related_issue set.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. On revise: update content then plate_artifact_resubmit id (summary/content_path).",
+        "3. Feed shows revised items with resubmit-first ask_user_question options.",
+        "4. gh plate artifact --actionable | --history ID | --resubmit ID --summary ... --content-path ..."
+      ],
+      "links": [
+        "#632",
+        "#648",
+        "#647",
+        "#631",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/design_research_approval.py, mcp_server.py, cli.py",
+      "migration_impact": "New plate_artifact_* tools and gh plate artifact. Approvals ledger under .agentic/approvals/. Artifacts are not authoritative until approved.",
+      "agent_notes": "Never treat Design/Research as planning authority until status=approved. Integrates with #631 feed via presentation_for_feed.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. After generating design/research docs, call plate_artifact_propose then present via ask_user_question.",
+        "3. On Approve: plate_artifact_decide decision=approve; link approved path into Feature/Epic.",
+        "4. Optionally gitignore .agentic/approvals/ for local-only, or commit for audit."
+      ],
+      "links": [
+        "#632",
+        "#654",
+        "#656",
+        "#631",
+        "#648"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/planning.py, cli.py, mcp_server.py, tests/test_planning.py",
+      "migration_impact": "plate_planning_start/build and gh plate plan honor durable spend remaining by default; over-budget returns blocked. Pass budget_remaining or use_live_budget=false to override.",
+      "agent_notes": "Parity with stubs/artifacts #634 hydrate. Closes #769. Related #634 #628 #630 #654.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer live hydrate (default) before starting or building plans.",
+        "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+        "4. Offline tests: --no-live-budget / use_live_budget=false."
+      ],
+      "links": [
+        "#769",
+        "#634",
+        "#628",
+        "#630",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/design_research_approval.py, design_validation.py",
+      "migration_impact": "Local only. Production base_dir=None still uses repo-root .agentic/budget. Callers passing base_dir get fully isolated spend.",
+      "agent_notes": "Completes budget base_dir isolation for remaining design surfaces after fleet/scheduled/stub/monitor/planning/packaging. Charge still happens on durable propose (intentional).",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release with this fix.",
+        "2. Tests with base_dir can use_live_budget=True safely.",
+        "3. If spend polluted: gh plate autonomy --budget-reset."
+      ],
+      "links": [
+        "#634",
+        "#632",
+        "#646",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/design_research_approval.py, cli.py, mcp_server.py, tests/test_design_research_approval.py",
+      "migration_impact": "plate_artifact_propose/resubmit and gh plate artifact honor durable spend remaining by default; over-budget returns blocked. Pass budget_remaining or use_live_budget=false to override.",
+      "agent_notes": "Parity with stubs/design-contract #634 hydrate. Closes #767. Related #634 #632 #654.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer live hydrate (default) before proposing or resubmitting artifacts.",
+        "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+        "4. Offline tests: --no-live-budget / use_live_budget=false."
+      ],
+      "links": [
+        "#767",
+        "#634",
+        "#632",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feature_media.py, cli.py, mcp_server.py",
+      "migration_impact": "plan_feature_media now defaults use_live_budget=true and may return blocked=true when remaining tokens are insufficient for Playwright GIF planning. Pass use_live_budget=false or budget_remaining for offline/tests.",
+      "agent_notes": "Continues #634 surface gates after ER planning (#771/#772). Does not close #634 fully (E2E budget proof still open on #654 checklist).",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer gh plate feature-media --json (or plate_feature_media_plan) and honor blocked budget responses.",
+        "3. Use --estimate-cost / plate_feature_media_estimate_cost before long capture sessions.",
+        "4. Override with --budget-remaining N or --no-live-budget only when intentional."
+      ],
+      "links": [
+        "#773",
+        "#634",
+        "#636",
+        "#654",
+        "#635"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/stubs.py, cli.py, mcp_server.py, tests/test_stubs.py",
+      "migration_impact": "plate_stub_* and gh plate stub honor durable spend remaining by default; over-budget author/create returns blocked. Pass budget_remaining or use_live_budget=false to override.",
+      "agent_notes": "Parity with design-contract/fleet/monitor #634 hydrate. Closes #765. Related #634 #637 #654.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer live hydrate (default) before authoring or creating stubs.",
+        "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+        "4. Offline tests: --no-live-budget / use_live_budget=false."
+      ],
+      "links": [
+        "#765",
+        "#634",
+        "#637",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/epic_release_planning.py, cli.py, mcp_server.py, tests/test_epic_release_planning.py",
+      "migration_impact": "plate_er_planning_start/build and gh plate er-plan honor durable spend remaining by default; over-budget returns blocked. Pass budget_remaining or use_live_budget=false to override.",
+      "agent_notes": "Parity with feature/product planning #634 hydrate. Closes #771. Related #634 #629 #640 #654 #769.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer live hydrate (default) before starting or building epic/release plans.",
+        "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+        "4. Offline tests: --no-live-budget / use_live_budget=false."
+      ],
+      "links": [
+        "#771",
+        "#634",
+        "#629",
+        "#640",
+        "#654",
+        "#769"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/scheduled_ops.py, cli.py, mcp_server.py, tests/test_scheduled_ops.py",
+      "migration_impact": "scheduled_op_run and gh plate scheduled-ops --run honor durable spend remaining by default; over-budget runs return blocked with budget reason. Pass budget_remaining or use_live_budget=false to override.",
+      "agent_notes": "Parity with feature_loop/bug_loop #634 hydrate. Does not close parent #634 UX stub. Closes #753. Related #641 #653 #654.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer live hydrate (default): plate_scheduled_op_run / gh plate scheduled-ops --run OP.",
+        "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+        "4. Disable hydrate only for offline tests: --no-live-budget / use_live_budget=false.",
+        "5. Status JSON includes budget_remaining_tokens and per-op estimates."
+      ],
+      "links": [
+        "#753",
+        "#634",
+        "#641",
+        "#654",
+        "#653"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/scheduled_ops.py",
+      "migration_impact": "Local only. dry_run scheduled ops skip budget_charge; live apply still charges. Callers with base_dir get isolated budget+ledger like fleet handoffs.",
+      "agent_notes": "dry_run must never call apply_live_budget_charge. Mirror this rule for any new gated surface. Pairs with fleet base_dir isolation and budget-reset.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release with this fix.",
+        "2. Prefer dry_run=true for previews; only dry_run=false applies spend.",
+        "3. If spend was already polluted, gh plate autonomy --budget-reset."
+      ],
+      "links": [
+        "#634",
+        "#641",
+        "#647",
+        "#654",
+        "#835"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/monitoring.py, autonomy.py, cli.py, mcp_server.py, tests/test_monitoring.py",
+      "migration_impact": "plate_monitor_* and gh plate monitor honor durable spend remaining by default; over-budget runs return blocked. Pass budget_remaining or use_live_budget=false to override.",
+      "agent_notes": "Parity with fleet/packaging/scheduled_ops #634 hydrate. Closes #761. Related #634 #642 #654.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer live hydrate (default) before discussion/market monitor runs.",
+        "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+        "4. Offline tests: --no-live-budget / use_live_budget=false.",
+        "5. AutonomyEngine procedure dispatch passes engine remaining into monitor procedures."
+      ],
+      "links": [
+        "#761",
+        "#634",
+        "#642",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/fleet.py, autonomy.py, cli.py, mcp_server.py, tests/test_fleet.py",
+      "migration_impact": "create_handoff and fleet_status hydrate remaining from durable spend by default; over-budget handoffs return blocked. Pass budget_remaining or use_live_budget=false to override. Engine procedure dispatch passes engine remaining into scheduled ops.",
+      "agent_notes": "Parity with feature_loop/bug_loop/scheduled_ops #634 hydrate. Does not close parent #634 UX stub. Closes #755. Related #644 #660 #654.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer live hydrate (default): plate_fleet_handoff / gh plate fleet --handoff.",
+        "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+        "4. Disable hydrate for offline tests: --no-live-budget / use_live_budget=false.",
+        "5. fleet_status JSON includes budget_remaining_tokens when hydrated."
+      ],
+      "links": [
+        "#755",
+        "#634",
+        "#644",
+        "#660",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/fleet.py",
+      "migration_impact": "Local only. Production create_handoff(base_dir=None) still uses repo-root .agentic/budget and .agentic/ledger. Callers that pass base_dir now get fully isolated budget+ledger+checkpoints.",
+      "agent_notes": "Pairs with checkpoint base_dir isolation and budget-reset. Prefer base_dir isolation over use_live_budget=False when testing live charge paths.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release with this fix.",
+        "2. Unit/integration tests that pass base_dir can safely use_live_budget=True without polluting operator spend.",
+        "3. If spend.json was already exhausted by prior test runs, use gh plate autonomy --budget-reset (feature #835)."
+      ],
+      "links": [
+        "#634",
+        "#644",
+        "#647",
+        "#654",
+        "#835"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/fleet.py, cli.py, mcp_server.py, tests/test_fleet.py",
+      "migration_impact": "fleet plan defaults to live remaining instead of fixed 20000 when budget_tokens omitted. Zero remaining returns blocked. Explicit budget_tokens still wins.",
+      "agent_notes": "Complements create_handoff hydrate (#755). Closes #759. Related #634 #644 #654.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer omit budget_tokens so plans hydrate from spend.json.",
+        "3. Explicit pool: budget_tokens=N or --budget-tokens N.",
+        "4. Offline tests: use_live_budget=false / --no-live-budget.",
+        "5. Inspect budget_remaining_tokens on plan JSON."
+      ],
+      "links": [
+        "#759",
+        "#634",
+        "#644",
+        "#755",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/design_validation.py, cli.py, mcp_server.py, tests/test_design_validation.py",
+      "migration_impact": "plate_design_contract_propose and gh plate design-contract honor durable spend remaining by default; over-budget proposals return blocked. Pass budget_remaining or use_live_budget=false to override.",
+      "agent_notes": "Parity with fleet/packaging/monitor #634 hydrate. Closes #763. Related #634 #646 #654.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer live hydrate (default) before proposing design contracts.",
+        "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+        "4. Offline tests: --no-live-budget / use_live_budget=false."
+      ],
+      "links": [
+        "#763",
+        "#634",
+        "#646",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/packaging.py, cli.py, mcp_server.py, tests/test_packaging.py",
+      "migration_impact": "plate_packaging_build and gh plate packaging honor durable spend remaining by default; over-budget builds return blocked. Never auto-publishes. Pass budget_remaining or use_live_budget=false to override.",
+      "agent_notes": "Parity with feature/bug/scheduled_ops/fleet #634 hydrate. Does not close parent #634 UX stub. Closes #757. Related #652 #641 #654.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer live hydrate (default) before packaging builds.",
+        "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+        "4. Disable hydrate for offline tests: --no-live-budget / use_live_budget=false.",
+        "5. Human marketplace publish remains Tasks #380/#381/#626."
+      ],
+      "links": [
+        "#757",
+        "#634",
+        "#652",
+        "#641",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/costs.py",
+      "migration_impact": "Local only. Cost/risk feed items and gh plate costs budget section ignore prior UTC day durable spend, matching AutonomyEngine and plate_pm_status.",
+      "agent_notes": "Always hydrate durable spend via get_budget_snapshot for operator surfaces. Pair with 634-660-pm-budget-day-rollover. Do not reintroduce load_budget_spend without spend_is_today.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release with this fix.",
+        "2. Re-run gh plate costs / plate cost dashboard; pressure should be ok when spend.json date is not today.",
+        "3. PM with repo set no longer re-imports stale cost pressure from the dashboard path."
+      ],
+      "links": [
+        "#634",
+        "#653",
+        "#660",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "Local only. Operators may still see stale counters inside .agentic/budget/spend.json until the next charge rewrites today's date; status/pressure surfaces now ignore prior UTC days.",
+      "agent_notes": "Always prefer get_budget_snapshot for remaining/pressure/burn. Never derive PM pressure from raw spend.json without spend_is_today. what_next ranks PM after budget pressure clears.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release with this fix.",
+        "2. Re-run plate_pm_status / get_pm_status; budget_pressure should be ok when spend.json date is not today.",
+        "3. Optional: delete or rewrite .agentic/budget/spend.json if local test debris remains (file is gitignored)."
+      ],
+      "links": [
+        "#634",
+        "#660",
+        "#653",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/autonomy.py",
+      "migration_impact": "MCP/CLI autonomy status JSON gains additive fields. Feed and what_next consumers can read pressure/pause without a separate cost dashboard call.",
+      "agent_notes": "Prefer plate_autonomy_status.budget_pressure and would_pause_next_cycle for surface gates under risk=off. Set AutonomyEngine.budget_base_dir in tests for isolation.",
+      "links": [
+        "#634",
+        "#653",
+        "#470"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/costs.py, feed.py (via cost dashboard signals)",
+      "migration_impact": "Operators with risk=off now see budget_gate in feed/dashboard when remaining is exhausted or critical. Elevated-only burn while engine off ranks lower (rank 22).",
+      "agent_notes": "Pairs with #785 loop hydrate-when-risk-off. Do not hide budget pressure because the engine is parked.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate costs --dashboard / plate_feed should show budget_gate under risk=off when spend is high.",
+        "3. risk_tolerance=off still disables AutonomyEngine cycles only."
+      ],
+      "links": [
+        "#787",
+        "#634",
+        "#653",
+        "#631",
+        "#785",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/autonomy.py,fleet.py",
+      "migration_impact": "budget_pressure value 'high' is no longer emitted from get_budget_snapshot; consumers that only checked critical/exhausted now correctly treat low remaining as critical. Fleet status/plan with base_dir no longer read operator spend.json.",
+      "agent_notes": "Treat budget_pressure as ok|elevated|critical|exhausted only. Prefer base_dir for fleet plan/status isolation in tests.",
+      "links": [
+        "#634",
+        "#653",
+        "#644",
+        "#660"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/autonomy.py,costs.py",
+      "migration_impact": "Snapshots/dashboards with rem < per_cycle report critical (not elevated) and surface would_pause_next_cycle even when autonomy risk=off. Feed budget_gate fires more consistently.",
+      "agent_notes": "Treat rem < per_cycle as critical pressure + would_pause_next_cycle. enforcement_active still false under risk=off.",
+      "links": [
+        "#634",
+        "#653",
+        "#787"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/autonomy.py,costs.py,pm.py,scheduled_ops.py",
+      "migration_impact": "No downstream config. Consumers may read would_pause_next_cycle from snapshots; isolated PM/dashboard/ops status no longer clobber operator spend.",
+      "agent_notes": "Prefer would_pause_next_cycle (alias of would_pause) when wiring feed/PM. Pass budget_base_dir into get_cost_dashboard when ProjectManager.budget_base_dir is set.",
+      "links": [
+        "#634",
+        "#653",
+        "#660",
+        "#641"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/autonomy.py",
+      "migration_impact": "Snapshots with low remaining now set would_pause_next_cycle=true without requiring estimated_tokens. Consumers that only checked would_pause after an estimate now see the gate earlier.",
+      "agent_notes": "Treat would_pause_next_cycle as true when remaining < per_cycle (or remaining=0). Pressure remains critical/exhausted independently.",
+      "links": [
+        "#634",
+        "#653",
+        "#660"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, feature_loop.py, cli.py, mcp_server.py, tests/",
+      "migration_impact": "New CLI flag --budget and MCP plate_autonomy_budget. Feature loop start may block when live budget pressure + estimate exceed rails (only when .plate autonomy enabled and risk != off). Explicit budget_remaining still wins; use_live_budget=false opts out.",
+      "agent_notes": "Prefer plate_autonomy_budget before long feature_loop starts. risk-off repos see snapshot limits but do not auto-block starts. Pairs with durable spend (#634) and cost dashboard (#653).",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Inspect rails: gh plate autonomy --budget [--estimate-tokens N] --json or plate_autonomy_budget.",
+        "3. Feature loop start without --budget-remaining hydrates from spend.json when autonomy is on.",
+        "4. Pass --budget-remaining or use_live_budget=false for isolated/test starts."
+      ],
+      "links": [
+        "#735",
+        "#634",
+        "#653",
+        "#639",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, cli.py, mcp_server.py",
+      "migration_impact": "Additive CLI/MCP flags. Local spend.json may be zeroed intentionally; does not alter token_budget or risk_tolerance. Downstream adopters get a safe way to clear test/loop debris that false-exhausted what_next budget_gate.",
+      "agent_notes": "reset_budget_spend is operator hygiene, not a bypass of live gates for unsupervised AutonomyEngine runs. Keep risk_off vs enforce semantics. Always isolate tests via base_dir.",
+      "migration_guidance": [
+        "1. When plate_what_next prioritizes budget_gate but risk_tolerance=off and spend is test debris: gh plate autonomy --budget-reset (or plate_autonomy_budget reset=true).",
+        "2. Re-run gh plate autonomy --budget / plate_what_next; remaining should restore to daily limit.",
+        "3. Prefer use_live_budget=False in unit tests so spend.json is not charged outside isolated base_dir."
+      ],
+      "links": [
+        "#634",
+        "#653",
+        "#654",
+        "#787"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, planning.py, epic_release_planning.py, scheduled_ops.py, fleet.py, feature_media.py",
+      "migration_impact": "Live gated actions now deplete .agentic/budget/spend.json remaining after success (not only hydrate/block). use_live_budget=false still skips charge for tests/dry overrides.",
+      "agent_notes": "Extends #775/#776 beyond feature_media. Packaging/monitoring/stubs can adopt apply_live_budget_charge in follow-ups.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Expect spent_today to rise after live planning/ops/fleet/media success paths.",
+        "3. Inspect with gh plate autonomy --budget / get_budget_snapshot.",
+        "4. Tests: pass use_live_budget=false to avoid charging repo spend."
+      ],
+      "links": [
+        "#777",
+        "#634",
+        "#775",
+        "#776",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feature_loop.py, bug_loop.py",
+      "migration_impact": "Live feature/bug loop starts increment spend.json. Tests must pass use_live_budget=false.",
+      "agent_notes": "Completes charge-on-success for implement/bug loops after packaging/monitoring/stubs (#779).",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Expect spent_today growth after live loop starts.",
+        "3. Use --no-live-budget / use_live_budget=false for dry tests."
+      ],
+      "links": [
+        "#781",
+        "#634",
+        "#638",
+        "#639",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/packaging.py, monitoring.py, stubs.py, design_validation.py, design_research_approval.py",
+      "migration_impact": "More live gated actions now deplete spend.json after success. Keep use_live_budget=false in unit tests.",
+      "agent_notes": "Completes the #634 charge-on-success pass started in #775\u2013#778. Loops (feature/bug) already hydrate; charge there is optional follow-up.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Expect spent_today growth after live package/monitor/stub/design/artifact success.",
+        "3. Inspect with gh plate autonomy --budget.",
+        "4. Tests: use_live_budget=false."
+      ],
+      "links": [
+        "#779",
+        "#634",
+        "#777",
+        "#778",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/cli.py",
+      "migration_impact": "CLI text output only (JSON already had fields from AutonomyStatus). Operators see pressure without --json.",
+      "agent_notes": "Prefer autonomy --status for human scans of #634 rails; use --json for machine parsing of budget_pressure and would_pause_next_cycle.",
+      "links": [
+        "#634",
+        "#653",
+        "#470"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, costs.py, tests/test_autonomy.py",
+      "migration_impact": "New local file .agentic/budget/spend.json (gitignored). AutonomyEngine.enforce_budget persists spend and enforces cost_ceiling_usd. No .plate schema change (uses existing token_budget + cost_ceiling_usd).",
+      "agent_notes": "risk_tolerance=off still skips enforcement (manual mode). Prefer pause for production ceilings. Do not delete spend.json mid-day to bypass limits. Pairs with #653 dashboard feed items.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Set autonomy.token_budget.{daily,per_cycle,action} and optional cost_ceiling_usd in .plate.",
+        "3. Long --loop / multi-process hosts now share durable spend counters for the UTC day.",
+        "4. On PAUSE from budget or ceiling, inspect plate_autonomy_status / cost dashboard before raising caps."
+      ],
+      "links": [
+        "#634",
+        "#653",
+        "#470",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/feature_media.py,feature_loop.py,bug_loop.py",
+      "migration_impact": "No downstream config change. Tests and callers that pass base_dir without budget_base_dir no longer write operator .agentic/budget/spend.json.",
+      "agent_notes": "When starting feature_media, feature_loop, or bug_loop with an isolated base_dir, omit budget_base_dir to auto-use base_dir/budget (same pattern as design_validation #846).",
+      "links": [
+        "#634",
+        "#638",
+        "#639",
+        "#636"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/health.py, cli.py",
+      "migration_impact": "Additive health fields only. Agents may read budget_* keys from plate_health / gh plate health --json.",
+      "agent_notes": "Complements #653 cost dashboard and charge-on-success gates. Does not change health pass/warn/fail scoring.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer gh plate health --json budget_* or human Budget (#634) line.",
+        "3. Full dashboard remains plate_costs / autonomy --budget."
+      ],
+      "links": [
+        "#783",
+        "#634",
+        "#653",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/feature_loop.py, bug_loop.py",
+      "migration_impact": "Live loop starts may now block or charge when remaining is low even if autonomy risk is off. Pass use_live_budget=false to skip.",
+      "agent_notes": "Aligns surface budget gates with AGENTS.md: risk-off blocks engine autopilot, not Feature/Bug implementation rails.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Expect live loop starts to honor spend.json remaining regardless of risk_tolerance.",
+        "3. risk_tolerance=off still disables AutonomyEngine cycles only."
+      ],
+      "links": [
+        "#785",
+        "#634",
+        "#638",
+        "#639",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, plate_config.py, agent_guidance.py",
+      "migration_impact": "Additive .plate key autonomy.token_budget.per_action (integer tokens). Unset means unlimited per action (prior behavior). Operators can cap a single implement/plan step without lowering daily/cycle rails.",
+      "agent_notes": "per_action is not the same as token_budget.action (policy: pause|throttle|warn). Prefer pause policy for hard single-action caps. Do not claim #634 fully E2E-closed without operator proof of long /loop budget safety.",
+      "migration_guidance": [
+        "1. Upgrade plate-core.",
+        "2. Optionally set .plate autonomy.token_budget.per_action (e.g. 4000) alongside daily/per_cycle and action policy.",
+        "3. Verify with gh plate autonomy --budget or get_budget_snapshot estimate that oversize estimates gate with : per_action.",
+        "4. risk_tolerance=off still skips AutonomyEngine enforce; snapshot still reports the limit."
+      ],
+      "links": [
+        "#634",
+        "#653",
+        "#654",
+        "#470"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/planning.py, packaging.py, epic_release_planning.py",
+      "migration_impact": "Local only. persist=False / persist_pending=False previews no longer deplete spend.json. Live persist still charges.",
+      "agent_notes": "Charge only on durable success (persist). Pairs with scheduled-ops, stubs, monitor dry_run fixes.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release with this fix.",
+        "2. Use persist=False for free previews; persist=True for durable sessions/packages.",
+        "3. If spend was polluted: gh plate autonomy --budget-reset."
+      ],
+      "links": [
+        "#634",
+        "#628",
+        "#630",
+        "#629",
+        "#640",
+        "#652",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, feature_media.py",
+      "migration_impact": "Live feature-media plans now increment spend.json. Surface gates that passed estimate_tokens (not estimated_tokens) now correctly compute would_pause/remaining. Offline tests should keep use_live_budget=false.",
+      "agent_notes": "Closes two #634 gaps: (1) gates never charged spend; (2) estimate_tokens kwarg was ignored so live hydrate failed silently. First charge consumer is #636 plan_feature_media.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Expect spent_today to rise after live plan_feature_media / future wired surfaces.",
+        "3. Use get_budget_snapshot / gh plate autonomy --budget to inspect remaining.",
+        "4. Tests and dry-runs: pass use_live_budget=false to avoid charging.",
+        "5. Prefer estimated_tokens; estimate_tokens remains a supported alias."
+      ],
+      "links": [
+        "#775",
+        "#634",
+        "#773",
+        "#774",
+        "#636",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/stubs.py, src/plate_core/monitoring.py",
+      "migration_impact": "Local only. dry_run/preview paths skip budget_charge; live create/persist still charges. Matches scheduled_ops dry_run fix.",
+      "agent_notes": "Never charge on dry_run create_stub_issue. Monitoring: charge only when persist. Pairs with scheduled-ops and fleet isolation.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release with this fix.",
+        "2. Prefer dry_run=true / persist=false for previews.",
+        "3. If spend was polluted: gh plate autonomy --budget-reset."
+      ],
+      "links": [
+        "#634",
+        "#637",
+        "#642",
+        "#654",
+        "#839"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/what_next.py,health.py",
+      "migration_impact": "what_next may return budget_gate more often when remaining is below per_cycle. Health JSON gains two additive budget boolean fields.",
+      "agent_notes": "Treat would_pause_next_cycle as a hard surface gate equivalent to critical pressure for starting large work. Health budget_would_pause_next_cycle mirrors the snapshot alias.",
+      "links": [
+        "#634",
+        "#653",
+        "#789"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/release_media.py, release.py, scripts/render_release_notes.py, scripts/cut_release.py, cli.py, mcp_server.py, .agentic/releases/unreleased/README.md",
+      "migration_impact": "Fragments may include optional media[]. cut_release writes media + media_markdown into release.json. Capture GIFs via e2e tooling then reference path; approve before shipping preferred.",
+      "agent_notes": "First slice of #635 \u2014 schema + render + approval helpers. Does not auto-record Playwright GIFs (see #636 / record-e2e-gif). Prefer only_approved media for public Release body.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. On Feature fragments add media: [{type:\"gif\", path:\"tests/e2e/fixtures/gifs/foo.gif\", caption:\"...\", approval_status:\"pending\"}].",
+        "3. gh plate release-media / plate_release_media_manifest to list; approve via feed or set approval_status approved.",
+        "4. cut_release aggregates into release notes and GitHub Release body helpers."
+      ],
+      "links": [
+        "#635",
+        "#636",
+        "#654",
+        "#639"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feature_media.py, feature_loop.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+      "migration_impact": "Optional local registry .agentic/feature_media/ (gitignored). Agents should plan+record+approve media for user-facing Features before merge; skip only with reason.",
+      "agent_notes": "First slice of #636 \u2014 registry + approval + fragment attach. Does not replace record_e2e_gif implementation. Pairs with #635 release notes media and #639 feature_loop.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate feature-media --feature N --title \"...\" (or plate_feature_media_plan).",
+        "3. record_e2e_gif with returned test_name; plate_feature_media_register.",
+        "4. Approve via feed; plate_feature_media_attach_fragment to unreleased fragment."
+      ],
+      "links": [
+        "#636",
+        "#635",
+        "#639",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/stubs.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+      "migration_impact": "Optional local drafts under .agentic/stubs/ (gitignored). Create on GitHub is dry-run by default. Complements plate_task_create and planning sessions.",
+      "agent_notes": "First slice of Epic #637 \u2014 local lifecycle + GitHub create. Full Q&A-driven multi-turn loops, Design/Research artifact commits, and automatic Epic sub-issue linking remain follow-ups. Prefer dry_run until human/checkpoint allows create.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Author: gh plate stub --intent \"...\" --type Feature (or plate_stub_author).",
+        "3. Refine: plate_stub_refine; create: plate_stub_create dry_run=false / gh plate stub --create <id> --apply.",
+        "4. Feed surfaces drafts awaiting create/refine."
+      ],
+      "links": [
+        "#637",
+        "#654",
+        "#359",
+        "#642",
+        "#631"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pr_babysit.py, bug_loop.py, feature_loop.py, tests/",
+      "migration_impact": "Bug/feature loop advance with gates= now also requires green/settled CI and no CHANGES_REQUESTED. get_pr_merge_gates returns additive fields (review_decision, ci_*, loop_advance_*). No .plate schema change.",
+      "agent_notes": "evaluate_babysit_gates is pure and shared \u2014 prefer it over hand-rolled merge_state checks. risk-off still never auto-merges; merge_eligible only reports readiness. Pairs with #648 checkpoints and #605 outdated thread resolve.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. When advancing loops, pass gates from plate_get_pr_merge_gates / get_pr_merge_gates (or equivalent) so CI + review decision are checked.",
+        "3. Expect advance to stay on babysit while checks pending or failing; re-tick after CI settles.",
+        "4. Human CHANGES_REQUESTED remains a hard babysit hold (address feedback before advance)."
+      ],
+      "links": [
+        "#734",
+        "#638",
+        "#639",
+        "#654",
+        "#526",
+        "#605",
+        "#648"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/bug_loop.py, pm.py, cli.py, mcp_server.py, tests/test_bug_loop.py",
+      "migration_impact": "Bug loop start may block when autonomy enabled and estimate exceeds remaining spend. Default use_live_budget=true; pass use_live_budget=false or explicit budget_remaining for isolated starts. Additive fields on runs/feed.",
+      "agent_notes": "risk-off repos do not live-block (enabled=false). Mirrors feature_loop hydrate. Does not spend tokens into spend.json on start (estimate only).",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate bug-loop --bug N --size medium [--budget-remaining T | --no-live-budget].",
+        "3. PM bugfix dispatch inherits assignment budget remaining.",
+        "4. Inspect run.cost_estimate_tokens and blocked errors on start."
+      ],
+      "links": [
+        "#751",
+        "#638",
+        "#634",
+        "#639",
+        "#660",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/bug_loop.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+      "migration_impact": "Optional local runs under .agentic/bug_loops/ (gitignored). Orchestration contracts only \u2014 agents still execute git/PR work via existing babysit/TDD flows. Human checkpoint when risk high or need:human-review.",
+      "agent_notes": "First orchestration slice of Epic #638. Full worktree TDD automation, auto draft-PR creation, and risk-gated auto-merge remain follow-ups. Prefer dry_run ticks; integrate with #645/#648 for high impact.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Start: gh plate bug-loop --bug N --title \"...\" or plate_bug_loop_start.",
+        "3. Follow packet steps; advance with plate_bug_loop_advance; babysit stage uses plate_pr_babysit + gates.",
+        "4. risk-off / requires_human: stop at human_checkpoint; do not self-merge."
+      ],
+      "links": [
+        "#638",
+        "#654",
+        "#470",
+        "#605",
+        "#648"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feature_loop.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+      "migration_impact": "Optional local runs under .agentic/feature_loops/ (gitignored). Orchestration contracts only; agents execute work via existing TDD/babysit/fragment flows. Budget remaining can block start.",
+      "agent_notes": "First orchestration slice of Epic #639. Full auto draft-PR creation, Playwright media capture (#636), and design contracts (#646) remain follow-ups. Prefer dry_run ticks; pair with #638 bug loop and #634 budgets.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Estimate: gh plate feature-loop --estimate --size medium --design --e2e",
+        "3. Start: plate_feature_loop_start / gh plate feature-loop --feature N --title \"...\"",
+        "4. Advance stages; babysit with plate_pr_babysit; human_checkpoint for media/high risk."
+      ],
+      "links": [
+        "#639",
+        "#638",
+        "#654",
+        "#646",
+        "#636",
+        "#634"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/epic_release_planning.py, mcp_server.py, cli.py",
+      "migration_impact": "New plate_er_planning_* tools and gh plate er-plan. Independent of feature/product planning surfaces. Host creates issues only after approval.",
+      "agent_notes": "Use ask_user_question per next_question. Complements plate_plan_epic risk stubs. Approval gate required before GitHub mutations.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Epic: plate_er_planning_start kind=epic \u2192 answer \u2192 build \u2192 approve \u2192 create Epic+children.",
+        "3. Release: kind=release for scope + notes skeleton; do not cut/tag without ceremony.",
+        "4. high risk auto-adds a second Feature stub; off yields Epic body only."
+      ],
+      "links": [
+        "#640",
+        "#629",
+        "#654",
+        "#656",
+        "#470"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/epic_release_planning.py, planning.py, feed.py, cli.py, mcp_server.py",
+      "migration_impact": "New MCP plate_er_planning_decide / plate_er_planning_list_pending; CLI gh plate er-plan --decide/--list-pending/--feed. Feature planning feed excludes epic/release kinds to avoid double-ranking. Approve does not create issues or cut releases.",
+      "agent_notes": "Never cut/tag on release plan approve. Incomplete ER sessions live under .agentic/planning/er_sessions/. Pending plans shared with feature planning under .agentic/planning/pending/.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. After plate_er_planning_build, present ask_user_question from plan or feed.",
+        "3. Decide: plate_er_planning_decide plan_id approve|revise|reject (or gh plate er-plan --decide ID).",
+        "4. On approve epic: create Epic + children stubs; on approve release: link scope + notes skeleton only \u2014 no tag/cut."
+      ],
+      "links": [
+        "#640",
+        "#629",
+        "#630",
+        "#628",
+        "#631",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/epic_release_planning.py, cli.py, mcp_server.py, tests/test_epic_release_planning.py",
+      "migration_impact": "ER revise no longer leaves plans invisible in feed. Approve after revise requires resubmit. New MCP tool and CLI flags. History via shared planning ledger.",
+      "agent_notes": "Parity with #630 feature planning resubmit. Does not create Epics/Releases or cut tags on approve. Feature plans remain on plate plan surfaces.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. On revise: plan stays pending with resubmit option.",
+        "3. After edits: gh plate er-plan --resubmit ID or plate_er_planning_resubmit.",
+        "4. Then plate_er_planning_decide approve."
+      ],
+      "links": [
+        "#745",
+        "#640",
+        "#629",
+        "#630",
+        "#656",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/scheduled_ops.py",
+      "migration_impact": "run_scheduled_op(dry_run=false) for safe ops returns fleet_dispatch with handoff_id and stores metadata.fleet_handoff_id. Accept handoff to open feature loops (#820). Pass dispatch_fleet=false to disable.",
+      "agent_notes": "risk_tolerance=off skips fleet dispatch. Does not complete #641 E2E deploy story. Human Tasks #380/#381/#626 still required for real marketplace/PyPI publish.",
+      "migration_guidance": [
+        "1. Upgrade plate-core.",
+        "2. Dry-run: gh plate scheduled-ops / plate_scheduled_op_run dry_run=true \u2014 see fleet_dispatch.would_create_handoff.",
+        "3. Live: dry_run=false creates handoff; gh plate fleet --list then --update ID --status accepted.",
+        "4. Deploy/marketplace ops remain human-gated; never auto-publish."
+      ],
+      "links": [
+        "#641",
+        "#644",
+        "#654",
+        "#659"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/scheduled_ops.py, autonomy.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .agentic/procedures/*, .gitignore",
+      "migration_impact": "New procedures under .agentic/procedures/ and local ledger .agentic/scheduled_ops/ (gitignored). High/critical ops require approved or checkpoint; marketplace publish remains human Task.",
+      "agent_notes": "First orchestration slice of Epic #641 \u2014 packets + gates, not full auto cut/deploy. Pair with #638/#639 loops, #635 media, human Tasks for marketplace.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate scheduled-ops --status / plate_scheduled_ops_status.",
+        "3. Dry-run: plate_scheduled_op_run op_id=scheduled-refactor dry_run=true.",
+        "4. High risk: open checkpoint + approved=true before apply; never silent deploy/publish."
+      ],
+      "links": [
+        "#641",
+        "#654",
+        "#470",
+        "#639",
+        "#635"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/monitoring.py, autonomy.py, feed.py, mcp_server.py, cli.py, .agentic/procedures/, .gitignore",
+      "migration_impact": "New low-risk weekly procedures weekly-discussion-review and market-condition-monitor. Optional local .agentic/monitoring/ (gitignored). Market path requires host-injected signals (no core network scrape).",
+      "agent_notes": "First real #642 surface \u2014 propose + feed + procedures, not silent issue creation. Live Ideas fetch only when fetch_live/apply. Epic #659 scheduled ops still owns broader deploy/refactor cadence.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Dry-run: gh plate monitor --json or plate_monitor_discussions; market via plate_monitor_market with signals.",
+        "3. Persist: --apply / dry_run=false; approve proposals via plate_monitor_decide before creating GitHub issues.",
+        "4. AutonomyEngine: procedures appear in list; run_procedure dispatches discussion/market handlers."
+      ],
+      "links": [
+        "#642",
+        "#654",
+        "#659",
+        "#631",
+        "#470"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/scheduled_ops.py",
+      "migration_impact": "New op ids in scheduled-ops catalog. Live runs open market-monitor handoffs; monitoring proposals still require human decide before Issues. No auto-fetch of GitHub Discussions unless host enables fetch path later.",
+      "agent_notes": "Does not auto-create Issues from discussions. Market signals must be injected by host (no silent network scrape in scheduled op path).",
+      "migration_guidance": [
+        "1. Upgrade plate-core.",
+        "2. gh plate scheduled-ops / plate_scheduled_op_run op_id=review-discussions dry_run=true.",
+        "3. Live: dry_run=false opens fleet handoff; accept to run market-monitor follow-through.",
+        "4. Approve monitor proposals via plate_monitoring_decide before creating Issues."
+      ],
+      "links": [
+        "#642",
+        "#641",
+        "#644",
+        "#654",
+        "#659"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/collab.py, pm.py, feed.py, agent_guidance.py, mcp_server.py, cli.py",
+      "migration_impact": "Optional driver:* labels on issues/PRs. PM run_cycle reports human_paused. Agents should call plate_collab_check before force-push/auto-merge. Labels must exist in repo or be created if adopted.",
+      "agent_notes": "First slice of #643; full PM webhook/driver field and collab metrics remain follow-ups. Issue stays open as stub for richer flows. Does not close #643 if epic-scale work remains \u2014 this PR uses Closes only if slice is accepted as first ship.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. To claim human ownership of an item: add label driver:human (PM/autonomy pause auto-work).",
+        "3. Collaborative handoffs: driver:collaborative + need:human-review as needed.",
+        "4. gh plate collab --action force_push --mix mixed (or plate_collab_check) before risky git ops."
+      ],
+      "links": [
+        "#643",
+        "#654",
+        "#660",
+        "#496",
+        "#631"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/fleet.py, src/plate_core/spec_audit.py, SPEC.md, .gitignore",
+      "migration_impact": "Local only: existing junk pending Deploy-prod checkpoints under .agentic/checkpoints/ may be cancelled (gh plate checkpoint decide <id> --decision cancel) or deleted; directory is now gitignored like other ephemeral .agentic runtime state. SPEC path wording and audit heuristics change; no template payload force-copy.",
+      "agent_notes": "create_handoff(base_dir=...) now writes checkpoints to base_dir/checkpoints. Never create high-risk fleet handoffs against the real repo root during unit tests. SPEC is human-owned; this PR only fixes false path citations and documents already-landed surfaces.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release branch containing this fix.",
+        "2. If plate_pm_status or autonomy shows open_checkpoints from test Deploy prod handoffs, cancel them: gh plate checkpoint list --open then decide cancel.",
+        "3. Re-run gh plate spec-audit; stale /loop /mcp findings should clear; remaining undocumented findings need real SPEC intent updates.",
+        "4. Optional: rm -rf .agentic/checkpoints/ after cancelling if only local test debris remains."
+      ],
+      "links": [
+        "#644",
+        "#648",
+        "#338",
+        "#340",
+        "#654",
+        "#634",
+        "#616"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/fleet.py, feed.py",
+      "migration_impact": "create_handoff gains budget_remaining and open_checkpoint. High-risk handoffs may status=blocked until accepted. list active includes blocked. New handoff_from_pm_assignment helper. No config break.",
+      "agent_notes": "Do not execute blocked handoffs until accepted. Prefer checkpoint_id on handoff context for resume. Quiet ops still apply for fleet cycles.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Pass budget_remaining when creating handoffs under tight budgets.",
+        "3. Accept blocked high-risk handoffs via plate_fleet_update --status accepted after checkpoint approve.",
+        "4. PM loops may call handoff_from_pm_assignment after assign_work for multi-agent execution."
+      ],
+      "links": [
+        "#644",
+        "#660",
+        "#648",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/fleet.py",
+      "migration_impact": "update_handoff(status=accepted) now defaults dispatch_work=True and may create feature_loop/bug_loop/artifact ids under handoff.context. Pass dispatch_work=false to accept without side effects. Idempotent via context.dispatched.",
+      "agent_notes": "Does not auto-merge, deploy, or approve artifacts. Second accept is no-op for dispatch. Browser #661 still out of scope.",
+      "migration_guidance": [
+        "1. Upgrade plate-core.",
+        "2. Accept handoffs with gh plate fleet --update ID --status accepted (or MCP equivalent).",
+        "3. Inspect handoff.context.loop_run_id / artifact_proposal_id and continue via loop tick or plate_artifact_decide.",
+        "4. Deployer/planner handoffs remain packet_only (human ceremony)."
+      ],
+      "links": [
+        "#644",
+        "#660",
+        "#632",
+        "#638",
+        "#639",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/fleet.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+      "migration_impact": "Optional local fleet state in .agentic/fleet/ (gitignored). Complements PM personas (#660) and plate_delegate_to_agent; does not auto-spawn remote agents.",
+      "agent_notes": "First slice of Epic #644 \u2014 contracts + coordination only. Full multi-runtime spawn, webhooks, and cross-host scheduling remain follow-ups. Prefer dry_run plan before create when risk unknown.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate fleet --roles / plate_fleet_roles to see fleet catalog.",
+        "3. Dry-run: gh plate fleet --plan \"...intent...\" or plate_fleet_plan; --apply/create to open handoffs.",
+        "4. Complete with plate_fleet_complete; watch feed for active handoffs."
+      ],
+      "links": [
+        "#644",
+        "#660",
+        "#654",
+        "#470",
+        "#631"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/checkpoint.py, src/plate_core/autonomy.py",
+      "migration_impact": "Local only. Existing duplicate pending checkpoints remain until cancelled; new gate calls reuse one open checkpoint per action_kind.",
+      "agent_notes": "create_checkpoint_for_shadow(dedupe=True) is default. Prefer find_open_checkpoint before opening new high-impact pause gates. Tests must still isolate checkpoint_base_dir.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release with this fix.",
+        "2. Optional cleanup: gh plate checkpoint list --open; cancel obsolete deploy spam with decide cancel.",
+        "3. Re-run gate_high_impact / plate autonomy simulate + gate; second call should return the same checkpoint_id."
+      ],
+      "links": [
+        "#645",
+        "#648",
+        "#660",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/checkpoint.py, src/plate_core/pm.py",
+      "migration_impact": "Existing pending shadow-deploy checkpoints created under risk=off may still have pause_autonomy=true; cancel them once (gh plate checkpoint decide <id> --decision cancel) or re-run gate after upgrade. New shadow gates at risk=off are advisory only.",
+      "agent_notes": "create_checkpoint_for_shadow(risk=off or autonomy_enabled=False) records pending approval artifacts for feed/ledger but does not pause PM/AutonomyEngine. Live pause still applies when autonomy is enabled and risk > off. PM _count_open_checkpoints uses list_open_checkpoints (pause_autonomy filter).",
+      "migration_guidance": [
+        "1. Upgrade plate-core to a release that includes this fix.",
+        "2. List open pause gates: gh plate checkpoint list (or inspect .agentic/checkpoints).",
+        "3. Cancel stale risk=off shadow-only pending checkpoints that should not freeze PM.",
+        "4. Confirm plate_pm_status open_checkpoints drops when only advisory gates remain."
+      ],
+      "links": [
+        "#887",
+        "#645",
+        "#648",
+        "#660",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, tests/test_autonomy.py",
+      "migration_impact": "New on-disk previews under .agentic/shadow/<shadow_id>.json (repo-local, similar to checkpoints/ledger). Blocked high-impact gates may create pending checkpoints under .agentic/checkpoints/. No config schema change.",
+      "agent_notes": "Prefer durable shadow_ack over re-simulate (re-simulate mints a new id). When status=shadow_required, surface checkpoint in feed and pause unsupervised cycles. Full worktree/fork shadow diffs remain a later #645 slice.",
+      "migration_guidance": [
+        "1. Upgrade plate_core so plate_autonomy_simulate persists shadow_id durably.",
+        "2. After simulate in one process/session, pass the same shadow_id + approved to gate/run_procedure in another process.",
+        "3. On shadow_required, read checkpoint_id and decide via plate_checkpoint_decide / gh plate checkpoint decide.",
+        "4. Optionally gitignore .agentic/shadow/ and .agentic/checkpoints/ if local-only (ledger/checkpoint conventions already apply)."
+      ],
+      "links": [
+        "#645",
+        "#648",
+        "#654",
+        "#470"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, scheduled_ops.py",
+      "migration_impact": "ShadowReport gains predicted_diff and worktree_plan fields (additive). simulate/gate JSON includes them. Scheduled op dry-runs return shadow_report. Scope skip_git_preview=true disables git calls; base_ref/cwd override defaults.",
+      "agent_notes": "Does not auto-create worktrees or run remote forks. Prefer base_ref=origin/release (legacy). Never force-push or publish from shadow worktree.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. On plate_autonomy_simulate / gate_high_impact: review predicted_diff.stat and worktree_plan before approving high/critical.",
+        "3. Optional: create worktree via worktree_plan.create_commands for isolated tests; always cleanup.",
+        "4. scheduled-ops medium+ dry_run packets include shadow_id; pass through to checkpoint when gating deploy/release."
+      ],
+      "links": [
+        "#645",
+        "#641",
+        "#648",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, mcp_server.py, cli.py, agent_guidance.py",
+      "migration_impact": "New MCP tool plate_autonomy_simulate and CLI flag --simulate. High-risk procedures at low risk_tolerance return status=shadow_required instead of executing. No breaking config changes.",
+      "agent_notes": "Prefer plate_autonomy_simulate before high-impact autonomy. Do not treat dry_run alone as sufficient for critical actions. Worktree/fork full shadow diffs remain follow-up under #645.",
+      "migration_guidance": [
+        "1. Upgrade plate_core / gh-plate / plate-mcp to pick up autonomy simulate surfaces.",
+        "2. Before deploy/release_cut/auto_merge: call plate_autonomy_simulate (or --simulate) and present ShadowReport to the human.",
+        "3. Only execute after shadow_ack + approved=True for critical actions; high-risk procedures honor the same gate at low tolerance."
+      ],
+      "links": [
+        "#645",
+        "#654",
+        "#470",
+        "#648"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/design_validation.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+      "migration_impact": "Optional local contracts under .agentic/design_contracts/ (gitignored). Feature loops should set needs_design_validation and require approved contracts before merge of UI Features.",
+      "agent_notes": "First slice of #646 \u2014 contract ledger + scaffolds, not full visual-regression CI. Pair with #639 feature_loop and #636 media. Never weaken failing design contract tests to green.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Propose: gh plate design-contract --feature N --title \"...\" --interactions \"a;b\" --playwright",
+        "3. Approve via feed or plate_design_contract_decide; scaffold failing tests with --scaffold.",
+        "4. validate readiness before feature-loop implement stage."
+      ],
+      "links": [
+        "#646",
+        "#639",
+        "#636",
+        "#632",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/ledger.py, feed.py, cli.py",
+      "migration_impact": "Additive ledger summary fields and feed item type ledger_gate. No schema break. Hosts should present ledger_gate options (inspect / decide checkpoint / resume shadow) before retrying gated actions.",
+      "agent_notes": "Prefer ledger entry checkpoint_id/shadow_id for resume. Blocking decisions: pause, shadow_required, reject. Feed rank ~12 (after open checkpoints).",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate ledger --summary for blocking counts + recent gates.",
+        "3. plate_feed ranks ledger_gate from recent pause/shadow_required entries.",
+        "4. Resolve via plate_checkpoint_decide or gate_high_impact(shadow_ack=..., approved=True); do not re-run blindly."
+      ],
+      "links": [
+        "#647",
+        "#648",
+        "#645",
+        "#631",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/autonomy.py, costs.py, tests/test_ledger.py",
+      "migration_impact": "More local JSON under .agentic/ledger/ (gitignored). Cost dashboard gains ledger key. No config schema change.",
+      "agent_notes": "Every blocked high-impact gate and checkpoint pause should leave a PLATE-DECISION ledger row. Prefer ledger_id from gate responses when explaining blocks to humans.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Use gh plate ledger --summary / plate_ledger_* after autonomy cycles to audit pause/shadow_required rows.",
+        "3. Cost dashboard feed_items now include ledger-derived drift signals for high-impact pauses.",
+        "4. Optional: retain selected ledger entries for audits before cleaning .agentic/ledger/."
+      ],
+      "links": [
+        "#647",
+        "#645",
+        "#648",
+        "#634",
+        "#653",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/ledger.py, autonomy.py, mcp_server.py, cli.py, agent_guidance.py",
+      "migration_impact": "New plate_ledger_* MCP tools and gh plate ledger. Ledger files under .agentic/ledger/ (local durable audit; commit when used as project truth). No breaking config changes.",
+      "agent_notes": "Complements USAGE REPORT and PLATE-AUTONOMY-CYCLE. Link shadow_id (#645) and checkpoint_id (#648) when present. Full GitHub comment posting of markers is host-side / follow-up.",
+      "migration_guidance": [
+        "1. Upgrade plate_core surfaces.",
+        "2. Optionally gitignore .agentic/ledger/ for local-only, or commit selected entries for audit.",
+        "3. Agents: prefer plate_ledger_record for non-trivial autonomous decisions; query via plate_ledger_query when debugging.",
+        "4. run_cycle now emits ledger: <id> lines in actions_taken."
+      ],
+      "links": [
+        "#647",
+        "#645",
+        "#648",
+        "#654",
+        "#470"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/checkpoint.py, autonomy.py, mcp_server.py, cli.py, agent_guidance.py",
+      "migration_impact": "New MCP tools plate_checkpoint_* and CLI gh plate checkpoint. Open pending medium+ checkpoints pause unsupervised autonomy cycles. Ledger files appear under .agentic/checkpoints/ (gitignored recommended for local-only, or commit when used as audit). No breaking config schema changes.",
+      "agent_notes": "Prefer plate_checkpoint_create over ad-hoc comments for human gates. Pair with #645 shadow_id when a ShadowReport requires approval. TUI ask_user_question host bridge and Projects fields are follow-ups.",
+      "migration_guidance": [
+        "1. Upgrade plate_core / surfaces to pick up checkpoint module.",
+        "2. Optionally add .agentic/checkpoints/ to .gitignore if local-only; commit selected records when they are the audit trail.",
+        "3. Agents: call plate_checkpoint_create before high-impact actions; humans decide via plate_checkpoint_decide or gh plate checkpoint --decide ID --decision approve.",
+        "4. Autonomy loops: plate_autonomy_status open_human_checkpoints now includes open pausing checkpoints."
+      ],
+      "links": [
+        "#648",
+        "#645",
+        "#654",
+        "#470"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/checkpoint.py, autonomy.py, feed.py, mcp_server.py",
+      "migration_impact": "MCP plate_autonomy_run_procedure accepts checkpoint_id. Feed items for checkpoints use durable ids and ask_user_question + plate_checkpoint_decide prompts. No config schema change.",
+      "agent_notes": "Prefer checkpoint_id over bare approved=True when a #648 record exists. Structured feed checkpoint ids are the durable decide target. TUI host bridge remains follow-up.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. On shadow_required: present checkpoint from feed; user decides via plate_checkpoint_decide / gh plate checkpoint --decide ID --decision approve.",
+        "3. Resume gated action with checkpoint_id (and optional shadow_ack); do not re-open a new checkpoint for the same approval.",
+        "4. plate_feed / gh plate feed now includes cost/risk signals from get_cost_dashboard when autonomy is included."
+      ],
+      "links": [
+        "#648",
+        "#645",
+        "#653",
+        "#631",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/bug_loop.py, feature_loop.py, checkpoint.py",
+      "migration_impact": "Bug and Feature loop advance at human_checkpoint now creates .agentic/checkpoints records (or under test base_dir/checkpoints) and blocks leave until plate_checkpoint_decide approve. force_skip_checkpoint still bypasses for low-risk paths.",
+      "agent_notes": "Prefer the checkpoint_id on the loop run over ad-hoc comments. force_skip_checkpoint is only for explicit low-risk skip paths. Feed/TUI hosts should present packet ask_user_question approve/reject options at human_checkpoint.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. On high-risk bug/feature loops: advance into human_checkpoint (auto-opens cp-*).",
+        "3. User decides via plate_checkpoint_decide / gh plate checkpoint --decide ID --decision approve (or feed options).",
+        "4. Re-advance the loop to merge_eligible only after approval; do not merge while pending."
+      ],
+      "links": [
+        "#648",
+        "#638",
+        "#639",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/hybrid.py, cli.py, mcp_server.py, feed.py, agent_guidance.py",
+      "migration_impact": "none",
+      "agent_notes": "Use plate_hybrid_detect / plate_hybrid_set_kind / gh plate hybrid. Do not assume unit tests alone for non-code work. Follow-ups: wire feature_loop to consume validation plans; deploy target adapters.",
+      "links": [
+        "#650",
+        "#654",
+        "#627",
+        "#646",
+        "#628"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/collab.py, feed.py, agent_guidance.py, mcp_server.py, cli.py, .gitignore",
+      "migration_impact": "Optional local ownership registry under .agentic/collab/ (gitignored). Humans claim path/branch pauses; agents must pass paths/branch into plate_collab_check. No required config change.",
+      "agent_notes": "First enforceable slice of #651 on top of #643 driver labels. Does not replace CODEOWNERS/branch protection. Prefer feature/*|bug/* branches in isolated worktrees. Issue may remain open for richer GitHub-native ownership signals.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. To pause agents on a path: gh plate collab --claim --kind path --target <path> (or plate_collab_ownership_claim).",
+        "3. Agents: include --paths / paths= and --branch in collab checks before edit/push; respect blocked claims.",
+        "4. Release when done: gh plate collab --release <claim-id> or --kind/--target."
+      ],
+      "links": [
+        "#651",
+        "#643",
+        "#654",
+        "#514"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/packaging.py, cli.py, mcp_server.py, feed.py, scheduled_ops.py, agent_guidance.py",
+      "migration_impact": "none",
+      "agent_notes": "Use plate_packaging_build / gh plate packaging; plate_packaging_decide approve only marks approved_for_publish. Wire into marketplace-package scheduled op. Real publish stays #380/#381/#625/#626.",
+      "links": [
+        "#652",
+        "#635",
+        "#636",
+        "#641",
+        "#654",
+        "#380",
+        "#626"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/costs.py, feed.py",
+      "migration_impact": "Additive dashboard fields (budget_pressure, would_pause_next_cycle, spent_today_durable) and feed item type budget_gate. Hosts should present budget_gate ask_user_question before large unsupervised cycles. No config schema break.",
+      "agent_notes": "When feed.autonomy.budget_pressure is critical/exhausted, do not start high-cost unsupervised loops. Prefer small targeted work. Durable counters live under .agentic/budget/spend.json.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate costs --dashboard (or plate_costs dashboard=true) to inspect pressure + durable spend.",
+        "3. plate_feed / gh plate feed includes budget_gate when pressure elevated/critical; honor presentation ask_user_question.",
+        "4. Raise .plate autonomy.token_budget or cost_ceiling_usd when gate fires; keep risk=off to disable enforcement previews that require enabled autonomy."
+      ],
+      "links": [
+        "#653",
+        "#634",
+        "#631",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/costs.py, cli.py, mcp_server.py",
+      "migration_impact": "plate_costs gains optional dashboard flag; gh plate costs --dashboard. No breaking changes to default plate_costs aggregate payload.",
+      "agent_notes": "Use dashboard before long autonomy loops to surface burn, ceiling, checkpoints, and cost hotspots. Complements plate_autonomy_status; does not replace enforce_budget.",
+      "migration_guidance": [
+        "1. Upgrade plate_core surfaces.",
+        "2. Prefer plate_costs with dashboard=true (or gh plate costs --dashboard --json) for feed/PM observability.",
+        "3. Wire feed consumers (#631) to feed_items + open_human_checkpoints."
+      ],
+      "links": [
+        "#653",
+        "#634",
+        "#654",
+        "#470",
+        "#631"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md, docs/wiki/Quiet-Agents-Epic-456.md",
+      "migration_impact": "Docs only. Agents should treat listed epics as first-slice complete on release and not re-author sketch fragments for those surfaces.",
+      "agent_notes": "Epic closes via this Documentation PR for Quiet Agents + first-slice loop/fleet/scheduled epics. PM epic #660 stays open while #661 child is open.",
+      "migration_guidance": [
+        "1. No package upgrade required.",
+        "2. Read docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md before starting new v1 surface sketches.",
+        "3. Leave #661 browser and human publish Tasks to human prioritization.",
+        "4. #654 checklist still requires E2E proof before claiming 1.0 done."
+      ],
+      "links": [
+        "#456",
+        "#637",
+        "#638",
+        "#639",
+        "#641",
+        "#644",
+        "#660",
+        "#661",
+        "#654",
+        "#825"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, mcp_server.py",
+      "migration_impact": "Agents following plate_what_next will get budget_gate and open-PR priority before advancing Epics. risk_off does not hide budget pressure.",
+      "agent_notes": "Replaces v1 labels/epics-only heuristic. Aligns with #787 feed budget_gate and #785 loop hydrate under risk=off.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Call plate_what_next / get_what_next at cycle start.",
+        "3. Honor priority=budget_gate before large Feature/Bug starts."
+      ],
+      "links": [
+        "#789",
+        "#654",
+        "#634",
+        "#787",
+        "#631",
+        "#513"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pm.py, feed.py, cli.py",
+      "migration_impact": "Agents can run gh plate what-next. PM and feed process signals carry priority/state_snapshot from the hardened recommender.",
+      "agent_notes": "Closes MCP coupling for what_next consumers. Complements #789 core helper.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer gh plate what-next --json at cycle start.",
+        "3. Feed --include-process ranks budget/open PR process items higher."
+      ],
+      "links": [
+        "#791",
+        "#789",
+        "#654",
+        "#660",
+        "#631"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feed.py, tests/test_feed.py",
+      "migration_impact": "Feed presentation item_type may be planning_approval/er_planning_approval/artifact_approval instead of generic approval. Revised items rank ahead of pending. Hosts should honor pre-shaped ask_user_question then fallback options.",
+      "agent_notes": "Pairs with #630/#640 plan resubmit and #632 artifact resubmit. Prefer source-provided rank over index-only ranking.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Present feed presentation[].ask_user_question; option ids include resubmit for revise_requested/revised.",
+        "3. No .plate schema change."
+      ],
+      "links": [
+        "#747",
+        "#656",
+        "#631",
+        "#630",
+        "#640",
+        "#632",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py, cli.py, mcp_server.py",
+      "migration_impact": "Agents/hosts that only called plate_pm_complete with status=done after manual work should use status=run for the Approve & run option. Pending high-impact checkpoints still block approve&run until decided.",
+      "agent_notes": "status=run|approve|approve_run is the explicit consent path that overrides packet.auto_delegate=false under risk=off. Does not re-enable AutonomyEngine autopilot. Host TUI host_hint documents the call.",
+      "migration_guidance": [
+        "1. Upgrade plate-core with this fix.",
+        "2. For proposed PM rows: plate_pm_complete assignment_id status=run (or gh plate pm --complete ID --complete-status run).",
+        "3. After agent finishes: plate_pm_complete status=done.",
+        "4. High-impact: approve #648 checkpoint first, then status=run (or rely on promote_checkpoint_ready on next cycle)."
+      ],
+      "links": [
+        "#891",
+        "#660",
+        "#889",
+        "#654",
+        "#648"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "PM run_cycle with dispatch_loops now opens pending Design/Research proposals instead of loop_skip for design/research. Hosts should surface packet.artifact_ask_user_question / plate_artifact_decide. release/qanda types still skip loop mapping.",
+      "agent_notes": "Does not auto-approve artifacts. Browser #661 still out of scope. Release work types remain checkpoint/fleet oriented.",
+      "migration_guidance": [
+        "1. Upgrade plate-core.",
+        "2. On PM apply cycles, design/research assignments get loop_kind=artifact and loop_run_id=proposal id.",
+        "3. Present artifact ask_user_question; decide via plate_artifact_decide / gh plate artifact.",
+        "4. plate_pm_tick_loops / run_cycle ticks complete the assignment when proposal is approved or rejected."
+      ],
+      "links": [
+        "#660",
+        "#632",
+        "#654",
+        "#656"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pm.py, feed.py",
+      "migration_impact": "PMStatus gains budget_pressure, would_pause_next_cycle, spent_today_durable. run_cycle may return status=paused pause_kind=budget. Feed includes pm_gate signals when autonomy included. No config schema break.",
+      "agent_notes": "Do not plate_pm_run_cycle --apply while pause_kind is budget or checkpoints. Prefer dry_run loops. Blocked assignments stay in feed until plate_pm_complete or re-budget.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. plate_pm_status / gh plate pm --status shows budget_pressure fields.",
+        "3. Before long loops: resolve open checkpoints and budget gates (costs --dashboard).",
+        "4. plate_feed ranks PM pause gates ahead of ordinary assignments."
+      ],
+      "links": [
+        "#660",
+        "#634",
+        "#653",
+        "#648",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "PM cycles may pause under risk=off when spend leaves remaining below per_cycle. Operators raise token_budget or wait for UTC day rollover / reset spend to resume.",
+      "agent_notes": "Do not treat risk=off as permission to assign work when budget_pressure is critical or would_pause_next_cycle is true. Resolve budget_gate first.",
+      "links": [
+        "#660",
+        "#634",
+        "#653",
+        "#785",
+        "#787"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py, src/plate_core/what_next.py",
+      "migration_impact": "PM cycles may propose Documentation and Feature/Bug ready rows even when what_next priority is pm_tick or pm_propose_run. Empty-ready repos still fall back to process what_next blob.",
+      "agent_notes": "fetch_ready_issue_candidates fallback query now includes label:Documentation. collect_work dedupes by issue number across direct fetch + what_next expansion.",
+      "migration_guidance": [
+        "1. Upgrade plate-core with this fix.",
+        "2. Ensure implementable work has Feature/Bug/Documentation labels without need:refinement/status:stub.",
+        "3. plate_pm_run_cycle dry_run should list issue-N rows when such issues are open."
+      ],
+      "links": [
+        "#897",
+        "#660",
+        "#654",
+        "#895",
+        "#896"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "PM cycles that previously queued a single process what_next blob now propose issue-N assignments when what_next returns ready candidates. Agents should Approve & run those rows (status=run) instead of inventing process-only packets.",
+      "agent_notes": "When ready_issues present, process what_next blob is omitted to avoid duplicate non-actionable queue noise. classify_work_type uses Bug/Feature labels for bugfix vs implement.",
+      "migration_guidance": [
+        "1. Upgrade plate-core with this fix.",
+        "2. plate_pm_run_cycle dry_run \u2192 expect issue-<n> work_ids when ready Features/Bugs exist.",
+        "3. plate_pm_complete status=run on those rows to dispatch loops linked to the GitHub issue."
+      ],
+      "links": [
+        "#895",
+        "#660",
+        "#654",
+        "#892",
+        "#894"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "Non-dry-run plate_pm_run_cycle / run_pm_cycle now create fleet handoffs by default (dispatch_fleet=True). Dry-run unchanged. Pass dispatch_fleet=false to disable. Handoffs land under .agentic/fleet/ (or fleet_base_dir in tests).",
+      "agent_notes": "dry_run never opens fleet handoffs. Budget remaining is passed into handoff create. If fleet budget-blocks, assignment status becomes blocked.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Prefer dry_run first; then --apply / dry_run=false to open handoffs.",
+        "3. Inspect report.fleet_handoffs and gh plate fleet --list.",
+        "4. Accept blocked high-risk handoffs via plate_fleet_update before execution."
+      ],
+      "links": [
+        "#660",
+        "#644",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pm.py, tests/test_pm.py",
+      "migration_impact": "Apply-mode PM cycles may create durable runs under .agentic/feature_loops/ and .agentic/bug_loops/ (gitignored). dry_run still skips. Opt out with dispatch_loops=false. Does not auto-merge.",
+      "agent_notes": "Pairs with fleet handoffs (#644) and budget snapshot (#634). Loops only for implement/bugfix/refactor; design/research/release stay packet/fleet. risk-off still blocks most assignments before loop dispatch.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. Apply PM: gh plate pm --run (or plate_pm_run_cycle dry_run=false) with dispatch_loops enabled.",
+        "3. Inspect assignment.loop_run_id / report.loop_dispatches; advance via feature-loop / bug-loop CLI or MCP.",
+        "4. Budget: remaining tokens from PM status gate loop start; live hydrate when remaining omitted."
+      ],
+      "links": [
+        "#737",
+        "#660",
+        "#638",
+        "#639",
+        "#634",
+        "#644",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pm.py, cli.py, mcp_server.py, tests/test_pm.py",
+      "migration_impact": "PM cycles now refresh delegated loop state by default. Assignments auto-complete when linked loop status/stage is done. No silent merges; babysit advances still require gates when fetch_loop_gates + apply.",
+      "agent_notes": "Follow stage packets for real implementation work; ticks only sync/complete. Pairs with 660-pm-loop-dispatch and evaluate_babysit_gates. risk-off still blocks new assigns but existing delegated rows still tick.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. After dispatching loops, re-run gh plate pm --run to sync stages (ticks in JSON report).",
+        "3. Use --apply --fetch-loop-gates to attempt babysit gate advance on linked PRs.",
+        "4. Opt out with --no-tick-loops or tick_loops=false on MCP."
+      ],
+      "links": [
+        "#739",
+        "#660",
+        "#638",
+        "#639",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "Existing .agentic/pm/queue.json rows with status=blocked and rationale containing blocked: risk_tolerance=off (without budget block) rewrite to proposed on next PM status/cycle. Budget-blocked rows unchanged.",
+      "agent_notes": "Does not re-enable autopilot. Approve & run remains plate_pm_complete status=run. Combined with #889/#892 for risk=off propose\u2192explicit run path.",
+      "migration_guidance": [
+        "1. Upgrade plate-core with this fix.",
+        "2. Run gh plate pm --status or plate_pm_status once to trigger load migration.",
+        "3. Cancel process-only proposed rows (e.g. what_next-local) if undesired: plate_pm_complete status=cancelled."
+      ],
+      "links": [
+        "#900",
+        "#660",
+        "#889",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pm.py, mcp_server.py, cli.py",
+      "migration_impact": "New plate_pm_status/team/assign/run_cycle tools and gh plate pm. State under .agentic/pm/last_cycle.json. Does not replace AutonomyEngine; coordinates above it.",
+      "agent_notes": "Prefer plate_pm_run_cycle dry_run before long loops. Pause when open_human_checkpoints > 0. Epic #660 stays open for full team runtime.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate pm --status / plate_pm_status for budget+team visibility.",
+        "3. gh plate pm --run (dry-run default) to propose persona assignments; --apply to attempt delegate.",
+        "4. Full multi-agent runtime, webhooks, driver: labels remain follow-ups on Epic #660."
+      ],
+      "links": [
+        "#660",
+        "#654",
+        "#470",
+        "#631",
+        "#648"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pm.py, mcp_server.py, cli.py, .gitignore",
+      "migration_impact": "New plate_pm_run_loop, plate_pm_queue, plate_pm_complete tools and CLI flags. Queue state under .agentic/pm/ (gitignored). Assignments include ask_user_question for host TUI. High-impact --apply opens #648 checkpoints. Epic #660 remains open for full multi-agent runtime.",
+      "agent_notes": "Prefer dry_run loop before --apply. Pause when open_checkpoints > 0. Risk-off blocks non-qanda assigns. Full team runtime/webhooks remain follow-ups on Epic #660.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. gh plate pm --queue / plate_pm_queue to inspect durable assignments.",
+        "3. gh plate pm --loop (dry-run default) for multi-cycle orchestration; --apply to open checkpoints + attempt delegate.",
+        "4. plate_pm_complete / --complete ASSIGNMENT_ID after persona finishes work.",
+        "5. Present assignment ask_user_question via host TUI; do not treat dry_run proposals as executed work."
+      ],
+      "links": [
+        "#660",
+        "#654",
+        "#648",
+        "#647",
+        "#631",
+        "#470"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/what_next.py, src/plate_core/feed.py",
+      "migration_impact": "Agents following plate_what_next with proposed>0 now get approve&run instructions instead of another dry-run assign cycle. Feed Approve & run descriptions call plate_pm_complete status=run.",
+      "agent_notes": "Order: open_pr \u2192 ready_issue \u2192 pm_checkpoint \u2192 pm_tick (delegated) \u2192 pm_propose_run (proposed) \u2192 pm assign cycle. Feed recovers assignment status from badges/labels when FeedItem has no status field.",
+      "migration_guidance": [
+        "1. Upgrade plate-core including this fix.",
+        "2. When what_next priority is pm_propose_run: list proposed queue and plate_pm_complete status=run.",
+        "3. Do not open new PM assigns until proposed rows are run, deferred, or cancelled."
+      ],
+      "links": [
+        "#893",
+        "#660",
+        "#892",
+        "#891",
+        "#654",
+        "#631"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "plate_pm_status / what_next pm_queue_size drop after completing or cancelling work. Historical queue files still store done/cancelled rows but they no longer inflate queue_size.",
+      "agent_notes": "ACTIVE_QUEUE_STATUSES = proposed|delegated|blocked. open_assignments remains proposed+delegated only.",
+      "migration_guidance": [
+        "1. Upgrade plate-core with this fix.",
+        "2. Optional: prune cancelled/done rows from .agentic/pm/queue.json for hygiene.",
+        "3. Confirm what_next leaves pm_propose_run/pm when only cancelled residue remains."
+      ],
+      "links": [
+        "#903",
+        "#660",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "Existing queue rows with status=blocked solely due to risk=off remain blocked until cancelled or re-cycled; new cycles create proposed + packet.auto_delegate=false. Agents should treat proposed rows as actionable via plate_pm_complete / human approve, not as hard stops.",
+      "agent_notes": "risk=off blocks AutonomyEngine autopilot only. PM still builds persona packets for the feed/TUI. Do not treat risk=off proposed assignments as failures. Budget exhaustion still blocks. High-impact still waits on #648 checkpoint before promote.",
+      "migration_guidance": [
+        "1. Upgrade plate-core including this fix.",
+        "2. Optional: cancel stale PM queue assignments blocked only for risk=off.",
+        "3. Run plate_pm_run_cycle dry_run=true \u2014 expect proposed (not blocked) implement rows when budget ok.",
+        "4. Explicit apply still leaves risk=off rows proposed; raise risk or complete assignment to proceed with delegate/fleet/loops."
+      ],
+      "links": [
+        "#889",
+        "#660",
+        "#654",
+        "#648"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "No downstream config change. Callers that construct ProjectManager(budget_base_dir=...) now get matching status/pressure for run_cycle budget pauses.",
+      "agent_notes": "When testing or running PM under an isolated root, pass budget_base_dir (typically root/budget) so get_status and budget gates do not read the operator spend file.",
+      "links": [
+        "#660",
+        "#634",
+        "#653"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pm.py, feature_loop.py, cli.py, mcp_server.py, tests/",
+      "migration_impact": "New CLI/MCP entrypoints. Apply-mode feature loop ticks leave estimate_cost automatically. Other stages still require agent work + advance. No silent merges.",
+      "agent_notes": "Use tick_loops for long host loops that only need stage sync. estimate_cost is the only non-gate auto-advance. Babysit still needs gates + fetch.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. After PM dispatch: gh plate pm --tick-loops --apply [--fetch-loop-gates].",
+        "3. Or plate_pm_tick_loops dry_run=false.",
+        "4. Full cycles still tick by default via run_cycle."
+      ],
+      "links": [
+        "#749",
+        "#660",
+        "#639",
+        "#638",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
+      "migration_impact": "Agents following plate_what_next / gh plate what-next will be steered to gh plate pm --status|--run|--tick-loops instead of only 'advance an open Epic' text when the PR pipeline is empty. risk_tolerance=off still dry-runs PM; no auto-merge.",
+      "agent_notes": "Closes a Phase-3 gap: orchestrator loop (what_next \u2192 assign \u2192 budget \u2192 checkpoints) is discoverable from the default recommender. Epic #660 may stay open for fuller multi-agent runtime; this slice does not claim browser #661.",
+      "migration_guidance": [
+        "1. Upgrade plate-core for what_next PM priorities.",
+        "2. At cycle start: gh plate what-next --json and honor priority pm_checkpoint|pm_tick|pm.",
+        "3. Use plate_pm_run_cycle dry_run first; --apply only when risk and human judgment allow.",
+        "4. Ready Features and open PRs still outrank PM."
+      ],
+      "links": [
+        "#660",
+        "#654",
+        "#648",
+        "#631",
+        "#470",
+        "#793",
+        "#811"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/design/pm-orchestrator-architecture-and-browser.md, AGENTS.md, SPEC.md",
+      "migration_impact": "Docs only. Agents should prefer plate_pm_* / what_next for long-running coordination; no runtime change.",
+      "agent_notes": "Brings main-side vision design onto release track. Does not claim #654 checklist E2E complete.",
+      "migration_guidance": [
+        "1. No package upgrade required for docs alone.",
+        "2. Read docs/design/pm-orchestrator-architecture-and-browser.md for PM architecture.",
+        "3. Follow AGENTS.md Project Manager section for default long-running coordination.",
+        "4. Do not start browser #661 work without human prioritization."
+      ],
+      "links": [
+        "#662",
+        "#660",
+        "#661",
+        "#654",
+        "#644",
+        "#631"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, src/plate_core/pm.py, gh plate what-next, plate_what_next",
+      "migration_impact": "Agents and PM loops using plate_what_next / gh plate what-next may receive priority=ready_issue with issue_number when the PR pipeline is empty. Ranking still prefers budget_gate and open_pr. No config change required.",
+      "agent_notes": "When priority is ready_issue, implement that issue next (branch from release, fragment, PR Closes #N). Budget and open PRs still outrank ready issues. Do not re-request Copilot in loops; babysit the opened PR.",
+      "migration_guidance": [
+        "1. Upgrade plate-core (or monorepo checkout) so what_next includes fetch_ready_issue_candidates.",
+        "2. Prefer following issue_number on ready_issue recommendations when opening Feature/Bug work.",
+        "3. No .plate schema change; existing autonomy budgets and risk_tolerance unchanged."
+      ],
+      "links": [
+        "#793",
+        "#654",
+        "#789",
+        "#791"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/autonomy.py get_budget_snapshot, plate_what_next budget_gate, gh plate costs/autonomy budget UX",
+      "migration_impact": "After upgrade, budget snapshots and plate_what_next treat yesterday's spend.json counters as zero until a same-day charge rewrites the file. Same-day spend behavior unchanged.",
+      "agent_notes": "If what_next says budget_gate exhausted but autonomy --status shows full remaining, ensure this fix is present. Prefer status remaining from snapshot after day rollover. Do not delete spend without cause when date is today.",
+      "migration_guidance": [
+        "1. Upgrade plate-core so get_budget_snapshot applies UTC day rollover.",
+        "2. Optional: delete stale .agentic/budget/spend.json if operators want a clean same-day file (not required).",
+        "3. No .plate schema change."
+      ],
+      "links": [
+        "#795",
+        "#634",
+        "#653",
+        "#787"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
+      "migration_impact": "Agents following plate_what_next will be steered to gh plate release repair (dry-run then apply) when multi-track standing branches are absent. Open PRs and budget gates still win. Idempotent repair already exists (#320).",
+      "agent_notes": "akasper/plate standing tracks were repaired 2026-07-26 (multi-track healthy). This ranking prevents silent legacy fallback for adopters. Do not force-delete branches; repair never auto-closes duplicate Next Release issues.",
+      "migration_guidance": [
+        "1. Upgrade plate-core.",
+        "2. On priority=release_repair: gh plate release status then gh plate release repair (dry-run) and --apply when safe.",
+        "3. Re-run what-next; mode should become multi-track when tracks exist."
+      ],
+      "links": [
+        "#814",
+        "#320",
+        "#306",
+        "#654",
+        "#612"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/autonomy.py",
+      "migration_impact": "Autonomous cycles may pause under risk=off when spend leaves remaining below per_cycle or pressure is critical/exhausted. Raise token_budget, wait for UTC day rollover, or reset spend to resume.",
+      "agent_notes": "Do not treat risk=off as permission to run cycles when budget_pressure is critical or would_pause_next_cycle is true. Resolve budget_gate first; mirrors PM #866.",
+      "links": [
+        "#867",
+        "#634",
+        "#653",
+        "#865",
+        "#866",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/fleet.py",
+      "migration_impact": "Live fleet plans/handoffs may refuse create under risk=off when remaining is below per_cycle. Raise token_budget, wait for UTC day rollover, or pass explicit use_live_budget=false with caller-owned remaining.",
+      "agent_notes": "Do not open fleet handoffs when budget_pressure is critical/exhausted or would_pause_next_cycle is true. Resolve budget_gate first; PM dispatch inherits via create_handoff.",
+      "links": [
+        "#869",
+        "#634",
+        "#644",
+        "#653",
+        "#865",
+        "#867",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/scheduled_ops.py",
+      "migration_impact": "Live scheduled ops may refuse run under risk=off when remaining is below per_cycle. Raise token_budget, wait for UTC day rollover, or pass explicit use_live_budget=false with caller-owned remaining.",
+      "agent_notes": "Do not run scheduled ops when budget_pressure is critical/exhausted or would_pause_next_cycle is true. Prior note-only path was a no-op; resolve budget_gate first.",
+      "links": [
+        "#871",
+        "#634",
+        "#641",
+        "#653",
+        "#869",
+        "#867",
+        "#865",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/autonomy.py",
+      "migration_impact": "Q&A planning start, epic/release planning start, and Design/Research propose may refuse live hydrate under risk=off when remaining is below per_cycle. Raise token_budget, wait for UTC day rollover, or pass use_live_budget=false with caller-owned remaining.",
+      "agent_notes": "Prefer durable_budget_surface_pause(snap) for new surface gates. Do not start planning/artifact work when would_pause_next_cycle is true.",
+      "links": [
+        "#873",
+        "#634",
+        "#628",
+        "#630",
+        "#629",
+        "#640",
+        "#632",
+        "#653",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/packaging.py",
+      "migration_impact": "Live packaging builds and design-contract proposals may refuse under risk=off when remaining is below per_cycle. Raise token_budget, wait for UTC day rollover, or pass use_live_budget=false with caller-owned remaining.",
+      "agent_notes": "Do not open packaging or design contracts when would_pause_next_cycle is true. Human marketplace publish Tasks remain required for real publish.",
+      "links": [
+        "#875",
+        "#634",
+        "#646",
+        "#652",
+        "#653",
+        "#873",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/monitoring.py",
+      "migration_impact": "Live monitoring, stub authoring, media plans, and loop starts may refuse under risk=off when remaining is below per_cycle even if est fits. Raise token_budget, wait for UTC day rollover, or pass use_live_budget=false.",
+      "agent_notes": "All surface gates should call durable_budget_surface_pause on live hydrate. Do not start loops/media/stubs/monitoring when would_pause_next_cycle is true.",
+      "links": [
+        "#877",
+        "#634",
+        "#636",
+        "#637",
+        "#638",
+        "#639",
+        "#642",
+        "#653",
+        "#873",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/scheduled_ops.py",
+      "migration_impact": "Live deploy/release/marketplace scheduled ops require shadow_ack from a prior simulate/dry-run (or approved checkpoint with shadow_id) plus approved=true. Dry-run path unchanged for obtaining shadow_id.",
+      "agent_notes": "Always dry-run or plate_autonomy_simulate first; pass shadow_ack on live run_scheduled_op for high/critical. Do not treat approved=true alone as sufficient for live high-impact ops.",
+      "links": [
+        "#879",
+        "#645",
+        "#641",
+        "#648",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/cli.py",
+      "migration_impact": "Agents must pass shadow_ack from dry-run/simulate when applying live high/critical scheduled ops via CLI or MCP. Dry-run still returns shadow_id for the next apply.",
+      "agent_notes": "After dry-run, copy shadow_id into --shadow-ack / shadow_ack with --apply --approved for deploy/release/marketplace ops.",
+      "links": [
+        "#881",
+        "#879",
+        "#645",
+        "#641",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/fleet.py",
+      "migration_impact": "Agents must pass shadow_ack (from plate_autonomy_simulate) and approved when updating high/critical handoffs to accepted. Low/medium accepts unchanged. Create still queues blocked+checkpoint.",
+      "agent_notes": "Do not accept high/critical fleet handoffs without shadow_ack. Use gh plate fleet --update ID --handoff-status accepted --shadow-ack \u2026 --approved.",
+      "links": [
+        "#883",
+        "#645",
+        "#644",
+        "#648",
+        "#879",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/pm.py",
+      "migration_impact": "After approving a PM high-impact checkpoint, the next plate_pm_run_cycle will promote the assignment and may open fleet handoffs/loops. Rejected checkpoints leave assignments blocked.",
+      "agent_notes": "Do not leave high-impact PM work as proposed forever after approve. Use decide_checkpoint then plate_pm_run_cycle; promotions appear on the cycle report.",
+      "links": [
+        "#885",
+        "#648",
+        "#660",
+        "#645",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/what_next.py, docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+      "migration_impact": "Agents and AutonomyEngine consumers: when pipeline empty and PM queue_size/open_assignments are 0, follow epic closeout/refine guidance instead of plate_pm_run_cycle. No package config change required.",
+      "agent_notes": "Pairs with #904 active-only queue_size. PM still ranks first for checkpoints, delegated, proposed, and active queue. Do not re-check #654 boxes without E2E proof.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / pull release after merge.",
+        "2. Re-run plate_what_next / gh plate what-next with empty pipeline \u2014 expect priority epic (closeout/refine) not pm when queue idle.",
+        "3. For complete-child Epics, extend docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md and add status:implemented; residual E2E stays under #654."
+      ],
+      "links": [
+        "#905",
+        "#904",
+        "#903",
+        "#660",
+        "#654",
+        "#470",
+        "#656",
+        "#657",
+        "#658"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "tests/test_what_next.py, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+      "migration_impact": "Tests and audit docs only. No runtime API change. Downstream adopters gain clearer evidence links for empty-pipeline agent routing.",
+      "agent_notes": "Child gap of #364 / Epic #350. Closes #907 only. Does not check #654 boxes.",
+      "migration_guidance": [
+        "1. Pull release after merge; run pytest tests/test_what_next.py.",
+        "2. Prefer plate_what_next priority=epic (closeout/refine) when PM queue idle \u2014 do not plate_pm_run_cycle solely for open_epic_count.",
+        "3. Residual contemplation/e2e gaps remain on #364."
+      ],
+      "links": [
+        "#907",
+        "#364",
+        "#350",
+        "#905",
+        "#904",
+        "#660",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py",
+      "migration_impact": "Agents should act on named Epic numbers in next_action when present (wiki closeout + status:implemented) instead of re-scanning all open Epics. API failure degrades to prior generic epic guidance.",
+      "agent_notes": "Extends #905/#907 idle path. Does not force PM dry-run. Empty-stub Epics (0 children) are skipped.",
+      "migration_guidance": [
+        "1. Pull release / upgrade plate-core after merge.",
+        "2. On empty pipeline + idle PM, run plate_what_next and prefer listed #N closeouts.",
+        "3. Residual E2E under #654 \u2014 do not re-check v1.0 boxes without proof."
+      ],
+      "links": [
+        "#909",
+        "#905",
+        "#907",
+        "#654",
+        "#660"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+      "migration_impact": "Docs/process memory only. Agents acting on plate_what_next closeout candidates should treat #390 and #596 first slices as recorded; residual legal CLA and human publish Tasks remain open.",
+      "agent_notes": "Driven by #909 named closeout candidates. Does not close GitHub Epic issues (residual under #654 / human Tasks).",
+      "migration_guidance": [
+        "1. Pull release after merge.",
+        "2. Prefer wiki closeout page over re-scanning children for #390/#596.",
+        "3. Do not re-check #654 boxes without E2E proof."
+      ],
+      "links": [
+        "#911",
+        "#390",
+        "#596",
+        "#909",
+        "#654",
+        "#625",
+        "#626"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/what_next.py",
+      "migration_impact": "After first-slice wiki + status:implemented, those Epics drop out of plate_what_next closeout candidates. Agents should refine stubs or implement ready Features instead of re-documenting the same Epics.",
+      "agent_notes": "Pairs with #909/#911. GraphQL now requests labels(first:20).",
+      "migration_guidance": [
+        "1. Pull release after merge.",
+        "2. When recording first-slice closeout, add status:implemented so the Epic leaves the candidate list.",
+        "3. Residual E2E still under #654 \u2014 do not re-check boxes without proof."
+      ],
+      "links": [
+        "#913",
+        "#909",
+        "#911",
+        "#905",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/what_next.py",
+      "migration_impact": "Agents on empty pipeline after first-slice Epics are status:implemented should refine stubs (e.g. #364 residuals) instead of re-documenting closeouts.",
+      "agent_notes": "Pairs with #913 skip implemented and #909 named candidates.",
+      "migration_guidance": [
+        "1. Pull release after merge.",
+        "2. On priority=epic with no named #N closeouts, refine a need:refinement Feature.",
+        "3. Do not re-check #654 without E2E proof."
+      ],
+      "links": [
+        "#915",
+        "#913",
+        "#909",
+        "#905",
+        "#364",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "tests/test_template_payload.py, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+      "migration_impact": "Tests and audit docs only. Adopters and agents gain bidirectional proof of what import-payload delivers; no runtime API change.",
+      "agent_notes": "Closes #917 only. Part of #364 residual batch; does not fully close #364.",
+      "migration_guidance": [
+        "1. Pull release after merge; run pytest tests/test_template_payload.py -k Adopter.",
+        "2. Do not expect monorepo plugin-structure.spec.ts inside payload \u2014 use example e2e + import-payload.",
+        "3. Residual #364: contemplation v2 matrix and compound Playwright e2e still open."
+      ],
+      "links": [
+        "#917",
+        "#364",
+        "#350",
+        "#616",
+        "#622",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "tests/test_what_next.py, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+      "migration_impact": "Tests and audit docs only. Agents can rely on documented ranking order for empty-pipeline routing.",
+      "agent_notes": "Closes #919 only. Does not claim full #364 or #654 E2E.",
+      "migration_guidance": [
+        "1. Pull release after merge; run pytest tests/test_what_next.py -k Compound.",
+        "2. Full Playwright babysit/release compound e2e remains deferred under #364."
+      ],
+      "links": [
+        "#919",
+        "#364",
+        "#350",
+        "#905",
+        "#913",
+        "#915",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/contemplation.py, tests/test_contemplation.py",
+      "migration_impact": "Contemplation comments gain Answer full: block; follow-up issues may be Research/Design not only Feature. Agents should not assume Feature-only labels from plate_contemplate.",
+      "agent_notes": "Closes #921 only. Partial Contemplation v2 contract gap close from research enumeration; not full Design #143.",
+      "migration_guidance": [
+        "1. Pull release after merge; run pytest tests/test_contemplation.py.",
+        "2. Prefer reading Answer full: in PLATE-CONTEMPLATION logs for audit.",
+        "3. Residual #364: artifact mutations via PR and Playwright compound e2e still open."
+      ],
+      "links": [
+        "#921",
+        "#364",
+        "#257",
+        "#143",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/contemplation.py, tests/test_contemplation.py",
+      "migration_impact": "PLATE-CONTEMPLATION comments gain Git commit + Provenance: block; contemplate() result includes git_commit. No API break.",
+      "agent_notes": "Closes #923 only. Best-effort SHA returns unknown outside a git worktree.",
+      "migration_guidance": [
+        "1. Pull release after merge; run pytest tests/test_contemplation.py -k provenance.",
+        "2. When auditing answers, use Git commit: line to tie transcript to tree.",
+        "3. Residual #364: artifact mutation via PR and Playwright compound e2e still open."
+      ],
+      "links": [
+        "#923",
+        "#921",
+        "#364",
+        "#142",
+        "#647",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/contemplation.py, tests/test_contemplation.py, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+      "migration_impact": "contemplate() result gains mutation_intents + mutation_pr_draft; transcripts list Mutation intent lines; process answers prefer mutation-plan Feature issues over generic typed follow-ups. No auto push/PR open.",
+      "agent_notes": "Closes #925 only. Engine stays PR-plan-only (Design #143 / research v2.1 intent + v2.2 draft body without network PR API).",
+      "migration_guidance": [
+        "1. Pull release after merge; run pytest tests/test_contemplation.py -k mutation.",
+        "2. When answers mention AGENTS.md/SPEC/skills/wiki/docs/fragments, expect mutation plan issues + need:human-review for high-risk paths.",
+        "3. Agents execute the draft PR body on a branch targeting release; never direct main push.",
+        "4. Residual #364: auto PR open/push still deferred; compound Playwright e2e still open."
+      ],
+      "links": [
+        "#925",
+        "#923",
+        "#921",
+        "#364",
+        "#143",
+        "#257",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "tests/e2e/compound-flows.spec.ts, tests/e2e/fixtures/compound_flow_driver.py, tests/e2e/README.md, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+      "migration_impact": "New Playwright suite compound-flows.spec.ts runs in tests/e2e (host-independent, no network). Adopters may copy the driver pattern; no runtime API change.",
+      "agent_notes": "Closes #927 only. Driver is pure offline (fake GH + temp releases tree + evaluate_babysit_gates).",
+      "migration_guidance": [
+        "1. Pull release after merge; cd tests/e2e && npx playwright test compound-flows.spec.ts",
+        "2. CI full suite already picks up **/*.spec.ts under tests/e2e.",
+        "3. Residual #364: live-network ceremony apply and contemplation auto PR open/push remain deferred."
+      ],
+      "links": [
+        "#927",
+        "#364",
+        "#925",
+        "#919",
+        "#654",
+        "#350"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/contemplation.py, tests/test_contemplation.py, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+      "migration_impact": "contemplate() gains mutation_pr_plan + mutation_pr_apply (always dry_run). New pure helpers build_mutation_pr_plan / apply_mutation_pr_plan. No default git push or gh pr create.",
+      "agent_notes": "Closes #929 only. Safe-by-default dry-run during contemplate; never opens live PRs without explicit runner.",
+      "migration_guidance": [
+        "1. Pull release after merge; run pytest tests/test_contemplation.py -k mutation_pr.",
+        "2. Agents execute plan.git_steps / plan.gh_argv on a worktree, or supply runner to apply_mutation_pr_plan(dry_run=False).",
+        "3. High-risk paths (AGENTS.md/SPEC/workflows) require allow_high_risk=True after human review.",
+        "4. Residual #364: live auto-push without runner still intentionally unsupported."
+      ],
+      "links": [
+        "#929",
+        "#925",
+        "#364",
+        "#143",
+        "#257",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, tests/test_what_next.py, docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+      "migration_impact": "recommend_what_next gains optional scheduled_ops; new priorities scheduled_op and scheduled_ops_plan. No breaking change to existing priorities when scheduled_ops omitted.",
+      "agent_notes": "Closes #933. Prefer dry-run scheduled-ops plan over deploy/marketplace human Tasks.",
+      "migration_guidance": [
+        "1. Pull release after merge; run pytest tests/test_what_next.py -k ScheduledOps.",
+        "2. Empty-pipeline agents should see scheduled_ops_plan when ops runnable at risk_tolerance.",
+        "3. Active blocked/running/planned runs rank before ready issues and PM."
+      ],
+      "links": [
+        "#933",
+        "#659",
+        "#641",
+        "#654",
+        "#282"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/adoption.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_adoption.py, docs/migration/adoption-guide.md",
+      "migration_impact": "New CLI `gh plate adopt` and MCP plate_adoption_status. Pure filesystem checks; no network or auto-import.",
+      "agent_notes": "Closes #935. Does not claim full #633 epic done; first machine-checkable readiness slice only.",
+      "migration_guidance": [
+        "1. Pull release after merge; run pytest tests/test_adoption.py -q.",
+        "2. Adopters: gh plate adopt --json before import-payload / bootstrap --adopt.",
+        "3. Use estimated_minutes_remaining and next_command; re-check after each step."
+      ],
+      "links": [
+        "#935",
+        "#633",
+        "#619",
+        "#616",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
+      "migration_impact": "recommend_what_next gains optional adoption dict; new priority adoption. Mature core_ready checkouts unchanged.",
+      "agent_notes": "Closes #937. Complements #935; does not close Epic #633.",
+      "migration_guidance": [
+        "1. Pull release after merge; pytest tests/test_what_next.py -k Adoption.",
+        "2. Incomplete adopters see next_action pointing at gh plate adopt / import-payload.",
+        "3. Open PRs and bootstrap (labels) still outrank adoption."
+      ],
+      "links": [
+        "#937",
+        "#935",
+        "#633",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+      "migration_impact": "New CLI self-migrate and MCP plate_self_migrate_plan. Detects VERSION/PLATE_CORE_VERSION/pyproject pins and ordered upgrade + import-payload + health steps.",
+      "agent_notes": "Closes #939. First slice of Epic #649; does not close the Epic.",
+      "migration_guidance": [
+        "1. Pull release after merge; pytest tests/test_self_migrate.py -q.",
+        "2. Adopters: gh plate self-migrate --plan --json before upgrading plate-core.",
+        "3. Execute steps manually after review; never auto-apply from the plan alone."
+      ],
+      "links": [
+        "#939",
+        "#649",
+        "#633",
+        "#615",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
+      "migration_impact": "recommend_what_next gains optional self_migrate; new priority self_migrate. No drift \u2192 unchanged ladder.",
+      "agent_notes": "Closes #941. Complements #939; does not close Epic #649.",
+      "migration_guidance": [
+        "1. Pull release after merge; pytest tests/test_what_next.py -k SelfMigrate.",
+        "2. Drifted pins surface next_command self-migrate --plan before Feature work.",
+        "3. Adoption core_ready=false still outranks self_migrate."
+      ],
+      "links": [
+        "#941",
+        "#939",
+        "#649",
+        "#937",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+      "migration_impact": "New --merge-markers / --upstream-dir / --apply-markers flags on self-migrate and MCP plate_self_migrate_merge_markers. Uses existing merge_with_diagnostics; no network; apply is explicit.",
+      "agent_notes": "Closes #943. Second slice of Epic #649 after #939/#941; does not close the Epic.",
+      "migration_guidance": [
+        "1. Pull release after merge; pytest tests/test_self_migrate.py -q.",
+        "2. Dry-run: gh plate self-migrate --merge-markers --upstream-dir <payload-or-upstream> --json.",
+        "3. After review only: add --apply-markers to write PLATES-CORE sections.",
+        "4. Residual Epic #649: optional PyPI/upstream fetch and low-risk auto PR apply remain open."
+      ],
+      "links": [
+        "#943",
+        "#649",
+        "#939",
+        "#941",
+        "#633",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+      "migration_impact": "plan_self_migrate gains resolve_upstream/allow_network/upstream_fetcher. CLI --resolve-upstream (offline unless --allow-network for live PyPI JSON). Tests inject fetcher; production network remains opt-in.",
+      "agent_notes": "Closes #945. Third #649 slice after #939/#941/#943; does not close the Epic.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_self_migrate.py -q.",
+        "2. Offline plan still: gh plate self-migrate --plan --json.",
+        "3. Resolve with inject/tests or live: --resolve-upstream --allow-network --json after review of network policy.",
+        "4. Residual Epic #649: low-risk auto migration PR apply remains open."
+      ],
+      "links": [
+        "#945",
+        "#649",
+        "#939",
+        "#943",
+        "#633",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+      "migration_impact": "New --pr-plan flags on gh plate self-migrate and MCP plate_self_migrate_pr_plan. Live apply requires injectable runner and low-risk pin-only eligibility; high risk blocked without allow_high_risk.",
+      "agent_notes": "Closes #947. Fourth #649 slice; mark Epic residual status in issue comments (first-slice complete).",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_self_migrate.py -q.",
+        "2. Dry-run: gh plate self-migrate --pr-plan --json.",
+        "3. Live open only via agent runner injection after review; CLI --apply-pr alone reports runner_required.",
+        "4. Epic #649 first-slice surfaces complete: plan, what_next, markers, upstream resolve, PR plan."
+      ],
+      "links": [
+        "#947",
+        "#649",
+        "#945",
+        "#943",
+        "#941",
+        "#939",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/adoption.py, src/plate_core/what_next.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, src/plate_core/bootstrap.py, tests/test_adoption.py",
+      "migration_impact": "Adoption readiness includes first_qa; next_command points at first-qa-plan when core_ready and not seeded. Live seed requires injectable runner. Bootstrap reuses adoption.STARTER_QUESTIONS catalog.",
+      "agent_notes": "Closes #949. Epic #633 remains open (full <30m E2E proof not claimed).",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_adoption.py -q.",
+        "2. After core_ready: gh plate adopt --first-qa-plan --json.",
+        "3. Apply only with agent runner; marker written under .agentic/adoption/first_qa_seed.json.",
+        "4. plate_what_next ranks first_qa_seed before ready Features when unseeded."
+      ],
+      "links": [
+        "#949",
+        "#633",
+        "#935",
+        "#937",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/bootstrap.py, src/plate_core/adoption.py, tests/test_bootstrap.py",
+      "migration_impact": "Bootstrap --apply seeds write .agentic/adoption/first_qa_seed.json under local_root (cwd default). Dry-run unchanged. Shared helper used by plan_first_qa_seed apply path.",
+      "agent_notes": "Closes #951. Epic #633 remains open for full <30m E2E proof.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_bootstrap.py tests/test_adoption.py -q.",
+        "2. After bootstrap --apply, check .agentic/adoption/first_qa_seed.json exists.",
+        "3. gh plate adopt --json should show first_qa.seeded=true when marker present."
+      ],
+      "links": [
+        "#951",
+        "#949",
+        "#633",
+        "#935",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/health.py, src/plate_core/cli.py, tests/test_health.py",
+      "migration_impact": "HealthReport/JSON gain additive adoption_* fields. Agents can use gh plate health --json without a separate adopt call for core_ready/first_qa signals.",
+      "agent_notes": "Closes #953. Epic #633 remains open for full <30m E2E proof.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_health.py -q.",
+        "2. gh plate health --json | jq '.adoption_core_ready, .first_qa_seeded, .adoption_next_command'.",
+        "3. Still use gh plate adopt for full checklist detail."
+      ],
+      "links": [
+        "#953",
+        "#633",
+        "#935",
+        "#949",
+        "#951",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/adoption.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_adoption.py",
+      "migration_impact": "New session markers and adopt flags. Completing a session records duration_minutes and within_30m against the 30m budget without claiming full E2E onboarding.",
+      "agent_notes": "Closes #955. Epic #633 remains open for full <30m E2E proof.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_adoption.py -q.",
+        "2. gh plate adopt --start-session --json before onboarding.",
+        "3. After work: gh plate adopt --complete-session --json; check within_30m.",
+        "4. MCP plate_adoption_session action=start|complete|status."
+      ],
+      "links": [
+        "#955",
+        "#633",
+        "#935",
+        "#953",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
+      "migration_impact": "what_next gains adoption_session ranking when session.json is active. Operators should complete or abandon sessions so ready Features can rank again.",
+      "agent_notes": "Closes #957. Epic #633 remains open for full <30m E2E proof.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_what_next.py -q -k AdoptionSession.",
+        "2. gh plate adopt --start-session; gh plate what-next --json should show priority adoption_session.",
+        "3. Complete with gh plate adopt --complete-session --json when done."
+      ],
+      "links": [
+        "#957",
+        "#955",
+        "#633",
+        "#937",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/feed.py, tests/test_feed.py",
+      "migration_impact": "Feed process items for adoption*, adoption_session, first_qa_seed surface above generic process (rank 50). No CLI change.",
+      "agent_notes": "Closes #959. Epic #633 remains open for full <30m E2E proof.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_feed.py -q -k adoption.",
+        "2. Start adoption session; gh plate feed --json should show process item rank 15 when what_next priority is adoption_session."
+      ],
+      "links": [
+        "#959",
+        "#633",
+        "#957",
+        "#955",
+        "#631",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/migration/adoption-guide.md, tests/test_adoption.py",
+      "migration_impact": "Operators and agents should follow docs/migration/adoption-guide.md for ordered <30m adopt. No runtime API change.",
+      "agent_notes": "Closes #961. Epic #633 remains open for full live <30m E2E proof.",
+      "migration_guidance": [
+        "1. Pull release; read docs/migration/adoption-guide.md.",
+        "2. pytest tests/test_adoption.py -q -k AdoptionGuide.",
+        "3. Do not claim #654 checklist boxes without live E2E proof."
+      ],
+      "links": [
+        "#961",
+        "#633",
+        "#935",
+        "#949",
+        "#955",
+        "#957",
+        "#959",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "SPEC.md",
+      "migration_impact": "Product intent document only. No code or template payload change. Downstream repos re-read SPEC; no forced file copy.",
+      "agent_notes": "Human-owned SPEC intent. Closes #963. Does not re-check #654 boxes. Addresses plate_what_next priority=spec_audit (2 undocumented).",
+      "migration_guidance": [
+        "1. Review SPEC Target Workflows for what_next idle-vs-active PM ranking and tests/test_what_next.py evidence.",
+        "2. Review SPEC Architecture for template_payload adopter harness / tests/test_template_payload.py.",
+        "3. Re-run plate health / local audit_spec; expect zero undocumented for those two fragment slugs."
+      ],
+      "links": [
+        "#963",
+        "#907",
+        "#917",
+        "#338",
+        "#339",
+        "#340",
+        "#364",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+      "migration_impact": "New gh plate self-migrate --verify and MCP plate_self_migrate_verify. Offline, no writes. Agents should run after migrate plan/apply before claiming adopter health.",
+      "agent_notes": "Closes #965. Fifth #649 slice after plan/what_next/markers/upstream/PR. Does not check #654 boxes.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_self_migrate.py -k Verify -q.",
+        "2. After self-migrate plan or PR: gh plate self-migrate --verify --json.",
+        "3. ready=false \u2192 follow next_command (plan or adopt); then re-verify.",
+        "4. Still run gh plate health for remote GitHub signals."
+      ],
+      "links": [
+        "#965",
+        "#649",
+        "#939",
+        "#947",
+        "#633",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/health.py, src/plate_core/cli.py, tests/test_health.py",
+      "migration_impact": "Additive health JSON/CLI fields. Agents may read self_migrate_* from gh plate health --json without calling --verify separately.",
+      "agent_notes": "Closes #967. Follow-on to #965 verify surface. Does not check #654 boxes.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_health.py -k self_migrate -q.",
+        "2. gh plate health --json | jq '.self_migrate_ready,.self_migrate_drift'.",
+        "3. If drift or not ready, follow self_migrate_next_command."
+      ],
+      "links": [
+        "#967",
+        "#965",
+        "#649",
+        "#953",
+        "#633",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, src/plate_core/feed.py, tests/test_what_next.py, tests/test_feed.py",
+      "migration_impact": "Agents may see priority=self_migrate_verify when pin is aligned but offline verify fails (e.g. .plate invalid). Follow next_command (gh plate self-migrate --verify --json).",
+      "agent_notes": "Closes #969. Complements #965 verify + #967 health fields. Does not check #654 boxes.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_what_next.py -k SelfMigrate -q && pytest tests/test_feed.py -k self_migrate -q.",
+        "2. Empty pipeline: plate_what_next / gh plate what-next \u2014 if self_migrate_verify, run --verify.",
+        "3. Drift still ranks priority=self_migrate (plan) ahead of verify."
+      ],
+      "links": [
+        "#969",
+        "#965",
+        "#967",
+        "#941",
+        "#649",
+        "#633",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+      "migration_impact": "Wiki/process memory only. Agents should treat #649 first-slice surfaces as landed and not re-sketch plan/verify/health/what_next wiring. Live adopter E2E under #654 remains residual.",
+      "agent_notes": "Closes #971. Apply status:implemented on #649 in same PR follow-through. Does not close Epic #649 issue until main release ceremony if desired; first-slice label is enough for idle routing.",
+      "migration_guidance": [
+        "1. Read docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md rows for #649 and #633.",
+        "2. Prefer gh plate self-migrate --verify and health self_migrate_* fields over re-implementing.",
+        "3. Do not check #654 adoption/self-migrate boxes without live E2E proof."
+      ],
+      "links": [
+        "#971",
+        "#649",
+        "#633",
+        "#965",
+        "#967",
+        "#969",
+        "#615",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "tests/test_adoption.py, docs/migration/adoption-guide.md",
+      "migration_impact": "Tests and adoption-guide only. No runtime API change. Live third-party timed E2E still residual under #654.",
+      "agent_notes": "Closes #973. Local compound proof only; not production under-30m claim.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_adoption.py -k Compound -q.",
+        "2. Follow docs/migration/adoption-guide.md step for self-migrate --verify after health.",
+        "3. Do not check #654 adoption boxes without live E2E."
+      ],
+      "links": [
+        "#973",
+        "#633",
+        "#955",
+        "#965",
+        "#961",
+        "#649",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+      "migration_impact": "Wiki/process memory only. Prefer plate_pm_* + TUI/CLI feed over browser client. Live third-party adoption E2E still residual under #654.",
+      "agent_notes": "Closes #975. Comment on #660/#661/#633 with deferral + first-slice note. status:implemented already on #660; add on #633 if missing.",
+      "migration_guidance": [
+        "1. Read V1-Autonomy-Surfaces-Epic-Closeouts.md rows for #660 and #633.",
+        "2. Treat #661 as deferred optional client; do not implement in autopilot cycles.",
+        "3. Do not check #654 PM/adoption boxes without live E2E proof."
+      ],
+      "links": [
+        "#975",
+        "#660",
+        "#661",
+        "#633",
+        "#973",
+        "#649",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "README.md",
+      "migration_impact": "Public README only. Install commands unchanged (gh-plate, pip install plate-core). Downstream forks may re-copy README if customized.",
+      "agent_notes": "Closes #977. Addresses Task #533 README intent; post PLATE-TASK-CLOSED on #533 after merge if closing Task path.",
+      "migration_guidance": [
+        "1. Re-read README top sections for monorepo vs package naming.",
+        "2. Prefer gh plate what-next / autonomy / pm / adopt / self-migrate --verify in docs and onboarding.",
+        "3. Marketplace human Tasks #380/#381/#625/#626 still out of band."
+      ],
+      "links": [
+        "#977",
+        "#533",
+        "#654",
+        "#378",
+        "#379"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+      "migration_impact": "Wiki/process memory only. Apply status:implemented on #349/#462/#469/#659. Do not check #654 boxes.",
+      "agent_notes": "Closes #979. Labels applied in follow-through comments on the four Epics.",
+      "migration_guidance": [
+        "1. Read closeout rows for #349/#462/#469/#659.",
+        "2. Prefer existing CLI/MCP ceremony surfaces over new prompt-only ceremonies.",
+        "3. Marketplace/PyPI human Tasks still block packaging claims."
+      ],
+      "links": [
+        "#979",
+        "#349",
+        "#462",
+        "#469",
+        "#659",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/what_next.py, src/plate_core/feed.py, tests/test_what_next.py",
+      "migration_impact": "Agents see priority=v1_residual when pipeline empty and no closeout candidates. Stop refining deferred stubs by default; surface human gates instead.",
+      "agent_notes": "Closes #981. Replaces #915 stub-refine default after first-slices landed.",
+      "migration_guidance": [
+        "1. Pull release; pytest tests/test_what_next.py -q.",
+        "2. Empty pipeline: plate_what_next may return v1_residual \u2014 hand off live E2E / Tasks to humans.",
+        "3. Do not start #661 browser unless human scopes it."
+      ],
+      "links": [
+        "#981",
+        "#915",
+        "#913",
+        "#661",
+        "#654"
+      ],
+      "requires": [
+        "0.7.2"
+      ]
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": ""
+}
