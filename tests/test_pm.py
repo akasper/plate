@@ -60,6 +60,59 @@ class TestPMTeamAndAssign(unittest.TestCase):
         self.assertIn("auto-delegate disabled", asg["rationale"])
         self.assertNotIn("blocked: risk_tolerance=off", asg["rationale"])
 
+    def test_migrate_legacy_risk_off_blocked(self):
+        from plate_core.pm import migrate_legacy_risk_off_blocked_assignment
+
+        asg = {
+            "assignment_id": "asg-old",
+            "status": "blocked",
+            "rationale": "matched skill for implement → dev-cautious; blocked: risk_tolerance=off",
+            "packet": {},
+        }
+        self.assertTrue(migrate_legacy_risk_off_blocked_assignment(asg))
+        self.assertEqual(asg["status"], "proposed")
+        self.assertFalse(asg["packet"].get("auto_delegate"))
+        self.assertIn("migrated from legacy blocked", asg["rationale"])
+        # budget block stays blocked
+        bud = {
+            "status": "blocked",
+            "rationale": "matched; blocked: est 6000 > budget remaining 100; blocked: risk_tolerance=off",
+            "packet": {},
+        }
+        self.assertFalse(migrate_legacy_risk_off_blocked_assignment(bud))
+        self.assertEqual(bud["status"], "blocked")
+
+    def test_load_queue_migrates_legacy_risk_off_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            qdir = root / ".agentic" / "pm"
+            # ProjectManager uses state_dir or default under CWD — pass state_dir
+            state = root / "pm"
+            state.mkdir(parents=True)
+            qpath = state / "queue.json"
+            qpath.write_text(
+                json.dumps(
+                    {
+                        "assignments": [
+                            {
+                                "assignment_id": "asg-legacy",
+                                "work_id": "what_next-local",
+                                "status": "blocked",
+                                "rationale": "matched skill; blocked: risk_tolerance=off",
+                                "packet": {},
+                            }
+                        ]
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            pm = ProjectManager(repo=None, state_dir=state)
+            self.assertEqual(pm._assignments[0]["status"], "proposed")
+            # persisted
+            data = json.loads(qpath.read_text(encoding="utf-8"))
+            self.assertEqual(data["assignments"][0]["status"], "proposed")
+
     def test_ready_issue_candidates_from_what_next(self):
         from plate_core.pm import _ready_issue_candidates_from_what_next
 
