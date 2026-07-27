@@ -14,8 +14,10 @@ from plate_core.adoption import (
     first_qa_seed_status,
     plan_first_qa_seed,
     start_adoption_session,
+    write_first_qa_seed_marker,
 )
 from plate_core.cli import cmd_adopt
+from plate_core.self_migrate import verify_self_migrate
 from plate_core.what_next import recommend_what_next
 
 
@@ -219,7 +221,7 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
 
 class AdoptionGuideRegressionTests(unittest.TestCase):
     def test_guide_documents_under_30m_command_path(self):
-        """Proves: adoption-guide lists full #633 CLI path phrases (#961)."""
+        """Proves: adoption-guide lists full #633 CLI path phrases (#961/#973)."""
         root = Path(__file__).resolve().parents[1]
         guide = (root / "docs" / "migration" / "adoption-guide.md").read_text(
             encoding="utf-8"
@@ -232,13 +234,115 @@ class AdoptionGuideRegressionTests(unittest.TestCase):
             "gh plate adopt --first-qa-plan",
             "gh plate health --json",
             "gh plate feed --json",
+            "gh plate self-migrate --verify --json",
             "gh plate adopt --complete-session",
             "first_qa_seeded",
             "within_30m",
+            "self_migrate_ready",
             "#955",
             "#959",
+            "#965",
         ):
             self.assertIn(phrase, guide, f"missing guide phrase: {phrase}")
+
+
+class CompoundAdoptionPathTests(unittest.TestCase):
+    """Offline compound chain for #633 under-30m path (#973). Not live E2E."""
+
+    def _seed_core_ready(self, root: Path, *, version: str = "0.7.2") -> None:
+        (root / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+        (root / "SPEC.md").write_text("# spec\n", encoding="utf-8")
+        (root / ".plate").write_text(
+            json.dumps(
+                {
+                    "version": "1.2",
+                    "methodology": {},
+                    "autonomy": {"enabled": False, "risk_tolerance": "off"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+        goals = root / "docs" / "wiki"
+        goals.mkdir(parents=True, exist_ok=True)
+        (goals / "Goals.md").write_text("# Goals\n", encoding="utf-8")
+        unreleased = root / ".agentic" / "releases" / "unreleased"
+        unreleased.mkdir(parents=True, exist_ok=True)
+        (unreleased / "README.md").write_text("x\n", encoding="utf-8")
+        gh = root / ".github"
+        (gh / "workflows").mkdir(parents=True, exist_ok=True)
+        (gh / "labels.yml").write_text("labels: []\n", encoding="utf-8")
+        (gh / "workflows" / "plate-ci.yml").write_text("name: plate\n", encoding="utf-8")
+
+    def test_compound_session_ready_first_qa_verify_complete(self):
+        """Proves: offline chain session→core_ready→first_qa→verify→complete ≤30m (#973/#633)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            started = start_adoption_session(
+                root, now_iso="2026-07-27T12:00:00+00:00"
+            )
+            self.assertTrue(started.get("ok") or started.get("active") is not False)
+
+            # Mid-session: not core_ready yet
+            early = assess_adoption_readiness(root, include_optional=False)
+            self.assertFalse(early["core_ready"])
+
+            self._seed_core_ready(root, version="0.7.2")
+            write_first_qa_seed_marker(
+                root,
+                titles=["Q1", "Q2", "Q3"],
+                mode="compound_test",
+            )
+
+            ready = assess_adoption_readiness(root, include_optional=False)
+            self.assertTrue(ready["core_ready"])
+            self.assertTrue((ready.get("first_qa") or {}).get("seeded"))
+
+            verify = verify_self_migrate(root, target_version="0.7.2")
+            self.assertTrue(verify["ok"])
+            self.assertTrue(verify["ready"], msg=verify.get("failures"))
+
+            done = complete_adoption_session(
+                root, now_iso="2026-07-27T12:22:00+00:00"
+            )
+            self.assertTrue(done["ok"])
+            self.assertEqual(done["duration_minutes"], 22.0)
+            self.assertTrue(done["within_30m"])
+            self.assertTrue(done.get("core_ready") or ready["core_ready"])
+
+            # Empty-pipeline ranking should not force adoption/self_migrate residuals
+            wn = recommend_what_next(
+                health={"label_coverage_ok": True, "open_epic_count": 1},
+                budget={
+                    "budget_pressure": "ok",
+                    "remaining_tokens": 40000,
+                    "daily_limit": 50000,
+                },
+                open_prs=[],
+                ready_issues=[],
+                adoption={
+                    "core_ready": True,
+                    "first_qa": {"seeded": True},
+                    "estimated_minutes_remaining": 0,
+                },
+                adoption_session={"active": False},
+                self_migrate={
+                    "drift": False,
+                    "ready": True,
+                    "target_version": "0.7.2",
+                },
+                pm_status={"queue_size": 0},
+            )
+            self.assertNotIn(
+                wn.get("priority"),
+                (
+                    "adoption",
+                    "adoption_session",
+                    "first_qa_seed",
+                    "self_migrate",
+                    "self_migrate_verify",
+                ),
+            )
 
 
 if __name__ == "__main__":

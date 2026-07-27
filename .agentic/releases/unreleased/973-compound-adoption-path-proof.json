@@ -1,0 +1,16 @@
+{
+  "slug": "973-compound-adoption-path-proof",
+  "change_type": "feature",
+  "surface": "tests/test_adoption.py, docs/migration/adoption-guide.md",
+  "summary": "Offline compound under-30m adoption path proof (#973/#633): session→core_ready→first_qa marker→self-migrate verify→complete within_30m unit chain; guide adds --verify step and self_migrate_ready success signal.",
+  "migration_impact": "Tests and adoption-guide only. No runtime API change. Live third-party timed E2E still residual under #654.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_adoption.py -k Compound -q.",
+    "2. Follow docs/migration/adoption-guide.md step for self-migrate --verify after health.",
+    "3. Do not check #654 adoption boxes without live E2E."
+  ],
+  "agent_notes": "Closes #973. Local compound proof only; not production under-30m claim.",
+  "breaking": false,
+  "links": ["#973", "#633", "#955", "#965", "#961", "#649", "#654"],
+  "requires": ["0.7.2"]
+}

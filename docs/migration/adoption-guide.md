@@ -64,7 +64,16 @@ Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automa
    ```
    Write real mission text in `docs/wiki/Goals.md`. Replace CODEOWNERS placeholders.
 
-6. **Complete session timer (#955)**  
+6. **Self-migrate verify (#649 / #965)**  
+   ```bash
+   gh plate self-migrate --plan --json
+   gh plate self-migrate --verify --json
+   ```
+   Offline post-migrate checks: pin/payload drift, adoption `core_ready`, `.plate` validity.  
+   Health also exposes `self_migrate_ready` / `self_migrate_drift` (#967).  
+   MCP: `plate_self_migrate_verify`.
+
+7. **Complete session timer (#955)**  
    ```bash
    gh plate adopt --session-status --json
    gh plate adopt --complete-session --json
@@ -72,7 +81,7 @@ Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automa
    Records `duration_minutes` and `within_30m` against the 30-minute budget.  
    This is **local proof evidence**, not a claim that every monorepo finished live E2E.
 
-7. **Optional cutover**  
+8. **Optional cutover**  
    If the repo was previously template-derived: `gh plate migrate plan` then review before apply.  
    Self-migrate pin/payload drift: `gh plate self-migrate --plan --json` (#649).
 
@@ -83,7 +92,8 @@ Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automa
 | `core_ready` | `gh plate adopt --json` / health `adoption_core_ready` |
 | `first_qa_seeded` | adopt `first_qa.seeded` / health `first_qa_seeded` / marker file |
 | Session `within_30m` | `gh plate adopt --complete-session --json` |
-| Feed / what_next | No longer stuck on `adoption` / `adoption_session` / `first_qa_seed` |
+| Self-migrate `ready` | `gh plate self-migrate --verify --json` / health `self_migrate_ready` |
+| Feed / what_next | No longer stuck on `adoption` / `adoption_session` / `first_qa_seed` / `self_migrate*` |
 
 ## Auto-detect
 
