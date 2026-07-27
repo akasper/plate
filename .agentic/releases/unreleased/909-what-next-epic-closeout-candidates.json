@@ -1,0 +1,15 @@
+{
+  "slug": "909-what-next-epic-closeout-candidates",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py",
+  "summary": "plate_what_next names complete-child open Epics as first-slice closeout candidates (#909): GraphQL subIssuesSummary fetch when pipeline empty and PM idle; structured epic_closeout_candidates on priority=epic.",
+  "migration_impact": "Agents should act on named Epic numbers in next_action when present (wiki closeout + status:implemented) instead of re-scanning all open Epics. API failure degrades to prior generic epic guidance.",
+  "migration_guidance": [
+    "1. Pull release / upgrade plate-core after merge.",
+    "2. On empty pipeline + idle PM, run plate_what_next and prefer listed #N closeouts.",
+    "3. Residual E2E under #654 — do not re-check v1.0 boxes without proof."
+  ],
+  "agent_notes": "Extends #905/#907 idle path. Does not force PM dry-run. Empty-stub Epics (0 children) are skipped.",
+  "breaking": false,
+  "links": ["#909", "#905", "#907", "#654", "#660"]
+}

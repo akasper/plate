@@ -378,6 +378,83 @@ class TestWhatNextCLI(unittest.TestCase):
         self.assertIn("what-next", help_text)
 
 
+class TestEpicCloseoutCandidates(unittest.TestCase):
+    """Proves: complete-child open Epics are named on idle epic priority (#909)."""
+
+    def test_recommend_names_closeout_candidates(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 12},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            pm_status={"queue_size": 0, "open_assignments": 0, "open_checkpoints": 0},
+            epic_closeout_candidates=[
+                {
+                    "number": 656,
+                    "title": "Q&A planning",
+                    "children_total": 6,
+                    "children_completed": 6,
+                },
+                {
+                    "number": 657,
+                    "title": "Autonomy foundations",
+                    "children_total": 5,
+                    "children_completed": 5,
+                },
+            ],
+        )
+        self.assertEqual(out["priority"], "epic")
+        self.assertIn("#656", out["next_action"])
+        self.assertIn("#657", out["next_action"])
+        self.assertEqual(out["state_snapshot"]["epic_closeout_candidate_count"], 2)
+        self.assertEqual(len(out["epic_closeout_candidates"]), 2)
+        self.assertEqual(out["epic_closeout_candidates"][0]["number"], 656)
+
+    def test_fetch_filters_incomplete_and_empty(self):
+        from plate_core.what_next import fetch_epic_closeout_candidates
+
+        class FakeGh:
+            def api(self, endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+                return {
+                    "data": {
+                        "repository": {
+                            "issues": {
+                                "nodes": [
+                                    {
+                                        "number": 656,
+                                        "title": "done kids",
+                                        "subIssuesSummary": {"total": 6, "completed": 6},
+                                    },
+                                    {
+                                        "number": 661,
+                                        "title": "still open kids",
+                                        "subIssuesSummary": {"total": 2, "completed": 1},
+                                    },
+                                    {
+                                        "number": 999,
+                                        "title": "empty stub epic",
+                                        "subIssuesSummary": {"total": 0, "completed": 0},
+                                    },
+                                ]
+                            }
+                        }
+                    }
+                }
+
+        out = fetch_epic_closeout_candidates("akasper/plate", gh=FakeGh())
+        nums = [c["number"] for c in out]
+        self.assertEqual(nums, [656])
+        self.assertEqual(out[0]["children_total"], 6)
+
+    def test_fetch_degrades_on_api_error(self):
+        from plate_core.what_next import fetch_epic_closeout_candidates
+
+        class BoomGh:
+            def api(self, *a, **k):
+                raise RuntimeError("rate limit")
+
+        self.assertEqual(fetch_epic_closeout_candidates("akasper/plate", gh=BoomGh()), [])
+
+
 class TestGetWhatNextLiveWiring(unittest.TestCase):
     """Proves: live get_what_next wires PM status into idle vs active ranking (#907/#905/#364).
 

@@ -9,6 +9,7 @@ Priority (cheap → specific):
 6. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
 7. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
 8. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
+   — when available, name concrete complete-child Epic candidates (#909)
 9. Pending fragments / release status
 """
 
@@ -52,6 +53,7 @@ def recommend_what_next(
     ready_issues: list[dict[str, Any]] | None = None,
     pm_status: dict[str, Any] | None = None,
     release_status: dict[str, Any] | None = None,
+    epic_closeout_candidates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure recommendation from pre-fetched state (testable).
 
@@ -61,6 +63,7 @@ def recommend_what_next(
     ``ready_issues``: list of {number, title, labels?} implementable Feature/Bug candidates.
     ``pm_status``: get_pm_status().to_dict() shape for #660 orchestrator ranking.
     ``release_status``: get_release_status() shape for multi-track standing repair (#814).
+    ``epic_closeout_candidates``: open Epics with all children closed (#909).
     """
     h = dict(health or {})
     b = dict(budget or {})
@@ -68,6 +71,7 @@ def recommend_what_next(
     ready = list(ready_issues or [])
     pm = dict(pm_status or {})
     rel = dict(release_status or {})
+    closeouts = list(epic_closeout_candidates or [])
     labels_ok = bool(h.get("label_coverage_ok", False))
     open_epics = int(h.get("open_epic_count") or 0)
     missing_tracks = _missing_release_tracks(rel) if rel else []
@@ -148,6 +152,7 @@ def recommend_what_next(
         "pm_risk_tolerance": pm_risk,
         "release_branch_mode": rel.get("release_branch_mode"),
         "missing_release_tracks": missing_tracks,
+        "epic_closeout_candidate_count": len(closeouts),
     }
 
     # 1) Budget critical/exhausted OR next-cycle pause — even under risk=off (surface gates).
@@ -424,35 +429,74 @@ def recommend_what_next(
             "priority": "pm",
         }
 
-    # 7) Open Epics, PM idle, no ready issues — closeouts / stub refine (#905)
+    # 7) Open Epics, PM idle, no ready issues — closeouts / stub refine (#905/#909)
     if open_epics > 0:
-        action = (
-            "advance open Epics: first-slice closeout for Epics with all children "
-            "closed (wiki + status:implemented); else refine a need:refinement "
-            "stub into status:ready-to-work and implement"
-        )
-        prompt = (
-            "Pipeline empty, PM queue idle, no ready Features/Bugs. Do not run "
-            "plate_pm_run_cycle just because open_epic_count > 0 (#905). "
-            "1) gh plate release status  2) For Epics whose children are all closed "
-            "(e.g. #656/#657/#658/#470 first slices), document outcomes in "
-            "docs/wiki/ (extend V1-Autonomy-Surfaces-Epic-Closeouts.md), add "
-            "status:implemented, post a summary comment — residual E2E stays under "
-            "#654. 3) Otherwise refine a need:refinement/status:stub Feature into "
-            "ACs + status:ready-to-work and implement the smallest slice with tests + "
-            "fragment + PR to release. Prefer v1.0 path over marketplace human Tasks."
-            + quiet
-        )
-        return {
+        cand_bits: list[str] = []
+        structured: list[dict[str, Any]] = []
+        for c in closeouts[:8]:
+            num = c.get("number") or c.get("epic_issue_number")
+            title = str(c.get("title") or c.get("epic_issue_title") or "")[:60]
+            if num is None:
+                continue
+            cand_bits.append(f"#{num}")
+            structured.append(
+                {
+                    "number": int(num),
+                    "title": title,
+                    "children_total": c.get("children_total"),
+                    "children_completed": c.get("children_completed"),
+                }
+            )
+        if cand_bits:
+            action = (
+                "first-slice closeout for complete-child Epics "
+                f"{', '.join(cand_bits)} (wiki + status:implemented); residual E2E under #654"
+            )
+            prompt = (
+                "Pipeline empty, PM idle. Named Epics have all sub-issues closed (#909). "
+                "For each: extend docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md (or "
+                "epic wiki), add status:implemented if missing, post a summary comment. "
+                "Do not claim full v1.0 / re-check #654 without E2E proof. Do not run "
+                "plate_pm_run_cycle solely for open_epic_count. If closeouts already "
+                "recorded, refine a need:refinement stub into status:ready-to-work."
+                + quiet
+            )
+            rationale = (
+                f"{len(structured)} complete-child Epic closeout candidate(s); "
+                f"open_epics={open_epics} (#909/#905)"
+            )
+        else:
+            action = (
+                "advance open Epics: first-slice closeout for Epics with all children "
+                "closed (wiki + status:implemented); else refine a need:refinement "
+                "stub into status:ready-to-work and implement"
+            )
+            prompt = (
+                "Pipeline empty, PM queue idle, no ready Features/Bugs. Do not run "
+                "plate_pm_run_cycle just because open_epic_count > 0 (#905). "
+                "1) gh plate release status  2) For Epics whose children are all closed "
+                "(e.g. #656/#657/#658/#470 first slices), document outcomes in "
+                "docs/wiki/ (extend V1-Autonomy-Surfaces-Epic-Closeouts.md), add "
+                "status:implemented, post a summary comment — residual E2E stays under "
+                "#654. 3) Otherwise refine a need:refinement/status:stub Feature into "
+                "ACs + status:ready-to-work and implement the smallest slice with tests + "
+                "fragment + PR to release. Prefer v1.0 path over marketplace human Tasks."
+                + quiet
+            )
+            rationale = (
+                f"{open_epics} open Epic(s); PM idle (queue=0) — closeout or refine (#905)"
+            )
+        out: dict[str, Any] = {
             "next_action": action,
             "prompt_segment": prompt,
-            "rationale": (
-                f"{open_epics} open Epic(s); PM idle (queue=0) — closeout or refine (#905)"
-            ),
+            "rationale": rationale,
             "state_snapshot": state,
             "agent_type": agent_type or "general",
             "priority": "epic",
         }
+        if structured:
+            out["epic_closeout_candidates"] = structured
+        return out
 
     # 6) Fragments / release
     if pending_fragment_count is not None and int(pending_fragment_count) > 0:
@@ -514,6 +558,87 @@ def _normalize_ready_issue(item: dict[str, Any]) -> dict[str, Any] | None:
         "title": str(item.get("title") or ""),
         "labels": _issue_label_names(item),
     }
+
+
+def fetch_epic_closeout_candidates(
+    repo: str | None = None,
+    *,
+    limit: int = 8,
+    gh: Any | None = None,
+) -> list[dict[str, Any]]:
+    """Open Epic issues whose sub-issues are all closed (first-slice closeout candidates).
+
+    Uses GraphQL ``subIssuesSummary`` when available. Degrades to [] on failure (#909).
+    Only returns Epics with ``total > 0`` and ``completed == total`` (skips empty stubs).
+    """
+    from .github_client import GhClient
+    from .health import resolve_repo
+
+    target = resolve_repo(repo)
+    owner, _, name = target.partition("/")
+    if not owner or not name:
+        return []
+    client = gh or GhClient()
+    query = """
+    query($owner: String!, $name: String!) {
+      repository(owner: $owner, name: $name) {
+        issues(
+          first: 25
+          states: OPEN
+          labels: ["Epic"]
+          orderBy: {field: UPDATED_AT, direction: DESC}
+        ) {
+          nodes {
+            number
+            title
+            subIssuesSummary {
+              total
+              completed
+            }
+          }
+        }
+      }
+    }
+    """
+    try:
+        data = client.api(
+            "graphql",
+            method="POST",
+            fields={"query": query, "owner": owner, "name": name},
+        )
+    except Exception:
+        return []
+    if not isinstance(data, dict):
+        return []
+    nodes = (
+        ((data.get("data") or {}).get("repository") or {}).get("issues") or {}
+    ).get("nodes") or []
+    out: list[dict[str, Any]] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        summary = node.get("subIssuesSummary") or {}
+        try:
+            total = int(summary.get("total") or 0)
+            completed = int(summary.get("completed") or 0)
+        except (TypeError, ValueError):
+            continue
+        if total <= 0 or completed != total:
+            continue
+        num = node.get("number")
+        if num is None:
+            continue
+        out.append(
+            {
+                "number": int(num),
+                "title": str(node.get("title") or "")[:120],
+                "children_total": total,
+                "children_completed": completed,
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
 
 
 def fetch_ready_issue_candidates(
@@ -727,6 +852,26 @@ def get_what_next(
         except Exception:
             pm_status = None
 
+    epic_closeout_candidates: list[dict[str, Any]] = []
+    # Only when pipeline empty and PM idle — avoid GraphQL when PRs/ready/PM win ranking.
+    pm_active = False
+    if isinstance(pm_status, dict):
+        try:
+            pm_active = (
+                int(pm_status.get("queue_size") or 0) > 0
+                or int(pm_status.get("open_assignments") or 0) > 0
+                or int(pm_status.get("open_checkpoints") or 0) > 0
+                or int(pm_status.get("delegated") or 0) > 0
+                or int(pm_status.get("proposed") or 0) > 0
+            )
+        except (TypeError, ValueError):
+            pm_active = False
+    if not open_prs and not ready_issues and not pm_active:
+        try:
+            epic_closeout_candidates = fetch_epic_closeout_candidates(repo, limit=8)
+        except Exception:
+            epic_closeout_candidates = []
+
     return recommend_what_next(
         health=health,
         budget=budget,
@@ -736,4 +881,5 @@ def get_what_next(
         ready_issues=ready_issues,
         pm_status=pm_status,
         release_status=release_status,
+        epic_closeout_candidates=epic_closeout_candidates,
     )
