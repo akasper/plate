@@ -1,0 +1,16 @@
+{
+  "slug": "925-contemplation-artifact-mutation-intent",
+  "change_type": "feature",
+  "surface": "src/plate_core/contemplation.py, tests/test_contemplation.py, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+  "summary": "Contemplation detects process-impacting answers, logs PR-only artifact mutation intents, and opens a Feature plan issue with a release-base PR draft body (#925/#364 residual).",
+  "migration_impact": "contemplate() result gains mutation_intents + mutation_pr_draft; transcripts list Mutation intent lines; process answers prefer mutation-plan Feature issues over generic typed follow-ups. No auto push/PR open.",
+  "migration_guidance": [
+    "1. Pull release after merge; run pytest tests/test_contemplation.py -k mutation.",
+    "2. When answers mention AGENTS.md/SPEC/skills/wiki/docs/fragments, expect mutation plan issues + need:human-review for high-risk paths.",
+    "3. Agents execute the draft PR body on a branch targeting release; never direct main push.",
+    "4. Residual #364: auto PR open/push still deferred; compound Playwright e2e still open."
+  ],
+  "agent_notes": "Closes #925 only. Engine stays PR-plan-only (Design #143 / research v2.1 intent + v2.2 draft body without network PR API).",
+  "breaking": false,
+  "links": ["#925", "#923", "#921", "#364", "#143", "#257", "#654"]
+}

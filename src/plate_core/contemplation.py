@@ -203,6 +203,158 @@ def _classify_followup_issue_type(answer_text: str) -> tuple[str, str]:
     return "Feature", "[Feature]"
 
 
+# Process artifacts that must mutate only via PR (Design #143 §2 / research §3.3).
+# High-risk paths require need:human-review before merge (#925).
+_HIGH_RISK_ARTIFACT_PREFIXES = (
+    "AGENTS.md",
+    "SPEC.md",
+    ".github/workflows/",
+    ".plate",
+)
+
+_ARTIFACT_MUTATION_RULES: tuple[tuple[tuple[str, ...], str, str], ...] = (
+    (
+        ("agents.md", "update agents", "agent rules", "question loop"),
+        "AGENTS.md",
+        "Process / agent operating rules",
+    ),
+    (
+        ("spec.md", "update spec", "product intent", "spec update"),
+        "SPEC.md",
+        "Product intent / architecture",
+    ),
+    (
+        ("skills.yml", ".agentic/skills", "add skill", "catalog skill"),
+        ".agentic/skills.yml",
+        "Agent catalog / skills",
+    ),
+    (
+        ("current.md", "update current"),
+        "CURRENT.md",
+        "Current capability index",
+    ),
+    (
+        ("docs/wiki/", "wiki source", "wiki page"),
+        "docs/wiki/",
+        "Wiki source material",
+    ),
+    (
+        ("docs/research/", "research findings", "research note"),
+        "docs/research/",
+        "Research findings commit",
+    ),
+    (
+        ("docs/design/", "design artifact", "design note"),
+        "docs/design/",
+        "Design artifact commit",
+    ),
+    (
+        (
+            ".agentic/releases/unreleased",
+            "release fragment",
+            "unreleased fragment",
+            "fragment under",
+        ),
+        ".agentic/releases/unreleased/",
+        "Release-note fragment",
+    ),
+    (
+        (".github/workflows", "workflow file", "ci workflow"),
+        ".github/workflows/",
+        "CI / workflow definitions",
+    ),
+    (
+        ("change process", "process update", "update process", "process rule"),
+        "AGENTS.md",
+        "Generic process change (default AGENTS.md)",
+    ),
+)
+
+
+def _is_high_risk_artifact(path: str) -> bool:
+    p = path or ""
+    return any(p == pref or p.startswith(pref) for pref in _HIGH_RISK_ARTIFACT_PREFIXES)
+
+
+def _detect_artifact_mutation_intents(answer_text: str) -> list[dict[str, Any]]:
+    """Detect process-impacting answers that require PR-only artifact mutation (#925).
+
+    Returns structured intents (no git push, no PR API). Full auto PR creation is
+    deferred; agents execute the draft plan on a feature branch targeting release.
+    """
+    lower = (answer_text or "").lower()
+    if not lower.strip():
+        return []
+
+    intents: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for keywords, path, rationale in _ARTIFACT_MUTATION_RULES:
+        if not any(k in lower for k in keywords):
+            continue
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+        high_risk = _is_high_risk_artifact(path)
+        intents.append(
+            {
+                "path": path,
+                "rationale": rationale,
+                "risk": "high" if high_risk else "low",
+                "need_human_review": high_risk,
+                "mode": "pr_only",
+            }
+        )
+    return intents
+
+
+def _format_mutation_pr_draft(
+    question_number: int,
+    answer_text: str,
+    intents: list[dict[str, Any]],
+    git_commit: str,
+) -> str:
+    """Human/agent-executable PR body for process artifact mutations (never main push)."""
+    lines = [
+        f"## Contemplation artifact mutation plan (from Question #{question_number})",
+        "",
+        "Process-impacting answer requires **PR-only** artifact updates "
+        "(Design #143 §2). Do **not** push directly to `main`.",
+        "",
+        "### Suggested PR metadata",
+        "- **Base:** `release` (legacy integration; confirm with `gh plate release status`)",
+        "- **Branch:** `docs/contemplation-q{n}-artifact-mutation` "
+        f"(replace with short slug; q={question_number})",
+        "- **Labels:** `Documentation` (+ `Feature` only if process surface changes code)",
+        f"- **Body must include:** `Closes #{question_number}` when this PR is the closure path",
+        f"- **Provenance git commit at contemplate time:** `{git_commit}`",
+        "",
+        "### Mutation intents",
+    ]
+    for intent in intents:
+        risk = intent.get("risk", "low")
+        path = intent.get("path", "?")
+        rationale = intent.get("rationale", "")
+        human = " **need:human-review**" if intent.get("need_human_review") else ""
+        lines.append(f"- `{path}` ({risk}){human} — {rationale}")
+    lines.extend(
+        [
+            "",
+            "### Original answer excerpt",
+            "",
+            f"> {(answer_text or '')[:500]}",
+            "",
+            "### Agent checklist",
+            "1. Branch from latest `origin/release`.",
+            "2. Apply minimal edits only to listed paths (plus fragment if process surface).",
+            "3. Open PR to `release` with clean human title; put closing keywords in body only.",
+            "4. Babysit to green; high-risk paths wait for human review.",
+            "",
+            f"<!-- plate-contemplation-mutation-plan: q{question_number} -->",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _git_head_sha() -> str:
     """Best-effort HEAD SHA for contemplation provenance (#923)."""
     try:
@@ -258,6 +410,8 @@ class ContemplationEngine:
         answer_text = answer_text or ""
         actions: list[str] = []
         created_issues: list[dict[str, Any]] = []
+        mutation_intents: list[dict[str, Any]] = []
+        mutation_pr_draft: str | None = None
         log_url = None
         close_ready_comment_url = None
 
@@ -297,7 +451,62 @@ class ContemplationEngine:
         else:
             actions.extend(criterion_warnings)
 
-        if (
+        # Git commit first so mutation PR drafts can cite provenance (#923/#925)
+        git_commit = _git_head_sha()
+        mutation_intents = _detect_artifact_mutation_intents(answer_text)
+        if mutation_intents:
+            mutation_pr_draft = _format_mutation_pr_draft(
+                question_number=question_number,
+                answer_text=answer_text,
+                intents=mutation_intents,
+                git_commit=git_commit,
+            )
+            high = sum(1 for i in mutation_intents if i.get("need_human_review"))
+            actions.append(
+                f"Detected {len(mutation_intents)} artifact mutation intent(s) "
+                f"({high} high-risk); PR-only mode"
+            )
+
+        # Prefer Documentation mutation plan issue over generic Feature when intents fire.
+        if mutation_intents and not close_signal_met:
+            try:
+                paths = ", ".join(i["path"] for i in mutation_intents)
+                title = (
+                    f"[Feature]: Artifact mutation PR plan from Question #{question_number}"
+                )
+                body = (
+                    f"Contemplation-driven **PR-only** process artifact mutation plan "
+                    f"from answer to Question #{question_number}.\n\n"
+                    f"**Parent Question:** #{question_number}\n\n"
+                    f"**Target paths:** {paths}\n\n"
+                    "Open a **Documentation** (or Feature) PR targeting `release` using the "
+                    "draft body below. Never push mutations directly to main.\n\n"
+                    f"{mutation_pr_draft}\n\n"
+                    f"<!-- plate-contemplation-mutation-ref: q{question_number} @{timestamp} -->"
+                )
+                labels = ["Feature"]
+                if any(i.get("need_human_review") for i in mutation_intents):
+                    labels.append("need:human-review")
+                new_issue = self.gh.api(
+                    f"repos/{target}/issues",
+                    method="POST",
+                    fields={"title": title, "body": body, "labels": labels},
+                )
+                created_issues.append(
+                    {
+                        "number": new_issue.get("number"),
+                        "title": title,
+                        "url": new_issue.get("html_url"),
+                        "type": "Feature",
+                        "mutation_plan": True,
+                    }
+                )
+                actions.append(
+                    f"Created Feature mutation plan: #{new_issue.get('number')}"
+                )
+            except GhApiError as exc:
+                actions.append(f"Create mutation plan issue failed: {exc}")
+        elif (
             not close_signal_met
             and (
                 any(keyword in answer_text.lower() for keyword in ["risk", "unknown", "create ", "implement ", "add "])
@@ -333,7 +542,6 @@ class ContemplationEngine:
 
         # Full non-destructive transcript: keep excerpt for scannability + full answer (#921)
         # Git commit + structured provenance fields for Design #142 gap (#923)
-        git_commit = _git_head_sha()
         body_excerpt = " ".join((issue_body or "").split())[:200]
         log_lines = [
             "<!-- PLATE-CONTEMPLATION:BEGIN -->",
@@ -356,7 +564,15 @@ class ContemplationEngine:
             answer_text if answer_text else "(empty)",
             f"Answer signal criteria: {len(criteria)}",
             f"Effective answers considered: {len(effective_answers)}",
+            f"Artifact mutation intents: {len(mutation_intents)}",
         ]
+        for intent in mutation_intents:
+            hr = " need:human-review" if intent.get("need_human_review") else ""
+            log_lines.append(
+                f"Mutation intent: {intent.get('path')} "
+                f"risk={intent.get('risk')} mode={intent.get('mode')}{hr} "
+                f"— {intent.get('rationale')}"
+            )
         for warning in criterion_warnings:
             log_lines.append(f"Warning: {warning}")
         for index, evaluation in enumerate(answer_signal_evaluation, start=1):
@@ -368,7 +584,14 @@ class ContemplationEngine:
             log_lines.append(f"Criterion {index}: {status} - {evaluation['criterion']}")
             log_lines.append(f"Criterion {index} citations: {unique_citations}")
         if close_signal_met:
-            actions.append("Answer signal satisfied; Question is ready to close via a PR artifact")
+            if mutation_intents:
+                actions.append(
+                    "Answer signal satisfied; close via PR that applies mutation intents"
+                )
+            else:
+                actions.append(
+                    "Answer signal satisfied; Question is ready to close via a PR artifact"
+                )
         log_lines.append(f"Actions triggered: {'; '.join(actions) if actions else 'none'}")
         log_lines.append(f"Close signal met: {str(close_signal_met).lower()}")
         log_lines.append("<!-- PLATE-CONTEMPLATION:END -->")
@@ -453,7 +676,9 @@ class ContemplationEngine:
             "close_ready_comment_url": close_ready_comment_url,
             "answer_signal_evaluation": answer_signal_evaluation,
             "git_commit": git_commit,
-            "note": "Strict checklist-based contemplation engine. Questions become PR-close-ready only when every answer-signal checklist item is backed by cited evidence from effective answers.",
+            "mutation_intents": mutation_intents,
+            "mutation_pr_draft": mutation_pr_draft,
+            "note": "Strict checklist-based contemplation engine. Questions become PR-close-ready only when every answer-signal checklist item is backed by cited evidence from effective answers. Process artifacts mutate via PR draft plans only (#925).",
         }
 
 
