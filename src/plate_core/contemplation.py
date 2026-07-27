@@ -14,6 +14,7 @@ issues must close via a PR that commits the required artifact and includes
 from __future__ import annotations
 
 import re
+import subprocess
 from datetime import datetime, timezone
 from typing import Any
 
@@ -202,6 +203,27 @@ def _classify_followup_issue_type(answer_text: str) -> tuple[str, str]:
     return "Feature", "[Feature]"
 
 
+def _git_head_sha() -> str:
+    """Best-effort HEAD SHA for contemplation provenance (#923)."""
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=2,
+        )
+        if proc.returncode == 0:
+            sha = (proc.stdout or "").strip()
+            if re.fullmatch(r"[0-9a-f]{7,40}", sha):
+                return sha
+    except Exception:
+        pass
+    return "unknown"
+
+
 def _format_usage_report() -> str:
     return "\n".join(
         [
@@ -310,6 +332,8 @@ class ContemplationEngine:
                 actions.append(f"Create issue failed: {exc}")
 
         # Full non-destructive transcript: keep excerpt for scannability + full answer (#921)
+        # Git commit + structured provenance fields for Design #142 gap (#923)
+        git_commit = _git_head_sha()
         body_excerpt = " ".join((issue_body or "").split())[:200]
         log_lines = [
             "<!-- PLATE-CONTEMPLATION:BEGIN -->",
@@ -320,6 +344,13 @@ class ContemplationEngine:
             f"Timestamp: {timestamp}",
             f"Source: {source}",
             f"Session: {session or 'none'}",
+            f"Git commit: {git_commit}",
+            "Provenance:",
+            f"  question_id: {question_number}",
+            f"  session_id: {session or 'none'}",
+            f"  author: {answered_by}",
+            f"  git_commit: {git_commit}",
+            f"  source: {source}",
             f"Answer excerpt: {answer_text[:180]}{'...' if len(answer_text) > 180 else ''}",
             "Answer full:",
             answer_text if answer_text else "(empty)",
@@ -421,6 +452,7 @@ class ContemplationEngine:
             "contemplation_log_url": log_url,
             "close_ready_comment_url": close_ready_comment_url,
             "answer_signal_evaluation": answer_signal_evaluation,
+            "git_commit": git_commit,
             "note": "Strict checklist-based contemplation engine. Questions become PR-close-ready only when every answer-signal checklist item is backed by cited evidence from effective answers.",
         }
 
