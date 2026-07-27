@@ -13,6 +13,7 @@ from plate_core.self_migrate import (
     plan_self_migrate,
     plan_self_migrate_pr,
     resolve_upstream_version,
+    verify_self_migrate,
 )
 from plate_core.cli import cmd_self_migrate
 
@@ -424,6 +425,7 @@ new core block from upstream
                     "apply_markers": False,
                     "upstream_dir": str(up),
                     "path": ["AGENTS.md"],
+                    "verify": False,
                 },
             )()
             import io
@@ -440,6 +442,118 @@ new core block from upstream
             data = json.loads(buf.getvalue())
             self.assertTrue(data["ok"])
             self.assertEqual(data["would_write"], 1)
+
+
+class VerifySelfMigrateTests(unittest.TestCase):
+    def _core_ready_tree(self, root: Path, *, version: str = "0.7.2") -> None:
+        (root / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+        (root / "SPEC.md").write_text("# spec\n", encoding="utf-8")
+        (root / "CURRENT.md").write_text("# current\n", encoding="utf-8")
+        (root / ".plate").write_text(
+            json.dumps(
+                {
+                    "version": "1.2",
+                    "methodology": {},
+                    "autonomy": {"enabled": False, "risk_tolerance": "off"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+        goals = root / "docs" / "wiki"
+        goals.mkdir(parents=True, exist_ok=True)
+        (goals / "Goals.md").write_text("# Goals\n", encoding="utf-8")
+        unreleased = root / ".agentic" / "releases" / "unreleased"
+        unreleased.mkdir(parents=True, exist_ok=True)
+        (unreleased / "README.md").write_text("x\n", encoding="utf-8")
+        gh = root / ".github"
+        (gh / "workflows").mkdir(parents=True, exist_ok=True)
+        (gh / "labels.yml").write_text("labels: []\n", encoding="utf-8")
+        (gh / "workflows" / "plate-ci.yml").write_text("name: plate\n", encoding="utf-8")
+
+    def test_verify_ready_when_no_drift_and_core_ready(self):
+        """Proves: offline verify ready when pin matches and adoption core_ready (#965)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._core_ready_tree(root, version="0.7.2")
+            report = verify_self_migrate(root, target_version="0.7.2")
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["mode"], "verify")
+        self.assertTrue(report["ready"])
+        self.assertEqual(report["failures"], [])
+        ids = {c["id"] for c in report["checks"]}
+        self.assertEqual(ids, {"no_drift", "adoption_core_ready", "plate_config_valid"})
+        self.assertFalse(report["auto_apply"])
+
+    def test_verify_fails_on_pin_drift(self):
+        """Proves: pin behind target fails no_drift check (#965)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._core_ready_tree(root, version="0.6.0")
+            report = verify_self_migrate(root, target_version="0.7.2")
+        self.assertTrue(report["ok"])
+        self.assertFalse(report["ready"])
+        self.assertIn("pin_or_payload_drift", report["failures"])
+        drift_check = next(c for c in report["checks"] if c["id"] == "no_drift")
+        self.assertFalse(drift_check["ok"])
+
+    def test_verify_fails_when_adoption_not_ready(self):
+        """Proves: empty tree fails adoption_core_ready (#965)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VERSION").write_text("0.7.2\n", encoding="utf-8")
+            report = verify_self_migrate(root, target_version="0.7.2")
+        self.assertFalse(report["ready"])
+        self.assertIn("adoption_not_core_ready", report["failures"])
+
+    def test_plan_step_six_points_at_verify(self):
+        """Proves: plan step 6_verify references self-migrate --verify (#965)."""
+        with TemporaryDirectory() as tmp:
+            report = plan_self_migrate(tmp, target_version="0.7.2")
+        step = next(s for s in report["steps"] if s["id"] == "6_verify")
+        self.assertIn("--verify", step["description"])
+
+    def test_cmd_verify_json(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._core_ready_tree(root, version="0.7.2")
+            ns = type(
+                "NS",
+                (),
+                {
+                    "repo_root": str(root),
+                    "target_version": "0.7.2",
+                    "no_payload": False,
+                    "plan": False,
+                    "json": True,
+                    "merge_markers": False,
+                    "apply_markers": False,
+                    "upstream_dir": None,
+                    "path": None,
+                    "resolve_upstream": False,
+                    "allow_network": False,
+                    "pr_plan": False,
+                    "apply_pr": False,
+                    "allow_high_risk": False,
+                    "base": "release",
+                    "closes": None,
+                    "verify": True,
+                },
+            )()
+            import io
+            import sys
+
+            buf = io.StringIO()
+            old = sys.stdout
+            try:
+                sys.stdout = buf
+                rc = cmd_self_migrate(ns)
+            finally:
+                sys.stdout = old
+            self.assertEqual(rc, 0)
+            data = json.loads(buf.getvalue())
+            self.assertTrue(data["ready"])
+            self.assertEqual(data["mode"], "verify")
 
 
 if __name__ == "__main__":
