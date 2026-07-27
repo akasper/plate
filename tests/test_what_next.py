@@ -65,16 +65,32 @@ class TestRecommendWhatNext(unittest.TestCase):
         self.assertEqual(out["priority"], "bootstrap")
 
     def test_epic_when_healthy_pm_idle(self):
-        """#905: empty pipeline + open epics + idle PM → epic closeout/refine, not PM dry-run."""
+        """#905/#915: empty pipeline + idle PM + no closeout cands → stub refine, not PM."""
         out = recommend_what_next(
             health={"label_coverage_ok": True, "open_epic_count": 2},
             budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
             open_prs=[],
             pm_status={"open_checkpoints": 0, "delegated": 0, "proposed": 0, "queue_size": 0},
+            epic_closeout_candidates=[],
         )
         self.assertEqual(out["priority"], "epic")
-        self.assertIn("closeout", out["next_action"].lower())
+        self.assertIn("refine", out["next_action"].lower())
+        self.assertIn("no first-slice closeout candidates", out["next_action"].lower())
         self.assertNotIn("Project Manager cycle", out["next_action"])
+
+    def test_empty_closeout_candidates_prefer_stub_refine(self):
+        """#915: after #913 filters, empty candidates must not lead with closeout prose."""
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 20},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            pm_status={"queue_size": 0, "open_assignments": 0},
+            epic_closeout_candidates=[],
+        )
+        self.assertEqual(out["priority"], "epic")
+        self.assertIn("stub", out["next_action"].lower())
+        self.assertNotIn("first-slice closeout for complete-child", out["next_action"])
+        self.assertIn("915", out["rationale"])
 
     def test_pm_when_active_queue_even_with_open_epics(self):
         """Active PM queue still ranks PM over generic epic prose (#660)."""
