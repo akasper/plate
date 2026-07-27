@@ -103,6 +103,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
   - Fleet handoffs (`fleet.py`): accept dispatches implementer→feature/bug loop, researcher/design→#632 artifact, reviewer→babysit; high-risk handoffs open checkpoints
 - **SPEC audit** (`spec_audit.py`): structured findings (aligned/undocumented/stale_evidence); `gh plate spec-audit --followups` / MCP `plate_spec_audit_followups` route to Documentation/Bug/Question with human gate on SPEC writes
 - **Adoption import**: `import_payload.py` + `template_payload_manifest.yml` path_rules (safe|conservative|force, install_as, conflict strategies); `gh plate import-payload` / `plate_import_payload`
+- **template_payload adopter harness**: `tests/test_template_payload.py` proves adopter claims (AGENTS/SPEC, e2e scaffold, core workflows present; `list_payload_files` + import dry-run plan them) so <30m onboarding evidence is bidirectional (#917/#364 residual)
 - **Surfaces**: `gh plate *` and MCP `plate_*` stay parity for health, epic, release, autonomy, feed, planning, checkpoint, ledger, pm, fleet, import-payload, spec-audit.
 - **Progressive features**: Playwright E2E, skill marketplace, visualization dashboards, multi-agent team runtime depth, hybrid/non-code workflows.
 
@@ -113,6 +114,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 - `gh plate bootstrap --apply` → fully scaffolded PLATE repo (including standing release tracks / Next Release as applicable).
 - `/agent plate "Implement feature X"` → agent plans, implements test-first, opens atomic PR to the correct release base (`gh plate release status` first).
 - `gh plate health` + `gh plate epic status` + `gh plate what-next` / `plate_what_next` → instant confidence and next process step.
+- **what_next priority ladder (proved):** budget_gate → open_pr → adoption/self-migrate → ready_issue → pm_tick / active PM → epic closeout or stub refine when the PM queue is **idle** (do not force PM dry-run solely because `open_epic_count > 0`). Live idle-vs-active PM ranking is covered by integration-style tests in `tests/test_what_next.py` (#905/#907 proving path).
 - **Budgeted autonomy:** operator sets `.plate` `autonomy.risk_tolerance` + budgets; agent or scheduler runs `gh plate autonomy --status` then `run` / `--loop` (or MCP `plate_autonomy_run_cycle`). Risk `off` disables engine autopilot only — ordinary Feature/Bug/Doc implementation still proceeds under human review rules.
 - **Safety path:** high-impact actions use `plate_autonomy_simulate` / shadow reports; open checkpoints pause cycles until decide/approve; ledger records decisions for audit.
 - **Feed + planning:** `plate_feed` ranks open Questions/Tasks; Q&A planning builds Feature/Epic/Release stubs with approval prompts.
