@@ -166,7 +166,9 @@ Post-#470 / #654 landings added substantial feature-proof coverage that this Jun
 
 **Gap closed in this batch (#907):** Bidirectional proof that idle PM + open epics does **not** force PM dry-run; active `open_assignments` / delegated rows still rank PM/tick. Tests declare `Proves:` claims in docstrings.
 
-**Still open under #364 (not claimed done here):** Contemplation Engine v2 full contract matrix; compound Playwright e2e (babysit→merge, release cut+finalize); template_payload adopter audit parity.
+**Still open under #364 (not claimed done here):** Contemplation Engine v2 full contract matrix; compound Playwright e2e (babysit→merge, release cut+finalize).
+
+**Closed (first slice) under #917:** template_payload adopter harness parity — `TemplatePayloadAdopterClaimsTests` proves payload ships AGENTS/SPEC, e2e README+example specs, core workflows; `list_payload_files` + import dry-run plan those paths. Monorepo-only `plugin-structure.spec.ts` / `catalog-discovery.spec.ts` (hardcoded `.plugin` layout) intentionally **not** copied into payload; adopters get example harness + import-payload instead.
 
 ---
 *This report follows the template in `docs/audits/audit-report-template.md`. Per PLATE Issue Artifact Rules for Audit/Epic work, findings live in `docs/audits/`.*
