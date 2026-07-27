@@ -392,6 +392,30 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 upstream_root=args.get("upstream_root") or args.get("upstream_dir"),
                 apply=bool(args.get("apply", False)),
             )
+        elif name == "plate_self_migrate_pr_plan":
+            from .self_migrate import apply_self_migrate_pr, plan_self_migrate_pr
+
+            pr_plan = plan_self_migrate_pr(
+                args.get("repo_root") or ".",
+                target_version=args.get("target_version"),
+                include_payload=not bool(args.get("no_payload", False)),
+                resolve_upstream=bool(args.get("resolve_upstream", False)),
+                allow_network=bool(args.get("allow_network", False)),
+                base=args.get("base") or "release",
+                closes=args.get("closes"),
+            )
+            if bool(args.get("apply", False)):
+                payload = {
+                    "plan": pr_plan,
+                    "apply": apply_self_migrate_pr(
+                        pr_plan,
+                        dry_run=False,
+                        allow_high_risk=bool(args.get("allow_high_risk", False)),
+                        runner=None,
+                    ),
+                }
+            else:
+                payload = pr_plan
         elif name == "plate_config_get":
             payload = get_plate_config_report(args.get("repo_root")).to_dict()
         elif name == "plate_config_validate":
@@ -2266,6 +2290,51 @@ def run() -> None:
                                         "apply": {
                                             "type": "boolean",
                                             "description": "When true, write merged content. Default false (dry-run).",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_self_migrate_pr_plan",
+                                "description": "Low-risk self-migrate migration PR plan (#947/#649). Dry-run by default; apply needs injectable runner and low-risk pin-only eligibility.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "target_version": {
+                                            "type": "string",
+                                            "description": "Optional target plate-core semver.",
+                                        },
+                                        "base": {
+                                            "type": "string",
+                                            "description": "PR base branch (default release).",
+                                        },
+                                        "closes": {
+                                            "type": "string",
+                                            "description": "Optional issue ref for PR body.",
+                                        },
+                                        "no_payload": {
+                                            "type": "boolean",
+                                            "description": "Omit payload step from underlying migrate plan.",
+                                        },
+                                        "resolve_upstream": {
+                                            "type": "boolean",
+                                            "description": "Resolve upstream version for target.",
+                                        },
+                                        "allow_network": {
+                                            "type": "boolean",
+                                            "description": "Permit network for resolve_upstream.",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "Attempt live apply (requires runner; default false).",
+                                        },
+                                        "allow_high_risk": {
+                                            "type": "boolean",
+                                            "description": "Permit non-low-risk apply when runner provided.",
                                         },
                                     },
                                 },

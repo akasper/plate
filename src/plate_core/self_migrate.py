@@ -596,3 +596,342 @@ def plan_marker_merge(
             else "gh plate health"
         ),
     }
+
+
+# Pin/source files that may be updated in a low-risk self-migrate PR.
+_LOW_RISK_PIN_PATHS = frozenset(
+    {
+        "VERSION",
+        "PLATE_CORE_VERSION",
+        "gh-plate/VERSION",
+        "requirements.txt",
+        "pyproject.toml",
+    }
+)
+
+
+def plan_self_migrate_pr(
+    repo_root: str | Path | None = None,
+    *,
+    target_version: str | None = None,
+    include_payload: bool = True,
+    resolve_upstream: bool = False,
+    allow_network: bool = False,
+    upstream_fetcher: UpstreamFetcher | None = None,
+    base: str = "release",
+    closes: str | None = None,
+    migrate_plan: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a dry-run migration PR plan from self-migrate status (#947 / #649).
+
+    Pure helper: no git, no network (unless migrate_plan resolve is requested).
+    Default base is legacy ``release``. Does not open a PR.
+    """
+    root = Path(repo_root or ".").resolve()
+    plan = migrate_plan or plan_self_migrate(
+        root,
+        target_version=target_version,
+        include_payload=include_payload,
+        resolve_upstream=resolve_upstream,
+        allow_network=allow_network,
+        upstream_fetcher=upstream_fetcher,
+    )
+    if not plan.get("ok"):
+        return {
+            "ok": False,
+            "error": "migrate_plan_failed",
+            "migrate_plan": plan,
+            "auto_apply": False,
+        }
+
+    target = str(plan.get("target_version") or "unknown")
+    pin = plan.get("pin") or {}
+    pin_source = pin.get("source")
+    pin_path = None
+    if pin.get("pins"):
+        pin_path = pin["pins"][0].get("path")
+    elif pin_source:
+        # map source label to relative path when possible
+        for p in pin.get("pins") or []:
+            if p.get("source") == pin_source:
+                pin_path = p.get("path")
+                break
+
+    file_intents: list[dict[str, Any]] = []
+    if pin_source and plan.get("comparisons", {}).get("pin_vs_target") in (
+        "behind",
+        "ahead",
+    ):
+        rel = None
+        if pin_path:
+            try:
+                rel = str(Path(pin_path).resolve().relative_to(root))
+            except ValueError:
+                rel = Path(pin_path).name
+        else:
+            rel = {
+                "VERSION": "VERSION",
+                "PLATE_CORE_VERSION": "PLATE_CORE_VERSION",
+                "gh-plate/VERSION": "gh-plate/VERSION",
+                "pyproject.toml": "pyproject.toml",
+                "requirements.txt": "requirements.txt",
+            }.get(str(pin_source), str(pin_source))
+        file_intents.append(
+            {
+                "path": rel,
+                "action": "align_pin",
+                "from_version": pin.get("version"),
+                "to_version": target,
+                "low_risk": rel in _LOW_RISK_PIN_PATHS
+                or Path(rel).name in ("VERSION", "PLATE_CORE_VERSION"),
+            }
+        )
+
+    # Marker-bearing process files are medium when present; list as review-only intents
+    for p in plan.get("refresh_paths_present") or []:
+        if p.get("has_plates_core_markers") and p.get("path"):
+            file_intents.append(
+                {
+                    "path": p["path"],
+                    "action": "marker_review",
+                    "low_risk": False,
+                    "note": "Use --merge-markers with explicit --apply-markers after review",
+                }
+            )
+
+    if not file_intents and not plan.get("drift"):
+        return {
+            "ok": True,
+            "mode": "pr_plan",
+            "eligible": False,
+            "reason": "no_drift",
+            "migrate_plan": plan,
+            "base": base,
+            "file_intents": [],
+            "auto_apply": False,
+            "note": "No pin/payload drift; migration PR not needed.",
+            "related_issues": ["#947", "#649", "#945", "#943", "#939"],
+        }
+
+    if not file_intents and plan.get("drift"):
+        # Drift from installed vs target without pin file: still plan runtime upgrade PR body
+        file_intents.append(
+            {
+                "path": "PLATE_CORE_VERSION",
+                "action": "align_pin_or_document",
+                "from_version": plan.get("installed_version"),
+                "to_version": target,
+                "low_risk": True,
+                "note": "Pin file may be absent; document upgrade in PR body",
+            }
+        )
+
+    # Eligibility is pin-alignment only; marker_review is advisory (not auto-applied).
+    pin_intents = [
+        i
+        for i in file_intents
+        if i.get("action") in ("align_pin", "align_pin_or_document")
+    ]
+    marker_intents = [i for i in file_intents if i.get("action") == "marker_review"]
+    pin_only_low = bool(pin_intents) and all(i.get("low_risk") for i in pin_intents)
+    high_risk = not pin_only_low
+    risk = "low" if pin_only_low else "medium"
+    if marker_intents and not pin_only_low:
+        risk = "medium"
+        high_risk = True
+
+    slug_ver = target.replace(".", "-")
+    branch = f"chore/self-migrate-{slug_ver}"
+    title = f"Self-migrate plate-core pin toward {target}"
+    closes_line = f"\n\nCloses {closes}" if closes else ""
+    body = (
+        f"## Summary\n"
+        f"- Self-migrate plan for plate-core target **{target}**\n"
+        f"- Installed: {plan.get('installed_version')}; "
+        f"pin: {pin.get('version')} ({pin.get('source')})\n"
+        f"- Drift: {plan.get('drift')}; plan risk: {plan.get('risk')}\n"
+        f"\n## File intents\n"
+        + "\n".join(
+            f"- `{i.get('path')}`: {i.get('action')} "
+            f"({i.get('from_version')} → {i.get('to_version')})"
+            if i.get("to_version")
+            else f"- `{i.get('path')}`: {i.get('action')}"
+            for i in file_intents
+        )
+        + "\n\n## Safety\n"
+        "- Generated by `gh plate self-migrate --pr-plan` (#947)\n"
+        "- Dry-run by default; apply requires explicit `--apply-pr` and low risk\n"
+        "- Marker sections are advisory only — use --merge-markers separately\n"
+        "- Does not auto-merge; no secrets\n"
+        f"{closes_line}"
+    ).strip() + "\n"
+
+    # Commit paths: only pin alignments for low-risk auto PR
+    paths = [str(i["path"]) for i in pin_intents if i.get("path")] or [
+        str(i["path"]) for i in file_intents if i.get("path")
+    ]
+    labels = ["Feature", "Migration", "area:agent", f"risk:{risk}"]
+    if high_risk:
+        labels.append("need:human-review")
+
+    git_steps = [
+        f"git fetch origin {base}",
+        f"git checkout -b {branch} origin/{base}",
+        "apply pin intents: " + ", ".join(paths),
+        "git add -- " + " ".join(paths),
+        f'git commit -m "Self-migrate plate-core pin toward {target}"',
+        f"git push -u origin {branch}",
+    ]
+    gh_argv = [
+        "gh",
+        "pr",
+        "create",
+        "--base",
+        base,
+        "--head",
+        branch,
+        "--title",
+        title,
+        "--body",
+        body,
+        "--label",
+        ",".join(labels),
+    ]
+
+    eligible = bool(plan.get("drift")) and pin_only_low and risk == "low"
+    return {
+        "ok": True,
+        "mode": "pr_plan",
+        "eligible": eligible,
+        "reason": (
+            None
+            if eligible
+            else (
+                "no_drift"
+                if not plan.get("drift")
+                else "not_low_risk_pin_only"
+            )
+        ),
+        "migrate_plan": {
+            "target_version": plan.get("target_version"),
+            "installed_version": plan.get("installed_version"),
+            "pin": plan.get("pin"),
+            "drift": plan.get("drift"),
+            "risk": plan.get("risk"),
+            "comparisons": plan.get("comparisons"),
+        },
+        "base": base,
+        "branch": branch,
+        "title": title,
+        "body": body,
+        "labels": labels,
+        "paths": paths,
+        "file_intents": file_intents,
+        "risk": risk,
+        "high_risk": high_risk,
+        "need_human_review": high_risk,
+        "git_steps": git_steps,
+        "gh_argv": gh_argv,
+        "auto_apply": False,
+        "auto_push": False,
+        "note": (
+            "PR plan only — no git push or gh pr create. "
+            "Use apply_self_migrate_pr(dry_run=False) only when eligible and low risk (#947)."
+        ),
+        "related_issues": ["#947", "#649", "#945", "#943", "#939", "#654"],
+        "next_command": "gh plate self-migrate --pr-plan --json",
+    }
+
+
+def apply_self_migrate_pr(
+    plan: dict[str, Any] | None,
+    *,
+    dry_run: bool = True,
+    allow_high_risk: bool = False,
+    runner: Any | None = None,
+) -> dict[str, Any]:
+    """Apply or dry-run a self-migrate PR plan (#947).
+
+    - dry_run=True (default): returns would_execute; no git/network.
+    - dry_run=False: requires eligible low-risk plan (or allow_high_risk) and
+      an injectable ``runner(plan)``; never auto-pushes without runner.
+    """
+    if not plan or not plan.get("ok"):
+        return {
+            "ok": False,
+            "applied": False,
+            "dry_run": dry_run,
+            "error": (plan or {}).get("error") or "invalid_plan",
+        }
+
+    high_risk = bool(plan.get("high_risk") or plan.get("need_human_review"))
+    steps = list(plan.get("git_steps") or []) + [
+        " ".join(str(x) for x in (plan.get("gh_argv") or [])[:8]) + " ..."
+    ]
+
+    if dry_run:
+        return {
+            "ok": True,
+            "applied": False,
+            "dry_run": True,
+            "would_execute": steps,
+            "eligible": plan.get("eligible"),
+            "high_risk": high_risk,
+            "branch": plan.get("branch"),
+            "base": plan.get("base"),
+            "title": plan.get("title"),
+            "note": "Dry-run only; no git push or gh pr create executed (#947).",
+        }
+
+    if high_risk and not allow_high_risk:
+        return {
+            "ok": False,
+            "applied": False,
+            "dry_run": False,
+            "error": "high_risk_blocked",
+            "high_risk": True,
+            "note": "High/medium risk migration PR requires allow_high_risk=True and human review.",
+        }
+
+    if not plan.get("eligible") and not allow_high_risk:
+        return {
+            "ok": False,
+            "applied": False,
+            "dry_run": False,
+            "error": "not_eligible",
+            "eligible": False,
+            "note": plan.get("reason") or "Plan not eligible for auto PR apply.",
+        }
+
+    if runner is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "dry_run": False,
+            "error": "runner_required",
+            "would_execute": steps,
+            "note": "Live apply needs injectable runner(plan); engine never pushes alone.",
+        }
+
+    try:
+        result = runner(plan)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "applied": False,
+            "dry_run": False,
+            "error": str(exc),
+            "note": "Runner failed during self-migrate PR apply.",
+        }
+
+    return {
+        "ok": True,
+        "applied": True,
+        "dry_run": False,
+        "high_risk": high_risk,
+        "branch": plan.get("branch"),
+        "base": plan.get("base"),
+        "title": plan.get("title"),
+        "runner_result": result,
+        "note": "Runner completed; verify PR on GitHub before merge (#947).",
+    }
