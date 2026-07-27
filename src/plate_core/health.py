@@ -49,6 +49,11 @@ class HealthReport:
     spec_audit_counts: dict[str, int] = field(default_factory=dict)
     spec_audit_actionable_count: int | None = None
     spec_audit_next_step: str | None = None
+    # #953 / #633 adoption readiness (local, best-effort; never fails health alone)
+    adoption_core_ready: bool | None = None
+    first_qa_seeded: bool | None = None
+    adoption_minutes_remaining: int | None = None
+    adoption_next_command: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -405,6 +410,30 @@ def get_health(
         spec_audit_status = "error"
         spec_audit_next_step = f"SPEC audit health summary failed: {e}"
 
+    # #953 / #633: local adoption readiness (best-effort; does not fail health alone)
+    adoption_core_ready: bool | None = None
+    first_qa_seeded: bool | None = None
+    adoption_minutes_remaining: int | None = None
+    adoption_next_command: str | None = None
+    try:
+        from .adoption import assess_adoption_readiness
+
+        adopt = assess_adoption_readiness(
+            repo_root if repo_root is not None else ".",
+            include_optional=False,
+        )
+        if adopt.get("ok"):
+            adoption_core_ready = bool(adopt.get("core_ready"))
+            fq = adopt.get("first_qa") or {}
+            if isinstance(fq, dict) and "seeded" in fq:
+                first_qa_seeded = bool(fq.get("seeded"))
+            if adopt.get("estimated_minutes_remaining") is not None:
+                adoption_minutes_remaining = int(adopt.get("estimated_minutes_remaining") or 0)
+            if adopt.get("next_command"):
+                adoption_next_command = str(adopt.get("next_command"))
+    except Exception as e:
+        errors.append(f"adoption: {e}")
+
     report = HealthReport(
         repo=target,
         label_coverage_ok=label_ok,
@@ -438,5 +467,9 @@ def get_health(
         spec_audit_counts=spec_audit_counts,
         spec_audit_actionable_count=spec_audit_actionable_count,
         spec_audit_next_step=spec_audit_next_step,
+        adoption_core_ready=adoption_core_ready,
+        first_qa_seeded=first_qa_seeded,
+        adoption_minutes_remaining=adoption_minutes_remaining,
+        adoption_next_command=adoption_next_command,
     )
     return report

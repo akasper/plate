@@ -1,0 +1,15 @@
+{
+  "slug": "953-health-adoption-fields",
+  "change_type": "feature",
+  "surface": "src/plate_core/health.py, src/plate_core/cli.py, tests/test_health.py",
+  "summary": "Expose adoption readiness on plate health (#953/#633): adoption_core_ready, first_qa_seeded, adoption_minutes_remaining, adoption_next_command via assess_adoption_readiness; CLI print; best-effort never fails health alone.",
+  "migration_impact": "HealthReport/JSON gain additive adoption_* fields. Agents can use gh plate health --json without a separate adopt call for core_ready/first_qa signals.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_health.py -q.",
+    "2. gh plate health --json | jq '.adoption_core_ready, .first_qa_seeded, .adoption_next_command'.",
+    "3. Still use gh plate adopt for full checklist detail."
+  ],
+  "agent_notes": "Closes #953. Epic #633 remains open for full <30m E2E proof.",
+  "breaking": false,
+  "links": ["#953", "#633", "#935", "#949", "#951", "#654"]
+}
