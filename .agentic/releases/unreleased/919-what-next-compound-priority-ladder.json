@@ -1,0 +1,14 @@
+{
+  "slug": "919-what-next-compound-priority-ladder",
+  "change_type": "feature",
+  "surface": "tests/test_what_next.py, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+  "summary": "Compound unit proof of plate_what_next priority ladder (#919/#364): budget_gate → open_pr → ready_issue → pm_tick → pm → epic closeout/stub refine in one suite with Proves claims; audit residual notes unit compound closed.",
+  "migration_impact": "Tests and audit docs only. Agents can rely on documented ranking order for empty-pipeline routing.",
+  "migration_guidance": [
+    "1. Pull release after merge; run pytest tests/test_what_next.py -k Compound.",
+    "2. Full Playwright babysit/release compound e2e remains deferred under #364."
+  ],
+  "agent_notes": "Closes #919 only. Does not claim full #364 or #654 E2E.",
+  "breaking": false,
+  "links": ["#919", "#364", "#350", "#905", "#913", "#915", "#654"]
+}
