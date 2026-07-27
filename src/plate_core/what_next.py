@@ -466,25 +466,25 @@ def recommend_what_next(
                 f"open_epics={open_epics} (#909/#905)"
             )
         else:
+            # No complete-child candidates (all first-slices recorded or none) — #915
             action = (
-                "advance open Epics: first-slice closeout for Epics with all children "
-                "closed (wiki + status:implemented); else refine a need:refinement "
-                "stub into status:ready-to-work and implement"
+                "refine a need:refinement/status:stub Feature into status:ready-to-work "
+                "and implement (no first-slice closeout candidates remaining)"
             )
             prompt = (
-                "Pipeline empty, PM queue idle, no ready Features/Bugs. Do not run "
-                "plate_pm_run_cycle just because open_epic_count > 0 (#905). "
-                "1) gh plate release status  2) For Epics whose children are all closed "
-                "(e.g. #656/#657/#658/#470 first slices), document outcomes in "
-                "docs/wiki/ (extend V1-Autonomy-Surfaces-Epic-Closeouts.md), add "
-                "status:implemented, post a summary comment — residual E2E stays under "
-                "#654. 3) Otherwise refine a need:refinement/status:stub Feature into "
-                "ACs + status:ready-to-work and implement the smallest slice with tests + "
-                "fragment + PR to release. Prefer v1.0 path over marketplace human Tasks."
+                "Pipeline empty, PM idle, no ready Features/Bugs, and no complete-child "
+                "Epic closeout candidates (#915; status:implemented Epics are skipped per "
+                "#913). Do not re-run first-slice wiki closeouts or plate_pm_run_cycle "
+                "just because open_epic_count > 0. "
+                "1) gh plate release status  2) Pick a need:refinement stub on the v1.0 "
+                "path (e.g. #364 residual coverage gaps — not browser #661 unless scoped). "
+                "3) Refine ACs, remove need:refinement, add status:ready-to-work, implement "
+                "smallest TDD slice + fragment + PR to release. Prefer v1.0 safety/feed/PM "
+                "over marketplace human Tasks. Residual E2E stays under #654."
                 + quiet
             )
             rationale = (
-                f"{open_epics} open Epic(s); PM idle (queue=0) — closeout or refine (#905)"
+                f"{open_epics} open Epic(s); 0 closeout candidates — stub refine (#915/#913)"
             )
         out: dict[str, Any] = {
             "next_action": action,
