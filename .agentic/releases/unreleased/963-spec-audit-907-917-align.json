@@ -1,0 +1,16 @@
+{
+  "slug": "963-spec-audit-907-917-align",
+  "change_type": "docs",
+  "surface": "SPEC.md",
+  "summary": "Clear SPEC audit undocumented findings for 907-what-next-pm-idle-proving-tests and 917-template-payload-adopter-claim-proofs (#963): additive SPEC bullets for idle PM ranking proofs and template_payload adopter harness evidence.",
+  "migration_impact": "Product intent document only. No code or template payload change. Downstream repos re-read SPEC; no forced file copy.",
+  "migration_guidance": [
+    "1. Review SPEC Target Workflows for what_next idle-vs-active PM ranking and tests/test_what_next.py evidence.",
+    "2. Review SPEC Architecture for template_payload adopter harness / tests/test_template_payload.py.",
+    "3. Re-run plate health / local audit_spec; expect zero undocumented for those two fragment slugs."
+  ],
+  "agent_notes": "Human-owned SPEC intent. Closes #963. Does not re-check #654 boxes. Addresses plate_what_next priority=spec_audit (2 undocumented).",
+  "breaking": false,
+  "links": ["#963", "#907", "#917", "#338", "#339", "#340", "#364", "#654"],
+  "requires": ["0.7.2"]
+}
