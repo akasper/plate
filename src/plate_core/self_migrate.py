@@ -1,8 +1,9 @@
-"""Self-migrate dry-run plan + marker merge + optional upstream resolve (#939/#943/#945 / Epic #649).
+"""Self-migrate dry-run plan + marker merge + optional upstream resolve + verify (#939/#943/#945/#965 / Epic #649).
 
 Plan mode: no pip install, no file writes, no network by default.
 Marker merge: dry-run by default; optional explicit apply of PLATES-CORE sections only.
 Upstream resolve: injectable fetcher; network only when allow_network=True.
+Verify mode: offline post-migrate checks (drift, adoption readiness, .plate validity).
 """
 
 from __future__ import annotations
@@ -380,7 +381,10 @@ def plan_self_migrate(
     steps.append(
         {
             "id": "6_verify",
-            "description": "gh plate health; gh plate adopt --json; gh plate config validate",
+            "description": (
+                "gh plate self-migrate --verify --json "
+                "(offline drift + adoption + .plate; then gh plate health if remote)"
+            ),
             "dry_run_only": True,
         }
     )
@@ -934,4 +938,200 @@ def apply_self_migrate_pr(
         "title": plan.get("title"),
         "runner_result": result,
         "note": "Runner completed; verify PR on GitHub before merge (#947).",
+    }
+
+
+def verify_self_migrate(
+    repo_root: str | Path | None = None,
+    *,
+    target_version: str | None = None,
+    include_payload: bool = True,
+    resolve_upstream: bool = False,
+    allow_network: bool = False,
+    upstream_fetcher: UpstreamFetcher | None = None,
+) -> dict[str, Any]:
+    """Offline post-migrate verification: drift + adoption + .plate (#965 / #649).
+
+    No network by default, no file writes, no pip install. Complements remote
+    ``gh plate health`` which still needs GitHub when operators want full status.
+    """
+    root = Path(repo_root or ".").resolve()
+    plan = plan_self_migrate(
+        root,
+        target_version=target_version,
+        include_payload=include_payload,
+        resolve_upstream=resolve_upstream,
+        allow_network=allow_network,
+        upstream_fetcher=upstream_fetcher,
+    )
+
+    checks: list[dict[str, Any]] = []
+    failures: list[str] = []
+
+    drift = bool(plan.get("drift"))
+    checks.append(
+        {
+            "id": "no_drift",
+            "ok": not drift,
+            "detail": {
+                "drift": drift,
+                "target_version": plan.get("target_version"),
+                "comparisons": plan.get("comparisons"),
+                "pin": plan.get("pin"),
+            },
+        }
+    )
+    if drift:
+        failures.append("pin_or_payload_drift")
+
+    adoption: dict[str, Any] = {}
+    try:
+        from .adoption import assess_adoption_readiness
+
+        adoption = assess_adoption_readiness(root, include_optional=False)
+        core_ready = bool(adoption.get("core_ready"))
+        checks.append(
+            {
+                "id": "adoption_core_ready",
+                "ok": core_ready,
+                "detail": {
+                    "core_ready": core_ready,
+                    "first_qa_seeded": (adoption.get("first_qa") or {}).get("seeded"),
+                    "next_command": adoption.get("next_command"),
+                    "minutes_remaining": adoption.get("minutes_remaining"),
+                },
+            }
+        )
+        if not core_ready:
+            failures.append("adoption_not_core_ready")
+    except Exception as exc:  # noqa: BLE001
+        checks.append(
+            {
+                "id": "adoption_core_ready",
+                "ok": False,
+                "detail": {"error": str(exc)},
+            }
+        )
+        failures.append("adoption_check_error")
+        adoption = {"error": str(exc)}
+
+    plate_cfg: dict[str, Any] = {}
+    plate_path = root / ".plate"
+    if plate_path.is_file():
+        try:
+            from .plate_config import get_plate_config_report
+
+            cfg = get_plate_config_report(root)
+            plate_cfg = cfg.to_dict() if hasattr(cfg, "to_dict") else dict(cfg)  # type: ignore[arg-type]
+            valid = bool(plate_cfg.get("valid"))
+            checks.append(
+                {
+                    "id": "plate_config_valid",
+                    "ok": valid,
+                    "detail": {
+                        "present": plate_cfg.get("present"),
+                        "valid": valid,
+                        "source": plate_cfg.get("source"),
+                        "file_version": plate_cfg.get("file_version"),
+                    },
+                }
+            )
+            if not valid:
+                failures.append("plate_config_invalid")
+        except Exception as exc:  # noqa: BLE001
+            checks.append(
+                {
+                    "id": "plate_config_valid",
+                    "ok": False,
+                    "detail": {"error": str(exc)},
+                }
+            )
+            failures.append("plate_config_error")
+            plate_cfg = {"error": str(exc)}
+    else:
+        checks.append(
+            {
+                "id": "plate_config_valid",
+                "ok": True,
+                "detail": {
+                    "present": False,
+                    "valid": None,
+                    "note": "No .plate file; skipped (optional for bare checkouts).",
+                },
+            }
+        )
+
+    ready = len(failures) == 0
+    next_cmd = "gh plate self-migrate --verify --json"
+    if drift:
+        next_cmd = plan.get("next_command") or "gh plate self-migrate --plan --json"
+    elif not (adoption.get("core_ready") if adoption else True):
+        next_cmd = adoption.get("next_command") or "gh plate adopt --json"
+
+    note = (
+        "Post-migrate verify offline (#965). "
+        "ready=true means no pin/payload drift, adoption core_ready, and valid .plate when present. "
+        "Run gh plate health for remote GitHub signals."
+    )
+    if not ready:
+        note = (
+            "Post-migrate verify found residual work (#965): "
+            + ", ".join(failures)
+            + ". Address then re-run --verify."
+        )
+
+    return {
+        "ok": True,
+        "mode": "verify",
+        "repo_root": str(root),
+        "ready": ready,
+        "failures": failures,
+        "checks": checks,
+        "migrate": {
+            "drift": drift,
+            "target_version": plan.get("target_version"),
+            "risk": plan.get("risk"),
+            "comparisons": plan.get("comparisons"),
+            "pin": plan.get("pin"),
+            "installed_version": plan.get("installed_version"),
+        },
+        "adoption": {
+            "core_ready": adoption.get("core_ready"),
+            "first_qa_seeded": (adoption.get("first_qa") or {}).get("seeded")
+            if isinstance(adoption.get("first_qa"), dict)
+            else adoption.get("first_qa_seeded"),
+            "next_command": adoption.get("next_command"),
+            "error": adoption.get("error"),
+        },
+        "plate_config": {
+            "present": plate_cfg.get("present") if plate_cfg else False,
+            "valid": plate_cfg.get("valid"),
+            "source": plate_cfg.get("source"),
+            "file_version": plate_cfg.get("file_version"),
+            "error": plate_cfg.get("error"),
+        },
+        "next_command": next_cmd,
+        "auto_apply": False,
+        "note": note,
+        "related_issues": ["#965", "#649", "#939", "#947", "#633", "#654"],
+        "ask_user_question": {
+            "question": (
+                f"Self-migrate verify ready={ready} (failures={failures or 'none'}). Next?"
+            ),
+            "options": [
+                {
+                    "label": "Re-plan migrate",
+                    "description": "gh plate self-migrate --plan --json",
+                },
+                {
+                    "label": "Adoption status",
+                    "description": "gh plate adopt --json",
+                },
+                {
+                    "label": "Remote health",
+                    "description": "gh plate health",
+                },
+                {"label": "Done", "description": "No further migrate work"},
+            ],
+        },
     }
