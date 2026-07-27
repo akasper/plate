@@ -442,6 +442,16 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 }
             else:
                 payload = pr_plan
+        elif name == "plate_self_migrate_verify":
+            from .self_migrate import verify_self_migrate
+
+            payload = verify_self_migrate(
+                args.get("repo_root") or ".",
+                target_version=args.get("target_version"),
+                include_payload=not bool(args.get("no_payload", False)),
+                resolve_upstream=bool(args.get("resolve_upstream", False)),
+                allow_network=bool(args.get("allow_network", False)),
+            )
         elif name == "plate_config_get":
             payload = get_plate_config_report(args.get("repo_root")).to_dict()
         elif name == "plate_config_validate":
@@ -2403,6 +2413,35 @@ def run() -> None:
                                         "allow_high_risk": {
                                             "type": "boolean",
                                             "description": "Permit non-low-risk apply when runner provided.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_self_migrate_verify",
+                                "description": "Offline post-migrate verify: pin/payload drift + adoption core_ready + .plate validity (#965/#649). No writes, no network by default.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "target_version": {
+                                            "type": "string",
+                                            "description": "Optional target plate-core semver.",
+                                        },
+                                        "no_payload": {
+                                            "type": "boolean",
+                                            "description": "Omit payload from underlying migrate plan when checking drift.",
+                                        },
+                                        "resolve_upstream": {
+                                            "type": "boolean",
+                                            "description": "Resolve upstream version for target.",
+                                        },
+                                        "allow_network": {
+                                            "type": "boolean",
+                                            "description": "Permit network for resolve_upstream. Default false.",
                                         },
                                     },
                                 },
