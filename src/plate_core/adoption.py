@@ -301,6 +301,48 @@ def first_qa_seed_status(repo_root: str | Path | None = None) -> dict[str, Any]:
     }
 
 
+def write_first_qa_seed_marker(
+    repo_root: str | Path | None = None,
+    *,
+    titles: list[str] | None = None,
+    mode: str = "manual",
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Write offline first Q&A seed marker (#949/#951). Idempotent overwrite.
+
+    Used by plan_first_qa_seed apply and bootstrap apply after seeding Questions.
+    """
+    root = Path(repo_root or ".").resolve()
+    marker = root / _FIRST_QA_MARKER
+    title_list = list(titles) if titles is not None else [q["title"] for q in STARTER_QUESTIONS]
+    payload: dict[str, Any] = {
+        "seeded": True,
+        "count": len(title_list),
+        "titles": title_list,
+        "mode": mode,
+    }
+    if extra:
+        payload.update(extra)
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        return {
+            "ok": False,
+            "marker_path": str(marker),
+            "error": str(exc),
+            "seeded": False,
+        }
+    return {
+        "ok": True,
+        "marker_path": str(marker),
+        "seeded": True,
+        "count": len(title_list),
+        "titles": title_list,
+        "mode": mode,
+    }
+
+
 def plan_first_qa_seed(
     repo_root: str | Path | None = None,
     *,
@@ -398,16 +440,16 @@ def plan_first_qa_seed(
         return plan
 
     # Write local marker so offline status shows seeded
-    marker = root / _FIRST_QA_MARKER
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "seeded": True,
-        "count": len(catalog),
-        "titles": [q["title"] for q in catalog],
-        "mode": "apply",
-        "runner_result": result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result),
-    }
-    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_first_qa_seed_marker(
+        root,
+        titles=[q["title"] for q in catalog],
+        mode="apply",
+        extra={
+            "runner_result": result
+            if isinstance(result, (dict, list, str, int, float, bool, type(None)))
+            else str(result),
+        },
+    )
     plan["applied"] = True
     plan["runner_result"] = result
     plan["already_seeded"] = True
