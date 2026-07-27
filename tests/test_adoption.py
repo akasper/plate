@@ -217,5 +217,29 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
             self.assertIn("checks", data)
 
 
+class AdoptionGuideRegressionTests(unittest.TestCase):
+    def test_guide_documents_under_30m_command_path(self):
+        """Proves: adoption-guide lists full #633 CLI path phrases (#961)."""
+        root = Path(__file__).resolve().parents[1]
+        guide = (root / "docs" / "migration" / "adoption-guide.md").read_text(
+            encoding="utf-8"
+        )
+        for phrase in (
+            "gh plate adopt --start-session",
+            "gh plate adopt --json",
+            "gh plate import-payload --dry-run --strategy conservative",
+            "gh plate bootstrap --repo OWNER/REPO --adopt --apply",
+            "gh plate adopt --first-qa-plan",
+            "gh plate health --json",
+            "gh plate feed --json",
+            "gh plate adopt --complete-session",
+            "first_qa_seeded",
+            "within_30m",
+            "#955",
+            "#959",
+        ):
+            self.assertIn(phrase, guide, f"missing guide phrase: {phrase}")
+
+
 if __name__ == "__main__":
     unittest.main()
