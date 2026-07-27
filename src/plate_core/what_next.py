@@ -775,25 +775,29 @@ def recommend_what_next(
                 f"open_epics={open_epics} (#909/#905)"
             )
         else:
-            # No complete-child candidates (all first-slices recorded or none) — #915
+            # No complete-child candidates — first-slices recorded (#915/#913) → v1 residual (#981)
+            # Do not keep agents in "refine stub Feature" loops when only deferred work remains
+            # (e.g. browser #661) and real next gates are human E2E / marketplace Tasks.
             action = (
-                "refine a need:refinement/status:stub Feature into status:ready-to-work "
-                "and implement (no first-slice closeout candidates remaining)"
+                "v1.0 agent first-slices landed: clear human-gated #654 residuals "
+                "(live E2E proof and/or marketplace/PyPI Tasks); do not implement deferred browser #661"
             )
             prompt = (
                 "Pipeline empty, PM idle, no ready Features/Bugs, and no complete-child "
-                "Epic closeout candidates (#915; status:implemented Epics are skipped per "
-                "#913). Do not re-run first-slice wiki closeouts or plate_pm_run_cycle "
-                "just because open_epic_count > 0. "
-                "1) gh plate release status  2) Pick a need:refinement stub on the v1.0 "
-                "path (e.g. #364 residual coverage gaps — not browser #661 unless scoped). "
-                "3) Refine ACs, remove need:refinement, add status:ready-to-work, implement "
-                "smallest TDD slice + fragment + PR to release. Prefer v1.0 safety/feed/PM "
-                "over marketplace human Tasks. Residual E2E stays under #654."
+                "Epic closeout candidates (#915; status:implemented Epics skipped per #913). "
+                "Core Phase 0–3 first-slice surfaces are recorded on "
+                "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md. "
+                "1) Do **not** re-sketch first slices or start deferred browser #661. "
+                "2) Human-gated: live under-30m adopter E2E and/or Tasks #380/#381/#625/#626 "
+                "(agents never complete those). "
+                "3) Optional: `gh plate release status` + review unreleased fragments; "
+                "do not cut v1.0.0 without #654 checklist E2E. "
+                "4) Only refine a non-deferred stub if a human explicitly scopes it."
                 + quiet
             )
             rationale = (
-                f"{open_epics} open Epic(s); 0 closeout candidates — stub refine (#915/#913)"
+                f"{open_epics} open Epic(s); 0 closeout candidates — "
+                f"v1 residual / human gates (#981/#915/#913)"
             )
         out: dict[str, Any] = {
             "next_action": action,
@@ -801,9 +805,10 @@ def recommend_what_next(
             "rationale": rationale,
             "state_snapshot": state,
             "agent_type": agent_type or "general",
-            "priority": "epic",
+            "priority": "v1_residual" if not structured else "epic",
         }
         if structured:
+            out["priority"] = "epic"
             out["epic_closeout_candidates"] = structured
         return out
 
