@@ -1,0 +1,15 @@
+{
+  "slug": "905-what-next-idle-pm-not-open-epics",
+  "change_type": "fix",
+  "surface": "src/plate_core/what_next.py, docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+  "summary": "Stop plate_what_next from forcing PM dry-run solely because open_epic_count > 0 when the PM queue is idle (#905); idle path recommends first-slice epic closeout or stub refine. Document first-slice closeouts for #470/#656/#657/#658 on the v1 autonomy wiki page.",
+  "migration_impact": "Agents and AutonomyEngine consumers: when pipeline empty and PM queue_size/open_assignments are 0, follow epic closeout/refine guidance instead of plate_pm_run_cycle. No package config change required.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release after merge.",
+    "2. Re-run plate_what_next / gh plate what-next with empty pipeline — expect priority epic (closeout/refine) not pm when queue idle.",
+    "3. For complete-child Epics, extend docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md and add status:implemented; residual E2E stays under #654."
+  ],
+  "agent_notes": "Pairs with #904 active-only queue_size. PM still ranks first for checkpoints, delegated, proposed, and active queue. Do not re-check #654 boxes without E2E proof.",
+  "breaking": false,
+  "links": ["#905", "#904", "#903", "#660", "#654", "#470", "#656", "#657", "#658"]
+}
