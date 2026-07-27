@@ -1,0 +1,16 @@
+{
+  "slug": "971-649-633-first-slice-closeout",
+  "change_type": "docs",
+  "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+  "summary": "Record first-slice closeout for self-migrate Epic #649 and adoption path progress for #633 on v1 autonomy closeout wiki (#971); operator path adds adopt + self-migrate verify; label status:implemented on #649.",
+  "migration_impact": "Wiki/process memory only. Agents should treat #649 first-slice surfaces as landed and not re-sketch plan/verify/health/what_next wiring. Live adopter E2E under #654 remains residual.",
+  "migration_guidance": [
+    "1. Read docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md rows for #649 and #633.",
+    "2. Prefer gh plate self-migrate --verify and health self_migrate_* fields over re-implementing.",
+    "3. Do not check #654 adoption/self-migrate boxes without live E2E proof."
+  ],
+  "agent_notes": "Closes #971. Apply status:implemented on #649 in same PR follow-through. Does not close Epic #649 issue until main release ceremony if desired; first-slice label is enough for idle routing.",
+  "breaking": false,
+  "links": ["#971", "#649", "#633", "#965", "#967", "#969", "#615", "#654"],
+  "requires": ["0.7.2"]
+}
