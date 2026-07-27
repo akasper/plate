@@ -12,6 +12,7 @@
 | **#638** | Full autonomous bug loop | **Close (first slice)** | `bug_loop.py`, PM/fleet dispatch, ticks, checkpoints, babysit stages | Production E2E bug→merge proof under #654 |
 | **#639** | Full autonomous feature loop | **Close (first slice)** | `feature_loop.py`, media/design gates, PM dispatch, ticks | Production E2E feature→merge proof under #654 |
 | **#641** | Scheduled autonomous ops | **Close (first slice)** | `scheduled_ops.py` catalog, fleet dispatch, monitor ops #642, shadow/budget gates | Real deploy/publish remain human Tasks |
+| **#659** | Scheduled Procedures, Monitoring & Deploy | **Close (first slice)** | Thematic parent of #641+#642; what_next ranks active/runnable scheduled ops (#933); procedure JSON under `.agentic/procedures/` | Live deploy/marketplace publish human Tasks; full cadence E2E under #654 |
 | **#644** | Multi-agent fleet handoffs | **Close (first slice)** | `fleet.py` handoffs, accept→loop/artifact dispatch, feed items, PM bridge | Remote multi-agent host runtime N/A |
 | **#656** | Q&A planning + endless feed | **Close (first slice)** | Product/feature/release Q&A planning (#628–#630/#640), Q+Task feed (#631), Design/Research approval (#632); children **6/6** | Host TUI polish + full E2E planning→ship under #654 |
 | **#657** | Autonomy foundations (sim/checkpoint/budget/ledger) | **Close (first slice)** | Shadow/sim #645, checkpoint primitive #648, budgets #634, cost/risk feed #653, ledger #647; children **5/5** | Production high-impact gate E2E under #654 |
