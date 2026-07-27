@@ -166,7 +166,7 @@ Post-#470 / #654 landings added substantial feature-proof coverage that this Jun
 
 **Gap closed in this batch (#907):** Bidirectional proof that idle PM + open epics does **not** force PM dry-run; active `open_assignments` / delegated rows still rank PM/tick. Tests declare `Proves:` claims in docstrings.
 
-**Still open under #364 (not claimed done here):** Contemplation Engine v2 full auto PR open/push (engine still stops at draft plan); live-network compound e2e (real babysit→merge, real cut+tag+finalize apply) remains out of scope for the offline harness.
+**Still open under #364 (not claimed done here):** Contemplation live auto PR open/push without injectable runner (default remains dry-run); live-network compound e2e (real babysit→merge, real cut+tag+finalize apply) remains out of scope for the offline harness.
 
 **Closed (partial) under #921:** Contemplation full transcript (`Answer full:` + question title/body excerpt) and typed Research/Design/Feature follow-ups with parent Question link.
 
@@ -175,6 +175,8 @@ Post-#470 / #654 landings added substantial feature-proof coverage that this Jun
 **Closed (partial) under #925:** Contemplation artifact mutation intents + PR-only draft plan Feature issues (Design #143 §2 / research §3.3 first slice). Detects process paths, logs intents, high-risk need:human-review; does **not** auto-push or open PRs.
 
 **Closed (partial) under #927:** Compound Playwright e2e offline chain — `tests/e2e/compound-flows.spec.ts` + `fixtures/compound_flow_driver.py` proves babysit gate block/unblock, release cut dry-run (no write) + `plan_gh_plate_sync` dry surface, and contemplate→mutation PR draft plan without network.
+
+**Closed (partial) under #929:** Contemplation structured `mutation_pr_plan` + `apply_mutation_pr_plan` dry-run default (gh_argv/git_steps); high-risk requires `allow_high_risk`; live apply only via injectable runner (no default auto-push).
 
 **Closed (first slice) under #917:** template_payload adopter harness parity — `TemplatePayloadAdopterClaimsTests` proves payload ships AGENTS/SPEC, e2e README+example specs, core workflows; `list_payload_files` + import dry-run plan those paths. Monorepo-only `plugin-structure.spec.ts` / `catalog-discovery.spec.ts` (hardcoded `.plugin` layout) intentionally **not** copied into payload; adopters get example harness + import-payload instead.
 
