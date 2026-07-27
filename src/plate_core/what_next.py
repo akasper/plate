@@ -7,15 +7,16 @@ Priority (cheap → specific):
 4. Missing multi-track release standing branches → release repair (#320/#814)
 5. Actionable local SPEC audit findings (#340 health/drift)
 6. Local adoption not core_ready → gh plate adopt / import-payload (#937 / #633 / #935)
-7. Core adoption ready but first Q&A not seeded → gh plate adopt --first-qa-plan (#949 / #633)
-8. Self-migrate pin/payload drift → gh plate self-migrate --plan (#941 / #649 / #939)
-9. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
-9. Active scheduled op runs (blocked/running/planned) (#933 / #659 / #641)
-10. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
-11. Runnable scheduled ops dry-run plan when pipeline + PM idle (#933)
-12. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
+7. Active adoption session timer → continue under-30m path / complete-session (#957 / #955 / #633)
+8. Core adoption ready but first Q&A not seeded → gh plate adopt --first-qa-plan (#949 / #633)
+9. Self-migrate pin/payload drift → gh plate self-migrate --plan (#941 / #649 / #939)
+10. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
+11. Active scheduled op runs (blocked/running/planned) (#933 / #659 / #641)
+12. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
+13. Runnable scheduled ops dry-run plan when pipeline + PM idle (#933)
+14. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
    — when available, name concrete complete-child Epic candidates (#909)
-13. Pending fragments / release status
+15. Pending fragments / release status
 """
 
 from __future__ import annotations
@@ -61,6 +62,7 @@ def recommend_what_next(
     epic_closeout_candidates: list[dict[str, Any]] | None = None,
     scheduled_ops: dict[str, Any] | None = None,
     adoption: dict[str, Any] | None = None,
+    adoption_session: dict[str, Any] | None = None,
     self_migrate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure recommendation from pre-fetched state (testable).
@@ -74,6 +76,7 @@ def recommend_what_next(
     ``epic_closeout_candidates``: open Epics with all children closed (#909).
     ``scheduled_ops``: scheduled_ops_status-like summary + optional active_runs (#933).
     ``adoption``: assess_adoption_readiness() shape (#937/#935); ranks when core_ready is false.
+    ``adoption_session``: adoption_session_status() shape (#957/#955); ranks when active.
     ``self_migrate``: plan_self_migrate() shape (#941/#939); ranks when drift is true.
     """
     h = dict(health or {})
@@ -85,6 +88,7 @@ def recommend_what_next(
     closeouts = list(epic_closeout_candidates or [])
     sops = dict(scheduled_ops or {})
     adopt = dict(adoption or {})
+    adopt_sess = dict(adoption_session or {})
     smig = dict(self_migrate or {})
     labels_ok = bool(h.get("label_coverage_ok", False))
     open_epics = int(h.get("open_epic_count") or 0)
@@ -178,6 +182,10 @@ def recommend_what_next(
         else None,
         "first_qa_seeded": (adopt.get("first_qa") or {}).get("seeded")
         if adopt
+        else None,
+        "adoption_session_active": adopt_sess.get("active") if adopt_sess else None,
+        "adoption_session_elapsed": adopt_sess.get("elapsed_minutes")
+        if adopt_sess
         else None,
         "self_migrate_drift": smig.get("drift") if smig else None,
         "self_migrate_target": smig.get("target_version") if smig else None,
@@ -336,7 +344,69 @@ def recommend_what_next(
             "priority": "spec_audit_advisory",
         }
 
-    # 5) Local adoption incomplete — finish <30m path before new Features (#937/#633)
+    # 5) Active adoption session timer — continue under-30m path (#957/#955/#633)
+    # Ranks ahead of ready Features / self-migrate while session is in progress.
+    # Takes precedence over plain adoption_not_ready so elapsed timer context is visible.
+    if adopt_sess.get("active") is True:
+        first_qa_s = adopt.get("first_qa") if adopt else None
+        seeded = (
+            isinstance(first_qa_s, dict) and first_qa_s.get("seeded") is True
+        ) or adopt_sess.get("first_qa_seeded") is True
+        core_ok = (
+            adopt.get("core_ready") is True or adopt_sess.get("core_ready") is True
+        )
+        elapsed = adopt_sess.get("elapsed_minutes")
+        if not core_ok:
+            next_cmd = str(adopt.get("next_command") or "gh plate adopt --json")
+            phase = "finish readiness"
+        elif not seeded:
+            next_cmd = "gh plate adopt --first-qa-plan --json"
+            phase = "seed first Q&A"
+        else:
+            next_cmd = "gh plate adopt --complete-session --json"
+            phase = "complete session timer"
+        elapsed_s = f" elapsed≈{elapsed}m" if elapsed is not None else ""
+        return {
+            "next_action": (
+                f"continue adoption session ({phase}{elapsed_s}): {next_cmd}"
+            ),
+            "prompt_segment": (
+                "Active adoption wall-clock session (#955/#957/#633). "
+                f"Phase: {phase}. "
+                "1) Follow next_command  "
+                "2) `gh plate adopt --session-status --json` for elapsed/within_30m_so_far  "
+                "3) When core_ready + first_qa seeded: "
+                "`gh plate adopt --complete-session --json` to record proof. "
+                "Do not start ready Features until session completes or is deferred."
+                + quiet
+            ),
+            "rationale": (
+                f"adoption_session active; phase={phase}; "
+                f"elapsed_minutes={elapsed} (#957/#955/#633)"
+            ),
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "adoption_session",
+            "next_command": next_cmd,
+            "elapsed_minutes": elapsed,
+            "within_30m_so_far": adopt_sess.get("within_30m_so_far"),
+            "ask_user_question": {
+                "question": f"Adoption session active{elapsed_s} — continue under-30m path?",
+                "options": [
+                    {"label": "Follow next command", "description": next_cmd},
+                    {
+                        "label": "Session status",
+                        "description": "gh plate adopt --session-status --json",
+                    },
+                    {
+                        "label": "Complete session",
+                        "description": "gh plate adopt --complete-session --json",
+                    },
+                ],
+            },
+        }
+
+    # 5b) Local adoption incomplete — finish <30m path before new Features (#937/#633)
     if adoption_not_ready:
         mins = adopt.get("estimated_minutes_remaining")
         next_cmd = str(adopt.get("next_command") or "gh plate adopt --json")
@@ -1089,6 +1159,7 @@ def get_what_next(
             )
         except (TypeError, ValueError):
             pm_active = False
+    adoption_session: dict[str, Any] | None = None
     if include_adoption and not open_prs:
         try:
             from .adoption import assess_adoption_readiness
@@ -1096,9 +1167,22 @@ def get_what_next(
             adoption = assess_adoption_readiness(".", include_optional=False)
         except Exception:
             adoption = None
+        try:
+            from .adoption import adoption_session_status
+
+            adoption_session = adoption_session_status(".")
+        except Exception:
+            adoption_session = None
 
     # Only when adoption is ready (or skipped) — pin drift is secondary to first adopt.
-    adopt_ready = adoption is None or adoption.get("core_ready") is not False
+    # Active session also blocks self-migrate ranking (session path wins in recommend).
+    session_active = bool(
+        isinstance(adoption_session, dict) and adoption_session.get("active") is True
+    )
+    adopt_ready = (
+        (adoption is None or adoption.get("core_ready") is not False)
+        and not session_active
+    )
     if include_self_migrate and not open_prs and adopt_ready:
         try:
             from .self_migrate import plan_self_migrate
@@ -1150,5 +1234,6 @@ def get_what_next(
         epic_closeout_candidates=epic_closeout_candidates,
         scheduled_ops=scheduled_ops,
         adoption=adoption,
+        adoption_session=adoption_session,
         self_migrate=self_migrate,
     )
