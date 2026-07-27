@@ -1,0 +1,15 @@
+{
+  "slug": "957-what-next-adoption-session",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
+  "summary": "Rank active adoption session on plate_what_next (#957/#955/#633): priority adoption_session with phase-aware next_command (readiness/first-qa/complete-session); live loads adoption_session_status; blocks self-migrate while session active.",
+  "migration_impact": "what_next gains adoption_session ranking when session.json is active. Operators should complete or abandon sessions so ready Features can rank again.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_what_next.py -q -k AdoptionSession.",
+    "2. gh plate adopt --start-session; gh plate what-next --json should show priority adoption_session.",
+    "3. Complete with gh plate adopt --complete-session --json when done."
+  ],
+  "agent_notes": "Closes #957. Epic #633 remains open for full <30m E2E proof.",
+  "breaking": false,
+  "links": ["#957", "#955", "#633", "#937", "#654"]
+}
