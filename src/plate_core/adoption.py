@@ -8,6 +8,7 @@ report to drive import-payload + bootstrap --adopt + first Q&A seed in order
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -39,6 +40,23 @@ STARTER_QUESTIONS: list[dict[str, str]] = [
 ]
 
 _FIRST_QA_MARKER = Path(".agentic") / "adoption" / "first_qa_seed.json"
+_SESSION_MARKER = Path(".agentic") / "adoption" / "session.json"
+_TARGET_MINUTES = 30
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _parse_iso(ts: str | None) -> datetime | None:
+    if not ts:
+        return None
+    try:
+        # Support trailing Z
+        t = str(ts).strip().replace("Z", "+00:00")
+        return datetime.fromisoformat(t)
+    except ValueError:
+        return None
 
 
 def _check(
@@ -456,3 +474,275 @@ def plan_first_qa_seed(
     plan["next_command"] = "gh plate feed --json"
     plan["note"] = "Seed applied via runner; local marker written. Open feed for first Q&A."
     return plan
+
+
+def adoption_session_status(repo_root: str | Path | None = None) -> dict[str, Any]:
+    """Read offline adoption session timer (#955)."""
+    root = Path(repo_root or ".").resolve()
+    marker = root / _SESSION_MARKER
+    readiness = None
+    try:
+        readiness = assess_adoption_readiness(root, include_optional=False)
+    except Exception as exc:  # noqa: BLE001
+        readiness = {"ok": False, "error": str(exc)}
+
+    base: dict[str, Any] = {
+        "ok": True,
+        "repo_root": str(root),
+        "marker_path": str(marker),
+        "active": False,
+        "completed": False,
+        "target_minutes": _TARGET_MINUTES,
+        "related_issues": ["#955", "#633", "#935", "#654"],
+    }
+    if readiness and readiness.get("ok"):
+        base["core_ready"] = readiness.get("core_ready")
+        base["first_qa_seeded"] = (readiness.get("first_qa") or {}).get("seeded")
+        base["estimated_minutes_remaining"] = readiness.get("estimated_minutes_remaining")
+
+    if not marker.is_file():
+        base["note"] = "No adoption session started. Use gh plate adopt --start-session."
+        base["next_command"] = "gh plate adopt --start-session --json"
+        return base
+
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        base["ok"] = False
+        base["error"] = str(exc)
+        base["note"] = "Session marker unreadable."
+        return base
+
+    started = data.get("started_at")
+    finished = data.get("finished_at")
+    base["started_at"] = started
+    base["finished_at"] = finished
+    base["active"] = bool(started) and not finished
+    base["completed"] = bool(finished)
+    if data.get("duration_minutes") is not None:
+        base["duration_minutes"] = data.get("duration_minutes")
+    if data.get("within_30m") is not None:
+        base["within_30m"] = data.get("within_30m")
+    base["session"] = data
+
+    if base["active"]:
+        start_dt = _parse_iso(str(started) if started else None)
+        if start_dt:
+            elapsed = (datetime.now(timezone.utc) - start_dt.astimezone(timezone.utc)).total_seconds() / 60.0
+            base["elapsed_minutes"] = round(elapsed, 2)
+            base["within_30m_so_far"] = elapsed <= _TARGET_MINUTES
+        base["next_command"] = "gh plate adopt --complete-session --json"
+        base["note"] = "Adoption session in progress; complete when core_ready + first_qa seeded."
+    elif base["completed"]:
+        base["next_command"] = "gh plate feed --json"
+        base["note"] = (
+            f"Session complete duration_minutes={base.get('duration_minutes')} "
+            f"within_30m={base.get('within_30m')}."
+        )
+    return base
+
+
+def start_adoption_session(
+    repo_root: str | Path | None = None,
+    *,
+    force: bool = False,
+    now_iso: str | None = None,
+) -> dict[str, Any]:
+    """Start local adoption wall-clock session (#955). No network."""
+    root = Path(repo_root or ".").resolve()
+    marker = root / _SESSION_MARKER
+    if marker.is_file() and not force:
+        try:
+            existing = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+        if existing.get("started_at") and not existing.get("finished_at"):
+            return {
+                "ok": True,
+                "started": False,
+                "already_active": True,
+                "repo_root": str(root),
+                "marker_path": str(marker),
+                "started_at": existing.get("started_at"),
+                "note": "Session already active; pass force=true to restart.",
+                "next_command": "gh plate adopt --session-status --json",
+                "related_issues": ["#955", "#633"],
+            }
+
+    started_at = now_iso or _utc_now_iso()
+    payload = {
+        "started_at": started_at,
+        "finished_at": None,
+        "target_minutes": _TARGET_MINUTES,
+        "mode": "start",
+    }
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        return {
+            "ok": False,
+            "started": False,
+            "error": str(exc),
+            "repo_root": str(root),
+            "marker_path": str(marker),
+        }
+
+    readiness = assess_adoption_readiness(root, include_optional=False)
+    return {
+        "ok": True,
+        "started": True,
+        "already_active": False,
+        "repo_root": str(root),
+        "marker_path": str(marker),
+        "started_at": started_at,
+        "target_minutes": _TARGET_MINUTES,
+        "core_ready": readiness.get("core_ready"),
+        "first_qa_seeded": (readiness.get("first_qa") or {}).get("seeded"),
+        "next_command": readiness.get("next_command") or "gh plate adopt --json",
+        "note": (
+            "Adoption session started. Run import-payload/bootstrap/first-qa, "
+            "then gh plate adopt --complete-session --json (#955)."
+        ),
+        "related_issues": ["#955", "#633", "#935", "#654"],
+        "ask_user_question": {
+            "question": "Adoption session started — continue under-30m onboarding?",
+            "options": [
+                {"label": "Show readiness", "description": "gh plate adopt --json"},
+                {"label": "Import payload dry-run", "description": "gh plate import-payload --dry-run --json"},
+                {"label": "Complete session later", "description": "gh plate adopt --complete-session"},
+            ],
+        },
+    }
+
+
+def complete_adoption_session(
+    repo_root: str | Path | None = None,
+    *,
+    now_iso: str | None = None,
+    require_core_ready: bool = False,
+) -> dict[str, Any]:
+    """Complete adoption session and record duration vs 30m budget (#955)."""
+    root = Path(repo_root or ".").resolve()
+    marker = root / _SESSION_MARKER
+    if not marker.is_file():
+        return {
+            "ok": False,
+            "completed": False,
+            "error": "no_session",
+            "repo_root": str(root),
+            "marker_path": str(marker),
+            "note": "No session to complete. Start with gh plate adopt --start-session.",
+            "related_issues": ["#955", "#633"],
+        }
+
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "ok": False,
+            "completed": False,
+            "error": str(exc),
+            "repo_root": str(root),
+        }
+
+    if data.get("finished_at") and not now_iso:
+        # already complete — return snapshot
+        return {
+            "ok": True,
+            "completed": True,
+            "already_completed": True,
+            "repo_root": str(root),
+            "marker_path": str(marker),
+            "started_at": data.get("started_at"),
+            "finished_at": data.get("finished_at"),
+            "duration_minutes": data.get("duration_minutes"),
+            "within_30m": data.get("within_30m"),
+            "note": "Session already completed.",
+            "session": data,
+            "related_issues": ["#955", "#633"],
+        }
+
+    started_at = data.get("started_at")
+    start_dt = _parse_iso(str(started_at) if started_at else None)
+    finished_at = now_iso or _utc_now_iso()
+    end_dt = _parse_iso(finished_at) or datetime.now(timezone.utc)
+    if start_dt is None:
+        return {
+            "ok": False,
+            "completed": False,
+            "error": "invalid_started_at",
+            "repo_root": str(root),
+            "session": data,
+        }
+
+    duration = (end_dt.astimezone(timezone.utc) - start_dt.astimezone(timezone.utc)).total_seconds() / 60.0
+    duration_minutes = round(duration, 2)
+    within = duration_minutes <= _TARGET_MINUTES
+
+    readiness = assess_adoption_readiness(root, include_optional=False)
+    core_ready = bool(readiness.get("core_ready"))
+    first_qa = bool((readiness.get("first_qa") or {}).get("seeded"))
+
+    if require_core_ready and not core_ready:
+        return {
+            "ok": False,
+            "completed": False,
+            "error": "core_not_ready",
+            "repo_root": str(root),
+            "core_ready": core_ready,
+            "first_qa_seeded": first_qa,
+            "elapsed_minutes": duration_minutes,
+            "note": "Session not completed: core_ready is false (require_core_ready).",
+            "related_issues": ["#955", "#633"],
+        }
+
+    payload = {
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "duration_minutes": duration_minutes,
+        "within_30m": within,
+        "target_minutes": _TARGET_MINUTES,
+        "core_ready": core_ready,
+        "first_qa_seeded": first_qa,
+        "mode": "complete",
+    }
+    try:
+        marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        return {
+            "ok": False,
+            "completed": False,
+            "error": str(exc),
+            "repo_root": str(root),
+        }
+
+    return {
+        "ok": True,
+        "completed": True,
+        "already_completed": False,
+        "repo_root": str(root),
+        "marker_path": str(marker),
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "duration_minutes": duration_minutes,
+        "within_30m": within,
+        "target_minutes": _TARGET_MINUTES,
+        "core_ready": core_ready,
+        "first_qa_seeded": first_qa,
+        "session": payload,
+        "next_command": "gh plate feed --json" if core_ready else readiness.get("next_command"),
+        "note": (
+            f"Adoption session complete in {duration_minutes}m "
+            f"(target {_TARGET_MINUTES}m, within_30m={within})."
+        ),
+        "related_issues": ["#955", "#633", "#935", "#654"],
+        "ask_user_question": {
+            "question": f"Adoption finished in {duration_minutes}m (within_30m={within}). Next?",
+            "options": [
+                {"label": "Open feed", "description": "gh plate feed --json"},
+                {"label": "Health", "description": "gh plate health --json"},
+                {"label": "Start new session", "description": "gh plate adopt --start-session --force"},
+            ],
+        },
+    }

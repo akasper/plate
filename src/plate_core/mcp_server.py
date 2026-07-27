@@ -378,6 +378,24 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 apply=bool(args.get("apply", False)),
                 runner=None,
             )
+        elif name == "plate_adoption_session":
+            from .adoption import (
+                adoption_session_status,
+                complete_adoption_session,
+                start_adoption_session,
+            )
+
+            action = str(args.get("action") or "status").lower()
+            root = args.get("repo_root") or "."
+            if action == "start":
+                payload = start_adoption_session(root, force=bool(args.get("force", False)))
+            elif action == "complete":
+                payload = complete_adoption_session(
+                    root,
+                    require_core_ready=bool(args.get("require_core_ready", False)),
+                )
+            else:
+                payload = adoption_session_status(root)
         elif name == "plate_self_migrate_plan":
             from .self_migrate import plan_self_migrate
 
@@ -2260,6 +2278,31 @@ def run() -> None:
                                         "apply": {
                                             "type": "boolean",
                                             "description": "Attempt live seed (requires runner; default false).",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_adoption_session",
+                                "description": "Adoption wall-clock session timer for <30m proof (#955/#633). action=start|complete|status; local only.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "action": {
+                                            "type": "string",
+                                            "description": "start | complete | status (default status).",
+                                        },
+                                        "force": {
+                                            "type": "boolean",
+                                            "description": "Force restart when action=start.",
+                                        },
+                                        "require_core_ready": {
+                                            "type": "boolean",
+                                            "description": "When action=complete, refuse if core_ready is false.",
                                         },
                                     },
                                 },
