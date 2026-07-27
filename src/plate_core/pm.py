@@ -192,6 +192,36 @@ def classify_work_type(item: dict[str, Any]) -> str:
     return "implement"
 
 
+def migrate_legacy_risk_off_blocked_assignment(asg: dict[str, Any]) -> bool:
+    """Rewrite pre-#890 ``blocked: risk_tolerance=off`` rows to proposed (in-place).
+
+    Old PM versions marked implement work ``blocked`` under risk=off, which stranded
+    durable queue rows forever. Current policy proposes with ``auto_delegate=false``.
+    Returns True when the assignment was migrated.
+    """
+    if not isinstance(asg, dict):
+        return False
+    if str(asg.get("status") or "") != "blocked":
+        return False
+    rat = str(asg.get("rationale") or "")
+    if "blocked: risk_tolerance=off" not in rat:
+        return False
+    # Keep real budget blocks
+    if "blocked: est" in rat or "budget remaining" in rat.lower():
+        return False
+    asg["status"] = "proposed"
+    pkt = asg.setdefault("packet", {})
+    if isinstance(pkt, dict):
+        pkt["auto_delegate"] = False
+        pkt["migrated_from"] = "legacy_risk_off_blocked"
+    asg["rationale"] = rat.replace(
+        "blocked: risk_tolerance=off",
+        "auto-delegate disabled: risk_tolerance=off (migrated from legacy blocked)",
+    )
+    asg["updated_at"] = _now()
+    return True
+
+
 def _ready_issue_candidates_from_what_next(wn: dict[str, Any]) -> list[dict[str, Any]]:
     """Expand what_next ready_issue / issue_number into assignable PM work rows (#660)."""
     out: list[dict[str, Any]] = []
@@ -746,7 +776,25 @@ class ProjectManager:
                 rows = data
             else:
                 rows = []
-            return [r for r in rows if isinstance(r, dict)]
+            out = [r for r in rows if isinstance(r, dict)]
+            # Heal pre-#890 queue rows blocked solely for risk=off → proposed (#889/#660)
+            changed = False
+            for r in out:
+                if migrate_legacy_risk_off_blocked_assignment(r):
+                    changed = True
+            if changed:
+                try:
+                    path.write_text(
+                        json.dumps(
+                            {"updated_at": _now(), "assignments": out},
+                            indent=2,
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                except Exception:
+                    pass
+            return out
         except Exception:
             return []
 
