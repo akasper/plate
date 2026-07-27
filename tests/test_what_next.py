@@ -378,5 +378,111 @@ class TestWhatNextCLI(unittest.TestCase):
         self.assertIn("what-next", help_text)
 
 
+class TestGetWhatNextLiveWiring(unittest.TestCase):
+    """Proves: live get_what_next wires PM status into idle vs active ranking (#907/#905/#364).
+
+    Claim: empty pipeline + idle PM queue does not force PM dry-run solely from open
+    epics; active open_assignments/queue_size still ranks PM (#660).
+    """
+
+    def _health(self, *, open_epics: int = 5):
+        class H:
+            def to_dict(self):
+                return {
+                    "label_coverage_ok": True,
+                    "open_epic_count": open_epics,
+                    "budget_pressure": "ok",
+                    "budget_remaining_tokens": 50000,
+                    "budget_daily_limit": 50000,
+                    "budget_risk_tolerance": "off",
+                }
+
+        return H()
+
+    def test_get_what_next_idle_pm_ranks_epic_not_pm(self):
+        from unittest.mock import patch
+
+        from plate_core.what_next import get_what_next
+
+        idle_pm = {
+            "open_checkpoints": 0,
+            "delegated": 0,
+            "proposed": 0,
+            "queue_size": 0,
+            "open_assignments": 0,
+            "budget_pressure": "ok",
+            "risk_tolerance": "off",
+        }
+        with patch("plate_core.health.get_health", return_value=self._health()):
+            with patch("plate_core.autonomy.get_budget_snapshot", return_value={
+                "budget_pressure": "ok",
+                "remaining_tokens": 50000,
+                "daily_limit": 50000,
+                "risk_tolerance": "off",
+            }):
+                with patch("plate_core.what_next.fetch_ready_issue_candidates", return_value=[]):
+                    with patch("plate_core.pm.get_pm_status", return_value=idle_pm):
+                        with patch("plate_core.release.get_release_status", side_effect=Exception("skip")):
+                            with patch("plate_core.release.collect_fragments", return_value=[]):
+                                out = get_what_next(
+                                    "akasper/plate",
+                                    include_prs=False,
+                                    include_fragments=True,
+                                    include_ready_issues=True,
+                                    include_pm=True,
+                                    include_release=True,
+                                )
+        self.assertEqual(out["priority"], "epic")
+        self.assertIn("closeout", out["next_action"].lower())
+        self.assertEqual(out["state_snapshot"]["pm_queue_size"], 0)
+
+    def test_get_what_next_open_assignments_ranks_pm(self):
+        """Proves: open_assignments alone (even if queue_size omitted) ranks PM (#907)."""
+        from unittest.mock import patch
+
+        from plate_core.what_next import get_what_next, recommend_what_next
+
+        # Pure recommend path: open_assignments without queue_size
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 3},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            pm_status={"open_checkpoints": 0, "delegated": 0, "proposed": 0, "open_assignments": 2},
+        )
+        self.assertEqual(out["priority"], "pm")
+        self.assertIn("Project Manager", out["next_action"])
+
+        active_pm = {
+            "open_checkpoints": 0,
+            "delegated": 1,
+            "proposed": 1,
+            "queue_size": 2,
+            "open_assignments": 2,
+            "budget_pressure": "ok",
+            "risk_tolerance": "off",
+        }
+        with patch("plate_core.health.get_health", return_value=self._health()):
+            with patch("plate_core.autonomy.get_budget_snapshot", return_value={
+                "budget_pressure": "ok",
+                "remaining_tokens": 50000,
+                "daily_limit": 50000,
+                "risk_tolerance": "off",
+            }):
+                with patch("plate_core.what_next.fetch_ready_issue_candidates", return_value=[]):
+                    with patch("plate_core.pm.get_pm_status", return_value=active_pm):
+                        with patch("plate_core.release.get_release_status", side_effect=Exception("skip")):
+                            with patch("plate_core.release.collect_fragments", return_value=[]):
+                                live = get_what_next(
+                                    "akasper/plate",
+                                    include_prs=False,
+                                    include_fragments=True,
+                                    include_ready_issues=True,
+                                    include_pm=True,
+                                    include_release=True,
+                                )
+        # Delegated > 0 ranks pm_tick before generic pm cycle
+        self.assertEqual(live["priority"], "pm_tick")
+
+
 if __name__ == "__main__":
     unittest.main()
