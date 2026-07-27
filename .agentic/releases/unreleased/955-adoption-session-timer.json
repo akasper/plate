@@ -1,0 +1,16 @@
+{
+  "slug": "955-adoption-session-timer",
+  "change_type": "feature",
+  "surface": "src/plate_core/adoption.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_adoption.py",
+  "summary": "Adoption wall-clock session timer for <30m proof (#955/#633): start/complete/status under .agentic/adoption/session.json; CLI --start-session/--complete-session/--session-status; MCP plate_adoption_session; local only.",
+  "migration_impact": "New session markers and adopt flags. Completing a session records duration_minutes and within_30m against the 30m budget without claiming full E2E onboarding.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_adoption.py -q.",
+    "2. gh plate adopt --start-session --json before onboarding.",
+    "3. After work: gh plate adopt --complete-session --json; check within_30m.",
+    "4. MCP plate_adoption_session action=start|complete|status."
+  ],
+  "agent_notes": "Closes #955. Epic #633 remains open for full <30m E2E proof.",
+  "breaking": false,
+  "links": ["#955", "#633", "#935", "#953", "#654"]
+}
