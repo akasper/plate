@@ -7,13 +7,14 @@ Priority (cheap → specific):
 4. Missing multi-track release standing branches → release repair (#320/#814)
 5. Actionable local SPEC audit findings (#340 health/drift)
 6. Local adoption not core_ready → gh plate adopt / import-payload (#937 / #633 / #935)
-7. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
-8. Active scheduled op runs (blocked/running/planned) (#933 / #659 / #641)
-9. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
-10. Runnable scheduled ops dry-run plan when pipeline + PM idle (#933)
-11. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
+7. Self-migrate pin/payload drift → gh plate self-migrate --plan (#941 / #649 / #939)
+8. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
+9. Active scheduled op runs (blocked/running/planned) (#933 / #659 / #641)
+10. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
+11. Runnable scheduled ops dry-run plan when pipeline + PM idle (#933)
+12. Open Epics with idle PM → first-slice closeout / stub refine (not PM dry-run solely from open_epic_count; #905)
    — when available, name concrete complete-child Epic candidates (#909)
-12. Pending fragments / release status
+13. Pending fragments / release status
 """
 
 from __future__ import annotations
@@ -59,6 +60,7 @@ def recommend_what_next(
     epic_closeout_candidates: list[dict[str, Any]] | None = None,
     scheduled_ops: dict[str, Any] | None = None,
     adoption: dict[str, Any] | None = None,
+    self_migrate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure recommendation from pre-fetched state (testable).
 
@@ -71,6 +73,7 @@ def recommend_what_next(
     ``epic_closeout_candidates``: open Epics with all children closed (#909).
     ``scheduled_ops``: scheduled_ops_status-like summary + optional active_runs (#933).
     ``adoption``: assess_adoption_readiness() shape (#937/#935); ranks when core_ready is false.
+    ``self_migrate``: plan_self_migrate() shape (#941/#939); ranks when drift is true.
     """
     h = dict(health or {})
     b = dict(budget or {})
@@ -81,6 +84,7 @@ def recommend_what_next(
     closeouts = list(epic_closeout_candidates or [])
     sops = dict(scheduled_ops or {})
     adopt = dict(adoption or {})
+    smig = dict(self_migrate or {})
     labels_ok = bool(h.get("label_coverage_ok", False))
     open_epics = int(h.get("open_epic_count") or 0)
     missing_tracks = _missing_release_tracks(rel) if rel else []
@@ -171,11 +175,14 @@ def recommend_what_next(
         "adoption_minutes_remaining": adopt.get("estimated_minutes_remaining")
         if adopt
         else None,
+        "self_migrate_drift": smig.get("drift") if smig else None,
+        "self_migrate_target": smig.get("target_version") if smig else None,
     }
 
     active_sop_runs = list(sops.get("active_runs") or [])
     runnable_sops = list(sops.get("runnable_at_tolerance") or sops.get("runnable") or [])
     adoption_not_ready = bool(adopt) and adopt.get("core_ready") is False
+    self_migrate_drift = bool(smig) and smig.get("drift") is True
 
     # 1) Budget critical/exhausted OR next-cycle pause — even under risk=off (surface gates).
     # would_pause_next_cycle can be true while pressure is only elevated (remaining < per_cycle).
@@ -359,7 +366,41 @@ def recommend_what_next(
             "ask_user_question": adopt.get("ask_user_question"),
         }
 
-    # 6) Concrete ready Feature/Bug — prefer over generic epic text (#793)
+    # 6) Self-migrate pin/payload drift — plan before new Features (#941/#649)
+    if self_migrate_drift:
+        target = smig.get("target_version") or "?"
+        next_cmd = str(
+            smig.get("next_command") or "gh plate self-migrate --plan --json"
+        )
+        pin = (smig.get("pin") or {}).get("version")
+        action = (
+            f"review self-migrate plan (pin={pin} → target={target}): {next_cmd}"
+        )
+        prompt = (
+            "Local plate-core pin/payload drift detected (#939/#649). "
+            "1) `gh plate self-migrate --plan --json` / plate_self_migrate_plan  "
+            "2) Review steps (upgrade pin, import-payload conservative, health)  "
+            "3) Apply only with explicit approval — plan is dry-run only. "
+            "Do not start ready Feature work until drift is resolved or deferred."
+            + quiet
+        )
+        return {
+            "next_action": action,
+            "prompt_segment": prompt,
+            "rationale": (
+                f"self_migrate drift=true pin={pin} target={target} "
+                f"(#941/#939/#649)"
+            ),
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "self_migrate",
+            "next_command": next_cmd,
+            "target_version": target,
+            "risk": smig.get("risk"),
+            "ask_user_question": smig.get("ask_user_question"),
+        }
+
+    # 7) Concrete ready Feature/Bug — prefer over generic epic text (#793)
     if ready:
         first = ready[0]
         num = first.get("number") or first.get("issue_number")
@@ -883,8 +924,9 @@ def get_what_next(
     include_release: bool = True,
     include_scheduled_ops: bool = True,
     include_adoption: bool = True,
+    include_self_migrate: bool = True,
 ) -> dict[str, Any]:
-    """Live what-next: health + budget + PRs + adoption + ready issues + PM + release + scheduled ops."""
+    """Live what-next: health + budget + PRs + adoption + self-migrate + ready issues + PM + release + scheduled ops."""
     health: dict[str, Any] = {}
     budget: dict[str, Any] = {}
     open_prs: list[dict[str, Any]] = []
@@ -894,6 +936,7 @@ def get_what_next(
     release_status: dict[str, Any] | None = None
     scheduled_ops: dict[str, Any] | None = None
     adoption: dict[str, Any] | None = None
+    self_migrate: dict[str, Any] | None = None
 
     try:
         from .health import get_health
@@ -1013,6 +1056,16 @@ def get_what_next(
         except Exception:
             adoption = None
 
+    # Only when adoption is ready (or skipped) — pin drift is secondary to first adopt.
+    adopt_ready = adoption is None or adoption.get("core_ready") is not False
+    if include_self_migrate and not open_prs and adopt_ready:
+        try:
+            from .self_migrate import plan_self_migrate
+
+            self_migrate = plan_self_migrate(".", include_payload=True)
+        except Exception:
+            self_migrate = None
+
     if include_scheduled_ops and not open_prs and not ready_issues:
         try:
             from .scheduled_ops import (
@@ -1056,4 +1109,5 @@ def get_what_next(
         epic_closeout_candidates=epic_closeout_candidates,
         scheduled_ops=scheduled_ops,
         adoption=adoption,
+        self_migrate=self_migrate,
     )
