@@ -409,7 +409,7 @@ class TestEpicCloseoutCandidates(unittest.TestCase):
         self.assertEqual(len(out["epic_closeout_candidates"]), 2)
         self.assertEqual(out["epic_closeout_candidates"][0]["number"], 656)
 
-    def test_fetch_filters_incomplete_and_empty(self):
+    def test_fetch_filters_incomplete_empty_and_implemented(self):
         from plate_core.what_next import fetch_epic_closeout_candidates
 
         class FakeGh:
@@ -421,17 +421,31 @@ class TestEpicCloseoutCandidates(unittest.TestCase):
                                 "nodes": [
                                     {
                                         "number": 656,
-                                        "title": "done kids",
+                                        "title": "done kids already implemented",
+                                        "labels": {
+                                            "nodes": [
+                                                {"name": "Epic"},
+                                                {"name": "status:implemented"},
+                                            ]
+                                        },
                                         "subIssuesSummary": {"total": 6, "completed": 6},
+                                    },
+                                    {
+                                        "number": 350,
+                                        "title": "done kids need closeout",
+                                        "labels": {"nodes": [{"name": "Epic"}]},
+                                        "subIssuesSummary": {"total": 3, "completed": 3},
                                     },
                                     {
                                         "number": 661,
                                         "title": "still open kids",
+                                        "labels": {"nodes": [{"name": "Epic"}]},
                                         "subIssuesSummary": {"total": 2, "completed": 1},
                                     },
                                     {
                                         "number": 999,
                                         "title": "empty stub epic",
+                                        "labels": {"nodes": [{"name": "Epic"}]},
                                         "subIssuesSummary": {"total": 0, "completed": 0},
                                     },
                                 ]
@@ -442,8 +456,8 @@ class TestEpicCloseoutCandidates(unittest.TestCase):
 
         out = fetch_epic_closeout_candidates("akasper/plate", gh=FakeGh())
         nums = [c["number"] for c in out]
-        self.assertEqual(nums, [656])
-        self.assertEqual(out[0]["children_total"], 6)
+        self.assertEqual(nums, [350])
+        self.assertEqual(out[0]["children_total"], 3)
 
     def test_fetch_degrades_on_api_error(self):
         from plate_core.what_next import fetch_epic_closeout_candidates
