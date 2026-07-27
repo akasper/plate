@@ -561,13 +561,33 @@ def cmd_adopt(args: argparse.Namespace) -> int:
 
 
 def cmd_self_migrate(args: argparse.Namespace) -> int:
-    """Self-migrate dry-run plan, marker merge, or PR plan (#939/#943/#947 / Epic #649)."""
+    """Self-migrate dry-run plan, marker merge, PR plan, or verify (#939/#943/#947/#965 / Epic #649)."""
     from .self_migrate import (
         apply_self_migrate_pr,
         plan_marker_merge,
         plan_self_migrate,
         plan_self_migrate_pr,
+        verify_self_migrate,
     )
+
+    if bool(getattr(args, "verify", False)):
+        report = verify_self_migrate(
+            getattr(args, "repo_root", ".") or ".",
+            target_version=getattr(args, "target_version", None),
+            include_payload=not bool(getattr(args, "no_payload", False)),
+            resolve_upstream=bool(getattr(args, "resolve_upstream", False)),
+            allow_network=bool(getattr(args, "allow_network", False)),
+        )
+        if args.json:
+            print(json.dumps(report))
+            return 0 if report.get("ok") and report.get("ready") else 1
+        print(f"Repo root: {report.get('repo_root')}")
+        print(f"Ready: {report.get('ready')}  failures={report.get('failures')}")
+        for c in report.get("checks") or []:
+            print(f"  - {c.get('id')}: ok={c.get('ok')}")
+        print(f"Next: {report.get('next_command')}")
+        print(report.get("note"))
+        return 0 if report.get("ok") and report.get("ready") else 1
 
     if bool(getattr(args, "merge_markers", False)):
         paths = getattr(args, "path", None) or None
@@ -4078,6 +4098,11 @@ def build_parser() -> argparse.ArgumentParser:
     self_mig.add_argument(
         "--closes",
         help="Optional issue ref for PR body (e.g. #947)",
+    )
+    self_mig.add_argument(
+        "--verify",
+        action="store_true",
+        help="Offline post-migrate verify: drift + adoption + .plate (#965); no writes",
     )
     self_mig.add_argument("--json", action="store_true", help="Output JSON")
     self_mig.set_defaults(func=cmd_self_migrate)
