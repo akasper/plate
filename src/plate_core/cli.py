@@ -278,6 +278,14 @@ def cmd_health(args: argparse.Namespace) -> int:
         )
         if report.adoption_next_command:
             print(f"Adoption next: {report.adoption_next_command}")
+    if report.self_migrate_ready is not None or report.self_migrate_drift is not None:
+        print(
+            f"Self-migrate (#967/#649): ready={report.self_migrate_ready} "
+            f"drift={report.self_migrate_drift} "
+            f"target={report.self_migrate_target}"
+        )
+        if report.self_migrate_next_command:
+            print(f"Self-migrate next: {report.self_migrate_next_command}")
     return 0 if report.status != "fail" else 1
 
 
