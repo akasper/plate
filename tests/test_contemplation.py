@@ -1,7 +1,12 @@
 import unittest
 from unittest.mock import patch
 
-from plate_core.contemplation import ContemplationEngine, _git_head_sha
+from plate_core.contemplation import (
+    ContemplationEngine,
+    _detect_artifact_mutation_intents,
+    _format_mutation_pr_draft,
+    _git_head_sha,
+)
 
 
 def _answer_block(answer_text: str, revision_of: str | None = None) -> str:
@@ -106,8 +111,13 @@ Document a recommendation in docs/research/example.md and link follow-up impleme
 
         self.assertFalse(result["close_signal_met"])
         self.assertEqual(result["answer_signal_evaluation"], [])
-        contemplation_log = client.posted[0][1]
-        self.assertIn("no parseable checklist criteria", contemplation_log)
+        logs = [
+            b
+            for endpoint, b, _ in client.posted
+            if endpoint.endswith("/issues/326/comments") and "PLATE-CONTEMPLATION:BEGIN" in b
+        ]
+        self.assertEqual(len(logs), 1)
+        self.assertIn("no parseable checklist criteria", logs[0])
 
     def test_revision_invalidates_previous_citations(self):
         body = """
@@ -218,9 +228,10 @@ What should we research?
 ## Answer signal
 Document a recommendation without a checklist so follow-up may spawn.
 """
+        # Avoid explicit docs/research/ path so #925 mutation intents do not override.
         answer = (
-            "We need research into docs/research/example.md covering risk and unknown "
-            "tradeoffs before implement. This answer is long enough to trigger follow-up."
+            "We need research into covering risk and unknown tradeoffs before implement. "
+            "This answer is long enough to trigger follow-up and says investigate carefully."
         )
         client = _FakeGhClient(body, comments=[])
         result = ContemplationEngine(client).contemplate(
@@ -230,6 +241,7 @@ Document a recommendation without a checklist so follow-up may spawn.
             answered_by="user",
         )
         self.assertFalse(result["close_signal_met"])
+        self.assertEqual(result.get("mutation_intents") or [], [])
         self.assertEqual(len(result["created_issues"]), 1)
         self.assertEqual(result["created_issues"][0]["type"], "Research")
         create_posts = [
@@ -285,6 +297,119 @@ Example
     def test_git_head_sha_unknown_on_failure(self):
         with patch("plate_core.contemplation.subprocess.run", side_effect=OSError("no git")):
             self.assertEqual(_git_head_sha(), "unknown")
+
+    def test_detect_artifact_mutation_intents_high_risk_agents(self):
+        """Proves: process-impacting answers yield PR-only mutation intents (#925)."""
+        intents = _detect_artifact_mutation_intents(
+            "We should update AGENTS.md Question loop and add a skill in .agentic/skills.yml."
+        )
+        paths = {i["path"] for i in intents}
+        self.assertIn("AGENTS.md", paths)
+        self.assertIn(".agentic/skills.yml", paths)
+        agents = next(i for i in intents if i["path"] == "AGENTS.md")
+        self.assertEqual(agents["risk"], "high")
+        self.assertTrue(agents["need_human_review"])
+        self.assertEqual(agents["mode"], "pr_only")
+        skills = next(i for i in intents if i["path"] == ".agentic/skills.yml")
+        self.assertEqual(skills["risk"], "low")
+        self.assertFalse(skills["need_human_review"])
+
+    def test_mutation_pr_draft_forbids_main_push(self):
+        """Proves: mutation plan is PR-only with release base (#925)."""
+        draft = _format_mutation_pr_draft(
+            question_number=326,
+            answer_text="Update AGENTS.md process rules.",
+            intents=[
+                {
+                    "path": "AGENTS.md",
+                    "rationale": "Process",
+                    "risk": "high",
+                    "need_human_review": True,
+                    "mode": "pr_only",
+                }
+            ],
+            git_commit="deadbeef",
+        )
+        self.assertIn("Base:** `release`", draft)
+        self.assertIn("Do **not** push directly to `main`", draft)
+        self.assertIn("Closes #326", draft)
+        self.assertIn("AGENTS.md", draft)
+        self.assertIn("need:human-review", draft)
+        self.assertIn("deadbeef", draft)
+
+    def test_contemplate_logs_mutation_intents_and_creates_plan_issue(self):
+        """Proves: incomplete process answers create mutation plan Feature (#925)."""
+        body = """
+## Question
+How should agents handle process answers?
+
+## Answer signal
+Document a recommendation without a checklist so follow-up may spawn.
+"""
+        answer = (
+            "Please update AGENTS.md Question loop and change process for "
+            "contemplation so process updates only land via PR. "
+            "Also document in docs/research/example.md."
+        )
+        client = _FakeGhClient(body, comments=[])
+        with patch("plate_core.contemplation._git_head_sha", return_value="abc1234"):
+            result = ContemplationEngine(client).contemplate(
+                question_number=326,
+                answer_text=answer,
+                repo="owner/repo",
+                answered_by="user",
+            )
+        self.assertFalse(result["close_signal_met"])
+        self.assertTrue(result["mutation_intents"])
+        self.assertIsNotNone(result.get("mutation_pr_draft"))
+        self.assertIn("AGENTS.md", {i["path"] for i in result["mutation_intents"]})
+        self.assertEqual(len(result["created_issues"]), 1)
+        self.assertTrue(result["created_issues"][0].get("mutation_plan"))
+        self.assertEqual(result["created_issues"][0]["type"], "Feature")
+        create_posts = [
+            fields
+            for endpoint, _body, fields in client.posted
+            if endpoint.endswith("/issues") and fields
+        ]
+        self.assertEqual(len(create_posts), 1)
+        fields = create_posts[0]
+        self.assertIn("Feature", fields.get("labels") or [])
+        self.assertIn("need:human-review", fields.get("labels") or [])
+        self.assertIn("plate-contemplation-mutation", fields.get("body") or "")
+        self.assertIn("Base:** `release`", fields.get("body") or "")
+        logs = [
+            b
+            for endpoint, b, _ in client.posted
+            if endpoint.endswith("/issues/326/comments") and "PLATE-CONTEMPLATION:BEGIN" in b
+        ]
+        self.assertEqual(len(logs), 1)
+        self.assertIn("Mutation intent: AGENTS.md", logs[0])
+        self.assertIn("Artifact mutation intents:", logs[0])
+
+    def test_typed_followup_when_no_mutation_intents(self):
+        """Proves: non-process answers still use typed Research/Feature follow-up (#921/#925)."""
+        body = """
+## Question
+What next?
+
+## Answer signal
+No checklist here.
+"""
+        # Avoid docs/research/ and process keywords so mutation intents stay empty.
+        answer = (
+            "We should investigate the unknown risk before we implement create add "
+            "the feature; this needs research into the tradeoffs carefully now."
+        )
+        client = _FakeGhClient(body, comments=[])
+        result = ContemplationEngine(client).contemplate(
+            question_number=326,
+            answer_text=answer,
+            repo="owner/repo",
+            answered_by="user",
+        )
+        self.assertEqual(result.get("mutation_intents") or [], [])
+        self.assertEqual(len(result["created_issues"]), 1)
+        self.assertEqual(result["created_issues"][0]["type"], "Research")
 
 
 if __name__ == "__main__":
