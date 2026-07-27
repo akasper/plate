@@ -1,0 +1,16 @@
+{
+  "slug": "945-upstream-version-resolve",
+  "change_type": "feature",
+  "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+  "summary": "Optional upstream plate-core version resolve for self-migrate (#945/#649): resolve_upstream_version with injectable fetcher; --resolve-upstream/--allow-network CLI; MCP flags; offline default, no auto-apply.",
+  "migration_impact": "plan_self_migrate gains resolve_upstream/allow_network/upstream_fetcher. CLI --resolve-upstream (offline unless --allow-network for live PyPI JSON). Tests inject fetcher; production network remains opt-in.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_self_migrate.py -q.",
+    "2. Offline plan still: gh plate self-migrate --plan --json.",
+    "3. Resolve with inject/tests or live: --resolve-upstream --allow-network --json after review of network policy.",
+    "4. Residual Epic #649: low-risk auto migration PR apply remains open."
+  ],
+  "agent_notes": "Closes #945. Third #649 slice after #939/#941/#943; does not close the Epic.",
+  "breaking": false,
+  "links": ["#945", "#649", "#939", "#943", "#633", "#654"]
+}
