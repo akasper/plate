@@ -477,6 +477,34 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     return 0 if report.get("ok") else 1
 
 
+def cmd_self_migrate(args: argparse.Namespace) -> int:
+    """Self-migrate dry-run plan (#939 / Epic #649)."""
+    from .self_migrate import plan_self_migrate
+
+    report = plan_self_migrate(
+        getattr(args, "repo_root", ".") or ".",
+        target_version=getattr(args, "target_version", None),
+        include_payload=not bool(getattr(args, "no_payload", False)),
+    )
+    if args.json:
+        print(json.dumps(report))
+        return 0
+    print(f"Repo root: {report.get('repo_root')}")
+    print(f"Installed: {report.get('installed_version')}")
+    pin = report.get("pin") or {}
+    print(f"Pin: {pin.get('version')} (source={pin.get('source')})")
+    print(f"Target: {report.get('target_version')}")
+    print(f"Drift: {report.get('drift')}  Risk: {report.get('risk')}")
+    comps = report.get("comparisons") or {}
+    print(f"Comparisons: {comps}")
+    print("Steps:")
+    for s in report.get("steps") or []:
+        print(f"  - [{s.get('id')}] {s.get('description')}")
+    print(f"Next command: {report.get('next_command')}")
+    print(report.get("note"))
+    return 0 if report.get("ok") else 1
+
+
 def cmd_config_show(args: argparse.Namespace) -> int:
     report = get_plate_config_report(Path(args.repo_root))
     if args.json:
@@ -3776,6 +3804,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     adopt.add_argument("--json", action="store_true", help="Output JSON")
     adopt.set_defaults(func=cmd_adopt)
+
+    self_mig = sub.add_parser(
+        "self-migrate",
+        help="Dry-run plan for plate-core pin/payload self-migrate (#939/#649); no apply",
+    )
+    self_mig.add_argument(
+        "--repo-root",
+        default=".",
+        help="Local checkout root (default: current directory)",
+    )
+    self_mig.add_argument(
+        "--plan",
+        action="store_true",
+        help="Emit plan (default behavior; accepted for explicit UX)",
+    )
+    self_mig.add_argument(
+        "--target-version",
+        help="Optional target plate-core version (default: installed __version__)",
+    )
+    self_mig.add_argument(
+        "--no-payload",
+        action="store_true",
+        help="Omit import-payload step from the plan",
+    )
+    self_mig.add_argument("--json", action="store_true", help="Output JSON")
+    self_mig.set_defaults(func=cmd_self_migrate)
 
     config = sub.add_parser("config", help="Inspect and initialize local .plate configuration")
     config_sub = config.add_subparsers(dest="config_command", required=True)
