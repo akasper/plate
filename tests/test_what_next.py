@@ -725,6 +725,53 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
         self.assertEqual(live["priority"], "pm_tick")
 
 
+class TestAdoptionWhatNext(unittest.TestCase):
+    """Proves: adoption readiness ranks on what_next (#937 / #633)."""
+
+    def test_adoption_not_ready_before_ready_issue(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 3},
+            budget={
+                "budget_pressure": "ok",
+                "remaining_tokens": 40000,
+                "daily_limit": 50000,
+            },
+            open_prs=[],
+            ready_issues=[{"number": 100, "title": "Some feature"}],
+            adoption={
+                "core_ready": False,
+                "estimated_minutes_remaining": 12,
+                "within_30m_budget": True,
+                "next_command": "gh plate import-payload --dry-run --strategy conservative --json",
+            },
+        )
+        self.assertEqual(out["priority"], "adoption")
+        self.assertIn("import-payload", out["next_action"])
+        self.assertEqual(out["estimated_minutes_remaining"], 12)
+        self.assertFalse(out["state_snapshot"]["adoption_core_ready"])
+
+    def test_open_pr_beats_adoption(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 1},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[{"number": 50, "title": "x", "baseRefName": "release"}],
+            adoption={"core_ready": False, "estimated_minutes_remaining": 20, "next_command": "x"},
+        )
+        self.assertEqual(out["priority"], "open_pr")
+
+    def test_core_ready_skips_adoption(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            ready_issues=[{"number": 200, "title": "Ready feat"}],
+            adoption={"core_ready": True, "estimated_minutes_remaining": 0},
+            pm_status={"queue_size": 0},
+        )
+        self.assertEqual(out["priority"], "ready_issue")
+        self.assertTrue(out["state_snapshot"]["adoption_core_ready"])
+
+
 class TestScheduledOpsWhatNext(unittest.TestCase):
     """Proves: scheduled ops rank on what_next (#933 / #659)."""
 
