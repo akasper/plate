@@ -1,0 +1,15 @@
+{
+  "slug": "939-self-migrate-plan",
+  "change_type": "feature",
+  "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+  "summary": "Self-migrate dry-run plan for plate-core pin/payload drift (#939/#649): plan_self_migrate, gh plate self-migrate --plan, plate_self_migrate_plan; no apply/network by default.",
+  "migration_impact": "New CLI self-migrate and MCP plate_self_migrate_plan. Detects VERSION/PLATE_CORE_VERSION/pyproject pins and ordered upgrade + import-payload + health steps.",
+  "migration_guidance": [
+    "1. Pull release after merge; pytest tests/test_self_migrate.py -q.",
+    "2. Adopters: gh plate self-migrate --plan --json before upgrading plate-core.",
+    "3. Execute steps manually after review; never auto-apply from the plan alone."
+  ],
+  "agent_notes": "Closes #939. First slice of Epic #649; does not close the Epic.",
+  "breaking": false,
+  "links": ["#939", "#649", "#633", "#615", "#654"]
+}
