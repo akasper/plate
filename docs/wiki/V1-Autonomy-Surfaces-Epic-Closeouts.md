@@ -17,6 +17,7 @@
 | **#657** | Autonomy foundations (sim/checkpoint/budget/ledger) | **Close (first slice)** | Shadow/sim #645, checkpoint primitive #648, budgets #634, cost/risk feed #653, ledger #647; children **5/5** | Production high-impact gate E2E under #654 |
 | **#658** | Evidence, media, packaging outcomes | **Close (first slice)** | Release-note media #635, feature media #636, packaging media #652; children **3/3** | Marketplace human publish Tasks remain out of band |
 | **#660** | Project Manager orchestrator | **Open** | `pm.py` assign/loop/queue/MCP; artifact dispatch; what_next PM rank; active-only queue (#903/#904) | Child **#661** browser deferred; keep epic open until browser decision or explicit deferral comment |
+| **#350** | Test Coverage Audit | **Close (first slice)** | Research #361 inventory; Design #362 Evidence convention; Feature #363 audit surface; Feature #364 high-priority gap closures (what_next, template_payload, Contemplation v2.1 proofs, compound Playwright offline); children **4/4** | Live auto-push without runner + live-network ceremony apply deferred; low-priority inventory / continuous audit tooling may continue under new Features |
 
 ## Operator path (current)
 
