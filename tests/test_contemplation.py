@@ -1,6 +1,7 @@
 import unittest
+from unittest.mock import patch
 
-from plate_core.contemplation import ContemplationEngine
+from plate_core.contemplation import ContemplationEngine, _git_head_sha
 
 
 def _answer_block(answer_text: str, revision_of: str | None = None) -> str:
@@ -241,6 +242,49 @@ Document a recommendation without a checklist so follow-up may spawn.
         self.assertEqual(fields.get("labels"), ["Research"])
         self.assertIn("[Research]", fields.get("title") or "")
         self.assertIn("**Parent Question:** #326", fields.get("body") or "")
+
+    def test_transcript_includes_git_provenance(self):
+        """Proves: contemplation log carries git commit provenance (#923)."""
+        body = """
+## Question
+Example
+
+## Answer signal
+- [ ] Cite docs/design/contemplation-engine-contract.md as the closure contract.
+"""
+        answer = "The contract lives in docs/design/contemplation-engine-contract.md."
+        comments = [
+            {
+                "id": 41,
+                "html_url": "https://example.invalid/comments/41",
+                "body": _answer_block(answer),
+            }
+        ]
+        client = _FakeGhClient(body, comments)
+        with patch("plate_core.contemplation._git_head_sha", return_value="abc1234deadbeef"):
+            result = ContemplationEngine(client).contemplate(
+                question_number=326,
+                answer_text=answer,
+                repo="owner/repo",
+                session="sess-1",
+                answered_by="user",
+            )
+        self.assertEqual(result.get("git_commit"), "abc1234deadbeef")
+        logs = [
+            b
+            for endpoint, b, _ in client.posted
+            if endpoint.endswith("/issues/326/comments") and "PLATE-CONTEMPLATION:BEGIN" in b
+        ]
+        self.assertEqual(len(logs), 1)
+        log = logs[0]
+        self.assertIn("Git commit: abc1234deadbeef", log)
+        self.assertIn("git_commit: abc1234deadbeef", log)
+        self.assertIn("question_id: 326", log)
+        self.assertIn("session_id: sess-1", log)
+
+    def test_git_head_sha_unknown_on_failure(self):
+        with patch("plate_core.contemplation.subprocess.run", side_effect=OSError("no git")):
+            self.assertEqual(_git_head_sha(), "unknown")
 
 
 if __name__ == "__main__":
