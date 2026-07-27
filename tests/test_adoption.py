@@ -8,9 +8,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from plate_core.adoption import (
+    adoption_session_status,
     assess_adoption_readiness,
+    complete_adoption_session,
     first_qa_seed_status,
     plan_first_qa_seed,
+    start_adoption_session,
 )
 from plate_core.cli import cmd_adopt
 from plate_core.what_next import recommend_what_next
@@ -144,6 +147,42 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         self.assertEqual(rec.get("priority"), "first_qa_seed")
         self.assertIn("first-qa-plan", rec.get("next_command") or "")
 
+    def test_adoption_session_start_complete_within_30m(self):
+        """Proves: session records duration and within_30m for under-30m proof (#955)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            started = start_adoption_session(
+                root, now_iso="2026-07-27T10:00:00+00:00"
+            )
+            self.assertTrue(started["ok"])
+            self.assertTrue(started["started"])
+            status = adoption_session_status(root)
+            self.assertTrue(status["active"])
+            done = complete_adoption_session(
+                root, now_iso="2026-07-27T10:18:00+00:00"
+            )
+        self.assertTrue(done["ok"])
+        self.assertTrue(done["completed"])
+        self.assertEqual(done["duration_minutes"], 18.0)
+        self.assertTrue(done["within_30m"])
+
+    def test_adoption_session_over_30m(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            start_adoption_session(root, now_iso="2026-07-27T10:00:00+00:00")
+            done = complete_adoption_session(
+                root, now_iso="2026-07-27T10:45:00+00:00"
+            )
+        self.assertTrue(done["ok"])
+        self.assertEqual(done["duration_minutes"], 45.0)
+        self.assertFalse(done["within_30m"])
+
+    def test_adoption_session_complete_without_start(self):
+        with TemporaryDirectory() as tmp:
+            done = complete_adoption_session(tmp)
+        self.assertFalse(done["ok"])
+        self.assertEqual(done["error"], "no_session")
+
     def test_cmd_adopt_json(self):
         with TemporaryDirectory() as tmp:
             ns = type(
@@ -155,6 +194,11 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
                     "json": True,
                     "first_qa_plan": False,
                     "apply_first_qa": False,
+                    "start_session": False,
+                    "complete_session": False,
+                    "session_status": False,
+                    "force": False,
+                    "require_core_ready": False,
                 },
             )()
             import io

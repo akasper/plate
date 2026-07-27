@@ -456,8 +456,14 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
 
 
 def cmd_adopt(args: argparse.Namespace) -> int:
-    """Local adoption readiness or first Q&A seed plan (#935/#949 / Epic #633)."""
-    from .adoption import assess_adoption_readiness, plan_first_qa_seed
+    """Local adoption readiness, first Q&A seed, or session timer (#935/#949/#955 / Epic #633)."""
+    from .adoption import (
+        adoption_session_status,
+        assess_adoption_readiness,
+        complete_adoption_session,
+        plan_first_qa_seed,
+        start_adoption_session,
+    )
 
     if bool(getattr(args, "first_qa_plan", False)):
         report = plan_first_qa_seed(
@@ -481,6 +487,50 @@ def cmd_adopt(args: argparse.Namespace) -> int:
         print(f"Next: {report.get('next_command')}")
         print(report.get("note"))
         return 0 if report.get("ok") or report.get("error") == "runner_required" else 1
+
+    if bool(getattr(args, "start_session", False)):
+        report = start_adoption_session(
+            getattr(args, "repo_root", ".") or ".",
+            force=bool(getattr(args, "force", False)),
+        )
+        if args.json:
+            print(json.dumps(report))
+            return 0 if report.get("ok") else 1
+        print(f"Started: {report.get('started')} already_active={report.get('already_active')}")
+        print(f"Started at: {report.get('started_at')}")
+        print(f"Next: {report.get('next_command')}")
+        print(report.get("note"))
+        return 0 if report.get("ok") else 1
+
+    if bool(getattr(args, "complete_session", False)):
+        report = complete_adoption_session(
+            getattr(args, "repo_root", ".") or ".",
+            require_core_ready=bool(getattr(args, "require_core_ready", False)),
+        )
+        if args.json:
+            print(json.dumps(report))
+            return 0 if report.get("ok") else 1
+        print(
+            f"Completed: {report.get('completed')} within_30m={report.get('within_30m')} "
+            f"duration_minutes={report.get('duration_minutes')}"
+        )
+        print(f"Next: {report.get('next_command')}")
+        print(report.get("note"))
+        return 0 if report.get("ok") else 1
+
+    if bool(getattr(args, "session_status", False)):
+        report = adoption_session_status(getattr(args, "repo_root", ".") or ".")
+        if args.json:
+            print(json.dumps(report))
+            return 0 if report.get("ok") else 1
+        print(f"Active: {report.get('active')} completed={report.get('completed')}")
+        print(
+            f"Elapsed/duration: {report.get('elapsed_minutes') or report.get('duration_minutes')} "
+            f"within_30m={report.get('within_30m') or report.get('within_30m_so_far')}"
+        )
+        print(f"Next: {report.get('next_command')}")
+        print(report.get("note"))
+        return 0 if report.get("ok") else 1
 
     report = assess_adoption_readiness(
         getattr(args, "repo_root", ".") or ".",
@@ -3902,7 +3952,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     adopt = sub.add_parser(
         "adopt",
-        help="Adoption readiness or first Q&A seed plan (#935/#949/#633); dry-run default",
+        help="Adoption readiness, first Q&A seed, or session timer (#935/#949/#955/#633)",
     )
     adopt.add_argument(
         "--repo-root",
@@ -3923,6 +3973,31 @@ def build_parser() -> argparse.ArgumentParser:
         "--apply-first-qa",
         action="store_true",
         help="Attempt live seed (requires --first-qa-plan + injectable runner; blocked without it)",
+    )
+    adopt.add_argument(
+        "--start-session",
+        action="store_true",
+        help="Start local adoption wall-clock session (#955)",
+    )
+    adopt.add_argument(
+        "--complete-session",
+        action="store_true",
+        help="Complete adoption session and record duration vs 30m (#955)",
+    )
+    adopt.add_argument(
+        "--session-status",
+        action="store_true",
+        help="Show adoption session timer status (#955)",
+    )
+    adopt.add_argument(
+        "--force",
+        action="store_true",
+        help="Force restart of an active adoption session",
+    )
+    adopt.add_argument(
+        "--require-core-ready",
+        action="store_true",
+        help="With --complete-session, refuse if core_ready is false",
     )
     adopt.add_argument("--json", action="store_true", help="Output JSON")
     adopt.set_defaults(func=cmd_adopt)
