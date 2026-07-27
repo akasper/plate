@@ -1,0 +1,16 @@
+{
+  "slug": "977-readme-plate-align",
+  "change_type": "docs",
+  "surface": "README.md",
+  "summary": "Align monorepo README with PLATE product naming and v1 surfaces (#977/#533): title PLATE not plate_core-only; quick start for what-next/autonomy/pm/feed/adopt/self-migrate/release; package remains plate-core on PyPI.",
+  "migration_impact": "Public README only. Install commands unchanged (gh-plate, pip install plate-core). Downstream forks may re-copy README if customized.",
+  "migration_guidance": [
+    "1. Re-read README top sections for monorepo vs package naming.",
+    "2. Prefer gh plate what-next / autonomy / pm / adopt / self-migrate --verify in docs and onboarding.",
+    "3. Marketplace human Tasks #380/#381/#625/#626 still out of band."
+  ],
+  "agent_notes": "Closes #977. Addresses Task #533 README intent; post PLATE-TASK-CLOSED on #533 after merge if closing Task path.",
+  "breaking": false,
+  "links": ["#977", "#533", "#654", "#378", "#379"],
+  "requires": ["0.7.2"]
+}
