@@ -1,0 +1,10 @@
+{
+  "seeded": true,
+  "count": 3,
+  "titles": [
+    "[Question]: What is the primary purpose or value proposition of this software?",
+    "[Question]: Who are the primary users or customers of this software?",
+    "[Question]: What are the biggest risks or unknowns for this project right now?"
+  ],
+  "mode": "bootstrap_apply"
+}
