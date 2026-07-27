@@ -1,0 +1,16 @@
+{
+  "slug": "943-marker-merge-executor",
+  "change_type": "feature",
+  "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+  "summary": "Marker-aware sectional merge executor for self-migrate (#943/#649): plan_marker_merge, gh plate self-migrate --merge-markers [--apply-markers], MCP plate_self_migrate_merge_markers; dry-run default, preserves outside-marker local content.",
+  "migration_impact": "New --merge-markers / --upstream-dir / --apply-markers flags on self-migrate and MCP plate_self_migrate_merge_markers. Uses existing merge_with_diagnostics; no network; apply is explicit.",
+  "migration_guidance": [
+    "1. Pull release after merge; pytest tests/test_self_migrate.py -q.",
+    "2. Dry-run: gh plate self-migrate --merge-markers --upstream-dir <payload-or-upstream> --json.",
+    "3. After review only: add --apply-markers to write PLATES-CORE sections.",
+    "4. Residual Epic #649: optional PyPI/upstream fetch and low-risk auto PR apply remain open."
+  ],
+  "agent_notes": "Closes #943. Second slice of Epic #649 after #939/#941; does not close the Epic.",
+  "breaking": false,
+  "links": ["#943", "#649", "#939", "#941", "#633", "#654"]
+}
