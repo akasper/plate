@@ -374,10 +374,15 @@ def run_bootstrap(
             BootstrapAction(name="create-initial-epic", state="already-configured", detail="At least one open Epic exists")
         )
 
-    # Feature #153 / #949: shared starter Curiosity Questions catalog (adoption.STARTER_QUESTIONS).
-    from .adoption import STARTER_QUESTIONS
+    # Feature #153 / #949 / #951: shared starter catalog; write first_qa marker on apply.
+    from .adoption import (
+        STARTER_QUESTIONS,
+        first_qa_seed_status,
+        write_first_qa_seed_marker,
+    )
 
     starter_questions = list(STARTER_QUESTIONS)
+    local_checkout = Path(local_root) if local_root is not None else Path.cwd()
 
     # Check if any starter Questions already exist (simple heuristic for now)
     # Use direct API call (per_page=100 sufficient; matches labels/epics patterns in health.py)
@@ -400,18 +405,45 @@ def run_bootstrap(
                         "labels": ["Question"],
                     },
                 )
+            marker = write_first_qa_seed_marker(
+                local_checkout,
+                titles=[q["title"] for q in starter_questions],
+                mode="bootstrap_apply",
+            )
             state = "applied"
-            detail = f"Seeded {len(starter_questions)} initial Curiosity Questions"
+            detail = (
+                f"Seeded {len(starter_questions)} initial Curiosity Questions; "
+                f"first_qa marker written ({marker.get('marker_path')})"
+            )
         else:
             state = "planned"
             detail = f"Seed {len(starter_questions)} initial Curiosity Questions (project purpose, users, risks)"
         actions.append(BootstrapAction(name="seed-initial-questions", state=state, detail=detail))
     else:
+        detail = "Initial Curiosity Questions already present"
+        if apply_mode and not first_qa_seed_status(local_checkout).get("seeded"):
+            # Sync offline marker so what_next does not re-queue first_qa_seed (#951)
+            titles = [
+                str(q.get("title") or "")
+                for q in existing_questions
+                if str(q.get("title") or "").startswith("[Question]:")
+            ]
+            if not titles:
+                titles = [q["title"] for q in starter_questions]
+            marker = write_first_qa_seed_marker(
+                local_checkout,
+                titles=titles[:10],
+                mode="bootstrap_sync",
+            )
+            detail = (
+                f"Initial Curiosity Questions already present; "
+                f"first_qa marker synced ({marker.get('marker_path')})"
+            )
         actions.append(
             BootstrapAction(
                 name="seed-initial-questions",
                 state="already-configured",
-                detail="Initial Curiosity Questions already present",
+                detail=detail,
             )
         )
 
