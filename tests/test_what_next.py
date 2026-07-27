@@ -725,6 +725,59 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
         self.assertEqual(live["priority"], "pm_tick")
 
 
+class TestSelfMigrateWhatNext(unittest.TestCase):
+    """Proves: self-migrate drift ranks on what_next (#941 / #649)."""
+
+    def test_self_migrate_drift_before_ready_issue(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 2},
+            budget={
+                "budget_pressure": "ok",
+                "remaining_tokens": 40000,
+                "daily_limit": 50000,
+            },
+            open_prs=[],
+            ready_issues=[{"number": 300, "title": "Feature"}],
+            adoption={"core_ready": True},
+            self_migrate={
+                "drift": True,
+                "target_version": "0.8.0",
+                "pin": {"version": "0.6.0", "source": "VERSION"},
+                "next_command": "gh plate self-migrate --plan --json",
+                "risk": "medium",
+            },
+        )
+        self.assertEqual(out["priority"], "self_migrate")
+        self.assertEqual(out["target_version"], "0.8.0")
+        self.assertTrue(out["state_snapshot"]["self_migrate_drift"])
+
+    def test_adoption_beats_self_migrate(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 1},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            adoption={
+                "core_ready": False,
+                "estimated_minutes_remaining": 10,
+                "next_command": "gh plate adopt --json",
+            },
+            self_migrate={"drift": True, "target_version": "0.8.0", "next_command": "x"},
+        )
+        self.assertEqual(out["priority"], "adoption")
+
+    def test_no_drift_skips_self_migrate(self):
+        out = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 1},
+            budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
+            open_prs=[],
+            ready_issues=[{"number": 301, "title": "Ready"}],
+            adoption={"core_ready": True},
+            self_migrate={"drift": False, "target_version": "0.7.2"},
+            pm_status={"queue_size": 0},
+        )
+        self.assertEqual(out["priority"], "ready_issue")
+
+
 class TestAdoptionWhatNext(unittest.TestCase):
     """Proves: adoption readiness ranks on what_next (#937 / #633)."""
 
