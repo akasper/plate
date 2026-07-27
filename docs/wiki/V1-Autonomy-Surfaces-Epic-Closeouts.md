@@ -1,6 +1,6 @@
 # v1.0 autonomy surface epics — closeout status
 
-**As of 2026-07-26 on `release`:** First-class runtime surfaces for the #654 path are **landed** as implementable modules + fragments. This page is durable epic memory so agents do not re-sketch closed first slices.
+**As of 2026-07-27 on `release`:** First-class runtime surfaces for the #654 path are **landed** as implementable modules + fragments. This page is durable epic memory so agents do not re-sketch closed first slices.
 
 | Epic | Title | Status | What shipped (summary) | Residual / non-goals |
 |---|---|---|---|---|
@@ -18,6 +18,8 @@
 | **#657** | Autonomy foundations (sim/checkpoint/budget/ledger) | **Close (first slice)** | Shadow/sim #645, checkpoint primitive #648, budgets #634, cost/risk feed #653, ledger #647; children **5/5** | Production high-impact gate E2E under #654 |
 | **#658** | Evidence, media, packaging outcomes | **Close (first slice)** | Release-note media #635, feature media #636, packaging media #652; children **3/3** | Marketplace human publish Tasks remain out of band |
 | **#660** | Project Manager orchestrator | **Open** | `pm.py` assign/loop/queue/MCP; artifact dispatch; what_next PM rank; active-only queue (#903/#904) | Child **#661** browser deferred; keep epic open until browser decision or explicit deferral comment |
+| **#649** | Self-updating / self-migrating PLATE in adopters | **Close (first slice)** | `self_migrate.py`: plan (#939), what_next drift (#941), marker merge (#943), upstream resolve (#945), PR plan (#947), offline verify (#965), health fields (#967), what_next/feed verify rank (#969); CLI/MCP parity | Live timed adopter migrate E2E + auto-apply at risk≠off still #654 residual; no auto-merge migration PRs |
+| **#633** | Frictionless integration (&lt;30m) + bootstrap | **Progress (first slice)** | Payload import #615+#616–#622; adoption readiness/session/first-qa/health/feed (#935–#961); guide session path; self-migrate child #649 first slice closed | Live under-30m proof on third-party repo is human-gated E2E; greenfield timed metrics residual; do not check #654 adoption boxes without that proof |
 | **#350** | Test Coverage Audit | **Close (first slice)** | Research #361 inventory; Design #362 Evidence convention; Feature #363 audit surface; Feature #364 high-priority gap closures (what_next, template_payload, Contemplation v2.1 proofs, compound Playwright offline); children **4/4** | Live auto-push without runner + live-network ceremony apply deferred; low-priority inventory / continuous audit tooling may continue under new Features |
 
 ## Operator path (current)
@@ -29,6 +31,9 @@ gh plate autonomy --status
 gh plate scheduled-ops --status
 gh plate fleet --roles
 gh plate feed
+gh plate adopt --json
+gh plate self-migrate --verify --json
+gh plate health
 ```
 
 ## Human-only still blocking v1 packaging claims
