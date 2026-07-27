@@ -1,0 +1,15 @@
+{
+  "slug": "911-licensing-gh-plate-epic-closeouts",
+  "change_type": "docs",
+  "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+  "summary": "Record first-slice closeouts for complete-child Epics #390 (Licensing 4/4) and #596 (gh-plate thin extension 3/3) on the v1 autonomy closeout wiki page; status:implemented on those Epics (#911).",
+  "migration_impact": "Docs/process memory only. Agents acting on plate_what_next closeout candidates should treat #390 and #596 first slices as recorded; residual legal CLA and human publish Tasks remain open.",
+  "migration_guidance": [
+    "1. Pull release after merge.",
+    "2. Prefer wiki closeout page over re-scanning children for #390/#596.",
+    "3. Do not re-check #654 boxes without E2E proof."
+  ],
+  "agent_notes": "Driven by #909 named closeout candidates. Does not close GitHub Epic issues (residual under #654 / human Tasks).",
+  "breaking": false,
+  "links": ["#911", "#390", "#596", "#909", "#654", "#625", "#626"]
+}

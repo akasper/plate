@@ -4,8 +4,10 @@
 
 | Epic | Title | Status | What shipped (summary) | Residual / non-goals |
 |---|---|---|---|---|
+| **#390** | Add Licensing | **Close (first slice)** | MIT+Commons Clause LICENSE; research #451; LICENSE/docs #452; process refs #453; template propagation research #454; children **4/4** | CLA / contributor agreement deferred (not-now); marketplace legal posture human judgment |
 | **#456** | Quiet Agents | **Close** | `QUIET_OPERATIONS_GUIDANCE`, persona quiet rules, audit/closeout migration note | Host auto-quiet UI N/A |
 | **#470** | Autonomous PLATE Engine & Scheduled Procedures | **Close (first slice)** | AutonomyEngine, `.plate` autonomy schema, procedures, CLI/MCP `plate_autonomy_*`, budget/observability, SPEC align #488; children #471–#482 + #488 **13/13** | Unsupervised production loops still need risk≠off + E2E under #654 |
+| **#596** | gh-plate thin extension + automated publishing | **Close (first slice)** | Thin `akasper/gh-plate` shim repo; install docs `gh extension install akasper/gh-plate`; sync automation #597–#599; children **3/3** | PyPI/trusted-publisher human Tasks (#625/#626) still out of band |
 | **#637** | Stub authoring / refine lifecycle | **Close (first slice)** | Stub budget gates, planning/stub surfaces under unreleased `634-637-*` / stubs module | Full E2E “author every type from Q&A only” still #654 proof |
 | **#638** | Full autonomous bug loop | **Close (first slice)** | `bug_loop.py`, PM/fleet dispatch, ticks, checkpoints, babysit stages | Production E2E bug→merge proof under #654 |
 | **#639** | Full autonomous feature loop | **Close (first slice)** | `feature_loop.py`, media/design gates, PM dispatch, ticks | Production E2E feature→merge proof under #654 |
