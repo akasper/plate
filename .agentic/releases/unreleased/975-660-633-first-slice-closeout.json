@@ -1,0 +1,16 @@
+{
+  "slug": "975-660-633-first-slice-closeout",
+  "change_type": "docs",
+  "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+  "summary": "First-slice closeout for PM Epic #660 (browser #661 deferred) and adoption Epic #633 after compound offline proof #973 (#975). Agents must not start #661 browser work in default v1 loops.",
+  "migration_impact": "Wiki/process memory only. Prefer plate_pm_* + TUI/CLI feed over browser client. Live third-party adoption E2E still residual under #654.",
+  "migration_guidance": [
+    "1. Read V1-Autonomy-Surfaces-Epic-Closeouts.md rows for #660 and #633.",
+    "2. Treat #661 as deferred optional client; do not implement in autopilot cycles.",
+    "3. Do not check #654 PM/adoption boxes without live E2E proof."
+  ],
+  "agent_notes": "Closes #975. Comment on #660/#661/#633 with deferral + first-slice note. status:implemented already on #660; add on #633 if missing.",
+  "breaking": false,
+  "links": ["#975", "#660", "#661", "#633", "#973", "#649", "#654"],
+  "requires": ["0.7.2"]
+}
