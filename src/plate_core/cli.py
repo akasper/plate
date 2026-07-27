@@ -448,8 +448,31 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
 
 
 def cmd_adopt(args: argparse.Namespace) -> int:
-    """Local adoption readiness status (#935 / Epic #633)."""
-    from .adoption import assess_adoption_readiness
+    """Local adoption readiness or first Q&A seed plan (#935/#949 / Epic #633)."""
+    from .adoption import assess_adoption_readiness, plan_first_qa_seed
+
+    if bool(getattr(args, "first_qa_plan", False)):
+        report = plan_first_qa_seed(
+            getattr(args, "repo_root", ".") or ".",
+            apply=bool(getattr(args, "apply_first_qa", False)),
+            runner=None,
+        )
+        if args.json:
+            print(json.dumps(report))
+            # runner_required is expected surface for apply without runner
+            if report.get("error") == "runner_required":
+                return 0
+            return 0 if report.get("ok") else 1
+        print(f"Repo root: {report.get('repo_root')}")
+        print(f"Mode: {report.get('mode')} already_seeded={report.get('already_seeded')}")
+        print(f"Count: {report.get('count')} applied={report.get('applied')}")
+        for q in report.get("questions") or []:
+            print(f"  - {q.get('title')}")
+        if report.get("error"):
+            print(f"Error: {report.get('error')}")
+        print(f"Next: {report.get('next_command')}")
+        print(report.get("note"))
+        return 0 if report.get("ok") or report.get("error") == "runner_required" else 1
 
     report = assess_adoption_readiness(
         getattr(args, "repo_root", ".") or ".",
@@ -460,6 +483,8 @@ def cmd_adopt(args: argparse.Namespace) -> int:
         return 0
     print(f"Repo root: {report.get('repo_root')}")
     print(f"Core ready: {report.get('core_ready')}")
+    fq = report.get("first_qa") or {}
+    print(f"First Q&A seeded: {fq.get('seeded')}")
     print(
         f"Estimated minutes remaining (core): {report.get('estimated_minutes_remaining')} "
         f"(within 30m budget: {report.get('within_30m_budget')})"
@@ -3869,7 +3894,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     adopt = sub.add_parser(
         "adopt",
-        help="Local adoption readiness status for <30m onboarding (#935/#633); status only",
+        help="Adoption readiness or first Q&A seed plan (#935/#949/#633); dry-run default",
     )
     adopt.add_argument(
         "--repo-root",
@@ -3880,6 +3905,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-optional",
         action="store_true",
         help="Skip optional SPEC.md/CURRENT.md checks",
+    )
+    adopt.add_argument(
+        "--first-qa-plan",
+        action="store_true",
+        help="Emit first Q&A seed plan (3 starter Questions; dry-run) (#949)",
+    )
+    adopt.add_argument(
+        "--apply-first-qa",
+        action="store_true",
+        help="Attempt live seed (requires --first-qa-plan + injectable runner; blocked without it)",
     )
     adopt.add_argument("--json", action="store_true", help="Output JSON")
     adopt.set_defaults(func=cmd_adopt)

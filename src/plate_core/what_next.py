@@ -7,8 +7,9 @@ Priority (cheap → specific):
 4. Missing multi-track release standing branches → release repair (#320/#814)
 5. Actionable local SPEC audit findings (#340 health/drift)
 6. Local adoption not core_ready → gh plate adopt / import-payload (#937 / #633 / #935)
-7. Self-migrate pin/payload drift → gh plate self-migrate --plan (#941 / #649 / #939)
-8. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
+7. Core adoption ready but first Q&A not seeded → gh plate adopt --first-qa-plan (#949 / #633)
+8. Self-migrate pin/payload drift → gh plate self-migrate --plan (#941 / #649 / #939)
+9. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
 9. Active scheduled op runs (blocked/running/planned) (#933 / #659 / #641)
 10. Project Manager orchestrator (#660): checkpoints → tick delegated → proposed → active queue only
 11. Runnable scheduled ops dry-run plan when pipeline + PM idle (#933)
@@ -173,6 +174,9 @@ def recommend_what_next(
         "scheduled_ops_gated_count": len(list(sops.get("gated") or [])),
         "adoption_core_ready": adopt.get("core_ready") if adopt else None,
         "adoption_minutes_remaining": adopt.get("estimated_minutes_remaining")
+        if adopt
+        else None,
+        "first_qa_seeded": (adopt.get("first_qa") or {}).get("seeded")
         if adopt
         else None,
         "self_migrate_drift": smig.get("drift") if smig else None,
@@ -366,7 +370,44 @@ def recommend_what_next(
             "ask_user_question": adopt.get("ask_user_question"),
         }
 
-    # 6) Self-migrate pin/payload drift — plan before new Features (#941/#649)
+    # 6b) Core adoption ready but first Q&A seed pending (#949/#633)
+    first_qa = adopt.get("first_qa") if adopt else None
+    if (
+        adopt
+        and adopt.get("core_ready") is True
+        and isinstance(first_qa, dict)
+        and first_qa.get("seeded") is False
+    ):
+        next_cmd = "gh plate adopt --first-qa-plan --json"
+        return {
+            "next_action": f"seed first Q&A after adoption: {next_cmd}",
+            "prompt_segment": (
+                "Local adoption core_ready but first Q&A Questions not seeded (#949/#633). "
+                "1) `gh plate adopt --first-qa-plan --json` / plate_adoption_first_qa_plan  "
+                "2) Review 3 starter Curiosity Questions; apply only with explicit runner  "
+                "3) Then `gh plate feed --json` / product planning. "
+                "Dry-run default — no GitHub issue create without injectable runner."
+                + quiet
+            ),
+            "rationale": "adoption core_ready; first_qa.seeded=false (#949/#935/#633)",
+            "state_snapshot": state,
+            "agent_type": agent_type or "general",
+            "priority": "first_qa_seed",
+            "next_command": next_cmd,
+            "ask_user_question": {
+                "question": "Seed 3 starter Curiosity Questions for first Q&A?",
+                "options": [
+                    {
+                        "label": "First Q&A seed plan",
+                        "description": next_cmd,
+                    },
+                    {"label": "Open feed", "description": "gh plate feed --json"},
+                    {"label": "Defer", "description": "Continue without seed"},
+                ],
+            },
+        }
+
+    # 7) Self-migrate pin/payload drift — plan before new Features (#941/#649)
     if self_migrate_drift:
         target = smig.get("target_version") or "?"
         next_cmd = str(
