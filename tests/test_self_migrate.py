@@ -7,7 +7,11 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from plate_core.self_migrate import plan_marker_merge, plan_self_migrate
+from plate_core.self_migrate import (
+    plan_marker_merge,
+    plan_self_migrate,
+    resolve_upstream_version,
+)
 from plate_core.cli import cmd_self_migrate
 
 
@@ -81,6 +85,8 @@ class PlanSelfMigrateTests(unittest.TestCase):
                     "apply_markers": False,
                     "upstream_dir": None,
                     "path": None,
+                    "resolve_upstream": False,
+                    "allow_network": False,
                 },
             )()
             import io
@@ -120,6 +126,71 @@ new core block from upstream
 
 Upstream footer.
 """
+
+
+class ResolveUpstreamVersionTests(unittest.TestCase):
+    def test_offline_default_no_version(self):
+        """Proves: offline resolve returns no version and does not error (#945)."""
+        report = resolve_upstream_version(allow_network=False)
+        self.assertTrue(report["ok"])
+        self.assertIsNone(report["version"])
+        self.assertEqual(report["source"], "offline_default")
+        self.assertFalse(report["used_network"])
+
+    def test_injected_fetcher_pypi_json(self):
+        """Proves: injected fetcher sets version from PyPI JSON shape (#945)."""
+        payload = {"info": {"version": "0.9.1"}, "releases": {"0.9.1": []}}
+
+        def fetcher():
+            return payload
+
+        report = resolve_upstream_version(fetcher=fetcher)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["version"], "0.9.1")
+        self.assertEqual(report["source"], "injected_fetcher")
+        self.assertFalse(report["used_network"])
+
+    def test_injected_fetcher_plain_text(self):
+        report = resolve_upstream_version(fetcher=lambda: "v1.2.3\n")
+        self.assertEqual(report["version"], "1.2.3")
+
+    def test_fetcher_error_returns_ok_false(self):
+        def boom():
+            raise TimeoutError("timeout")
+
+        report = resolve_upstream_version(fetcher=boom)
+        self.assertFalse(report["ok"])
+        self.assertIsNone(report["version"])
+        self.assertIn("timeout", report["error"] or "")
+
+    def test_plan_uses_resolved_target_for_drift(self):
+        """Proves: resolve_upstream with fetcher marks pin behind newer target (#945)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VERSION").write_text("0.7.2\n", encoding="utf-8")
+            report = plan_self_migrate(
+                root,
+                resolve_upstream=True,
+                upstream_fetcher=lambda: {"info": {"version": "0.9.0"}},
+                include_payload=False,
+            )
+        self.assertEqual(report["target_version"], "0.9.0")
+        self.assertTrue(report["drift"])
+        self.assertEqual(report["comparisons"]["pin_vs_target"], "behind")
+        self.assertIsNotNone(report.get("upstream"))
+        self.assertEqual(report["upstream"]["version"], "0.9.0")
+
+    def test_explicit_target_wins_over_resolve(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = plan_self_migrate(
+                root,
+                target_version="0.8.0",
+                resolve_upstream=True,
+                upstream_fetcher=lambda: {"info": {"version": "0.9.0"}},
+                include_payload=False,
+            )
+        self.assertEqual(report["target_version"], "0.8.0")
 
 
 class PlanMarkerMergeTests(unittest.TestCase):
