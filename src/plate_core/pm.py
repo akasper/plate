@@ -148,10 +148,23 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# Durable queue rows that still need PM attention (what_next / status routing).
+ACTIVE_QUEUE_STATUSES = frozenset({"proposed", "delegated", "blocked"})
+
+
 def _ensure_pm_dir(base: Path | None = None) -> Path:
     d = base or PM_DIR
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def count_active_queue(assignments: list[dict[str, Any]] | None) -> int:
+    """Count proposed/delegated/blocked only — ignore done/cancelled residue (#660)."""
+    n = 0
+    for a in assignments or []:
+        if str((a or {}).get("status") or "") in ACTIVE_QUEUE_STATUSES:
+            n += 1
+    return n
 
 
 def list_team() -> list[dict[str, Any]]:
@@ -1585,7 +1598,8 @@ class ProjectManager:
             open_assignments=by_status["proposed"] + by_status["delegated"],
             open_checkpoints=open_cp_count,
             last_cycle=last_cycle or _now(),
-            queue_size=len(self._assignments),
+            # Active only — cancelled/done must not keep what_next on pm forever
+            queue_size=count_active_queue(self._assignments),
             proposed=by_status["proposed"],
             delegated=by_status["delegated"],
             blocked=by_status["blocked"],
@@ -1752,7 +1766,7 @@ class ProjectManager:
                 "pm_status": status.to_dict(),
                 "timestamp": ts,
                 "dry_run": dry_run,
-                "queue_size": len(self._assignments),
+                "queue_size": count_active_queue(self._assignments),
                 "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'paused', 'ts': ts})}\n{MARKER_END}",
             }
             _ledger_pm(
@@ -1794,7 +1808,7 @@ class ProjectManager:
                 "pm_status": status.to_dict(),
                 "timestamp": ts,
                 "dry_run": dry_run,
-                "queue_size": len(self._assignments),
+                "queue_size": count_active_queue(self._assignments),
                 "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'paused', 'kind': 'budget', 'ts': ts})}\n{MARKER_END}",
             }
             _ledger_pm(
@@ -2041,7 +2055,7 @@ class ProjectManager:
             "dispatch_fleet": do_fleet and not dry_run,
             "dispatch_loops": do_loops and not dry_run,
             "tick_loops": bool(tick_loops),
-            "queue_size": len(self._assignments),
+            "queue_size": count_active_queue(self._assignments),
             "marker": f"{MARKER_BEGIN}\n{json.dumps({'status': 'completed', 'n': len(new_assignments), 'fleet': len(fleet_handoffs), 'loops': len(loop_dispatches), 'ticks': len(loop_ticks), 'promotions': len(promotions), 'ts': ts})}\n{MARKER_END}",
         }
         _ledger_pm(
@@ -2204,7 +2218,7 @@ def tick_pm_loops(
         "n_ticks": len(ticks),
         "n_advanced": advanced,
         "n_completed": completed,
-        "queue_size": len(pm._assignments),
+        "queue_size": count_active_queue(pm._assignments),
         "pm_status": pm.get_status().to_dict(),
         "marker": (
             f"{MARKER_BEGIN}\n"
