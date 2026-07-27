@@ -166,8 +166,6 @@ Post-#470 / #654 landings added substantial feature-proof coverage that this Jun
 
 **Gap closed in this batch (#907):** Bidirectional proof that idle PM + open epics does **not** force PM dry-run; active `open_assignments` / delegated rows still rank PM/tick. Tests declare `Proves:` claims in docstrings.
 
-**Still open under #364 (not claimed done here):** Contemplation live auto PR open/push without injectable runner (default remains dry-run); live-network compound e2e (real babysit→merge, real cut+tag+finalize apply) remains out of scope for the offline harness.
-
 **Closed (partial) under #921:** Contemplation full transcript (`Answer full:` + question title/body excerpt) and typed Research/Design/Feature follow-ups with parent Question link.
 
 **Closed (partial) under #923:** Contemplation git commit provenance + structured Provenance fields in transcript (Design #142 gap first slice).
@@ -180,7 +178,40 @@ Post-#470 / #654 landings added substantial feature-proof coverage that this Jun
 
 **Closed (first slice) under #917:** template_payload adopter harness parity — `TemplatePayloadAdopterClaimsTests` proves payload ships AGENTS/SPEC, e2e README+example specs, core workflows; `list_payload_files` + import dry-run plan those paths. Monorepo-only `plugin-structure.spec.ts` / `catalog-discovery.spec.ts` (hardcoded `.plugin` layout) intentionally **not** copied into payload; adopters get example harness + import-payload instead.
 
-**Closed (unit compound) under #919:** `TestWhatNextCompoundPriorityLadder` proves budget → open PR → ready → PM tick/active → named closeout → empty-closeout stub refine in one compound suite (#905/#913/#915). Playwright compound e2e still open.
+**Closed (unit compound) under #919:** `TestWhatNextCompoundPriorityLadder` proves budget → open PR → ready → PM tick/active → named closeout → empty-closeout stub refine in one compound suite (#905/#913/#915). Offline Playwright compound covered by #927.
+
+---
+
+## Addendum (2026-07-27) — #364 high-priority gap closeout
+
+Feature #364 (child of Epic #350) is **closed for high-priority inventory gaps** after the v1.0 proof batches above. Success criteria mapping:
+
+| #364 success criterion | Evidence |
+|------------------------|----------|
+| Top 4–6 inventory gaps have proving tests + doc refs | what_next/PM idle (#907/#919); template_payload adopter (#917); Contemplation transcript/typed follow-ups/provenance/mutation plan (#921/#923/#925/#929); compound offline ceremony e2e (#927) |
+| Audit report shows those gaps closed with PR/test links | This addendum + closed (partial) rows above |
+| Acceptance Evidence cites proving tests | `docs/design/contemplation-engine-contract.md`; e2e README compound-flows; research closeout `docs/research/364-test-coverage-gap-closeout.md` |
+| PR(s) carry process + `Closes #N` | #908, #918, #920, #922, #924, #926, #928, #930 + this closeout PR |
+
+### Intentionally deferred (not #364 blockers)
+
+| Deferred item | Why deferred | Follow-on home |
+|---------------|--------------|----------------|
+| Contemplation live auto-push / `gh pr create` without injectable runner | Safety: default remains dry-run; high-risk needs human + `allow_high_risk` | Contemplation v2.2+ under Epic #257 / future Feature |
+| Live-network babysit→merge and cut+tag+finalize apply in CI | Needs secrets, real remotes, non-idempotent tags | Optional nightly / human Task; offline harness is the cert for #364 |
+| Full interactive epic planning engine replacement | Separate product Feature (SPEC Phase-1), not mere test gap | Own Feature under planning / MCP surface work |
+
+### Proving-test index (bidirectional)
+
+| Claim area | Primary proving tests |
+|------------|----------------------|
+| what_next priority ladder | `tests/test_what_next.py` (`TestWhatNextCompoundPriorityLadder`, idle/active PM) |
+| template_payload adopter | `tests/test_template_payload*.py` / adopter claims suite (#917) |
+| Contemplation contract (partial→v2.1) | `tests/test_contemplation.py` |
+| Compound ceremony offline | `tests/e2e/compound-flows.spec.ts` + `fixtures/compound_flow_driver.py` |
+| Answer model | `tests/test_curiosity_answers.py` |
+
+Parent Epic #350 may remain open for broader classification tooling / remaining low-priority inventory; #364 high-priority gap closure is complete.
 
 ---
 *This report follows the template in `docs/audits/audit-report-template.md`. Per PLATE Issue Artifact Rules for Audit/Epic work, findings live in `docs/audits/`.*
