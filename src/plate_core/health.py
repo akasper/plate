@@ -456,9 +456,10 @@ def get_health(
                 self_migrate_drift = bool(sm.get("drift"))
             if "ready" in sm:
                 self_migrate_ready = bool(sm.get("ready"))
-            target = migrate.get("target_version") or sm.get("target_version")
-            if target:
-                self_migrate_target = str(target)
+            # Do not shadow outer `target` (GitHub owner/name used for report.repo).
+            sm_target = migrate.get("target_version") or sm.get("target_version")
+            if sm_target:
+                self_migrate_target = str(sm_target)
             if sm.get("next_command"):
                 self_migrate_next_command = str(sm.get("next_command"))
     except Exception as e:
