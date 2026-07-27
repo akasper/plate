@@ -370,6 +370,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 args.get("repo_root") or ".",
                 include_optional=not bool(args.get("no_optional", False)),
             )
+        elif name == "plate_adoption_first_qa_plan":
+            from .adoption import plan_first_qa_seed
+
+            payload = plan_first_qa_seed(
+                args.get("repo_root") or ".",
+                apply=bool(args.get("apply", False)),
+                runner=None,
+            )
         elif name == "plate_self_migrate_plan":
             from .self_migrate import plan_self_migrate
 
@@ -2235,6 +2243,23 @@ def run() -> None:
                                         "no_optional": {
                                             "type": "boolean",
                                             "description": "When true, skip optional SPEC.md/CURRENT.md checks.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_adoption_first_qa_plan",
+                                "description": "First Q&A seed plan after adoption core_ready (#949/#633). Dry-run default; apply needs injectable runner.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "Attempt live seed (requires runner; default false).",
                                         },
                                     },
                                 },

@@ -1,13 +1,44 @@
-"""Local adoption readiness for frictionless <30m onboarding (#935 / Epic #633).
+"""Local adoption readiness for frictionless <30m onboarding (#935/#949 / Epic #633).
 
-Pure filesystem checks — no network, no auto-apply. Operators use the report to
-drive import-payload + bootstrap --adopt in order (see docs/migration/adoption-guide.md).
+Pure filesystem checks — no network, no auto-apply by default. Operators use the
+report to drive import-payload + bootstrap --adopt + first Q&A seed in order
+(see docs/migration/adoption-guide.md).
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+# Shared catalog with bootstrap seed-initial-questions (#153 / #949).
+STARTER_QUESTIONS: list[dict[str, str]] = [
+    {
+        "title": "[Question]: What is the primary purpose or value proposition of this software?",
+        "body": (
+            "What problem does this project solve? Who benefits and how?\n\n"
+            "**Answer signal:** A clear, one-paragraph statement that can guide "
+            "all future work and prioritization."
+        ),
+    },
+    {
+        "title": "[Question]: Who are the primary users or customers of this software?",
+        "body": (
+            "Describe the main personas or organizations that will use or pay for this.\n\n"
+            "**Answer signal:** A concise description of the target users that can be "
+            "used for roadmap and design decisions."
+        ),
+    },
+    {
+        "title": "[Question]: What are the biggest risks or unknowns for this project right now?",
+        "body": (
+            "Technical, market, team, or other uncertainties that could derail success.\n\n"
+            "**Answer signal:** A short prioritized list that the team can actively de-risk."
+        ),
+    },
+]
+
+_FIRST_QA_MARKER = Path(".agentic") / "adoption" / "first_qa_seed.json"
 
 
 def _check(
@@ -141,10 +172,15 @@ def assess_adoption_readiness(
         int(c["minutes_if_missing"]) for c in failed if c["id"] in ("spec_md", "current_md")
     )
 
+    core_ready = len(core_failed) == 0
+    first_qa = first_qa_seed_status(root)
+
     if not plate_ok:
         next_cmd = "gh plate import-payload --dry-run --strategy conservative --json"
     elif core_failed:
         next_cmd = "gh plate bootstrap --repo OWNER/REPO --adopt --apply"
+    elif core_ready and not first_qa.get("seeded"):
+        next_cmd = "gh plate adopt --first-qa-plan --json"
     else:
         next_cmd = "gh plate health && gh plate feed --json"
 
@@ -161,16 +197,25 @@ def assess_adoption_readiness(
             "3. GitHub baseline: gh plate bootstrap --adopt --apply (labels/wiki/.plate)"
         )
     next_steps.append("4. Verify: gh plate health; write mission text in docs/wiki/Goals.md")
-    next_steps.append("5. First Q&A: gh plate feed / gh plate plan (product planning)")
+    if core_ready and not first_qa.get("seeded"):
+        next_steps.append(
+            "5. First Q&A seed: gh plate adopt --first-qa-plan --json "
+            "(optional --apply-first-qa with runner)"
+        )
+    else:
+        next_steps.append("5. First Q&A: gh plate feed / gh plate plan (product planning)")
 
-    core_ready = len(core_failed) == 0
     within_30 = est <= 30
 
     ask = {
         "question": (
             "Adoption readiness: continue under-30m PLATE onboarding?"
             if not core_ready
-            else "Core adoption checks pass — start first Q&A / product planning?"
+            else (
+                "Core adoption ready — seed first Q&A Questions?"
+                if not first_qa.get("seeded")
+                else "Core adoption + first Q&A seeded — open feed / product planning?"
+            )
         ),
         "options": (
             [
@@ -180,11 +225,22 @@ def assess_adoption_readiness(
                 {"label": "Defer", "description": "Leave status report only"},
             ]
             if not core_ready
-            else [
-                {"label": "Open feed", "description": "gh plate feed --json"},
-                {"label": "Start product plan", "description": "gh plate plan"},
-                {"label": "Health only", "description": "gh plate health"},
-            ]
+            else (
+                [
+                    {
+                        "label": "First Q&A seed plan",
+                        "description": "gh plate adopt --first-qa-plan --json",
+                    },
+                    {"label": "Open feed", "description": "gh plate feed --json"},
+                    {"label": "Health only", "description": "gh plate health"},
+                ]
+                if not first_qa.get("seeded")
+                else [
+                    {"label": "Open feed", "description": "gh plate feed --json"},
+                    {"label": "Start product plan", "description": "gh plate plan"},
+                    {"label": "Health only", "description": "gh plate health"},
+                ]
+            )
         ),
     }
 
@@ -192,6 +248,7 @@ def assess_adoption_readiness(
         "ok": True,
         "repo_root": str(root),
         "core_ready": core_ready,
+        "first_qa": first_qa,
         "checks": checks,
         "passed": sum(1 for c in checks if c["ok"]),
         "failed": len(failed),
@@ -204,6 +261,156 @@ def assess_adoption_readiness(
         "next_steps": next_steps,
         "ask_user_question": ask,
         "guide": "docs/migration/adoption-guide.md",
-        "related_issues": ["#935", "#633", "#619", "#616", "#654"],
-        "note": "Status only — does not apply import/bootstrap. Human/agent executes next_command.",
+        "related_issues": ["#935", "#949", "#633", "#619", "#616", "#654"],
+        "note": (
+            "Status only — does not apply import/bootstrap/seed. "
+            "Human/agent executes next_command."
+        ),
     }
+
+
+def first_qa_seed_status(repo_root: str | Path | None = None) -> dict[str, Any]:
+    """Offline status of first Q&A seed marker (#949)."""
+    root = Path(repo_root or ".").resolve()
+    marker = root / _FIRST_QA_MARKER
+    if not marker.is_file():
+        return {
+            "seeded": False,
+            "marker_path": str(marker),
+            "count": 0,
+            "titles": [],
+        }
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "seeded": False,
+            "marker_path": str(marker),
+            "count": 0,
+            "titles": [],
+            "error": "marker_unreadable",
+        }
+    titles = list(data.get("titles") or [])
+    return {
+        "seeded": bool(data.get("seeded")) or len(titles) >= 3,
+        "marker_path": str(marker),
+        "count": int(data.get("count") or len(titles)),
+        "titles": titles,
+        "applied_at": data.get("applied_at"),
+        "mode": data.get("mode"),
+    }
+
+
+def plan_first_qa_seed(
+    repo_root: str | Path | None = None,
+    *,
+    apply: bool = False,
+    runner: Callable[[dict[str, Any]], Any] | None = None,
+    questions: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Plan (and optionally apply via runner) first Q&A seed after adoption (#949).
+
+    Dry-run by default. Does not call GitHub unless an injectable ``runner`` is
+    provided with ``apply=True``. Writes local marker only when apply succeeds
+    or when apply with runner returns ok / when dry-run writes nothing.
+    """
+    root = Path(repo_root or ".").resolve()
+    status = first_qa_seed_status(root)
+    catalog = list(questions or STARTER_QUESTIONS)
+    gh_argv_list: list[list[str]] = []
+    for q in catalog:
+        gh_argv_list.append(
+            [
+                "gh",
+                "issue",
+                "create",
+                "--title",
+                q["title"],
+                "--body",
+                q["body"],
+                "--label",
+                "Question",
+            ]
+        )
+
+    plan: dict[str, Any] = {
+        "ok": True,
+        "mode": "dry_run",
+        "repo_root": str(root),
+        "already_seeded": bool(status.get("seeded")),
+        "questions": catalog,
+        "count": len(catalog),
+        "gh_argv_list": gh_argv_list,
+        "marker_path": str(root / _FIRST_QA_MARKER),
+        "auto_apply": False,
+        "applied": False,
+        "related_issues": ["#949", "#633", "#935", "#654"],
+        "next_command": (
+            "gh plate feed --json"
+            if status.get("seeded")
+            else "gh plate adopt --first-qa-plan --json"
+        ),
+        "note": (
+            "Already seeded (local marker); no-op."
+            if status.get("seeded")
+            else (
+                "Dry-run plan only — no GitHub issue create. "
+                "Apply requires --apply-first-qa + injectable runner (#949)."
+            )
+        ),
+        "ask_user_question": {
+            "question": "Seed 3 starter Curiosity Questions for first Q&A?",
+            "options": [
+                {
+                    "label": "Apply seed via runner",
+                    "description": "Create Question issues then open feed",
+                },
+                {"label": "Plan only", "description": "Keep dry-run artifact"},
+                {"label": "Open feed without seed", "description": "gh plate feed --json"},
+            ],
+        },
+    }
+
+    if status.get("seeded"):
+        plan["mode"] = "already_seeded"
+        return plan
+
+    if not apply:
+        return plan
+
+    # Live apply path
+    plan["mode"] = "apply"
+    if runner is None:
+        plan["ok"] = False
+        plan["error"] = "runner_required"
+        plan["note"] = (
+            "Live seed requires injectable runner(plan); "
+            "CLI/MCP never create GitHub issues alone (#949)."
+        )
+        return plan
+
+    try:
+        result = runner(plan)
+    except Exception as exc:  # noqa: BLE001
+        plan["ok"] = False
+        plan["error"] = str(exc)
+        plan["note"] = "Runner failed during first Q&A seed apply."
+        return plan
+
+    # Write local marker so offline status shows seeded
+    marker = root / _FIRST_QA_MARKER
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "seeded": True,
+        "count": len(catalog),
+        "titles": [q["title"] for q in catalog],
+        "mode": "apply",
+        "runner_result": result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result),
+    }
+    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    plan["applied"] = True
+    plan["runner_result"] = result
+    plan["already_seeded"] = True
+    plan["next_command"] = "gh plate feed --json"
+    plan["note"] = "Seed applied via runner; local marker written. Open feed for first Q&A."
+    return plan

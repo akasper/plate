@@ -1,4 +1,4 @@
-"""Tests for adoption readiness status (#935 / Epic #633)."""
+"""Tests for adoption readiness and first Q&A seed (#935/#949 / Epic #633)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,14 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
-from plate_core.adoption import assess_adoption_readiness
+from plate_core.adoption import (
+    assess_adoption_readiness,
+    first_qa_seed_status,
+    plan_first_qa_seed,
+)
 from plate_core.cli import cmd_adopt
+from plate_core.what_next import recommend_what_next
 
 
 class AssessAdoptionReadinessTests(unittest.TestCase):
@@ -50,7 +54,8 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         self.assertTrue(report["core_ready"])
         self.assertEqual(report["estimated_minutes_remaining"], 0)
         self.assertEqual(report["core_failed"], 0)
-        self.assertIn("health", report["next_command"])
+        # Unseeded first Q&A is the post-core next step (#949)
+        self.assertIn("first-qa-plan", report["next_command"])
 
     def test_optional_checks_do_not_block_core_ready(self):
         with TemporaryDirectory() as tmp:
@@ -68,6 +73,77 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         # SPEC/CURRENT optional missing may add optional minutes only
         self.assertGreaterEqual(report.get("optional_minutes_remaining", 0), 0)
 
+    def test_core_ready_next_cmd_first_qa_when_not_seeded(self):
+        """Proves: core_ready without seed marker points at first-qa-plan (#949)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text("{}\n", encoding="utf-8")
+            (root / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+            goals = root / "docs" / "wiki"
+            goals.mkdir(parents=True)
+            (goals / "Goals.md").write_text("# Goals\n", encoding="utf-8")
+            unreleased = root / ".agentic" / "releases" / "unreleased"
+            unreleased.mkdir(parents=True)
+            (unreleased / "README.md").write_text("x\n", encoding="utf-8")
+            wf = root / ".github" / "workflows"
+            wf.mkdir(parents=True)
+            (wf / "plate-ci.yml").write_text("name: plate\n", encoding="utf-8")
+            report = assess_adoption_readiness(root, include_optional=False)
+        self.assertTrue(report["core_ready"])
+        self.assertFalse(report["first_qa"]["seeded"])
+        self.assertIn("first-qa-plan", report["next_command"])
+
+    def test_first_qa_plan_dry_run(self):
+        """Proves: dry-run plan lists 3 starter Questions without writing marker (#949)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = plan_first_qa_seed(root, apply=False)
+            status = first_qa_seed_status(root)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["mode"], "dry_run")
+        self.assertEqual(report["count"], 3)
+        self.assertFalse(report["applied"])
+        self.assertFalse(status["seeded"])
+        self.assertEqual(len(report["gh_argv_list"]), 3)
+
+    def test_first_qa_apply_with_runner_writes_marker(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            def runner(plan):
+                return {"created": plan["count"]}
+
+            report = plan_first_qa_seed(root, apply=True, runner=runner)
+            status = first_qa_seed_status(root)
+        self.assertTrue(report["ok"])
+        self.assertTrue(report["applied"])
+        self.assertTrue(status["seeded"])
+        self.assertEqual(status["count"], 3)
+
+    def test_first_qa_apply_without_runner_blocked(self):
+        with TemporaryDirectory() as tmp:
+            report = plan_first_qa_seed(tmp, apply=True, runner=None)
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["error"], "runner_required")
+
+    def test_what_next_ranks_first_qa_when_core_ready_unseeded(self):
+        """Proves: what_next priority first_qa_seed after adoption ready (#949)."""
+        adoption = {
+            "core_ready": True,
+            "first_qa": {"seeded": False},
+            "estimated_minutes_remaining": 0,
+        }
+        rec = recommend_what_next(
+            health={"label_coverage_ok": True, "open_epic_count": 0},
+            budget={"budget_pressure": "ok", "remaining_tokens": 50000, "daily_limit": 50000},
+            open_prs=[],
+            ready_issues=[],
+            adoption=adoption,
+            agent_type="general",
+        )
+        self.assertEqual(rec.get("priority"), "first_qa_seed")
+        self.assertIn("first-qa-plan", rec.get("next_command") or "")
+
     def test_cmd_adopt_json(self):
         with TemporaryDirectory() as tmp:
             ns = type(
@@ -77,11 +153,10 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
                     "repo_root": tmp,
                     "no_optional": True,
                     "json": True,
+                    "first_qa_plan": False,
+                    "apply_first_qa": False,
                 },
             )()
-            with patch("sys.stdout") as out:
-                # capture via real print path
-                pass
             import io
             import sys
 

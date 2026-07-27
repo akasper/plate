@@ -654,6 +654,11 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
             "budget_pressure": "ok",
             "risk_tolerance": "off",
         }
+        adopt_ready = {
+            "core_ready": True,
+            "first_qa": {"seeded": True},
+            "estimated_minutes_remaining": 0,
+        }
         with patch("plate_core.health.get_health", return_value=self._health()):
             with patch("plate_core.autonomy.get_budget_snapshot", return_value={
                 "budget_pressure": "ok",
@@ -665,14 +670,22 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
                     with patch("plate_core.pm.get_pm_status", return_value=idle_pm):
                         with patch("plate_core.release.get_release_status", side_effect=Exception("skip")):
                             with patch("plate_core.release.collect_fragments", return_value=[]):
-                                out = get_what_next(
-                                    "akasper/plate",
-                                    include_prs=False,
-                                    include_fragments=True,
-                                    include_ready_issues=True,
-                                    include_pm=True,
-                                    include_release=True,
-                                )
+                                with patch(
+                                    "plate_core.adoption.assess_adoption_readiness",
+                                    return_value=adopt_ready,
+                                ):
+                                    with patch(
+                                        "plate_core.self_migrate.plan_self_migrate",
+                                        return_value={"drift": False},
+                                    ):
+                                        out = get_what_next(
+                                            "akasper/plate",
+                                            include_prs=False,
+                                            include_fragments=True,
+                                            include_ready_issues=True,
+                                            include_pm=True,
+                                            include_release=True,
+                                        )
         self.assertEqual(out["priority"], "epic")
         self.assertIn("closeout", out["next_action"].lower())
         self.assertEqual(out["state_snapshot"]["pm_queue_size"], 0)
@@ -689,6 +702,7 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
             budget={"budget_pressure": "ok", "remaining_tokens": 40000, "daily_limit": 50000},
             open_prs=[],
             pm_status={"open_checkpoints": 0, "delegated": 0, "proposed": 0, "open_assignments": 2},
+            adoption={"core_ready": True, "first_qa": {"seeded": True}},
         )
         self.assertEqual(out["priority"], "pm")
         self.assertIn("Project Manager", out["next_action"])
@@ -702,6 +716,11 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
             "budget_pressure": "ok",
             "risk_tolerance": "off",
         }
+        adopt_ready = {
+            "core_ready": True,
+            "first_qa": {"seeded": True},
+            "estimated_minutes_remaining": 0,
+        }
         with patch("plate_core.health.get_health", return_value=self._health()):
             with patch("plate_core.autonomy.get_budget_snapshot", return_value={
                 "budget_pressure": "ok",
@@ -713,14 +732,22 @@ class TestGetWhatNextLiveWiring(unittest.TestCase):
                     with patch("plate_core.pm.get_pm_status", return_value=active_pm):
                         with patch("plate_core.release.get_release_status", side_effect=Exception("skip")):
                             with patch("plate_core.release.collect_fragments", return_value=[]):
-                                live = get_what_next(
-                                    "akasper/plate",
-                                    include_prs=False,
-                                    include_fragments=True,
-                                    include_ready_issues=True,
-                                    include_pm=True,
-                                    include_release=True,
-                                )
+                                with patch(
+                                    "plate_core.adoption.assess_adoption_readiness",
+                                    return_value=adopt_ready,
+                                ):
+                                    with patch(
+                                        "plate_core.self_migrate.plan_self_migrate",
+                                        return_value={"drift": False},
+                                    ):
+                                        live = get_what_next(
+                                            "akasper/plate",
+                                            include_prs=False,
+                                            include_fragments=True,
+                                            include_ready_issues=True,
+                                            include_pm=True,
+                                            include_release=True,
+                                        )
         # Delegated > 0 ranks pm_tick before generic pm cycle
         self.assertEqual(live["priority"], "pm_tick")
 
