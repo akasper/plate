@@ -1,0 +1,13 @@
+{
+  "slug": "install-path-0.8.0-parity",
+  "title": "Install path docs parity for plate-core 0.8.0 and gh-plate pin",
+  "summary": "Pin Quick Start and adoption/marketplace docs to plate-core==0.8.0; document gh-plate upgrade/reinstall when PLATE_CORE_VERSION still locks 0.7.x; add offline timed dry-run research note (not LIVE E2E).",
+  "issues": ["#998", "#983", "#633", "#989"],
+  "type": "documentation",
+  "change_type": "docs",
+  "surface": "README.md, docs/migration/adoption-guide.md, docs/bootstrap/marketplace-install-checklist.md, docs/research/adopter-install-path-0.8.0-parity.md",
+  "migration_impact": "Adopters should pip install -U 'plate-core==0.8.0' and gh extension upgrade/reinstall gh-plate to v0.8.0. No code API change.",
+  "agent_notes": "Before under-30m adopt sessions, verify plate_core.__version__ and gh-plate PLATE_CORE_VERSION are 0.8.0. Do not claim #654 LIVE under-30m from docs/research/adopter-install-path-0.8.0-parity.md alone.",
+  "breaking": false,
+  "links": ["#998", "#983", "#989", "#992", "#633", "#649"]
+}

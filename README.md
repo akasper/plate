@@ -6,11 +6,13 @@ This repository (`akasper/plate`) is the **implementation monorepo**. The instal
 
 | Surface | Target User | How to Install |
 |---|---|---|
-| `gh plate` extension | Humans and scripts — terminal PLATE operations | `gh extension install akasper/gh-plate` |
-| `plate-mcp` MCP server | AI agents — first-class tool calls via MCP | `pip install plate-core` then `plate-mcp` (or `python -m plate_core.mcp_server`) |
-| CLI agent plugin (Copilot CLI, Grok Build, …) | Interactive sessions — plate persona + MCP wiring | `pip install plate-core` then marketplace install from this repo (see below) |
+| `gh plate` extension | Humans and scripts — terminal PLATE operations | `gh extension install akasper/gh-plate` (pins `plate-core` via extension `PLATE_CORE_VERSION`) |
+| `plate-mcp` MCP server | AI agents — first-class tool calls via MCP | `pip install 'plate-core==0.8.0'` then `plate-mcp` (or `python -m plate_core.mcp_server`) |
+| CLI agent plugin (Copilot CLI, Grok Build, …) | Interactive sessions — plate persona + MCP wiring | same runtime pin, then marketplace install from this repo (see below) |
 
 All surfaces share the same library code under `src/plate_core/`, so CLI, MCP, and plugins stay in parity.
+
+**Current public pin (v0.8.0):** prefer an explicit pip pin and a current `gh-plate` extension so agents do not mix 0.7.x runtime with 0.8.x docs.
 
 **Licensing**
 
@@ -36,18 +38,45 @@ See `AGENTS.md`, `SPEC.md`, and `docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.m
 
 ## Quick Start
 
+### Install versions (pip + gh-plate pin)
+
+After the **v0.8.0** cut, public surfaces are:
+
+| Surface | Expected version | Verify |
+|---|---|---|
+| PyPI `plate-core` | **0.8.0** (latest) | `python -c "import plate_core; print(plate_core.__version__)"` |
+| `gh` extension `akasper/gh-plate` | **v0.8.0** (ships `PLATE_CORE_VERSION=0.8.0`) | `gh extension list` · extension dir `PLATE_CORE_VERSION` |
+| This monorepo (dev) | `pyproject.toml` / `plate_core.__version__` **0.8.0** | `PYTHONPATH=src python -c "import plate_core; print(plate_core.__version__)"` |
+
+```bash
+# Runtime (recommended pin for adopters and CI)
+pip install -U 'plate-core==0.8.0'
+python -c "import plate_core; print(plate_core.__version__)"   # expect 0.8.0
+
+# gh extension: install or upgrade so the thin shim pin matches
+gh extension install akasper/gh-plate        # first time
+gh extension upgrade plate                   # later (or: gh extension upgrade gh-plate)
+# If upgrade leaves an old pin, reinstall:
+#   gh extension remove plate && gh extension install akasper/gh-plate
+
+# Optional: confirm the extension pin file (path varies by gh install layout)
+#   cat "$(dirname "$(which gh-plate 2>/dev/null || true)")/PLATE_CORE_VERSION"
+```
+
+**Pin mismatch symptom:** `gh plate` prints `plate-core version lock active ... ensuring plate-core==0.7.2` (or another older pin) while docs assume 0.8.0. Fix with extension upgrade/reinstall + `pip install -U 'plate-core==0.8.0'`. Self-migrate with an **explicit** target should not report false drift when pin already equals that target (`gh plate self-migrate --plan --json` / `--verify`).
+
 ### As a Python package (`plate-core` on PyPI + MCP)
 
 ```bash
-pip install plate-core
+pip install -U 'plate-core==0.8.0'
 plate-mcp   # stdio MCP server for agents
-python -c "import plate_core; print(plate_core.__version__)"
+python -c "import plate_core; print(plate_core.__version__)"  # 0.8.0
 ```
 
 ### As a `gh` extension
 
 ```sh
-gh extension install akasper/gh-plate
+gh extension install akasper/gh-plate   # or: gh extension upgrade plate
 gh plate health --json
 gh plate what-next --json
 gh plate autonomy --status
@@ -61,7 +90,7 @@ gh plate bootstrap --repo OWNER/REPO --adopt --json
 gh plate pr babysit 112 --repo akasper/plate --json
 ```
 
-The `gh plate` extension is published from a dedicated thin repository (`akasper/gh-plate`) so the GitHub CLI name starts with `gh-`. Implementation, the `plate-core` package, MCP entrypoint, plugins, and source live in this monorepo (`akasper/plate`).
+The `gh plate` extension is published from a dedicated thin repository (`akasper/gh-plate`) so the GitHub CLI name starts with `gh-`. Implementation, the `plate-core` package, MCP entrypoint, plugins, and source live in this monorepo (`akasper/plate`). The extension **version-locks** runtime via sibling `VERSION` / `PLATE_CORE_VERSION` (#614) — keep it on **v0.8.0** for post-cut work.
 
 ### As an MCP server (v1 baseline; works in Copilot CLI, Grok Build, and other compatible agents)
 
@@ -75,7 +104,7 @@ The `gh plate` extension is published from a dedicated thin repository (`akasper
 
 ```sh
 # Install the runtime prerequisite first so the plugin's MCP command is available.
-pip install plate-core
+pip install -U 'plate-core==0.8.0'
 
 # Register this repository as a marketplace, then install the plugin from it.
 copilot plugin marketplace add akasper/plate
@@ -112,7 +141,7 @@ Before cutting a release that ships marketplace install:
 1. Confirm `.github/plugin/marketplace.json` (Copilot → `source: "plugin"`) and `.grok-plugin/marketplace.json` (Grok → `./.plugin`) still point at the intended plugin payloads; versions match `plate-core`.
 2. If baseline catalog skills changed, run `python3 scripts/generate-plugin-skills.py` (and commit) so `plugin/SKILLS.md`, `plugin/skills/*/SKILL.md`, and the mirrored `.plugin/` copies stay in sync; then `python3 scripts/generate-plugin-skills.py --check`.
 3. Re-run `python3 scripts/generate-grok-plugin-index.py` (and commit) if `plugin/agents/`, `plugin/skills/`, `.mcp.json`, or manifest keys changed; then `python3 scripts/generate-grok-plugin-index.py --check`.
-4. Verify the runtime prerequisite is available with `pip install plate-core` (`plate-mcp` on `PATH`).
+4. Verify the runtime prerequisite is available with `pip install -U 'plate-core==0.8.0'` (`plate-mcp` on `PATH`; print `__version__`).
 5. Smoke-test the pre-launch install flows (Copilot + generator for Grok):
    ```sh
    copilot plugin marketplace add akasper/plate
