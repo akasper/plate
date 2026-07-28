@@ -1,0 +1,7 @@
+{
+  "slug": "restore-publish-pypi-workflow",
+  "title": "Restore publish-pypi.yml workflow for plate-core releases",
+  "summary": "Re-land automated PyPI publish workflow (from #624) lost when main history was restored for the 0.8.0 cut. Enables Trusted Publisher OIDC publish of v0.8.0+ via tag push or workflow_dispatch.",
+  "issues": ["#625", "#623", "#624"],
+  "type": "bugfix"
+}
