@@ -1,0 +1,13 @@
+{
+  "slug": "first-qa-next-command-apply",
+  "title": "first-qa plan next_command points at apply (not re-plan)",
+  "summary": "plan_first_qa_seed dry-run and runner_required paths set next_command to --apply-first-qa instead of circular --first-qa-plan; seeded/applied still route to feed. what_next first_qa prompt mentions apply step.",
+  "issues": ["#1001", "#1000", "#983", "#949", "#633"],
+  "type": "feature",
+  "change_type": "feature",
+  "surface": "src/plate_core/adoption.py, src/plate_core/what_next.py",
+  "migration_impact": "Additive routing only. Agents should execute next_command after first-qa dry-run (apply with runner) instead of re-planning.",
+  "agent_notes": "After gh plate adopt --first-qa-plan --json, follow report.next_command (apply-first-qa + runner). Do not loop on plan. Parent Epic #1000 for post-0.8.0 adopter TTV.",
+  "breaking": false,
+  "links": ["#1001", "#1000", "#983", "#949"]
+}

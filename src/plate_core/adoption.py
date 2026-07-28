@@ -393,6 +393,8 @@ def plan_first_qa_seed(
             ]
         )
 
+    # After dry-run, agents must not re-plan forever (#1001): point at apply.
+    apply_cmd = "gh plate adopt --first-qa-plan --apply-first-qa --json"
     plan: dict[str, Any] = {
         "ok": True,
         "mode": "dry_run",
@@ -404,18 +406,17 @@ def plan_first_qa_seed(
         "marker_path": str(root / _FIRST_QA_MARKER),
         "auto_apply": False,
         "applied": False,
-        "related_issues": ["#949", "#633", "#935", "#654"],
+        "related_issues": ["#949", "#633", "#935", "#654", "#1000", "#1001"],
         "next_command": (
-            "gh plate feed --json"
-            if status.get("seeded")
-            else "gh plate adopt --first-qa-plan --json"
+            "gh plate feed --json" if status.get("seeded") else apply_cmd
         ),
         "note": (
             "Already seeded (local marker); no-op."
             if status.get("seeded")
             else (
                 "Dry-run plan only — no GitHub issue create. "
-                "Apply requires --apply-first-qa + injectable runner (#949)."
+                "Next: apply with injectable runner "
+                f"(`{apply_cmd}`); CLI alone cannot open issues (#949/#1001)."
             )
         ),
         "ask_user_question": {
@@ -423,7 +424,7 @@ def plan_first_qa_seed(
             "options": [
                 {
                     "label": "Apply seed via runner",
-                    "description": "Create Question issues then open feed",
+                    "description": apply_cmd,
                 },
                 {"label": "Plan only", "description": "Keep dry-run artifact"},
                 {"label": "Open feed without seed", "description": "gh plate feed --json"},
@@ -443,9 +444,11 @@ def plan_first_qa_seed(
     if runner is None:
         plan["ok"] = False
         plan["error"] = "runner_required"
+        plan["next_command"] = apply_cmd
         plan["note"] = (
             "Live seed requires injectable runner(plan); "
-            "CLI/MCP never create GitHub issues alone (#949)."
+            "CLI/MCP never create GitHub issues alone (#949). "
+            f"Re-run with runner: `{apply_cmd}` (or create Questions via gh_argv_list)."
         )
         return plan
 
