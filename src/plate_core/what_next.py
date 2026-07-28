@@ -451,18 +451,21 @@ def recommend_what_next(
         and isinstance(first_qa, dict)
         and first_qa.get("seeded") is False
     ):
+        # Plan first; after dry-run, plan_first_qa_seed points at --apply-first-qa (#1001).
         next_cmd = "gh plate adopt --first-qa-plan --json"
         return {
             "next_action": f"seed first Q&A after adoption: {next_cmd}",
             "prompt_segment": (
-                "Local adoption core_ready but first Q&A Questions not seeded (#949/#633). "
+                "Local adoption core_ready but first Q&A Questions not seeded (#949/#633/#1001). "
                 "1) `gh plate adopt --first-qa-plan --json` / plate_adoption_first_qa_plan  "
-                "2) Review 3 starter Curiosity Questions; apply only with explicit runner  "
+                "2) Review plan; apply with runner via "
+                "`gh plate adopt --first-qa-plan --apply-first-qa --json` "
+                "(do not re-plan in a loop)  "
                 "3) Then `gh plate feed --json` / product planning. "
                 "Dry-run default — no GitHub issue create without injectable runner."
                 + quiet
             ),
-            "rationale": "adoption core_ready; first_qa.seeded=false (#949/#935/#633)",
+            "rationale": "adoption core_ready; first_qa.seeded=false (#949/#935/#633/#1001)",
             "state_snapshot": state,
             "agent_type": agent_type or "general",
             "priority": "first_qa_seed",

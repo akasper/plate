@@ -110,6 +110,12 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         self.assertFalse(report["applied"])
         self.assertFalse(status["seeded"])
         self.assertEqual(len(report["gh_argv_list"]), 3)
+        # #1001: dry-run must not circular-loop on re-plan
+        self.assertIn("--apply-first-qa", report["next_command"])
+        self.assertNotEqual(
+            report["next_command"],
+            "gh plate adopt --first-qa-plan --json",
+        )
 
     def test_first_qa_apply_with_runner_writes_marker(self):
         with TemporaryDirectory() as tmp:
@@ -124,12 +130,24 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         self.assertTrue(report["applied"])
         self.assertTrue(status["seeded"])
         self.assertEqual(status["count"], 3)
+        self.assertEqual(report["next_command"], "gh plate feed --json")
 
     def test_first_qa_apply_without_runner_blocked(self):
         with TemporaryDirectory() as tmp:
             report = plan_first_qa_seed(tmp, apply=True, runner=None)
         self.assertFalse(report["ok"])
         self.assertEqual(report["error"], "runner_required")
+        self.assertIn("--apply-first-qa", report["next_command"])
+
+    def test_first_qa_already_seeded_next_is_feed(self):
+        """Proves: seeded marker → next_command is feed, not re-plan (#1001)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_first_qa_seed_marker(root, titles=["a", "b", "c"], mode="test")
+            report = plan_first_qa_seed(root, apply=False)
+        self.assertTrue(report["already_seeded"])
+        self.assertEqual(report["mode"], "already_seeded")
+        self.assertEqual(report["next_command"], "gh plate feed --json")
 
     def test_what_next_ranks_first_qa_when_core_ready_unseeded(self):
         """Proves: what_next priority first_qa_seed after adoption ready (#949)."""
