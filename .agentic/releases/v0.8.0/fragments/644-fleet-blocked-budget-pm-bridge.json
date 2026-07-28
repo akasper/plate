@@ -1,0 +1,24 @@
+{
+  "slug": "644-fleet-blocked-budget-pm-bridge",
+  "change_type": "feature",
+  "surface": "src/plate_core/fleet.py, feed.py",
+  "summary": "Harden #644 fleet handoffs: active includes blocked; high-risk/human handoffs start blocked with optional #648 checkpoint; budget_remaining gate on create; handoff_from_pm_assignment bridges #660 PM queue; feed ranks blocked handoffs higher with checkpoint decide options.",
+  "migration_impact": "create_handoff gains budget_remaining and open_checkpoint. High-risk handoffs may status=blocked until accepted. list active includes blocked. New handoff_from_pm_assignment helper. No config break.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Pass budget_remaining when creating handoffs under tight budgets.",
+    "3. Accept blocked high-risk handoffs via plate_fleet_update --status accepted after checkpoint approve.",
+    "4. PM loops may call handoff_from_pm_assignment after assign_work for multi-agent execution."
+  ],
+  "agent_notes": "Do not execute blocked handoffs until accepted. Prefer checkpoint_id on handoff context for resume. Quiet ops still apply for fleet cycles.",
+  "breaking": false,
+  "links": [
+    "#644",
+    "#660",
+    "#648",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

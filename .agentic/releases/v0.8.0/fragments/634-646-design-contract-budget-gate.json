@@ -1,0 +1,24 @@
+{
+  "slug": "634-646-design-contract-budget-gate",
+  "change_type": "feature",
+  "surface": "src/plate_core/design_validation.py, cli.py, mcp_server.py, tests/test_design_validation.py",
+  "summary": "Gate #646 design contract propose on live #634 budget: estimate_contract_cost, propose_contract hydrate/block, CLI --budget-remaining/--no-live-budget, MCP fields (#763).",
+  "migration_impact": "plate_design_contract_propose and gh plate design-contract honor durable spend remaining by default; over-budget proposals return blocked. Pass budget_remaining or use_live_budget=false to override.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer live hydrate (default) before proposing design contracts.",
+    "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+    "4. Offline tests: --no-live-budget / use_live_budget=false."
+  ],
+  "agent_notes": "Parity with fleet/packaging/monitor #634 hydrate. Closes #763. Related #634 #646 #654.",
+  "breaking": false,
+  "links": [
+    "#763",
+    "#634",
+    "#646",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

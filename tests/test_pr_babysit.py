@@ -1,11 +1,15 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.pr_babysit import (
     _default_agent_match,
     _extract_actionable_threads,
+    _extract_outdated_unresolved_threads,
     _detect_base_branch_out_of_sync,
     babysit_pr,
+    extract_suggestion_blocks,
+    resolve_pr_review_scope,
     resolve_review_thread,
 )
 
@@ -17,6 +21,20 @@ class _FakeClient:
 
     def api(self, endpoint: str, method: str = "GET", fields: dict | None = None):
         self.calls.append((endpoint, method, fields))
+        # Dispatch GraphQL by mutation/query so resolve and load can share POST endpoint (#605)
+        if endpoint == "graphql" and method == "POST" and fields:
+            query = fields.get("query") or ""
+            if "resolveReviewThread" in query:
+                key = ("graphql", "POST", "resolve")
+                if key in self.responses:
+                    return self.responses[key]
+                # default successful resolve
+                tid = fields.get("threadId", "T?")
+                return {"data": {"resolveReviewThread": {"thread": {"id": tid, "isResolved": True}}}}
+            if "pullRequest" in query or "reviewThreads" in query:
+                key = ("graphql", "POST", "load")
+                if key in self.responses:
+                    return self.responses[key]
         key = (endpoint, method)
         return self.responses.get(key, self.responses.get(endpoint, {}))
 
@@ -25,7 +43,139 @@ class PrBabysitTests(unittest.TestCase):
     def test_default_agent_match(self):
         self.assertTrue(_default_agent_match("devin-ai-integration[bot]"))
         self.assertTrue(_default_agent_match("OpenHands-Agent"))
+        self.assertTrue(_default_agent_match("copilot-pull-request-reviewer"))
+        self.assertTrue(_default_agent_match("github-copilot[bot]"))
         self.assertFalse(_default_agent_match("octocat"))
+
+    def test_extract_suggestion_blocks_496(self):
+        body = "Please rename this:\n```suggestion\nnew_name = 1\n```\nThanks"
+        blocks = extract_suggestion_blocks(body)
+        self.assertEqual(len(blocks), 1)
+        self.assertIn("new_name = 1", blocks[0])
+        self.assertEqual(extract_suggestion_blocks("no fence"), [])
+
+    def test_pr_review_scope_filters_authors_496(self):
+        threads = [
+            {
+                "id": "T_copilot",
+                "isResolved": False,
+                "isOutdated": False,
+                "path": "src/plate_core/pr_babysit.py",
+                "comments": {
+                    "nodes": [
+                        {
+                            "databaseId": 1,
+                            "body": "```suggestion\nx = 1\n```",
+                            "url": "u1",
+                            "author": {"login": "copilot-pull-request-reviewer"},
+                        }
+                    ]
+                },
+            },
+            {
+                "id": "T_human",
+                "isResolved": False,
+                "isOutdated": False,
+                "path": "src/ok.py",
+                "comments": {
+                    "nodes": [
+                        {
+                            "databaseId": 2,
+                            "body": "please clarify",
+                            "url": "u2",
+                            "author": {"login": "octocat"},
+                        }
+                    ]
+                },
+            },
+        ]
+        all_scope = _extract_actionable_threads(threads, None, scope="all")
+        self.assertEqual(len(all_scope), 2)
+        bot_only = _extract_actionable_threads(threads, None, scope="bot-only")
+        self.assertEqual(len(bot_only), 1)
+        self.assertEqual(bot_only[0]["thread_id"], "T_copilot")
+        self.assertTrue(bot_only[0]["has_suggestion"])
+        self.assertTrue(bot_only[0]["prefer_apply_suggestion"])
+        human_only = _extract_actionable_threads(threads, None, scope="human-only")
+        self.assertEqual(len(human_only), 1)
+        self.assertEqual(human_only[0]["thread_id"], "T_human")
+        # explicit allowlist overrides scope
+        allow = _extract_actionable_threads(threads, "octocat", scope="bot-only")
+        self.assertEqual(len(allow), 1)
+        self.assertEqual(allow[0]["author"], "octocat")
+
+    def test_high_risk_path_blocks_prefer_apply_496(self):
+        threads = [
+            {
+                "id": "T_agents",
+                "isResolved": False,
+                "isOutdated": False,
+                "path": "AGENTS.md",
+                "comments": {
+                    "nodes": [
+                        {
+                            "databaseId": 9,
+                            "body": "```suggestion\n# wipe\n```",
+                            "url": "u",
+                            "author": {"login": "copilot-pull-request-reviewer"},
+                        }
+                    ]
+                },
+            }
+        ]
+        items = _extract_actionable_threads(threads, None, scope="all")
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["high_risk_path"])
+        self.assertFalse(items[0]["prefer_apply_suggestion"])
+
+    def test_babysit_pr_scope_all_includes_copilot_496(self):
+        repo = "akasper/plate"
+        pr = 496
+        threads_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "CLEAN",
+                        "baseRefName": "main",
+                        "headRefName": "feature/496",
+                        "reviewThreads": {
+                            "nodes": [
+                                {
+                                    "id": "PRRT_copilot",
+                                    "isResolved": False,
+                                    "isOutdated": False,
+                                    "path": "src/plate_core/cli.py",
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 42,
+                                                "body": "nit:\n```suggestion\nprint('ok')\n```",
+                                                "url": "https://example.com/c",
+                                                "author": {"login": "copilot-pull-request-reviewer"},
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                }
+            }
+        }
+        fake = _FakeClient(responses={("graphql", "POST", "load"): threads_payload})
+        report = babysit_pr(repo=repo, pr_number=pr, act=False, pr_review_scope="all", client=fake)
+        self.assertEqual(report.pr_review_scope, "all")
+        self.assertEqual(report.actionable_threads, 1)
+        self.assertEqual(report.threads_with_suggestions, 1)
+        # Pre-#496 bot-only without copilot patterns would have been 0; patterns now include copilot
+        report_bot = babysit_pr(repo=repo, pr_number=pr, act=False, pr_review_scope="bot-only", client=fake)
+        self.assertEqual(report_bot.actionable_threads, 1)
+
+    def test_resolve_pr_review_scope_validation_496(self):
+        self.assertEqual(resolve_pr_review_scope("ALL"), "all")
+        self.assertEqual(resolve_pr_review_scope("bot_only"), "bot-only")
+        with self.assertRaises(ValueError):
+            resolve_pr_review_scope("friends-only")
 
     def test_extract_actionable_threads_filters_resolved_and_outdated(self):
         threads = [
@@ -55,6 +205,159 @@ class PrBabysitTests(unittest.TestCase):
         actionable = _extract_actionable_threads(threads, agent_logins=None)
         self.assertEqual(len(actionable), 1)
         self.assertEqual(actionable[0]["thread_id"], "T1")
+
+    def test_extract_outdated_unresolved_threads_for_605(self):
+        threads = [
+            {
+                "id": "T_fresh",
+                "isResolved": False,
+                "isOutdated": False,
+                "comments": {"nodes": [{"databaseId": 1, "body": "open", "url": "u1", "author": {"login": "devin-ai"}}]},
+            },
+            {
+                "id": "T_outdated",
+                "isResolved": False,
+                "isOutdated": True,
+                "comments": {"nodes": [{"databaseId": 2, "body": "fixed", "url": "u2", "author": {"login": "copilot"}}]},
+            },
+            {
+                "id": "T_resolved_outdated",
+                "isResolved": True,
+                "isOutdated": True,
+                "comments": {"nodes": [{"databaseId": 3, "body": "done", "url": "u3", "author": {"login": "devin-ai"}}]},
+            },
+        ]
+        candidates = _extract_outdated_unresolved_threads(threads)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["thread_id"], "T_outdated")
+
+    def test_babysit_pr_act_auto_resolves_outdated_unresolved_threads_605(self):
+        """#605: act=True must resolve outdated+unresolved threads (post-fix state)."""
+        repo = "akasper/plate"
+        pr = 601
+        threads_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "CLEAN",
+                        "baseRefName": "main",
+                        "headRefName": "feature/x",
+                        "reviewThreads": {
+                            "nodes": [
+                                {
+                                    "id": "PRRT_outdated_1",
+                                    "isResolved": False,
+                                    "isOutdated": True,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 201,
+                                                "body": "please rename",
+                                                "url": "https://example.com/t1",
+                                                "author": {"login": "akasper"},
+                                            }
+                                        ]
+                                    },
+                                },
+                                {
+                                    "id": "PRRT_outdated_2",
+                                    "isResolved": False,
+                                    "isOutdated": True,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 202,
+                                                "body": "nit",
+                                                "url": "https://example.com/t2",
+                                                "author": {"login": "copilot-pull-request-reviewer"},
+                                            }
+                                        ]
+                                    },
+                                },
+                                {
+                                    "id": "PRRT_still_actionable",
+                                    "isResolved": False,
+                                    "isOutdated": False,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 203,
+                                                "body": "still open",
+                                                "url": "https://example.com/t3",
+                                                "author": {"login": "devin-ai"},
+                                            }
+                                        ]
+                                    },
+                                },
+                            ]
+                        },
+                    }
+                }
+            }
+        }
+        fake = _FakeClient(
+            responses={
+                ("graphql", "POST", "load"): threads_payload,
+                (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+                (f"repos/{repo}/issues/{pr}/comments", "POST"): {"html_url": "https://example.com/posted"},
+            }
+        )
+        report = babysit_pr(repo=repo, pr_number=pr, act=True, client=fake)
+        self.assertEqual(report.actionable_threads, 1)
+        self.assertEqual(report.auto_resolved_threads, 2)
+        self.assertEqual(
+            set(report.auto_resolved_thread_ids or []),
+            {"PRRT_outdated_1", "PRRT_outdated_2"},
+        )
+        resolve_calls = [
+            c for c in fake.calls
+            if c[0] == "graphql" and c[1] == "POST" and c[2] and "resolveReviewThread" in (c[2].get("query") or "")
+        ]
+        self.assertEqual(len(resolve_calls), 2)
+        resolved_ids = {c[2]["threadId"] for c in resolve_calls}
+        self.assertEqual(resolved_ids, {"PRRT_outdated_1", "PRRT_outdated_2"})
+
+    def test_babysit_pr_without_act_does_not_auto_resolve_605(self):
+        repo = "akasper/plate"
+        pr = 602
+        threads_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "CLEAN",
+                        "baseRefName": "main",
+                        "headRefName": "feature/y",
+                        "reviewThreads": {
+                            "nodes": [
+                                {
+                                    "id": "PRRT_o",
+                                    "isResolved": False,
+                                    "isOutdated": True,
+                                    "comments": {
+                                        "nodes": [
+                                            {
+                                                "databaseId": 1,
+                                                "body": "stale",
+                                                "url": "u",
+                                                "author": {"login": "devin-ai"},
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                }
+            }
+        }
+        fake = _FakeClient(responses={("graphql", "POST", "load"): threads_payload})
+        report = babysit_pr(repo=repo, pr_number=pr, act=False, client=fake)
+        self.assertEqual(report.auto_resolved_threads, 0)
+        resolve_calls = [
+            c for c in fake.calls
+            if c[0] == "graphql" and c[1] == "POST" and c[2] and "resolveReviewThread" in (c[2].get("query") or "")
+        ]
+        self.assertEqual(len(resolve_calls), 0)
 
     def test_babysit_pr_posts_trigger_comment_when_act_true(self):
         repo = "akasper/plate"
@@ -470,6 +773,8 @@ class PrBabysitTests(unittest.TestCase):
                         "mergeStateStatus": "BEHIND",
                         "baseRefName": "main",
                         "headRefName": "feature-branch",
+                        "reviewDecision": "CHANGES_REQUESTED",
+                        "statusCheckRollup": {"state": "FAILURE"},
                         "reviewThreads": {
                             "nodes": [
                                 {
@@ -508,8 +813,34 @@ class PrBabysitTests(unittest.TestCase):
         self.assertTrue(result["out_of_sync"])
         self.assertEqual(result["unresolved_review_threads"], 1)
         self.assertEqual(result["actionable_agent_threads"], 1)
+        self.assertEqual(result["review_decision"], "CHANGES_REQUESTED")
+        self.assertTrue(result["ci_failing"])
+        self.assertTrue(result["loop_advance_blocked"])
         self.assertIn("comprehensively", result["note"])
         self.assertIn("full gates", result["note"])
+
+    def test_evaluate_babysit_gates_ci_and_review(self):
+        """#638/#639 shared gate evaluator for loop advance."""
+        from plate_core.pr_babysit import evaluate_babysit_gates
+
+        clean = evaluate_babysit_gates(
+            {
+                "merge_state": "CLEAN",
+                "unresolved_review_threads": 0,
+                "ci_state": "SUCCESS",
+                "review_decision": "APPROVED",
+            }
+        )
+        self.assertFalse(clean["blocked"])
+
+        none = evaluate_babysit_gates(None)
+        self.assertFalse(none["blocked"])
+
+        fail = evaluate_babysit_gates(
+            {"merge_state": "CLEAN", "unresolved_review_threads": 0, "failing_checks": 3}
+        )
+        self.assertTrue(fail["blocked"])
+        self.assertIn("CI failing", fail["reason"])
 
     def test_long_running_background_task_protocol_in_guidance(self):
         """Regression test for #525: the long-running/background task protocol (record task_id, proactively schedule/polling with get_command_or_subagent_output or monitor at intervals rather than waiting for reminders, consider lightweight monitor helper) must be present in shipped guidance (and thus in the plate persona and pr-babysit flows)."""
@@ -560,8 +891,9 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("default to ask_user_question (native TUI); if option promises review/babysit", persona)
-        self.assertIn("Follow guidance.", persona)
+        self.assertIn("default to ask_user_question (native TUI)", persona)
+        self.assertIn("if option promises review/babysit", persona)
+        self.assertIn("default to ask_user_question (native TUI)", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
@@ -610,7 +942,8 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("default to ask_user_question (native TUI); if option promises review/babysit", persona)
+        self.assertIn("default to ask_user_question (native TUI)", persona)
+        self.assertIn("if option promises review/babysit", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
@@ -738,11 +1071,13 @@ class PrBabysitTests(unittest.TestCase):
         """Regression test for #503: persona, guidance, and AGENTS must enforce that Q&A options promising 'review the PR'/'babysit'/'address feedback' result in *full execution* (pr-babysit skill, isolated worktree, push to same branch, resolve threads) before next question or progress/done; never merge or advance unaddressed. (Builds on #517/#503 stub.)"""
         from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
         self.assertIn("If a choice promises \"review the PR\", \"babysit\", \"address feedback\", or similar, the agent *must* fully execute that work using the dedicated pr-babysit skill", QANDA_CURIOSITY_GUIDANCE)
-        self.assertIn("Never merge or advance with unaddressed feedback. (Addresses #503, #517.)", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Never merge or advance with unaddressed feedback.", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("#508", QANDA_CURIOSITY_GUIDANCE)
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
-        self.assertIn("if option promises review/babysit, fully execute via pr-babysit before next (Addresses #503, #517)", persona)
+        self.assertIn("if option promises review/babysit, fully execute via pr-babysit before next", persona)
+        self.assertIn("#508", persona)
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
@@ -750,5 +1085,65 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("(Addresses #503, #518, #517, #521 and closes the post-0.6.1 Q&A/babysit stub cluster under #580/#569 polish.)", agents)
 
 
+
+    def test_508_qa_follow_through_checklist(self):
+        """#508: named Q&A follow-through checklist must remain in guidance + persona."""
+        from plate_core.agent_guidance import QANDA_CURIOSITY_GUIDANCE
+        self.assertIn("Q&A Follow-Through Checklist (#508)", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Options are executable in-turn only", QANDA_CURIOSITY_GUIDANCE)
+        self.assertIn("Mismatch recovery", QANDA_CURIOSITY_GUIDANCE)
+        persona = Path("plugin/agents/plate.agent.md").read_text(encoding="utf-8")
+        self.assertIn("#508", persona)
+
+    def test_510_merge_gates_checklist(self):
+        """#510: Full PR Green merge-gates checklist must stay discoverable."""
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+        self.assertIn("Merge Gates Checklist (#510)", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("plate_get_pr_merge_gates", QUIET_OPERATIONS_GUIDANCE)
+        persona = Path("plugin/agents/plate.agent.md").read_text(encoding="utf-8")
+        self.assertIn("#510", persona)
+        self.assertIn("one-pass Full PR Green", persona)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class AutonomyGuidance480Tests(unittest.TestCase):
+    """Feature #480: persona + autonomy_loops guidance + catalog skill."""
+
+    def test_autonomy_loops_section_registered(self):
+        from plate_core.agent_guidance import get_agent_guidance_sections, AUTONOMY_LOOPS_GUIDANCE
+
+        sections = get_agent_guidance_sections()
+        self.assertIn("autonomy_loops", sections)
+        self.assertIn("plate_autonomy_status", AUTONOMY_LOOPS_GUIDANCE)
+        self.assertIn("PLATE-AUTONOMY-CYCLE", AUTONOMY_LOOPS_GUIDANCE)
+        self.assertIn("PLATE-PROCEDURE-RUN", AUTONOMY_LOOPS_GUIDANCE)
+        self.assertIn("risk_tolerance", AUTONOMY_LOOPS_GUIDANCE)
+
+    def test_quiet_exempts_autonomy_markers(self):
+        from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
+
+        self.assertIn("PLATE-AUTONOMY-CYCLE", QUIET_OPERATIONS_GUIDANCE)
+        self.assertIn("PLATE-PROCEDURE-RUN", QUIET_OPERATIONS_GUIDANCE)
+
+    def test_plate_persona_routes_autonomy_status(self):
+        from pathlib import Path
+
+        for rel in ("plugin/agents/plate.agent.md", ".plugin/agents/plate.agent.md"):
+            text = Path(rel).read_text()
+            self.assertIn("plate_autonomy_status", text)
+            self.assertIn("autonomy_loops", text)
+            self.assertIn("#480", text)
+
+    def test_catalog_run_autonomy_cycle_skill(self):
+        from pathlib import Path
+        import yaml
+
+        data = yaml.safe_load(Path("src/plate_core/data/baseline_catalog.yml").read_text())
+        skill_ids = {s["id"] for s in data["skills"]}
+        self.assertIn("run-autonomy-cycle", skill_ids)
+        pm = next(a for a in data["agents"] if a["id"] == "project-manager")
+        self.assertIn("run-autonomy-cycle", pm["primary_skill_ids"])
+        self.assertEqual(len(data["agents"]), 15)

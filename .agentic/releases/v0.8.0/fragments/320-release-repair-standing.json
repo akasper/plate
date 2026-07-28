@@ -1,0 +1,24 @@
+{
+  "slug": "320-release-repair-standing",
+  "change_type": "feature",
+  "surface": "src/plate_core/release.py, cli.py, mcp_server.py",
+  "summary": "Idempotent release standing-state init/repair (#320): diagnose healthy|never_initialized|drifted; create missing release-major/minor/patch/release; ensure one Next Release issue; report need:human on duplicates; CLI gh plate release repair|init + MCP plate_release_repair.",
+  "migration_impact": "New repair path. Does not force-delete branches or auto-close extra Next Release issues. Complements bootstrap --apply (still valid for full bootstrap).",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate release repair (dry-run) to see missing tracks / Next Release drift.",
+    "3. gh plate release repair --apply (or release init --apply) to create missing branches/issue.",
+    "4. If multiple Next Release issues exist, human closes extras — tool will not auto-dedupe."
+  ],
+  "agent_notes": "Addresses legacy-mode warning when track branches missing. Prefer dry-run first. Closes #320.",
+  "breaking": false,
+  "links": [
+    "#320",
+    "#306",
+    "#654",
+    "#612"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

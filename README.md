@@ -1,14 +1,16 @@
-# plate_core
+# PLATE
 
-**plate_core** is the shared library powering the [PLATE](https://github.com/akasper/plate_template) platform tooling. It is designed to be deployed in three forms:
+**PLATE** (Process Lifecycle Agentic Task Engine) is a GitHub-native methodology and tooling monorepo for agent-driven software delivery. Humans keep judgment; agents do the toil; GitHub preserves truth.
+
+This repository (`akasper/plate`) is the **implementation monorepo**. The installable Python package on PyPI is still named **`plate-core`** (import path `plate_core`); the product name is PLATE.
 
 | Surface | Target User | How to Install |
 |---|---|---|
-| `gh plate` extension | Humans and scripts — terminal PLATE health checks | `gh extension install akasper/gh-plate` |
-| `plate-mcp` MCP server | AI agents — first-class tool calls via `/mcp` in supported CLIs | `pip install plate-core` then `plate-mcp` (or `python -m plate_core.mcp_server`) |
-| CLI agent plugin (e.g. Copilot CLI, Grok Build, other standards-compliant CLIs) | Interactive sessions — `/agent plate` + MCP wiring (see grok-build epic for CLI-agnostic details) | `pip install plate-core` then `copilot plugin marketplace add akasper/plate` and `copilot plugin install plate-core@plate-marketplace` |
+| `gh plate` extension | Humans and scripts — terminal PLATE operations | `gh extension install akasper/gh-plate` |
+| `plate-mcp` MCP server | AI agents — first-class tool calls via MCP | `pip install plate-core` then `plate-mcp` (or `python -m plate_core.mcp_server`) |
+| CLI agent plugin (Copilot CLI, Grok Build, …) | Interactive sessions — plate persona + MCP wiring | `pip install plate-core` then marketplace install from this repo (see below) |
 
-All surfaces are backed by the same `plate_core` library, ensuring consistent behavior regardless of how you access PLATE platform features.
+All surfaces share the same library code under `src/plate_core/`, so CLI, MCP, and plugins stay in parity.
 
 **Licensing**
 
@@ -16,21 +18,25 @@ This project is licensed under a source-available model (MIT base + Commons Clau
 
 ## What It Does
 
-`plate_core` surfaces the live state of a PLATE project by querying the GitHub API and applying PLATE methodology rules:
+PLATE tooling reads GitHub + local `.plate` / `.agentic/` state and drives process loops:
 
-- **Health check** — label coverage, branch protection status, open Epic count
-- **Epic status** — per-epic child issue summary via `gh plate epic status`
-- **Feature detection** — optional PLATE capability detection (Playwright E2E, plugin setup, etc.) via `gh plate features`
-- **Bootstrap planning** — new-project setup planning/apply baseline via `gh plate bootstrap`
-- **Baseline agents and skills** — discoverable catalog via `gh plate agents` and `gh plate skills`
-- **PR feedback babysitting** — local monitoring/trigger flow via `gh plate pr babysit <number>`
-- **E2E Playwright tooling** — scaffolding, recording, and validation tools via MCP
-- **MCP tools** — `plate_health`, `plate_epic_status`, `plate_features`, `plate_bootstrap`, `plate_plan_epic`, `plate_pr_babysit`, `plate_resolve_review_thread`, `plate_agents`, `plate_agent`, `plate_skills`, `plate_skill`, `init_playwright`, `record_e2e_gif`, `validate_e2e_tests` return structured payloads
-- **CLI agent plugin** — installable agent surface (`/agent plate` or equivalent) with bundled MCP server configuration (CLI-agnostic per grok-build epic)
+- **Health & routing** — `gh plate health`, `gh plate what-next` / `plate_what_next` (priority ladder: budget, open PRs, adoption, self-migrate, ready work, PM, epics)
+- **Autonomy** — budgeted AutonomyEngine (`.plate` `autonomy.risk_tolerance`), procedures, checkpoints, ledger, shadow/simulate for high-impact actions
+- **Project Manager** — long-running orchestrator (`gh plate pm`, fleet handoffs, loop ticks); browser UI deferred
+- **Endless feed + Q&A planning** — Questions/Tasks feed; product/feature/release planning sessions with approval
+- **Adoption & self-migrate** — under-30m local path (`gh plate adopt`, import-payload, session timer); pin/payload self-migrate plan + offline verify
+- **Release ceremony** — multi-track release status, fragments, cut/finalize helpers
+- **PR green loop** — `gh plate pr babysit` with feedback resolution and base sync strategies
+- **Epic / feature / bug loops** — status, stubs, feature/bug stage machines, media + design contracts
+- **Baseline agents & skills** — catalog via `gh plate agents` / `gh plate skills`
+- **E2E Playwright helpers** — scaffold/validate/record via MCP
+- **CLI agent plugin** — default plate persona when PLATE signals are present (`AGENTS.md`, `.plate/`)
+
+See `AGENTS.md`, `SPEC.md`, and `docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md` for operating rules and first-slice surface status. Release **#654** tracks v1.0.0 readiness (do not claim 1.0 without checklist E2E).
 
 ## Quick Start
 
-### As a Python package (for `plate-mcp` + library use)
+### As a Python package (`plate-core` on PyPI + MCP)
 
 ```bash
 pip install plate-core
@@ -38,24 +44,24 @@ plate-mcp   # stdio MCP server for agents
 python -c "import plate_core; print(plate_core.__version__)"
 ```
 
-### As a `gh` extension (v1 baseline)
+### As a `gh` extension
 
 ```sh
 gh extension install akasper/gh-plate
-gh plate health                   # PLATE health check for the current repo
-gh plate health --repo akasper/plate --json
+gh plate health --json
+gh plate what-next --json
+gh plate autonomy --status
+gh plate pm --status
+gh plate feed --json
+gh plate release status
+gh plate adopt --json
+gh plate self-migrate --verify --json
 gh plate epic status --repo akasper/plate --json
-gh plate features --repo akasper/plate --json
-gh plate agents list --json
-gh plate agents show research-agent --json
-gh plate skills list --json
-gh plate skills show crud-projects --json
-gh plate bootstrap --repo akasper/plate --json     # dry-run plan
-gh plate bootstrap --repo akasper/plate --apply    # apply supported steps
+gh plate bootstrap --repo OWNER/REPO --adopt --json
 gh plate pr babysit 112 --repo akasper/plate --json
 ```
 
-The `gh plate` extension is published from a dedicated thin repository (`akasper/gh-plate`) to satisfy GitHub CLI's requirement that extension repository names start with `gh-`. The complete implementation, the `plate-core` Python package on PyPI, the MCP server entrypoint, the plugin assets, and all source live in this repository (`akasper/plate`). Users and scripts install the extension with `gh extension install akasper/gh-plate`.
+The `gh plate` extension is published from a dedicated thin repository (`akasper/gh-plate`) so the GitHub CLI name starts with `gh-`. Implementation, the `plate-core` package, MCP entrypoint, plugins, and source live in this monorepo (`akasper/plate`).
 
 ### As an MCP server (v1 baseline; works in Copilot CLI, Grok Build, and other compatible agents)
 
@@ -99,28 +105,31 @@ The marketplace flow is the supported public install path. The plugin still expe
 
 #### Marketplace release checklist
 
-Before cutting the release that includes this marketplace path:
+Full maintainer checklist (surfaces, smoke, human Tasks): [`docs/bootstrap/marketplace-install-checklist.md`](docs/bootstrap/marketplace-install-checklist.md) (#378 / #379).
 
-1. Confirm `.github/plugin/marketplace.json` (Copilot) and `.grok-plugin/marketplace.json` (Grok) still point at the intended plugin source (`.plugin/` for the committed payload used by generator + e2e).
+Before cutting a release that ships marketplace install:
+
+1. Confirm `.github/plugin/marketplace.json` (Copilot → `source: "plugin"`) and `.grok-plugin/marketplace.json` (Grok → `./.plugin`) still point at the intended plugin payloads; versions match `plate-core`.
 2. If baseline catalog skills changed, run `python3 scripts/generate-plugin-skills.py` (and commit) so `plugin/SKILLS.md`, `plugin/skills/*/SKILL.md`, and the mirrored `.plugin/` copies stay in sync; then `python3 scripts/generate-plugin-skills.py --check`.
 3. Re-run `python3 scripts/generate-grok-plugin-index.py` (and commit) if `plugin/agents/`, `plugin/skills/`, `.mcp.json`, or manifest keys changed; then `python3 scripts/generate-grok-plugin-index.py --check`.
-4. Verify the runtime prerequisite is available with `pip install plate-core`.
+4. Verify the runtime prerequisite is available with `pip install plate-core` (`plate-mcp` on `PATH`).
 5. Smoke-test the pre-launch install flows (Copilot + generator for Grok):
    ```sh
    copilot plugin marketplace add akasper/plate
    copilot plugin install plate-core@plate-marketplace
    python3 scripts/generate-plugin-skills.py --check
    python3 scripts/generate-grok-plugin-index.py --check
+   pytest tests/test_copilot_cli_marketplace_packaging.py -q
    ```
-6. Complete the human-owned publication tasks tracked in #380 and #381.
-7. Fold the finished Epic into the active release issue (#376) and cut the release through the normal PLATE release ceremony.
+6. Complete the human-owned publication tasks tracked in #380 and #381 (and #625/#626 when PyPI pins require them). Agents must not complete those Tasks.
+7. Fold marketplace work into the active **Next Release** issue (#612) and cut through the normal PLATE release ceremony.
 
 See the grok-build epic for full CLI-agnostic details and verification that no vendor-specific language remains in the plugin files. (This release also closes the Grok marketplace discovery gap reported in #570.)
 
 
 ## Playwright E2E Testing
 
-`plate_core` includes tools for scaffolding, validating, and managing Playwright E2E tests:
+PLATE includes tools for scaffolding, validating, and managing Playwright E2E tests:
 
 ### MCP Tools
 
@@ -167,21 +176,20 @@ Playwright E2E Testing............. ✅ ENABLED
 ## Runtime layout (v1 baseline)
 
 ```text
-plate/
-├── .plugin/               # root plugin discovery manifest + agent + MCP config
+plate/                     # monorepo (product: PLATE)
+├── AGENTS.md              # operating rules (source of truth with GitHub)
+├── SPEC.md                # product intent
+├── .plate                 # local autonomy/release config (JSON)
+├── .agentic/              # fragments, procedures, costs, PM queue, …
+├── .plugin/               # root plugin discovery + MCP config
 ├── .github/plugin/        # Copilot CLI marketplace manifest
-├── plugin/                # plugin source surface (mirrors .plugin metadata)
-├── src/plate_core/
-│   ├── github_client.py   # gh api wrapper
-│   ├── health.py          # shared health logic
-│   ├── cli.py             # shared CLI command handlers
-│   ├── features.py        # feature detection (local and remote)
-│   ├── agent_guidance.py  # agent prompting strategies
-│   ├── baseline_catalog.py  # baseline agent/skill catalog loader
-│   ├── mcp/tools.py       # Playwright E2E MCP tools
-│   ├── mcp_server.py      # MCP stdio server (health, epic, catalog, e2e tools)
-│   └── data/
-│       └── baseline_catalog.yml
+├── plugin/                # plugin source (agents, skills)
+├── src/plate_core/        # Python package (PyPI name: plate-core)
+│   ├── health.py, what_next.py, autonomy.py, pm.py, feed.py, …
+│   ├── adoption.py, self_migrate.py, release.py, pr_babysit.py, …
+│   ├── cli.py, mcp_server.py
+│   └── data/baseline_catalog.yml
+├── docs/wiki/             # durable epic closeouts, Goals, …
 ├── gh-plate               # gh extension entrypoint
 └── plate-mcp              # MCP server entrypoint
 ```

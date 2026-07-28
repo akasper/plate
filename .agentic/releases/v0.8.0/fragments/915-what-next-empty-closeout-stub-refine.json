@@ -1,0 +1,15 @@
+{
+  "slug": "915-what-next-empty-closeout-stub-refine",
+  "change_type": "fix",
+  "surface": "src/plate_core/what_next.py",
+  "summary": "When idle what_next has open Epics but zero epic_closeout_candidates, prefer stub refine → ready-to-work over first-slice closeout prose (#915).",
+  "migration_impact": "Agents on empty pipeline after first-slice Epics are status:implemented should refine stubs (e.g. #364 residuals) instead of re-documenting closeouts.",
+  "migration_guidance": [
+    "1. Pull release after merge.",
+    "2. On priority=epic with no named #N closeouts, refine a need:refinement Feature.",
+    "3. Do not re-check #654 without E2E proof."
+  ],
+  "agent_notes": "Pairs with #913 skip implemented and #909 named candidates.",
+  "breaking": false,
+  "links": ["#915", "#913", "#909", "#905", "#364", "#654"]
+}

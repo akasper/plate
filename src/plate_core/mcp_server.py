@@ -34,7 +34,180 @@ from .release import (
 from .migration import generate_migration_plan, apply_migration_plan
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
-from .autonomy import get_autonomy_status, run_autonomy_cycle
+from .autonomy import get_autonomy_status, get_budget_snapshot, run_autonomy_cycle
+from .checkpoint import (
+    create_checkpoint,
+    decide_checkpoint,
+    get_checkpoint,
+    list_checkpoints,
+    list_open_checkpoints,
+)
+from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
+from .feed import get_user_feed
+from .planning import (
+    apply_planning_answer,
+    build_plan_from_session,
+    decide_pending_plan,
+    get_plan_history,
+    get_planning_script,
+    list_actionable_plans,
+    list_pending_plans,
+    planning_feed_items,
+    resubmit_pending_plan,
+    start_planning_session,
+)
+from .epic_release_planning import (
+    apply_er_answer,
+    build_er_plan_from_session,
+    decide_er_plan,
+    er_planning_feed_items,
+    get_er_script,
+    resubmit_er_plan,
+    start_er_session,
+)
+from .design_research_approval import (
+    decide_proposal,
+    get_proposal,
+    get_proposal_history,
+    list_actionable_proposals,
+    list_authoritative,
+    list_proposals,
+    propose_artifact,
+    resubmit_proposal,
+)
+from .pm import (
+    assign_work,
+    complete_pm_assignment,
+    get_pm_status,
+    list_pm_queue,
+    list_team,
+    run_pm_cycle,
+    run_pm_loop,
+    tick_pm_loops,
+)
+from .fleet import (
+    allocate_fleet_budget,
+    complete_handoff,
+    create_handoff,
+    fleet_status,
+    handoff_feed_items,
+    list_fleet_roles,
+    list_handoffs,
+    plan_fleet_from_intent,
+    update_handoff,
+)
+from .monitoring import (
+    decide_proposal,
+    list_proposals,
+    monitor_market_signals,
+    monitoring_feed_items,
+    review_discussions,
+    run_discussion_review_procedure,
+    run_market_monitor_procedure,
+)
+from .stubs import (
+    author_and_create,
+    author_stub,
+    create_stub_issue,
+    get_stub,
+    list_stubs,
+    refine_stub,
+    stubs_feed_items,
+)
+from .bug_loop import (
+    advance_bug_loop,
+    bug_loop_feed_items,
+    cancel_bug_loop,
+    get_bug_loop,
+    list_bug_loops,
+    run_bug_loop_tick,
+    start_bug_loop,
+    update_bug_loop,
+)
+from .feature_loop import (
+    advance_feature_loop,
+    cancel_feature_loop,
+    estimate_feature_cost,
+    feature_loop_feed_items,
+    get_feature_loop,
+    list_feature_loops,
+    run_feature_loop_tick,
+    start_feature_loop,
+    update_feature_loop,
+)
+from .design_validation import (
+    build_failing_test_scaffold,
+    contract_feed_items,
+    decide_contract,
+    get_contract,
+    list_contracts,
+    propose_contract,
+    update_contract,
+    validate_contract_readiness,
+)
+from .release_media import (
+    build_media_manifest,
+    collect_release_media,
+    decide_media_item,
+    media_feed_items,
+    render_media_markdown,
+    validate_media_paths,
+)
+from .release import collect_fragments as collect_release_fragments
+from .feature_media import (
+    attach_to_fragment_file,
+    decide_feature_media,
+    estimate_feature_media_cost,
+    feature_media_feed_items,
+    get_feature_media,
+    list_feature_media,
+    plan_feature_media,
+    register_capture,
+    skip_feature_media,
+)
+from .packaging import (
+    build_package,
+    decide_package_publish,
+    get_package,
+    list_packages,
+    packaging_feed_items,
+    plan_marketplace_package_op,
+    render_package_markdown,
+)
+from .hybrid import (
+    detect_project_kind,
+    feature_validation_plan,
+    get_kind_contract,
+    hybrid_feed_items,
+    list_artifact_types,
+    list_project_kinds,
+    list_validation_strategies,
+    load_project_profile,
+    planning_template_for_kind,
+    set_project_kind,
+)
+from .scheduled_ops import (
+    complete_op_run,
+    list_op_runs,
+    list_ops,
+    plan_op,
+    run_scheduled_op,
+    scheduled_ops_status,
+    ops_feed_items,
+)
+from .tasks import close_task_with_signal, create_task, detect_and_create_tasks
+from .collab import (
+    analyze_pr_authorship,
+    branch_etiquette_check,
+    claim_ownership,
+    collab_policy_check,
+    collab_status_for_issue,
+    concurrent_edit_risk,
+    get_driver,
+    list_ownership_claims,
+    ownership_feed_items,
+    release_ownership,
+)
 from .discussions import (
     add_discussion_comment,
     create_discussion,
@@ -107,46 +280,16 @@ def _plan_epic_stub(args: dict) -> object:
 
 
 def _what_next(repo: str | None, agent_type: str | None = None) -> dict:
-    """v1 static What Next? for PLATE process (Epic #282 / #285).
+    """What Next? for PLATE process (#282 / #654 harden).
 
-    Uses live health + simple heuristics over documented flows (epics, labels, fragments, Goals).
-    Returns next recommended action + prompt segment for agent use.
+    Prefers budget critical/exhausted, open release PRs to babysit, then
+    labels/bootstrap, open Epics, pending fragments. Uses health + durable
+    budget snapshot; risk_off does not hide budget pressure (#787/#785).
     """
     try:
-        from .health import get_health
-        h = get_health(repo).to_dict() if repo or True else {}
-        labels_ok = h.get("label_coverage_ok", False)
-        open_epics = h.get("open_epic_count", 0)
-        # simplistic v1
-        if not labels_ok:
-            action = "run bootstrap to establish labels/wiki/epic/starters"
-            prompt = (
-                "Follow the PLATE bootstrap flow: create required labels, enable wiki, seed initial Epic, "
-                "seed starter Questions from catalog. Then create a Goals wiki page per convention and use it for audits. "
-                "For any looped execution, use terse one-sentence bullet turn summaries and post comments only on meaningful progress (quiet_operations guidance)."
-            )
-        elif open_epics > 0:
-            action = "advance an open Epic: pick a child Feature/Bug with tests sketched, no need:refinement"
-            prompt = (
-                "Use plate_epic_status or gh plate epic status to list children. For a Feature: read full issue, "
-                "add/update tests first, implement smallest change, author fragment in .agentic/releases/unreleased/, "
-                "PR with clean title + labels (Feature + area + Epic:*) + Closes #N in body only, babysit with gh plate pr babysit. "
-                "In loops: terse bullet turn summaries only; comments only on real progress per quiet_operations."
-            )
-        else:
-            action = "check for pending release fragments or next beta item"
-            prompt = (
-                "Run gh plate release status. If unreleased fragments, prepare for cut_release. "
-                "Otherwise pick next beta-roadmap Feature (e.g. #260 local-rebase, #285 what-next, packaging, etc.). "
-                "Looped runs: emit only terse one-sentence bullets for the turn; follow quiet comment rules."
-            )
-        return {
-            "next_action": action,
-            "prompt_segment": prompt,
-            "rationale": "v1 heuristic on health (labels, open_epics); expand with full state (epics, fragments, Goals presence) in follow-ups",
-            "state_snapshot": {"label_coverage_ok": labels_ok, "open_epic_count": open_epics},
-            "agent_type": agent_type or "general",
-        }
+        from .what_next import get_what_next
+
+        return get_what_next(repo, agent_type)
     except Exception as exc:
         return {"next_action": "inspect with plate_health + plate_epic_status", "error": str(exc)}
 
@@ -157,7 +300,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
 
     try:
         if name == "plate_health":
-            report = get_health(args.get("repo"))
+            report = get_health(
+                args.get("repo"),
+                repo_root=args.get("repo_root"),
+                include_spec_audit=not bool(args.get("no_spec_audit", False)),
+            )
             payload = report.to_dict()
         elif name == "plate_epic_status":
             report = get_epic_status(args.get("repo"))
@@ -202,7 +349,109 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_features":
             payload = get_features(args.get("repo")).to_dict()
         elif name == "plate_bootstrap":
-            payload = run_bootstrap(args.get("repo"), apply_mode=bool(args.get("apply", False))).to_dict()
+            adopt_arg = args.get("adopt")
+            if adopt_arg is None and args.get("existing_repo") is not None:
+                adopt_arg = args.get("existing_repo")
+            adopt_flag: bool | None
+            if adopt_arg is True or adopt_arg is False:
+                adopt_flag = bool(adopt_arg)
+            else:
+                adopt_flag = None
+            payload = run_bootstrap(
+                args.get("repo"),
+                apply_mode=bool(args.get("apply", False)),
+                adopt=adopt_flag,
+                local_root=args.get("local_root"),
+            ).to_dict()
+        elif name == "plate_adoption_status":
+            from .adoption import assess_adoption_readiness
+
+            payload = assess_adoption_readiness(
+                args.get("repo_root") or ".",
+                include_optional=not bool(args.get("no_optional", False)),
+            )
+        elif name == "plate_adoption_first_qa_plan":
+            from .adoption import plan_first_qa_seed
+
+            payload = plan_first_qa_seed(
+                args.get("repo_root") or ".",
+                apply=bool(args.get("apply", False)),
+                runner=None,
+            )
+        elif name == "plate_adoption_session":
+            from .adoption import (
+                adoption_session_status,
+                complete_adoption_session,
+                start_adoption_session,
+            )
+
+            action = str(args.get("action") or "status").lower()
+            root = args.get("repo_root") or "."
+            if action == "start":
+                payload = start_adoption_session(root, force=bool(args.get("force", False)))
+            elif action == "complete":
+                payload = complete_adoption_session(
+                    root,
+                    require_core_ready=bool(args.get("require_core_ready", False)),
+                )
+            else:
+                payload = adoption_session_status(root)
+        elif name == "plate_self_migrate_plan":
+            from .self_migrate import plan_self_migrate
+
+            payload = plan_self_migrate(
+                args.get("repo_root") or ".",
+                target_version=args.get("target_version"),
+                include_payload=not bool(args.get("no_payload", False)),
+                resolve_upstream=bool(args.get("resolve_upstream", False)),
+                allow_network=bool(args.get("allow_network", False)),
+            )
+        elif name == "plate_self_migrate_merge_markers":
+            from .self_migrate import plan_marker_merge
+
+            paths = args.get("paths")
+            if isinstance(paths, str):
+                paths = [paths]
+            payload = plan_marker_merge(
+                args.get("repo_root") or ".",
+                paths=paths,
+                upstream_root=args.get("upstream_root") or args.get("upstream_dir"),
+                apply=bool(args.get("apply", False)),
+            )
+        elif name == "plate_self_migrate_pr_plan":
+            from .self_migrate import apply_self_migrate_pr, plan_self_migrate_pr
+
+            pr_plan = plan_self_migrate_pr(
+                args.get("repo_root") or ".",
+                target_version=args.get("target_version"),
+                include_payload=not bool(args.get("no_payload", False)),
+                resolve_upstream=bool(args.get("resolve_upstream", False)),
+                allow_network=bool(args.get("allow_network", False)),
+                base=args.get("base") or "release",
+                closes=args.get("closes"),
+            )
+            if bool(args.get("apply", False)):
+                payload = {
+                    "plan": pr_plan,
+                    "apply": apply_self_migrate_pr(
+                        pr_plan,
+                        dry_run=False,
+                        allow_high_risk=bool(args.get("allow_high_risk", False)),
+                        runner=None,
+                    ),
+                }
+            else:
+                payload = pr_plan
+        elif name == "plate_self_migrate_verify":
+            from .self_migrate import verify_self_migrate
+
+            payload = verify_self_migrate(
+                args.get("repo_root") or ".",
+                target_version=args.get("target_version"),
+                include_payload=not bool(args.get("no_payload", False)),
+                resolve_upstream=bool(args.get("resolve_upstream", False)),
+                allow_network=bool(args.get("allow_network", False)),
+            )
         elif name == "plate_config_get":
             payload = get_plate_config_report(args.get("repo_root")).to_dict()
         elif name == "plate_config_validate":
@@ -216,6 +465,240 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             ).to_dict()
         elif name == "plate_plan_epic":
             payload = _plan_epic_stub(args).to_dict()
+        elif name == "plate_planning_start":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = start_planning_session(
+                str(args.get("kind") or "feature"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_planning_answer":
+            session = args.get("session") or {}
+            if isinstance(session, str):
+                try:
+                    session = json.loads(session)
+                except Exception:
+                    session = {}
+            payload = apply_planning_answer(
+                session if isinstance(session, dict) else {},
+                str(args.get("answer") or args.get("answer_text") or ""),
+                question_id=args.get("question_id"),
+            )
+        elif name == "plate_planning_build":
+            session = args.get("session") or {}
+            if isinstance(session, str):
+                try:
+                    session = json.loads(session)
+                except Exception:
+                    session = {}
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = build_plan_from_session(
+                session if isinstance(session, dict) else {},
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_planning_script":
+            payload = get_planning_script(str(args.get("kind") or "feature"))
+        elif name == "plate_planning_decide":
+            payload = decide_pending_plan(
+                str(args.get("plan_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                note=str(args.get("note") or ""),
+                decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
+            )
+        elif name == "plate_planning_resubmit":
+            payload = resubmit_pending_plan(
+                str(args.get("plan_id") or args.get("id") or ""),
+                title=args.get("title"),
+                body=args.get("body"),
+                note=str(args.get("note") or ""),
+                resubmitted_by=str(args.get("resubmitted_by") or args.get("by") or "mcp"),
+            )
+        elif name == "plate_planning_history":
+            payload = {
+                "history": get_plan_history(
+                    str(args.get("plan_id") or args.get("id") or ""),
+                    limit=int(args.get("limit") or 20),
+                )
+            }
+        elif name == "plate_planning_list_pending":
+            if args.get("feed"):
+                payload = {"feed": planning_feed_items(limit=int(args.get("limit") or 20))}
+            elif args.get("actionable"):
+                payload = {
+                    "actionable": list_actionable_plans(limit=int(args.get("limit") or 20))
+                }
+            else:
+                payload = {
+                    "pending": list_pending_plans(limit=int(args.get("limit") or 20))
+                }
+        elif name == "plate_er_planning_start":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = start_er_session(
+                str(args.get("kind") or "epic"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_er_planning_answer":
+            session = args.get("session") or {}
+            if isinstance(session, str):
+                try:
+                    session = json.loads(session)
+                except Exception:
+                    session = {}
+            payload = apply_er_answer(
+                session if isinstance(session, dict) else {},
+                str(args.get("answer") or args.get("answer_text") or ""),
+                question_id=args.get("question_id"),
+            )
+        elif name == "plate_er_planning_build":
+            session = args.get("session") or {}
+            if isinstance(session, str):
+                try:
+                    session = json.loads(session)
+                except Exception:
+                    session = {}
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = build_er_plan_from_session(
+                session if isinstance(session, dict) else {},
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_er_planning_script":
+            payload = get_er_script(str(args.get("kind") or "epic"))
+        elif name == "plate_er_planning_decide":
+            payload = decide_er_plan(
+                str(args.get("plan_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                note=str(args.get("note") or ""),
+                decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
+            )
+        elif name == "plate_er_planning_resubmit":
+            payload = resubmit_er_plan(
+                str(args.get("plan_id") or args.get("id") or ""),
+                title=args.get("title"),
+                body=args.get("body"),
+                note=str(args.get("note") or ""),
+                resubmitted_by=str(args.get("resubmitted_by") or args.get("by") or "mcp"),
+            )
+        elif name == "plate_er_planning_list_pending":
+            payload = {
+                "items": er_planning_feed_items(limit=int(args.get("limit") or 20))
+            }
+        elif name == "plate_artifact_propose":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = propose_artifact(
+                kind=str(args.get("kind") or "design"),
+                title=str(args.get("title") or "Artifact"),
+                summary=str(args.get("summary") or ""),
+                content_path=str(args.get("content_path") or ""),
+                content_excerpt=str(args.get("content_excerpt") or ""),
+                related_issue=args.get("related_issue"),
+                related_epic=args.get("related_epic"),
+                originating_question=args.get("originating_question"),
+                media_links=list(args.get("media_links") or []),
+                actor=str(args.get("actor") or "agent"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_artifact_decide":
+            payload = decide_proposal(
+                str(args.get("proposal_id") or args.get("id") or ""),
+                str(args.get("decision") or ""),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=str(args.get("note") or ""),
+                open_checkpoint=bool(args.get("open_checkpoint") or False),
+            )
+        elif name == "plate_artifact_resubmit":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = resubmit_proposal(
+                str(args.get("proposal_id") or args.get("id") or ""),
+                summary=args.get("summary"),
+                content_path=args.get("content_path"),
+                content_excerpt=args.get("content_excerpt"),
+                media_links=list(args.get("media_links") or []) if args.get("media_links") is not None else None,
+                title=args.get("title"),
+                actor=str(args.get("actor") or "agent"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_artifact_history":
+            payload = {
+                "history": get_proposal_history(
+                    str(args.get("proposal_id") or args.get("id") or ""),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_artifact_list":
+            if args.get("authoritative"):
+                payload = {"proposals": list_authoritative(kind=args.get("kind"))}
+            elif args.get("actionable") or (args.get("status") == "actionable"):
+                payload = {
+                    "proposals": list_actionable_proposals(
+                        kind=args.get("kind"),
+                        limit=int(args.get("limit") or 50),
+                    )
+                }
+            else:
+                payload = {
+                    "proposals": list_proposals(
+                        status=args.get("status") or "pending",
+                        kind=args.get("kind"),
+                        limit=int(args.get("limit") or 50),
+                    )
+                }
+        elif name == "plate_artifact_get":
+            payload = get_proposal(str(args.get("proposal_id") or args.get("id") or "")) or {
+                "error": "not found"
+            }
         elif name == "plate_pr_babysit":
             pr_number = args.get("pr_number")
             if pr_number is None:
@@ -229,6 +712,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 agent_logins=args.get("agents"),
                 act=bool(args.get("act", False)),
                 branch_update_strategy=args.get("branch_update_strategy"),
+                pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
             ).to_dict()
         elif name == "plate_get_pr_merge_gates":
             pr_number = args.get("pr_number")
@@ -259,6 +743,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     pr_number=args.get("pr_number"),
                     repo=args.get("repo"),
                     agent_logins=args.get("agent_logins"),
+                    pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
                 ),
             }
         elif name == "plate_what_next":
@@ -266,6 +751,13 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             # Uses live state (health, epics, fragments, labels) to pick next PLATE step and prompt segment.
             # For v1: simple decision tree over common paths; future data-driven.
             payload = _what_next(args.get("repo"), args.get("agent_type"))
+        elif name == "plate_feed":
+            payload = get_user_feed(
+                repo=args.get("repo"),
+                limit=int(args.get("limit") or 10),
+                include_process=bool(args.get("include_process", True)),
+                include_autonomy=bool(args.get("include_autonomy", True)),
+            )
         elif name == "plate_contemplate":
             # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
             qn = args.get("question_number")
@@ -291,6 +783,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 repo=args.get("repo"),
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
             ).to_dict()
+        elif name == "plate_release_repair":
+            from .release import repair_release_standing_state
+
+            payload = repair_release_standing_state(
+                repo=args.get("repo"),
+                dry_run=not bool(args.get("apply", False)),
+                apply=bool(args.get("apply", False)),
+            )
         elif name == "plate_release_target_epic":
             payload = get_release_target_epic_guidance(
                 epic_number=int(args.get("epic_number")),
@@ -312,12 +812,1014 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
             ).to_dict()
         elif name == "plate_costs":
-            payload = get_cost_report(
-                repo=args.get("repo"),
-                epic_label=args.get("epic_label"),
-            ).to_dict()
+            if args.get("dashboard"):
+                from .costs import get_cost_dashboard
+                payload = get_cost_dashboard(
+                    repo=args.get("repo"),
+                    epic_label=args.get("epic_label"),
+                )
+            else:
+                payload = get_cost_report(
+                    repo=args.get("repo"),
+                    epic_label=args.get("epic_label"),
+                ).to_dict()
         elif name == "plate_autonomy_status":
             payload = get_autonomy_status(args.get("repo"))
+        elif name == "plate_autonomy_budget":
+            if bool(args.get("reset")):
+                from .autonomy import reset_budget_spend
+
+                payload = reset_budget_spend(
+                    reason=str(args.get("reset_reason") or "mcp plate_autonomy_budget reset=true"),
+                )
+            else:
+                est = args.get("estimated_tokens") or args.get("estimate_tokens")
+                payload = get_budget_snapshot(
+                    args.get("repo"),
+                    estimated_tokens=int(est) if est is not None else None,
+                )
+        elif name == "plate_pm_status":
+            payload = get_pm_status(args.get("repo"))
+        elif name == "plate_pm_team":
+            payload = {"team": list_team()}
+        elif name == "plate_pm_assign":
+            item = args.get("item") or {}
+            if isinstance(item, str):
+                try:
+                    item = json.loads(item)
+                except Exception:
+                    item = {"title": item}
+            st = get_autonomy_status(args.get("repo"))
+            payload = assign_work(
+                item if isinstance(item, dict) else {"title": str(item)},
+                risk_tolerance=str(st.get("risk_tolerance") or "medium"),
+                budget_remaining=st.get("budget_remaining_tokens"),
+            )
+        elif name == "plate_pm_run_cycle":
+            payload = run_pm_cycle(
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+                max_assignments=int(args.get("max_assignments") or 5),
+                dispatch_fleet=bool(args.get("dispatch_fleet", True)),
+                dispatch_loops=bool(args.get("dispatch_loops", True)),
+                tick_loops=bool(args.get("tick_loops", True)),
+                fetch_loop_gates=bool(args.get("fetch_loop_gates") or False),
+            )
+        elif name == "plate_pm_run_loop":
+            payload = run_pm_loop(
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+                max_cycles=int(args.get("max_cycles") or 3),
+                max_assignments=int(args.get("max_assignments") or 5),
+            )
+        elif name == "plate_pm_queue":
+            payload = {
+                "assignments": list_pm_queue(
+                    repo=args.get("repo"),
+                    status=args.get("status"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_pm_complete":
+            payload = complete_pm_assignment(
+                str(args.get("assignment_id") or ""),
+                status=str(args.get("status") or "done"),
+                note=str(args.get("note") or ""),
+                repo=args.get("repo"),
+            )
+        elif name == "plate_pm_tick_loops":
+            payload = tick_pm_loops(
+                args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+                fetch_gates=bool(args.get("fetch_gates") or args.get("fetch_loop_gates") or False),
+                limit=int(args.get("limit") or 20),
+                complete_when_done=bool(args.get("complete_when_done", True)),
+            )
+        elif name == "plate_fleet_status":
+            br = args.get("budget_remaining")
+            if br is None:
+                br = args.get("budget_tokens")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = fleet_status(
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+                risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
+            )
+        elif name == "plate_fleet_roles":
+            payload = {"roles": list_fleet_roles()}
+        elif name == "plate_fleet_handoff":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = create_handoff(
+                from_agent=str(args.get("from_agent") or "orchestrator"),
+                to_agent=str(args.get("to_agent") or ""),
+                task=str(args.get("task") or ""),
+                context=args.get("context") if isinstance(args.get("context"), dict) else {},
+                artifacts=list(args.get("artifacts") or []),
+                constraints=list(args.get("constraints") or []),
+                budget_tokens=args.get("budget_tokens"),
+                risk=str(args.get("risk") or "medium"),
+                related_issue=args.get("related_issue"),
+                related_pr=args.get("related_pr"),
+                parent_handoff_id=args.get("parent_handoff_id"),
+                requires_human=bool(args.get("requires_human", False)),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_fleet_update":
+            payload = update_handoff(
+                str(args.get("handoff_id") or args.get("id") or ""),
+                status=args.get("status"),
+                notes=args.get("notes") or args.get("note"),
+                artifacts=list(args.get("artifacts") or []) or None,
+                context_patch=args.get("context") if isinstance(args.get("context"), dict) else None,
+                shadow_ack=args.get("shadow_ack") or None,
+                approved=bool(args.get("approved") or False),
+                checkpoint_id=args.get("checkpoint_id") or None,
+            )
+        elif name == "plate_fleet_complete":
+            payload = complete_handoff(
+                str(args.get("handoff_id") or args.get("id") or ""),
+                notes=str(args.get("notes") or args.get("note") or ""),
+                artifacts=list(args.get("artifacts") or []) or None,
+            )
+        elif name == "plate_fleet_list":
+            payload = {
+                "handoffs": list_handoffs(
+                    status=str(args.get("status") or "active"),
+                    to_agent=args.get("to_agent"),
+                    from_agent=args.get("from_agent"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_fleet_allocate":
+            roles = args.get("active_roles") or args.get("roles")
+            if isinstance(roles, str):
+                roles = [x.strip() for x in roles.split(",") if x.strip()]
+            payload = allocate_fleet_budget(
+                int(args.get("budget_tokens") or args.get("total_tokens") or 20000),
+                active_roles=list(roles) if roles else None,
+                risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
+            )
+        elif name == "plate_fleet_plan":
+            bt = args.get("budget_tokens")
+            if bt is not None:
+                try:
+                    bt = int(bt)
+                except (TypeError, ValueError):
+                    bt = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = plan_fleet_from_intent(
+                str(args.get("intent") or args.get("task") or ""),
+                budget_tokens=bt,
+                risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
+                related_issue=args.get("related_issue"),
+                create=bool(args.get("create") or args.get("apply") or False),
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_fleet_feed":
+            payload = {"items": handoff_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_monitor_discussions":
+            dry = bool(args.get("dry_run", True))
+            discussions = args.get("discussions")
+            if isinstance(discussions, str):
+                try:
+                    discussions = json.loads(discussions)
+                except Exception:
+                    discussions = None
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            if dry:
+                payload = run_discussion_review_procedure(
+                    repo=args.get("repo"),
+                    discussions=list(discussions) if discussions else None,
+                    dry_run=True,
+                    fetch_live=False,
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
+                )
+            else:
+                payload = review_discussions(
+                    list(discussions) if discussions else None,
+                    repo=args.get("repo"),
+                    persist=bool(args.get("persist", True)),
+                    fetch_live=bool(args.get("fetch_live", False)),
+                    min_score=float(args.get("min_score") or 30),
+                    limit=int(args.get("limit") or 10),
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
+                )
+        elif name == "plate_monitor_market":
+            signals = args.get("signals") or []
+            if isinstance(signals, str):
+                try:
+                    signals = json.loads(signals)
+                except Exception:
+                    signals = [{"title": signals}]
+            dry = bool(args.get("dry_run", True))
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            if dry:
+                payload = run_market_monitor_procedure(
+                    signals=list(signals),
+                    dry_run=True,
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
+                )
+            else:
+                payload = monitor_market_signals(
+                    list(signals),
+                    persist=bool(args.get("persist", True)),
+                    min_score=float(args.get("min_score") or 40),
+                    limit=int(args.get("limit") or 10),
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
+                )
+        elif name == "plate_monitor_list":
+            payload = {
+                "proposals": list_proposals(
+                    status=str(args.get("status") or "pending"),
+                    source=args.get("source"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_monitor_decide":
+            payload = decide_proposal(
+                str(args.get("proposal_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                created_issue=args.get("created_issue"),
+            )
+        elif name == "plate_monitor_feed":
+            payload = {"items": monitoring_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_stub_author":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = author_stub(
+                str(args.get("intent") or args.get("task") or ""),
+                issue_type=args.get("issue_type") or args.get("type"),
+                title=args.get("title"),
+                summary=args.get("summary"),
+                acceptance_criteria=list(args.get("acceptance_criteria") or []) or None,
+                parent_epic=args.get("parent_epic"),
+                milestone=args.get("milestone"),
+                related_links=list(args.get("related_links") or []) or None,
+                source=str(args.get("source") or "qa"),
+                labels=list(args.get("labels") or []) or None,
+                persist=bool(args.get("persist", True)),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_stub_refine":
+            payload = refine_stub(
+                str(args.get("draft_id") or args.get("id") or ""),
+                answers=args.get("answers") if isinstance(args.get("answers"), dict) else None,
+                add_acceptance=list(args.get("add_acceptance") or args.get("acceptance_criteria") or []) or None,
+                summary_append=args.get("summary_append") or args.get("summary"),
+                issue_type=args.get("issue_type") or args.get("type"),
+                note=args.get("note"),
+                mark_ready=bool(args.get("mark_ready") or args.get("ready") or False),
+            )
+        elif name == "plate_stub_create":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = create_stub_issue(
+                args.get("draft_id") or args.get("id"),
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_stub_list":
+            payload = {
+                "drafts": list_stubs(
+                    status=str(args.get("status") or "all"),
+                    issue_type=args.get("issue_type") or args.get("type"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_stub_get":
+            payload = {"draft": get_stub(str(args.get("draft_id") or args.get("id") or ""))}
+        elif name == "plate_stub_author_create":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = author_and_create(
+                str(args.get("intent") or ""),
+                issue_type=args.get("issue_type") or args.get("type"),
+                title=args.get("title"),
+                dry_run=bool(args.get("dry_run", True)),
+                repo=args.get("repo"),
+                summary=args.get("summary"),
+                source=str(args.get("source") or "qa"),
+                parent_epic=args.get("parent_epic"),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_stub_feed":
+            payload = {"items": stubs_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_bug_loop_start":
+            labels = args.get("labels") or []
+            if isinstance(labels, str):
+                labels = [x.strip() for x in labels.split(",") if x.strip()]
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = start_bug_loop(
+                bug_number=args.get("bug_number") or args.get("bug"),
+                bug_title=str(args.get("bug_title") or args.get("title") or ""),
+                risk=str(args.get("risk") or "medium"),
+                size=str(args.get("size") or "medium"),
+                labels=list(labels) if labels else None,
+                paths=list(args.get("paths") or []) or None,
+                risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+                pr_number=args.get("pr_number") or args.get("pr"),
+                branch=args.get("branch"),
+                budget_remaining=args.get("budget_remaining"),
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_bug_loop_advance":
+            payload = advance_bug_loop(
+                str(args.get("run_id") or args.get("id") or ""),
+                pr_number=args.get("pr_number") or args.get("pr"),
+                branch=args.get("branch"),
+                note=args.get("note"),
+                force_skip_checkpoint=bool(args.get("force_skip_checkpoint") or False),
+                gates=args.get("gates") if isinstance(args.get("gates"), dict) else None,
+            )
+        elif name == "plate_bug_loop_tick":
+            payload = run_bug_loop_tick(
+                str(args.get("run_id") or args.get("id") or ""),
+                dry_run=bool(args.get("dry_run", True)),
+                fetch_gates=bool(args.get("fetch_gates") or False),
+                repo=args.get("repo"),
+            )
+        elif name == "plate_bug_loop_list":
+            payload = {
+                "runs": list_bug_loops(
+                    status=str(args.get("status") or "active"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_bug_loop_get":
+            payload = {"run": get_bug_loop(str(args.get("run_id") or args.get("id") or ""))}
+        elif name == "plate_bug_loop_cancel":
+            payload = cancel_bug_loop(
+                str(args.get("run_id") or args.get("id") or ""),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_bug_loop_update":
+            payload = update_bug_loop(
+                str(args.get("run_id") or args.get("id") or ""),
+                stage=args.get("stage"),
+                status=args.get("status"),
+                pr_number=args.get("pr_number") or args.get("pr"),
+                branch=args.get("branch"),
+                note=args.get("note"),
+                checkpoint_id=args.get("checkpoint_id"),
+            )
+        elif name == "plate_bug_loop_feed":
+            payload = {"items": bug_loop_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_feature_loop_estimate":
+            payload = estimate_feature_cost(
+                size=str(args.get("size") or "medium"),
+                needs_design_validation=bool(args.get("needs_design_validation") or args.get("design") or False),
+                needs_media=bool(args.get("needs_media", True)),
+                e2e=bool(args.get("e2e") or False),
+            )
+        elif name == "plate_feature_loop_start":
+            labels = args.get("labels") or []
+            if isinstance(labels, str):
+                labels = [x.strip() for x in labels.split(",") if x.strip()]
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = start_feature_loop(
+                feature_number=args.get("feature_number") or args.get("feature"),
+                feature_title=str(args.get("feature_title") or args.get("title") or ""),
+                risk=str(args.get("risk") or "medium"),
+                size=str(args.get("size") or "medium"),
+                labels=list(labels) if labels else None,
+                paths=list(args.get("paths") or []) or None,
+                risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+                needs_design_validation=bool(args.get("needs_design_validation") or args.get("design") or False),
+                needs_media_approval=bool(args.get("needs_media_approval", True)),
+                e2e=bool(args.get("e2e") or False),
+                pr_number=args.get("pr_number") or args.get("pr"),
+                branch=args.get("branch"),
+                budget_remaining=args.get("budget_remaining"),
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_feature_loop_advance":
+            payload = advance_feature_loop(
+                str(args.get("run_id") or args.get("id") or ""),
+                pr_number=args.get("pr_number") or args.get("pr"),
+                branch=args.get("branch"),
+                note=args.get("note"),
+                force_skip_checkpoint=bool(args.get("force_skip_checkpoint") or False),
+                skip_media=bool(args.get("skip_media") or False),
+                gates=args.get("gates") if isinstance(args.get("gates"), dict) else None,
+            )
+        elif name == "plate_feature_loop_tick":
+            payload = run_feature_loop_tick(
+                str(args.get("run_id") or args.get("id") or ""),
+                dry_run=bool(args.get("dry_run", True)),
+                fetch_gates=bool(args.get("fetch_gates") or False),
+                repo=args.get("repo"),
+            )
+        elif name == "plate_feature_loop_list":
+            payload = {
+                "runs": list_feature_loops(
+                    status=str(args.get("status") or "active"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_feature_loop_get":
+            payload = {"run": get_feature_loop(str(args.get("run_id") or args.get("id") or ""))}
+        elif name == "plate_feature_loop_cancel":
+            payload = cancel_feature_loop(
+                str(args.get("run_id") or args.get("id") or ""),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_feature_loop_update":
+            payload = update_feature_loop(
+                str(args.get("run_id") or args.get("id") or ""),
+                stage=args.get("stage"),
+                status=args.get("status"),
+                pr_number=args.get("pr_number") or args.get("pr"),
+                branch=args.get("branch"),
+                note=args.get("note"),
+                checkpoint_id=args.get("checkpoint_id"),
+                cost_estimate_tokens=args.get("cost_estimate_tokens"),
+            )
+        elif name == "plate_feature_loop_feed":
+            payload = {"items": feature_loop_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_design_contract_propose":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = propose_contract(
+                feature_number=args.get("feature_number") or args.get("feature"),
+                feature_title=str(args.get("feature_title") or args.get("title") or ""),
+                visual_specs=list(args.get("visual_specs") or []) or None,
+                interaction_criteria=list(args.get("interaction_criteria") or []) or None,
+                a11y_criteria=list(args.get("a11y_criteria") or []) or None,
+                artifact_paths=list(args.get("artifact_paths") or []) or None,
+                has_playwright=bool(args.get("has_playwright") or False),
+                submit_for_approval=bool(args.get("submit_for_approval", True)),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_design_contract_list":
+            payload = {
+                "contracts": list_contracts(
+                    status=str(args.get("status") or "all"),
+                    feature_number=args.get("feature_number") or args.get("feature"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_design_contract_get":
+            payload = {"contract": get_contract(str(args.get("contract_id") or args.get("id") or ""))}
+        elif name == "plate_design_contract_decide":
+            payload = decide_contract(
+                str(args.get("contract_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=args.get("note"),
+            )
+        elif name == "plate_design_contract_update":
+            payload = update_contract(
+                str(args.get("contract_id") or args.get("id") or ""),
+                visual_specs=list(args.get("visual_specs") or []) or None,
+                interaction_criteria=list(args.get("interaction_criteria") or []) or None,
+                a11y_criteria=list(args.get("a11y_criteria") or []) or None,
+                artifact_paths=list(args.get("artifact_paths") or []) or None,
+                status=args.get("status"),
+            )
+        elif name == "plate_design_contract_validate":
+            payload = validate_contract_readiness(
+                args.get("contract_id") or args.get("id"),
+            )
+        elif name == "plate_design_contract_scaffold":
+            c = get_contract(str(args.get("contract_id") or args.get("id") or ""))
+            if not c:
+                payload = {"ok": False, "error": "contract not found"}
+            else:
+                payload = build_failing_test_scaffold(
+                    c, language=str(args.get("language") or "python")
+                )
+                payload["ok"] = True
+        elif name == "plate_design_contract_feed":
+            payload = {"items": contract_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_release_media_manifest":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            frags = collect_release_fragments(rdir)
+            payload = build_media_manifest(frags, version=args.get("version"))
+        elif name == "plate_release_media_render":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            media = collect_release_media(collect_release_fragments(rdir))
+            payload = {
+                "markdown": render_media_markdown(
+                    media, only_approved=bool(args.get("only_approved") or False)
+                ),
+                "n": len(media),
+            }
+        elif name == "plate_release_media_feed":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            media = collect_release_media(collect_release_fragments(rdir))
+            payload = {"items": media_feed_items(media)}
+        elif name == "plate_release_media_validate_paths":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            media = collect_release_media(collect_release_fragments(rdir))
+            payload = validate_media_paths(media, repo_root=_P("."))
+        elif name == "plate_release_media_decide":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            media = collect_release_media(collect_release_fragments(rdir))
+            payload = decide_media_item(
+                media,
+                index=args.get("index"),
+                path=args.get("path"),
+                url=args.get("url"),
+                decision=str(args.get("decision") or "approve"),
+            )
+        elif name == "plate_hybrid_list_kinds":
+            payload = {"kinds": list_project_kinds()}
+        elif name == "plate_hybrid_list_artifacts":
+            payload = {"artifact_types": list_artifact_types()}
+        elif name == "plate_hybrid_list_validation":
+            payload = {
+                "validation": list_validation_strategies(kind=args.get("kind"))
+            }
+        elif name == "plate_hybrid_detect":
+            from pathlib import Path as _P
+
+            payload = detect_project_kind(_P(str(args.get("repo_root") or ".")))
+        elif name == "plate_hybrid_set_kind":
+            from pathlib import Path as _P
+
+            payload = set_project_kind(
+                str(args.get("kind") or ""),
+                base_dir=_P(str(args.get("base_dir") or ".agentic/hybrid")),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_hybrid_profile":
+            from pathlib import Path as _P
+
+            payload = load_project_profile(
+                base_dir=_P(str(args.get("base_dir") or ".agentic/hybrid")),
+                repo_root=_P(str(args.get("repo_root") or ".")),
+            )
+        elif name == "plate_hybrid_contract":
+            c = get_kind_contract(str(args.get("kind") or ""))
+            payload = {"ok": c is not None, "contract": c}
+        elif name == "plate_hybrid_planning_template":
+            payload = planning_template_for_kind(str(args.get("kind") or "software"))
+        elif name == "plate_hybrid_validation_plan":
+            payload = feature_validation_plan(
+                str(args.get("kind") or "software"),
+                feature_title=str(args.get("feature_title") or args.get("title") or ""),
+                artifact_types=args.get("artifact_types"),
+            )
+        elif name == "plate_hybrid_feed":
+            from pathlib import Path as _P
+
+            payload = {
+                "items": hybrid_feed_items(
+                    base_dir=_P(str(args.get("base_dir") or ".agentic/hybrid")),
+                    repo_root=_P(str(args.get("repo_root") or ".")),
+                    limit=int(args.get("limit") or 4),
+                )
+            }
+        elif name == "plate_packaging_build":
+            from pathlib import Path as _P
+
+            rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            frags = collect_release_fragments(rdir)
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = build_package(
+                str(args.get("version") or "unreleased"),
+                frags,
+                base_dir=bdir,
+                require_approved_media=bool(args.get("require_approved_media") or False),
+                persist=not bool(args.get("no_persist") or False),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_packaging_list":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            payload = {
+                "packages": list_packages(
+                    base_dir=bdir,
+                    status=str(args.get("status") or "all"),
+                    limit=int(args.get("limit") or 20),
+                )
+            }
+        elif name == "plate_packaging_get":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            p = get_package(str(args.get("package_id") or args.get("id") or ""), base_dir=bdir)
+            payload = {"package": p, "ok": p is not None}
+        elif name == "plate_packaging_render":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            pid = str(args.get("package_id") or args.get("id") or "")
+            p = get_package(pid, base_dir=bdir) if pid else None
+            if p is None and args.get("version"):
+                rdir = _P(str(args.get("releases_dir") or ".agentic/releases"))
+                br = args.get("budget_remaining")
+                if br is not None:
+                    try:
+                        br = int(br)
+                    except (TypeError, ValueError):
+                        br = None
+                use_live = args.get("use_live_budget")
+                if use_live is None:
+                    use_live = True
+                built = build_package(
+                    str(args.get("version")),
+                    collect_release_fragments(rdir),
+                    base_dir=bdir,
+                    persist=False,
+                    budget_remaining=br,
+                    use_live_budget=bool(use_live),
+                )
+                if not built.get("ok"):
+                    payload = built
+                else:
+                    p = built.get("package")
+            if p is not None:
+                payload = {
+                    "ok": True,
+                    "markdown": render_package_markdown(p),
+                    "package_id": p.get("id"),
+                }
+            elif "payload" not in locals():
+                payload = {"ok": False, "error": "package not found"}
+        elif name == "plate_packaging_decide":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            payload = decide_package_publish(
+                str(args.get("package_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=str(args.get("note") or ""),
+                base_dir=bdir,
+            )
+        elif name == "plate_packaging_feed":
+            from pathlib import Path as _P
+
+            bdir = _P(str(args.get("base_dir") or ".agentic/packaging"))
+            payload = {
+                "items": packaging_feed_items(
+                    base_dir=bdir, limit=int(args.get("limit") or 8)
+                )
+            }
+        elif name == "plate_packaging_plan":
+            from pathlib import Path as _P
+
+            payload = plan_marketplace_package_op(
+                args.get("version"),
+                releases_dir=_P(str(args.get("releases_dir") or ".agentic/releases")),
+            )
+        elif name == "plate_feature_media_estimate_cost":
+            payload = estimate_feature_media_cost(
+                phase=str(args.get("phase") or "plan"),
+                quality=str(args.get("quality") or "medium"),
+            )
+        elif name == "plate_feature_media_plan":
+            br = args.get("budget_remaining")
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = plan_feature_media(
+                feature_number=args.get("feature_number") or args.get("feature"),
+                feature_title=str(args.get("feature_title") or args.get("title") or ""),
+                test_name=args.get("test_name"),
+                caption=args.get("caption"),
+                fragment_slug=args.get("fragment_slug"),
+                quality=str(args.get("quality") or "medium"),
+                budget_remaining=int(br) if br is not None else None,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_feature_media_register":
+            payload = register_capture(
+                str(args.get("record_id") or args.get("id") or ""),
+                gif_path=args.get("gif_path"),
+                video_path=args.get("video_path"),
+                size_bytes=args.get("size_bytes"),
+                quality=args.get("quality"),
+                capture_result=args.get("capture_result")
+                if isinstance(args.get("capture_result"), dict)
+                else None,
+                submit_for_approval=bool(args.get("submit_for_approval", True)),
+            )
+        elif name == "plate_feature_media_list":
+            payload = {
+                "records": list_feature_media(
+                    status=str(args.get("status") or "all"),
+                    feature_number=args.get("feature_number") or args.get("feature"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_feature_media_get":
+            payload = {
+                "record": get_feature_media(str(args.get("record_id") or args.get("id") or ""))
+            }
+        elif name == "plate_feature_media_decide":
+            payload = decide_feature_media(
+                str(args.get("record_id") or args.get("id") or ""),
+                str(args.get("decision") or "approve"),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=args.get("note"),
+            )
+        elif name == "plate_feature_media_skip":
+            payload = skip_feature_media(
+                str(args.get("record_id") or args.get("id") or ""),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_feature_media_attach_fragment":
+            payload = attach_to_fragment_file(
+                str(args.get("record_id") or args.get("id") or ""),
+                str(args.get("fragment_path") or args.get("fragment") or ""),
+            )
+        elif name == "plate_feature_media_feed":
+            payload = {"items": feature_media_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_scheduled_ops_list":
+            payload = {"ops": list_ops()}
+        elif name == "plate_scheduled_ops_status":
+            payload = scheduled_ops_status(
+                risk_tolerance=str(args.get("risk_tolerance") or "medium")
+            )
+        elif name == "plate_scheduled_op_plan":
+            payload = plan_op(
+                str(args.get("op_id") or args.get("id") or ""),
+                dry_run=bool(args.get("dry_run", True)),
+            )
+        elif name == "plate_scheduled_op_run":
+            br = args.get("budget_remaining")
+            if br is not None:
+                try:
+                    br = int(br)
+                except (TypeError, ValueError):
+                    br = None
+            use_live = args.get("use_live_budget")
+            if use_live is None:
+                use_live = True
+            payload = run_scheduled_op(
+                str(args.get("op_id") or args.get("id") or ""),
+                dry_run=bool(args.get("dry_run", True)),
+                risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+                approved=bool(args.get("approved") or False),
+                checkpoint_id=args.get("checkpoint_id"),
+                shadow_ack=args.get("shadow_ack") or None,
+                note=str(args.get("note") or ""),
+                budget_remaining=br,
+                use_live_budget=bool(use_live),
+            )
+        elif name == "plate_scheduled_op_runs":
+            payload = {
+                "runs": list_op_runs(
+                    op_id=args.get("op_id"),
+                    status=str(args.get("status") or "all"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_scheduled_op_complete":
+            payload = complete_op_run(
+                str(args.get("run_id") or args.get("id") or ""),
+                status=str(args.get("status") or "done"),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_scheduled_ops_feed":
+            payload = {
+                "items": ops_feed_items(
+                    risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+                    limit=int(args.get("limit") or 10),
+                )
+            }
+        elif name == "plate_task_create":
+            payload = create_task(
+                str(args.get("title") or ""),
+                human_action=str(args.get("human_action") or args.get("action") or ""),
+                why_agent_cannot=str(args.get("why_agent_cannot") or args.get("why") or ""),
+                context=str(args.get("context") or ""),
+                instructions=str(args.get("instructions") or ""),
+                done_signal=args.get("done_signal"),
+                related_links=args.get("related_links") or args.get("related"),
+                milestone=args.get("milestone"),
+                epic_milestone_name=args.get("epic_milestone"),
+                labels=list(args.get("labels") or []) if isinstance(args.get("labels"), list) else None,
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", False)),
+            )
+        elif name == "plate_task_close":
+            payload = close_task_with_signal(
+                int(args.get("number") or args.get("issue_number") or 0),
+                comment=str(args.get("comment") or args.get("note") or "Task complete."),
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", False)),
+            )
+        elif name == "plate_task_detect":
+            signals = args.get("signals")
+            if isinstance(signals, str):
+                signals = [signals]
+            payload = detect_and_create_tasks(
+                signals=list(signals) if isinstance(signals, list) else None,
+                text=str(args.get("text") or args.get("signal") or "") or None,
+                context=str(args.get("context") or ""),
+                repo=args.get("repo"),
+                dry_run=bool(args.get("dry_run", True)),
+                create=bool(args.get("create", False)),
+            )
+        elif name == "plate_collab_check":
+            labels = args.get("labels") or []
+            if isinstance(labels, str):
+                labels = [labels]
+            auth = None
+            if args.get("commits") or args.get("author_login"):
+                auth = analyze_pr_authorship(
+                    pr_number=args.get("pr_number"),
+                    author_login=args.get("author_login"),
+                    commits=list(args.get("commits") or []) if isinstance(args.get("commits"), list) else None,
+                )
+            paths = args.get("paths") or []
+            if isinstance(paths, str):
+                paths = [p.strip() for p in paths.split(",") if p.strip()]
+            payload = collab_policy_check(
+                str(args.get("action") or "delegate"),
+                labels=list(labels),
+                authorship=auth,
+                paths=list(paths) if paths else None,
+                branch=args.get("branch"),
+                worktree_root=args.get("worktree_root"),
+                repo_root=args.get("repo_root"),
+            )
+            payload["driver"] = get_driver(list(labels))
+            if auth is not None:
+                payload["authorship"] = auth.to_dict() if hasattr(auth, "to_dict") else auth
+        elif name == "plate_collab_issue_status":
+            issue = args.get("issue") or {}
+            if isinstance(issue, str):
+                issue = {"title": issue, "labels": args.get("labels") or []}
+            if not issue.get("labels") and args.get("labels"):
+                issue = dict(issue)
+                issue["labels"] = args.get("labels")
+            payload = collab_status_for_issue(issue if isinstance(issue, dict) else {})
+        elif name == "plate_collab_ownership_claim":
+            payload = claim_ownership(
+                kind=str(args.get("kind") or "path"),
+                target=str(args.get("target") or ""),
+                owner=str(args.get("owner") or "human"),
+                reason=str(args.get("reason") or ""),
+                related_issue=args.get("related_issue"),
+                actor=str(args.get("actor") or "human"),
+            )
+        elif name == "plate_collab_ownership_release":
+            payload = release_ownership(
+                args.get("claim_id") or args.get("id"),
+                kind=args.get("kind"),
+                target=args.get("target"),
+            )
+        elif name == "plate_collab_ownership_list":
+            payload = {
+                "claims": list_ownership_claims(
+                    status=str(args.get("status") or "open"),
+                    kind=args.get("kind"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_collab_etiquette":
+            payload = branch_etiquette_check(
+                args.get("branch"),
+                worktree_root=args.get("worktree_root"),
+                repo_root=args.get("repo_root"),
+            )
+        elif name == "plate_collab_concurrent":
+            paths = args.get("paths") or []
+            if isinstance(paths, str):
+                paths = [p.strip() for p in paths.split(",") if p.strip()]
+            payload = concurrent_edit_risk(list(paths))
+        elif name == "plate_collab_ownership_feed":
+            payload = {"items": ownership_feed_items(limit=int(args.get("limit") or 10))}
+        elif name == "plate_ledger_record":
+            payload = record_decision(
+                action_kind=str(args.get("action_kind") or "unknown"),
+                decision=str(args.get("decision") or "proceed"),
+                reason=str(args.get("reason") or ""),
+                sources=list(args.get("sources") or []),
+                cost_estimate_tokens=args.get("cost_estimate_tokens"),
+                risk_tolerance=str(args.get("risk_tolerance") or ""),
+                impact=str(args.get("impact") or ""),
+                related_issue=args.get("related_issue"),
+                related_pr=args.get("related_pr"),
+                shadow_id=args.get("shadow_id"),
+                checkpoint_id=args.get("checkpoint_id"),
+                artifact_links=list(args.get("artifact_links") or []),
+                actor=str(args.get("actor") or "agent"),
+                session=str(args.get("session") or ""),
+                metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
+            )
+        elif name == "plate_ledger_list":
+            payload = {
+                "decisions": list_decisions(
+                    action_kind=args.get("action_kind"),
+                    decision=args.get("decision"),
+                    related_issue=args.get("related_issue"),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_ledger_query":
+            payload = {
+                "decisions": query_decisions(
+                    str(args.get("query") or ""),
+                    limit=int(args.get("limit") or 50),
+                )
+            }
+        elif name == "plate_ledger_get":
+            payload = get_decision(str(args.get("decision_id") or args.get("id") or "")) or {
+                "error": "not found"
+            }
+        elif name == "plate_ledger_summary":
+            payload = ledger_summary(limit=int(args.get("limit") or 20))
         elif name == "plate_autonomy_run_cycle":
             max_steps = args.get("max_steps")
             if max_steps is not None:
@@ -344,7 +1846,67 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = engine.run_procedure(
                 proc_id=args.get("proc_id"),
                 dry_run=bool(args.get("dry_run", False)),
+                shadow_ack=args.get("shadow_ack"),
+                approved=bool(args.get("approved", False)),
+                checkpoint_id=args.get("checkpoint_id"),
             )
+        elif name == "plate_autonomy_simulate":
+            from .autonomy import simulate_autonomy_action
+            scope = args.get("scope") or {}
+            if isinstance(scope, str):
+                try:
+                    scope = json.loads(scope)
+                except Exception:
+                    scope = {"raw": scope}
+            payload = simulate_autonomy_action(
+                action_kind=str(args.get("action_kind") or args.get("action") or "unknown"),
+                repo=args.get("repo"),
+                scope=scope if isinstance(scope, dict) else {},
+            )
+        elif name == "plate_checkpoint_create":
+            from .autonomy import AutonomyEngine
+            eng = AutonomyEngine(args.get("repo"))
+            scope = args.get("scope") or {}
+            if isinstance(scope, str):
+                try:
+                    scope = json.loads(scope)
+                except Exception:
+                    scope = {"raw": scope}
+            payload = create_checkpoint(
+                title=str(args.get("title") or "Human checkpoint"),
+                reason=str(args.get("reason") or "Human judgment required"),
+                impact=str(args.get("impact") or "medium"),
+                action_kind=str(args.get("action_kind") or ""),
+                scope=scope if isinstance(scope, dict) else {},
+                shadow_id=args.get("shadow_id"),
+                related_issue=args.get("related_issue"),
+                related_pr=args.get("related_pr"),
+                created_by=str(args.get("created_by") or "agent"),
+                risk_tolerance=eng.risk_tolerance,
+                autonomy_enabled=eng.enabled,
+            )
+        elif name == "plate_checkpoint_decide":
+            payload = decide_checkpoint(
+                checkpoint_id=str(args.get("checkpoint_id") or args.get("id") or ""),
+                decision=str(args.get("decision") or ""),
+                decided_by=str(args.get("decided_by") or "human"),
+                note=str(args.get("note") or ""),
+            )
+        elif name == "plate_checkpoint_list":
+            st = args.get("status") or "pending"
+            if args.get("open_only"):
+                payload = {"checkpoints": list_open_checkpoints(limit=int(args.get("limit") or 50))}
+            else:
+                payload = {
+                    "checkpoints": list_checkpoints(
+                        status=None if st == "all" else st,
+                        limit=int(args.get("limit") or 50),
+                    )
+                }
+        elif name == "plate_checkpoint_get":
+            payload = get_checkpoint(str(args.get("checkpoint_id") or args.get("id") or "")) or {
+                "error": "not found"
+            }
         elif name == "plate_migrate_plan":
             plan = generate_migration_plan()
             if hasattr(plan, "to_dict"):
@@ -358,6 +1920,71 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
+        elif name == "plate_import_payload":
+            from .import_payload import import_payload
+
+            apply_mode = bool(args.get("apply", False))
+            dry = bool(args.get("dry_run", True))
+            if apply_mode:
+                dry = False
+            ns = args.get("namespace_scripts")
+            if ns is not None:
+                ns = bool(ns)
+            payload = import_payload(
+                target_dir=args.get("target_dir") or args.get("target") or ".",
+                strategy=str(args.get("strategy") or "safe"),
+                template_repo=args.get("template_repo"),
+                dry_run=dry,
+                apply=apply_mode,
+                namespace_scripts=ns,
+                escape_hatch_dir=args.get("escape_hatch_dir") or args.get("escape_hatch"),
+                escape_hatch_on_conflict=bool(args.get("escape_hatch_on_conflict", False)),
+            )
+        elif name == "plate_payload_list":
+            from .payload_surface import list_payload_files
+
+            payload = list_payload_files(
+                args.get("template_repo"),
+                include_excluded=bool(args.get("include_excluded", False)),
+            )
+        elif name == "plate_payload_root":
+            from .payload_surface import resolve_payload_root
+
+            payload = resolve_payload_root(args.get("template_repo"))
+        elif name == "plate_payload_manifest":
+            from .payload_surface import show_manifest
+
+            payload = show_manifest()
+        elif name == "plate_payload_classify":
+            from .payload_surface import classify_path
+
+            payload = classify_path(
+                str(args.get("path") or ""),
+                args.get("template_repo"),
+            )
+        elif name == "plate_spec_audit":
+            from .spec_audit import audit_spec
+
+            payload = audit_spec(
+                args.get("repo_root") or ".",
+                releases_dir=args.get("releases_dir"),
+                spec_path=args.get("spec_path") or args.get("spec"),
+            ).to_dict()
+        elif name == "plate_spec_audit_followups":
+            from .spec_audit import apply_audit_followups, audit_spec
+
+            report = audit_spec(
+                args.get("repo_root") or ".",
+                releases_dir=args.get("releases_dir"),
+                spec_path=args.get("spec_path") or args.get("spec"),
+            )
+            payload = apply_audit_followups(
+                report,
+                repo=args.get("repo"),
+                apply=bool(args.get("apply", False)),
+                max_issues=int(args.get("max_issues") or 10),
+            )
+            payload["audit_counts"] = report.counts
         elif name == "plate_perform_test_coverage_audit":
             from .mcp.audit_tools import PerformTestCoverageAuditTool
             payload = PerformTestCoverageAuditTool.execute(repo=repo, dry_run=args.get("dry_run", True))
@@ -424,14 +2051,28 @@ def run() -> None:
                         "tools": [
                             {
                                 "name": "plate_health",
-                                "description": "Return PLATE health summary for a repository.",
+                                "description": (
+                                    "Return PLATE health summary for a repository, "
+                                    "including local SPEC audit drift signals (#340)."
+                                ),
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "repo": {
                                             "type": "string",
                                             "description": "owner/name. Optional if running inside repo clone.",
-                                        }
+                                        },
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": (
+                                                "Local checkout root for SPEC audit filesystem "
+                                                "signals. Defaults to current working directory."
+                                            ),
+                                        },
+                                        "no_spec_audit": {
+                                            "type": "boolean",
+                                            "description": "When true, skip local SPEC audit summary.",
+                                        },
                                     },
                                 },
                             },
@@ -590,7 +2231,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_bootstrap",
-                                "description": "Plan or apply baseline PLATE bootstrap actions for a repository.",
+                                "description": "Plan or apply baseline PLATE bootstrap actions. Supports adoption mode (#619) via adopt=true for existing/mature repos.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -601,6 +2242,206 @@ def run() -> None:
                                         "apply": {
                                             "type": "boolean",
                                             "description": "When true, apply supported actions; default false (dry-run).",
+                                        },
+                                        "adopt": {
+                                            "type": "boolean",
+                                            "description": "Force adoption mode (true) or leave null for auto-detect; false forces greenfield.",
+                                        },
+                                        "existing_repo": {
+                                            "type": "boolean",
+                                            "description": "Alias for adopt=true.",
+                                        },
+                                        "local_root": {
+                                            "type": "string",
+                                            "description": "Local checkout path for adoption heuristics (default cwd).",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_adoption_status",
+                                "description": "Local adoption readiness checklist for <30m onboarding (#935/#633). Status only — no apply.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "no_optional": {
+                                            "type": "boolean",
+                                            "description": "When true, skip optional SPEC.md/CURRENT.md checks.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_adoption_first_qa_plan",
+                                "description": "First Q&A seed plan after adoption core_ready (#949/#633). Dry-run default; apply needs injectable runner.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "Attempt live seed (requires runner; default false).",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_adoption_session",
+                                "description": "Adoption wall-clock session timer for <30m proof (#955/#633). action=start|complete|status; local only.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "action": {
+                                            "type": "string",
+                                            "description": "start | complete | status (default status).",
+                                        },
+                                        "force": {
+                                            "type": "boolean",
+                                            "description": "Force restart when action=start.",
+                                        },
+                                        "require_core_ready": {
+                                            "type": "boolean",
+                                            "description": "When action=complete, refuse if core_ready is false.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_self_migrate_plan",
+                                "description": "Dry-run self-migrate plan for plate-core pin/payload drift (#939/#945/#649). No apply; network only if resolve_upstream+allow_network.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "target_version": {
+                                            "type": "string",
+                                            "description": "Optional target plate-core semver; default installed version.",
+                                        },
+                                        "no_payload": {
+                                            "type": "boolean",
+                                            "description": "When true, omit import-payload step from the plan.",
+                                        },
+                                        "resolve_upstream": {
+                                            "type": "boolean",
+                                            "description": "Attempt upstream version resolve (#945). Offline unless allow_network.",
+                                        },
+                                        "allow_network": {
+                                            "type": "boolean",
+                                            "description": "Permit live PyPI JSON fetch for resolve_upstream. Default false.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_self_migrate_merge_markers",
+                                "description": "Plan/apply PLATES-CORE marker sectional merge vs upstream files (#943/#649). Dry-run unless apply=true; no network.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "upstream_root": {
+                                            "type": "string",
+                                            "description": "Directory of upstream files mirroring relative paths.",
+                                        },
+                                        "paths": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "Relative paths to merge; default marker-bearing refresh files.",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "When true, write merged content. Default false (dry-run).",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_self_migrate_pr_plan",
+                                "description": "Low-risk self-migrate migration PR plan (#947/#649). Dry-run by default; apply needs injectable runner and low-risk pin-only eligibility.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "target_version": {
+                                            "type": "string",
+                                            "description": "Optional target plate-core semver.",
+                                        },
+                                        "base": {
+                                            "type": "string",
+                                            "description": "PR base branch (default release).",
+                                        },
+                                        "closes": {
+                                            "type": "string",
+                                            "description": "Optional issue ref for PR body.",
+                                        },
+                                        "no_payload": {
+                                            "type": "boolean",
+                                            "description": "Omit payload step from underlying migrate plan.",
+                                        },
+                                        "resolve_upstream": {
+                                            "type": "boolean",
+                                            "description": "Resolve upstream version for target.",
+                                        },
+                                        "allow_network": {
+                                            "type": "boolean",
+                                            "description": "Permit network for resolve_upstream.",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "Attempt live apply (requires runner; default false).",
+                                        },
+                                        "allow_high_risk": {
+                                            "type": "boolean",
+                                            "description": "Permit non-low-risk apply when runner provided.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_self_migrate_verify",
+                                "description": "Offline post-migrate verify: pin/payload drift + adoption core_ready + .plate validity (#965/#649). No writes, no network by default.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local checkout root (default cwd).",
+                                        },
+                                        "target_version": {
+                                            "type": "string",
+                                            "description": "Optional target plate-core semver.",
+                                        },
+                                        "no_payload": {
+                                            "type": "boolean",
+                                            "description": "Omit payload from underlying migrate plan when checking drift.",
+                                        },
+                                        "resolve_upstream": {
+                                            "type": "boolean",
+                                            "description": "Resolve upstream version for target.",
+                                        },
+                                        "allow_network": {
+                                            "type": "boolean",
+                                            "description": "Permit network for resolve_upstream. Default false.",
                                         },
                                     },
                                 },
@@ -683,10 +2524,312 @@ def run() -> None:
                                 },
                             },
                             {
+                                "name": "plate_planning_start",
+                                "description": "Start Q&A-driven feature (#630) or product (#628) planning session. Returns first question for ask_user_question. #634 budget gate.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "description": "feature | product"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_planning_answer",
+                                "description": "Record one planning answer and return next question or complete session (#628/#630).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "session": {"type": "object", "description": "Session dict from start/answer."},
+                                        "answer": {"type": "string"},
+                                        "question_id": {"type": "string"},
+                                    },
+                                    "required": ["session", "answer"],
+                                },
+                            },
+                            {
+                                "name": "plate_planning_build",
+                                "description": "Build Feature or product Epic stub plan from completed session answers for human approval (#628/#630). #634 budget gate.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "session": {"type": "object"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                    "required": ["session"],
+                                },
+                            },
+                            {
+                                "name": "plate_planning_script",
+                                "description": "Return the ordered planning question script for feature or product kind.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_planning_decide",
+                                "description": "Approve/revise/reject a pending Q&A plan stub (#628/#630). Revise stays actionable until resubmit. Does not auto-create GitHub issues.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string", "description": "Pending plan id"},
+                                        "decision": {
+                                            "type": "string",
+                                            "description": "approve | revise | reject",
+                                        },
+                                        "note": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                    },
+                                    "required": ["plan_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_planning_resubmit",
+                                "description": "Resubmit a revise_requested plan for re-approval (#630; parity with artifact resubmit).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "body": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "resubmitted_by": {"type": "string"},
+                                    },
+                                    "required": ["plan_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_planning_history",
+                                "description": "Decision/resubmit history for a Q&A plan id (#630).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                    "required": ["plan_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_planning_list_pending",
+                                "description": "List pending plan stubs, actionable (pending+revise), or planning feed items.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "feed": {
+                                            "type": "boolean",
+                                            "description": "If true, return planning_feed_items shape",
+                                        },
+                                        "actionable": {
+                                            "type": "boolean",
+                                            "description": "If true, pending + revise_requested plans",
+                                        },
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_er_planning_start",
+                                "description": "Start Q&A epic (#640) or release (#629) planning session. Returns first ask_user_question prompt. #634 budget gate.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "description": "epic | release"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                },
+                            },
+{
+                                "name": "plate_er_planning_answer",
+                                "description": "Record one epic/release planning answer; return next question or complete.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "session": {"type": "object"},
+                                        "answer": {"type": "string"},
+                                        "question_id": {"type": "string"},
+                                    },
+                                    "required": ["session", "answer"],
+                                },
+                            },
+{
+                                "name": "plate_er_planning_build",
+                                "description": "Build Epic tree or Release plan from session for human approval (#640/#629). #634 budget gate.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "session": {"type": "object"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                    "required": ["session"],
+                                },
+                            },
+{
+                                "name": "plate_er_planning_script",
+                                "description": "Return ordered epic or release planning questions.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_er_planning_decide",
+                                "description": "Approve/revise/reject a pending epic/release plan (#640/#629). Revise stays actionable until resubmit. Does not create issues or cut releases.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string"},
+                                        "decision": {
+                                            "type": "string",
+                                            "description": "approve | revise | reject",
+                                        },
+                                        "note": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                    },
+                                    "required": ["plan_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_er_planning_resubmit",
+                                "description": "Resubmit a revise_requested epic/release plan for re-approval (#640/#629; shared ledger with #630).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_id": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "body": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "resubmitted_by": {"type": "string"},
+                                    },
+                                    "required": ["plan_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_er_planning_list_pending",
+                                "description": "List pending/revise epic/release plans and incomplete ER sessions for the feed.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_artifact_propose",
+                                "description": "Propose a Design or Research artifact for human approval (#632). #634 budget gate. Durable under .agentic/approvals/.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "description": "design | research"},
+                                        "title": {"type": "string"},
+                                        "summary": {"type": "string"},
+                                        "content_path": {"type": "string"},
+                                        "content_excerpt": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "related_epic": {"type": "integer"},
+                                        "originating_question": {"type": "integer"},
+                                        "media_links": {"type": "array", "items": {"type": "string"}},
+                                        "actor": {"type": "string"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                    "required": ["kind", "title", "summary"],
+                                },
+                            },
+{
+                                "name": "plate_artifact_decide",
+                                "description": "Approve, revise, or reject a Design/Research proposal (#632).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "proposal_id": {"type": "string"},
+                                        "decision": {"type": "string", "description": "approve|revise|reject"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "open_checkpoint": {
+                                            "type": "boolean",
+                                            "description": "On revise, open #648 checkpoint if related_issue set",
+                                        },
+                                    },
+                                    "required": ["proposal_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_artifact_resubmit",
+                                "description": "Resubmit a revised Design/Research proposal after content update (#632). #634 budget gate.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "proposal_id": {"type": "string"},
+                                        "summary": {"type": "string"},
+                                        "content_path": {"type": "string"},
+                                        "content_excerpt": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "media_links": {"type": "array", "items": {"type": "string"}},
+                                        "actor": {"type": "string"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                    "required": ["proposal_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_artifact_history",
+                                "description": "Decision history for a Design/Research proposal (#632).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "proposal_id": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                    "required": ["proposal_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_artifact_list",
+                                "description": "List pending/actionable/authoritative Design/Research approval proposals (#632).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "description": "pending|revised|approved|rejected|actionable|all",
+                                        },
+                                        "kind": {"type": "string"},
+                                        "authoritative": {"type": "boolean"},
+                                        "actionable": {
+                                            "type": "boolean",
+                                            "description": "If true, list pending+revised",
+                                        },
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_artifact_get",
+                                "description": "Get one artifact approval proposal by id (#632).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "proposal_id": {"type": "string"},
+                                    },
+                                    "required": ["proposal_id"],
+                                },
+                            },
+                            {
                                 "name": "plate_pr_babysit",
                                 "description": (
-                                    "Inspect a pull request for unresolved third-party agent feedback and base branch sync state. "
-                                    "Optionally post trigger comments for the plate agent to address issues."
+                                    "Inspect a pull request for unresolved review feedback (scope: all|bot-only|human-only per #496) "
+                                    "and base branch sync state. Optionally post trigger comments and auto-resolve outdated threads (--act / act=true)."
                                 ),
                                 "inputSchema": {
                                     "type": "object",
@@ -701,11 +2844,16 @@ def run() -> None:
                                         },
                                         "agents": {
                                             "type": "string",
-                                            "description": "Optional comma-separated GitHub logins treated as third-party agents.",
+                                            "description": "Optional comma-separated login allowlist (overrides scope).",
+                                        },
+                                        "scope": {
+                                            "type": "string",
+                                            "enum": ["all", "bot-only", "human-only"],
+                                            "description": "pr_review_scope (#496). Default all (from .plate or built-in).",
                                         },
                                         "act": {
                                             "type": "boolean",
-                                            "description": "When true, post trigger comments if issues detected.",
+                                            "description": "When true, post trigger comments if issues detected and auto-resolve outdated threads.",
                                         },
                                         "branch_update_strategy": {
                                             "type": "string",
@@ -757,7 +2905,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_get_actionable_review_threads",
-                                "description": "List actionable (unresolved, non-outdated, from target agents) review threads for a PR. High-level encapsulated helper: handles GraphQL (reviewThreads first:100 + nodes), databaseId, author filtering, body extraction internally. Use with plate_resolve_review_thread (or via plate_pr_babysit) instead of raw GraphQL/jq/mktemp/ANSI. Addresses #516.",
+                                "description": "List actionable (unresolved, non-outdated) review threads for a PR under pr_review_scope (#496: all|bot-only|human-only; default all includes Copilot). High-level helper: GraphQL reviewThreads, databaseId, suggestion metadata. Use with plate_resolve_review_thread / plate_pr_babysit. Addresses #516/#496.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -771,7 +2919,12 @@ def run() -> None:
                                         },
                                         "agent_logins": {
                                             "type": "string",
-                                            "description": "Comma-separated logins to match (optional; defaults to known third-party agent patterns).",
+                                            "description": "Comma-separated login allowlist (optional; overrides scope).",
+                                        },
+                                        "scope": {
+                                            "type": "string",
+                                            "enum": ["all", "bot-only", "human-only"],
+                                            "description": "pr_review_scope (#496). Default all.",
                                         },
                                     },
                                     "required": ["pr_number"],
@@ -791,6 +2944,19 @@ def run() -> None:
                                             "type": "string",
                                             "description": "Optional hint for specialized guidance (general, coding, docs, etc.).",
                                         },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feed",
+                                "description": "Ranked endless feed of open Questions + Tasks (plus process/autonomy signals) for native TUI/CLI presentation (#631). Prefer this for user-facing Q&A/Task surfacing.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "limit": {"type": "integer", "description": "Max items (default 10)."},
+                                        "include_process": {"type": "boolean", "description": "Include plate_what_next process item (default true)."},
+                                        "include_autonomy": {"type": "boolean", "description": "Include open autonomy checkpoints (default true)."},
                                     },
                                 },
                             },
@@ -938,6 +3104,17 @@ def run() -> None:
                                 },
                             },
                             {
+                                "name": "plate_release_repair",
+                                "description": "Init/repair standing release tracks (release-major/minor/patch + legacy release) and ensure exactly one Next Release issue (#320). Default dry-run; set apply=true to create missing artifacts.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "apply": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
                                 "name": "plate_release_status",
                                 "description": "Return the current PLATE release status: release branch existence, open Release issues, active Next Release visibility, linked/on-hold Epics, track summary, pending unreleased fragments, and extension release checks.",
                                 "inputSchema": {
@@ -1020,7 +3197,7 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_costs",
-                                "description": "Harvest USAGE REPORT blocks from closed issues (per AGENTS.md), aggregate tokens/cost/duration for observability (Epic #265). Supports epic_label filter. Emits JSON + MD.",
+                                "description": "Harvest USAGE REPORT blocks from closed issues (per AGENTS.md), aggregate tokens/cost/duration for observability (Epic #265). Set dashboard=true for cost+risk dashboard with budgets, burn rate, drift signals, ranked feed items (#653/#634).",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
@@ -1031,6 +3208,10 @@ def run() -> None:
                                         "epic_label": {
                                             "type": "string",
                                             "description": "Optional 'Epic: foo' label to scope aggregation.",
+                                        },
+                                        "dashboard": {
+                                            "type": "boolean",
+                                            "description": "When true, return cost+risk dashboard (#653/#634) instead of raw aggregate.",
                                         },
                                     },
                                     "required": [],
@@ -1043,6 +3224,1490 @@ def run() -> None:
                                     "type": "object",
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_autonomy_budget",
+                                "description": "Durable #634 budget snapshot: limits, spend.json counters, remaining tokens/USD, pressure, optional estimate would_pause/throttle. Set reset=true to zero today's spend counters (operator hygiene; does not change .plate limits).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "estimated_tokens": {
+                                            "type": "integer",
+                                            "description": "Optional estimate to project would_pause/throttle.",
+                                        },
+                                        "estimate_tokens": {
+                                            "type": "integer",
+                                            "description": "Alias for estimated_tokens.",
+                                        },
+                                        "reset": {
+                                            "type": "boolean",
+                                            "description": "When true, zero durable spend.json for the current UTC day and return post-reset snapshot fields.",
+                                        },
+                                        "reset_reason": {
+                                            "type": "string",
+                                            "description": "Optional note stored on spend.json when reset=true.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_pm_status",
+                                "description": "Project Manager orchestrator status: budget, team size, open assignments/checkpoints (#660).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"repo": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_pm_team",
+                                "description": "List pre-defined PM sub-agent personas (dev/design/research/release) (#660).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_pm_assign",
+                                "description": "Budget-aware assignment of one work item to a persona (#660).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "item": {"type": "object"},
+                                    },
+                                    "required": ["item"],
+                                },
+                            },
+                            {
+                                "name": "plate_pm_run_cycle",
+                                "description": "Run one PM orchestration cycle: collect work, assign personas, respect budget/checkpoints; may dispatch fleet/loops and tick delegated #638/#639 loops (#660). Default dry_run=true.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "max_assignments": {"type": "integer"},
+                                        "dispatch_fleet": {"type": "boolean"},
+                                        "dispatch_loops": {"type": "boolean"},
+                                        "tick_loops": {
+                                            "type": "boolean",
+                                            "description": "Sync loop stages and complete assignments when loops done (default true).",
+                                        },
+                                        "fetch_loop_gates": {
+                                            "type": "boolean",
+                                            "description": "When apply (dry_run=false), fetch PR gates on babysit ticks.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_pm_run_loop",
+                                "description": "Multi-cycle PM orchestrator loop with stop on checkpoints/budget/idle (#660). Default dry_run=true.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "max_cycles": {"type": "integer"},
+                                        "max_assignments": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_pm_queue",
+                                "description": "List durable PM assignment queue (.agentic/pm/queue.json) with ask_user_question payloads (#660).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "status": {
+                                            "type": "string",
+                                            "description": "proposed|delegated|blocked|done|cancelled|all",
+                                        },
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_pm_complete",
+                                "description": "Mark a PM assignment done/cancelled, or Approve & run (status=run|approve) to promote proposed→delegated with fleet/loop dispatch under explicit human consent (#660). Works when risk=off.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "assignment_id": {"type": "string"},
+                                        "status": {
+                                            "type": "string",
+                                            "description": "done|cancelled|run|approve|delegated|proposed|blocked",
+                                        },
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["assignment_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_pm_tick_loops",
+                                "description": "Tick delegated #638/#639 loops only (sync stages, auto-advance estimate_cost, optional babysit gates, complete-on-done) without new PM assigns (#660).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "fetch_gates": {"type": "boolean"},
+                                        "fetch_loop_gates": {"type": "boolean"},
+                                        "limit": {"type": "integer"},
+                                        "complete_when_done": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_status",
+                                "description": "Multi-agent fleet status: roles, active handoffs, budget allocation (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "budget_tokens": {"type": "integer"},
+                                        "risk_tolerance": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_roles",
+                                "description": "List fleet agent roles (planner/implementer/reviewer/researcher/deployer/market) (#644).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_fleet_handoff",
+                                "description": "Create explicit agent→agent handoff packet with narrow context; #634 live budget gate (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "from_agent": {"type": "string"},
+                                        "to_agent": {"type": "string"},
+                                        "task": {"type": "string"},
+                                        "context": {"type": "object"},
+                                        "artifacts": {"type": "array", "items": {"type": "string"}},
+                                        "constraints": {"type": "array", "items": {"type": "string"}},
+                                        "budget_tokens": {"type": "integer"},
+                                        "budget_remaining": {
+                                            "type": "integer",
+                                            "description": "Explicit remaining tokens; blocks when est exceeds remaining (#634).",
+                                        },
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate remaining from durable spend when budget_remaining omitted (default true).",
+                                        },
+                                        "risk": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "related_pr": {"type": "integer"},
+                                        "parent_handoff_id": {"type": "string"},
+                                        "requires_human": {"type": "boolean"},
+                                    },
+                                    "required": ["to_agent", "task"],
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_update",
+                                "description": "Update handoff status (accepted|done|blocked|cancelled); high/critical accept needs shadow_ack + approved (#644/#645).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "handoff_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "notes": {"type": "string"},
+                                        "artifacts": {"type": "array", "items": {"type": "string"}},
+                                        "context": {"type": "object"},
+                                        "shadow_ack": {
+                                            "type": "string",
+                                            "description": "shadow_id for high/critical accept (#645/#883).",
+                                        },
+                                        "approved": {
+                                            "type": "boolean",
+                                            "description": "Human approval for high/critical accept.",
+                                        },
+                                        "checkpoint_id": {
+                                            "type": "string",
+                                            "description": "Approved #648 checkpoint id supplying shadow/approval.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_complete",
+                                "description": "Mark a fleet handoff done (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "handoff_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "notes": {"type": "string"},
+                                        "artifacts": {"type": "array", "items": {"type": "string"}},
+                                    },
+                                    "required": ["handoff_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_list",
+                                "description": "List fleet handoffs (default active) (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "to_agent": {"type": "string"},
+                                        "from_agent": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_allocate",
+                                "description": "Allocate token budget across concurrent fleet agents (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "budget_tokens": {"type": "integer"},
+                                        "active_roles": {"type": "array", "items": {"type": "string"}},
+                                        "risk_tolerance": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_plan",
+                                "description": "Plan multi-agent handoffs from high-level intent; optional create; #634 live budget hydrate (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "intent": {"type": "string"},
+                                        "task": {"type": "string"},
+                                        "budget_tokens": {
+                                            "type": "integer",
+                                            "description": "Explicit total pool; when omitted hydrates from durable remaining (#634).",
+                                        },
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate pool from spend.json when budget_tokens omitted (default true).",
+                                        },
+                                        "risk_tolerance": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "create": {"type": "boolean"},
+                                        "apply": {"type": "boolean"},
+                                    },
+                                    "required": ["intent"],
+                                },
+                            },
+                            {
+                                "name": "plate_fleet_feed",
+                                "description": "Feed presentation items for active fleet handoffs (#644).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_discussions",
+                                "description": "Review Discussions/Ideas into ranked stub issue proposals (#642). #634 budget gate. dry_run default true.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "discussions": {"type": "array", "items": {"type": "object"}},
+                                        "dry_run": {"type": "boolean"},
+                                        "fetch_live": {"type": "boolean"},
+                                        "persist": {"type": "boolean"},
+                                        "min_score": {"type": "number"},
+                                        "limit": {"type": "integer"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_market",
+                                "description": "Synthesize host-injected market signals into Question proposals (#642). #634 budget gate. No outbound network.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "signals": {"type": "array", "items": {"type": "object"}},
+                                        "dry_run": {"type": "boolean"},
+                                        "persist": {"type": "boolean"},
+                                        "min_score": {"type": "number"},
+                                        "limit": {"type": "integer"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_list",
+                                "description": "List monitoring proposals (default pending) (#642).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "source": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_decide",
+                                "description": "Approve/reject/created a monitoring proposal (#642).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "proposal_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "created_issue": {"type": "integer"},
+                                    },
+                                    "required": ["proposal_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_monitor_feed",
+                                "description": "Feed presentation for pending monitoring proposals (#642).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_stub_author",
+                                "description": "Author a local stub Issue draft of any PLATE type from intent/Q&A (#637). #634 budget gate.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "intent": {"type": "string"},
+                                        "task": {"type": "string"},
+                                        "issue_type": {"type": "string"},
+                                        "type": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "summary": {"type": "string"},
+                                        "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "parent_epic": {},
+                                        "milestone": {},
+                                        "related_links": {"type": "array", "items": {"type": "string"}},
+                                        "source": {"type": "string"},
+                                        "labels": {"type": "array", "items": {"type": "string"}},
+                                        "persist": {"type": "boolean"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                    "required": ["intent"],
+                                },
+                            },
+                            {
+                                "name": "plate_stub_refine",
+                                "description": "Refine a stub draft with Q&A answers / AC / type changes (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "draft_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "answers": {"type": "object"},
+                                        "add_acceptance": {"type": "array", "items": {"type": "string"}},
+                                        "summary_append": {"type": "string"},
+                                        "issue_type": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "mark_ready": {"type": "boolean"},
+                                    },
+                                    "required": ["draft_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_stub_create",
+                                "description": "Create GitHub issue from stub draft (dry_run default true) (#637). #634 budget gate.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "draft_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_stub_list",
+                                "description": "List local stub drafts (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "issue_type": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_stub_get",
+                                "description": "Get one stub draft by id (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "draft_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                    },
+                                    "required": ["draft_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_stub_author_create",
+                                "description": "Author stub then dry-run/create GitHub issue in one call (#637). #634 budget gate.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "intent": {"type": "string"},
+                                        "issue_type": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "summary": {"type": "string"},
+                                        "repo": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "source": {"type": "string"},
+                                        "parent_epic": {},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                    "required": ["intent"],
+                                },
+                            },
+                            {
+                                "name": "plate_stub_feed",
+                                "description": "Feed presentation for stub drafts awaiting create/refine (#637).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_start",
+                                "description": "Start autonomous bug resolution loop run (#638): plan→TDD→PR→babysit→merge-eligible; budget estimate + live hydrate (#634).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "bug_number": {"type": "integer"},
+                                        "bug": {"type": "integer"},
+                                        "bug_title": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "risk": {"type": "string"},
+                                        "size": {
+                                            "type": "string",
+                                            "description": "trivial|small|medium|large for cost estimate",
+                                        },
+                                        "labels": {"type": "array", "items": {"type": "string"}},
+                                        "paths": {"type": "array", "items": {"type": "string"}},
+                                        "risk_tolerance": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "pr": {"type": "integer"},
+                                        "branch": {"type": "string"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate remaining tokens from durable spend when budget_remaining omitted (default true).",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_advance",
+                                "description": "Advance bug loop one stage; babysit stage honors optional merge gates (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "branch": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "force_skip_checkpoint": {"type": "boolean"},
+                                        "gates": {"type": "object"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_tick",
+                                "description": "One bug-loop tick: emit stage packet; optional gate fetch; auto-advance only if dry_run=false (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "fetch_gates": {"type": "boolean"},
+                                        "repo": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_list",
+                                "description": "List bug resolution loop runs (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_get",
+                                "description": "Get one bug loop run (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_cancel",
+                                "description": "Cancel a bug loop run (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_update",
+                                "description": "Update bug loop fields (stage, pr, branch, checkpoint) (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "stage": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "branch": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "checkpoint_id": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_bug_loop_feed",
+                                "description": "Feed presentation for active bug resolution loops (#638).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_feature_loop_estimate",
+                                "description": "Upfront cost estimate for a Feature implementation loop (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "size": {"type": "string"},
+                                        "needs_design_validation": {"type": "boolean"},
+                                        "design": {"type": "boolean"},
+                                        "needs_media": {"type": "boolean"},
+                                        "e2e": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_loop_start",
+                                "description": "Start Feature loop: estimate→plan→TDD→docs→media→babysit→merge-eligible (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "feature_number": {"type": "integer"},
+                                        "feature": {"type": "integer"},
+                                        "feature_title": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "risk": {"type": "string"},
+                                        "size": {"type": "string"},
+                                        "labels": {"type": "array", "items": {"type": "string"}},
+                                        "paths": {"type": "array", "items": {"type": "string"}},
+                                        "risk_tolerance": {"type": "string"},
+                                        "needs_design_validation": {"type": "boolean"},
+                                        "needs_media_approval": {"type": "boolean"},
+                                        "e2e": {"type": "boolean"},
+                                        "pr_number": {"type": "integer"},
+                                        "branch": {"type": "string"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "When true (default), hydrate remaining tokens from durable #634 snapshot if budget_remaining omitted.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_loop_advance",
+                                "description": "Advance Feature loop one stage; babysit honors optional merge gates (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "branch": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "force_skip_checkpoint": {"type": "boolean"},
+                                        "skip_media": {"type": "boolean"},
+                                        "gates": {"type": "object"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_loop_tick",
+                                "description": "One Feature-loop tick with optional gate fetch (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "fetch_gates": {"type": "boolean"},
+                                        "repo": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_loop_list",
+                                "description": "List Feature implementation loop runs (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_loop_get",
+                                "description": "Get one Feature loop run (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"run_id": {"type": "string"}},
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_loop_cancel",
+                                "description": "Cancel a Feature loop run (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_loop_update",
+                                "description": "Update Feature loop fields (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "stage": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "branch": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "checkpoint_id": {"type": "string"},
+                                        "cost_estimate_tokens": {"type": "integer"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_loop_feed",
+                                "description": "Feed presentation for active Feature loops (#639).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_propose",
+                                "description": "Propose visual/interaction design contract for a Feature with failing-test scaffold (#646). #634 budget gate.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "feature_number": {"type": "integer"},
+                                        "feature_title": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "visual_specs": {"type": "array", "items": {"type": "string"}},
+                                        "interaction_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "a11y_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "artifact_paths": {"type": "array", "items": {"type": "string"}},
+                                        "has_playwright": {"type": "boolean"},
+                                        "submit_for_approval": {"type": "boolean"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_list",
+                                "description": "List design contracts (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "feature_number": {"type": "integer"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_get",
+                                "description": "Get one design contract (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"contract_id": {"type": "string"}},
+                                    "required": ["contract_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_decide",
+                                "description": "Approve/reject/revise a design contract (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "contract_id": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["contract_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_update",
+                                "description": "Update design contract criteria (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "contract_id": {"type": "string"},
+                                        "visual_specs": {"type": "array", "items": {"type": "string"}},
+                                        "interaction_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "a11y_criteria": {"type": "array", "items": {"type": "string"}},
+                                        "artifact_paths": {"type": "array", "items": {"type": "string"}},
+                                        "status": {"type": "string"},
+                                    },
+                                    "required": ["contract_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_validate",
+                                "description": "Check if design contract is ready for Feature implementation (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"contract_id": {"type": "string"}},
+                                    "required": ["contract_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_scaffold",
+                                "description": "Generate failing design-contract test scaffold (python|typescript) (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "contract_id": {"type": "string"},
+                                        "language": {"type": "string"},
+                                    },
+                                    "required": ["contract_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_design_contract_feed",
+                                "description": "Feed presentation for pending design contracts (#646).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_manifest",
+                                "description": "Aggregate GIF/video media from unreleased fragments for release notes (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "releases_dir": {"type": "string"},
+                                        "version": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_render",
+                                "description": "Render release media markdown from fragments (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "releases_dir": {"type": "string"},
+                                        "only_approved": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_feed",
+                                "description": "Feed items for pending release media approval (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"releases_dir": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_validate_paths",
+                                "description": "Check that fragment media paths exist on disk (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"releases_dir": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_release_media_decide",
+                                "description": "Approve/reject a media item in-memory (persist by editing fragment) (#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "releases_dir": {"type": "string"},
+                                        "index": {"type": "integer"},
+                                        "path": {"type": "string"},
+                                        "url": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_list_kinds",
+                                "description": "List hybrid/non-code project kinds (software, docs, marketing, infra, …) (#650).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_hybrid_list_artifacts",
+                                "description": "List generalized artifact types for hybrid projects (#650).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_hybrid_list_validation",
+                                "description": "List validation strategies (link check, content lint, visual, IaC plan, …) (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"kind": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_detect",
+                                "description": "Detect project kind from filesystem signals (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"repo_root": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_set_kind",
+                                "description": "Persist explicit project kind override (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["kind"],
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_profile",
+                                "description": "Load persisted or detected hybrid project profile (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "base_dir": {"type": "string"},
+                                        "repo_root": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_contract",
+                                "description": "Full contract for a project kind: artifacts, validation, deploy targets (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"kind": {"type": "string"}},
+                                    "required": ["kind"],
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_planning_template",
+                                "description": "Q&A planning template tuned to project kind (#650/#628).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"kind": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_validation_plan",
+                                "description": "Feature-level validation plan for non-code or hybrid work (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
+                                        "feature_title": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "artifact_types": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_hybrid_feed",
+                                "description": "Feed items for hybrid project profile detection/confirmation (#650).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "base_dir": {"type": "string"},
+                                        "repo_root": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_build",
+                                "description": "Build marketplace/release package with media, user narratives, onboarding proof, and planning links (#652). #634 budget gate. Never publishes.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "version": {"type": "string"},
+                                        "releases_dir": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                        "require_approved_media": {"type": "boolean"},
+                                        "no_persist": {"type": "boolean"},
+                                        "budget_remaining": {
+                                            "type": "integer",
+                                            "description": "Explicit remaining tokens; blocks when est exceeds remaining (#634).",
+                                        },
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate remaining from durable spend when budget_remaining omitted (default true).",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_list",
+                                "description": "List persisted marketplace package builds (#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "base_dir": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_get",
+                                "description": "Get one marketplace package build by id (#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "package_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_render",
+                                "description": "Render marketplace package markdown (media + narratives + onboarding) (#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "package_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "version": {"type": "string"},
+                                        "releases_dir": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_decide",
+                                "description": "Approve package for human publish or reject (#652). Never publishes credentials/secrets.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "package_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                        "base_dir": {"type": "string"},
+                                    },
+                                    "required": ["package_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_feed",
+                                "description": "Feed items for marketplace packages awaiting review/publish Tasks (#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "base_dir": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_packaging_plan",
+                                "description": "Agent packet for marketplace-package scheduled op (#641/#652).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "version": {"type": "string"},
+                                        "releases_dir": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_estimate_cost",
+                                "description": "Advisory token estimate for Feature media plan/register (#634/#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "phase": {
+                                            "type": "string",
+                                            "description": "plan|register",
+                                        },
+                                        "quality": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_plan",
+                                "description": "Plan per-Feature demo GIF capture (test_name + path + steps) (#636). Gates on live #634 budget when use_live_budget.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "feature_number": {"type": "integer"},
+                                        "feature_title": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "test_name": {"type": "string"},
+                                        "caption": {"type": "string"},
+                                        "fragment_slug": {"type": "string"},
+                                        "quality": {"type": "string"},
+                                        "budget_remaining": {"type": "integer"},
+                                        "use_live_budget": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_register",
+                                "description": "Register record_e2e_gif result for a Feature media plan (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "record_id": {"type": "string"},
+                                        "gif_path": {"type": "string"},
+                                        "video_path": {"type": "string"},
+                                        "size_bytes": {"type": "integer"},
+                                        "quality": {"type": "string"},
+                                        "capture_result": {"type": "object"},
+                                        "submit_for_approval": {"type": "boolean"},
+                                    },
+                                    "required": ["record_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_list",
+                                "description": "List Feature media registry records (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "feature_number": {"type": "integer"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_get",
+                                "description": "Get one Feature media record (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"record_id": {"type": "string"}},
+                                    "required": ["record_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_decide",
+                                "description": "Approve/reject Feature demo media (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "record_id": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["record_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_skip",
+                                "description": "Skip media requirement for a Feature (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "record_id": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["record_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_attach_fragment",
+                                "description": "Append approved media to unreleased fragment media[] (#636/#635).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "record_id": {"type": "string"},
+                                        "fragment_path": {"type": "string"},
+                                        "fragment": {"type": "string"},
+                                    },
+                                    "required": ["record_id", "fragment_path"],
+                                },
+                            },
+                            {
+                                "name": "plate_feature_media_feed",
+                                "description": "Feed presentation for planned/pending Feature media (#636).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_ops_list",
+                                "description": "List scheduled autonomous ops catalog (#641).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_scheduled_ops_status",
+                                "description": "Runnable vs gated scheduled ops at current risk_tolerance (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"risk_tolerance": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_op_plan",
+                                "description": "Emit agent step packet for a scheduled op (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "op_id": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                    },
+                                    "required": ["op_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_op_run",
+                                "description": "Run/record scheduled op (dry_run default; live high/critical need approved + shadow_ack; #634 budget gate) (#641/#645).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "op_id": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                        "risk_tolerance": {"type": "string"},
+                                        "approved": {"type": "boolean"},
+                                        "checkpoint_id": {"type": "string"},
+                                        "shadow_ack": {
+                                            "type": "string",
+                                            "description": "shadow_id from prior dry-run or plate_autonomy_simulate for live high/critical (#645/#879).",
+                                        },
+                                        "note": {"type": "string"},
+                                        "budget_remaining": {
+                                            "type": "integer",
+                                            "description": "Explicit remaining tokens; blocks when est exceeds remaining (#634).",
+                                        },
+                                        "use_live_budget": {
+                                            "type": "boolean",
+                                            "description": "Hydrate remaining from durable spend.json when budget_remaining omitted (default true).",
+                                        },
+                                    },
+                                    "required": ["op_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_op_runs",
+                                "description": "List scheduled op runs (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "op_id": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_op_complete",
+                                "description": "Mark a scheduled op run done/cancelled (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "run_id": {"type": "string"},
+                                        "status": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["run_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_scheduled_ops_feed",
+                                "description": "Feed items for gated scheduled ops needing human (#641).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "risk_tolerance": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_task_create",
+                                "description": "Create a human-only Task issue with the 6-field contract (#359). Redacts secret-looking text. Agents never complete the human work.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "human_action": {"type": "string"},
+                                        "why_agent_cannot": {"type": "string"},
+                                        "context": {"type": "string"},
+                                        "instructions": {"type": "string"},
+                                        "done_signal": {"type": "string"},
+                                        "related_links": {"type": "string"},
+                                        "milestone": {"type": "string"},
+                                        "epic_milestone": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                    },
+                                    "required": ["title", "human_action", "why_agent_cannot", "context", "instructions"],
+                                },
+                            },
+                            {
+                                "name": "plate_task_close",
+                                "description": "Close a Task with <!-- PLATE-TASK-CLOSED --> after human completion (#359). Do not invent completion.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "number": {"type": "integer"},
+                                        "comment": {"type": "string"},
+                                        "dry_run": {"type": "boolean"},
+                                    },
+                                    "required": ["number"],
+                                },
+                            },
+                            {
+                                "name": "plate_task_detect",
+                                "description": "Detect human-only blockers (credentials, PyPI, billing, marketplace, external accounts) and optionally create Task issues (#360). Default detect-only (create=false, dry_run=true).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string"},
+                                        "text": {"type": "string"},
+                                        "signal": {"type": "string"},
+                                        "signals": {"type": "array", "items": {"type": "string"}},
+                                        "context": {"type": "string"},
+                                        "create": {"type": "boolean"},
+                                        "dry_run": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_collab_check",
+                                "description": "Human/agent co-existence policy check (#643/#651): gate actions against driver:* labels, authorship mix, path/branch ownership, and worktree etiquette.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "action": {"type": "string"},
+                                        "labels": {"type": "array", "items": {"type": "string"}},
+                                        "author_login": {"type": "string"},
+                                        "pr_number": {"type": "integer"},
+                                        "commits": {"type": "array", "items": {"type": "object"}},
+                                        "paths": {"type": "array", "items": {"type": "string"}},
+                                        "branch": {"type": "string"},
+                                        "worktree_root": {"type": "string"},
+                                        "repo_root": {"type": "string"},
+                                    },
+                                    "required": ["action"],
+                                },
+                            },
+                            {
+                                "name": "plate_collab_issue_status",
+                                "description": "Summarize driver:* / pause-delegation state for an issue (#643).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "issue": {"type": "object"},
+                                        "labels": {"type": "array", "items": {"type": "string"}},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_collab_ownership_claim",
+                                "description": "Claim path or branch ownership to pause agent autonomy on that surface (#651). Durable under .agentic/collab/ownership.json.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "description": "path|branch"},
+                                        "target": {"type": "string"},
+                                        "owner": {"type": "string", "description": "human|agent|collaborative"},
+                                        "reason": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "actor": {"type": "string"},
+                                    },
+                                    "required": ["target"],
+                                },
+                            },
+                            {
+                                "name": "plate_collab_ownership_release",
+                                "description": "Release a path/branch ownership claim by id or kind+target (#651).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "claim_id": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "kind": {"type": "string"},
+                                        "target": {"type": "string"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_collab_ownership_list",
+                                "description": "List ownership claims (default open) (#651).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "kind": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_collab_etiquette",
+                                "description": "Branch/worktree etiquette check for agents (#651): integration branch + isolation.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "branch": {"type": "string"},
+                                        "worktree_root": {"type": "string"},
+                                        "repo_root": {"type": "string"},
+                                    },
+                                    "required": ["branch"],
+                                },
+                            },
+                            {
+                                "name": "plate_collab_concurrent",
+                                "description": "Predict concurrent-edit risk from open ownership claims for given paths (#651).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "paths": {"type": "array", "items": {"type": "string"}},
+                                    },
+                                    "required": ["paths"],
+                                },
+                            },
+                            {
+                                "name": "plate_collab_ownership_feed",
+                                "description": "Feed presentation items for open human/collaborative ownership pauses (#651).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_record",
+                                "description": "Append an inspectable PLATE-DECISION provenance entry for an autonomous action (#647). Durable under .agentic/ledger/.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "action_kind": {"type": "string"},
+                                        "decision": {"type": "string", "description": "proceed|throttle|pause|warn|skip|approve|reject|..."},
+                                        "reason": {"type": "string"},
+                                        "sources": {"type": "array", "items": {"type": "string"}},
+                                        "cost_estimate_tokens": {"type": "integer"},
+                                        "risk_tolerance": {"type": "string"},
+                                        "impact": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "related_pr": {"type": "integer"},
+                                        "shadow_id": {"type": "string"},
+                                        "checkpoint_id": {"type": "string"},
+                                        "artifact_links": {"type": "array", "items": {"type": "string"}},
+                                        "actor": {"type": "string"},
+                                        "session": {"type": "string"},
+                                        "metadata": {"type": "object"},
+                                    },
+                                    "required": ["action_kind", "decision", "reason"],
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_list",
+                                "description": "List recent decision ledger entries (#647), optional filters.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "action_kind": {"type": "string"},
+                                        "decision": {"type": "string"},
+                                        "related_issue": {"type": "integer"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_query",
+                                "description": "Substring search over decision ledger reason/sources/metadata (#647).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "query": {"type": "string"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                    "required": ["query"],
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_get",
+                                "description": "Get one decision ledger entry by id (#647).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "decision_id": {"type": "string"},
+                                    },
+                                    "required": ["decision_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_summary",
+                                "description": "Compact decision ledger summary counts (#647).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "limit": {"type": "integer"},
                                     },
                                 },
                             },
@@ -1070,15 +4735,94 @@ def run() -> None:
                             },
                             {
                                 "name": "plate_autonomy_run_procedure",
-                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run.",
+                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run. High-risk procedures may return shadow_required (#645) unless approved after plate_autonomy_simulate or an approved #648 checkpoint_id.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "proc_id": {"type": "string", "description": "Procedure id e.g. nightly-drift-detection"},
                                         "dry_run": {"type": "boolean", "description": "Default false."},
+                                        "shadow_ack": {"type": "string", "description": "shadow_id from plate_autonomy_simulate (#645)."},
+                                        "approved": {"type": "boolean", "description": "Explicit human approval after shadow preview (#645)."},
+                                        "checkpoint_id": {"type": "string", "description": "Approved #648 checkpoint id; supplies approval (+ shadow_id when present)."},
                                     },
                                     "required": ["proc_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_autonomy_simulate",
+                                "description": "Shadow/simulate a high-impact autonomous action without side effects (#645). Returns impact, cost/duration estimates, predicted side effects, gate preview, requires_approval, and shadow_id for later approval + execute.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "action_kind": {
+                                            "type": "string",
+                                            "description": "Action to simulate e.g. release_cut, deploy, auto_merge, run_procedure, plan_epic.",
+                                        },
+                                        "scope": {
+                                            "type": "object",
+                                            "description": "Optional context (version, pr_number, risk_level, etc.).",
+                                        },
+                                    },
+                                    "required": ["action_kind"],
+                                },
+                            },
+                            {
+                                "name": "plate_checkpoint_create",
+                                "description": "Create a unified human checkpoint/approval request (#648). Durable under .agentic/checkpoints/; returns marker for GitHub comments. Can auto-approve low impact at medium+ risk_tolerance.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "title": {"type": "string", "description": "Short checkpoint title for the feed."},
+                                        "reason": {"type": "string", "description": "Why human judgment is required."},
+                                        "impact": {"type": "string", "description": "low|medium|high|critical"},
+                                        "action_kind": {"type": "string", "description": "Gated action e.g. release_cut, deploy, design_approve."},
+                                        "scope": {"type": "object", "description": "Optional context payload."},
+                                        "shadow_id": {"type": "string", "description": "Optional #645 shadow_id to attach."},
+                                        "related_issue": {"type": "integer"},
+                                        "related_pr": {"type": "integer"},
+                                        "created_by": {"type": "string"},
+                                    },
+                                    "required": ["title", "reason"],
+                                },
+                            },
+                            {
+                                "name": "plate_checkpoint_decide",
+                                "description": "Record approve|revise|reject|cancel on a checkpoint (#648). Clears pause_autonomy when decided.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "checkpoint_id": {"type": "string"},
+                                        "decision": {"type": "string", "description": "approve|revise|reject|cancel"},
+                                        "decided_by": {"type": "string"},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["checkpoint_id", "decision"],
+                                },
+                            },
+                            {
+                                "name": "plate_checkpoint_list",
+                                "description": "List checkpoints (#648). Default status=pending; open_only=true returns pausing ones.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string", "description": "pending|approved|rejected|auto_approved|all"},
+                                        "open_only": {"type": "boolean"},
+                                        "limit": {"type": "integer"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_checkpoint_get",
+                                "description": "Get one checkpoint by id (#648).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "checkpoint_id": {"type": "string"},
+                                    },
+                                    "required": ["checkpoint_id"],
                                 },
                             },
                             {
@@ -1099,6 +4843,137 @@ def run() -> None:
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "dry_run": {"type": "boolean", "description": "Simulate only (default true for safety)."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_import_payload",
+                                "description": (
+                                    "Import PLATE template payload into a local checkout (#616). "
+                                    "Dry-run by default; set apply=true to write. Strategies: safe|conservative|force. "
+                                    "namespace_scripts installs under scripts/plate/ when product scripts/ exists (#621). "
+                                    "escape_hatch_dir writes plan.json+PLAN.md+DRAFT_PR_BODY.md for hard merges (#622); "
+                                    "never force-overwrite high-value paths without human approval."
+                                ),
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "target_dir": {
+                                            "type": "string",
+                                            "description": "Local target directory (default .).",
+                                        },
+                                        "strategy": {
+                                            "type": "string",
+                                            "description": "safe | conservative | force (default safe).",
+                                        },
+                                        "template_repo": {
+                                            "type": "string",
+                                            "description": "Optional explicit template root path.",
+                                        },
+                                        "dry_run": {
+                                            "type": "boolean",
+                                            "description": "Plan only (default true).",
+                                            "default": True,
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "Write files (default false).",
+                                            "default": False,
+                                        },
+                                        "namespace_scripts": {
+                                            "type": "boolean",
+                                            "description": "Force scripts/plate/ install; omit for auto-detect.",
+                                        },
+                                        "escape_hatch_dir": {
+                                            "type": "string",
+                                            "description": "Write #622 escape-hatch bundle under this directory.",
+                                        },
+                                        "escape_hatch_on_conflict": {
+                                            "type": "boolean",
+                                            "description": "Auto-write escape hatch under target/.agentic/import-escape-hatch when conflicts exist.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_payload_list",
+                                "description": "List PLATE template payload files with classification and path_rules (#621).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "template_repo": {"type": "string"},
+                                        "include_excluded": {"type": "boolean"},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_payload_root",
+                                "description": "Resolve package payload root path and source kind (#621).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"template_repo": {"type": "string"}},
+                                },
+                            },
+                            {
+                                "name": "plate_payload_manifest",
+                                "description": "Show template payload manifest including path_rules (#621).",
+                                "inputSchema": {"type": "object", "properties": {}},
+                            },
+                            {
+                                "name": "plate_payload_classify",
+                                "description": "Classify a relative path against the payload manifest (#621).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "path": {"type": "string"},
+                                        "template_repo": {"type": "string"},
+                                    },
+                                    "required": ["path"],
+                                },
+                            },
+                            {
+                                "name": "plate_spec_audit",
+                                "description": "Audit SPEC.md against unreleased fragments and path citations (#338). Returns structured findings (aligned/undocumented/stale_evidence/future_ok).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Local repo root (default .).",
+                                        },
+                                        "spec_path": {
+                                            "type": "string",
+                                            "description": "Optional path to SPEC.md.",
+                                        },
+                                        "releases_dir": {
+                                            "type": "string",
+                                            "description": "Optional .agentic/releases path.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_spec_audit_followups",
+                                "description": "From SPEC audit findings, plan (default) or create follow-up issues and a SPEC draft table (#339). Never writes SPEC.md. apply=true creates GitHub issues with human-checkpoint bodies.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {"type": "string"},
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name for issue creation",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "Create issues when true (default false dry-run).",
+                                            "default": False,
+                                        },
+                                        "max_issues": {
+                                            "type": "integer",
+                                            "description": "Cap actionable issues (default 10).",
+                                        },
+                                        "spec_path": {"type": "string"},
+                                        "releases_dir": {"type": "string"},
                                     },
                                 },
                             },

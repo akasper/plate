@@ -1,0 +1,10 @@
+{
+  "slug": "634-what-next-pause-budget-gate",
+  "change_type": "fix",
+  "surface": "src/plate_core/what_next.py,health.py",
+  "summary": "recommend_what_next ranks budget_gate when would_pause_next_cycle is true even if pressure is only elevated; health exposes budget_would_pause_next_cycle / throttle fields from durable snapshot.",
+  "migration_impact": "what_next may return budget_gate more often when remaining is below per_cycle. Health JSON gains two additive budget boolean fields.",
+  "agent_notes": "Treat would_pause_next_cycle as a hard surface gate equivalent to critical pressure for starting large work. Health budget_would_pause_next_cycle mirrors the snapshot alias.",
+  "breaking": false,
+  "links": ["#634", "#653", "#789"]
+}

@@ -1,0 +1,10 @@
+{
+  "slug": "652-marketplace-packaging-media-proof",
+  "change_type": "feature",
+  "surface": "src/plate_core/packaging.py, cli.py, mcp_server.py, feed.py, scheduled_ops.py, agent_guidance.py",
+  "summary": "Marketplace packaging treats media + adoption proof as first-class (#652): build package with approved GIFs/videos, end-user narratives from fragments, install→first Q&A onboarding proof, planning links; feed + PM approve_for_publish; never auto-publishes (human Tasks).",
+  "migration_impact": "none",
+  "agent_notes": "Use plate_packaging_build / gh plate packaging; plate_packaging_decide approve only marks approved_for_publish. Wire into marketplace-package scheduled op. Real publish stays #380/#381/#625/#626.",
+  "links": ["#652", "#635", "#636", "#641", "#654", "#380", "#626"],
+  "breaking": false
+}

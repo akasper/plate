@@ -1,0 +1,10 @@
+{
+  "slug": "875-packaging-design-budget-pause-rails",
+  "change_type": "fix",
+  "surface": "src/plate_core/packaging.py",
+  "summary": "build_package and propose_contract hard-block on durable would_pause_next_cycle or critical/exhausted budget pressure via durable_budget_surface_pause even when est fits remaining (#634/#875).",
+  "migration_impact": "Live packaging builds and design-contract proposals may refuse under risk=off when remaining is below per_cycle. Raise token_budget, wait for UTC day rollover, or pass use_live_budget=false with caller-owned remaining.",
+  "agent_notes": "Do not open packaging or design contracts when would_pause_next_cycle is true. Human marketplace publish Tasks remain required for real publish.",
+  "breaking": false,
+  "links": ["#875", "#634", "#646", "#652", "#653", "#873", "#654"]
+}

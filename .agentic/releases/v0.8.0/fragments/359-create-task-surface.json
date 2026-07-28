@@ -1,0 +1,25 @@
+{
+  "slug": "359-create-task-surface",
+  "change_type": "feature",
+  "surface": "src/plate_core/tasks.py, mcp_server.py, cli.py",
+  "summary": "Explicit human Task creation surface (#359): build 6-field Task body with secret redaction, create_task / close_task_with_signal, MCP plate_task_create|close, gh plate task --create|--close.",
+  "migration_impact": "New MCP tools and CLI subcommand. Agents should create Task issues for human-only blockers instead of trapping work in chat. Agents never complete human work or invent PLATE-TASK-CLOSED.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. When user asks for a human Task or a human-only blocker appears: plate_task_create / gh plate task --create with human_action, why, context, instructions.",
+    "3. Optional --epic-milestone / milestone inheritance for Epic-related Tasks (no Epic: label required).",
+    "4. After human completes: plate_task_close / --close N posts <!-- PLATE-TASK-CLOSED --> then closes."
+  ],
+  "agent_notes": "Implements #359 explicit creation path. Detection-driven auto Tasks are #360 follow-up. Never paste secrets into Task bodies (redaction is best-effort only).",
+  "breaking": false,
+  "links": [
+    "#359",
+    "#360",
+    "#349",
+    "#654",
+    "#626"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "slug": "634-636-feature-media-budget-gate",
+  "change_type": "feature",
+  "surface": "src/plate_core/feature_media.py, cli.py, mcp_server.py",
+  "summary": "Gate #636 Feature media plan on live #634 budget: estimate_feature_media_cost, plan_feature_media hydrate/block, CLI --budget-remaining/--no-live-budget/--estimate-cost, MCP plate_feature_media_estimate_cost + budget fields (#773).",
+  "migration_impact": "plan_feature_media now defaults use_live_budget=true and may return blocked=true when remaining tokens are insufficient for Playwright GIF planning. Pass use_live_budget=false or budget_remaining for offline/tests.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer gh plate feature-media --json (or plate_feature_media_plan) and honor blocked budget responses.",
+    "3. Use --estimate-cost / plate_feature_media_estimate_cost before long capture sessions.",
+    "4. Override with --budget-remaining N or --no-live-budget only when intentional."
+  ],
+  "agent_notes": "Continues #634 surface gates after ER planning (#771/#772). Does not close #634 fully (E2E budget proof still open on #654 checklist).",
+  "breaking": false,
+  "links": [
+    "#773",
+    "#634",
+    "#636",
+    "#654",
+    "#635"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

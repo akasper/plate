@@ -1,0 +1,28 @@
+{
+  "slug": "629-640-er-planning-durable-tui",
+  "change_type": "feature",
+  "surface": "src/plate_core/epic_release_planning.py, tests/test_epic_release_planning.py",
+  "summary": "Deepen #629/#640 epic/release Q&A planning: durable er_sessions, ask_user_question payloads per turn/build, pending plan stubs via shared planning pending dir for feed approval.",
+  "migration_impact": "New .agentic/planning/er_sessions/ (under gitignored planning/). plate_er_planning_* returns session_id + ask_user_question. Built plans can land in .agentic/planning/pending/ for feed.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. plate_er_planning_start → present ask_user_question; keep session_id.",
+    "3. plate_er_planning_answer free text; resume via load_er_session if process restarts.",
+    "4. plate_er_planning_build → present approval options; host creates GitHub Epic/Release only after approve.",
+    "5. plate_feed lists pending ER plans with feature/product pending plans."
+  ],
+  "agent_notes": "Parity with #628/#630 durable planning. Never cut release or open Epic children without human approval of the plan stub.",
+  "breaking": false,
+  "links": [
+    "#629",
+    "#640",
+    "#628",
+    "#630",
+    "#631",
+    "#654",
+    "#656"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

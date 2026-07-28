@@ -1,0 +1,23 @@
+{
+  "slug": "634-660-pm-budget-day-rollover",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py",
+  "summary": "PM get_status uses get_budget_snapshot (UTC day rollover) instead of raw load_budget_spend so prior-day spend.json no longer reports false critical budget_pressure and 100% burn (#634/#660).",
+  "migration_impact": "Local only. Operators may still see stale counters inside .agentic/budget/spend.json until the next charge rewrites today's date; status/pressure surfaces now ignore prior UTC days.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release with this fix.",
+    "2. Re-run plate_pm_status / get_pm_status; budget_pressure should be ok when spend.json date is not today.",
+    "3. Optional: delete or rewrite .agentic/budget/spend.json if local test debris remains (file is gitignored)."
+  ],
+  "agent_notes": "Always prefer get_budget_snapshot for remaining/pressure/burn. Never derive PM pressure from raw spend.json without spend_is_today. what_next ranks PM after budget pressure clears.",
+  "breaking": false,
+  "links": [
+    "#634",
+    "#660",
+    "#653",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

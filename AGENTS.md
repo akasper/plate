@@ -16,6 +16,21 @@ The PLATE book explains doctrine and the reasons behind the method. This reposit
 | Documentation | Update per-feature change files under `.agentic/releases/`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
 | Stack selection | Prototype and benchmark candidate stacks per the Research issue. | Final language/runtime choice and distribution format. |
 
+
+## Real-world / external human Tasks (Epic planning requirement)
+
+When planning or refining an Epic or Feature, the agent and human must explicitly identify any steps that require actions the AI development partner cannot safely or permissibly perform "in the real world" (external accounts, credential provisioning, manual deploys on third-party services, billing, legal, physical access, or any action requiring human identity/ownership on an external system such as PyPI trusted publisher setup, API key creation for CI, account creation, or initial manual publishes to unblock pins).
+
+For each such step:
+- Create a dedicated `Task` issue (labeled `Task`).
+- Follow the standard human-only template in the body: "Human action required", "Why the agent cannot safely proceed", "Context and affected artifacts", "Best-effort instructions / next steps", and "Done signal" (the human leaves a short completion comment containing `<!-- PLATE-TASK-CLOSED -->`; the comment must not include secrets/credentials).
+- Link the Task to the parent Epic (via sub-issue sidebar or milestone) and reference it from PR bodies, release checklists, Epic success criteria, and AGENTS.md notes.
+- The Epic (and any dependent release) remains open until the human owner confirms completion of the real-world Task(s).
+
+This makes the human dependencies first-class, visible, auditable, and part of the formal PLATE plan. The AI must not attempt to complete these Tasks. Examples from the PyPI deployment work: #625 (PyPI account + trusted publisher config for the publish workflow), #626 (initial back-publish of v0.7.2 via dispatch to unblock version-locked gh-plate installs), and the earlier #380 (marketplace package publish).
+
+Planners must treat this as a required part of Epic scoping, not an afterthought in a PR description checklist. The guidance also applies to new-project templates (see template_payload/AGENTS.md) and the release ceremony packaging phase.
+
 ## Default PLATE Persona (Epic #459)
 
 When operating in a repository that has adopted PLATE (signaled locally by `.plate/` or `.plate/config` + `AGENTS.md` / `.agentic/`, or on GitHub by Epic labels, release artifacts, etc.), agents **must default to the `plate` persona** ( `plugin/agents/plate.agent.md` + `src/plate_core/agent_guidance.py` sections + baseline catalog).
@@ -132,7 +147,7 @@ After making the PR green (including feedback-resolution for any agent threads),
 | 4 | When the answer changes operating guidance, update `AGENTS.md` and `.agentic/skills.yml` in the same PR. |
 | 5 | Open a Documentation PR with `Closes #N` in the body. |
 
-For PLATE Q&A: consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers (artifacts per ACs) without reminder. Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress. If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed. See persona/guidance. (Addresses #503, #518, #517, #521 and closes the post-0.6.1 Q&A/babysit stub cluster under #580/#569 polish.)
+For PLATE Q&A: consistently default to native TUI (ask_user_question arrow-key forms) and enforce full follow-through on answers (artifacts per ACs) without reminder. Open with native TUI first—never plain-text options that only “upgrade” after the user asks (#509). Offer only options whose full execution+artifacts complete in-turn before further Q&A/progress. If option promises review/babysit/address feedback, *must* fully execute via pr-babysit skill + worktree + push same branch + resolve threads before next question or progress/done. Never merge unaddressed. Prefer `plate_resolve_review_thread` / babysit `--act` so feedback-resolution does not stay red after you addressed comments (#511). Named checklists: Q&A Follow-Through (#508) + Merge Gates one-pass (#510); parent doc gap #512 closed by that package — see `docs/research/508-510-qa-and-pr-green-follow-through.md`. (Addresses #503, #518, #517, #521 and closes the post-0.6.1 Q&A/babysit stub cluster under #580/#569 polish.)
 
 ## Task Management (for agents)
 
@@ -248,14 +263,32 @@ Stubs are one of the primary tools PLATE provides for operating effectively in t
 
 See Feature #351 for the discussion that produced this definition. The two Epic issues #349 and #350 were created as stubs under this understanding.
 
+## Project Manager / Orchestration Guidance (#660 / #662)
+
+When PLATE signals are present, long-running coordination prefers the **Project Manager** stack above raw AutonomyEngine loops:
+
+1. `plate_what_next` / `gh plate what-next` for the next process step (open PRs → budget gates → PM → ready issues).
+2. `plate_pm_status` / `plate_pm_run_cycle` (dry-run first when risk unknown) to assign work to persona team agents within budget and open checkpoints.
+3. Delegated implement/bug work opens feature/bug loops; design/research opens #632 artifact proposals; fleet handoffs (#644) accept into the same surfaces.
+4. Humans keep judgment at checkpoints, high-risk paths, and external Tasks. Drivers: prefer `driver:human` / `driver:agent` / `driver:collaborative` labels when present; do not force-push human-driven work.
+5. Browser dashboard (#661) is out of scope for default agents — TUI `ask_user_question` + feed is the current surface.
+
+Design detail: `docs/design/pm-orchestrator-architecture-and-browser.md`. Quiet ops and USAGE REPORT rules still apply.
+
 ## Autonomous Mode
 
 Autonomous mode is the default operating posture for unattended sessions (overnight runs, long-running autopilot via `/loop` or scheduler, `/delegate` tasks) where no human reviewer is available interactively. It is driven by `.plate` config (see Epic #470) rather than a marker file. The engine (AutonomyEngine) introspects state and delegates/executes at the user's budgeted token rate and chosen `risk_tolerance` (off/low/medium/high), with scheduled/recurring procedures (`.agentic/procedures/`) for audits, drift detection, feedback integration, etc.
 
 **Configuration (single source of truth):** Use the `autonomy` section in `.plate` (added in #473, engine in #474):
 - `risk_tolerance`: "off" (fully manual), "low", "medium", or "high". Higher tolerance enables broader autonomous progress (e.g., auto-merge up to that risk level, apply-mode for procedures/audits, auto-stub generation in planning).
-- `enabled`, `token_budget` (daily/per_cycle/action: throttle|pause|warn), `schedules_enabled`, etc.
+- `enabled`, `token_budget` (daily/per_cycle/action: throttle|pause|warn), `schedules_enabled`, `pr_review_scope` (#496), etc.
 - Legacy `.github/AUTONOMOUS_MODE` (file presence) is supported for transition/compat but is sunset in favor of `.plate` (generalized in #476 PR; health/config surfaces emit migration guidance). Delete the marker file after configuring `.plate`.
+
+**Agent routing for autonomy loops (#480):** When PLATE signals are present, the **plate** persona prefers AutonomyEngine thin surfaces for long-running work:
+1. `plate_what_next` for the next *process* step (still first for ordinary "what should I do?").
+2. `plate_autonomy_status` / `gh plate autonomy --status` **before** unsupervised cycles — honor risk, budget, due procedures.
+3. `plate_autonomy_run_cycle` / `gh plate autonomy --run|--loop` (dry-run first when risk unknown); procedures via list/run tools.
+4. Quiet rules: terminal = terse bullets only; GitHub comments only on progress or exempt markers (`PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`, USAGE REPORT). Full protocol: `autonomy_loops` in `agent_guidance.py` + catalog skill `run-autonomy-cycle`.
 
 **When autonomous mode is active (risk_tolerance != "off" and enabled):**
 
@@ -397,7 +430,8 @@ Use this loop:
 4. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 5. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
 6. For all other actionable comments: push a code change or reply explaining why no change is needed
-7. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the encapsulated helper: `plate_resolve_review_thread` (MCP) / `resolve_review_thread` (Python) / `gh plate pr babysit` (which detects + reports). The helpers encapsulate the GraphQL mutation, node IDs, pagination, and extraction.
+7. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the encapsulated helper: `plate_resolve_review_thread` (MCP) / `resolve_review_thread` (Python) / `gh plate pr babysit --act` (which detects + reports, and **auto-resolves outdated unresolved threads** per #605). The helpers encapsulate the GraphQL mutation, node IDs, pagination, and extraction. Prefer `--act` after pushes so outdated threads are closed without a separate resolve pass.
+8. **PR review scope (#496):** Default is `all` (humans + bots, including Copilot). Configure via `.plate` `autonomy.pr_review_scope` (`all` | `bot-only` | `human-only`) or `gh plate pr babysit --scope …`. Prefer applying fenced ` ```suggestion` ` blocks when `prefer_apply_suggestion` is true; never auto-apply on high-risk paths (AGENTS.md, workflows, SPEC, secrets, `.plate`). Do **not** re-request Copilot review in a loop — work existing unresolved threads first.
    (The raw mutation + `repository.pullRequest.reviewThreads` + databaseId matching is implementation detail only; agents must not construct it manually with jq/mktemp/sed/etc. See pr_babysit.get_actionable_review_threads and plate_get_actionable_review_threads. Addresses #516.)
 8. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
 9. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked

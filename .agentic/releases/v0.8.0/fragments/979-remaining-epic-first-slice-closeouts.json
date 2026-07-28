@@ -1,0 +1,16 @@
+{
+  "slug": "979-remaining-epic-first-slice-closeouts",
+  "change_type": "docs",
+  "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+  "summary": "Record first-slice closeouts for Epics #349 (human Tasks), #462 (scriptify ceremonies), #469 (multi-track release), and reaffirm #659 label path (#979). Prevents idle agents from re-sketching landed ceremony/Task/release surfaces.",
+  "migration_impact": "Wiki/process memory only. Apply status:implemented on #349/#462/#469/#659. Do not check #654 boxes.",
+  "migration_guidance": [
+    "1. Read closeout rows for #349/#462/#469/#659.",
+    "2. Prefer existing CLI/MCP ceremony surfaces over new prompt-only ceremonies.",
+    "3. Marketplace/PyPI human Tasks still block packaging claims."
+  ],
+  "agent_notes": "Closes #979. Labels applied in follow-through comments on the four Epics.",
+  "breaking": false,
+  "links": ["#979", "#349", "#462", "#469", "#659", "#654"],
+  "requires": ["0.7.2"]
+}

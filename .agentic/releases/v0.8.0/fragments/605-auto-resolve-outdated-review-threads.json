@@ -1,0 +1,21 @@
+{
+  "slug": "605-auto-resolve-outdated-review-threads",
+  "change_type": "fix",
+  "surface": "src/plate_core/pr_babysit.py, cli.py, tests/test_pr_babysit.py, gh-plate, tests/e2e",
+  "summary": "babysit --act auto-resolves outdated unresolved review threads; keep gh-plate --json stdout clean for e2e (#605).",
+  "migration_impact": "Agents running gh plate pr babysit --act after addressing feedback no longer need a separate resolve pass for outdated threads.",
+  "migration_guidance": [
+    "1. Prefer babysit --act after pushes that address review lines.",
+    "2. Still resolve non-outdated threads explicitly after applying suggestions."
+  ],
+  "agent_notes": "Outdated+unresolved threads resolve on act=True. Non-outdated still need plate_resolve_review_thread.",
+  "breaking": false,
+  "links": [
+    "#605",
+    "#671",
+    "#496"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

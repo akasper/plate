@@ -1,0 +1,24 @@
+{
+  "slug": "634-632-artifact-budget-gate",
+  "change_type": "feature",
+  "surface": "src/plate_core/design_research_approval.py, cli.py, mcp_server.py, tests/test_design_research_approval.py",
+  "summary": "Gate #632 Design/Research artifact propose/resubmit on live #634 budget: estimate_artifact_cost, hydrate/block, CLI/MCP fields (#767).",
+  "migration_impact": "plate_artifact_propose/resubmit and gh plate artifact honor durable spend remaining by default; over-budget returns blocked. Pass budget_remaining or use_live_budget=false to override.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer live hydrate (default) before proposing or resubmitting artifacts.",
+    "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+    "4. Offline tests: --no-live-budget / use_live_budget=false."
+  ],
+  "agent_notes": "Parity with stubs/design-contract #634 hydrate. Closes #767. Related #634 #632 #654.",
+  "breaking": false,
+  "links": [
+    "#767",
+    "#634",
+    "#632",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

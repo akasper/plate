@@ -1,0 +1,25 @@
+{
+  "slug": "634-642-monitor-budget-gate",
+  "change_type": "feature",
+  "surface": "src/plate_core/monitoring.py, autonomy.py, cli.py, mcp_server.py, tests/test_monitoring.py",
+  "summary": "Gate #642 discussion/market monitoring on live #634 budget: estimate_monitor_cost, review_discussions/monitor_market_signals hydrate/block, AutonomyEngine remaining pass-through, CLI/MCP fields (#761).",
+  "migration_impact": "plate_monitor_* and gh plate monitor honor durable spend remaining by default; over-budget runs return blocked. Pass budget_remaining or use_live_budget=false to override.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer live hydrate (default) before discussion/market monitor runs.",
+    "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+    "4. Offline tests: --no-live-budget / use_live_budget=false.",
+    "5. AutonomyEngine procedure dispatch passes engine remaining into monitor procedures."
+  ],
+  "agent_notes": "Parity with fleet/packaging/scheduled_ops #634 hydrate. Closes #761. Related #634 #642 #654.",
+  "breaking": false,
+  "links": [
+    "#761",
+    "#634",
+    "#642",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "slug": "967-health-self-migrate-fields",
+  "change_type": "feature",
+  "surface": "src/plate_core/health.py, src/plate_core/cli.py, tests/test_health.py",
+  "summary": "Expose self-migrate verify on plate health (#967/#649): self_migrate_drift/ready/target/next_command via offline verify_self_migrate; CLI health print; best-effort never fails health alone.",
+  "migration_impact": "Additive health JSON/CLI fields. Agents may read self_migrate_* from gh plate health --json without calling --verify separately.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_health.py -k self_migrate -q.",
+    "2. gh plate health --json | jq '.self_migrate_ready,.self_migrate_drift'.",
+    "3. If drift or not ready, follow self_migrate_next_command."
+  ],
+  "agent_notes": "Closes #967. Follow-on to #965 verify surface. Does not check #654 boxes.",
+  "breaking": false,
+  "links": ["#967", "#965", "#649", "#953", "#633", "#654"],
+  "requires": ["0.7.2"]
+}

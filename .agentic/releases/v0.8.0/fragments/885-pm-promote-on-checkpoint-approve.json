@@ -1,0 +1,10 @@
+{
+  "slug": "885-pm-promote-on-checkpoint-approve",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py",
+  "summary": "PM promotes proposed high-impact assignments to delegated after #648 checkpoint approve (fleet/loop dispatch); reject/cancel blocks; run_cycle reports promotions (#648/#885).",
+  "migration_impact": "After approving a PM high-impact checkpoint, the next plate_pm_run_cycle will promote the assignment and may open fleet handoffs/loops. Rejected checkpoints leave assignments blocked.",
+  "agent_notes": "Do not leave high-impact PM work as proposed forever after approve. Use decide_checkpoint then plate_pm_run_cycle; promotions appear on the cycle report.",
+  "breaking": false,
+  "links": ["#885", "#648", "#660", "#645", "#654"]
+}

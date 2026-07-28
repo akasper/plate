@@ -60,29 +60,94 @@ class TestAutonomyEngine(unittest.TestCase):
         self.assertNotIn("high-proc", ids)
 
     def test_enforce_budget_throttle(self):
-        engine = AutonomyEngine(repo=None)
-        engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 500, "action": "throttle"}}
-        engine.enabled = True  # test exercises enforcement path (code DEFAULT is now medium/enabled per this PR; tests opt-in explicitly for isolation)
-        engine.risk_tolerance = "high"
-        engine.enabled = True
-        engine._spent_this_cycle = 0
-        # First spend within limits
-        self.assertEqual(engine.enforce_budget(400, "test"), Decision.PROCEED)
-        self.assertEqual(engine._spent_this_cycle, 400)
-        # Over per_cycle -> throttle (partial spend, still proceeds)
-        self.assertEqual(engine.enforce_budget(200, "test"), Decision.THROTTLE)
-        self.assertGreaterEqual(engine._spent_this_cycle, 400)
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 500, "action": "throttle"}}
+            engine.enabled = True  # test exercises enforcement path (code DEFAULT is now medium/enabled per this PR; tests opt-in explicitly for isolation)
+            engine.risk_tolerance = "high"
+            engine.enabled = True
+            engine._spent_this_cycle = 0
+            engine._spent_today = 0
+            engine._spent_usd_today = 0.0
+            # First spend within limits
+            self.assertEqual(engine.enforce_budget(400, "test"), Decision.PROCEED)
+            self.assertEqual(engine._spent_this_cycle, 400)
+            # Over per_cycle -> throttle (partial spend, still proceeds)
+            self.assertEqual(engine.enforce_budget(200, "test"), Decision.THROTTLE)
+            self.assertGreaterEqual(engine._spent_this_cycle, 400)
 
     def test_enforce_budget_pause(self):
-        engine = AutonomyEngine(repo=None)
-        engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 100, "action": "pause"}}
-        engine.risk_tolerance = "high"
-        engine.enabled = True
-        engine._spent_this_cycle = 0
-        # Under limit: proceeds
-        self.assertEqual(engine.enforce_budget(50, "test"), Decision.PROCEED)
-        # Over per_cycle -> pause returns Decision.PAUSE
-        self.assertEqual(engine.enforce_budget(200, "test"), Decision.PAUSE)
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.autonomy_config = {"token_budget": {"daily": 1000, "per_cycle": 100, "action": "pause"}}
+            engine.risk_tolerance = "high"
+            engine.enabled = True
+            engine._spent_this_cycle = 0
+            engine._spent_today = 0
+            engine._spent_usd_today = 0.0
+            # Under limit: proceeds
+            self.assertEqual(engine.enforce_budget(50, "test"), Decision.PROCEED)
+            # Over per_cycle -> pause returns Decision.PAUSE
+            self.assertEqual(engine.enforce_budget(200, "test"), Decision.PAUSE)
+
+    def test_enforce_budget_per_action_pause(self):
+        """#634: token_budget.per_action caps a single estimate even when daily/cycle have room."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.autonomy_config = {
+                "token_budget": {
+                    "daily": 100_000,
+                    "per_cycle": 50_000,
+                    "per_action": 500,
+                    "action": "pause",
+                }
+            }
+            engine.risk_tolerance = "high"
+            engine.enabled = True
+            engine._spent_this_cycle = 0
+            engine._spent_today = 0
+            engine._spent_usd_today = 0.0
+            self.assertEqual(engine.enforce_budget(400, "test"), Decision.PROCEED)
+            self.assertEqual(engine._spent_this_cycle, 400)
+            # Single action over per_action → pause, no charge
+            self.assertEqual(engine.enforce_budget(600, "test"), Decision.PAUSE)
+            self.assertEqual(engine._spent_this_cycle, 400)
+
+    def test_enforce_budget_per_action_throttle(self):
+        """#634: throttle policy charges at most per_action when that is the breach."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.autonomy_config = {
+                "token_budget": {
+                    "daily": 100_000,
+                    "per_cycle": 50_000,
+                    "per_action": 1000,
+                    "action": "throttle",
+                }
+            }
+            engine.risk_tolerance = "medium"
+            engine.enabled = True
+            engine._spent_this_cycle = 0
+            engine._spent_today = 0
+            engine._spent_usd_today = 0.0
+            self.assertEqual(engine.enforce_budget(2000, "test"), Decision.THROTTLE)
+            # half of 2000 = 1000, also capped by per_action=1000
+            self.assertEqual(engine._spent_this_cycle, 1000)
+            self.assertGreaterEqual(engine.throttled_actions, 1)
 
     def test_get_status_and_autopilot(self):
         engine = AutonomyEngine(repo=None)
@@ -93,6 +158,57 @@ class TestAutonomyEngine(unittest.TestCase):
         self.assertGreaterEqual(status.autopilot_score, 0)
         self.assertLessEqual(status.autopilot_score, 100)
         self.assertIn("due_procedures", status.to_dict())
+        d = status.to_dict()
+        self.assertIn("budget_pressure", d)
+        self.assertIn("would_pause_next_cycle", d)
+
+    def test_get_status_includes_budget_pressure_from_snapshot(self):
+        """#634/#653: plate_autonomy_status surfaces pressure + next-cycle pause."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import AutonomyEngine, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 9500,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 2000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                eng = AutonomyEngine(repo=None)
+                eng.budget_base_dir = bdir
+                st = eng.get_status()
+            self.assertEqual(st.budget_remaining_tokens, 500)
+            self.assertEqual(st.budget_pressure, "critical")
+            self.assertTrue(st.would_pause_next_cycle)
+            self.assertEqual(st.spent_today_durable, 9500)
+            self.assertEqual(st.daily_limit, 10000)
+            self.assertEqual(st.per_cycle_limit, 2000)
 
     def test_run_cycle_dry_run(self):
         engine = AutonomyEngine(repo=None)
@@ -103,15 +219,119 @@ class TestAutonomyEngine(unittest.TestCase):
         self.assertIn(report.budget_decision, ("proceed", "throttle", "pause", "warn"))
 
     def test_run_cycle_pause_on_budget_exceeded(self):
-        engine = AutonomyEngine(repo=None)
-        engine.risk_tolerance = "medium"
-        engine.autonomy_config = {"token_budget": {"daily": 1, "per_cycle": 1, "action": "pause"}}
-        engine.enabled = True
-        engine._spent_this_cycle = 100
-        report = engine.run_cycle(dry_run=True, max_steps=5)
-        self.assertEqual(report.status, "paused")
-        self.assertTrue(report.paused)
-        self.assertEqual(report.budget_decision, "pause")
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.budget_base_dir = Path(tmp) / "budget"
+            engine.risk_tolerance = "medium"
+            engine.autonomy_config = {"token_budget": {"daily": 1, "per_cycle": 1, "action": "pause"}}
+            engine.enabled = True
+            engine._spent_this_cycle = 100
+            engine._spent_today = 100
+            report = engine.run_cycle(dry_run=True, max_steps=5)
+            self.assertEqual(report.status, "paused")
+            self.assertTrue(report.paused)
+            self.assertEqual(report.budget_decision, "pause")
+
+    def test_run_cycle_pauses_on_durable_budget_when_risk_off(self):
+        """#867/#634: surface budget rails pause run_cycle even when risk=off."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import AutonomyEngine, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 10000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 2000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                eng = AutonomyEngine(repo=None)
+                eng.budget_base_dir = bdir
+                eng.checkpoint_base_dir = Path(tmp) / "checkpoints"
+                eng.ledger_base_dir = Path(tmp) / "ledger"
+                report = eng.run_cycle(dry_run=True, max_steps=5)
+
+            self.assertEqual(report.status, "paused")
+            self.assertTrue(report.paused)
+            self.assertEqual(report.budget_decision, "pause")
+            self.assertIn("budget", report.throttled)
+            joined = " ".join(report.actions_taken)
+            self.assertIn("budget", joined.lower())
+
+    def test_run_cycle_risk_off_healthy_budget_completes_empty(self):
+        """#867: risk-off with healthy durable budget does not false-pause."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import AutonomyEngine, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 0,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 50000,
+                        "per_cycle": 8000,
+                        "action": "throttle",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                eng = AutonomyEngine(repo=None)
+                eng.budget_base_dir = bdir
+                eng.checkpoint_base_dir = Path(tmp) / "checkpoints"
+                eng.ledger_base_dir = Path(tmp) / "ledger"
+                report = eng.run_cycle(dry_run=True, max_steps=3)
+
+            self.assertEqual(report.status, "completed")
+            self.assertFalse(report.paused)
+            self.assertEqual(report.budget_decision, "proceed")
 
     def test_estimate_cost_heuristics(self):
         """#471 wired: base + scope mult + over-est (1.5-2x+20%) + cap; references costs/COSTS for hist (sparse ok)."""
@@ -190,9 +410,868 @@ class TestAutonomyEngine(unittest.TestCase):
         self.assertIn("burn_rate", d)
 
 
+class TestShadowSimulation645(unittest.TestCase):
+    """#645: simulation/shadow mode for high-impact autonomous actions."""
+
+    def setUp(self):
+        self._patches = [
+            patch("plate_core.autonomy.get_cost_report", side_effect=Exception("no network")),
+            patch("plate_core.autonomy.get_health", side_effect=Exception("no network")),
+            patch("plate_core.autonomy.get_epic_status", side_effect=Exception("no network")),
+            patch(
+                "plate_core.autonomy.get_plate_config_report",
+                return_value=type("R", (), {"to_dict": lambda self: {}})(),
+            ),
+            patch(
+                "plate_core.autonomy.load_plate_config",
+                return_value=type(
+                    "C",
+                    (),
+                    {
+                        "to_dict": lambda self: {
+                            "autonomy": {
+                                "enabled": True,
+                                "risk_tolerance": "medium",
+                                "token_budget": {"daily": 50000, "per_cycle": 8000},
+                            }
+                        }
+                    },
+                )(),
+            ),
+        ]
+        for p in self._patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_classify_impact_catalog(self):
+        from plate_core.autonomy import classify_action_impact
+        self.assertEqual(classify_action_impact("what_next"), "low")
+        self.assertEqual(classify_action_impact("health"), "low")
+        self.assertEqual(classify_action_impact("babysit"), "medium")
+        self.assertEqual(classify_action_impact("auto_merge"), "high")
+        self.assertEqual(classify_action_impact("release_cut"), "critical")
+        self.assertEqual(classify_action_impact("deploy"), "critical")
+        self.assertEqual(classify_action_impact("force_push"), "critical")
+        self.assertEqual(classify_action_impact("marketplace_publish"), "critical")
+        self.assertEqual(classify_action_impact("totally_unknown_action"), "medium")
+
+    def test_simulate_action_returns_shadow_report(self):
+        from plate_core.autonomy import AutonomyEngine
+        engine = AutonomyEngine(repo=None)
+        engine.enabled = True
+        engine.risk_tolerance = "low"
+        engine.autonomy_config = {
+            "enabled": True,
+            "risk_tolerance": "low",
+            "token_budget": {"daily": 50000, "per_cycle": 8000, "action": "throttle"},
+            "cost_ceiling_usd": 10.0,
+        }
+        report = engine.simulate_action("release_cut", scope={"version": "1.0.0"})
+        d = report.to_dict()
+        self.assertEqual(d["mode"], "shadow")
+        self.assertEqual(d["action_kind"], "release_cut")
+        self.assertEqual(d["impact"], "critical")
+        self.assertTrue(d["requires_approval"])
+        self.assertFalse(d["would_execute"])
+        self.assertIsInstance(d["predicted_side_effects"], list)
+        self.assertGreater(len(d["predicted_side_effects"]), 0)
+        self.assertGreater(d["estimated_tokens"], 0)
+        self.assertTrue(d["shadow_id"])
+        self.assertIsInstance(d["approval_reasons"], list)
+        self.assertIsInstance(d["gate_preview"], list)
+
+    def test_simulate_low_impact_no_approval(self):
+        from plate_core.autonomy import AutonomyEngine
+        engine = AutonomyEngine(repo=None)
+        engine.enabled = True
+        engine.risk_tolerance = "medium"
+        engine.autonomy_config = {
+            "enabled": True,
+            "risk_tolerance": "medium",
+            "token_budget": {"daily": 50000, "per_cycle": 8000},
+        }
+        report = engine.simulate_action("what_next")
+        d = report.to_dict()
+        self.assertEqual(d["impact"], "low")
+        self.assertFalse(d["requires_approval"])
+        self.assertTrue(d["would_execute"])
+        self.assertTrue(d["risk_allowed"])
+
+    def test_high_impact_blocked_without_shadow_ack_at_low_risk(self):
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine
+        with tempfile.TemporaryDirectory() as tmp:
+            shadow_dir = Path(tmp) / "shadow"
+            cp_dir = Path(tmp) / "cp"
+            engine = AutonomyEngine(repo=None)
+            engine.enabled = True
+            engine.risk_tolerance = "low"
+            engine.shadow_base_dir = shadow_dir
+            engine.checkpoint_base_dir = cp_dir
+            engine.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "low",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            blocked = engine.gate_high_impact("auto_merge", shadow_ack=None)
+            self.assertTrue(blocked["blocked"])
+            self.assertEqual(blocked["mode"], "shadow_required")
+            self.assertIn("shadow_report", blocked)
+            self.assertIn("checkpoint_id", blocked)
+            shadow = engine.simulate_action("auto_merge")
+            still = engine.gate_high_impact("auto_merge", shadow_ack=shadow.shadow_id, approved=False)
+            self.assertTrue(still["blocked"])
+            ok = engine.gate_high_impact("auto_merge", shadow_ack=shadow.shadow_id, approved=True)
+            self.assertFalse(ok["blocked"])
+
+    def test_critical_always_requires_approval(self):
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.enabled = True
+            engine.risk_tolerance = "high"
+            engine.shadow_base_dir = Path(tmp) / "shadow"
+            engine.checkpoint_base_dir = Path(tmp) / "cp"
+            engine.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "high",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            shadow = engine.simulate_action("deploy")
+            self.assertTrue(shadow.to_dict()["requires_approval"])
+            blocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=False)
+            self.assertTrue(blocked["blocked"])
+            cid1 = blocked.get("checkpoint_id")
+            # Repeated gate must reuse the same open checkpoint (#648 dedupe)
+            blocked2 = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=False)
+            self.assertTrue(blocked2["blocked"])
+            self.assertEqual(blocked2.get("checkpoint_id"), cid1)
+            from plate_core.checkpoint import list_open_checkpoints
+
+            open_cps = list_open_checkpoints(base_dir=engine.checkpoint_base_dir)
+            deploy_cps = [
+                c
+                for c in open_cps
+                if str(c.get("action_kind") or "").lower() == "deploy"
+            ]
+            self.assertEqual(len(deploy_cps), 1)
+            unblocked = engine.gate_high_impact("deploy", shadow_ack=shadow.shadow_id, approved=True)
+            self.assertFalse(unblocked["blocked"])
+
+    def test_run_procedure_high_risk_shadow_default_when_low_tolerance(self):
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine, ProcedureDef
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = AutonomyEngine(repo=None)
+            engine.enabled = True
+            engine.risk_tolerance = "low"
+            engine.shadow_base_dir = Path(tmp) / "shadow"
+            engine.checkpoint_base_dir = Path(tmp) / "cp"
+            engine.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "low",
+                "token_budget": {"daily": 5e4, "per_cycle": 8e3},
+            }
+            engine.procedures = [
+                ProcedureDef(
+                    id="risky-proc",
+                    cadence="manual",
+                    risk_level="high",
+                    enabled=True,
+                    description="high impact",
+                ),
+            ]
+            result = engine.run_procedure("risky-proc", dry_run=False)
+            self.assertEqual(result.get("status"), "shadow_required")
+            self.assertIn("shadow_report", result)
+            self.assertIn("checkpoint_id", result)
+
+    def test_durable_shadow_ack_across_engine_instances(self):
+        """#645 harden: shadow_ack must resolve from .agentic/shadow after process restart."""
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine, load_shadow_report
+
+        with tempfile.TemporaryDirectory() as tmp:
+            shadow_dir = Path(tmp) / "shadow"
+            cp_dir = Path(tmp) / "cp"
+            eng1 = AutonomyEngine(repo=None)
+            eng1.enabled = True
+            eng1.risk_tolerance = "low"
+            eng1.shadow_base_dir = shadow_dir
+            eng1.checkpoint_base_dir = cp_dir
+            eng1.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "low",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            shadow = eng1.simulate_action("auto_merge")
+            sid = shadow.shadow_id
+            self.assertIsNotNone(load_shadow_report(sid, base_dir=shadow_dir))
+
+            # Fresh engine (no in-memory previews) must still accept durable ack
+            eng2 = AutonomyEngine(repo=None)
+            eng2.enabled = True
+            eng2.risk_tolerance = "low"
+            eng2.shadow_base_dir = shadow_dir
+            eng2.checkpoint_base_dir = cp_dir
+            eng2.autonomy_config = eng1.autonomy_config
+            self.assertEqual(eng2._shadow_previews, {})
+            still = eng2.gate_high_impact("auto_merge", shadow_ack=sid, approved=False)
+            self.assertTrue(still["blocked"])
+            ok = eng2.gate_high_impact("auto_merge", shadow_ack=sid, approved=True)
+            self.assertFalse(ok["blocked"])
+            self.assertEqual(ok["mode"], "approved")
+
+    def test_module_level_simulate_helper(self):
+        from plate_core.autonomy import simulate_autonomy_action
+        d = simulate_autonomy_action("release_finalize", repo=None)
+        self.assertEqual(d["mode"], "shadow")
+        self.assertEqual(d["impact"], "critical")
+        # #645 harden fields always present (diff may be empty outside a git repo)
+        self.assertIn("predicted_diff", d)
+        self.assertIn("worktree_plan", d)
+        self.assertTrue(d["worktree_plan"].get("path"))
+
+    def test_git_diff_preview_and_worktree_plan(self):
+        """#645: collect_git_diff_preview + worktree plan on simulate for high impact."""
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import (
+            AutonomyEngine,
+            collect_git_diff_preview,
+            plan_shadow_worktree,
+            shadow_report_from_dict,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "test"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+            (repo / "a.txt").write_text("one\n", encoding="utf-8")
+            subprocess.run(["git", "add", "a.txt"], cwd=repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "init"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+            (repo / "b.txt").write_text("two\n", encoding="utf-8")
+            subprocess.run(["git", "add", "b.txt"], cwd=repo, check=True, capture_output=True)
+            # No origin/release — falls back to WORKTREE / HEAD
+            preview = collect_git_diff_preview(base_ref="origin/release", cwd=repo)
+            self.assertTrue(preview["ok"], preview)
+            self.assertGreaterEqual(preview["file_count"], 1)
+
+            plan = plan_shadow_worktree("deploy", shadow_id="shadow-test-abc", base_ref="HEAD")
+            self.assertIn("deploy-shadow-test-abc", plan["path"])
+            self.assertTrue(plan["create_commands"])
+
+            eng = AutonomyEngine(repo=None)
+            eng.enabled = True
+            eng.risk_tolerance = "medium"
+            eng.shadow_base_dir = Path(tmp) / "shadow"
+            eng.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "medium",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            report = eng.simulate_action(
+                "deploy",
+                scope={"cwd": str(repo), "base_ref": "HEAD"},
+            )
+            d = report.to_dict()
+            self.assertTrue(d["predicted_diff"].get("ok"))
+            self.assertTrue(d["worktree_plan"].get("path"))
+            # Durable rehydrate keeps new fields
+            rehyd = shadow_report_from_dict(d)
+            self.assertEqual(rehyd.predicted_diff.get("ok"), True)
+            self.assertTrue(rehyd.worktree_plan.get("create_commands"))
+
+    def test_gate_honors_approved_checkpoint_id(self):
+        """#648: approved checkpoint_id supplies approved + shadow_ack to gate."""
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine
+        from plate_core.checkpoint import decide_checkpoint
+
+        with tempfile.TemporaryDirectory() as tmp:
+            shadow_dir = Path(tmp) / "shadow"
+            cp_dir = Path(tmp) / "cp"
+            eng = AutonomyEngine(repo=None)
+            eng.enabled = True
+            eng.risk_tolerance = "low"
+            eng.shadow_base_dir = shadow_dir
+            eng.checkpoint_base_dir = cp_dir
+            eng.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "low",
+                "token_budget": {"daily": 50000, "per_cycle": 8000},
+            }
+            blocked = eng.gate_high_impact(
+                "auto_merge",
+                shadow_ack=None,
+                scope={"skip_git_preview": True},
+            )
+            self.assertTrue(blocked["blocked"])
+            cid = blocked["checkpoint_id"]
+            sid = blocked["shadow_report"]["shadow_id"]
+            decide_checkpoint(cid, "approve", base_dir=cp_dir)
+            # Fresh engine, only checkpoint_id (shadow from durable store + checkpoint)
+            eng2 = AutonomyEngine(repo=None)
+            eng2.enabled = True
+            eng2.risk_tolerance = "low"
+            eng2.shadow_base_dir = shadow_dir
+            eng2.checkpoint_base_dir = cp_dir
+            eng2.autonomy_config = eng.autonomy_config
+            ok = eng2.gate_high_impact(
+                "auto_merge",
+                checkpoint_id=cid,
+                create_checkpoint=False,
+                scope={"skip_git_preview": True},
+            )
+            self.assertFalse(ok["blocked"], ok)
+            self.assertEqual(ok["mode"], "approved")
+            self.assertEqual(ok["shadow_report"]["shadow_id"], sid)
+
+    def test_durable_budget_spend_across_engines(self):
+        """#634: spend counters persist under .agentic/budget so governor survives restart."""
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine, Decision, load_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            eng1 = AutonomyEngine(repo=None)
+            eng1.enabled = True
+            eng1.risk_tolerance = "high"
+            eng1.budget_base_dir = bdir
+            # Isolate from any real .agentic/budget hydrated at __init__
+            eng1._spent_today = 0
+            eng1._spent_this_cycle = 0
+            eng1._spent_usd_today = 0.0
+            eng1.throttled_actions = 0
+            eng1.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "high",
+                "token_budget": {"daily": 1000, "per_cycle": 800, "action": "pause"},
+            }
+            self.assertEqual(eng1.enforce_budget(400, "test"), Decision.PROCEED)
+            data = load_budget_spend(base_dir=bdir)
+            self.assertEqual(data.get("spent_today"), 400)
+
+            eng2 = AutonomyEngine(repo=None)
+            eng2.enabled = True
+            eng2.risk_tolerance = "high"
+            eng2.budget_base_dir = bdir
+            eng2.autonomy_config = eng1.autonomy_config
+            eng2._load_durable_spend()
+            self.assertEqual(eng2._spent_today, 400)
+            # Remaining room 400; next 500 over daily -> pause
+            self.assertEqual(eng2.enforce_budget(500, "test"), Decision.PAUSE)
+            self.assertEqual(eng2._spent_today, 400)
+
+    def test_cost_ceiling_usd_pauses(self):
+        """#634: cost_ceiling_usd is a hard rail (pause under throttle policy)."""
+        import tempfile
+        from pathlib import Path
+        from plate_core.autonomy import AutonomyEngine, Decision, tokens_to_usd
+
+        with tempfile.TemporaryDirectory() as tmp:
+            eng = AutonomyEngine(repo=None)
+            eng.enabled = True
+            eng.risk_tolerance = "high"
+            eng.budget_base_dir = Path(tmp) / "budget"
+            # Ceiling near-zero relative to estimate
+            eng.autonomy_config = {
+                "enabled": True,
+                "risk_tolerance": "high",
+                "token_budget": {"daily": 1_000_000, "per_cycle": 1_000_000, "action": "throttle"},
+                "cost_ceiling_usd": 0.0001,
+            }
+            est = 50_000  # ~0.1 USD at heuristic rate
+            self.assertGreater(tokens_to_usd(est), 0.0001)
+            self.assertEqual(eng.enforce_budget(est, "plan_epic"), Decision.PAUSE)
+
+    def test_get_budget_snapshot_and_markdown(self):
+        """#634 UX: get_budget_snapshot merges limits + durable spend for CLI/loops."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import (
+            format_budget_snapshot_markdown,
+            get_budget_snapshot,
+            save_budget_spend,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 4000,
+                    "spent_this_cycle": 500,
+                    "spent_usd_today": 0.008,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {"daily": 10000, "per_cycle": 2000, "action": "pause"},
+                    "cost_ceiling_usd": 1.0,
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                # load_budget_spend is called with base_dir — patch path via base_dir arg
+                snap = get_budget_snapshot(base_dir=bdir, estimated_tokens=7000)
+            self.assertEqual(snap["daily_limit"], 10000)
+            self.assertEqual(snap["spent_today"], 4000)
+            self.assertEqual(snap["remaining_tokens"], 6000)
+            self.assertTrue(snap["spend_is_today"])
+            self.assertTrue(snap["would_pause"])
+            # Dashboard/feed/PM field aliases must mirror would_pause/throttle (#634).
+            self.assertTrue(snap["would_pause_next_cycle"])
+            self.assertEqual(snap["would_pause_next_cycle"], snap["would_pause"])
+            self.assertEqual(snap["would_throttle_next_cycle"], snap["would_throttle"])
+            self.assertIn("daily", snap["gate_reason"] or "")
+            md = format_budget_snapshot_markdown(snap)
+            self.assertIn("Budget snapshot", md)
+            self.assertIn("4000/10000", md)
+
+    def test_get_budget_snapshot_low_remaining_is_critical(self):
+        """#634/#653: low remaining uses critical (not high) so what_next/feed gates fire."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 9500,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 2000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["remaining_tokens"], 500)
+            self.assertEqual(snap["budget_pressure"], "critical")
+            self.assertNotEqual(snap["budget_pressure"], "high")
+            # Next-cycle projection without estimate (remaining < per_cycle).
+            self.assertTrue(snap["would_pause"])
+            self.assertTrue(snap["would_pause_next_cycle"])
+            self.assertIn("per_cycle", snap.get("gate_reason") or "")
+
+    def test_get_budget_snapshot_rem_below_per_cycle_is_critical(self):
+        """remaining < per_cycle ⇒ critical pressure (align cost dashboard / feed)."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            # remaining 7000, daily 50000 → not <10%; burn 86% elevated alone;
+            # per_cycle 8000 forces critical.
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 43000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 50000,
+                        "per_cycle": 8000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["remaining_tokens"], 7000)
+            self.assertEqual(snap["budget_pressure"], "critical")
+            self.assertTrue(snap["would_pause_next_cycle"])
+
+    def test_get_budget_snapshot_exhausted_projects_next_cycle_pause(self):
+        """#634: remaining 0 → would_pause_next_cycle without requiring estimate."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            today = (
+                __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .date()
+                .isoformat()
+            )
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 10000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 2000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["remaining_tokens"], 0)
+            self.assertEqual(snap["budget_pressure"], "exhausted")
+            self.assertTrue(snap["would_pause_next_cycle"])
+
+    def test_get_budget_snapshot_stale_day_zeros_spend(self):
+        """#795: prior UTC day spend must not exhaust snapshot/what_next after rollover."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": "2020-01-01",
+                    "spent_today": 999_999,
+                    "spent_this_cycle": 50_000,
+                    "spent_usd_today": 9.99,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {"daily": 50000, "per_cycle": 8000, "action": "pause"},
+                    "cost_ceiling_usd": 10.0,
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["spent_today"], 0)
+            self.assertEqual(snap["spent_this_cycle"], 0)
+            self.assertEqual(snap["remaining_tokens"], 50000)
+            self.assertEqual(snap["budget_pressure"], "ok")
+            self.assertFalse(snap["spend_is_today"])
+
+    def test_record_budget_spend_public(self):
+        """#634/#775: gated surfaces charge durable spend outside AutonomyEngine."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.autonomy import (
+            get_budget_snapshot,
+            load_budget_spend,
+            record_budget_spend,
+            save_budget_spend,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": __import__("datetime")
+                    .datetime.now(__import__("datetime").timezone.utc)
+                    .date()
+                    .isoformat(),
+                    "spent_today": 100,
+                    "spent_this_cycle": 10,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+            out = record_budget_spend(
+                250,
+                base_dir=bdir,
+                reason="unit-test",
+                action_kind="test_charge",
+            )
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["charged_tokens"], 250)
+            self.assertEqual(out["spent_today"], 350)
+            self.assertEqual(out["spent_this_cycle"], 260)
+            data = load_budget_spend(base_dir=bdir)
+            self.assertEqual(data.get("spent_today"), 350)
+            self.assertEqual(data.get("last_action_kind"), "test_charge")
+            snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["spent_today"], 350)
+
+    def test_reset_budget_spend_zeros_today(self):
+        """Operator hygiene: reset clears durable spend without changing limits."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.autonomy import (
+            get_budget_snapshot,
+            load_budget_spend,
+            record_budget_spend,
+            reset_budget_spend,
+            save_budget_spend,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": __import__("datetime")
+                    .datetime.now(__import__("datetime").timezone.utc)
+                    .date()
+                    .isoformat(),
+                    "spent_today": 59850,
+                    "spent_this_cycle": 29700,
+                    "spent_usd_today": 0.12,
+                    "throttled_actions": 6,
+                },
+                base_dir=bdir,
+            )
+            out = reset_budget_spend(base_dir=bdir, reason="unit-test reset")
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["prior_spent_today"], 59850)
+            self.assertEqual(out["spent_today"], 0)
+            self.assertEqual(out["budget_pressure"], "ok")
+            data = load_budget_spend(base_dir=bdir)
+            self.assertEqual(data.get("spent_today"), 0)
+            self.assertEqual(data.get("spent_this_cycle"), 0)
+            self.assertEqual(data.get("throttled_actions"), 6)
+            self.assertEqual(data.get("last_action_kind"), "budget_reset")
+            snap = get_budget_snapshot(base_dir=bdir)
+            self.assertEqual(snap["spent_today"], 0)
+            self.assertGreater(snap["remaining_tokens"], 0)
+            # Subsequent charge still works
+            charge = record_budget_spend(100, base_dir=bdir, action_kind="post_reset")
+            self.assertTrue(charge["ok"])
+            self.assertEqual(charge["spent_today"], 100)
+
+    def test_durable_budget_surface_pause_helper(self):
+        """#873: shared helper for risk-independent surface budget rails."""
+        from plate_core.autonomy import durable_budget_surface_pause
+
+        empty = durable_budget_surface_pause(None)
+        self.assertFalse(empty["pause"])
+        ok = durable_budget_surface_pause(
+            {
+                "budget_pressure": "ok",
+                "remaining_tokens": 50000,
+                "would_pause": False,
+                "would_pause_next_cycle": False,
+            }
+        )
+        self.assertFalse(ok["pause"])
+        paused = durable_budget_surface_pause(
+            {
+                "budget_pressure": "critical",
+                "remaining_tokens": 1500,
+                "would_pause": True,
+                "would_pause_next_cycle": True,
+                "gate_reason": "remaining below per_cycle",
+            }
+        )
+        self.assertTrue(paused["pause"])
+        self.assertTrue(paused["would_pause_next_cycle"])
+        self.assertEqual(paused["pressure"], "critical")
+        self.assertEqual(paused["remaining"], 1500)
+        self.assertIn("remaining below per_cycle", paused["reason"] or "")
+        zero = durable_budget_surface_pause(
+            {
+                "budget_pressure": "exhausted",
+                "remaining_tokens": 0,
+                "would_pause_next_cycle": False,
+            }
+        )
+        self.assertTrue(zero["pause"])
+
+    def test_get_budget_snapshot_estimate_tokens_alias(self):
+        """Surface gates pass estimate_tokens; alias must hydrate gate reasons."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import get_budget_snapshot, save_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            save_budget_spend(
+                {
+                    "date": __import__("datetime")
+                    .datetime.now(__import__("datetime").timezone.utc)
+                    .date()
+                    .isoformat(),
+                    "spent_today": 9000,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 10000,
+                        "per_cycle": 5000,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(
+                    base_dir=bdir, estimate_tokens=2000
+                )
+            self.assertTrue(snap["would_pause"])
+            self.assertIn("daily", snap.get("gate_reason") or "")
+
+    def test_get_budget_snapshot_per_action_gate(self):
+        """#634: snapshot reports per_action_limit and gates estimates above it."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from plate_core.autonomy import format_budget_snapshot_markdown, get_budget_snapshot
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+
+            class _Cfg:
+                autonomy = {
+                    "enabled": True,
+                    "risk_tolerance": "medium",
+                    "token_budget": {
+                        "daily": 100_000,
+                        "per_cycle": 50_000,
+                        "per_action": 300,
+                        "action": "pause",
+                    },
+                }
+
+            with patch("plate_core.autonomy.load_plate_config", return_value=_Cfg()):
+                snap = get_budget_snapshot(base_dir=bdir, estimated_tokens=900)
+            self.assertEqual(snap["per_action_limit"], 300)
+            self.assertTrue(snap["would_pause"])
+            self.assertIn("per_action", snap.get("gate_reason") or "")
+            md = format_budget_snapshot_markdown(snap)
+            self.assertIn("Per-action", md)
+            self.assertIn("300", md)
+
+    def test_apply_live_budget_charge(self):
+        """#777 helper charges only on live path and adjusts remaining."""
+        import tempfile
+        from pathlib import Path
+
+        from plate_core.autonomy import apply_live_budget_charge, load_budget_spend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            out = {
+                "ok": True,
+                "budget_remaining": 10000,
+                "notes": [],
+            }
+            apply_live_budget_charge(
+                out,
+                tokens=500,
+                use_live_budget=True,
+                action_kind="unit_test",
+                reason="test",
+                base_dir=bdir,
+            )
+            self.assertTrue(out["budget_charge"]["ok"])
+            self.assertEqual(out["budget_remaining"], 9500)
+            self.assertEqual(load_budget_spend(base_dir=bdir).get("spent_today"), 500)
+
+            dry = {"ok": True, "budget_remaining": 10000, "notes": []}
+            apply_live_budget_charge(
+                dry,
+                tokens=500,
+                use_live_budget=False,
+                action_kind="unit_test",
+                base_dir=bdir,
+            )
+            self.assertNotIn("budget_charge", dry)
+            self.assertEqual(load_budget_spend(base_dir=bdir).get("spent_today"), 500)
+
+
 if __name__ == "__main__":
     unittest.main()
-
-
-
-

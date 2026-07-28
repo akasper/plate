@@ -1,0 +1,16 @@
+{
+  "slug": "949-adoption-first-qa-seed",
+  "change_type": "feature",
+  "surface": "src/plate_core/adoption.py, src/plate_core/what_next.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, src/plate_core/bootstrap.py, tests/test_adoption.py",
+  "summary": "First Q&A seed plan after adoption core_ready (#949/#633): plan_first_qa_seed + local marker, gh plate adopt --first-qa-plan, MCP plate_adoption_first_qa_plan, what_next priority first_qa_seed; shared STARTER_QUESTIONS with bootstrap.",
+  "migration_impact": "Adoption readiness includes first_qa; next_command points at first-qa-plan when core_ready and not seeded. Live seed requires injectable runner. Bootstrap reuses adoption.STARTER_QUESTIONS catalog.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_adoption.py -q.",
+    "2. After core_ready: gh plate adopt --first-qa-plan --json.",
+    "3. Apply only with agent runner; marker written under .agentic/adoption/first_qa_seed.json.",
+    "4. plate_what_next ranks first_qa_seed before ready Features when unseeded."
+  ],
+  "agent_notes": "Closes #949. Epic #633 remains open (full <30m E2E proof not claimed).",
+  "breaking": false,
+  "links": ["#949", "#633", "#935", "#937", "#654"]
+}

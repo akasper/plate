@@ -1,0 +1,11 @@
+{
+  "id": "marketplace-package",
+  "cadence": "manual",
+  "risk_level": "critical",
+  "description": "Package for marketplace; real publish remains human Task (#641/#380).",
+  "steps": [
+    {"tool": "plate_scheduled_op_run", "args": {"op_id": "marketplace-package", "dry_run": true}}
+  ],
+  "enabled": true,
+  "max_tokens_per_run": 6000
+}

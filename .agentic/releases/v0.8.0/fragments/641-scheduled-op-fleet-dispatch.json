@@ -1,0 +1,16 @@
+{
+  "slug": "641-scheduled-op-fleet-dispatch",
+  "change_type": "feature",
+  "surface": "src/plate_core/scheduled_ops.py",
+  "summary": "Harden #641 scheduled ops: live scheduled-refactor and implement-epic-slice open #644 fleet handoffs to implementer; dry-run previews dispatch; deploy/marketplace never auto-dispatch.",
+  "migration_impact": "run_scheduled_op(dry_run=false) for safe ops returns fleet_dispatch with handoff_id and stores metadata.fleet_handoff_id. Accept handoff to open feature loops (#820). Pass dispatch_fleet=false to disable.",
+  "migration_guidance": [
+    "1. Upgrade plate-core.",
+    "2. Dry-run: gh plate scheduled-ops / plate_scheduled_op_run dry_run=true — see fleet_dispatch.would_create_handoff.",
+    "3. Live: dry_run=false creates handoff; gh plate fleet --list then --update ID --status accepted.",
+    "4. Deploy/marketplace ops remain human-gated; never auto-publish."
+  ],
+  "agent_notes": "risk_tolerance=off skips fleet dispatch. Does not complete #641 E2E deploy story. Human Tasks #380/#381/#626 still required for real marketplace/PyPI publish.",
+  "breaking": false,
+  "links": ["#641", "#644", "#654", "#659"]
+}

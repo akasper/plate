@@ -3,7 +3,13 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from plate_core.github_client import GhApiError
-from plate_core.health import HealthReport, _repo_from_git_remote, get_health, resolve_repo
+from plate_core.health import (
+    HealthReport,
+    _repo_from_git_remote,
+    get_health,
+    resolve_repo,
+    summarize_spec_audit_for_health,
+)
 
 
 class FakeClient:
@@ -67,7 +73,11 @@ class FailingClient:
 
 class HealthTests(unittest.TestCase):
     def test_health_pass(self):
-        report = get_health(repo="akasper/plate_core", client=FakeClient())
+        report = get_health(
+            repo="akasper/plate_core",
+            client=FakeClient(),
+            include_spec_audit=False,
+        )
         self.assertIsInstance(report, HealthReport)
         self.assertEqual(report.repo, "akasper/plate_core")
         self.assertTrue(report.label_coverage_ok)
@@ -85,11 +95,199 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.plate_config_resolved_version, "1.2")
         self.assertTrue(report.plate_config_upgrade_available)
         self.assertIn(".plate/config present", report.plate_repo_signals)  # #459 / #464 detection for default persona
+        # #634 budget fields present (best-effort; values depend on local/config)
+        d = report.to_dict()
+        self.assertIn("budget_remaining_tokens", d)
+        self.assertIn("budget_pressure", d)
+        # #340 fields always present
+        self.assertEqual(report.spec_audit_status, "skipped")
+        self.assertIn("spec_audit_status", d)
+
+    def test_health_budget_fields_from_snapshot(self):
+        """#634/#783: health merges get_budget_snapshot into report."""
+        fake_snap = {
+            "enabled": True,
+            "risk_tolerance": "medium",
+            "daily_limit": 50000,
+            "spent_today": 12000,
+            "remaining_tokens": 38000,
+            "burn_rate": 24.0,
+            "budget_pressure": "ok",
+            "remaining_usd": 8.5,
+        }
+        with patch("plate_core.autonomy.get_budget_snapshot", return_value=fake_snap):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+            )
+        self.assertTrue(report.budget_enabled)
+        self.assertEqual(report.budget_risk_tolerance, "medium")
+        self.assertEqual(report.budget_remaining_tokens, 38000)
+        self.assertEqual(report.budget_daily_limit, 50000)
+        self.assertEqual(report.budget_spent_today, 12000)
+        self.assertEqual(report.budget_burn_rate, 24.0)
+        self.assertEqual(report.budget_pressure, "ok")
+        self.assertEqual(report.budget_remaining_usd, 8.5)
+
+    def test_summarize_spec_audit_actionable(self):
+        """#340: actionable findings produce status + next_step without writing SPEC."""
+        from plate_core.spec_audit import SpecAuditReport, SpecFinding
+
+        fake = SpecAuditReport(
+            ok=True,
+            repo_root="/tmp",
+            spec_path="/tmp/SPEC.md",
+            findings=[
+                SpecFinding(
+                    kind="undocumented",
+                    title="gap",
+                    confidence="medium",
+                    evidence=["e"],
+                )
+            ],
+            counts={"undocumented": 1, "aligned": 0, "stale_evidence": 0, "future_ok": 0, "conflict": 0},
+        )
+        with patch("plate_core.spec_audit.audit_spec", return_value=fake):
+            sa = summarize_spec_audit_for_health("/tmp")
+        self.assertEqual(sa["spec_audit_status"], "actionable")
+        self.assertEqual(sa["spec_audit_actionable_count"], 1)
+        self.assertIn("spec-audit", sa["spec_audit_next_step"])
+
+    def test_health_includes_spec_audit_fields(self):
+        """#340: get_health merges SPEC audit summary into report JSON."""
+        fake_sa = {
+            "spec_audit_status": "actionable",
+            "spec_audit_counts": {"undocumented": 2, "stale_evidence": 1},
+            "spec_audit_actionable_count": 3,
+            "spec_audit_next_step": "run gh plate spec-audit",
+        }
+        with patch(
+            "plate_core.health.summarize_spec_audit_for_health",
+            return_value=fake_sa,
+        ):
+            report = get_health(repo="akasper/plate_core", client=FakeClient())
+        self.assertEqual(report.spec_audit_status, "actionable")
+        self.assertEqual(report.spec_audit_actionable_count, 3)
+        self.assertEqual(report.spec_audit_counts.get("undocumented"), 2)
+        self.assertIn("spec-audit", report.spec_audit_next_step or "")
+        d = report.to_dict()
+        self.assertEqual(d["spec_audit_status"], "actionable")
+        self.assertEqual(d["spec_audit_actionable_count"], 3)
+
+    def test_health_skips_spec_audit_when_disabled(self):
+        report = get_health(
+            repo="akasper/plate_core",
+            client=FakeClient(),
+            include_spec_audit=False,
+        )
+        self.assertEqual(report.spec_audit_status, "skipped")
+        self.assertEqual(report.spec_audit_actionable_count, 0)
+
+    def test_health_includes_adoption_fields(self):
+        """#953: get_health merges local adoption readiness into report."""
+        fake_adopt = {
+            "ok": True,
+            "core_ready": False,
+            "first_qa": {"seeded": False},
+            "estimated_minutes_remaining": 12,
+            "next_command": "gh plate import-payload --dry-run --json",
+        }
+        with patch(
+            "plate_core.adoption.assess_adoption_readiness",
+            return_value=fake_adopt,
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+            )
+        self.assertFalse(report.adoption_core_ready)
+        self.assertFalse(report.first_qa_seeded)
+        self.assertEqual(report.adoption_minutes_remaining, 12)
+        self.assertIn("import-payload", report.adoption_next_command or "")
+        d = report.to_dict()
+        self.assertIn("adoption_core_ready", d)
+        self.assertEqual(d["adoption_minutes_remaining"], 12)
+
+    def test_health_adoption_ready_and_seeded(self):
+        fake_adopt = {
+            "ok": True,
+            "core_ready": True,
+            "first_qa": {"seeded": True},
+            "estimated_minutes_remaining": 0,
+            "next_command": "gh plate health && gh plate feed --json",
+        }
+        with patch(
+            "plate_core.adoption.assess_adoption_readiness",
+            return_value=fake_adopt,
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+            )
+        self.assertTrue(report.adoption_core_ready)
+        self.assertTrue(report.first_qa_seeded)
+        self.assertEqual(report.adoption_minutes_remaining, 0)
+
+    def test_health_includes_self_migrate_fields(self):
+        """Proves: get_health merges local self-migrate verify into report (#967)."""
+        fake_sm = {
+            "ok": True,
+            "ready": False,
+            "next_command": "gh plate self-migrate --plan --json",
+            "migrate": {
+                "drift": True,
+                "target_version": "0.7.2",
+            },
+        }
+        with patch(
+            "plate_core.self_migrate.verify_self_migrate",
+            return_value=fake_sm,
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+            )
+        self.assertTrue(report.self_migrate_drift)
+        self.assertFalse(report.self_migrate_ready)
+        self.assertEqual(report.self_migrate_target, "0.7.2")
+        self.assertIn("self-migrate", report.self_migrate_next_command or "")
+        d = report.to_dict()
+        self.assertIn("self_migrate_drift", d)
+        self.assertIn("self_migrate_ready", d)
+
+    def test_health_self_migrate_ready(self):
+        """Proves: ready path surfaces ready=true without failing health (#967)."""
+        fake_sm = {
+            "ok": True,
+            "ready": True,
+            "next_command": "gh plate self-migrate --verify --json",
+            "migrate": {"drift": False, "target_version": "0.7.2"},
+        }
+        with patch(
+            "plate_core.self_migrate.verify_self_migrate",
+            return_value=fake_sm,
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+            )
+        self.assertFalse(report.self_migrate_drift)
+        self.assertTrue(report.self_migrate_ready)
+        self.assertEqual(report.self_migrate_target, "0.7.2")
 
     def test_health_partial_on_failures(self):
         """Degraded mode with errors list when some calls fail (rate, 404 etc)."""
         client = FailingClient()
-        report = get_health(repo="akasper/plate_core", client=client)
+        report = get_health(
+            repo="akasper/plate_core",
+            client=client,
+            include_spec_audit=False,
+        )
         self.assertIsInstance(report, HealthReport)
         self.assertFalse(report.label_coverage_ok)  # missing many
         self.assertGreater(len(report.missing_labels), 0)

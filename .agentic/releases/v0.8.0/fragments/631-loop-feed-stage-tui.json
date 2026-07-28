@@ -1,0 +1,26 @@
+{
+  "slug": "631-loop-feed-stage-tui",
+  "change_type": "feature",
+  "surface": "src/plate_core/feed.py, tests/test_feed.py",
+  "summary": "Endless feed #631 polish: stage-ranked feature/bug loop items (human_checkpoint/babysit first), stage-aware ask_user_question options (babysit/tick/advance/approve), PM assignments with loop_run_id gain tick_loop option and higher rank.",
+  "migration_impact": "Feed presentation options for loop items change to stage-specific follow-through ids. Rank order prefers gate stages over plan/impl. No schema/config change.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Hosts present presentation[].ask_user_question for feature_loop/bug_loop using option ids advance|babysit|tick_gates|approve_checkpoint.",
+    "3. PM queue rows with loop_run_id expose tick_loop; re-run plate_pm_run_cycle to sync stages."
+  ],
+  "agent_notes": "Do not re-request Copilot from babysit option; use pr babysit --act. risk-off still requires human merge on merge_eligible. Pairs with #638/#639/#660 loop dispatch+ticks.",
+  "breaking": false,
+  "links": [
+    "#741",
+    "#631",
+    "#656",
+    "#638",
+    "#639",
+    "#660",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

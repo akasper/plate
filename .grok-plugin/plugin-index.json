@@ -109,6 +109,10 @@
             "description": "Assess whether a change has sufficient automated test coverage."
           },
           {
+            "name": "Run Autonomy Cycle / Loop",
+            "description": "Drive long-running PLATE work via AutonomyEngine surfaces: plate_autonomy_status, plate_autonomy_run_cycle, plate_auton…"
+          },
+          {
             "name": "Run Q&A Session",
             "description": "Discover, prioritize, present (via native or fallback), and record answers to open Question issues, triggering contempl…"
           },

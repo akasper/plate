@@ -1,0 +1,15 @@
+{
+  "slug": "620-shared-payload-local-applier",
+  "change_type": "feature",
+  "surface": "src/plate_core/import_payload.py, src/plate_core/bootstrap.py",
+  "summary": "Shared payload planner for local + remote (#620): bootstrap uses list_payload_relative_paths; copy_template_payload_local alias for agents; same manifest paths for import-payload and bootstrap Contents API copy.",
+  "migration_impact": "No behavior change for remote bootstrap. New public alias copy_template_payload_local for local FS apply (same as import_payload). Agents should use gh plate import-payload or the alias instead of hand-crafted cp.",
+  "migration_guidance": [
+    "1. Prefer gh plate import-payload --dry-run then --apply for local adoption.",
+    "2. Code callers may use copy_template_payload_local(dest, dry_run=...) from plate_core.import_payload.",
+    "3. Bootstrap remote path still uses GitHub Contents API with the shared path list."
+  ],
+  "agent_notes": "After local apply, run gh plate bootstrap --apply for labels/wiki/.plate only. Do not hand-write selective cp from package payload.",
+  "breaking": false,
+  "links": ["#620", "#616", "#615", "#633"]
+}

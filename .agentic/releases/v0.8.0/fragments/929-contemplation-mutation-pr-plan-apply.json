@@ -1,0 +1,16 @@
+{
+  "slug": "929-contemplation-mutation-pr-plan-apply",
+  "change_type": "feature",
+  "surface": "src/plate_core/contemplation.py, tests/test_contemplation.py, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+  "summary": "Contemplation builds structured mutation_pr_plan (branch/base/gh_argv/git_steps) and dry-run apply_mutation_pr_plan by default; high-risk live apply needs allow_high_risk + injectable runner (#929/#364).",
+  "migration_impact": "contemplate() gains mutation_pr_plan + mutation_pr_apply (always dry_run). New pure helpers build_mutation_pr_plan / apply_mutation_pr_plan. No default git push or gh pr create.",
+  "migration_guidance": [
+    "1. Pull release after merge; run pytest tests/test_contemplation.py -k mutation_pr.",
+    "2. Agents execute plan.git_steps / plan.gh_argv on a worktree, or supply runner to apply_mutation_pr_plan(dry_run=False).",
+    "3. High-risk paths (AGENTS.md/SPEC/workflows) require allow_high_risk=True after human review.",
+    "4. Residual #364: live auto-push without runner still intentionally unsupported."
+  ],
+  "agent_notes": "Closes #929 only. Safe-by-default dry-run during contemplate; never opens live PRs without explicit runner.",
+  "breaking": false,
+  "links": ["#929", "#925", "#364", "#143", "#257", "#654"]
+}

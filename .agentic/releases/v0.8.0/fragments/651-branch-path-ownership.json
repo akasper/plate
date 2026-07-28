@@ -1,0 +1,24 @@
+{
+  "slug": "651-branch-path-ownership",
+  "change_type": "feature",
+  "surface": "src/plate_core/collab.py, feed.py, agent_guidance.py, mcp_server.py, cli.py, .gitignore",
+  "summary": "Stronger human+agent branch/path ownership etiquette (#651): durable .agentic/collab ownership claims, path/branch pause gestures, worktree isolation + concurrent-edit checks wired into collab_policy_check, feed signals, MCP plate_collab_ownership_* / etiquette / concurrent + gh plate collab --claim|--release|--etiquette.",
+  "migration_impact": "Optional local ownership registry under .agentic/collab/ (gitignored). Humans claim path/branch pauses; agents must pass paths/branch into plate_collab_check. No required config change.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. To pause agents on a path: gh plate collab --claim --kind path --target <path> (or plate_collab_ownership_claim).",
+    "3. Agents: include --paths / paths= and --branch in collab checks before edit/push; respect blocked claims.",
+    "4. Release when done: gh plate collab --release <claim-id> or --kind/--target."
+  ],
+  "agent_notes": "First enforceable slice of #651 on top of #643 driver labels. Does not replace CODEOWNERS/branch protection. Prefer feature/*|bug/* branches in isolated worktrees. Issue may remain open for richer GitHub-native ownership signals.",
+  "breaking": false,
+  "links": [
+    "#651",
+    "#643",
+    "#654",
+    "#514"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

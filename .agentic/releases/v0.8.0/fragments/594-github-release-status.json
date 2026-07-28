@@ -1,0 +1,23 @@
+{
+  "slug": "594-github-release-status",
+  "change_type": "feature",
+  "surface": "src/plate_core/release.py, cli.py",
+  "summary": "Surface GitHub Releases state on release status (#594): github_release_exists/is_latest/url/tag via GhClient; CLI + JSON/MCP additive fields; warn when version artifacts exist without a published Release.",
+  "migration_impact": "Additive fields on ReleaseStatusReport / get_release_status JSON. No breaking schema changes. CLI prints three new lines after version.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Run gh plate release status (or --json) and read github_release_* fields.",
+    "3. If exists=false for the current version, run finalize / gh release create to publish the missing Release object."
+  ],
+  "agent_notes": "Complements #592 create_github_release and #591 ceremony gap. Use for post-finalize verification. Closes #594.",
+  "breaking": false,
+  "links": [
+    "#594",
+    "#591",
+    "#592",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

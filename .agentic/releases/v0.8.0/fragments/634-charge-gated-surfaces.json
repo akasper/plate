@@ -1,0 +1,25 @@
+{
+  "slug": "634-charge-gated-surfaces",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, planning.py, epic_release_planning.py, scheduled_ops.py, fleet.py, feature_media.py",
+  "summary": "apply_live_budget_charge helper + charge durable spend on success for planning start/build, ER planning start/build, scheduled ops run, fleet create_handoff; feature_media uses shared helper (#777/#634).",
+  "migration_impact": "Live gated actions now deplete .agentic/budget/spend.json remaining after success (not only hydrate/block). use_live_budget=false still skips charge for tests/dry overrides.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Expect spent_today to rise after live planning/ops/fleet/media success paths.",
+    "3. Inspect with gh plate autonomy --budget / get_budget_snapshot.",
+    "4. Tests: pass use_live_budget=false to avoid charging repo spend."
+  ],
+  "agent_notes": "Extends #775/#776 beyond feature_media. Packaging/monitoring/stubs can adopt apply_live_budget_charge in follow-ups.",
+  "breaking": false,
+  "links": [
+    "#777",
+    "#634",
+    "#775",
+    "#776",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

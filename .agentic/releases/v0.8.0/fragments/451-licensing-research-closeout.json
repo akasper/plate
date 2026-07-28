@@ -1,0 +1,15 @@
+{
+  "slug": "451-licensing-research-closeout",
+  "change_type": "docs",
+  "surface": "docs/research/451-licensing-text-and-cla-decision.md",
+  "summary": "Close Research #451: durable record that MIT+Commons Clause LICENSE (PR #455) is authoritative; CLA decision is not-now; CONTRIBUTING/README already landed.",
+  "migration_impact": "None. Confirms existing LICENSE/README/CONTRIBUTING; no new license change.",
+  "migration_guidance": [
+    "1. Treat root LICENSE as source of truth for license text.",
+    "2. Do not re-open #451 for text drafting unless legal counsel requests a rewrite.",
+    "3. Revisit CLA only if commercial dual-license or high-volume external contribution program starts."
+  ],
+  "agent_notes": "Research issue closes via Documentation PR with Closes #451. Epic #390 remains open until human epic-close ceremony if any children remain.",
+  "breaking": false,
+  "links": ["#451", "#390", "#453", "#455", "#654"]
+}

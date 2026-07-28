@@ -1,0 +1,10 @@
+{
+  "slug": "871-scheduled-ops-budget-pause-rails",
+  "change_type": "fix",
+  "surface": "src/plate_core/scheduled_ops.py",
+  "summary": "run_scheduled_op hard-blocks on durable would_pause_next_cycle or critical/exhausted budget pressure even when remaining tokens > est, matching fleet/PM/AutonomyEngine surface rails (#634/#871).",
+  "migration_impact": "Live scheduled ops may refuse run under risk=off when remaining is below per_cycle. Raise token_budget, wait for UTC day rollover, or pass explicit use_live_budget=false with caller-owned remaining.",
+  "agent_notes": "Do not run scheduled ops when budget_pressure is critical/exhausted or would_pause_next_cycle is true. Prior note-only path was a no-op; resolve budget_gate first.",
+  "breaking": false,
+  "links": ["#871", "#634", "#641", "#653", "#869", "#867", "#865", "#654"]
+}

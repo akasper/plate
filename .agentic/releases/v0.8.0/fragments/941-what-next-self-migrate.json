@@ -1,0 +1,15 @@
+{
+  "slug": "941-what-next-self-migrate",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py, tests/test_what_next.py",
+  "summary": "plate_what_next ranks self-migrate when pin/payload drift is true (after adoption, before ready issues); get_what_next loads plan_self_migrate (#941/#649/#939).",
+  "migration_impact": "recommend_what_next gains optional self_migrate; new priority self_migrate. No drift → unchanged ladder.",
+  "migration_guidance": [
+    "1. Pull release after merge; pytest tests/test_what_next.py -k SelfMigrate.",
+    "2. Drifted pins surface next_command self-migrate --plan before Feature work.",
+    "3. Adoption core_ready=false still outranks self_migrate."
+  ],
+  "agent_notes": "Closes #941. Complements #939; does not close Epic #649.",
+  "breaking": false,
+  "links": ["#941", "#939", "#649", "#937", "#654"]
+}

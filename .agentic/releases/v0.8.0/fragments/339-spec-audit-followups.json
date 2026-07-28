@@ -1,0 +1,16 @@
+{
+  "slug": "339-spec-audit-followups",
+  "change_type": "feature",
+  "surface": "src/plate_core/spec_audit.py, gh plate spec-audit --followups, plate_spec_audit_followups MCP",
+  "summary": "SPEC audit follow-ups (#339): route findings to Documentation/Bug/Question issues with dedupe markers, plan/apply via CLI --followups/--apply-followups and MCP; additive SPEC draft table with human-approval gate (never auto-writes SPEC.md).",
+  "migration_impact": "New optional flags on gh plate spec-audit and MCP plate_spec_audit_followups. Default remains audit-only. Creating issues requires explicit --apply-followups / apply=true.",
+  "migration_guidance": [
+    "1. Upgrade plate-core for follow-up surfaces.",
+    "2. Dry-run: gh plate spec-audit --followups --show-draft.",
+    "3. Create issues only with --apply-followups after human review of plan.",
+    "4. Apply SPEC draft only via a Documentation PR with human approval."
+  ],
+  "agent_notes": "Never write SPEC.md from followups. Low-confidence undocumented findings become Questions. Prefer dry-run plan in loops; only apply when user requests issue creation.",
+  "breaking": false,
+  "links": ["#339", "#338", "#335", "#337", "#340", "#654"]
+}

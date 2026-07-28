@@ -1,0 +1,23 @@
+{
+  "slug": "645-shadow-simulation-high-impact",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, mcp_server.py, cli.py, agent_guidance.py",
+  "summary": "First real #645 shadow/simulate gate: classify action impact, ShadowReport previews (cost/side-effects/gates), gate_high_impact requiring shadow_ack+approval for high/critical, MCP plate_autonomy_simulate + gh plate autonomy --simulate.",
+  "migration_impact": "New MCP tool plate_autonomy_simulate and CLI flag --simulate. High-risk procedures at low risk_tolerance return status=shadow_required instead of executing. No breaking config changes.",
+  "migration_guidance": [
+    "1. Upgrade plate_core / gh-plate / plate-mcp to pick up autonomy simulate surfaces.",
+    "2. Before deploy/release_cut/auto_merge: call plate_autonomy_simulate (or --simulate) and present ShadowReport to the human.",
+    "3. Only execute after shadow_ack + approved=True for critical actions; high-risk procedures honor the same gate at low tolerance."
+  ],
+  "agent_notes": "Prefer plate_autonomy_simulate before high-impact autonomy. Do not treat dry_run alone as sufficient for critical actions. Worktree/fork full shadow diffs remain follow-up under #645.",
+  "breaking": false,
+  "links": [
+    "#645",
+    "#654",
+    "#470",
+    "#648"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

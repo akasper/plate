@@ -1,0 +1,16 @@
+{
+  "slug": "662-pm-vision-design-agents",
+  "change_type": "docs",
+  "surface": "docs/design/pm-orchestrator-architecture-and-browser.md, AGENTS.md, SPEC.md",
+  "summary": "Land #662 v1.0 vision docs on release: PM/orchestrator design artifact, thin AGENTS Project Manager guidance, SPEC pointer; browser #661 remains deferred.",
+  "migration_impact": "Docs only. Agents should prefer plate_pm_* / what_next for long-running coordination; no runtime change.",
+  "migration_guidance": [
+    "1. No package upgrade required for docs alone.",
+    "2. Read docs/design/pm-orchestrator-architecture-and-browser.md for PM architecture.",
+    "3. Follow AGENTS.md Project Manager section for default long-running coordination.",
+    "4. Do not start browser #661 work without human prioritization."
+  ],
+  "agent_notes": "Brings main-side vision design onto release track. Does not claim #654 checklist E2E complete.",
+  "breaking": false,
+  "links": ["#662", "#660", "#661", "#654", "#644", "#631"]
+}

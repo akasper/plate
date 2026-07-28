@@ -1,0 +1,24 @@
+{
+  "slug": "653-cost-risk-dashboard",
+  "change_type": "feature",
+  "surface": "src/plate_core/costs.py, cli.py, mcp_server.py",
+  "summary": "Cost+risk observability dashboard (#653/#634): get_cost_dashboard merges USAGE harvest with autonomy budgets (burn, remaining, enforcement action), autopilot score, drift signals, ranked feed_items for what-next; CLI --dashboard and plate_costs dashboard=true.",
+  "migration_impact": "plate_costs gains optional dashboard flag; gh plate costs --dashboard. No breaking changes to default plate_costs aggregate payload.",
+  "migration_guidance": [
+    "1. Upgrade plate_core surfaces.",
+    "2. Prefer plate_costs with dashboard=true (or gh plate costs --dashboard --json) for feed/PM observability.",
+    "3. Wire feed consumers (#631) to feed_items + open_human_checkpoints."
+  ],
+  "agent_notes": "Use dashboard before long autonomy loops to surface burn, ceiling, checkpoints, and cost hotspots. Complements plate_autonomy_status; does not replace enforce_budget.",
+  "breaking": false,
+  "links": [
+    "#653",
+    "#634",
+    "#654",
+    "#470",
+    "#631"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

@@ -78,9 +78,11 @@ The contract composes with existing Research/Design/Feature loops (see AGENTS.md
 - Audit of any closed Question in the Epic shows complete lossless history.
 - No violations of the four invariants in verification runs.
 - PRs implementing the contract update the required process files atomically.
-- **Proving tests** (per Epic #350 Test Coverage Audit convention + Research #361 classification):
-  - `tests/test_contemplation.py:ContemplationEngineTests` (citation-based close_signal_met, revision invalidation, blocking resumption + USAGE REPORT; partial for full v2 contract).
-  - `tests/test_curiosity_answers.py` (Answer Model parse/build/index/backfill supporting the transcript/revision requirements).
-  - (See `docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md` and `docs/research/test-classification-inventory.md` for the full bidirectional matrix and gap notes on v2 completeness.)
+- **Proving tests** (per Epic #350 Test Coverage Audit convention + Research #361 classification + #364 closeout):
+  - `tests/test_contemplation.py:ContemplationEngineTests` — citation-based `close_signal_met`, revision invalidation, blocking resumption + USAGE REPORT; full transcript + typed follow-ups (#921); git provenance (#923); mutation intents + PR draft (#925); structured `mutation_pr_plan` + dry-run apply (#929).
+  - `tests/test_curiosity_answers.py` — Answer Model parse/build/index/backfill supporting transcript/revision requirements.
+  - `tests/e2e/compound-flows.spec.ts` — offline compound chain including contemplate→mutation plan (#927).
+  - Bidirectional matrix: `docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md` (#364 closeout addendum) and `docs/research/364-test-coverage-gap-closeout.md`.
+  - **Deferred (not blocking #364):** live auto-push without injectable runner; live-network ceremony apply (see audit deferred table).
 
 This design is derived directly from Design issue #143 requirements and Epic #139 invariants. It will incorporate cross-references to the full research inventory artifact from #140 (docs/research/curiosity-qanda-inventory.md) once that Research PR lands. All changes pushed to the existing PR branch per babysit rules. (Updated for #350/#361 convention dogfooding.)
