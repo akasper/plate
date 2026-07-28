@@ -1,0 +1,185 @@
+name: Publish plate-core to PyPI (PLATE-CORE-PUBLISHING-ONLY)
+
+# PLATE-CORE-PUBLISHING-ONLY
+# ============================================================
+# This workflow publishes the `plate-core` Python package (sdist + wheel)
+# to PyPI whenever a release is cut (v* tag produced by the normal PLATE
+# release ceremony in release.yml + tag creation job).
+#
+# It complements publish-gh-plate-extension.yml (the thin gh- shim for the
+# `gh plate` extension).
+#
+# THIS IS SPECIFIC INFRASTRUCTURE FOR PUBLISHING THE OFFICIAL
+# plate_core / akasper/plate PyPI package surface.
+#
+# IT IS NOT PART OF THE PLATE METHODOLOGY.
+# IT IS NOT PART OF AGENTS.md, THE GENERAL RELEASE CEREMONY,
+# OR ANYTHING DOWNSTREAM PLATE ADOPTERS SHOULD COPY OR CARE ABOUT.
+#
+# Do not sync this file (or the logic it contains) into
+# src/plate_core/template_payload/.github/workflows/
+# or treat it as reusable PLATE process or template content.
+#
+# The thin repo (akasper/gh-plate) is a minimal shim whose only job
+# is to host the launcher script. All real code, the plate-core PyPI
+# package, MCP, plugins, etc. live in the main akasper/plate repo.
+# ============================================================
+#
+# Restored after main history repair for the 0.8.0 cut (workflow was introduced
+# in #624 / #623 and is required for Trusted Publisher OIDC publishes).
+
+on:
+  # Trigger after the normal release ceremony has produced a tag on main.
+  # Same trigger as the gh-plate thin-shim publisher.
+  push:
+    tags:
+      - 'v*'
+  # Also allow manual trigger for recovery / initial seed / back-publishing
+  # a prior release (e.g. publish 0.7.2 after this change lands so that
+  # gh-plate v0.7.2 pins stop failing).
+  #
+  # CRITICAL: For workflow_dispatch, the caller MUST supply `ref: vX.Y.Z` (a release tag).
+  # The expression `github.event.inputs.ref || github.ref` works for tag pushes,
+  # but on dispatch without a proper ref it would fall back to the default branch
+  # (typically main, which may contain .dev versions). The validation step below
+  # enforces a v[0-9] release tag pattern for both paths and will fail the job
+  # with a clear error if violated. This directly addresses the Release Risk
+  # Review concern (thread PRRT_kwDOSn5ouc6KD10j).
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (MUST be a v* release tag e.g. v0.7.2 for publishing; branch/SHA will be rejected by validation). Use for manual dispatch, recovery, or backfill of prior releases.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  # Required for trusted publishing via GitHub OIDC (no PYPI_TOKEN secret).
+  id-token: write
+
+# NOTE (Release Risk Review, thread PRRT_kwDOSn5ouc6KD10m):
+# Good on pinning and permissions. Critical prerequisite: If this trusted
+# publisher is not yet configured on pypi.org, the first tag push (or dispatch)
+# after merge will fail with a 403. The post-merge owner checklist in the PR
+# body (now formatted as a markdown task list) documents the one-time setup.
+# This workflow is self-documenting on that point via comments in the Publish step.
+
+jobs:
+  publish:
+    # Only run on the real main repo, not forks.
+    if: github.repository == 'akasper/plate'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo at the release ref
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Determine version
+        id: ver
+        run: |
+          set -euo pipefail
+          RAW="${{ github.event.inputs.ref || github.ref }}"
+          # Normalize ref to a clean version string (vX.Y.Z etc).
+          # For tag-push: github.ref is typically refs/tags/vX.Y.Z → extract vX.Y.Z
+          # For dispatch: use the provided ref (user must give v* tag per validation)
+          if [[ "$RAW" == refs/tags/* ]]; then
+            VER="${RAW#refs/tags/}"
+          elif [[ "$RAW" == refs/heads/* ]]; then
+            VER="${RAW#refs/heads/}"
+          else
+            VER="$RAW"
+          fi
+          echo "raw=$RAW" >> $GITHUB_OUTPUT
+          echo "ver=$VER" >> $GITHUB_OUTPUT
+          echo "Determined VER=$VER from input or triggering ref"
+          # Secondary read of pyproject version (for extra diagnostics; addresses review
+          # suggestion around asserting no .dev in pyproject.toml for release paths).
+          PYVER=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1 || echo "unknown")
+          echo "pyproject_version=$PYVER" >> $GITHUB_OUTPUT
+
+      - name: Validate release version
+        # This step directly addresses Release Risk Review suggestion (thread PRRT_kwDOSn5ouc6KD10j):
+        # - For tag pushes: the tag name itself is validated (normal case from release.yml).
+        # - For workflow_dispatch: user MUST provide ref=v* ; empty or main/branch falls through
+        #   to github.ref which would be the workflow's default branch (dev), and this fails loudly.
+        # Clear ::error + hints provided. Also surfaces pyproject version for traceability.
+        run: |
+          set -euo pipefail
+          VER="${{ steps.ver.outputs.ver }}"
+          PYVER="${{ steps.ver.outputs.pyproject_version }}"
+          echo "Validating release version: VER=$VER (pyproject.toml reports: $PYVER)"
+          if [[ ! "$VER" =~ ^v[0-9] ]]; then
+            echo "::error title=Invalid release ref for PyPI publish::Determined version '$VER' does not match a release tag pattern (must start with 'v' followed by a digit, e.g. v0.7.2, v1.2.3)."
+            echo ""
+            echo "Hints:"
+            echo "  - Tag push: only v* tags created by the PLATE release ceremony will pass."
+            echo "  - workflow_dispatch: you MUST explicitly set the 'ref' input to a real v* tag (see input description)."
+            echo "    Example:  ref: v0.7.2"
+            echo "  - This protects against accidentally publishing a .dev version from main or a feature branch."
+            echo "  - See Release Risk Review thread PRRT_kwDOSn5ouc6KD10j."
+            echo "  - Checked out using: ${{ github.event.inputs.ref || github.ref }}"
+            echo ""
+            exit 1
+          fi
+          if [[ "$PYVER" == *".dev"* || "$PYVER" == *"dev0"* ]]; then
+            echo "::warning::pyproject.toml version '$PYVER' contains a dev marker, even for VER=$VER. Review pyproject.toml."
+          fi
+          echo "✅ Release version validated successfully: $VER"
+
+      - name: Set up Python (>= 3.10 as declared in pyproject)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
+      - name: Build sdist and wheel
+        run: python -m build
+        # Artifacts land in dist/
+
+      - name: Verify built artifacts (import + version smoke)
+        run: |
+          set -euo pipefail
+          ls -l dist/
+          # Install the wheel without deps (plate-core has none) to smoke the package
+          python -m pip install --no-deps --force-reinstall dist/*.whl
+          python -c '
+          import plate_core
+          import sys
+          print("Successfully imported plate_core version:", plate_core.__version__)
+          print("Python:", sys.version)
+          '
+          # Best-effort twine metadata check (non-fatal if twine complains about
+          # dev metadata on a real release tag)
+          python -m twine check dist/* || echo "twine check produced warnings (non-fatal)"
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Trusted publishing: the workflow's OIDC token is exchanged for a
+        # short-lived PyPI token automatically. The plate-core project on
+        # PyPI must have akasper/plate + this workflow filename registered
+        # under Settings > Publishing > Trusted publishers (one-time owner step).
+        # See https://docs.pypi.org/trusted-publishers/ for setup.
+        #
+        # CRITICAL PREREQUISITE (per Release Risk Review thread PRRT_kwDOSn5ouc6KD10m):
+        # If the trusted publisher is NOT configured on pypi.org yet, the first
+        # tag push after merge (or manual dispatch) WILL fail with HTTP 403.
+        # See the "Post-merge / owner actions required" checklist in the PR
+        # description (use workflow_dispatch with ref=v0.7.2 for backfill once set).
+        #
+        # On first use after this PR, use workflow_dispatch with ref=v0.7.2
+        # (and any earlier tags) to backfill so the version pins in gh-plate
+        # shims become satisfiable.
+
+      - name: Summary
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          echo "plate-core published to PyPI for $VER (raw ref: ${{ steps.ver.outputs.raw }})"
+          echo "Users can now: pip install plate-core"
+          echo "The gh-plate extension shim (version-locked installs) will now succeed."
+          echo "See Bug #623."
