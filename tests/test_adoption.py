@@ -184,6 +184,57 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
             done = complete_adoption_session(tmp)
         self.assertFalse(done["ok"])
         self.assertEqual(done["error"], "no_session")
+        self.assertIn("start-session", done["next_command"])
+
+    def test_complete_session_next_command_first_qa_when_unseeded(self):
+        """#1003: core_ready without first_qa must not jump to feed."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # Minimal core_ready tree
+            (root / ".plate").write_text("version: 1\n", encoding="utf-8")
+            (root / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+            (root / "docs" / "wiki").mkdir(parents=True)
+            (root / "docs" / "wiki" / "Goals.md").write_text("# g\n", encoding="utf-8")
+            (root / ".agentic" / "releases" / "unreleased").mkdir(parents=True)
+            (root / ".github" / "workflows").mkdir(parents=True)
+            (root / ".github" / "labels.yml").write_text("labels: []\n", encoding="utf-8")
+            # force core_ready if assess needs more - use write_first_qa only for seeded case
+            start_adoption_session(root, now_iso="2026-07-28T10:00:00+00:00")
+            ready = assess_adoption_readiness(root, include_optional=False)
+            done = complete_adoption_session(
+                root, now_iso="2026-07-28T10:10:00+00:00"
+            )
+        self.assertTrue(done["ok"])
+        self.assertTrue(done["completed"])
+        if ready.get("core_ready"):
+            self.assertFalse(done.get("first_qa_seeded"))
+            self.assertIn("first-qa-plan", done["next_command"])
+            self.assertNotEqual(done["next_command"], "gh plate feed --json")
+        else:
+            # empty-ish tree may not be core_ready; still must not blindly feed
+            self.assertNotEqual(done["next_command"], "gh plate feed --json")
+
+    def test_complete_session_next_command_feed_when_first_qa_seeded(self):
+        """#1003: core_ready + first_qa seeded → feed."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text("version: 1\n", encoding="utf-8")
+            (root / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+            (root / "docs" / "wiki").mkdir(parents=True)
+            (root / "docs" / "wiki" / "Goals.md").write_text("# g\n", encoding="utf-8")
+            (root / ".agentic" / "releases" / "unreleased").mkdir(parents=True)
+            (root / ".github" / "workflows").mkdir(parents=True)
+            (root / ".github" / "labels.yml").write_text("labels: []\n", encoding="utf-8")
+            write_first_qa_seed_marker(root, titles=["q1", "q2", "q3"], mode="test")
+            start_adoption_session(root, now_iso="2026-07-28T10:00:00+00:00")
+            ready = assess_adoption_readiness(root, include_optional=False)
+            done = complete_adoption_session(
+                root, now_iso="2026-07-28T10:12:00+00:00"
+            )
+        self.assertTrue(done["ok"])
+        if ready.get("core_ready"):
+            self.assertTrue(done.get("first_qa_seeded"))
+            self.assertEqual(done["next_command"], "gh plate feed --json")
 
     def test_cmd_adopt_json(self):
         with TemporaryDirectory() as tmp:

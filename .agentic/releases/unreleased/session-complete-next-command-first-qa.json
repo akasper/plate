@@ -1,0 +1,13 @@
+{
+  "slug": "session-complete-next-command-first-qa",
+  "title": "complete-session next_command respects first_qa residual",
+  "summary": "complete_adoption_session no longer jumps to feed when core_ready but first_qa unseeded; routes to first-qa-plan. no_session/already_completed expose next_command. Epic #1000 adopter TTV.",
+  "issues": ["#1003", "#1000", "#983", "#955"],
+  "type": "feature",
+  "change_type": "feature",
+  "surface": "src/plate_core/adoption.py",
+  "migration_impact": "Additive routing. Agents completing adopt sessions should follow next_command (first-qa-plan before feed when unseeded).",
+  "agent_notes": "After gh plate adopt --complete-session --json, if first_qa_seeded=false run next_command (first-qa-plan) before feed. Parent Epic #1000.",
+  "breaking": false,
+  "links": ["#1003", "#1000", "#955", "#949"]
+}
