@@ -214,6 +214,26 @@ class PlanSelfMigratePrTests(unittest.TestCase):
         self.assertFalse(report.get("eligible"))
         self.assertEqual(report.get("reason"), "no_drift")
 
+    def test_pin_equals_target_not_drift_when_installed_ahead(self):
+        """Proves: pin==explicit target is no-drift even if installed is newer (#984).
+
+        Packaging cuts bump plate_core.__version__ while tests and adopters may
+        still pin an older explicit target; installed-ahead must not false-positive.
+        """
+        from plate_core import __version__ as installed
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VERSION").write_text("0.7.2\n", encoding="utf-8")
+            report = plan_self_migrate(
+                root, target_version="0.7.2", include_payload=False
+            )
+        self.assertEqual(report["comparisons"]["pin_vs_target"], "equal")
+        # After 0.8.0 cut the monorepo installed version is ahead of 0.7.2.
+        if installed != "0.7.2":
+            self.assertEqual(report["comparisons"]["installed_vs_target"], "ahead")
+        self.assertFalse(report["drift"])
+
     def test_pin_behind_eligible_low_risk(self):
         """Proves: VERSION pin behind target is low-risk eligible PR plan (#947)."""
         with TemporaryDirectory() as tmp:

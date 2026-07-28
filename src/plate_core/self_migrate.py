@@ -302,8 +302,16 @@ def plan_self_migrate(
     installed_vs_target = _compare(installed, target)
     pin_vs_installed = _compare(pin_ver, installed)
 
-    drift = pin_vs_target == "behind" or installed_vs_target == "behind" or (
-        pin_ver is not None and pin_ver != installed and pin_vs_installed != "equal"
+    # Drift = checkout still needs work to reach *target*:
+    # - pin behind/ahead of target → align pin files
+    # - installed behind target → upgrade runtime
+    # Do NOT treat "installed ahead of pin" alone as drift when pin already
+    # equals the target. That pattern is normal in the plate-core monorepo
+    # after a packaging cut (tests pin an older explicit target while
+    # PYTHONPATH loads the cut version) and is not pin/payload misalignment.
+    drift = (
+        pin_vs_target in ("behind", "ahead")
+        or installed_vs_target == "behind"
     )
 
     present_refresh: list[dict[str, Any]] = []
