@@ -1,8 +1,8 @@
 {
   "version": "0.8.0",
-  "summary": "PLATE 0.8.0 \u2014 Autonomy, adoption, and packaging foundations (188 changes). Ships durable budget rails, decision ledger, checkpoints/shadow gates, endless feed + Q&A planning, PM/fleet/bug/feature loops, scheduled ops, release media + marketplace packaging helpers, hybrid project kinds, import-payload + adoption under-30m path, self-migrate dry-run/verify, SPEC audit, and Contemplation provenance/mutation plans. Human Tasks remain for PyPI/marketplace publish (#626/#625/#380/#381). v1.0 browser PM client (#661) deferred.",
+  "summary": "PLATE 0.8.0 \u2014 Autonomy, adoption, and packaging foundations (189 changes). Ships durable budget rails, decision ledger, checkpoints/shadow gates, endless feed + Q&A planning, PM/fleet/bug/feature loops, scheduled ops, release media + marketplace packaging helpers, hybrid project kinds, import-payload + adoption under-30m path, self-migrate dry-run/verify, SPEC audit, and Contemplation provenance/mutation plans. Human Tasks remain for PyPI/marketplace publish (#626/#625/#380/#381). v1.0 browser PM client (#661) deferred.",
   "cut_at": "2026-07-27T12:59:01Z",
-  "fragment_count": 188,
+  "fragment_count": 189,
   "fragment_slugs": [
     "320-release-repair-standing",
     "338-spec-audit-engine",
@@ -191,7 +191,8 @@
     "975-660-633-first-slice-closeout",
     "977-readme-plate-align",
     "979-remaining-epic-first-slice-closeouts",
-    "981-what-next-v1-residual-idle"
+    "981-what-next-v1-residual-idle",
+    "984-self-migrate-pin-target-drift"
   ],
   "entries": [
     {
