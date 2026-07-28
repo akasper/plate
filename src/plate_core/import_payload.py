@@ -97,6 +97,7 @@ class ImportPayloadReport:
     conflicts: list[str] = field(default_factory=list)
     overwritten: list[str] = field(default_factory=list)
     next_steps: list[str] = field(default_factory=list)
+    next_command: str = ""
     namespace_scripts: bool = False
     ok: bool = True
     error: str | None = None
@@ -132,6 +133,7 @@ class ImportPayloadReport:
             "overwritten": list(self.overwritten),
             "files": [f.to_dict() for f in self.files],
             "next_steps": list(self.next_steps),
+            "next_command": self.next_command or _next_command(self),
         }
 
 
@@ -192,8 +194,82 @@ def _decide_file(
     )
 
 
+def _strategy_flag(strategy: str) -> str:
+    strat = str(strategy or "safe").lower()
+    if strat not in VALID_STRATEGIES:
+        strat = "safe"
+    return f"--strategy {strat}"
+
+
+def _next_command(report: ImportPayloadReport | dict[str, Any]) -> str:
+    """Single actionable next CLI for agents/adopters (parity with adopt/self-migrate).
+
+    Priority:
+    1. Invalid/error → re-run dry-run with a valid strategy
+    2. Dry-run with hard conflicts → escape-hatch plan for human review
+    3. Dry-run with pending writes → ``--apply`` same strategy
+    4. Apply wrote files → bootstrap GitHub-side adoption
+    5. Apply left conflicts → escape hatch (do not force)
+    6. Nothing pending → readiness/health
+    """
+    if isinstance(report, dict):
+        ok = report.get("ok", True)
+        error = report.get("error")
+        apply_mode = bool(report.get("apply_mode"))
+        strategy = str(report.get("strategy") or "safe")
+        would_create = list(report.get("would_create") or [])
+        would_overwrite = list(report.get("would_overwrite") or [])
+        would_conflict = list(report.get("would_conflict") or [])
+        created = list(report.get("created") or [])
+        overwritten = list(report.get("overwritten") or [])
+        conflicts = list(report.get("conflicts") or [])
+    else:
+        ok = report.ok
+        error = report.error
+        apply_mode = report.apply_mode
+        strategy = report.strategy
+        would_create = report.would_create
+        would_overwrite = report.would_overwrite
+        would_conflict = report.would_conflict
+        created = report.created
+        overwritten = report.overwritten
+        conflicts = report.conflicts
+
+    strat = _strategy_flag(strategy)
+    if not ok:
+        if error and "Invalid strategy" in str(error):
+            return "gh plate import-payload --dry-run --strategy conservative --json"
+        return f"gh plate import-payload --dry-run {strat} --json"
+
+    if not apply_mode:
+        if would_conflict:
+            return (
+                f"gh plate import-payload --dry-run {strat} "
+                "--escape-hatch .agentic/import-escape-hatch --json"
+            )
+        if would_create or would_overwrite:
+            return f"gh plate import-payload --apply {strat}"
+        return "gh plate adopt --json"
+
+    if conflicts and not (created or overwritten):
+        return (
+            f"gh plate import-payload --dry-run {strat} "
+            "--escape-hatch .agentic/import-escape-hatch --json"
+        )
+    if created or overwritten:
+        return "gh plate bootstrap --repo OWNER/REPO --adopt --apply"
+    if conflicts:
+        return (
+            f"gh plate import-payload --dry-run {strat} "
+            "--escape-hatch .agentic/import-escape-hatch --json"
+        )
+    return "gh plate adopt --json"
+
+
 def _next_steps(report: ImportPayloadReport) -> list[str]:
+    next_cmd = _next_command(report)
     steps = [
+        f"Next command: `{next_cmd}`",
         "Review would_create / would_conflict lists before --apply on real repos.",
         "After local apply: commit scaffolding, run `gh plate bootstrap --apply` (or `--adopt`) for labels/wiki/.plate GitHub-side setup.",
         "Run `gh plate health` and open the first Curiosity Q&A session when healthy.",
@@ -201,20 +277,20 @@ def _next_steps(report: ImportPayloadReport) -> list[str]:
     ]
     if report.would_conflict or report.conflicts:
         steps.insert(
-            0,
+            1,
             "Hard conflicts: run with --escape-hatch DIR (or plate_import_payload escape_hatch_dir) "
             "to write plan.json + PLAN.md + DRAFT_PR_BODY.md for human review (#622); "
             "do not use --strategy force without explicit human approval on high-value paths.",
         )
         steps.insert(
-            1,
+            2,
             "Resolve would_conflict paths manually or re-run with --strategy force only if intentional overwrite is desired.",
         )
     if report.apply_mode and (report.created or report.overwritten):
-        steps.insert(0, "git status + review diffs for newly written payload files.")
+        steps.insert(1, "git status + review diffs for newly written payload files.")
     if any(x == "CURRENT.md" or x.endswith("CURRENT.md") for x in report.would_create):
         steps.insert(
-            0,
+            1,
             "Fill CURRENT.md capability rows (or deprecate to fragments) once real features land.",
         )
     return steps
@@ -385,6 +461,7 @@ def plan_import_payload(
     # validate_plate_repo + feature detection — seed when missing.
     _seed_current_md_if_missing(target, report, apply=bool(apply))
 
+    report.next_command = _next_command(report)
     report.next_steps = _next_steps(report)
     if ns:
         report.next_steps.insert(
@@ -510,6 +587,9 @@ def format_import_payload_report(report: dict[str, Any] | ImportPayloadReport) -
         lines.append("- Conflicts:")
         for p in conflict_sample:
             lines.append(f"  - {p}")
+    next_cmd = data.get("next_command") or ""
+    if next_cmd:
+        lines.append(f"- Next command: `{next_cmd}`")
     steps = data.get("next_steps") or []
     if steps:
         lines.append("- Next steps:")

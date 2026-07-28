@@ -229,6 +229,70 @@ class TestImportPayload(unittest.TestCase):
             again = import_payload(tmp, strategy="safe", dry_run=True)
             self.assertIn("CURRENT.md", again["would_skip"])
 
+    def test_next_command_dry_run_with_creates(self):
+        """Adopter path: dry-run with pending creates points at --apply (same strategy)."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = import_payload(tmp, strategy="conservative", dry_run=True)
+            self.assertTrue(report["ok"])
+            self.assertGreater(report["counts"]["would_create"], 0)
+            self.assertEqual(
+                report["next_command"],
+                "gh plate import-payload --apply --strategy conservative",
+            )
+            self.assertTrue(
+                any("Next command:" in s for s in report["next_steps"]),
+                msg=report["next_steps"][:3],
+            )
+
+    def test_next_command_dry_run_with_conflicts(self):
+        """Conflicts → escape-hatch command, not silent force apply."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first = import_payload(tmp, strategy="safe", apply=True)
+            rel = first["created"][0]
+            dest = Path(tmp) / rel
+            dest.write_text(dest.read_text(encoding="utf-8") + "\n# local\n", encoding="utf-8")
+            report = import_payload(tmp, strategy="conservative", dry_run=True)
+            self.assertTrue(report["would_conflict"])
+            self.assertIn("--escape-hatch", report["next_command"])
+            self.assertIn("conservative", report["next_command"])
+            self.assertNotIn("--apply", report["next_command"])
+
+    def test_next_command_after_apply(self):
+        """Successful apply → bootstrap --adopt as the single next command."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = import_payload(tmp, strategy="safe", apply=True)
+            self.assertGreater(report["counts"]["created"], 0)
+            self.assertEqual(
+                report["next_command"],
+                "gh plate bootstrap --repo OWNER/REPO --adopt --apply",
+            )
+
+    def test_next_command_noop_points_at_adopt(self):
+        """All payload present / skipped → adopt readiness, not re-apply."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            import_payload(tmp, strategy="safe", apply=True)
+            again = import_payload(tmp, strategy="safe", dry_run=True)
+            self.assertEqual(again["counts"]["would_create"], 0)
+            self.assertFalse(again["would_conflict"])
+            self.assertEqual(again["next_command"], "gh plate adopt --json")
+
+    def test_next_command_invalid_strategy(self):
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = import_payload(tmp, strategy="nope", dry_run=True)
+            self.assertFalse(report["ok"])
+            self.assertIn("conservative", report["next_command"])
+            self.assertIn("--dry-run", report["next_command"])
+
 
 if __name__ == "__main__":
     unittest.main()
