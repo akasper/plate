@@ -1,0 +1,10 @@
+{
+  "slug": "634-feature-media-loop-budget-base-dir",
+  "change_type": "fix",
+  "surface": "src/plate_core/feature_media.py,feature_loop.py,bug_loop.py",
+  "summary": "Isolate #634 budget hydrate/charge under base_dir/budget for feature_media plan and feature/bug loop starts when budget_base_dir is omitted; ledger under base_dir/ledger for loop starts.",
+  "migration_impact": "No downstream config change. Tests and callers that pass base_dir without budget_base_dir no longer write operator .agentic/budget/spend.json.",
+  "agent_notes": "When starting feature_media, feature_loop, or bug_loop with an isolated base_dir, omit budget_base_dir to auto-use base_dir/budget (same pattern as design_validation #846).",
+  "breaking": false,
+  "links": ["#634", "#638", "#639", "#636"]
+}

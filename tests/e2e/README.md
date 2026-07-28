@@ -51,6 +51,7 @@ The `plugin-structure.spec.ts` + `catalog-discovery.spec.ts` provide a **host-in
 - `plugin-structure.spec.ts`: manifest + agent.md + MCP wiring + vendor-neutrality checks (the primary certification).
 - `copilot-plugin.spec.ts`: real Copilot CLI install/uninstall flow (skippable).
 - `catalog-discovery.spec.ts`: exercises `gh plate agents` / `skills` via the wrapper (baseline catalog).
+- `compound-flows.spec.ts`: offline compound ceremony chains (babysit merge gates → release cut dry-run + finalize/sync plan → contemplate mutation PR draft) via `fixtures/compound_flow_driver.py` (#927 / #364 residual).
 - `playwright.config.ts`, `tsconfig.json`: harness config.
 
 ## Updating the Harness

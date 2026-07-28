@@ -1,0 +1,25 @@
+{
+  "slug": "660-pm-loop-ticks",
+  "change_type": "feature",
+  "surface": "src/plate_core/pm.py, cli.py, mcp_server.py, tests/test_pm.py",
+  "summary": "Deepen #660 PM: tick_delegated_loops syncs #638/#639 loop stages onto queue rows, completes assignments when loops reach done, and run_cycle reports loop_ticks (CLI --no-tick-loops / --fetch-loop-gates; MCP tick_loops + fetch_loop_gates).",
+  "migration_impact": "PM cycles now refresh delegated loop state by default. Assignments auto-complete when linked loop status/stage is done. No silent merges; babysit advances still require gates when fetch_loop_gates + apply.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. After dispatching loops, re-run gh plate pm --run to sync stages (ticks in JSON report).",
+    "3. Use --apply --fetch-loop-gates to attempt babysit gate advance on linked PRs.",
+    "4. Opt out with --no-tick-loops or tick_loops=false on MCP."
+  ],
+  "agent_notes": "Follow stage packets for real implementation work; ticks only sync/complete. Pairs with 660-pm-loop-dispatch and evaluate_babysit_gates. risk-off still blocks new assigns but existing delegated rows still tick.",
+  "breaking": false,
+  "links": [
+    "#739",
+    "#660",
+    "#638",
+    "#639",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

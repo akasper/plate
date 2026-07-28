@@ -1,0 +1,14 @@
+{
+  "id": "market-condition-monitor",
+  "cadence": "weekly",
+  "risk_level": "low",
+  "description": "Synthesize host-injected market signals (web/X/feedback) into Question proposals for the feed; no auto-network calls in-core (#642).",
+  "steps": [
+    {"tool": "plate_monitor_market", "args": {"persist": true}, "apply_if_risk_ok": true},
+    {"action": "surface_proposals_in_feed"}
+  ],
+  "log_to": ".agentic/autonomy/runs/",
+  "max_tokens_per_run": 6000,
+  "enabled": true,
+  "requires": []
+}

@@ -1,0 +1,15 @@
+{
+  "slug": "923-contemplation-git-provenance",
+  "change_type": "feature",
+  "surface": "src/plate_core/contemplation.py, tests/test_contemplation.py",
+  "summary": "Contemplation transcripts include best-effort git HEAD SHA and structured provenance fields (question_id, session, author, git_commit) for Design #142 gap (#923/#364 residual).",
+  "migration_impact": "PLATE-CONTEMPLATION comments gain Git commit + Provenance: block; contemplate() result includes git_commit. No API break.",
+  "migration_guidance": [
+    "1. Pull release after merge; run pytest tests/test_contemplation.py -k provenance.",
+    "2. When auditing answers, use Git commit: line to tie transcript to tree.",
+    "3. Residual #364: artifact mutation via PR and Playwright compound e2e still open."
+  ],
+  "agent_notes": "Closes #923 only. Best-effort SHA returns unknown outside a git worktree.",
+  "breaking": false,
+  "links": ["#923", "#921", "#364", "#142", "#647", "#654"]
+}

@@ -1,0 +1,23 @@
+{
+  "slug": "634-653-costs-budget-day-rollover",
+  "change_type": "fix",
+  "surface": "src/plate_core/costs.py",
+  "summary": "Cost dashboard + feed budget gates use get_budget_snapshot (UTC day rollover) instead of raw load_budget_spend so prior-day spend.json cannot reintroduce false critical pressure after the PM fix (#634/#653/#660).",
+  "migration_impact": "Local only. Cost/risk feed items and gh plate costs budget section ignore prior UTC day durable spend, matching AutonomyEngine and plate_pm_status.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release with this fix.",
+    "2. Re-run gh plate costs / plate cost dashboard; pressure should be ok when spend.json date is not today.",
+    "3. PM with repo set no longer re-imports stale cost pressure from the dashboard path."
+  ],
+  "agent_notes": "Always hydrate durable spend via get_budget_snapshot for operator surfaces. Pair with 634-660-pm-budget-day-rollover. Do not reintroduce load_budget_spend without spend_is_today.",
+  "breaking": false,
+  "links": [
+    "#634",
+    "#653",
+    "#660",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

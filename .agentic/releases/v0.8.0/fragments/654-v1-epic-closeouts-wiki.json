@@ -1,0 +1,16 @@
+{
+  "slug": "654-v1-epic-closeouts-wiki",
+  "change_type": "docs",
+  "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md, docs/wiki/Quiet-Agents-Epic-456.md",
+  "summary": "Wiki closeouts for landed v1 autonomy surface epics (#456 Quiet Agents; first-slice #637–#639 loops, #641 scheduled ops, #644 fleet); mark #660 open for deferred browser #661; refresh Quiet Agents follow-ons after #509–#512 close.",
+  "migration_impact": "Docs only. Agents should treat listed epics as first-slice complete on release and not re-author sketch fragments for those surfaces.",
+  "migration_guidance": [
+    "1. No package upgrade required.",
+    "2. Read docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md before starting new v1 surface sketches.",
+    "3. Leave #661 browser and human publish Tasks to human prioritization.",
+    "4. #654 checklist still requires E2E proof before claiming 1.0 done."
+  ],
+  "agent_notes": "Epic closes via this Documentation PR for Quiet Agents + first-slice loop/fleet/scheduled epics. PM epic #660 stays open while #661 child is open.",
+  "breaking": false,
+  "links": ["#456", "#637", "#638", "#639", "#641", "#644", "#660", "#661", "#654", "#825"]
+}

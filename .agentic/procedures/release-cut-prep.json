@@ -1,0 +1,11 @@
+{
+  "id": "release-cut-prep",
+  "cadence": "manual",
+  "risk_level": "high",
+  "description": "Prepare release cut: fragments, media, notes, human checkpoint (#641).",
+  "steps": [
+    {"tool": "plate_scheduled_op_run", "args": {"op_id": "release-cut-prep", "dry_run": true}}
+  ],
+  "enabled": true,
+  "max_tokens_per_run": 15000
+}

@@ -1,0 +1,16 @@
+{
+  "slug": "644-handoff-accept-dispatch",
+  "change_type": "feature",
+  "surface": "src/plate_core/fleet.py",
+  "summary": "Harden #644 fleet: accepting a handoff dispatches real work surfaces (implementer→feature/bug loop, researcher/design→#632 artifact, reviewer→babysit hint); design PM personas map to researcher; intent plan adds design step.",
+  "migration_impact": "update_handoff(status=accepted) now defaults dispatch_work=True and may create feature_loop/bug_loop/artifact ids under handoff.context. Pass dispatch_work=false to accept without side effects. Idempotent via context.dispatched.",
+  "migration_guidance": [
+    "1. Upgrade plate-core.",
+    "2. Accept handoffs with gh plate fleet --update ID --status accepted (or MCP equivalent).",
+    "3. Inspect handoff.context.loop_run_id / artifact_proposal_id and continue via loop tick or plate_artifact_decide.",
+    "4. Deployer/planner handoffs remain packet_only (human ceremony)."
+  ],
+  "agent_notes": "Does not auto-merge, deploy, or approve artifacts. Second accept is no-op for dispatch. Browser #661 still out of scope.",
+  "breaking": false,
+  "links": ["#644", "#660", "#632", "#638", "#639", "#654"]
+}

@@ -1,0 +1,16 @@
+{
+  "slug": "634-per-action-token-budget",
+  "change_type": "feature",
+  "surface": "src/plate_core/autonomy.py, plate_config.py, agent_guidance.py",
+  "summary": "Harden #634 budgets with optional token_budget.per_action single-estimate ceiling: schema validation, AutonomyEngine.enforce_budget + get_budget_snapshot gate reasons/markdown, thin guidance note.",
+  "migration_impact": "Additive .plate key autonomy.token_budget.per_action (integer tokens). Unset means unlimited per action (prior behavior). Operators can cap a single implement/plan step without lowering daily/cycle rails.",
+  "migration_guidance": [
+    "1. Upgrade plate-core.",
+    "2. Optionally set .plate autonomy.token_budget.per_action (e.g. 4000) alongside daily/per_cycle and action policy.",
+    "3. Verify with gh plate autonomy --budget or get_budget_snapshot estimate that oversize estimates gate with : per_action.",
+    "4. risk_tolerance=off still skips AutonomyEngine enforce; snapshot still reports the limit."
+  ],
+  "agent_notes": "per_action is not the same as token_budget.action (policy: pause|throttle|warn). Prefer pause policy for hard single-action caps. Do not claim #634 fully E2E-closed without operator proof of long /loop budget safety.",
+  "breaking": false,
+  "links": ["#634", "#653", "#654", "#470"]
+}

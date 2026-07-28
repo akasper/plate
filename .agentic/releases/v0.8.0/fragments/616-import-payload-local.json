@@ -1,0 +1,16 @@
+{
+  "slug": "616-import-payload-local",
+  "change_type": "feature",
+  "surface": "src/plate_core/import_payload.py, gh plate import-payload, plate_import_payload MCP",
+  "summary": "First-class template payload import (#616): local dry-run/apply with safe|conservative|force strategies, structured create/skip/conflict report, CLI gh plate import-payload and MCP plate_import_payload for adoption without improvising file copies.",
+  "migration_impact": "New optional surface for adoption. Existing bootstrap GitHub Contents copy is unchanged. Agents should prefer gh plate import-payload --dry-run then --apply on checkouts before bootstrap GitHub-side steps.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / gh-plate so import-payload is available.",
+    "2. On an existing repo checkout: gh plate import-payload --dry-run --json to review would_create/would_conflict.",
+    "3. Apply with --strategy safe (default) or conservative; use force only when overwrite is intentional.",
+    "4. Then run gh plate bootstrap --apply for labels/wiki/.plate remote setup as needed."
+  ],
+  "agent_notes": "For #633 adoption: plan with import-payload dry-run first; never force-overwrite customer files without human confirmation. GitHub remote-only import remains via bootstrap copy-template-payload; this surface is local-checkout first-class.",
+  "breaking": false,
+  "links": ["#616", "#615", "#633", "#654"]
+}

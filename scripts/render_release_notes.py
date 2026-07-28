@@ -17,6 +17,19 @@ def render_release(data: dict) -> str:
         "",
     ]
 
+    # #635: top-level approved demo media section
+    media_md = data.get("media_markdown") or ""
+    if not media_md and data.get("media"):
+        try:
+            from plate_core.release_media import render_media_markdown
+
+            media_md = render_media_markdown(data.get("media") or [], only_approved=False)
+        except Exception:
+            media_md = ""
+    if media_md:
+        lines.append(media_md.rstrip())
+        lines.append("")
+
     for entry in data["entries"]:
         lines.extend(
             [
@@ -38,6 +51,12 @@ def render_release(data: dict) -> str:
             lines.append("- **Breaking:** yes")
         if entry.get("links"):
             lines.append(f"- **Links:** {', '.join(entry['links'])}")
+        # Per-entry media (#635)
+        for m in entry.get("media") or []:
+            cap = m.get("caption") or m.get("feature") or "demo"
+            ref = m.get("path") or m.get("url") or ""
+            st = m.get("approval_status") or "pending"
+            lines.append(f"- **Media ({m.get('type', 'media')}):** {cap} — {ref} ({st})")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

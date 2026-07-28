@@ -1,0 +1,1045 @@
+"""Scheduled autonomous operations catalog + run packets (#641).
+
+Ops (via .agentic/procedures/ + AutonomyEngine):
+- scheduled-refactor
+- release-cut-prep
+- release-finalize-prep
+- deploy-production (always high/critical — checkpoint)
+- marketing-site-deploy
+- marketplace-package (human Tasks for real publish)
+- implement-epic-slice
+- review-discussions (#642)
+- monitor-market (#642)
+
+First slice: durable catalog, last-run ledger, dry-run agent packets with
+risk/checkpoint gates. Does not auto-tag or force-deploy.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+OPS_DIR = Path(".agentic/scheduled_ops")
+RUNS_FILE = "runs.json"
+MARKER_BEGIN = "<!-- PLATE-SCHEDULED-OP:BEGIN -->"
+MARKER_END = "<!-- PLATE-SCHEDULED-OP:END -->"
+
+# Canonical op catalog (also mirrored as procedure JSON files)
+OPS_CATALOG: list[dict[str, Any]] = [
+    {
+        "id": "scheduled-refactor",
+        "cadence": "weekly",
+        "risk_level": "medium",
+        "description": "Identify rearch/debt from health/drift; open TDD refactor PR; babysit low-risk merges",
+        "requires_human": False,
+        "impact": "medium",
+        "steps": [
+            "gh plate health + plate_perform_information_audit dry_run",
+            "Pick one safe refactor; branch bug/ or feature/ from origin/release",
+            "Add failing tests; implement; PR + babysit",
+            "Checkpoint if touches AGENTS.md/workflows/SPEC",
+        ],
+        "tools": ["plate_health", "plate_pr_babysit", "plate_bug_loop_start"],
+    },
+    {
+        "id": "release-cut-prep",
+        "cadence": "manual",
+        "risk_level": "high",
+        "description": "Prepare release cut: fragments, notes+media (#635), version inference, draft Release PR checklist",
+        "requires_human": True,
+        "impact": "high",
+        "steps": [
+            "gh plate release status",
+            "plate_release_media_manifest; approve pending media",
+            "scripts/cut_release.py or gh plate release cut (dry-run first)",
+            "Open Release PR draft to main with Release+Documentation labels when packaging",
+            "Surface checkpoint: approve cut scope + notes",
+        ],
+        "tools": ["plate_release_status", "plate_release_media_manifest", "plate_checkpoint_create"],
+    },
+    {
+        "id": "release-finalize-prep",
+        "cadence": "manual",
+        "risk_level": "high",
+        "description": "Post-merge finalize checklist: tag, GitHub Release, branch reset, Next Release issue",
+        "requires_human": True,
+        "impact": "high",
+        "steps": [
+            "Confirm Release PR merged to main",
+            "gh plate release finalize (or workflow tag path)",
+            "Verify GitHub Release + media body",
+            "Hard-reset release track as policy allows",
+            "Ensure Next Release issue exists",
+        ],
+        "tools": ["plate_release_status", "plate_checkpoint_create"],
+    },
+    {
+        "id": "deploy-production",
+        "cadence": "manual",
+        "risk_level": "critical",
+        "description": "Production deploy (always shadow + checkpoint + human approve)",
+        "requires_human": True,
+        "impact": "critical",
+        "steps": [
+            "plate_autonomy_simulate deploy",
+            "Open #648 checkpoint with shadow report",
+            "Human approve; never auto-deploy at risk-off/low",
+            "Run deploy skill / CI deploy only after approve",
+        ],
+        "tools": ["plate_autonomy_simulate", "plate_checkpoint_create"],
+    },
+    {
+        "id": "marketing-site-deploy",
+        "cadence": "manual",
+        "risk_level": "high",
+        "description": "Deploy marketing/docs site with release highlights + approved GIFs",
+        "requires_human": True,
+        "impact": "high",
+        "steps": [
+            "Collect approved release media markdown",
+            "Update marketing claims only if reviewed (extension release_checks)",
+            "Checkpoint before live publish",
+            "Deploy via project deploy skill",
+        ],
+        "tools": ["plate_release_media_render", "plate_checkpoint_create"],
+    },
+    {
+        "id": "marketplace-package",
+        "cadence": "manual",
+        "risk_level": "critical",
+        "description": "Package for marketplace with media + adoption proof (#652); real publish is human Task (#380/#381/#626)",
+        "requires_human": True,
+        "impact": "critical",
+        "steps": [
+            "plate_packaging_build: narratives + approved media + onboarding proof + planning links",
+            "plate_packaging_render for review markdown",
+            "Surface on feed: plate_packaging_feed (PM approve_for_publish)",
+            "Detect human blockers: plate_task_detect marketplace/PyPI",
+            "Do NOT publish secrets; open Task issues for human publish",
+            "Document package paths for human owner under .agentic/packaging/",
+        ],
+        "tools": [
+            "plate_packaging_build",
+            "plate_packaging_render",
+            "plate_packaging_feed",
+            "plate_packaging_decide",
+            "plate_task_detect",
+            "plate_task_create",
+        ],
+    },
+    {
+        "id": "implement-epic-slice",
+        "cadence": "manual",
+        "risk_level": "medium",
+        "description": "Pick ready Feature under an Epic; run feature_loop until merge-eligible",
+        "requires_human": False,
+        "impact": "medium",
+        "steps": [
+            "plate_what_next / plate_pm_run_cycle dry_run",
+            "plate_feature_loop_start for top ready Feature",
+            "Execute stage packets (TDD, fragment, media, babysit)",
+            "Stop at human_checkpoint when required",
+        ],
+        "tools": ["plate_feature_loop_start", "plate_pm_run_cycle", "plate_what_next"],
+    },
+    {
+        "id": "review-discussions",
+        "cadence": "daily",
+        "risk_level": "low",
+        "description": "Review GitHub Discussions; draft stub Issue proposals for human approve (#642)",
+        "requires_human": False,
+        "impact": "low",
+        "steps": [
+            "run_discussion_review_procedure (dry_run first; fetch_live only when approved path)",
+            "Surface proposals on feed: monitoring_feed_items / plate_monitoring_feed",
+            "Human approve/reject via decide_proposal — never auto-create Issues without approve",
+            "Fleet handoff to market-monitor on live start for agent follow-through",
+        ],
+        "tools": [
+            "plate_review_discussions",
+            "plate_monitoring_feed",
+            "plate_monitoring_decide",
+        ],
+    },
+    {
+        "id": "monitor-market",
+        "cadence": "weekly",
+        "risk_level": "low",
+        "description": "Monitor market/condition signals; draft Question stubs for human (#642)",
+        "requires_human": False,
+        "impact": "low",
+        "steps": [
+            "Host injects signals (web/x search); monitor_market_signals scores + persists proposals",
+            "Surface on feed for human decide; no silent external publish",
+            "Fleet handoff to market-monitor on live start",
+        ],
+        "tools": [
+            "plate_monitor_market",
+            "plate_monitoring_feed",
+            "plate_monitoring_decide",
+        ],
+    },
+]
+
+
+@dataclass
+class ScheduledOpRun:
+    id: str
+    op_id: str
+    status: str = "planned"  # planned | running | done | blocked | cancelled
+    dry_run: bool = True
+    requires_human: bool = False
+    checkpoint_id: str | None = None
+    packet: dict[str, Any] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+    completed_at: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _store_path(base: Path | None = None) -> Path:
+    d = base or OPS_DIR
+    if d.name == RUNS_FILE:
+        return d
+    return d / RUNS_FILE
+
+
+def _load(base: Path | None = None) -> dict[str, Any]:
+    path = _store_path(base)
+    if not path.exists():
+        return {"version": 1, "runs": [], "last_run_by_op": {}}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"version": 1, "runs": [], "last_run_by_op": {}}
+        data.setdefault("version", 1)
+        data.setdefault("runs", [])
+        data.setdefault("last_run_by_op", {})
+        return data
+    except (OSError, json.JSONDecodeError):
+        return {"version": 1, "runs": [], "last_run_by_op": {}}
+
+
+def _save(data: dict[str, Any], base: Path | None = None) -> Path:
+    path = _store_path(base)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def render_op_marker(payload: dict[str, Any]) -> str:
+    return f"{MARKER_BEGIN}\n{json.dumps(payload, indent=2)}\n{MARKER_END}\n"
+
+
+def list_ops() -> list[dict[str, Any]]:
+    return [dict(o) for o in OPS_CATALOG]
+
+
+def get_op(op_id: str) -> dict[str, Any] | None:
+    for o in OPS_CATALOG:
+        if o["id"] == op_id:
+            return dict(o)
+    return None
+
+
+def build_op_packet(op: dict[str, Any], *, dry_run: bool = True) -> dict[str, Any]:
+    oid = op["id"]
+    return {
+        "op_id": oid,
+        "description": op.get("description"),
+        "cadence": op.get("cadence"),
+        "risk_level": op.get("risk_level"),
+        "requires_human": op.get("requires_human"),
+        "dry_run": dry_run,
+        "steps": list(op.get("steps") or []),
+        "tools": list(op.get("tools") or []),
+        "ask_user_question": {
+            "question": f"Run scheduled op '{oid}' ({op.get('risk_level')} risk)?",
+            "options": [
+                {
+                    "id": "run",
+                    "label": "Run packet (agent executes steps)",
+                    "description": f"plate_scheduled_op_run {oid} dry_run={str(dry_run).lower()}",
+                },
+                {
+                    "id": "checkpoint",
+                    "label": "Open human checkpoint first",
+                    "description": "plate_checkpoint_create for this op",
+                },
+                {
+                    "id": "skip",
+                    "label": "Skip this cycle",
+                    "description": "Leave last_run untouched",
+                },
+            ],
+        },
+        "marker": render_op_marker(
+            {"op_id": oid, "risk": op.get("risk_level"), "dry_run": dry_run}
+        ),
+    }
+
+
+def plan_op(op_id: str, *, dry_run: bool = True) -> dict[str, Any]:
+    op = get_op(op_id)
+    if not op:
+        return {"ok": False, "error": f"unknown op: {op_id}"}
+    est = estimate_op_cost(op_id, dry_run=dry_run)
+    return {
+        "ok": True,
+        "op": op,
+        "packet": build_op_packet(op, dry_run=dry_run),
+        "cost_estimate": est,
+    }
+
+
+# Heuristic token costs by risk (#634 / #641 parity with feature/bug loops).
+_OP_ESTIMATE_BASE: dict[str, int] = {
+    "low": 3000,
+    "medium": 8000,
+    "high": 15000,
+    "critical": 25000,
+}
+
+
+def estimate_op_cost(
+    op_id: str,
+    *,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Upfront cost estimate for a scheduled op (#634/#641).
+
+    Advisory tokens for budget gates; AutonomyEngine ceilings still apply on autonomy loops.
+    dry_run packets are cheaper (planning-only) than apply runs.
+    """
+    op = get_op(op_id)
+    if not op:
+        return {
+            "ok": False,
+            "op_id": op_id,
+            "estimated_tokens": 0,
+            "error": f"unknown op: {op_id}",
+        }
+    risk = str(op.get("risk_level") or "medium").lower()
+    if risk not in _OP_ESTIMATE_BASE:
+        risk = "medium"
+    base = _OP_ESTIMATE_BASE[risk]
+    # dry_run: packet + shadow only; apply: full agent steps
+    tokens = max(500, base // 4) if dry_run else base
+    if bool(op.get("requires_human")) and not dry_run:
+        tokens += 2000  # checkpoint / human coordination overhead
+    return {
+        "ok": True,
+        "op_id": op_id,
+        "risk_level": risk,
+        "dry_run": dry_run,
+        "estimated_tokens": int(tokens),
+        "breakdown": {
+            "base": base,
+            "dry_run_discount": base - tokens if dry_run else 0,
+            "human_overhead": 2000 if (bool(op.get("requires_human")) and not dry_run) else 0,
+        },
+        "notes": [
+            "Estimate is advisory; durable spend.json + AutonomyEngine still enforce hard ceilings.",
+            "Gate scheduled runs with budget_remaining / live hydrate (use_live_budget).",
+        ],
+    }
+
+
+# Ops that open a #644 fleet handoff on live (non-dry-run) start (#641 residual).
+# Critical/human publish ops never auto-dispatch (stay packet + Task path).
+_OP_FLEET_DISPATCH: dict[str, dict[str, Any]] = {
+    "scheduled-refactor": {
+        "to_agent": "implementer",
+        "task": "Scheduled refactor: pick one safe debt item; TDD PR from origin/release; babysit low-risk",
+        "risk": "medium",
+    },
+    "implement-epic-slice": {
+        "to_agent": "implementer",
+        "task": "Implement ready Feature under open Epic; run feature_loop to merge-eligible",
+        "risk": "medium",
+    },
+    "review-discussions": {
+        "to_agent": "market-monitor",
+        "task": "Review Discussions; draft stub proposals for human approve (no auto-Issue create)",
+        "risk": "low",
+    },
+    "monitor-market": {
+        "to_agent": "market-monitor",
+        "task": "Score injected market signals; draft Question proposals for human decide",
+        "risk": "low",
+    },
+}
+
+
+def dispatch_fleet_for_scheduled_op(
+    op_id: str,
+    *,
+    run_id: str | None = None,
+    risk_tolerance: str = "medium",
+    budget_remaining: int | None = None,
+    fleet_base_dir: Path | None = None,
+    record_ledger: bool = True,
+) -> dict[str, Any]:
+    """Open a #644 fleet handoff for safe scheduled ops (refactor / implement slice).
+
+    Does not accept/complete the handoff; does not deploy or publish.
+    Unknown or human-gated ops return skipped. Covers refactor/implement + #642 monitors.
+    """
+    spec = _OP_FLEET_DISPATCH.get(op_id)
+    if not spec:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": f"op {op_id} has no fleet auto-dispatch (human/ceremony path)",
+        }
+    try:
+        from .fleet import create_handoff
+    except Exception as exc:
+        return {"ok": False, "error": f"fleet unavailable: {exc}"}
+
+    risk = str(spec.get("risk") or "medium")
+    # Cap handoff risk by caller tolerance (never escalate above op)
+    rank = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+    tol = (risk_tolerance or "medium").lower()
+    if rank.get(risk, 2) > rank.get(tol, 2) and tol != "off":
+        risk = tol if tol in ("low", "medium", "high") else "medium"
+    if tol == "off":
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "risk_tolerance=off: no fleet handoff for scheduled op",
+        }
+
+    out = create_handoff(
+        from_agent="scheduled-ops",
+        to_agent=str(spec["to_agent"]),
+        task=str(spec["task"]),
+        risk=risk,
+        context={
+            "scheduled_op": op_id,
+            "scheduled_run_id": run_id,
+            "source": "scheduled_ops",
+        },
+        constraints=["quiet_ops", "github_as_truth", "no_auto_merge"],
+        budget_remaining=budget_remaining,
+        use_live_budget=budget_remaining is None,
+        open_checkpoint=False,
+        base_dir=fleet_base_dir,
+        record_ledger=record_ledger,
+    )
+    if not out.get("ok"):
+        return {
+            "ok": False,
+            "error": out.get("error"),
+            "blocked": out.get("blocked"),
+            "reason": out.get("reason"),
+            "result": out,
+        }
+    ho = out.get("handoff") or {}
+    return {
+        "ok": True,
+        "handoff_id": ho.get("handoff_id"),
+        "to_agent": ho.get("to_agent"),
+        "status": ho.get("status"),
+        "result": out,
+    }
+
+
+def run_scheduled_op(
+    op_id: str,
+    *,
+    dry_run: bool = True,
+    risk_tolerance: str = "medium",
+    approved: bool = False,
+    checkpoint_id: str | None = None,
+    shadow_ack: str | None = None,
+    note: str = "",
+    base_dir: Path | None = None,
+    fleet_base_dir: Path | None = None,
+    record_ledger: bool = True,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
+    dispatch_fleet: bool = True,
+) -> dict[str, Any]:
+    """Start/record a scheduled op run. dry_run default — no side effects beyond local ledger.
+
+    #634: when ``budget_remaining`` is omitted and ``use_live_budget`` is True (default),
+    hydrate remaining tokens from durable budget snapshot and block if est exceeds remaining.
+    Explicit ``budget_remaining`` wins; ``use_live_budget=False`` skips live hydrate.
+
+    #645: live high/critical ops must pass ``gate_high_impact`` (shadow_ack + approval
+    or approved checkpoint). Dry-run only attaches a shadow preview.
+
+    #641/#644: on live (non-dry-run) unblocked runs for safe ops, open a fleet handoff
+    when ``dispatch_fleet`` is True (refactor / implement-epic-slice). Never auto-publishes.
+    """
+    op = get_op(op_id)
+    if not op:
+        return {"ok": False, "error": f"unknown op: {op_id}"}
+
+    risk = str(op.get("risk_level") or "medium")
+    needs_human = bool(op.get("requires_human")) or risk in ("high", "critical")
+    rank = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+    tol = rank.get((risk_tolerance or "medium").lower(), 0)
+    op_rank = rank.get(risk.lower(), 2)
+
+    cost_est = estimate_op_cost(op_id, dry_run=dry_run)
+    est_tokens = int(cost_est.get("estimated_tokens") or 0)
+    effective_budget = budget_remaining
+    budget_notes: list[str] = []
+    # Isolate budget + ledger under base_dir when provided (tests / alternate roots).
+    budget_base: Path | None = None
+    ledger_base: Path | None = None
+    if base_dir is not None:
+        root = Path(base_dir)
+        budget_base = root / "budget"
+        ledger_base = root / "ledger"
+    surface_budget_pause = False
+    surface_budget_pressure: str | None = None
+    if effective_budget is None and use_live_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            budget_snap = get_budget_snapshot(
+                estimate_tokens=est_tokens,
+                base_dir=budget_base,
+            )
+            rem = budget_snap.get("remaining_tokens")
+            if rem is not None:
+                effective_budget = int(rem)
+                budget_notes.append(
+                    f"budget hydrated: remaining_tokens={effective_budget} "
+                    f"pressure={budget_snap.get('budget_pressure')}"
+                )
+            # #634/#871: hard-block on durable next-cycle pause rails (same as
+            # fleet/PM/AutonomyEngine). risk_tolerance=off only disables autopilot —
+            # surface gates still apply. Prior note-only path was a no-op when
+            # remaining already exceeded est.
+            surface_budget_pressure = (
+                str(budget_snap.get("budget_pressure") or "").lower() or None
+            )
+            would_pause_snap = bool(
+                budget_snap.get("would_pause_next_cycle")
+                if budget_snap.get("would_pause_next_cycle") is not None
+                else budget_snap.get("would_pause")
+            )
+            if (
+                surface_budget_pressure in ("critical", "exhausted")
+                or would_pause_snap
+                or (effective_budget is not None and int(effective_budget) <= 0)
+            ):
+                surface_budget_pause = True
+                budget_notes.append(
+                    budget_snap.get("gate_reason")
+                    or "blocked: durable budget would_pause / pressure gate"
+                )
+        except Exception as exc:
+            budget_notes.append(f"budget hydrate skipped: {exc}")
+
+    blocked = False
+    reasons: list[str] = []
+    if op_rank > tol and not approved:
+        blocked = True
+        reasons.append(f"op risk {risk} exceeds risk_tolerance {risk_tolerance}")
+    if needs_human and not approved and not checkpoint_id:
+        blocked = True
+        reasons.append("requires human approval or checkpoint_id")
+    if risk == "critical" and not approved:
+        blocked = True
+        reasons.append("critical op always needs explicit approved=true")
+    if surface_budget_pause:
+        blocked = True
+        rem_out = int(effective_budget) if effective_budget is not None else 0
+        reasons.append(
+            f"budget: durable rails pause scheduled op "
+            f"(pressure={surface_budget_pressure} remaining={rem_out})"
+        )
+    if effective_budget is not None and est_tokens > int(effective_budget):
+        blocked = True
+        reasons.append(
+            f"budget: est {est_tokens} tokens exceeds remaining {effective_budget}"
+        )
+
+    packet = build_op_packet(op, dry_run=dry_run)
+    # #645: always attach a shadow/simulate preview for medium+ scheduled ops
+    shadow_report: dict[str, Any] | None = None
+    shadow_id: str | None = None
+    shadow_gate: dict[str, Any] | None = None
+    action_kind = str(op.get("action_kind") or op_id).replace("-", "_")
+    scope = {
+        "scheduled_op": op_id,
+        "risk_level": risk,
+        "procedure_risk": risk,
+        "skip_git_preview": False,
+    }
+    if risk in ("medium", "high", "critical") or needs_human:
+        try:
+            from .autonomy import AutonomyEngine
+
+            eng = AutonomyEngine(repo=None)
+            eng.risk_tolerance = risk_tolerance
+            eng.enabled = (risk_tolerance or "off").lower() not in ("off", "")
+            eng.autonomy_config = {
+                "enabled": eng.enabled,
+                "risk_tolerance": risk_tolerance,
+            }
+            if base_dir is not None:
+                root = Path(base_dir)
+                eng.checkpoint_base_dir = root / "checkpoints"
+                eng.ledger_base_dir = root / "ledger"
+                # durable shadow store under op base for isolated tests
+                try:
+                    eng.shadow_base_dir = root / "shadow"  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+            shadow = eng.simulate_action(action_kind, scope=scope)
+            shadow_report = shadow.to_dict()
+            shadow_id = shadow.shadow_id
+            packet = dict(packet)
+            packet["shadow_id"] = shadow_id
+            packet["shadow_report"] = {
+                "shadow_id": shadow_id,
+                "impact": shadow_report.get("impact"),
+                "requires_approval": shadow_report.get("requires_approval"),
+                "estimated_tokens": shadow_report.get("estimated_tokens"),
+                "predicted_diff": shadow_report.get("predicted_diff"),
+                "worktree_plan": shadow_report.get("worktree_plan"),
+                "gate_preview": shadow_report.get("gate_preview"),
+            }
+            # Live high/critical: hard gate_high_impact (shadow_ack + approval).
+            # Dry-run stays preview-only so operators can inspect shadow_id first.
+            if (not dry_run) and risk in ("high", "critical") and not blocked:
+                gate = eng.gate_high_impact(
+                    action_kind if risk != "critical" else "deploy",
+                    shadow_ack=shadow_ack or None,
+                    approved=approved,
+                    checkpoint_id=checkpoint_id,
+                    scope=scope,
+                    create_checkpoint=True,
+                )
+                shadow_gate = gate
+                if gate.get("shadow_report"):
+                    shadow_report = gate.get("shadow_report")
+                    shadow_id = (shadow_report or {}).get("shadow_id") or shadow_id
+                if gate.get("blocked"):
+                    blocked = True
+                    reasons.append(
+                        gate.get("reason")
+                        or "high-impact scheduled op requires shadow_ack + approval (#645)"
+                    )
+                    if gate.get("checkpoint_id") and not checkpoint_id:
+                        checkpoint_id = str(gate.get("checkpoint_id"))
+        except Exception as exc:
+            reasons.append(f"shadow preview unavailable: {exc}")
+            if (not dry_run) and risk in ("high", "critical") and not blocked:
+                blocked = True
+                reasons.append(
+                    "high-impact live op blocked: shadow gate unavailable"
+                )
+
+    ts = _now()
+    merged_notes = list(budget_notes) + list(reasons) + ([note] if note else [])
+    run = ScheduledOpRun(
+        id=f"sop-{uuid.uuid4().hex[:10]}",
+        op_id=op_id,
+        status="blocked" if blocked else ("done" if dry_run else "running"),
+        dry_run=dry_run,
+        requires_human=needs_human,
+        checkpoint_id=checkpoint_id,
+        packet=packet,
+        notes=merged_notes,
+        created_at=ts,
+        updated_at=ts,
+        completed_at=ts if (dry_run and not blocked) else None,
+        metadata={
+            "risk_tolerance": risk_tolerance,
+            "approved": approved,
+            "shadow_id": shadow_id,
+            "cost_estimate_tokens": est_tokens,
+            "budget_remaining": effective_budget,
+            "budget_source": (
+                "explicit"
+                if budget_remaining is not None
+                else ("live" if use_live_budget else "none")
+            ),
+        },
+    )
+    if dry_run and not blocked:
+        run.notes.append("dry_run complete: packet emitted; no remote side effects")
+        if shadow_id:
+            run.notes.append(f"shadow preview {shadow_id} attached")
+        run.status = "done"
+
+    data = _load(base_dir)
+    data["runs"].append(run.to_dict())
+    if not blocked:
+        data["last_run_by_op"][op_id] = {
+            "run_id": run.id,
+            "at": ts,
+            "dry_run": dry_run,
+            "status": run.status,
+        }
+    _save(data, base_dir)
+
+    out: dict[str, Any] = {
+        "ok": not blocked,
+        "blocked": blocked,
+        "run": run.to_dict(),
+        "packet": packet,
+        "proc_id": op_id,
+        "status": "blocked" if blocked else ("dry-run" if dry_run else "executed"),
+        "cost_estimate_tokens": est_tokens,
+        "cost_estimate": cost_est,
+        "budget_remaining": effective_budget,
+        "budget_pressure": surface_budget_pressure,
+        "would_pause_next_cycle": bool(surface_budget_pause),
+        "notes": list(merged_notes),
+        "log_marker": (
+            f"<!-- PLATE-PROCEDURE-RUN:{op_id} cadence={op.get('cadence')} "
+            f"risk={risk} dry_run={dry_run} -->"
+        ),
+    }
+    if shadow_report is not None:
+        out["shadow_report"] = shadow_report
+        out["shadow_id"] = shadow_id
+    if shadow_gate is not None:
+        out["shadow_gate"] = {
+            "blocked": shadow_gate.get("blocked"),
+            "mode": shadow_gate.get("mode"),
+            "reason": shadow_gate.get("reason"),
+            "checkpoint_id": shadow_gate.get("checkpoint_id"),
+        }
+        if shadow_gate.get("checkpoint_id"):
+            out["checkpoint_id"] = shadow_gate.get("checkpoint_id")
+    if checkpoint_id:
+        out["checkpoint_id"] = checkpoint_id
+    if blocked:
+        out["error"] = "; ".join(reasons)
+        out["reason"] = out["error"]
+    # Charge durable spend only on live unblocked apply — never on dry_run previews.
+    elif (not dry_run) and use_live_budget and est_tokens > 0:
+        try:
+            from .autonomy import apply_live_budget_charge
+
+            apply_live_budget_charge(
+                out,
+                tokens=est_tokens,
+                use_live_budget=True,
+                action_kind="scheduled_op",
+                reason=f"run_scheduled_op:{op_id}:{run.id}",
+                base_dir=budget_base,
+            )
+        except Exception:
+            pass
+    elif dry_run and use_live_budget and est_tokens > 0:
+        budget_notes.append(
+            f"dry_run: skipped budget charge of est {est_tokens} tokens"
+        )
+        out["notes"] = list(out.get("notes") or []) + [
+            f"dry_run: skipped budget charge of est {est_tokens} tokens"
+        ]
+
+    if record_ledger:
+        try:
+            from .ledger import record_decision
+
+            rec = record_decision(
+                action_kind="scheduled_op",
+                decision="pause" if blocked else ("proceed" if not dry_run else "shadow"),
+                reason=f"scheduled op {op_id}: {out.get('status')}",
+                sources=["scheduled_ops", "#641", "#645", "#634"],
+                risk_tolerance=risk_tolerance,
+                impact=risk,
+                checkpoint_id=checkpoint_id,
+                shadow_id=shadow_id,
+                actor="scheduled_ops",
+                metadata={
+                    "run_id": run.id,
+                    "op_id": op_id,
+                    "dry_run": dry_run,
+                    "cost_estimate_tokens": est_tokens,
+                    "budget_remaining": effective_budget,
+                },
+                base_dir=ledger_base,
+            )
+            out["ledger_id"] = rec.get("id") if isinstance(rec, dict) else None
+        except Exception:
+            pass
+
+    # #642: attach monitoring procedure result for discussion/market ops
+    if not blocked and op_id in ("review-discussions", "monitor-market"):
+        try:
+            mon_base = None
+            if base_dir is not None:
+                mon_base = Path(base_dir) / "monitoring"
+            if op_id == "review-discussions":
+                from .monitoring import run_discussion_review_procedure
+
+                mon = run_discussion_review_procedure(
+                    dry_run=dry_run,
+                    fetch_live=False,  # live GH fetch only when host sets fetch path explicitly
+                    discussions=[],
+                    base_dir=mon_base,
+                    budget_remaining=effective_budget,
+                    use_live_budget=False if effective_budget is not None else use_live_budget,
+                )
+            else:
+                from .monitoring import run_market_monitor_procedure
+
+                mon = run_market_monitor_procedure(
+                    dry_run=dry_run,
+                    signals=[],
+                    base_dir=mon_base,
+                    budget_remaining=effective_budget,
+                    use_live_budget=False if effective_budget is not None else use_live_budget,
+                )
+            out["monitor"] = mon
+            if mon.get("blocked"):
+                # do not flip whole op to blocked if fleet can still open; note only
+                out.setdefault("notes", [])
+                if isinstance(out["notes"], list):
+                    out["notes"].append(
+                        f"monitor procedure blocked: {mon.get('error') or mon.get('reason')}"
+                    )
+            elif mon.get("n_proposed") is not None:
+                out.setdefault("notes", [])
+                if isinstance(out["notes"], list):
+                    out["notes"].append(
+                        f"monitor proposals={mon.get('n_proposed')} status={mon.get('status')}"
+                    )
+        except Exception as exc:
+            out["monitor"] = {"ok": False, "error": str(exc)}
+
+    # #641 residual: live safe ops open #644 fleet handoffs (accept → loops via #820)
+    if dispatch_fleet and not blocked and not dry_run:
+        try:
+            fleet_out = dispatch_fleet_for_scheduled_op(
+                op_id,
+                run_id=run.id,
+                risk_tolerance=risk_tolerance,
+                budget_remaining=effective_budget,
+                fleet_base_dir=fleet_base_dir,
+                record_ledger=record_ledger,
+            )
+        except Exception as exc:
+            fleet_out = {"ok": False, "error": str(exc)}
+        out["fleet_dispatch"] = fleet_out
+        if fleet_out.get("handoff_id"):
+            # Persist handoff id on the run record
+            data2 = _load(base_dir)
+            for r in data2.get("runs") or []:
+                if r.get("id") == run.id:
+                    meta = dict(r.get("metadata") or {})
+                    meta["fleet_handoff_id"] = fleet_out.get("handoff_id")
+                    r["metadata"] = meta
+                    r["updated_at"] = _now()
+                    out["run"] = r
+                    break
+            _save(data2, base_dir)
+            out.setdefault("notes", [])
+            if isinstance(out["notes"], list):
+                out["notes"].append(
+                    f"fleet handoff {fleet_out.get('handoff_id')} → {fleet_out.get('to_agent')}"
+                )
+        elif fleet_out.get("skipped"):
+            out.setdefault("notes", [])
+            if isinstance(out["notes"], list) and fleet_out.get("reason"):
+                out["notes"].append(str(fleet_out["reason"]))
+    elif dry_run and not blocked and op_id in _OP_FLEET_DISPATCH:
+        # Preview only — no handoff write
+        spec = _OP_FLEET_DISPATCH[op_id]
+        out["fleet_dispatch"] = {
+            "ok": True,
+            "dry_run": True,
+            "would_create_handoff": True,
+            "to_agent": spec.get("to_agent"),
+            "task": spec.get("task"),
+        }
+    return out
+
+
+def complete_op_run(
+    run_id: str,
+    *,
+    status: str = "done",
+    note: str = "",
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    data = _load(base_dir)
+    found = None
+    for r in data["runs"]:
+        if r.get("id") == run_id:
+            found = r
+            break
+    if not found:
+        return {"ok": False, "error": f"run not found: {run_id}"}
+    found["status"] = status
+    found["updated_at"] = _now()
+    if status in ("done", "cancelled", "blocked"):
+        found["completed_at"] = _now()
+    if note:
+        found.setdefault("notes", []).append(note)
+    data["last_run_by_op"][found["op_id"]] = {
+        "run_id": run_id,
+        "at": found["updated_at"],
+        "dry_run": found.get("dry_run"),
+        "status": status,
+    }
+    _save(data, base_dir)
+    return {"ok": True, "run": found}
+
+
+def list_op_runs(
+    *,
+    op_id: str | None = None,
+    status: str = "all",
+    limit: int = 50,
+    base_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    out = []
+    for r in _load(base_dir).get("runs") or []:
+        if op_id and r.get("op_id") != op_id:
+            continue
+        if status and status != "all" and r.get("status") != status:
+            continue
+        out.append(r)
+    return out[: max(1, int(limit or 50))]
+
+
+def last_runs(base_dir: Path | None = None) -> dict[str, Any]:
+    return dict(_load(base_dir).get("last_run_by_op") or {})
+
+
+def scheduled_ops_status(
+    *,
+    risk_tolerance: str = "medium",
+    base_dir: Path | None = None,
+    include_budget: bool = True,
+) -> dict[str, Any]:
+    """Summary for autonomy/status surfaces.
+
+    When include_budget is True, attach #634 remaining_tokens from durable snapshot
+    so operators see whether apply runs would gate on budget.
+    """
+    rank = {"off": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+    tol = rank.get((risk_tolerance or "medium").lower(), 0)
+    runnable = []
+    gated = []
+    for o in OPS_CATALOG:
+        item = {
+            "id": o["id"],
+            "cadence": o["cadence"],
+            "risk_level": o["risk_level"],
+            "requires_human": o["requires_human"],
+            "estimated_tokens_dry_run": estimate_op_cost(o["id"], dry_run=True).get(
+                "estimated_tokens"
+            ),
+            "estimated_tokens_apply": estimate_op_cost(o["id"], dry_run=False).get(
+                "estimated_tokens"
+            ),
+        }
+        if rank.get(str(o["risk_level"]).lower(), 2) <= tol and not o["requires_human"]:
+            runnable.append(item)
+        else:
+            gated.append(item)
+    out: dict[str, Any] = {
+        "ops": list_ops(),
+        "runnable_at_tolerance": runnable,
+        "gated": gated,
+        "last_run_by_op": last_runs(base_dir),
+        "risk_tolerance": risk_tolerance,
+        "n_ops": len(OPS_CATALOG),
+    }
+    if include_budget:
+        try:
+            from .autonomy import get_budget_snapshot
+
+            budget_base = Path(base_dir) / "budget" if base_dir is not None else None
+            snap = get_budget_snapshot(base_dir=budget_base)
+            out["budget_remaining_tokens"] = snap.get("remaining_tokens")
+            out["budget_pressure"] = snap.get("budget_pressure")
+            # Prefer next-cycle alias; fall back to would_pause for older callers.
+            out["would_pause_next_cycle"] = bool(
+                snap.get("would_pause_next_cycle")
+                if snap.get("would_pause_next_cycle") is not None
+                else snap.get("would_pause")
+            )
+            out["would_throttle_next_cycle"] = bool(
+                snap.get("would_throttle_next_cycle")
+                if snap.get("would_throttle_next_cycle") is not None
+                else snap.get("would_throttle")
+            )
+        except Exception as exc:
+            out["budget_error"] = str(exc)
+    return out
+
+
+def ops_feed_items(
+    *,
+    risk_tolerance: str = "medium",
+    limit: int = 10,
+    base_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Feed: only active/blocked scheduled op *runs* (not the full gated catalog)."""
+    items = []
+    for r in list_op_runs(status="all", limit=limit * 2, base_dir=base_dir):
+        if r.get("status") not in ("blocked", "running", "planned"):
+            continue
+        oid = r.get("op_id")
+        full = get_op(str(oid)) or {"id": oid, "description": oid, "risk_level": "medium"}
+        items.append(
+            {
+                "id": r.get("id") or f"sop-{oid}",
+                "item_type": "scheduled_op",
+                "title": f"Scheduled op [{r.get('status')}]: {oid}",
+                "op_id": oid,
+                "risk_level": full.get("risk_level"),
+                "badges": ["scheduled_op", str(r.get("status")), str(full.get("risk_level") or "medium")],
+                "source": "scheduled_ops",
+                "impact": "high" if full.get("risk_level") in ("high", "critical") else "medium",
+                "reason": full.get("description") or str(oid),
+                "ask_user_question": build_op_packet(full, dry_run=True).get("ask_user_question"),
+            }
+        )
+        if len(items) >= limit:
+            break
+    return items
+
+
+def run_procedure_dispatch(
+    proc_id: str,
+    *,
+    dry_run: bool = True,
+    risk_tolerance: str = "medium",
+    approved: bool = False,
+    checkpoint_id: str | None = None,
+    base_dir: Path | None = None,
+    budget_remaining: int | None = None,
+    use_live_budget: bool = True,
+) -> dict[str, Any] | None:
+    """If proc_id is a #641 op, run it; else return None for caller fallback."""
+    if get_op(proc_id) is None:
+        return None
+    return run_scheduled_op(
+        proc_id,
+        dry_run=dry_run,
+        risk_tolerance=risk_tolerance,
+        approved=approved,
+        checkpoint_id=checkpoint_id,
+        base_dir=base_dir,
+        budget_remaining=budget_remaining,
+        use_live_budget=use_live_budget,
+    )

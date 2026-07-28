@@ -1,0 +1,24 @@
+{
+  "slug": "634-stub-monitor-dry-run-no-charge",
+  "change_type": "fix",
+  "surface": "src/plate_core/stubs.py, src/plate_core/monitoring.py",
+  "summary": "create_stub_issue dry_run no longer charges durable #634 spend; monitoring review/market charge only when persist=True (live apply). base_dir isolates budget under base_dir/budget (#634/#637/#642).",
+  "migration_impact": "Local only. dry_run/preview paths skip budget_charge; live create/persist still charges. Matches scheduled_ops dry_run fix.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release with this fix.",
+    "2. Prefer dry_run=true / persist=false for previews.",
+    "3. If spend was polluted: gh plate autonomy --budget-reset."
+  ],
+  "agent_notes": "Never charge on dry_run create_stub_issue. Monitoring: charge only when persist. Pairs with scheduled-ops and fleet isolation.",
+  "breaking": false,
+  "links": [
+    "#634",
+    "#637",
+    "#642",
+    "#654",
+    "#839"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

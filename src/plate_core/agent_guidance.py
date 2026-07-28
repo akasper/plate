@@ -72,7 +72,15 @@ PLATE supports a Curiosity-driven workflow where informational goals are tracked
 
 ### Enforcement and follow-through for PLATE Q&A
 - **Mandatory use of native TUI forms for Q&A in PLATE contexts:** Agents must *consistently default to or use* Grok Build native TUI interactive configurator (arrow-key forms) via ask_user_question (or host native TUI) for interactive Q&A; include detection/fallback note; do not require user reminders. Do not use raw text prompts unless native is unavailable.
-- **Enforcement of Q&A option follow-through:** After answers, explicitly create/update artifacts (issues, fragments, docs) per Answer signal checklist and contemplation contract. Use explicit checklist in turns or session state to ensure complete follow-through without mid-stream corrections. Offer *only* options/actions in ask_user_question whose full follow-through (artifacts + execution) will be completed in this turn before any further progress or new Q&A; do not declare done or offer next until prior chosen option is fully executed. If a choice promises "review the PR", "babysit", "address feedback", or similar, the agent *must* fully execute that work using the dedicated pr-babysit skill (or MCP), isolated worktree, push to the *existing* PR branch, resolve addressed threads, before offering the next question or declaring progress/done. Never merge or advance with unaddressed feedback. (Addresses #503, #517.)
+- **Enforcement of Q&A option follow-through:** After answers, explicitly create/update artifacts (issues, fragments, docs) per Answer signal checklist and contemplation contract. Use explicit checklist in turns or session state to ensure complete follow-through without mid-stream corrections. Offer *only* options/actions in ask_user_question whose full follow-through (artifacts + execution) will be completed in this turn before any further progress or new Q&A; do not declare done or offer next until prior chosen option is fully executed. If a choice promises "review the PR", "babysit", "address feedback", or similar, the agent *must* fully execute that work using the dedicated pr-babysit skill (or MCP), isolated worktree, push to the *existing* PR branch, resolve addressed threads, before offering the next question or declaring progress/done. Never merge or advance with unaddressed feedback. (Addresses #503, #517, #508.)
+
+### Q&A Follow-Through Checklist (#508)
+Before offering the next ask_user_question (or declaring progress/done after a choice):
+1. **Options are executable in-turn only** — do not list babysit/review/merge unless this turn will finish them.
+2. **todo_write** the chosen path immediately (capture answer → artifacts → promised execution).
+3. **Execute fully** before next Q&A: pr-babysit to CLEAN when promised; write fragments/docs when promised; never squash-merge unaddressed feedback.
+4. **Mismatch recovery:** if you advanced without follow-through, open a Bug stub + corrective PR on the *same* branch before more planning.
+5. Mark checklist todos completed only when GitHub state proves it (checks green, threads resolved, files committed).
 
 ### Question handling flow
 1. Use available MCP tools (or future equivalents such as `plate_list_questions`, `plate_get_question`) to discover and prioritize open Questions.
@@ -151,6 +159,7 @@ def get_agent_guidance_sections() -> dict[str, str]:
         "information_audit": INFORMATION_AUDIT_GUIDANCE,
         "quiet_operations": QUIET_OPERATIONS_GUIDANCE,
         "task_management": TASK_MANAGEMENT_GUIDANCE,
+        "autonomy_loops": AUTONOMY_LOOPS_GUIDANCE,
     }
 
 
@@ -202,6 +211,7 @@ PLATE supports long-running autonomous operation (e.g. Copilot CLI `/every`, Gro
   - "Re-checked health / release status / epic status."
   - Status updates or "still working" notes in a watch/loop.
 - The engine's own PLATE-ANSWER / PLATE-CONTEMPLATION / PLATE-BLOCKING-DUMP markers and required usage-report blocks on closure are **exempt** (they are the auditable record per Issue Artifact Rules). Do not add your own prose comments around routine ones.
+- Autonomy engine markers are likewise **exempt**: `PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`, `PLATE-DECISION` ledger markers (#647), and required USAGE REPORT blocks produced by `plate_autonomy_run_cycle` / procedure runs (#470 / #480). Do not wrap them in extra "still running" prose. Use `plate_ledger_record` / `gh plate ledger` for durable decision provenance.
 - Human checkpoints remain (e.g. "Post a summary comment on the Epic issue when all child issues are resolved"). These are explicit, not routine.
 
 ### Q&A / Curiosity question presentation
@@ -284,11 +294,87 @@ When given a *single high-level instruction* like "get this PR green", "make mer
 
 6. Only then produce the one-sentence summary for the human of what is left + current state. Use terse quiet output for loops.
 
-For any PR health / conflict / feedback / 'get green' work, start by using the dedicated pr-babysit skill (gh plate pr babysit or plate_pr_babysit MCP) rather than hand-rolling raw git + gh commands. Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit` + get_pr_merge_gates) surface by default. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state from a single high-level prompt instead of sequential single-category fixes waiting for user diagnosis. (Addresses #519, #528, #526, etc.)
+For any PR health / conflict / feedback / 'get green' work, start by using the dedicated pr-babysit skill (gh plate pr babysit or plate_pr_babysit MCP) rather than hand-rolling raw git + gh commands. Use the dedicated `gh plate pr babysit` (or MCP `plate_pr_babysit` + get_pr_merge_gates) surface by default. Escalate with `need:human-review` label + blocking comment for judgment items. This gives the agent ownership of the full "mergeable" state from a single high-level prompt instead of sequential single-category fixes waiting for user diagnosis. (Addresses #519, #528, #526, #510.)
+
+### Merge Gates Checklist (#510)
+From one "get this PR green" prompt, inspect and fix **all** agent-actionable gates in one pass (do not wait for the user to name the next category):
+1. **CI diagnosis first** — `gh pr checks` + `gh run view … --log-failed` on the specific failing job.
+2. **Merge gates bundle** — `plate_get_pr_merge_gates` / `plate_pr_babysit` (mergeStateStatus, threads, note).
+3. **Labels** — required PR type + area:* + risk:* (and Feature fragment when applicable).
+4. **Base sync** — BEHIND/CONFLICTING/DIRTY → local-rebase or copilot-request (isolated worktree).
+5. **Feedback-resolution** — actionable threads via plate_get_actionable_review_threads + plate_resolve_review_thread; outdated via babysit `--act` (#605).
+6. **Tests / title / issue-link / feature-change-files** — fix what failed; re-push to the *same* branch.
+7. **Stop only when** remaining items are human-only; then one-sentence summary.
 
 The pr-babysit skill should support (or be used in) a "until green" / comprehensive make-mergeable flow with the above loop, appropriate quiet reporting, and clear human escalation points.
 
 Use this section for any monitoring, babysitting, contemplation, or repeated what_next work. The goal is dramatically less noise in Issues and terminals while preserving every required traceable artifact.
+
+### Human co-existence (#643 / #651)
+- Respect `driver:human` / `driver:collaborative` / `driver:agent` labels. On `driver:human`, pause auto-delegation and do not push/auto-merge without explicit human direction.
+- Mixed human+agent PRs: never force-push; escalate before history rewrites. Use `plate_collab_check` / authorship mix when unsure.
+- Prefer human review when `need:human-review`, high risk, or collaborative mix; never self-merge those.
+- Clear signaling: PLATE markers on comments, quiet ops, and collab markers for ownership handoffs.
+- Path/branch ownership (#651): humans claim pause via `plate_collab_ownership_claim` / `gh plate collab --claim` (durable `.agentic/collab/`). Agents must call policy check with paths/branch; skip overlapping work until release. Use feature/* or bug/* branches in isolated worktrees — never agent-edit main/release directly.
+
+### Multi-agent fleet (#644)
+- Prefer explicit handoffs: `plate_fleet_handoff` / `gh plate fleet --handoff` with narrow context packets (GitHub as truth; local `.agentic/fleet/` coordination only).
+- Plan multi-role work from intent with `plate_fleet_plan` (dry-run default); allocate budget via `plate_fleet_allocate`.
+- Complete handoffs with provenance; surface active handoffs in the feed. Complements PM personas (#660) and `plate_delegate_to_agent`.
+
+### Scheduled monitoring (#642)
+- Weekly procedures: `weekly-discussion-review`, `market-condition-monitor` (low risk; AutonomyEngine list/run).
+- Discussion Ideas → stub proposals: `plate_monitor_discussions` / `gh plate monitor` (dry-run default; `--apply` / `--live` to persist/fetch).
+- Market signals are host-injected (web_search / x_*); core never scrapes network: `plate_monitor_market` with `signals`.
+- Pending proposals surface in the feed; decide with `plate_monitor_decide` before creating GitHub issues.
+
+### Stub issue lifecycle (#637)
+- Author any type (Feature/Bug/Epic/Release/Research/Design/Question/Task): `plate_stub_author` / `gh plate stub --intent "..."`.
+- Refine with Q&A: `plate_stub_refine`; create on GitHub only with explicit dry_run=false / `--apply`.
+- Local drafts under `.agentic/stubs/`; labels include `status:stub` + `need:refinement` until mark_ready.
+- Complements `plate_task_create`, planning sessions, and monitor proposals.
+
+### Bug resolution loop (#638)
+- Orchestrate TDD bug fixes: `plate_bug_loop_start` → stage packets (plan→draft PR→failing test→fix→ready→babysit→checkpoint?→merge_eligible).
+- Advance with `plate_bug_loop_advance`; tick with gates via `plate_bug_loop_tick` + `plate_pr_babysit` / `plate_get_pr_merge_gates`.
+- Never self-merge when risk-off or requires_human; surface human_checkpoint + feed. Local runs in `.agentic/bug_loops/`.
+
+### Feature implementation loop (#639)
+- Orchestrate Features: `plate_feature_loop_start` (upfront cost estimate) → plan→draft PR→failing tests→impl→fragment→media→babysit→checkpoint?→merge_eligible.
+- Estimate only: `plate_feature_loop_estimate` / `gh plate feature-loop --estimate`. Budget can block start.
+- Same babysit/gate rules as bug loop; media/design approval via human_checkpoint. Local runs in `.agentic/feature_loops/`.
+
+### Design validation contracts (#646)
+- Propose enforceable visual/interaction contracts: `plate_design_contract_propose` / `gh plate design-contract`.
+- Approve before impl: `plate_design_contract_decide`; check readiness with `plate_design_contract_validate`.
+- Drop failing TDD scaffolds via `plate_design_contract_scaffold` (python|typescript). Do not weaken assertions to pass.
+- Pending contracts surface in the feed; pair with feature_loop `needs_design_validation`.
+
+### Release notes media (#635)
+- Attach demo GIF/video on fragments via optional `media: [{type, path|url, caption, approval_status}]`.
+- Aggregate/render: `plate_release_media_manifest` / `gh plate release-media`; cut_release embeds media into release.json.
+- Prefer approved media in GitHub Release body; pending items surface for user approval in the feed.
+- Capture via record-e2e-gif / Playwright into `tests/e2e/fixtures/gifs/` then reference path in the fragment.
+
+### Per-Feature media (#636)
+- Every Feature: `plate_feature_media_plan` → `record_e2e_gif` → `plate_feature_media_register` → user approve → `plate_feature_media_attach_fragment`.
+- CLI: `gh plate feature-media --feature N --title "..."`. Skip only with explicit reason.
+- Pairs with feature_loop `media_capture` stage and #635 fragment media[].
+
+### Scheduled ops (#641)
+- Catalog: refactor, release-cut/finalize prep, deploy-production, marketing deploy, marketplace package, implement-epic-slice.
+- `plate_scheduled_ops_status` / `gh plate scheduled-ops`; plan packets with `plate_scheduled_op_plan`.
+- High/critical ops need `approved=true` or checkpoint; marketplace publish stays human Task. Dry-run default.
+
+### Marketplace packaging (#652)
+- First-class package builds bundle approved media (#635/#636), end-user narratives from fragments, onboarding proof (install → first Q&A), and planning links.
+- `plate_packaging_build` / `gh plate packaging`; render with `plate_packaging_render`; feed via `plate_packaging_feed`.
+- `plate_packaging_decide approve` only marks approved_for_publish — never publishes. Real marketplace/PyPI stays human Task (#380/#381/#625/#626).
+
+### Hybrid / non-code projects (#650)
+- Project kinds: software, docs, content, marketing, design_system, infra, hybrid — each with artifact types + validation strategies (link check, content lint, visual, claims, IaC plan, etc.).
+- `plate_hybrid_detect` / `plate_hybrid_set_kind` / `gh plate hybrid`; planning templates via `plate_hybrid_planning_template`; Feature validation plans via `plate_hybrid_validation_plan`.
+- Do not assume unit tests alone for non-code work; attach kind-aware validation and human gates (editorial/claims/prod apply).
 
 ### Release Status Protocol (mandatory first step for any PR/branch/targeting work)
 Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase decision, or determining integration target for Bug/Feature work (or babysit on a PR):
@@ -300,4 +386,50 @@ Before *any* branch targeting, PR creation (`gh pr create`), base edit, rebase d
 - Enhance pr-babysit and planning surfaces to surface/release status output and the determined base automatically where possible.
 
 See AGENTS.md §Branch Model and Ceremonies, §Documentation Rules, Feature/Bug work loops. (Addresses #513.)
+"""
+
+
+AUTONOMY_LOOPS_GUIDANCE = """
+## Autonomy Loops & Engine Surfaces (Epic #470 / Feature #480)
+
+When PLATE signals are present (`.plate/`, `AGENTS.md`, Epic labels, release artifacts), prefer the **AutonomyEngine** surfaces for long-running, scheduled, or budgeted autonomous work instead of ad-hoc shell loops.
+
+### Discoverability (thin surfaces)
+- **MCP:** `plate_autonomy_status`, `plate_autonomy_run_cycle`, `plate_autonomy_list_procedures`, `plate_autonomy_run_procedure`
+- **CLI:** `gh plate autonomy --status | --run [--dry-run] | --loop [--max-cycles N]`
+- **Process next-step:** still call `plate_what_next` first for *what* to do; call `plate_autonomy_status` first for *whether/how* to run a long loop (risk, budget, due procedures).
+- **Config:** `.plate` `autonomy` section — `enabled`, `risk_tolerance` (`off|low|medium|high`), `token_budget`, `cost_ceiling_usd`, `schedules_enabled`, `loop`, `pr_review_scope` (#496).
+
+### Routing order for long-running / scheduled work
+1. `gh plate release status` if the work involves branches/PRs/targeting (#513).
+2. `plate_autonomy_status` (or `gh plate autonomy --status`) — read `risk_tolerance`, remaining budget, autopilot_score, due procedures, human checkpoints (`plate_checkpoint_list` / #648 for open pausing approvals).
+3. If `risk_tolerance` is `off` or autonomy `enabled: false`: do **not** run unsupervised cycles; surface status to the human and fall back to interactive / single-shot work.
+4. If budget is exhausted or throttle action is active: stop or downscope; do not burn more tokens on no-op loops. Prefer one `plate_what_next` + targeted fix.
+5. Otherwise: `plate_autonomy_run_cycle` (prefer `--dry-run` / dry_run first when risk is unknown) or `gh plate autonomy --run`, then `--loop` only when the user/process explicitly wants continuous operation.
+6. For procedure-specific work: `plate_autonomy_list_procedures` then `plate_autonomy_run_procedure` within risk cap.
+7. Delegation of coding/review still uses `plate_delegate_to_agent` + pr-babysit (#496 scope, #605 auto-resolve outdated threads). Autonomy coordinates; it does not replace Full PR Green ownership.
+
+### Quiet + budget rules inside autonomy loops
+- Terminal output: **only** terse one-sentence bullets (same as quiet_operations). Never dump full cycle JSON unless the user asked for `--json` / debug.
+- GitHub comments: only on meaningful forward progress or required markers (`PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`, USAGE REPORT). No "cycle N complete, 0 actions" spam.
+- Respect `token_budget.per_cycle` / daily / optional `per_action` caps and `cost_ceiling_usd`. When status shows throttle or ceiling hit, exit the loop cleanly with one bullet naming the constraint.
+- At `risk_tolerance: low`, prefer dry-run / shadow simulation (#645) and human checkpoints before high-impact actions (deploy, release cut, force-push, secretful ops). Use `plate_autonomy_simulate` / `gh plate autonomy --simulate ACTION` for a structured ShadowReport (impact, cost, side effects, gate_preview, shadow_id); high/critical live runs need shadow_ack + approved.
+- At `high`, still never skip human Tasks (real-world credentials, marketplace publish, PyPI) or merge policy gates.
+
+### Markers (auditable record — quiet-exempt)
+- `<!-- PLATE-AUTONOMY-CYCLE -->` … cycle summary + optional USAGE REPORT
+- `<!-- PLATE-PROCEDURE-RUN -->` … procedure id, outcome, risk
+- Same discipline as PLATE-ANSWER / PLATE-CONTEMPLATION: these *are* the record; do not add surrounding chit-chat.
+
+### Coordination with what_next and PM/orchestrator vision
+- `plate_what_next` chooses the next *process* step from health/epics/fragments. For end-user Q+Task surfacing use `plate_feed` / `gh plate feed` (#631).
+- `plate_what_next` remains the agent process router;
+- Autonomy engine enforces *budget/risk/schedule* around executing steps and built-in procedures.
+- Future PM/Orchestrator (#660) builds on these surfaces; until then, the plate persona + these tools are the supported autonomy path.
+
+### Catalog
+- Skill `run-autonomy-cycle` (owned by project-manager) documents this flow for delegation packets.
+- Keep persona thin; this section is the detailed protocol (#569 guidance architecture).
+
+See `docs/design/autonomous-plate-engine.md`, AGENTS.md Autonomous Mode, quiet_operations, and Epic #470 children. (Addresses #480.)
 """

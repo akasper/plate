@@ -22,17 +22,31 @@ const GH_PLATE = join(WORKSPACE, "gh-plate");
 const PYTHON =
   process.platform === "win32" ? "python" : "python3";
 
+function parseJsonStdout(stdout: string): unknown {
+  // Tolerate incidental non-JSON prefixes (e.g. historical pip "Collecting..." on first run).
+  const trimmed = (stdout || "").trim();
+  const start = trimmed.search(/[\[{]/);
+  if (start < 0) {
+    throw new Error(`gh-plate produced no JSON object/array in stdout: ${JSON.stringify(stdout)}`);
+  }
+  return JSON.parse(trimmed.slice(start));
+}
+
 function runGhPlate(...args: string[]): unknown {
   const result = spawnSync(PYTHON, [GH_PLATE, ...args], {
     encoding: "utf-8",
-    env: process.env,
+    env: {
+      ...process.env,
+      // Prefer in-tree package in CI/dev so first-run pip install is not required.
+      PYTHONPATH: [process.env.PYTHONPATH, join(WORKSPACE, "src")].filter(Boolean).join(process.platform === "win32" ? ";" : ":"),
+    },
   });
   if (result.status !== 0) {
     throw new Error(
       `gh-plate ${args.join(" ")} exited ${result.status}: ${result.stderr}`
     );
   }
-  return JSON.parse(result.stdout);
+  return parseJsonStdout(result.stdout);
 }
 
 const EXPECTED_AGENT_IDS = [

@@ -1,0 +1,26 @@
+{
+  "slug": "634-641-scheduled-ops-budget-gate",
+  "change_type": "feature",
+  "surface": "src/plate_core/scheduled_ops.py, cli.py, mcp_server.py, tests/test_scheduled_ops.py",
+  "summary": "Gate #641 scheduled ops on live #634 budget remaining: estimate_op_cost, run_scheduled_op hydrate/block, status estimates, CLI --budget-remaining/--no-live-budget, MCP budget fields (#753).",
+  "migration_impact": "scheduled_op_run and gh plate scheduled-ops --run honor durable spend remaining by default; over-budget runs return blocked with budget reason. Pass budget_remaining or use_live_budget=false to override.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer live hydrate (default): plate_scheduled_op_run / gh plate scheduled-ops --run OP.",
+    "3. Explicit remaining: --budget-remaining N or budget_remaining arg.",
+    "4. Disable hydrate only for offline tests: --no-live-budget / use_live_budget=false.",
+    "5. Status JSON includes budget_remaining_tokens and per-op estimates."
+  ],
+  "agent_notes": "Parity with feature_loop/bug_loop #634 hydrate. Does not close parent #634 UX stub. Closes #753. Related #641 #653 #654.",
+  "breaking": false,
+  "links": [
+    "#753",
+    "#634",
+    "#641",
+    "#654",
+    "#653"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

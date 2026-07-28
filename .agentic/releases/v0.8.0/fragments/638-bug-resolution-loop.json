@@ -1,0 +1,25 @@
+{
+  "slug": "638-bug-resolution-loop",
+  "change_type": "feature",
+  "surface": "src/plate_core/bug_loop.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+  "summary": "Autonomous bug resolution loop first slice (#638): durable stage machine (plan→draft PR→failing test→fix→ready→babysit→human_checkpoint?→merge_eligible→done), agent packets, merge-gate aware advance, feed prompts, MCP plate_bug_loop_* + gh plate bug-loop; no silent merge.",
+  "migration_impact": "Optional local runs under .agentic/bug_loops/ (gitignored). Orchestration contracts only — agents still execute git/PR work via existing babysit/TDD flows. Human checkpoint when risk high or need:human-review.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Start: gh plate bug-loop --bug N --title \"...\" or plate_bug_loop_start.",
+    "3. Follow packet steps; advance with plate_bug_loop_advance; babysit stage uses plate_pr_babysit + gates.",
+    "4. risk-off / requires_human: stop at human_checkpoint; do not self-merge."
+  ],
+  "agent_notes": "First orchestration slice of Epic #638. Full worktree TDD automation, auto draft-PR creation, and risk-gated auto-merge remain follow-ups. Prefer dry_run ticks; integrate with #645/#648 for high impact.",
+  "breaking": false,
+  "links": [
+    "#638",
+    "#654",
+    "#470",
+    "#605",
+    "#648"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

@@ -277,6 +277,35 @@ class CliTests(unittest.TestCase):
         args, kwargs = mock_reset.call_args
         self.assertFalse(kwargs.get("apply", False))
 
+    @patch("plate_core.cli.get_autonomy_status")
+    def test_autonomy_status_prints_pressure_and_pause(self, mock_status):
+        """#634/#653: human-readable status surfaces pressure + next-cycle gate."""
+        mock_status.return_value = {
+            "enabled": False,
+            "risk_tolerance": "off",
+            "autopilot_score": 65,
+            "burn_rate": 86.0,
+            "budget_remaining_tokens": 7000,
+            "daily_limit": 50000,
+            "budget_pressure": "critical",
+            "would_pause_next_cycle": True,
+            "would_throttle_next_cycle": False,
+            "spent_today_durable": 43000,
+            "due_procedures": [],
+            "throttled_actions": 0,
+            "open_human_checkpoints": ["cp-1: Approve deploy"],
+            "last_cycle": "2026-07-26T00:00:00+00:00",
+        }
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["autonomy", "--status"])
+        self.assertEqual(code, 0)
+        text = out.getvalue()
+        self.assertIn("Budget pressure: critical", text)
+        self.assertIn("would_pause=True", text)
+        self.assertIn("Budget remaining tokens: 7000/50000", text)
+        self.assertIn("Open checkpoints: 1", text)
+
 
 if __name__ == "__main__":
     unittest.main()

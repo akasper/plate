@@ -2,6 +2,8 @@
 
 The pr-babysit skill/MCP surface (`gh plate pr babysit` or `plate_pr_babysit`) is the dedicated tool for PR feedback and health work. Agents must default to it (rather than hand-rolling git/gh commands) for "babysit", "get CI passing", "address feedback", or "make PR green" instructions (addresses #524 and related). After addressing feedback, explicitly resolve the corresponding review threads (via resolveReviewThread) to satisfy the feedback-resolution check (addresses #520).
 
+**Auto-resolve on act (addresses #605):** When `act=True`, `babysit_pr` automatically resolves unresolved review threads that are **outdated** (typically after code was pushed that addresses the comment lines). This closes the gap where threads stayed `isResolved: false` after fixes, blocking the feedback-resolution gate even though the tool reported 0 actionable (outdated) threads. Explicit `resolve_review_thread` remains available for non-outdated threads and manual cases.
+
 **Per #513: agents MUST run `gh plate release status` *proactively as the very first step* before calling babysit_pr, creating related PRs, or any targeting/base decision. This function assumes the caller has done so to confirm the correct track/base and pending fragments; use the output to set context.**
 
 Review thread handling (GraphQL pagination via reviewThreads first:100 + nodes, exact databaseId from comments, author filtering, isResolved/isOutdated, body, resolveReviewThread mutation) is fully encapsulated in the high-level helpers: babysit_pr (for detection + report), get_actionable_review_threads (for listing), resolve_review_thread (for safe resolution), and get_pr_merge_gates. Agents and calling code **must not** manually construct raw `gh api graphql`, jq filters, mktemp tempfiles, sed/NO_COLOR ANSI stripping, or the mutation. Use the Python/MCP/CLI surfaces instead (addresses #516).
@@ -31,11 +33,13 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from .github_client import GhClient
 from .health import resolve_repo
 
 
+# Known bot / automated reviewer logins and patterns (#496 expands beyond early third-party list).
 _DEFAULT_AGENT_PATTERNS = [
     re.compile(r"^devin", re.IGNORECASE),
     re.compile(r"^openhands", re.IGNORECASE),
@@ -43,6 +47,12 @@ _DEFAULT_AGENT_PATTERNS = [
     re.compile(r"^swe-agent", re.IGNORECASE),
     re.compile(r"^aide-agent", re.IGNORECASE),
     re.compile(r"^mentat-bot", re.IGNORECASE),
+    re.compile(r"copilot", re.IGNORECASE),  # copilot-pull-request-reviewer, github-copilot, etc.
+    re.compile(r"^dependabot", re.IGNORECASE),
+    re.compile(r"^github-actions", re.IGNORECASE),
+    re.compile(r"^coderabbit", re.IGNORECASE),
+    re.compile(r"^cursor", re.IGNORECASE),
+    re.compile(r"\[bot\]$", re.IGNORECASE),
 ]
 
 _BABYSIT_MARKER = "<!-- plate-pr-babysit -->"
@@ -51,6 +61,23 @@ _MERGE_TRIGGER_MARKER = "<!-- plate-pr-merge-trigger -->"
 # Valid branch update strategies
 _VALID_STRATEGIES = ["copilot-request", "local-rebase", "none"]
 _DEFAULT_STRATEGY = "copilot-request"
+
+# #496: who counts as actionable review feedback
+PR_REVIEW_SCOPES = ("all", "bot-only", "human-only")
+_DEFAULT_PR_REVIEW_SCOPE = "all"
+_SUGGESTION_FENCE_RE = re.compile(r"```suggestion[^\n]*\n(.*?)```", re.IGNORECASE | re.DOTALL)
+_HIGH_RISK_PATH_FRAGMENTS = (
+    "agents.md",
+    ".github/workflows/",
+    "spec.md",
+    "current.md",
+    ".plate",
+    "credentials",
+    "secret",
+    "id_rsa",
+    ".env",
+    "pyproject.toml",  # version/publish surface
+)
 
 
 @dataclass
@@ -69,13 +96,67 @@ class BabysitReport:
     local_rebase_success: bool | None = None
     local_rebase_conflict: bool = False
     local_rebase_error: str | None = None
+    # #605: threads auto-resolved because they were outdated + unresolved when act=True
+    auto_resolved_threads: int = 0
+    auto_resolved_thread_ids: list[str] | None = None
+    auto_resolve_errors: list[str] | None = None
+    # #496: scope + suggestion awareness
+    pr_review_scope: str = _DEFAULT_PR_REVIEW_SCOPE
+    threads_with_suggestions: int = 0
+    high_risk_suggestion_threads: int = 0
+    actionable_thread_summaries: list[dict] | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
 def _default_agent_match(login: str) -> bool:
+    """True if login looks like a known bot/agent reviewer (#496)."""
     return any(pattern.search(login or "") for pattern in _DEFAULT_AGENT_PATTERNS)
+
+
+def _is_bot_login(login: str) -> bool:
+    """Alias for bot/agent detection used by pr_review_scope filtering."""
+    return _default_agent_match(login)
+
+
+def extract_suggestion_blocks(body: str | None) -> list[str]:
+    """Return fenced ```suggestion``` block bodies from a review comment (#496)."""
+    if not body:
+        return []
+    return [m.group(1).strip("\n") for m in _SUGGESTION_FENCE_RE.finditer(body)]
+
+
+def _path_is_high_risk(path: str | None) -> bool:
+    if not path:
+        return False
+    lower = path.replace("\\", "/").lower()
+    return any(frag in lower for frag in _HIGH_RISK_PATH_FRAGMENTS)
+
+
+def resolve_pr_review_scope(
+    scope: str | None = None,
+    *,
+    repo_root: str | Path | None = None,
+) -> str:
+    """Resolve pr_review_scope: explicit arg > .plate autonomy > default ``all`` (#496)."""
+    if scope:
+        normalized = scope.strip().lower().replace("_", "-")
+        if normalized not in PR_REVIEW_SCOPES:
+            raise ValueError(f"Invalid pr_review_scope: {scope!r}. Must be one of {PR_REVIEW_SCOPES}")
+        return normalized
+    try:
+        from .plate_config import load_plate_config
+
+        conf = load_plate_config(repo_root or ".")
+        auto = getattr(conf, "autonomy", None) or {}
+        if isinstance(auto, dict):
+            cfg_scope = auto.get("pr_review_scope")
+            if cfg_scope:
+                return resolve_pr_review_scope(str(cfg_scope))
+    except Exception:
+        pass
+    return _DEFAULT_PR_REVIEW_SCOPE
 
 
 def _detect_base_branch_out_of_sync(pr_data: dict) -> dict:
@@ -108,8 +189,43 @@ def _parse_agent_logins(agent_logins: str | None) -> set[str]:
     return {item.strip().lower() for item in agent_logins.split(",") if item.strip()}
 
 
-def _extract_actionable_threads(threads: list[dict], agent_logins: str | None) -> list[dict]:
+def _author_in_scope(
+    author: str,
+    *,
+    scope: str,
+    agent_logins: str | None,
+) -> bool:
+    """Decide if a review author is actionable under scope / explicit allowlist (#496).
+
+    Explicit ``agent_logins`` (CLI ``--agents``) remains an allowlist that overrides scope.
+    """
     configured = _parse_agent_logins(agent_logins)
+    lower = (author or "").strip().lower()
+    if configured:
+        return lower in configured
+    is_bot = _is_bot_login(author)
+    if scope == "all":
+        return True
+    if scope == "bot-only":
+        return is_bot
+    if scope == "human-only":
+        return not is_bot
+    return True
+
+
+def _extract_actionable_threads(
+    threads: list[dict],
+    agent_logins: str | None,
+    *,
+    scope: str | None = None,
+) -> list[dict]:
+    """Extract unresolved, non-outdated threads in scope (#496).
+
+    Default scope is ``all`` (every author) so Copilot and human reviewers are not dropped.
+    Use ``bot-only`` for the pre-#496 conservative behavior (expanded bot patterns still apply).
+    """
+    effective_scope = resolve_pr_review_scope(scope) if scope is not None else resolve_pr_review_scope(None)
+    # When agent_logins is set, scope is overridden by allowlist; still record effective intent.
     actionable: list[dict] = []
     for thread in threads:
         if thread.get("isResolved") or thread.get("isOutdated"):
@@ -119,20 +235,61 @@ def _extract_actionable_threads(threads: list[dict], agent_logins: str | None) -
             continue
         last = comments[-1]
         author = ((last.get("author") or {}).get("login") or "").strip()
-        lower = author.lower()
-        is_target = lower in configured if configured else _default_agent_match(author)
-        if not is_target:
+        if not _author_in_scope(author, scope=effective_scope, agent_logins=agent_logins):
             continue
+        body = (last.get("body") or "").strip()
+        suggestions = extract_suggestion_blocks(body)
+        path = thread.get("path") or last.get("path") or ""
+        high_risk = _path_is_high_risk(path)
         actionable.append(
             {
                 "thread_id": thread.get("id"),
                 "comment_id": last.get("databaseId"),
                 "author": author,
                 "url": last.get("url"),
-                "body": (last.get("body") or "").strip(),
+                "body": body,
+                "is_bot": _is_bot_login(author),
+                "has_suggestion": bool(suggestions),
+                "suggestion_count": len(suggestions),
+                "suggestions": suggestions,
+                "path": path,
+                "high_risk_path": high_risk,
+                # Prefer apply only when suggestion present, path not high-risk, and bot/all scope trusts bots more
+                "prefer_apply_suggestion": bool(suggestions) and not high_risk,
             }
         )
     return actionable
+
+
+def _extract_outdated_unresolved_threads(threads: list[dict]) -> list[dict]:
+    """Threads that are still open but outdated (code moved) — candidates for auto-resolve (#605).
+
+    Outdated + unresolved is the common post-fix state: agent addressed the line(s) and pushed,
+    so GitHub marks the thread outdated, but feedback-resolution CI still fails until
+    resolveReviewThread is called.
+    """
+    candidates: list[dict] = []
+    for thread in threads:
+        if thread.get("isResolved"):
+            continue
+        if not thread.get("isOutdated"):
+            continue
+        thread_id = thread.get("id")
+        if not thread_id:
+            continue
+        comments = (thread.get("comments") or {}).get("nodes") or []
+        last = comments[-1] if comments else {}
+        author = ((last.get("author") or {}).get("login") or "").strip()
+        candidates.append(
+            {
+                "thread_id": thread_id,
+                "comment_id": last.get("databaseId"),
+                "author": author,
+                "url": last.get("url"),
+                "body": (last.get("body") or "").strip(),
+            }
+        )
+    return candidates
 
 
 def _load_review_threads(client: GhClient, repo: str, pr_number: int) -> list[dict]:
@@ -141,8 +298,170 @@ def _load_review_threads(client: GhClient, repo: str, pr_number: int) -> list[di
     return pr_data.get("reviewThreads", [])
 
 
+def _summarize_status_check_rollup(rollup: dict | None) -> dict:
+    """Normalize GitHub statusCheckRollup into failing/pending counts + state.
+
+    Used by get_pr_merge_gates and evaluate_babysit_gates for #638/#639 loop advance.
+    """
+    if not isinstance(rollup, dict):
+        return {
+            "ci_state": None,
+            "failing_checks": 0,
+            "pending_checks": 0,
+            "ci_failing": False,
+            "ci_pending": False,
+        }
+    state = str(rollup.get("state") or "").upper() or None
+    failing = 0
+    pending = 0
+    contexts = rollup.get("contexts") or rollup.get("nodes") or []
+    if isinstance(contexts, dict):
+        contexts = contexts.get("nodes") or []
+    for ctx in contexts or []:
+        if not isinstance(ctx, dict):
+            continue
+        # CheckRun: status (QUEUED/IN_PROGRESS/COMPLETED) + conclusion
+        conclusion = str(ctx.get("conclusion") or "").upper()
+        status = str(ctx.get("status") or ctx.get("state") or "").upper()
+        if conclusion in ("FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"):
+            failing += 1
+        elif status in ("FAILURE", "ERROR"):
+            failing += 1
+        elif status in ("PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "REQUESTED", "WAITING"):
+            pending += 1
+        elif conclusion in ("", "NEUTRAL", "SKIPPED") and status in ("", "COMPLETED"):
+            continue
+    # Prefer rollup aggregate when contexts missing
+    if failing == 0 and pending == 0 and state:
+        if state in ("FAILURE", "ERROR"):
+            failing = 1
+        elif state in ("PENDING", "EXPECTED"):
+            pending = 1
+    return {
+        "ci_state": state,
+        "failing_checks": failing,
+        "pending_checks": pending,
+        "ci_failing": failing > 0 or state in ("FAILURE", "ERROR"),
+        "ci_pending": pending > 0 or state in ("PENDING", "EXPECTED"),
+    }
+
+
+def evaluate_babysit_gates(
+    gates: dict | None,
+    *,
+    require_ci_success: bool = True,
+    block_on_pending_ci: bool = True,
+) -> dict:
+    """Decide whether bug/feature loops may leave babysit (or merge_eligible).
+
+    Pure helper for #638/#639 advance gates. When ``gates`` is None, not blocked
+    (caller did not supply inspection). When present, blocks on:
+    - merge_state in BLOCKED/DIRTY/CONFLICTING/BEHIND
+    - unresolved / actionable agent review threads
+    - review_decision == CHANGES_REQUESTED
+    - CI failing (and optionally pending) when require_ci_success
+    - explicit need_human_review / labels containing need:human-review (soft: reason only
+      when also force-blocking via gates['block_human_review']=True — default False so
+      requires_human routing handles it)
+
+    Returns:
+        {blocked: bool, reason: str|None, checks: dict snapshot}
+    """
+    if not gates:
+        return {"blocked": False, "reason": None, "checks": {}}
+
+    merge_state = str(
+        gates.get("merge_state") or gates.get("mergeStateStatus") or ""
+    ).upper()
+    unresolved = int(
+        gates.get("unresolved_review_threads")
+        or gates.get("actionable_agent_threads")
+        or 0
+    )
+    # Prefer explicit actionable agent count for thread gate when both present
+    if gates.get("actionable_agent_threads") is not None and gates.get(
+        "unresolved_review_threads"
+    ) is not None:
+        unresolved = max(
+            int(gates.get("unresolved_review_threads") or 0),
+            int(gates.get("actionable_agent_threads") or 0),
+        )
+    review_decision = str(
+        gates.get("review_decision") or gates.get("reviewDecision") or ""
+    ).upper()
+    ci_failing = bool(gates.get("ci_failing"))
+    ci_pending = bool(gates.get("ci_pending"))
+    failing_checks = int(gates.get("failing_checks") or 0)
+    pending_checks = int(gates.get("pending_checks") or 0)
+    if failing_checks > 0:
+        ci_failing = True
+    if pending_checks > 0:
+        ci_pending = True
+    ci_state = str(gates.get("ci_state") or "").upper()
+    if ci_state in ("FAILURE", "ERROR"):
+        ci_failing = True
+    if ci_state in ("PENDING", "EXPECTED"):
+        ci_pending = True
+
+    checks = {
+        "merge_state": merge_state or None,
+        "unresolved_review_threads": unresolved,
+        "review_decision": review_decision or None,
+        "ci_failing": ci_failing,
+        "ci_pending": ci_pending,
+        "failing_checks": failing_checks,
+        "pending_checks": pending_checks,
+        "ci_state": ci_state or None,
+    }
+
+    if merge_state in ("BLOCKED", "DIRTY", "CONFLICTING", "BEHIND"):
+        return {
+            "blocked": True,
+            "reason": f"PR not clean ({merge_state}); stay on babysit",
+            "checks": checks,
+        }
+    if unresolved > 0:
+        return {
+            "blocked": True,
+            "reason": f"{unresolved} unresolved threads; stay on babysit",
+            "checks": checks,
+        }
+    if review_decision == "CHANGES_REQUESTED":
+        return {
+            "blocked": True,
+            "reason": "review_decision=CHANGES_REQUESTED; stay on babysit",
+            "checks": checks,
+        }
+    if require_ci_success and ci_failing:
+        n = failing_checks or 1
+        return {
+            "blocked": True,
+            "reason": f"CI failing ({n} check(s)); stay on babysit",
+            "checks": checks,
+        }
+    if require_ci_success and block_on_pending_ci and ci_pending:
+        n = pending_checks or 1
+        return {
+            "blocked": True,
+            "reason": f"CI pending ({n} check(s)); stay on babysit",
+            "checks": checks,
+        }
+    if gates.get("block_human_review"):
+        labels = gates.get("labels") or []
+        if gates.get("need_human_review") or any(
+            str(x) == "need:human-review" for x in labels
+        ):
+            return {
+                "blocked": True,
+                "reason": "need:human-review; stay on babysit/human_checkpoint",
+                "checks": checks,
+            }
+
+    return {"blocked": False, "reason": None, "checks": checks}
+
+
 def _load_pr_data(client: GhClient, repo: str, pr_number: int) -> dict:
-    """Load PR data including review threads and merge state.
+    """Load PR data including review threads, merge state, review decision, CI rollup.
 
     Returns:
         dict with keys:
@@ -150,6 +469,8 @@ def _load_pr_data(client: GhClient, repo: str, pr_number: int) -> dict:
             - mergeStateStatus (str): Merge state (CLEAN, BEHIND, CONFLICTING, DIRTY, etc)
             - baseRefName (str): Base branch name
             - headRefName (str): Head branch name
+            - reviewDecision (str|None): APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED / None
+            - statusCheckRollup (dict|None): GitHub rollup for head commit checks
     """
     owner, name = repo.split("/", 1)
     query = """
@@ -159,16 +480,22 @@ query($owner: String!, $repo: String!, $number: Int!) {
       mergeStateStatus
       baseRefName
       headRefName
+      reviewDecision
+      statusCheckRollup {
+        state
+      }
       reviewThreads(first: 100) {
         nodes {
           id
           isResolved
           isOutdated
+          path
           comments(last: 5) {
             nodes {
               databaseId
               body
               url
+              path
               author {
                 login
               }
@@ -200,6 +527,8 @@ query($owner: String!, $repo: String!, $number: Int!) {
         "mergeStateStatus": pr.get("mergeStateStatus", "UNKNOWN"),
         "baseRefName": pr.get("baseRefName", ""),
         "headRefName": pr.get("headRefName", ""),
+        "reviewDecision": pr.get("reviewDecision"),
+        "statusCheckRollup": pr.get("statusCheckRollup"),
     }
 
 
@@ -214,21 +543,42 @@ def _has_existing_merge_trigger_comment(client: GhClient, repo: str, pr_number: 
     return any(_MERGE_TRIGGER_MARKER in ((c or {}).get("body") or "") for c in comments or [])
 
 
-def _post_babysit_trigger(client: GhClient, repo: str, pr_number: int, actionable_threads: list[dict]) -> str | None:
-    thread_lines = [f"- {item['url']} (thread `{item['thread_id']}` by @{item['author']})" for item in actionable_threads]
+def _post_babysit_trigger(
+    client: GhClient,
+    repo: str,
+    pr_number: int,
+    actionable_threads: list[dict],
+    *,
+    scope: str = _DEFAULT_PR_REVIEW_SCOPE,
+) -> str | None:
+    thread_lines = []
+    for item in actionable_threads:
+        flags = []
+        if item.get("has_suggestion"):
+            flags.append("suggestion")
+        if item.get("prefer_apply_suggestion"):
+            flags.append("prefer-apply")
+        if item.get("high_risk_path"):
+            flags.append("high-risk-path")
+        flag_s = f" [{', '.join(flags)}]" if flags else ""
+        thread_lines.append(
+            f"- {item.get('url')} (thread `{item.get('thread_id')}` by @{item.get('author')}){flag_s}"
+        )
     body = "\n".join(
         [
             _BABYSIT_MARKER,
             "@copilot Start PR feedback babysitting for this pull request.",
             "",
-            "Actionable third-party agent threads detected:",
+            f"Scope: `{scope}` (autonomy.pr_review_scope / --scope). Address *all* listed threads.",
+            "Actionable review threads:",
             *thread_lines,
             "",
             "Workflow requirements:",
-            "1. Address each actionable thread with code changes or a rationale reply.",
+            "1. Prefer applying ```suggestion``` blocks when present and path is not high-risk; else code change or terse rationale.",
             "2. Push changes to this same PR branch (do not open a new PR).",
-            "3. Resolve each addressed thread via GraphQL `resolveReviewThread`.",
-            "4. If human judgment is needed, add `need:human-review` and explain the block.",
+            "3. Resolve each addressed thread (`plate_resolve_review_thread` / resolveReviewThread). Outdated threads auto-resolve on babysit --act (#605).",
+            "4. High-risk paths (AGENTS.md, workflows, SPEC, secrets, .plate, …): do not auto-apply; add `need:human-review` if blocked.",
+            "5. Do not re-request Copilot review in a loop; work the existing threads first (#496).",
         ]
     )
     response = client.api(
@@ -419,19 +769,21 @@ def babysit_pr(
     agent_logins: str | None = None,
     act: bool = False,
     branch_update_strategy: str | None = None,
+    pr_review_scope: str | None = None,
     client: GhClient | None = None,
 ) -> BabysitReport:
-    """Babysit a pull request for actionable third-party agent feedback and base branch sync.
+    """Babysit a pull request for actionable review feedback and base branch sync.
 
     Use get_pr_merge_gates for the comprehensive 'make this PR mergeable' helper (enumerates common gates like labels, CI, threads, etc., per #526).
 
     Args:
         pr_number: Pull request number
         repo: Repository identifier (owner/name), defaults to git remote
-        agent_logins: Comma-separated GitHub logins to treat as agents
-        act: If True, post trigger comments when issues detected
+        agent_logins: Optional comma-separated allowlist of logins (overrides scope)
+        act: If True, post trigger comments when issues detected and auto-resolve outdated threads
         branch_update_strategy: How to handle out-of-sync base branch.
             Options: "copilot-request" (default), "local-rebase", "none"
+        pr_review_scope: ``all`` | ``bot-only`` | ``human-only`` (default from .plate or ``all``) (#496)
         client: Optional GitHub client
 
     Returns:
@@ -440,6 +792,7 @@ def babysit_pr(
     target = resolve_repo(repo)
     gh = client or GhClient()
     strategy = branch_update_strategy or _DEFAULT_STRATEGY
+    scope = resolve_pr_review_scope(pr_review_scope)
 
     # Validate strategy
     if strategy not in _VALID_STRATEGIES:
@@ -448,7 +801,7 @@ def babysit_pr(
     # Load PR data including threads and merge state
     pr_data = _load_pr_data(gh, target, pr_number)
     threads = pr_data.get("reviewThreads", [])
-    actionable = _extract_actionable_threads(threads, agent_logins)
+    actionable = _extract_actionable_threads(threads, agent_logins, scope=scope)
 
     # Detect base branch sync state
     sync_info = _detect_base_branch_out_of_sync(pr_data)
@@ -457,8 +810,25 @@ def babysit_pr(
     posted = False
     trigger_url = None
     if act and actionable and not _has_existing_babysit_comment(gh, target, pr_number):
-        trigger_url = _post_babysit_trigger(gh, target, pr_number, actionable)
+        trigger_url = _post_babysit_trigger(gh, target, pr_number, actionable, scope=scope)
         posted = True
+
+    # #605: auto-resolve outdated unresolved threads when acting (post-fix state)
+    auto_resolved_ids: list[str] = []
+    auto_resolve_errors: list[str] = []
+    if act:
+        for item in _extract_outdated_unresolved_threads(threads):
+            tid = item.get("thread_id")
+            if not tid:
+                continue
+            try:
+                result = resolve_review_thread(thread_id=tid, repo=target, client=gh)
+                if result.get("resolved"):
+                    auto_resolved_ids.append(tid)
+                else:
+                    auto_resolve_errors.append(f"{tid}: resolve returned resolved=false")
+            except Exception as exc:  # noqa: BLE001 — best-effort; report errors, continue
+                auto_resolve_errors.append(f"{tid}: {exc}")
 
     # Handle base branch sync
     merge_trigger_posted = False
@@ -482,6 +852,21 @@ def babysit_pr(
         local_rebase_error = rebase_res.get("error")
         # Note: we do not post copilot trigger when local-rebase is chosen
 
+    suggestion_n = sum(1 for a in actionable if a.get("has_suggestion"))
+    high_risk_n = sum(1 for a in actionable if a.get("high_risk_path") and a.get("has_suggestion"))
+    summaries = [
+        {
+            "thread_id": a.get("thread_id"),
+            "author": a.get("author"),
+            "has_suggestion": a.get("has_suggestion"),
+            "prefer_apply_suggestion": a.get("prefer_apply_suggestion"),
+            "high_risk_path": a.get("high_risk_path"),
+            "path": a.get("path"),
+            "url": a.get("url"),
+        }
+        for a in actionable
+    ]
+
     return BabysitReport(
         repo=target,
         pr_number=pr_number,
@@ -497,6 +882,13 @@ def babysit_pr(
         local_rebase_success=local_rebase_success,
         local_rebase_conflict=local_rebase_conflict,
         local_rebase_error=local_rebase_error,
+        auto_resolved_threads=len(auto_resolved_ids),
+        auto_resolved_thread_ids=auto_resolved_ids or None,
+        auto_resolve_errors=auto_resolve_errors or None,
+        pr_review_scope=scope,
+        threads_with_suggestions=suggestion_n,
+        high_risk_suggestion_threads=high_risk_n,
+        actionable_thread_summaries=summaries or None,
     )
 
 
@@ -536,12 +928,16 @@ def get_actionable_review_threads(
     repo: str | None = None,
     agent_logins: str | None = None,
     *,
+    pr_review_scope: str | None = None,
     client: GhClient | None = None,
 ) -> list[dict]:
     """High-level encapsulated helper for listing actionable review threads.
 
-    Returns list of dicts (thread_id, comment_id=databaseId, author, url, body) for
-    unresolved, non-outdated threads from configured or default third-party agents.
+    Returns list of dicts (thread_id, comment_id=databaseId, author, url, body, suggestion
+    metadata) for unresolved, non-outdated threads in ``pr_review_scope`` (#496).
+
+    Default scope is ``all`` (humans + bots including Copilot). Use ``bot-only`` for
+    conservative bot-only filtering, or pass ``agent_logins`` as an explicit allowlist.
 
     Internally uses the exact GraphQL load (reviewThreads(first:100), comments, databaseId,
     author login) + extraction + filtering. Pagination stub (first:100 sufficient for typical
@@ -559,7 +955,8 @@ def get_actionable_review_threads(
     gh = client or GhClient()
     pr_data = _load_pr_data(gh, target, pr_number)
     threads = pr_data.get("reviewThreads", [])
-    return _extract_actionable_threads(threads, agent_logins)
+    scope = resolve_pr_review_scope(pr_review_scope)
+    return _extract_actionable_threads(threads, agent_logins, scope=scope)
 
 
 def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhClient | None = None) -> dict:
@@ -591,14 +988,40 @@ def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhCli
     pr_data = _load_pr_data(gh, target, pr_number)
     sync_info = _detect_base_branch_out_of_sync(pr_data)
     threads = pr_data.get("reviewThreads", [])
-    actionable = _extract_actionable_threads(threads, None)
+    scope = resolve_pr_review_scope(None)
+    actionable = _extract_actionable_threads(threads, None, scope=scope)
+    ci = _summarize_status_check_rollup(pr_data.get("statusCheckRollup"))
+    review_decision = pr_data.get("reviewDecision")
+    gate_eval = evaluate_babysit_gates(
+        {
+            "merge_state": sync_info.get("state"),
+            "unresolved_review_threads": len(
+                [t for t in threads if not t.get("isResolved") and not t.get("isOutdated")]
+            ),
+            "actionable_agent_threads": len(actionable),
+            "review_decision": review_decision,
+            **ci,
+        }
+    )
 
     return {
         "repo": target,
         "pr_number": pr_number,
         "merge_state": sync_info.get("state"),
         "out_of_sync": sync_info.get("out_of_sync"),
-        "unresolved_review_threads": len([t for t in threads if not t.get("isResolved") and not t.get("isOutdated")]),
+        "unresolved_review_threads": len(
+            [t for t in threads if not t.get("isResolved") and not t.get("isOutdated")]
+        ),
         "actionable_agent_threads": len(actionable),
-        "note": "Use plate_pr_babysit + gh pr checks + gh issue view for full gates (labels, CI, title, docs, etc.). Fix comprehensively in one loop per the guidance. Escalate only human items with need:human-review.",
+        "pr_review_scope": scope,
+        "threads_with_suggestions": sum(1 for a in actionable if a.get("has_suggestion")),
+        "review_decision": review_decision,
+        "ci_state": ci.get("ci_state"),
+        "failing_checks": ci.get("failing_checks", 0),
+        "pending_checks": ci.get("pending_checks", 0),
+        "ci_failing": ci.get("ci_failing", False),
+        "ci_pending": ci.get("ci_pending", False),
+        "loop_advance_blocked": gate_eval.get("blocked", False),
+        "loop_advance_reason": gate_eval.get("reason"),
+        "note": "Use plate_pr_babysit + gh pr checks + gh issue view for full gates (labels, CI, title, docs, etc.). Default pr_review_scope=all (#496) so Copilot/human threads count. Bug/feature loops use evaluate_babysit_gates (CI + review_decision + threads + merge_state). Fix comprehensively in one loop. Escalate only true human-judgment items with need:human-review.",
     }

@@ -1,0 +1,20 @@
+{
+  "slug": "660-pm-migrate-legacy-risk-off-blocked",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py",
+  "summary": "On PM queue load, migrate pre-#890 assignments blocked solely for risk_tolerance=off to proposed with auto_delegate=false so durable queues unstick under default risk-off posture (#660/#889).",
+  "migration_impact": "Existing .agentic/pm/queue.json rows with status=blocked and rationale containing blocked: risk_tolerance=off (without budget block) rewrite to proposed on next PM status/cycle. Budget-blocked rows unchanged.",
+  "migration_guidance": [
+    "1. Upgrade plate-core with this fix.",
+    "2. Run gh plate pm --status or plate_pm_status once to trigger load migration.",
+    "3. Cancel process-only proposed rows (e.g. what_next-local) if undesired: plate_pm_complete status=cancelled."
+  ],
+  "agent_notes": "Does not re-enable autopilot. Approve & run remains plate_pm_complete status=run. Combined with #889/#892 for risk=off propose\u2192explicit run path.",
+  "breaking": false,
+  "links": [
+    "#900",
+    "#660",
+    "#889",
+    "#654"
+  ]
+}

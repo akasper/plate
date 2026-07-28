@@ -49,6 +49,11 @@ class ReleaseStatusReport:
     linked_epics: list[dict] = field(default_factory=list)
     on_hold_epics: list[dict] = field(default_factory=list)
     release_track_summary: dict = field(default_factory=dict)  # e.g. {"Major": 3, "Minor": 5, "Patch": 2}
+    # GitHub Releases object for latest/current version (#594)
+    github_release_exists: bool = False
+    github_release_is_latest: bool = False
+    github_release_url: str | None = None
+    github_release_tag: str | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -68,8 +73,70 @@ class ReleaseStatusReport:
             "linked_epics": self.linked_epics,
             "on_hold_epics": self.on_hold_epics,
             "release_track_summary": self.release_track_summary,
+            "github_release_exists": self.github_release_exists,
+            "github_release_is_latest": self.github_release_is_latest,
+            "github_release_url": self.github_release_url,
+            "github_release_tag": self.github_release_tag,
         }
         return d
+
+
+def fetch_github_release_state(
+    gh: GhClient,
+    repo: str,
+    version: str | None,
+) -> dict:
+    """Query GitHub Releases for a version tag (#594).
+
+    Returns dict with keys: exists, is_latest, url, tag, warning.
+    Graceful on 404 / permission / rate-limit (exists=False, optional warning).
+    """
+    out: dict = {
+        "exists": False,
+        "is_latest": False,
+        "url": None,
+        "tag": None,
+        "warning": None,
+    }
+    if not version:
+        return out
+    ver = str(version).lstrip("v")
+    tag = f"v{ver}"
+    out["tag"] = tag
+    try:
+        existing = gh.api(f"repos/{repo}/releases/tags/{tag}")
+    except GhApiError as exc:
+        msg = str(exc).lower()
+        if "404" in msg or "not found" in msg:
+            out["warning"] = (
+                f"GitHub Release object missing for tag {tag} "
+                "(version artifacts may exist without a published Release)."
+            )
+            return out
+        out["warning"] = f"Could not query GitHub Release for {tag}: {exc}"
+        return out
+    except Exception as exc:  # network / unexpected
+        out["warning"] = f"Could not query GitHub Release for {tag}: {exc}"
+        return out
+
+    if not isinstance(existing, dict) or not existing.get("id"):
+        out["warning"] = f"GitHub Release object missing for tag {tag}."
+        return out
+
+    out["exists"] = True
+    out["url"] = existing.get("html_url") or existing.get("url")
+    # Compare to /releases/latest
+    try:
+        latest = gh.api(f"repos/{repo}/releases/latest")
+        if isinstance(latest, dict):
+            latest_tag = (latest.get("tag_name") or "").lstrip("v")
+            out["is_latest"] = latest_tag == ver or (latest.get("tag_name") == tag)
+    except GhApiError:
+        # No latest release or permissions — exists still true
+        out["is_latest"] = False
+    except Exception:
+        out["is_latest"] = False
+    return out
 
 
 @dataclass
@@ -531,6 +598,11 @@ def get_release_status(
     agentic_dir = (releases_dir.parent if releases_dir else Path(".agentic"))
     extension_release_checks = _load_extension_release_checks(agentic_dir)
 
+    # GitHub Releases state for current/latest local version (#594)
+    gh_rel = fetch_github_release_state(gh, target, latest_version or current_version)
+    if gh_rel.get("warning"):
+        warnings.append(str(gh_rel["warning"]))
+
     return ReleaseStatusReport(
         repo=target,
         release_branch_exists=release_branch_exists,
@@ -548,6 +620,10 @@ def get_release_status(
         linked_epics=linked_epics,
         on_hold_epics=on_hold_epics,
         release_track_summary=release_track_summary,
+        github_release_exists=bool(gh_rel.get("exists")),
+        github_release_is_latest=bool(gh_rel.get("is_latest")),
+        github_release_url=gh_rel.get("url"),
+        github_release_tag=gh_rel.get("tag"),
     )
 
 
@@ -914,6 +990,13 @@ def fragment_to_entry(fragment: dict) -> dict:
         entry["links"] = fragment["links"]
     if fragment.get("requires"):
         entry["requires"] = fragment["requires"]
+    # #635: optional demo media (gif/video) on fragments
+    try:
+        from .release_media import attach_media_to_entry
+
+        entry = attach_media_to_entry(entry, fragment)
+    except Exception:
+        pass
     return entry
 
 
@@ -921,7 +1004,7 @@ def build_release(version: str, fragments: list[dict]) -> dict:
     entries = [fragment_to_entry(f) for f in fragments]
     slugs = [f.get("slug", f.get("_source_file", "")) for f in fragments]
     summary_slugs = ", ".join(slugs[:5]) + ("..." if len(slugs) > 5 else "")
-    return {
+    release: dict = {
         "version": version,
         "summary": f"PLATE {version} -- {len(entries)} change(s): {summary_slugs}.",
         "cut_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -929,6 +1012,16 @@ def build_release(version: str, fragments: list[dict]) -> dict:
         "fragment_slugs": [f.get("slug", f["_source_file"]) for f in fragments],
         "entries": entries,
     }
+    try:
+        from .release_media import build_media_manifest
+
+        manifest = build_media_manifest(fragments, version=version)
+        release["media"] = manifest.get("media") or []
+        release["media_summary"] = manifest.get("summary")
+        release["media_markdown"] = manifest.get("markdown_approved") or ""
+    except Exception:
+        release["media"] = []
+    return release
 
 
 def collect_closes_block(fragments: list[dict]) -> str:
@@ -1295,6 +1388,59 @@ def perform_guarded_hard_reset(
         return {"error": f"reset_exception: {e}", "command": shell_cmd}
 
 
+def normalize_release_tag(version: str | None) -> str | None:
+    """Return vX.Y.Z form for a version or tag string."""
+    if not version:
+        return None
+    v = str(version).strip()
+    if not v:
+        return None
+    bare = v[1:] if v.lower().startswith("v") else v
+    return f"v{bare}"
+
+
+def plan_gh_plate_sync(version: str | None) -> dict:
+    """Plan post-release gh-plate thin-shim sync/tag/release (#613).
+
+    Pure helper for CI/finalize: returns file markers, tag, notes body, idempotent steps.
+    Actual git ops live in .github/workflows/publish-gh-plate-extension.yml (token-scoped).
+    """
+    tag = normalize_release_tag(version)
+    if not tag:
+        return {"ok": False, "error": "version_required"}
+    bare = tag.lstrip("v")
+    notes = (
+        f"## gh-plate {tag}\n\n"
+        f"Thin GitHub CLI extension shim matching **plate-core {bare}**.\n\n"
+        f"- Install: `gh extension install akasper/gh-plate@{tag}`\n"
+        f"- Or latest: `gh extension install akasper/gh-plate` then upgrade\n"
+        f"- Runtime: pins `plate-core=={bare}` via VERSION/PLATE_CORE_VERSION (#614)\n"
+        f"- Source of truth: [akasper/plate](https://github.com/akasper/plate) tag `{tag}`\n"
+        f"- Plate GitHub Release: https://github.com/akasper/plate/releases/tag/{tag}\n"
+    )
+    return {
+        "ok": True,
+        "version": bare,
+        "tag": tag,
+        "files": {
+            "gh-plate": "copy from plate monorepo root launcher",
+            "VERSION": tag,
+            "PLATE_CORE_VERSION": bare,
+        },
+        "steps": [
+            "copy launcher + VERSION + PLATE_CORE_VERSION into akasper/gh-plate",
+            "commit if tree dirty (idempotent if already synced)",
+            "push main",
+            f"create tag {tag} only if missing (no force-move of existing tags)",
+            f"create GitHub Release on gh-plate for {tag} if missing (notes link to plate)",
+        ],
+        "notes_body": notes,
+        "workflow": ".github/workflows/publish-gh-plate-extension.yml",
+        "trigger": "push tags v* on akasper/plate (after Release PR merge tags main) or workflow_dispatch",
+        "idempotent": True,
+    }
+
+
 def ensure_next_release_issue(
     repo: str | None = None,
     client: GhClient | None = None,
@@ -1323,3 +1469,227 @@ def ensure_next_release_issue(
         return {"created": True, "issue": {"number": created.get("number"), "url": created.get("html_url")}}
     except Exception as e:
         return {"error": f"create_failed: {e}"}
+
+
+STANDING_TRACK_BRANCHES = ("release-major", "release-minor", "release-patch", "release")
+
+
+def diagnose_release_standing_state(
+    repo: str | None = None,
+    client: GhClient | None = None,
+) -> dict:
+    """Classify standing release state: healthy | never_initialized | drifted (#320)."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+
+    branches: dict[str, bool] = {}
+    for name in STANDING_TRACK_BRANCHES:
+        try:
+            gh.api(f"repos/{target}/branches/{name}")
+            branches[name] = True
+        except Exception:
+            branches[name] = False
+
+    next_issues: list[dict] = []
+    try:
+        q = quote_plus(f'repo:{target} is:issue is:open label:Release')
+        search = gh.api(f"search/issues?q={q}") or {}
+        for item in search.get("items") or []:
+            title = (item.get("title") or "").strip()
+            if title.lower() == "next release" or title.lower().startswith("next release"):
+                next_issues.append(
+                    {
+                        "number": item.get("number"),
+                        "title": title,
+                        "url": item.get("html_url"),
+                    }
+                )
+    except Exception:
+        pass
+
+    missing_branches = [b for b, ok in branches.items() if not ok]
+    n_next = len(next_issues)
+    any_branch = any(branches.values())
+    any_versioned_history = False
+    try:
+        # any v* tag or versioned release dir implies prior release activity
+        tags = subprocess.run(
+            ["git", "tag", "-l", "v*"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tags.stdout.strip():
+            any_versioned_history = True
+    except Exception:
+        pass
+    try:
+        rel_dir = Path(".agentic/releases")
+        if rel_dir.exists():
+            for p in rel_dir.iterdir():
+                if p.is_dir() and p.name.startswith("v"):
+                    any_versioned_history = True
+                    break
+    except Exception:
+        pass
+
+    if not any_branch and n_next == 0 and not any_versioned_history:
+        health = "never_initialized"
+    elif not missing_branches and n_next == 1:
+        health = "healthy"
+    else:
+        health = "drifted"
+
+    return {
+        "repo": target,
+        "health": health,
+        "branches": branches,
+        "missing_branches": missing_branches,
+        "next_release_issues": next_issues,
+        "next_release_count": n_next,
+        "has_version_history": any_versioned_history,
+        "needs_branch_repair": bool(missing_branches),
+        "needs_next_issue": n_next == 0,
+        "needs_dedupe_next": n_next > 1,
+    }
+
+
+def repair_release_standing_state(
+    repo: str | None = None,
+    client: GhClient | None = None,
+    *,
+    dry_run: bool = True,
+    apply: bool = False,
+) -> dict:
+    """Idempotent repair/init for standing release tracks + Next Release issue (#320).
+
+    - Creates missing release-major/minor/patch/release from default branch.
+    - Ensures exactly one open 'Next Release' issue (creates if zero; reports if >1).
+    - Never force-deletes branches; never auto-closes extra Next Release issues
+      (reports need:human for dedupe).
+    """
+    do_apply = bool(apply) and not dry_run
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    diag = diagnose_release_standing_state(repo=target, client=gh)
+    actions: list[dict] = []
+
+    # Branch repair
+    default_branch = "main"
+    default_sha = None
+    if diag["needs_branch_repair"]:
+        try:
+            repo_obj = gh.api(f"repos/{target}") or {}
+            default_branch = str(repo_obj.get("default_branch") or "main")
+            branch_data = gh.api(f"repos/{target}/branches/{default_branch}") or {}
+            default_sha = (branch_data.get("commit") or {}).get("sha")
+        except Exception as exc:
+            actions.append(
+                {
+                    "action": "resolve_default_branch",
+                    "state": "error",
+                    "detail": str(exc),
+                }
+            )
+            default_sha = None
+
+        for name in diag["missing_branches"]:
+            if not default_sha:
+                actions.append(
+                    {
+                        "action": f"create-{name}",
+                        "state": "blocked",
+                        "detail": "cannot create branch without default SHA",
+                    }
+                )
+                continue
+            if do_apply:
+                try:
+                    gh.api(
+                        f"repos/{target}/git/refs",
+                        method="POST",
+                        fields={"ref": f"refs/heads/{name}", "sha": default_sha},
+                    )
+                    actions.append(
+                        {
+                            "action": f"create-{name}",
+                            "state": "applied",
+                            "detail": f"Created {name} from {default_branch} at {str(default_sha)[:7]}",
+                        }
+                    )
+                except Exception as exc:
+                    actions.append(
+                        {
+                            "action": f"create-{name}",
+                            "state": "error",
+                            "detail": str(exc),
+                        }
+                    )
+            else:
+                actions.append(
+                    {
+                        "action": f"create-{name}",
+                        "state": "planned",
+                        "detail": f"Would create {name} from {default_branch}",
+                    }
+                )
+    else:
+        actions.append(
+            {
+                "action": "branches",
+                "state": "already-configured",
+                "detail": "All standing track branches present",
+            }
+        )
+
+    # Next Release issue
+    n_next = diag["next_release_count"]
+    if n_next == 0:
+        if do_apply:
+            created = ensure_next_release_issue(repo=target, client=gh)
+            actions.append(
+                {
+                    "action": "ensure-next-release-issue",
+                    "state": "applied" if created.get("created") or created.get("exists") else "error",
+                    "detail": created,
+                }
+            )
+        else:
+            actions.append(
+                {
+                    "action": "ensure-next-release-issue",
+                    "state": "planned",
+                    "detail": "Would create open Release issue titled 'Next Release'",
+                }
+            )
+    elif n_next == 1:
+        actions.append(
+            {
+                "action": "ensure-next-release-issue",
+                "state": "already-configured",
+                "detail": diag["next_release_issues"][0],
+            }
+        )
+    else:
+        actions.append(
+            {
+                "action": "dedupe-next-release-issues",
+                "state": "need:human",
+                "detail": {
+                    "message": "Multiple open 'Next Release' issues; keep exactly one and close or rename the rest.",
+                    "issues": diag["next_release_issues"],
+                },
+            }
+        )
+
+    # Re-diagnose after apply for result health
+    final = diagnose_release_standing_state(repo=target, client=gh) if do_apply else diag
+    return {
+        "ok": True,
+        "repo": target,
+        "dry_run": not do_apply,
+        "apply": do_apply,
+        "diagnosis": diag,
+        "result_health": final.get("health"),
+        "actions": actions,
+    }

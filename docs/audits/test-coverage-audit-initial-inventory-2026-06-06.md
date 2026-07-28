@@ -151,4 +151,67 @@ This skeleton report serves as the starting artifact. Future passes (via child R
 **Status**: Initial skeleton complete. Broad inventory + classification pass done. Ready for Research child to deepen + first doc convention updates.
 
 ---
+
+## Addendum (2026-07-27) — v1.0 autonomy surface proofs (#907 / #364 batch)
+
+Post-#470 / #654 landings added substantial feature-proof coverage that this June skeleton did not list. Classification for agent routing:
+
+| Test File | Primary claim proved | Classification | Notes |
+|-----------|----------------------|----------------|-------|
+| `tests/test_what_next.py` | Empty-pipeline ranking: budget → open PR → ready issue → PM active queue → epic closeout/refine when PM idle (#905/#907); CLI `what-next` | Feature-proof | Live `get_what_next` wiring mocked for PM idle vs active; pure `recommend_what_next` matrix |
+| `tests/test_pm.py` | PM assign/tick/queue; `queue_size` active-only (`proposed\|delegated\|blocked`, not done/cancelled) (#903/#904); loop idle stop | Feature-proof | Core #660 surface |
+| `tests/test_autonomy.py` | AutonomyEngine config, budget, procedures, risk gates (#470) | Feature-proof | Heart of autonomy runtime |
+| `tests/test_ledger.py` | Provenance / decision ledger (#647) | Feature-proof | Safety stack |
+| `tests/test_cost_control_thin_surfaces.py` | Cost/risk thin surfaces toward feed (#653) | Feature-proof (thin) | Complements costs tests |
+
+**Gap closed in this batch (#907):** Bidirectional proof that idle PM + open epics does **not** force PM dry-run; active `open_assignments` / delegated rows still rank PM/tick. Tests declare `Proves:` claims in docstrings.
+
+**Closed (partial) under #921:** Contemplation full transcript (`Answer full:` + question title/body excerpt) and typed Research/Design/Feature follow-ups with parent Question link.
+
+**Closed (partial) under #923:** Contemplation git commit provenance + structured Provenance fields in transcript (Design #142 gap first slice).
+
+**Closed (partial) under #925:** Contemplation artifact mutation intents + PR-only draft plan Feature issues (Design #143 §2 / research §3.3 first slice). Detects process paths, logs intents, high-risk need:human-review; does **not** auto-push or open PRs.
+
+**Closed (partial) under #927:** Compound Playwright e2e offline chain — `tests/e2e/compound-flows.spec.ts` + `fixtures/compound_flow_driver.py` proves babysit gate block/unblock, release cut dry-run (no write) + `plan_gh_plate_sync` dry surface, and contemplate→mutation PR draft plan without network.
+
+**Closed (partial) under #929:** Contemplation structured `mutation_pr_plan` + `apply_mutation_pr_plan` dry-run default (gh_argv/git_steps); high-risk requires `allow_high_risk`; live apply only via injectable runner (no default auto-push).
+
+**Closed (first slice) under #917:** template_payload adopter harness parity — `TemplatePayloadAdopterClaimsTests` proves payload ships AGENTS/SPEC, e2e README+example specs, core workflows; `list_payload_files` + import dry-run plan those paths. Monorepo-only `plugin-structure.spec.ts` / `catalog-discovery.spec.ts` (hardcoded `.plugin` layout) intentionally **not** copied into payload; adopters get example harness + import-payload instead.
+
+**Closed (unit compound) under #919:** `TestWhatNextCompoundPriorityLadder` proves budget → open PR → ready → PM tick/active → named closeout → empty-closeout stub refine in one compound suite (#905/#913/#915). Offline Playwright compound covered by #927.
+
+---
+
+## Addendum (2026-07-27) — #364 high-priority gap closeout
+
+Feature #364 (child of Epic #350) is **closed for high-priority inventory gaps** after the v1.0 proof batches above. Success criteria mapping:
+
+| #364 success criterion | Evidence |
+|------------------------|----------|
+| Top 4–6 inventory gaps have proving tests + doc refs | what_next/PM idle (#907/#919); template_payload adopter (#917); Contemplation transcript/typed follow-ups/provenance/mutation plan (#921/#923/#925/#929); compound offline ceremony e2e (#927) |
+| Audit report shows those gaps closed with PR/test links | This addendum + closed (partial) rows above |
+| Acceptance Evidence cites proving tests | `docs/design/contemplation-engine-contract.md`; e2e README compound-flows; research closeout `docs/research/364-test-coverage-gap-closeout.md` |
+| PR(s) carry process + `Closes #N` | #908, #918, #920, #922, #924, #926, #928, #930 + this closeout PR |
+
+### Intentionally deferred (not #364 blockers)
+
+| Deferred item | Why deferred | Follow-on home |
+|---------------|--------------|----------------|
+| Contemplation live auto-push / `gh pr create` without injectable runner | Safety: default remains dry-run; high-risk needs human + `allow_high_risk` | Contemplation v2.2+ under Epic #257 / future Feature |
+| Live-network babysit→merge and cut+tag+finalize apply in CI | Needs secrets, real remotes, non-idempotent tags | Optional nightly / human Task; offline harness is the cert for #364 |
+| Full interactive epic planning engine replacement | Separate product Feature (SPEC Phase-1), not mere test gap | Own Feature under planning / MCP surface work |
+
+### Proving-test index (bidirectional)
+
+| Claim area | Primary proving tests |
+|------------|----------------------|
+| what_next priority ladder | `tests/test_what_next.py` (`TestWhatNextCompoundPriorityLadder`, idle/active PM) |
+| template_payload adopter | `tests/test_template_payload*.py` / adopter claims suite (#917) |
+| Contemplation contract (partial→v2.1) | `tests/test_contemplation.py` |
+| Compound ceremony offline | `tests/e2e/compound-flows.spec.ts` + `fixtures/compound_flow_driver.py` |
+| Answer model | `tests/test_curiosity_answers.py` |
+
+Parent Epic #350 may remain open for broader classification tooling / remaining low-priority inventory; #364 high-priority gap closure is complete.
+
+---
 *This report follows the template in `docs/audits/audit-report-template.md`. Per PLATE Issue Artifact Rules for Audit/Epic work, findings live in `docs/audits/`.*

@@ -1,0 +1,24 @@
+{
+  "slug": "634-644-fleet-budget-ledger-base-dir",
+  "change_type": "fix",
+  "surface": "src/plate_core/fleet.py",
+  "summary": "Fleet create_handoff with base_dir isolates #634 budget hydrate/charge under base_dir/budget and #647 ledger under base_dir/ledger so tests/loops with use_live_budget cannot exhaust repo-root spend.json or spam root ledger (#634/#644/#647).",
+  "migration_impact": "Local only. Production create_handoff(base_dir=None) still uses repo-root .agentic/budget and .agentic/ledger. Callers that pass base_dir now get fully isolated budget+ledger+checkpoints.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / pull release with this fix.",
+    "2. Unit/integration tests that pass base_dir can safely use_live_budget=True without polluting operator spend.",
+    "3. If spend.json was already exhausted by prior test runs, use gh plate autonomy --budget-reset (feature #835)."
+  ],
+  "agent_notes": "Pairs with checkpoint base_dir isolation and budget-reset. Prefer base_dir isolation over use_live_budget=False when testing live charge paths.",
+  "breaking": false,
+  "links": [
+    "#634",
+    "#644",
+    "#647",
+    "#654",
+    "#835"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

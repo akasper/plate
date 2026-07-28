@@ -1,0 +1,16 @@
+{
+  "slug": "340-spec-audit-health-surface",
+  "change_type": "feature",
+  "surface": "src/plate_core/health.py, what_next.py, cli.py, mcp_server.py",
+  "summary": "Expose local SPEC audit via health/drift surfaces (#340): plate_health/gh plate health include status/counts/next_step; plate_what_next prioritizes actionable findings; CLI --repo-root/--no-spec-audit; never auto-writes SPEC.md.",
+  "migration_impact": "Health JSON gains additive fields (spec_audit_status, spec_audit_counts, spec_audit_actionable_count, spec_audit_next_step). Agents should route actionable status to gh plate spec-audit / --followups before generic epic work. Optional --no-spec-audit skips the local audit.",
+  "migration_guidance": [
+    "1. Upgrade plate-core for health SPEC audit fields (#340).",
+    "2. Run gh plate health [--repo-root PATH] or plate_health; inspect spec_audit_*.",
+    "3. When status=actionable, run gh plate spec-audit --json then --followups as needed.",
+    "4. Use --no-spec-audit / no_spec_audit only for pure remote label/protection checks."
+  ],
+  "agent_notes": "CLI/MCP audit already from #338/#339. Prefer finishing open PRs over SPEC drift. Never auto-write SPEC.md; human-approval gate remains. Quiet: one-line health SPEC audit status unless asked for full findings.",
+  "breaking": false,
+  "links": ["#340", "#338", "#339", "#335", "#337", "#654"]
+}

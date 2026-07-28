@@ -2,16 +2,22 @@ schema_version: 1
 agents:
 - id: project-manager
   name: Project Manager
-  description: Coordinates project CRUD, backlog grooming, epic framing, and release
-    definition.
+  description: Coordinates project CRUD, backlog grooming, epic framing, release definition, and budgeted
+    autonomy loops (what_next + autonomy engine).
   primary_skill_ids:
   - crud-projects
   - groom-backlog
   - define-epic
   - define-release
+  - run-autonomy-cycle
+  - what-next-plate-process
   constraints:
   - Keep planning outputs concise and actionable.
   - Prefer clear scope boundaries over speculative implementation detail.
+  - For long-running/looped work prefer plate_autonomy_status then plate_autonomy_run_cycle within risk_tolerance
+    and budgets (#480).
+  - Emit only terse bullet turn summaries in loops; exempt PLATE-AUTONOMY-CYCLE / PLATE-PROCEDURE-RUN
+    markers.
   surfaces:
   - copilot-plugin
   - gh-plate
@@ -32,8 +38,7 @@ agents:
   - mcp
 - id: designer
   name: Designer
-  description: Unifies design themes and turns product intent into concrete feature
-    requirements.
+  description: Unifies design themes and turns product intent into concrete feature requirements.
   primary_skill_ids:
   - define-unify-design-theme
   - define-feature-requirements
@@ -46,8 +51,7 @@ agents:
   - mcp
 - id: user-experience-engineer
   name: User Experience Engineer
-  description: Shapes flows, wireframes, and mockups that make the product easy to
-    use.
+  description: Shapes flows, wireframes, and mockups that make the product easy to use.
   primary_skill_ids:
   - create-wireframe-demo
   - mockup-ui
@@ -75,8 +79,7 @@ agents:
   - mcp
 - id: software-engineer
   name: Software Engineer
-  description: Implements product changes, reviews test coverage, and fixes broken
-    builds.
+  description: Implements product changes, reviews test coverage, and fixes broken builds.
   primary_skill_ids:
   - review-test-coverage
   - fix-broken-build
@@ -84,15 +87,15 @@ agents:
   constraints:
   - Make small, test-driven changes.
   - Preserve behavior unless a change is explicitly intended.
-  - "Looped or autonomous sessions: use terse bullet turn summaries only and post comments or create issues only on meaningful forward progress per quiet_operations guidance. Prefer MCP data."
+  - 'Looped or autonomous sessions: use terse bullet turn summaries only and post comments or create issues
+    only on meaningful forward progress per quiet_operations guidance. Prefer MCP data.'
   surfaces:
   - copilot-plugin
   - gh-plate
   - mcp
 - id: ci-engineer
   name: CI Engineer
-  description: Hardens CI pipelines, test execution, and reliability of automated
-    checks.
+  description: Hardens CI pipelines, test execution, and reliability of automated checks.
   primary_skill_ids:
   - review-test-coverage
   - fix-broken-build
@@ -119,8 +122,7 @@ agents:
   - mcp
 - id: dev-relations-expert
   name: DevRel Expert
-  description: Turns project progress into readable updates for contributors and external
-    audiences.
+  description: Turns project progress into readable updates for contributors and external audiences.
   primary_skill_ids:
   - review-discussions
   - document-new-feature-in-wiki
@@ -148,8 +150,7 @@ agents:
   - mcp
 - id: accountant
   name: Accountant
-  description: Estimates and tracks the cost impact of features, CI, projects, and
-    agents.
+  description: Estimates and tracks the cost impact of features, CI, projects, and agents.
   primary_skill_ids:
   - calculate-costs
   constraints:
@@ -161,8 +162,7 @@ agents:
   - mcp
 - id: research-agent
   name: Research Agent
-  description: Synthesizes open questions, discussion threads, and evidence into decision-ready
-    findings.
+  description: Synthesizes open questions, discussion threads, and evidence into decision-ready findings.
   primary_skill_ids:
   - research-synthesis
   - identify-market-gaps-and-opportunities
@@ -175,15 +175,16 @@ agents:
   constraints:
   - Separate source facts from recommendations.
   - Prefer committed artifacts over ephemeral notes.
-  - "Looped or autonomous sessions: terse one-sentence bullet turn summaries only; comments and issue creation only on verifiable forward progress (see quiet_operations). Use MCP surfaces for data."
+  - 'Looped or autonomous sessions: terse one-sentence bullet turn summaries only; comments and issue
+    creation only on verifiable forward progress (see quiet_operations). Use MCP surfaces for data.'
   surfaces:
   - copilot-plugin
   - gh-plate
   - mcp
 - id: security-auditor
   name: Security Auditor
-  description: Audits code, dependencies, configs, and processes for security risks,
-    secrets, and compliance gaps.
+  description: Audits code, dependencies, configs, and processes for security risks, secrets, and compliance
+    gaps.
   primary_skill_ids:
   - audit-security-posture
   constraints:
@@ -195,8 +196,7 @@ agents:
   - mcp
 - id: performance-engineer
   name: Performance Engineer
-  description: Profiles, benchmarks, and optimizes for latency, throughput, memory,
-    and resource efficiency.
+  description: Profiles, benchmarks, and optimizes for latency, throughput, memory, and resource efficiency.
   primary_skill_ids:
   - profile-and-benchmark
   constraints:
@@ -208,8 +208,7 @@ agents:
   - mcp
 - id: data-engineer
   name: Data Engineer
-  description: Designs schemas, pipelines, ETL, and storage for reliable data flows
-    and analytics.
+  description: Designs schemas, pipelines, ETL, and storage for reliable data flows and analytics.
   primary_skill_ids:
   - design-data-pipelines
   constraints:
@@ -236,8 +235,7 @@ skills:
   - project-manager
 - id: groom-backlog
   name: Groom Backlog
-  description: Review backlog items, identify gaps, and keep work ordered by value
-    and readiness.
+  description: Review backlog items, identify gaps, and keep work ordered by value and readiness.
   inputs:
   - Open issues
   - Epic state
@@ -265,8 +263,7 @@ skills:
   - project-manager
 - id: define-release
   name: Define Release
-  description: Turn project progress into a release-ready plan with clear scope and
-    constraints.
+  description: Turn project progress into a release-ready plan with clear scope and constraints.
   inputs:
   - Completed features
   - Open risks
@@ -328,8 +325,7 @@ skills:
   - research-agent
 - id: define-unify-design-theme
   name: Define or Unify Design Theme
-  description: Align product visuals and interaction patterns around one consistent
-    design theme.
+  description: Align product visuals and interaction patterns around one consistent design theme.
   inputs:
   - Product goals
   - Existing UI patterns
@@ -374,8 +370,7 @@ skills:
   - user-interface-designer
 - id: create-wireframe-demo
   name: Create Wireframe Demo
-  description: Produce a wireframe-style demonstration for a proposed interaction
-    flow.
+  description: Produce a wireframe-style demonstration for a proposed interaction flow.
   inputs:
   - Flow description
   - Required actions
@@ -480,9 +475,8 @@ skills:
   - devops-engineer
 - id: calculate-costs
   name: Calculate Costs
-  description: Estimate the cost impact of feature work, CI runs, projects, or agent
-    activity. Use plate_costs MCP / gh plate costs to harvest real USAGE REPORTs
-    and aggregate (Epic #265).
+  description: Estimate the cost impact of feature work, CI runs, projects, or agent activity. Use plate_costs
+    MCP / gh plate costs to harvest real USAGE REPORTs and aggregate (Epic
   inputs:
   - Scope estimate
   - Build frequency
@@ -497,10 +491,9 @@ skills:
   - accountant
 - id: run-qanda-session
   name: Run Q&A Session
-  description: Discover, prioritize, present (via native or fallback), and record
-    answers to open Question issues, triggering contemplation against checklist-style
-    answer signals with explicit citations before any Question is considered ready
-    to close.
+  description: Discover, prioritize, present (via native or fallback), and record answers to open Question
+    issues, triggering contemplation against checklist-style answer signals with explicit citations before
+    any Question is considered ready to close.
   inputs:
   - Repo / Epic context
   - Open Questions (via MCP or gh plate qanda)
@@ -508,47 +501,43 @@ skills:
   - Recorded answers + Contemplation logs
   - New forward-progress issues/artifacts
   examples:
-  - Run Q&A on the top 3 open informational goals for the current Epic and summarize
-    outcomes.
+  - Run Q&A on the top 3 open informational goals for the current Epic and summarize outcomes.
   owning_agent_ids:
   - research-agent
   - project-manager
 - id: create-blocking-question-on-obstacle
   name: Create Blocking Question on Obstacle
-  description: As deliberate last resort, create a linked blocking Question with structured
-    information dump when hitting a hard informational obstacle on another Issue.
-    Pause the original work.
+  description: As deliberate last resort, create a linked blocking Question with structured information
+    dump when hitting a hard informational obstacle on another Issue. Pause the original work.
   inputs:
   - Original blocked Issue
   - Blockage details + partial work (never lost)
   outputs:
   - New blocking Question
   examples:
-  - We are blocked on scope ambiguity for the dashboard Epic. Create blocking Question
-    and pause.
+  - We are blocked on scope ambiguity for the dashboard Epic. Create blocking Question and pause.
   owning_agent_ids:
   - research-agent
   - software-engineer
 - id: resume-from-answered-question
   name: Resume from Answered (Blocking) Question
-  description: After a blocking Question is answered, retrieve the full answer + provenance,
-    merge into the original Issue via unblock report + context updates, and resume
-    the paused work.
+  description: After a blocking Question is answered, retrieve the full answer + provenance, merge into
+    the original Issue via unblock report + context updates, and resume the paused work.
   inputs:
   - Answered blocking Question (with dump marker)
   outputs:
   - Unblock report on original Issue
   - Merged context + resumed work items
   examples:
-  - The blocking Question on user personas was answered. Merge the findings and resume
-    the onboarding Feature.
+  - The blocking Question on user personas was answered. Merge the findings and resume the onboarding
+    Feature.
   owning_agent_ids:
   - research-agent
   - project-manager
 - id: audit-security-posture
   name: Audit Security Posture
-  description: Review code, deps, configs, and workflows for security vulnerabilities,
-    secret leaks, and compliance issues.
+  description: Review code, deps, configs, and workflows for security vulnerabilities, secret leaks, and
+    compliance issues.
   inputs:
   - Code or config diffs
   - Dependency list
@@ -562,8 +551,7 @@ skills:
   - security-auditor
 - id: profile-and-benchmark
   name: Profile and Benchmark
-  description: Instrument, measure, and report on performance bottlenecks with actionable
-    optimizations.
+  description: Instrument, measure, and report on performance bottlenecks with actionable optimizations.
   inputs:
   - Workload description or test
   - Current metrics or profiles
@@ -577,8 +565,7 @@ skills:
   - performance-engineer
 - id: design-data-pipelines
   name: Design Data Pipelines
-  description: Design reliable ETL, schemas, and storage solutions with quality and
-    privacy in mind.
+  description: Design reliable ETL, schemas, and storage solutions with quality and privacy in mind.
   inputs:
   - Data sources and sinks
   - Volume and freshness requirements
@@ -593,18 +580,45 @@ skills:
   - data-engineer
 - id: what-next-plate-process
   name: What Next? (PLATE Process Guidance)
-  description: Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment based on current repo state (health, open Epics, fragments, Goals page, etc.). Enables autonomous drive of the full process. In looped use, the caller must emit only terse bullet turn summaries and follow quiet comment discipline (see quiet_operations guidance and plate persona).
+  description: Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment
+    based on current repo state (health, open Epics, fragments, Goals page, etc.). Enables autonomous
+    drive of the full process. In looped use, the caller must emit only terse bullet turn summaries and
+    follow quiet comment discipline (see quiet_operations guidance and plate persona).
   inputs:
   - Current repo state (via plate_health, plate_epic_status, release status, labels)
   outputs:
   - next_action + prompt_segment + rationale
   examples:
-  - "Call plate_what_next to decide whether to bootstrap, advance an Epic child, cut release, or babysit a PR."
+  - Call plate_what_next to decide whether to bootstrap, advance an Epic child, cut release, or babysit
+    a PR.
   owning_agent_ids:
   - research-agent
+- id: run-autonomy-cycle
+  name: Run Autonomy Cycle / Loop
+  description: 'Drive long-running PLATE work via AutonomyEngine surfaces: plate_autonomy_status, plate_autonomy_run_cycle,
+    plate_autonomy_list_procedures, plate_autonomy_run_procedure (or gh plate autonomy --status|--run|--loop).
+    Respect .plate autonomy.risk_tolerance, token budgets, and quiet_operations (terse bullets only).
+    Use after plate_what_next when the next step is continuous/scheduled progress. See autonomy_loops
+    guidance (#480 / Epic #470).'
+  inputs:
+  - Live autonomy status (risk_tolerance, budget remaining, due procedures)
+  - Optional dry_run flag
+  - Optional procedure id
+  outputs:
+  - Cycle report or status dict
+  - Optional PLATE-AUTONOMY-CYCLE / PLATE-PROCEDURE-RUN markers + USAGE REPORT
+  - Terse bullet turn summary for loops
+  examples:
+  - Call plate_autonomy_status; if risk_tolerance is medium and budget remains, plate_autonomy_run_cycle
+    dry_run then live.
+  - gh plate autonomy --loop --max-cycles 3 with quiet bullet summaries only.
+  owning_agent_ids:
+  - project-manager
 - id: github-discussions
   name: GitHub Discussions
-  description: Read, list (with category filters e.g. Ideas), get full content, comment on, and create GitHub Discussions. Encapsulates the gh api + GraphQL strategy for reliable agent/orchestrator use (Ideas capture, inter-agent comms/logs per #287/#292/#293; supports #282 What Next? / orchestrator vision). Exposes plate_discussions_* MCP tools + conveniences like list_open_ideas.
+  description: Read, list (with category filters e.g. Ideas), get full content, comment on, and create
+    GitHub Discussions. Encapsulates the gh api + GraphQL strategy for reliable agent/orchestrator use
+    (Ideas capture, inter-agent comms/logs per
   inputs:
   - repo (owner/name)
   - category (slug e.g. 'ideas' or name)
@@ -617,72 +631,99 @@ skills:
   - created discussion confirmation + url
   - category list (for ID resolution on create)
   examples:
-  - "List open Ideas in akasper/plate and summarize gaps vs current AGENTS.md."
-  - "Post inter-agent orchestration state log to a dedicated discussion."
-  - "Create a quick developer note as new Discussion in Ideas category."
-  - "Use plate_list_open_ideas + plate_add_discussion_comment for agent comms."
+  - List open Ideas in akasper/plate and summarize gaps vs current AGENTS.md.
+  - Post inter-agent orchestration state log to a dedicated discussion.
+  - Create a quick developer note as new Discussion in Ideas category.
+  - Use plate_list_open_ideas + plate_add_discussion_comment for agent comms.
   owning_agent_ids:
   - research-agent
   - project-manager
   - dev-relations-expert
   - software-engineer
-
 informational_goals:
-  - id: primary-purpose
-    title: "[Question]: What is the primary purpose or value proposition of this software?"
-    body: "What problem does this project solve? Who benefits and how?\n\n**Answer signal:** A clear, one-paragraph statement that can guide all future work and prioritization."
-    related_goals: ["Mission"]
-    provenance_hint: "Default platform informational goal (expanded from #153 / #222)."
-    priority_rationale: "Foundational for all downstream audits, Questions, and agent behavior."
-    refinement_note: "Once answered, derive users, risks, success metrics, GTM etc."
+- id: primary-purpose
+  title: '[Question]: What is the primary purpose or value proposition of this software?'
+  body: 'What problem does this project solve? Who benefits and how?
 
-  - id: primary-users
-    title: "[Question]: Who are the primary users or customers of this software?"
-    body: "Describe the main personas or organizations that will use or pay for this.\n\n**Answer signal:** A concise description of the target users that can be used for roadmap and design decisions."
-    related_goals: ["Mission", "Users"]
-    provenance_hint: "Default platform informational goal (#222)."
-    priority_rationale: "Drives user research, design, and GTM Questions."
-    refinement_note: "Narrow to segments, jobs-to-be-done, or paying vs free users."
 
-  - id: biggest-risks
-    title: "[Question]: What are the biggest risks or unknowns for this project right now?"
-    body: "Technical, market, team, or other uncertainties that could derail success.\n\n**Answer signal:** A short prioritized list that the team can actively de-risk."
-    related_goals: ["Mission", "Risks"]
-    provenance_hint: "Default platform informational goal (#222)."
-    priority_rationale: "Directly informs Current State & Evidence and Open Questions on Goals page."
-    refinement_note: "Can be scoped by agent_type (e.g. engineering risks vs market risks)."
+    **Answer signal:** A clear, one-paragraph statement that can guide all future work and prioritization.'
+  related_goals:
+  - Mission
+  provenance_hint: 'Default platform informational goal (expanded from #153 / #222).'
+  priority_rationale: Foundational for all downstream audits, Questions, and agent behavior.
+  refinement_note: Once answered, derive users, risks, success metrics, GTM etc.
+- id: primary-users
+  title: '[Question]: Who are the primary users or customers of this software?'
+  body: 'Describe the main personas or organizations that will use or pay for this.
 
-  - id: success-metrics
-    title: "[Question]: What metrics or outcomes define success for this project?"
-    body: "How will we know we are making progress toward the Mission? Include leading and lagging indicators.\n\n**Answer signal:** 3-5 measurable outcomes with targets and data sources."
-    related_goals: ["Mission", "How We Intend to Succeed"]
-    provenance_hint: "Default platform informational goal (#222)."
-    priority_rationale: "Enables evidence-based prioritization and audit focus."
-    refinement_note: "Leads to specific instrumentation or research Questions."
 
-  - id: current-state-evidence
-    title: "[Question]: What is the current state and key evidence against our Goals?"
-    body: "Summarize where we stand on Mission, principles, and success criteria, with links to artifacts.\n\n**Answer signal:** A living snapshot (e.g. in Goals page) that audits and agents can read and update."
-    related_goals: ["Mission", "Current State"]
-    provenance_hint: "Default platform informational goal (#222)."
-    priority_rationale: "Closes the loop between Goals and observable reality; feeds refinement."
-    refinement_note: "Leads to targeted Questions when gaps are identified."
+    **Answer signal:** A concise description of the target users that can be used for roadmap and design
+    decisions.'
+  related_goals:
+  - Mission
+  - Users
+  provenance_hint: Default platform informational goal (#222).
+  priority_rationale: Drives user research, design, and GTM Questions.
+  refinement_note: Narrow to segments, jobs-to-be-done, or paying vs free users.
+- id: biggest-risks
+  title: '[Question]: What are the biggest risks or unknowns for this project right now?'
+  body: 'Technical, market, team, or other uncertainties that could derail success.
 
-  # Example extension-provided (for #226 extensibility demo; in real would come from extension manifest)
-  - id: marketing-gtm-positioning
-    title: "[Question]: What is our core value prop and positioning for the target market?"
-    body: "Define the unique value, key messages, and differentiation vs competitors.\n\n**Answer signal:** Documented positioning statement + 3-5 key messages usable in marketing and product."
-    related_goals: ["Mission", "Users"]
-    provenance_hint: "Provided by example 'marketing-extension' (per #226)."
-    priority_rationale: "Critical for GTM success; extends platform defaults for marketing-focused audits."
-    refinement_note: "Can be scoped by market segment."
-    provided_by: "marketing-extension"
 
-  - id: technical-architecture-risks
-    title: "[Question]: What are the key architectural risks and tech debt items?"
-    body: "List high-impact tech decisions, risks, and debt that could slow velocity or cause outages.\n\n**Answer signal:** Prioritized list with mitigation plans or links to issues."
-    related_goals: ["Mission", "Risks"]
-    provenance_hint: "Provided by example 'tech-extension' (per #226)."
-    priority_rationale: "Helps engineering agents focus audits on sustainability."
-    refinement_note: "Pair with code scans for evidence."
-    provided_by: "tech-extension"
+    **Answer signal:** A short prioritized list that the team can actively de-risk.'
+  related_goals:
+  - Mission
+  - Risks
+  provenance_hint: Default platform informational goal (#222).
+  priority_rationale: Directly informs Current State & Evidence and Open Questions on Goals page.
+  refinement_note: Can be scoped by agent_type (e.g. engineering risks vs market risks).
+- id: success-metrics
+  title: '[Question]: What metrics or outcomes define success for this project?'
+  body: 'How will we know we are making progress toward the Mission? Include leading and lagging indicators.
+
+
+    **Answer signal:** 3-5 measurable outcomes with targets and data sources.'
+  related_goals:
+  - Mission
+  - How We Intend to Succeed
+  provenance_hint: Default platform informational goal (#222).
+  priority_rationale: Enables evidence-based prioritization and audit focus.
+  refinement_note: Leads to specific instrumentation or research Questions.
+- id: current-state-evidence
+  title: '[Question]: What is the current state and key evidence against our Goals?'
+  body: 'Summarize where we stand on Mission, principles, and success criteria, with links to artifacts.
+
+
+    **Answer signal:** A living snapshot (e.g. in Goals page) that audits and agents can read and update.'
+  related_goals:
+  - Mission
+  - Current State
+  provenance_hint: Default platform informational goal (#222).
+  priority_rationale: Closes the loop between Goals and observable reality; feeds refinement.
+  refinement_note: Leads to targeted Questions when gaps are identified.
+- id: marketing-gtm-positioning
+  title: '[Question]: What is our core value prop and positioning for the target market?'
+  body: 'Define the unique value, key messages, and differentiation vs competitors.
+
+
+    **Answer signal:** Documented positioning statement + 3-5 key messages usable in marketing and product.'
+  related_goals:
+  - Mission
+  - Users
+  provenance_hint: 'Provided by example ''marketing-extension'' (per #226).'
+  priority_rationale: Critical for GTM success; extends platform defaults for marketing-focused audits.
+  refinement_note: Can be scoped by market segment.
+  provided_by: marketing-extension
+- id: technical-architecture-risks
+  title: '[Question]: What are the key architectural risks and tech debt items?'
+  body: 'List high-impact tech decisions, risks, and debt that could slow velocity or cause outages.
+
+
+    **Answer signal:** Prioritized list with mitigation plans or links to issues.'
+  related_goals:
+  - Mission
+  - Risks
+  provenance_hint: 'Provided by example ''tech-extension'' (per #226).'
+  priority_rationale: Helps engineering agents focus audits on sustainability.
+  refinement_note: Pair with code scans for evidence.
+  provided_by: tech-extension

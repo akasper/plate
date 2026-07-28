@@ -1,0 +1,26 @@
+{
+  "slug": "508-510-qa-pr-green-checklists",
+  "change_type": "process",
+  "surface": "src/plate_core/agent_guidance.py, plugin/agents/plate.agent.md, docs/research/508-510-qa-and-pr-green-follow-through.md",
+  "summary": "Close #508/#510 agent collab debt: named Q&A Follow-Through Checklist and Merge Gates Checklist in guidance/persona; research note + phrase regression tests.",
+  "migration_impact": "Process guidance only. Downstream agents pick up via plate_core upgrade / template persona sync.",
+  "migration_guidance": [
+    "1. Upgrade plate_core / copy thin persona + agent_guidance sections if customized.",
+    "2. Q&A: only offer options fully executable in-turn; run pr-babysit before next question when promised.",
+    "3. PR green: one-pass Merge Gates Checklist via plate_pr_babysit + plate_get_pr_merge_gates.",
+    "4. On mismatch, open Bug stub + corrective PR before more planning."
+  ],
+  "agent_notes": "Treat checklist headers as hard stop criteria. Tests assert headers so do not rename without updating tests.",
+  "breaking": false,
+  "links": [
+    "#508",
+    "#510",
+    "#503",
+    "#517",
+    "#519",
+    "#528"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

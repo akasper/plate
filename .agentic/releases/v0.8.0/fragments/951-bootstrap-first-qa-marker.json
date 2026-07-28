@@ -1,0 +1,15 @@
+{
+  "slug": "951-bootstrap-first-qa-marker",
+  "change_type": "feature",
+  "surface": "src/plate_core/bootstrap.py, src/plate_core/adoption.py, tests/test_bootstrap.py",
+  "summary": "Bootstrap apply writes/syncs first_qa_seed marker (#951/#633): write_first_qa_seed_marker helper; seed apply + already-configured sync so what_next does not re-rank first_qa_seed after bootstrap.",
+  "migration_impact": "Bootstrap --apply seeds write .agentic/adoption/first_qa_seed.json under local_root (cwd default). Dry-run unchanged. Shared helper used by plan_first_qa_seed apply path.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_bootstrap.py tests/test_adoption.py -q.",
+    "2. After bootstrap --apply, check .agentic/adoption/first_qa_seed.json exists.",
+    "3. gh plate adopt --json should show first_qa.seeded=true when marker present."
+  ],
+  "agent_notes": "Closes #951. Epic #633 remains open for full <30m E2E proof.",
+  "breaking": false,
+  "links": ["#951", "#949", "#633", "#935", "#654"]
+}

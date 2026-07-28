@@ -1,0 +1,15 @@
+{
+  "slug": "927-compound-playwright-e2e-flows",
+  "change_type": "feature",
+  "surface": "tests/e2e/compound-flows.spec.ts, tests/e2e/fixtures/compound_flow_driver.py, tests/e2e/README.md, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+  "summary": "Offline compound Playwright e2e certifies babysit merge gates, release cut dry-run + finalize/sync plan, and contemplate mutation PR draft plans (#927/#364 residual).",
+  "migration_impact": "New Playwright suite compound-flows.spec.ts runs in tests/e2e (host-independent, no network). Adopters may copy the driver pattern; no runtime API change.",
+  "migration_guidance": [
+    "1. Pull release after merge; cd tests/e2e && npx playwright test compound-flows.spec.ts",
+    "2. CI full suite already picks up **/*.spec.ts under tests/e2e.",
+    "3. Residual #364: live-network ceremony apply and contemplation auto PR open/push remain deferred."
+  ],
+  "agent_notes": "Closes #927 only. Driver is pure offline (fake GH + temp releases tree + evaluate_babysit_gates).",
+  "breaking": false,
+  "links": ["#927", "#364", "#925", "#919", "#654", "#350"]
+}

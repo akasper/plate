@@ -1,0 +1,24 @@
+{
+  "slug": "648-checkpoint-approval-primitive",
+  "change_type": "feature",
+  "surface": "src/plate_core/checkpoint.py, autonomy.py, mcp_server.py, cli.py, agent_guidance.py",
+  "summary": "Unified #648 checkpoint/approval primitive: durable .agentic/checkpoints ledger, create/decide/list/get surfaces (MCP + gh plate checkpoint), policy auto-approve for low impact at medium+ risk, AutonomyEngine run_cycle pauses on open checkpoints, PLATE-CHECKPOINT markers.",
+  "migration_impact": "New MCP tools plate_checkpoint_* and CLI gh plate checkpoint. Open pending medium+ checkpoints pause unsupervised autonomy cycles. Ledger files appear under .agentic/checkpoints/ (gitignored recommended for local-only, or commit when used as audit). No breaking config schema changes.",
+  "migration_guidance": [
+    "1. Upgrade plate_core / surfaces to pick up checkpoint module.",
+    "2. Optionally add .agentic/checkpoints/ to .gitignore if local-only; commit selected records when they are the audit trail.",
+    "3. Agents: call plate_checkpoint_create before high-impact actions; humans decide via plate_checkpoint_decide or gh plate checkpoint --decide ID --decision approve.",
+    "4. Autonomy loops: plate_autonomy_status open_human_checkpoints now includes open pausing checkpoints."
+  ],
+  "agent_notes": "Prefer plate_checkpoint_create over ad-hoc comments for human gates. Pair with #645 shadow_id when a ShadowReport requires approval. TUI ask_user_question host bridge and Projects fields are follow-ups.",
+  "breaking": false,
+  "links": [
+    "#648",
+    "#645",
+    "#654",
+    "#470"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "slug": "961-adoption-guide-session-path",
+  "change_type": "docs",
+  "surface": "docs/migration/adoption-guide.md, tests/test_adoption.py",
+  "summary": "Document full under-30m adoption command path (#961/#633): session timer, readiness/health, import-payload, bootstrap --adopt, first-qa seed, feed/what_next, complete-session; regression test for guide CLI phrases.",
+  "migration_impact": "Operators and agents should follow docs/migration/adoption-guide.md for ordered <30m adopt. No runtime API change.",
+  "migration_guidance": [
+    "1. Pull release; read docs/migration/adoption-guide.md.",
+    "2. pytest tests/test_adoption.py -q -k AdoptionGuide.",
+    "3. Do not claim #654 checklist boxes without live E2E proof."
+  ],
+  "agent_notes": "Closes #961. Epic #633 remains open for full live <30m E2E proof.",
+  "breaking": false,
+  "links": ["#961", "#633", "#935", "#949", "#955", "#957", "#959", "#654"]
+}

@@ -1,0 +1,15 @@
+{
+  "slug": "933-what-next-scheduled-ops",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py, tests/test_what_next.py, docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+  "summary": "plate_what_next ranks active scheduled op runs and runnable dry-run plans (#933/#659/#641); get_what_next loads scheduled_ops when pipeline empty; V1 closeouts note for #659 first slice.",
+  "migration_impact": "recommend_what_next gains optional scheduled_ops; new priorities scheduled_op and scheduled_ops_plan. No breaking change to existing priorities when scheduled_ops omitted.",
+  "migration_guidance": [
+    "1. Pull release after merge; run pytest tests/test_what_next.py -k ScheduledOps.",
+    "2. Empty-pipeline agents should see scheduled_ops_plan when ops runnable at risk_tolerance.",
+    "3. Active blocked/running/planned runs rank before ready issues and PM."
+  ],
+  "agent_notes": "Closes #933. Prefer dry-run scheduled-ops plan over deploy/marketplace human Tasks.",
+  "breaking": false,
+  "links": ["#933", "#659", "#641", "#654", "#282"]
+}

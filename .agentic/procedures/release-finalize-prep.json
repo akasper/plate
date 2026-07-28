@@ -1,0 +1,11 @@
+{
+  "id": "release-finalize-prep",
+  "cadence": "manual",
+  "risk_level": "high",
+  "description": "Post-merge finalize checklist: tag, GitHub Release, track reset (#641).",
+  "steps": [
+    {"tool": "plate_scheduled_op_run", "args": {"op_id": "release-finalize-prep", "dry_run": true}}
+  ],
+  "enabled": true,
+  "max_tokens_per_run": 10000
+}

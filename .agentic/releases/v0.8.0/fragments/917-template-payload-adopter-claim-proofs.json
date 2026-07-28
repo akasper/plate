@@ -1,0 +1,15 @@
+{
+  "slug": "917-template-payload-adopter-claim-proofs",
+  "change_type": "feature",
+  "surface": "tests/test_template_payload.py, docs/audits/test-coverage-audit-initial-inventory-2026-06-06.md",
+  "summary": "Prove template_payload adopter harness claims (#917/#364): AGENTS/SPEC, e2e scaffold, core workflows present; list_payload_files + import dry-run plan them; audit residual notes monorepo-only certification specs deferred.",
+  "migration_impact": "Tests and audit docs only. Adopters and agents gain bidirectional proof of what import-payload delivers; no runtime API change.",
+  "migration_guidance": [
+    "1. Pull release after merge; run pytest tests/test_template_payload.py -k Adopter.",
+    "2. Do not expect monorepo plugin-structure.spec.ts inside payload — use example e2e + import-payload.",
+    "3. Residual #364: contemplation v2 matrix and compound Playwright e2e still open."
+  ],
+  "agent_notes": "Closes #917 only. Part of #364 residual batch; does not fully close #364.",
+  "breaking": false,
+  "links": ["#917", "#364", "#350", "#616", "#622", "#654"]
+}

@@ -1,0 +1,16 @@
+{
+  "slug": "969-what-next-self-migrate-verify",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py, src/plate_core/feed.py, tests/test_what_next.py, tests/test_feed.py",
+  "summary": "Rank post-migrate verify on what_next/feed when ready=false (#969/#649): live get_what_next loads verify_self_migrate; priority self_migrate_verify after drift plan; feed rank 16; state_snapshot self_migrate_ready.",
+  "migration_impact": "Agents may see priority=self_migrate_verify when pin is aligned but offline verify fails (e.g. .plate invalid). Follow next_command (gh plate self-migrate --verify --json).",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_what_next.py -k SelfMigrate -q && pytest tests/test_feed.py -k self_migrate -q.",
+    "2. Empty pipeline: plate_what_next / gh plate what-next — if self_migrate_verify, run --verify.",
+    "3. Drift still ranks priority=self_migrate (plan) ahead of verify."
+  ],
+  "agent_notes": "Closes #969. Complements #965 verify + #967 health fields. Does not check #654 boxes.",
+  "breaking": false,
+  "links": ["#969", "#965", "#967", "#941", "#649", "#633", "#654"],
+  "requires": ["0.7.2"]
+}

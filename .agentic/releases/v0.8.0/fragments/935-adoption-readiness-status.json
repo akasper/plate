@@ -1,0 +1,15 @@
+{
+  "slug": "935-adoption-readiness-status",
+  "change_type": "feature",
+  "surface": "src/plate_core/adoption.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_adoption.py, docs/migration/adoption-guide.md",
+  "summary": "Local adoption readiness checklist for <30m onboarding (#935/#633): assess_adoption_readiness, gh plate adopt, plate_adoption_status; status only, no apply.",
+  "migration_impact": "New CLI `gh plate adopt` and MCP plate_adoption_status. Pure filesystem checks; no network or auto-import.",
+  "migration_guidance": [
+    "1. Pull release after merge; run pytest tests/test_adoption.py -q.",
+    "2. Adopters: gh plate adopt --json before import-payload / bootstrap --adopt.",
+    "3. Use estimated_minutes_remaining and next_command; re-check after each step."
+  ],
+  "agent_notes": "Closes #935. Does not claim full #633 epic done; first machine-checkable readiness slice only.",
+  "breaking": false,
+  "links": ["#935", "#633", "#619", "#616", "#654"]
+}

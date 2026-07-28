@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 from .github_client import GhClient
@@ -156,4 +157,493 @@ def format_cost_markdown(report: CostReport) -> str:
         lines.append(f"| {r.date} | {issue_cell} | {r.issue_type} | {r.tokens} | {r.cost} | {r.duration} | [comment]({r.source_url}) |")
     lines.append("")
     lines.append(f"**Totals:** {report.total_tokens} tokens, {report.total_cost}")
+    return "\n".join(lines)
+
+
+def _parse_usd(cost_str: str | None) -> float:
+    if not cost_str:
+        return 0.0
+    try:
+        return float(str(cost_str).replace("$", "").replace(",", "").strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def get_cost_dashboard(
+    repo: str | None = None,
+    client: GhClient | None = None,
+    epic_label: str | None = None,
+    *,
+    autonomy_status: dict[str, Any] | None = None,
+    health: dict[str, Any] | None = None,
+    budget_base_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Cost + risk observability dashboard for the endless what-next feed (#653 / #634).
+
+    Combines USAGE harvest totals with AutonomyEngine budget/risk signals:
+    - burn_rate, remaining tokens/USD, enforcement action
+    - autopilot_score + projected days of runway at current burn
+    - open human checkpoints and due procedures (feed seeds)
+    - drift/risk signals from health recommendations when provided
+    - ranked feed_items for #631 consumers
+
+    Network-light: pass autonomy_status/health to avoid extra GH calls in tests.
+    Pass ``budget_base_dir`` to hydrate durable spend from an isolated root
+    (e.g. PM ``budget_base_dir``) instead of operator ``.agentic/budget``.
+    """
+    report = get_cost_report(repo=repo, client=client, epic_label=epic_label)
+    cost_dict = report.to_dict()
+
+    if autonomy_status is None:
+        try:
+            from .autonomy import get_autonomy_status
+            autonomy_status = get_autonomy_status(repo)
+        except Exception:
+            autonomy_status = {}
+
+    if health is None:
+        health = {}
+        # Only hit health when repo is set; avoid offline hangs
+        if repo:
+            try:
+                from .health import get_health
+                health = get_health(repo).to_dict()
+            except Exception:
+                health = {}
+
+    daily = 50000
+    per_cycle = 8000
+    action_policy = "throttle"
+    cost_ceiling = None
+    try:
+        from .plate_config import load_plate_config
+        cfg = load_plate_config()
+        auto = (cfg.to_dict() if hasattr(cfg, "to_dict") else {}).get("autonomy") or {}
+        tb = auto.get("token_budget") or {}
+        daily = int(tb.get("daily") or daily)
+        per_cycle = int(tb.get("per_cycle") or per_cycle)
+        action_policy = str(tb.get("action") or action_policy)
+        if auto.get("cost_ceiling_usd") is not None:
+            cost_ceiling = float(auto.get("cost_ceiling_usd"))
+    except Exception:
+        pass
+
+    burn = float((autonomy_status or {}).get("burn_rate") or 0.0)
+    remaining_tokens = (autonomy_status or {}).get("budget_remaining_tokens")
+    remaining_from_status = remaining_tokens is not None
+    if remaining_tokens is None:
+        remaining_tokens = daily
+    remaining_usd = (autonomy_status or {}).get("budget_remaining_usd")
+    remaining_usd_from_status = remaining_usd is not None
+    if remaining_usd is None:
+        remaining_usd = cost_ceiling
+    autopilot = int((autonomy_status or {}).get("autopilot_score") or 0)
+    risk = str((autonomy_status or {}).get("risk_tolerance") or "off")
+    enabled = bool((autonomy_status or {}).get("enabled", False))
+    open_cps = list((autonomy_status or {}).get("open_human_checkpoints") or [])
+    due_procs = list((autonomy_status or {}).get("due_procedures") or [])
+
+    # #634 harden: hydrate durable spend via get_budget_snapshot (UTC day rollover)
+    # so dashboard/feed/PM match AutonomyEngine and never treat prior-day spend.json
+    # as live (#653/#660; pairs with PM day-rollover fix).
+    durable_spend: dict[str, Any] = {}
+    spent_today_durable: int | None = None
+    try:
+        from .autonomy import get_budget_snapshot, tokens_to_usd
+
+        snap = get_budget_snapshot(base_dir=budget_base_dir) or {}
+        durable_spend = {
+            "date": snap.get("spend_day"),
+            "spent_today": snap.get("spent_today"),
+            "spent_this_cycle": snap.get("spent_this_cycle"),
+            "spent_usd_today": snap.get("spent_usd_today"),
+            "spend_is_today": snap.get("spend_is_today"),
+        }
+        try:
+            spent_today_durable = int(snap.get("spent_today") or 0)
+        except (TypeError, ValueError):
+            spent_today_durable = 0
+        if snap.get("daily_limit") is not None:
+            try:
+                daily = int(snap.get("daily_limit") or daily)
+            except (TypeError, ValueError):
+                pass
+        if snap.get("per_cycle_limit") is not None:
+            try:
+                per_cycle = int(snap.get("per_cycle_limit") or per_cycle)
+            except (TypeError, ValueError):
+                pass
+        if not remaining_from_status and snap.get("remaining_tokens") is not None:
+            try:
+                remaining_tokens = int(snap.get("remaining_tokens") or 0)
+            except (TypeError, ValueError):
+                remaining_tokens = max(0, int(daily) - spent_today_durable)
+        elif not remaining_from_status:
+            remaining_tokens = max(0, int(daily) - spent_today_durable)
+        if cost_ceiling is not None and not remaining_usd_from_status:
+            try:
+                if snap.get("remaining_usd") is not None:
+                    remaining_usd = float(snap.get("remaining_usd"))
+                else:
+                    spent_usd = float(
+                        snap.get("spent_usd_today") or tokens_to_usd(spent_today_durable)
+                    )
+                    remaining_usd = max(0.0, float(cost_ceiling) - spent_usd)
+            except (TypeError, ValueError):
+                pass
+        # Prefer snapshot burn when autonomy_status burn is idle but spend is today
+        try:
+            snap_burn = float(snap.get("burn_rate") or 0.0)
+        except (TypeError, ValueError):
+            snap_burn = 0.0
+        if burn <= 0 and snap_burn > 0:
+            burn = snap_burn
+        elif burn <= 0 and daily and spent_today_durable and snap.get("spend_is_today"):
+            burn = round(min(100.0, (spent_today_durable / float(daily)) * 100.0), 1)
+    except Exception:
+        durable_spend = {}
+        spent_today_durable = None
+
+    # Projected runway: if burn is % of daily budget, estimate days until empty
+    projected_days_remaining: float | None
+    if burn > 0:
+        projected_days_remaining = round(max(0.0, (100.0 - burn) / burn), 2)
+    elif remaining_tokens and daily:
+        projected_days_remaining = None  # idle burn; unknown
+    else:
+        projected_days_remaining = None
+
+    spent_tokens_est = max(0, daily - int(remaining_tokens or 0)) if daily else 0
+    if spent_today_durable is not None:
+        spent_tokens_est = spent_today_durable
+    harvested_tokens = int(cost_dict.get("total_tokens") or 0)
+    harvested_usd = _parse_usd(cost_dict.get("total_cost"))
+
+    # Enforcement preview for next cycle-sized action (#634 → feed).
+    # Surface would_pause_next_cycle even under risk=off (same as get_budget_snapshot);
+    # enforcement_active still reflects whether AutonomyEngine would enforce.
+    rem_i = int(remaining_tokens or 0)
+    next_cycle_est = max(1, int(per_cycle))
+    would_breach_next = rem_i < next_cycle_est or rem_i <= 0
+    if action_policy == "throttle":
+        would_pause = False
+        would_throttle = bool(would_breach_next)
+    elif action_policy == "warn":
+        would_pause = False
+        would_throttle = False
+    else:
+        # pause (default) — surface-visible next-cycle pause
+        would_pause = bool(would_breach_next)
+        would_throttle = False
+    budget_pressure = "ok"
+    if rem_i <= 0:
+        budget_pressure = "exhausted"
+    elif would_throttle or burn >= 80 or rem_i < next_cycle_est:
+        budget_pressure = "critical"
+    elif burn >= 50 or rem_i <= int(daily * 0.25):
+        budget_pressure = "elevated"
+
+    # Budget enforcement posture (#634 visibility)
+    budget = {
+        "daily_tokens": daily,
+        "per_cycle_tokens": per_cycle,
+        "action_on_breach": action_policy,  # throttle | pause | warn
+        "cost_ceiling_usd": cost_ceiling,
+        "remaining_tokens": remaining_tokens,
+        "remaining_usd": remaining_usd,
+        "burn_rate_pct": burn,
+        "spent_tokens_est_today": spent_tokens_est,
+        "spent_usd_est_today": round((spent_tokens_est / 1000.0) * 0.002, 6) if spent_tokens_est else 0.0,
+        "enforcement_active": enabled and risk != "off",
+        "would_throttle_at": max(0, daily - per_cycle) if action_policy == "throttle" else None,
+        "would_pause_next_cycle": would_pause,
+        "would_throttle_next_cycle": would_throttle,
+        "budget_pressure": budget_pressure,
+        "spent_today_durable": spent_today_durable,
+        "durable_spend_present": bool(durable_spend),
+        "durable_spend_note": "AutonomyEngine persists counters under .agentic/budget/spend.json (#634)",
+    }
+
+    # Drift / risk signals
+    drift_signals: list[dict[str, Any]] = []
+    for rec in (health.get("recommendations") or [])[:10]:
+        drift_signals.append({"kind": "health_recommendation", "detail": str(rec), "impact": "medium"})
+    for err in (health.get("errors") or [])[:10]:
+        drift_signals.append({"kind": "health_error", "detail": str(err), "impact": "high"})
+    if risk == "off" or not enabled:
+        drift_signals.append({
+            "kind": "autonomy_off",
+            "detail": "Autonomy disabled or risk_tolerance=off — budgets not enforcing unsupervised runs",
+            "impact": "low",
+        })
+    if cost_ceiling is not None and harvested_usd > cost_ceiling:
+        drift_signals.append({
+            "kind": "cost_ceiling_exceeded",
+            "detail": f"Harvested cost {harvested_usd} exceeds ceiling {cost_ceiling}",
+            "impact": "high",
+        })
+    if burn >= 80:
+        drift_signals.append({
+            "kind": "burn_high",
+            "detail": f"Burn rate {burn}% of daily token budget",
+            "impact": "high",
+        })
+    if budget_pressure in ("critical", "exhausted") and enabled and risk != "off":
+        drift_signals.append({
+            "kind": "budget_pressure",
+            "detail": (
+                f"Budget pressure={budget_pressure}: remaining={rem_i} "
+                f"daily={daily} policy={action_policy} "
+                f"(would_pause={would_pause}, would_throttle={would_throttle})"
+            ),
+            "impact": "high",
+        })
+
+    # #647 ledger visibility for dashboard / feed
+    ledger_snap: dict[str, Any] = {}
+    try:
+        from .ledger import ledger_summary, list_decisions
+
+        ledger_snap = ledger_summary(limit=30)
+        for row in list_decisions(decision="pause", limit=5) + list_decisions(
+            decision="shadow_required", limit=5
+        ):
+            drift_signals.append({
+                "kind": f"ledger_{row.get('decision')}",
+                "detail": f"[{row.get('decision')}] {row.get('action_kind')}: {row.get('reason')}",
+                "impact": "high" if row.get("decision") in ("pause", "shadow_required") else "medium",
+            })
+    except Exception:
+        ledger_snap = {}
+
+    # Ranked feed items for what-next / #631
+    feed_items: list[dict[str, Any]] = []
+
+    def _budget_ask(title: str) -> dict[str, Any]:
+        return {
+            "question": title[:200],
+            "options": [
+                {
+                    "id": "view_dashboard",
+                    "label": "View cost dashboard",
+                    "description": "gh plate costs --dashboard / plate_costs dashboard=true",
+                },
+                {
+                    "id": "raise_budget",
+                    "label": "Raise token_budget / cost_ceiling in .plate",
+                    "description": "Human edits .plate autonomy.token_budget then re-run status",
+                },
+                {
+                    "id": "pause_work",
+                    "label": "Pause unsupervised autonomy",
+                    "description": "Keep risk_tolerance=off or action=pause until next UTC day",
+                },
+                {
+                    "id": "continue_throttle",
+                    "label": "Continue under throttle",
+                    "description": "Accept partial cycles; watch burn_rate and hotspots",
+                },
+            ],
+        }
+
+    # #634/#653/#787: top-rank budget gate when pressure is real (drives endless feed).
+    # Surface critical/exhausted even when risk_tolerance=off — engine autopilot is off but
+    # durable remaining still gates Feature/Bug/planning surfaces (#785).
+    if budget_pressure in ("critical", "exhausted"):
+        gate_title = (
+            f"Budget {budget_pressure}: {rem_i} tokens left of {daily} "
+            f"(policy={action_policy}; risk={risk}; engine={'on' if enabled and risk != 'off' else 'off'})"
+        )
+        feed_items.append({
+            "id": f"budget-gate-{budget_pressure}",
+            "rank": 5,
+            "type": "budget_gate",
+            "title": gate_title,
+            "impact": "critical" if budget_pressure == "exhausted" else "high",
+            "reason": (
+                "Budget near/at limit — feed prioritizes human budget decision "
+                "for surface gates + autonomy (#634/#653/#787)"
+            ),
+            "prompt_segment": (
+                f"{gate_title}. Present ask_user_question options; "
+                "do not start large cycles (engine or live surface gates) until resolved."
+            ),
+            "ask_user_question": _budget_ask(gate_title),
+        })
+    elif burn >= 50 and enabled and risk != "off":
+        elev_title = f"Budget elevated: burn {burn}% remaining {rem_i}/{daily}"
+        feed_items.append({
+            "id": "budget-gate-elevated",
+            "rank": 18,
+            "type": "budget_gate",
+            "title": elev_title,
+            "impact": "medium",
+            "reason": "Elevated burn — surface before more high-cost work",
+            "prompt_segment": elev_title,
+            "ask_user_question": _budget_ask(elev_title),
+        })
+    elif burn >= 70 and (not enabled or risk == "off") and rem_i < daily:
+        # Softer signal when engine is off but durable spend is high
+        elev_title = (
+            f"Budget elevated (engine off): burn {burn}% remaining {rem_i}/{daily}"
+        )
+        feed_items.append({
+            "id": "budget-gate-elevated-risk-off",
+            "rank": 22,
+            "type": "budget_gate",
+            "title": elev_title,
+            "impact": "medium",
+            "reason": "Elevated durable burn while risk_tolerance=off — surface gates still apply",
+            "prompt_segment": elev_title,
+            "ask_user_question": _budget_ask(elev_title),
+        })
+
+    for i, cp in enumerate(open_cps[:10]):
+        feed_items.append({
+            "rank": 10 + i,
+            "type": "checkpoint",
+            "title": str(cp),
+            "impact": "high",
+            "reason": "Open human checkpoint blocks unsupervised autonomy",
+        })
+    for i, proc in enumerate(due_procs[:10]):
+        feed_items.append({
+            "rank": 40 + i,
+            "type": "procedure",
+            "title": f"Due procedure: {proc}",
+            "impact": "medium",
+            "reason": "Scheduled procedure within risk_tolerance",
+        })
+    for i, sig in enumerate(drift_signals[:10]):
+        feed_items.append({
+            "id": f"drift-{sig.get('kind')}-{i}",
+            "rank": 20 + i if sig.get("impact") == "high" else 50 + i,
+            "type": "drift",
+            "title": sig.get("detail"),
+            "impact": sig.get("impact", "medium"),
+            "reason": f"Signal: {sig.get('kind')}",
+            "ask_user_question": (
+                _budget_ask(str(sig.get("detail") or "Budget/risk signal"))
+                if sig.get("kind") in ("burn_high", "budget_pressure", "cost_ceiling_exceeded")
+                else None
+            ),
+        })
+    # Cost hotspots from harvested reports (top issues by tokens)
+    top_reports = sorted(report.reports, key=lambda r: r.tokens, reverse=True)[:5]
+    for i, r in enumerate(top_reports):
+        feed_items.append({
+            "id": f"cost-hotspot-{r.issue_number}",
+            "rank": 60 + i,
+            "type": "cost_hotspot",
+            "title": f"#{r.issue_number} {r.issue_title} ({r.tokens} tokens)",
+            "impact": "medium" if r.tokens < 10000 else "high",
+            "reason": "High USAGE REPORT spend",
+            "issue_number": r.issue_number,
+            "prompt_segment": (
+                f"Review USAGE for #{r.issue_number}; prefer smaller PRs / targeted tests."
+            ),
+            "ask_user_question": {
+                "question": f"Cost hotspot #{r.issue_number} used {r.tokens} tokens — next step?",
+                "options": [
+                    {
+                        "id": "open_issue",
+                        "label": f"Open issue #{r.issue_number}",
+                        "description": "Inspect USAGE REPORT comments and scope",
+                    },
+                    {
+                        "id": "split_work",
+                        "label": "Split remaining work",
+                        "description": "Open smaller Features/PRs to cut token burn",
+                    },
+                    {
+                        "id": "ignore",
+                        "label": "Acknowledge and continue",
+                        "description": "No change; keep in dashboard only",
+                    },
+                ],
+            },
+        })
+    feed_items.sort(key=lambda x: (x.get("rank", 99), str(x.get("title") or "")))
+
+    return {
+        "repo": cost_dict.get("repo"),
+        "generated_for": "cost_risk_dashboard",
+        "issue_refs": ["#653", "#634", "#654"],
+        "cost": {
+            "total_tokens_harvested": harvested_tokens,
+            "total_cost_harvested": cost_dict.get("total_cost"),
+            "total_cost_usd": harvested_usd,
+            "report_count": len(report.reports),
+            "assumptions": cost_dict.get("assumptions"),
+            "top_issues": [
+                {
+                    "issue_number": r.issue_number,
+                    "title": r.issue_title,
+                    "tokens": r.tokens,
+                    "cost": r.cost,
+                    "type": r.issue_type,
+                }
+                for r in top_reports
+            ],
+        },
+        "budget": budget,
+        "risk": {
+            "risk_tolerance": risk,
+            "autonomy_enabled": enabled,
+            "autopilot_score": autopilot,
+            "throttled_actions": (autonomy_status or {}).get("throttled_actions", 0),
+        },
+        "projections": {
+            "burn_rate_pct": burn,
+            "projected_days_remaining_at_burn": projected_days_remaining,
+            "note": "Projection is heuristic from autonomy burn_rate % of daily budget; not a billing guarantee.",
+        },
+        "open_human_checkpoints": open_cps,
+        "due_procedures": due_procs,
+        "ledger": ledger_snap,
+        "drift_signals": drift_signals,
+        "feed_items": feed_items,
+        "markdown": format_dashboard_markdown(
+            repo=str(cost_dict.get("repo") or repo or ""),
+            budget=budget,
+            risk={"risk_tolerance": risk, "autonomy_enabled": enabled, "autopilot_score": autopilot},
+            projections={"burn_rate_pct": burn, "projected_days_remaining_at_burn": projected_days_remaining},
+            feed_items=feed_items[:15],
+            harvested_tokens=harvested_tokens,
+            harvested_cost=str(cost_dict.get("total_cost") or "$0.00"),
+        ),
+    }
+
+
+def format_dashboard_markdown(
+    *,
+    repo: str,
+    budget: dict[str, Any],
+    risk: dict[str, Any],
+    projections: dict[str, Any],
+    feed_items: list[dict[str, Any]],
+    harvested_tokens: int,
+    harvested_cost: str,
+) -> str:
+    """Compact MD for wiki/CLI (#653)."""
+    lines = [
+        f"# Cost + Risk Dashboard — {repo}",
+        "",
+        f"- Autonomy: enabled={risk.get('autonomy_enabled')} risk_tolerance={risk.get('risk_tolerance')} autopilot={risk.get('autopilot_score')}",
+        f"- Budget: daily={budget.get('daily_tokens')} remaining={budget.get('remaining_tokens')} burn={budget.get('burn_rate_pct')}% action={budget.get('action_on_breach')} pressure={budget.get('budget_pressure')}",
+        f"- Ceiling USD: {budget.get('cost_ceiling_usd')} | Harvested: {harvested_tokens} tokens / {harvested_cost} | durable_spent={budget.get('spent_today_durable')}",
+        f"- Next cycle gate: would_pause={budget.get('would_pause_next_cycle')} would_throttle={budget.get('would_throttle_next_cycle')}",
+        f"- Projection days remaining (heuristic): {projections.get('projected_days_remaining_at_burn')}",
+        "",
+        "## Feed items (ranked)",
+        "",
+    ]
+    if not feed_items:
+        lines.append("_No feed items._")
+    else:
+        for item in feed_items:
+            lines.append(
+                f"- [{item.get('impact')}] {item.get('type')}: {item.get('title')} — {item.get('reason')}"
+            )
+    lines.append("")
     return "\n".join(lines)

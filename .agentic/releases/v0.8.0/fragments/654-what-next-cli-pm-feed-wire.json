@@ -1,0 +1,24 @@
+{
+  "slug": "654-what-next-cli-pm-feed-wire",
+  "change_type": "feature",
+  "surface": "src/plate_core/pm.py, feed.py, cli.py",
+  "summary": "Wire PM collect_work + feed process items to shared get_what_next (no MCP import); add gh plate what-next CLI; rank budget_gate/open_pr higher in feed (#791/#789).",
+  "migration_impact": "Agents can run gh plate what-next. PM and feed process signals carry priority/state_snapshot from the hardened recommender.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer gh plate what-next --json at cycle start.",
+    "3. Feed --include-process ranks budget/open PR process items higher."
+  ],
+  "agent_notes": "Closes MCP coupling for what_next consumers. Complements #789 core helper.",
+  "breaking": false,
+  "links": [
+    "#791",
+    "#789",
+    "#654",
+    "#660",
+    "#631"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

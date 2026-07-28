@@ -1,0 +1,26 @@
+{
+  "slug": "634-644-plan-fleet-budget-hydrate",
+  "change_type": "feature",
+  "surface": "src/plate_core/fleet.py, cli.py, mcp_server.py, tests/test_fleet.py",
+  "summary": "Hydrate #644 plan_fleet_from_intent total pool from live #634 remaining; block create when remaining 0; pass remaining into create_handoff; CLI/MCP use_live_budget (#759).",
+  "migration_impact": "fleet plan defaults to live remaining instead of fixed 20000 when budget_tokens omitted. Zero remaining returns blocked. Explicit budget_tokens still wins.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. Prefer omit budget_tokens so plans hydrate from spend.json.",
+    "3. Explicit pool: budget_tokens=N or --budget-tokens N.",
+    "4. Offline tests: use_live_budget=false / --no-live-budget.",
+    "5. Inspect budget_remaining_tokens on plan JSON."
+  ],
+  "agent_notes": "Complements create_handoff hydrate (#755). Closes #759. Related #634 #644 #654.",
+  "breaking": false,
+  "links": [
+    "#759",
+    "#634",
+    "#644",
+    "#755",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

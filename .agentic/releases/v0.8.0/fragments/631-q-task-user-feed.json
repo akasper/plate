@@ -1,0 +1,23 @@
+{
+  "slug": "631-q-task-user-feed",
+  "change_type": "feature",
+  "surface": "src/plate_core/feed.py, mcp_server.py, cli.py, agent_guidance.py",
+  "summary": "Endless Q+Task user feed (#631): ranked open Questions and Tasks with process/autonomy signals, presentation prompts for ask_user_question, MCP plate_feed + gh plate feed, PLATE-FEED markers.",
+  "migration_impact": "New plate_feed MCP tool and gh plate feed CLI. No breaking changes to plate_what_next or qanda.",
+  "migration_guidance": [
+    "1. Upgrade plate_core surfaces.",
+    "2. Prefer plate_feed for user-facing endless feed; keep plate_what_next for agent process steps.",
+    "3. Present presentation[] items via native ask_user_question one-at-a-time; never auto-complete Task items."
+  ],
+  "agent_notes": "Feed ranks Tasks and need:human-review ahead of low-risk Questions. Integrates open autonomy checkpoints when available. Full host TUI bridge is follow-up under #656.",
+  "breaking": false,
+  "links": [
+    "#631",
+    "#654",
+    "#656",
+    "#139"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

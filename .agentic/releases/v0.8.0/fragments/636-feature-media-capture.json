@@ -1,0 +1,24 @@
+{
+  "slug": "636-feature-media-capture",
+  "change_type": "feature",
+  "surface": "src/plate_core/feature_media.py, feature_loop.py, mcp_server.py, cli.py, feed.py, agent_guidance.py, .gitignore",
+  "summary": "Per-Feature explanatory GIF/video lifecycle (#636): plan capture (test_name + path), register record_e2e_gif results, user approve/skip, attach to fragment media[] (#635), feed prompts, MCP plate_feature_media_* + gh plate feature-media; feature_loop media_capture stage wired.",
+  "migration_impact": "Optional local registry .agentic/feature_media/ (gitignored). Agents should plan+record+approve media for user-facing Features before merge; skip only with reason.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. gh plate feature-media --feature N --title \"...\" (or plate_feature_media_plan).",
+    "3. record_e2e_gif with returned test_name; plate_feature_media_register.",
+    "4. Approve via feed; plate_feature_media_attach_fragment to unreleased fragment."
+  ],
+  "agent_notes": "First slice of #636 — registry + approval + fragment attach. Does not replace record_e2e_gif implementation. Pairs with #635 release notes media and #639 feature_loop.",
+  "breaking": false,
+  "links": [
+    "#636",
+    "#635",
+    "#639",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

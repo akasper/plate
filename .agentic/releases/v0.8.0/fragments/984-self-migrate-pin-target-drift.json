@@ -1,0 +1,7 @@
+{
+  "slug": "984-self-migrate-pin-target-drift",
+  "title": "Self-migrate: pin==target is not drift when installed is ahead",
+  "summary": "Fix false-positive pin_or_payload_drift after packaging cuts: when an explicit pin matches the migrate target, do not treat a newer installed plate-core (monorepo PYTHONPATH) as drift. Unblocks Release CI for v0.8.0.",
+  "issues": ["#984", "#965", "#947", "#649"],
+  "type": "bugfix"
+}

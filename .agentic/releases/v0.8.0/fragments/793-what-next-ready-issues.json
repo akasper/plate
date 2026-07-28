@@ -1,0 +1,15 @@
+{
+  "slug": "793-what-next-ready-issues",
+  "change_type": "feature",
+  "surface": "src/plate_core/what_next.py, src/plate_core/pm.py, gh plate what-next, plate_what_next",
+  "summary": "Empty-pipeline what_next prefers concrete ready Feature/Bug candidates (#793): fetch status:ready-to-work then implementable Feature/Bug; rank ready_issue above generic epic; PM collect_work marks high impact and passes issue_number.",
+  "migration_impact": "Agents and PM loops using plate_what_next / gh plate what-next may receive priority=ready_issue with issue_number when the PR pipeline is empty. Ranking still prefers budget_gate and open_pr. No config change required.",
+  "migration_guidance": [
+    "1. Upgrade plate-core (or monorepo checkout) so what_next includes fetch_ready_issue_candidates.",
+    "2. Prefer following issue_number on ready_issue recommendations when opening Feature/Bug work.",
+    "3. No .plate schema change; existing autonomy budgets and risk_tolerance unchanged."
+  ],
+  "agent_notes": "When priority is ready_issue, implement that issue next (branch from release, fragment, PR Closes #N). Budget and open PRs still outrank ready issues. Do not re-request Copilot in loops; babysit the opened PR.",
+  "breaking": false,
+  "links": ["#793", "#654", "#789", "#791"]
+}

@@ -1,0 +1,25 @@
+{
+  "slug": "648-checkpoint-gate-feed-bridge",
+  "change_type": "feature",
+  "surface": "src/plate_core/checkpoint.py, autonomy.py, feed.py, mcp_server.py",
+  "summary": "Harden #648: checkpoint_approval_for_gate + gate_high_impact(checkpoint_id) resume path; feed ranks structured open checkpoints with decide prompts and merges #653 cost/risk dashboard signals.",
+  "migration_impact": "MCP plate_autonomy_run_procedure accepts checkpoint_id. Feed items for checkpoints use durable ids and ask_user_question + plate_checkpoint_decide prompts. No config schema change.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. On shadow_required: present checkpoint from feed; user decides via plate_checkpoint_decide / gh plate checkpoint --decide ID --decision approve.",
+    "3. Resume gated action with checkpoint_id (and optional shadow_ack); do not re-open a new checkpoint for the same approval.",
+    "4. plate_feed / gh plate feed now includes cost/risk signals from get_cost_dashboard when autonomy is included."
+  ],
+  "agent_notes": "Prefer checkpoint_id over bare approved=True when a #648 record exists. Structured feed checkpoint ids are the durable decide target. TUI host bridge remains follow-up.",
+  "breaking": false,
+  "links": [
+    "#648",
+    "#645",
+    "#653",
+    "#631",
+    "#654"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

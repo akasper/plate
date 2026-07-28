@@ -1,0 +1,22 @@
+{
+  "slug": "480-persona-autonomy-guidance",
+  "change_type": "feature",
+  "surface": "plugin/agents/plate.agent.md, agent_guidance.py, baseline_catalog.yml, AGENTS.md",
+  "summary": "Plate persona + autonomy_loops guidance + run-autonomy-cycle catalog skill so default agents prefer plate_autonomy_* surfaces for long-running budgeted work (#480).",
+  "migration_impact": "Agents using the plate persona will call plate_autonomy_status before unsupervised loops and follow quiet + budget rules. New skill run-autonomy-cycle appears in agents/skills list under project-manager. No breaking config changes.",
+  "migration_guidance": [
+    "1. Reload plate persona / plugin after upgrade.",
+    "2. For /loop or overnight runs: plate_autonomy_status then plate_autonomy_run_cycle within risk_tolerance.",
+    "3. Keep terminal turn summaries as terse bullets; exempt PLATE-AUTONOMY-CYCLE markers."
+  ],
+  "agent_notes": "Routing: what_next for process step; autonomy_status for budgeted loops. See autonomy_loops in agent_guidance.py.",
+  "breaking": false,
+  "links": [
+    "#480",
+    "#470",
+    "#456"
+  ],
+  "requires": [
+    "0.7.2"
+  ]
+}

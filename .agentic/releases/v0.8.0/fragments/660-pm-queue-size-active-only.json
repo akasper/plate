@@ -1,0 +1,19 @@
+{
+  "slug": "660-pm-queue-size-active-only",
+  "change_type": "fix",
+  "surface": "src/plate_core/pm.py",
+  "summary": "PM queue_size counts only proposed/delegated/blocked so cancelled/done residue no longer keeps what_next on pm forever (#660/#654).",
+  "migration_impact": "plate_pm_status / what_next pm_queue_size drop after completing or cancelling work. Historical queue files still store done/cancelled rows but they no longer inflate queue_size.",
+  "migration_guidance": [
+    "1. Upgrade plate-core with this fix.",
+    "2. Optional: prune cancelled/done rows from .agentic/pm/queue.json for hygiene.",
+    "3. Confirm what_next leaves pm_propose_run/pm when only cancelled residue remains."
+  ],
+  "agent_notes": "ACTIVE_QUEUE_STATUSES = proposed|delegated|blocked. open_assignments remains proposed+delegated only.",
+  "breaking": false,
+  "links": [
+    "#903",
+    "#660",
+    "#654"
+  ]
+}

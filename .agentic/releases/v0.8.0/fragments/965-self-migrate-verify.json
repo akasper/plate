@@ -1,0 +1,17 @@
+{
+  "slug": "965-self-migrate-verify",
+  "change_type": "feature",
+  "surface": "src/plate_core/self_migrate.py, src/plate_core/cli.py, src/plate_core/mcp_server.py, tests/test_self_migrate.py",
+  "summary": "Post-migrate offline verify for Epic #649 residual (#965): verify_self_migrate checks pin/payload drift, adoption core_ready, and .plate validity; CLI --verify + MCP plate_self_migrate_verify; plan step 6_verify points at the command.",
+  "migration_impact": "New gh plate self-migrate --verify and MCP plate_self_migrate_verify. Offline, no writes. Agents should run after migrate plan/apply before claiming adopter health.",
+  "migration_guidance": [
+    "1. Pull release; pytest tests/test_self_migrate.py -k Verify -q.",
+    "2. After self-migrate plan or PR: gh plate self-migrate --verify --json.",
+    "3. ready=false → follow next_command (plan or adopt); then re-verify.",
+    "4. Still run gh plate health for remote GitHub signals."
+  ],
+  "agent_notes": "Closes #965. Fifth #649 slice after plan/what_next/markers/upstream/PR. Does not check #654 boxes.",
+  "breaking": false,
+  "links": ["#965", "#649", "#939", "#947", "#633", "#654"],
+  "requires": ["0.7.2"]
+}
