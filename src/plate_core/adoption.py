@@ -616,6 +616,11 @@ def start_adoption_session(
     }
 
 
+# Align with plan_first_qa_seed dry-run next_command (#1001 / #1002): after plan,
+# agents must not re-plan forever — point at apply (runner still required).
+_FIRST_QA_APPLY_CMD = "gh plate adopt --first-qa-plan --apply-first-qa --json"
+
+
 def _session_complete_next_command(
     *,
     core_ready: bool,
@@ -625,12 +630,14 @@ def _session_complete_next_command(
     """Single next CLI after session complete (#1003 / #955).
 
     Prefer residual adoption work over jumping straight to feed when first Q&A
-    is still unseeded (under-30m path integrity).
+    is still unseeded (under-30m path integrity). When core is ready and first
+    Q&A is unseeded, route to the **apply** path (same as #1002 dry-run
+    next_command), not a circular re-plan of ``--first-qa-plan`` alone.
     """
     if not core_ready:
         return str((readiness or {}).get("next_command") or "gh plate adopt --json")
     if not first_qa_seeded:
-        return "gh plate adopt --first-qa-plan --json"
+        return _FIRST_QA_APPLY_CMD
     return "gh plate feed --json"
 
 

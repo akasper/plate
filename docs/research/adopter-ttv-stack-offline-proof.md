@@ -38,12 +38,13 @@ Wall-clock **compute** total ≈ **0.06s** (not operator wall time). Synthetic s
 | import-payload dry-run (empty target, conservative) | would_create=119, conflict=0 | `gh plate import-payload --apply --strategy conservative` |
 | import-payload apply (safe) | created=119 | `gh plate bootstrap --repo OWNER/REPO --adopt --apply` |
 | session start | ok | — |
-| adopt status | core_ready=true, first_qa unseeded | `gh plate adopt --first-qa-plan --json` |
+| adopt status | core_ready=true, first_qa unseeded | `gh plate adopt --first-qa-plan --json` (entry) |
 | first-qa plan (dry-run) | mode=dry_run | `gh plate adopt --first-qa-plan --apply-first-qa --json` |
 | first-qa apply (injectable runner) | applied=true | `gh plate feed --json` |
 | self-migrate plan (target 0.8.0) | drift=false | plan (review) |
 | self-migrate verify | ready=false (`plate_config_invalid` on minimal fixture `.plate`) | re-verify residual |
-| session complete | within_30m=true, first_qa_seeded=true | `gh plate feed --json` |
+| session complete (first_qa seeded) | within_30m=true, first_qa_seeded=true | `gh plate feed --json` |
+| session complete residual (core_ready, unseeded) | must not re-plan forever | `gh plate adopt --first-qa-plan --apply-first-qa --json` |
 | pin==target fixture (`VERSION=0.8.0`) | drift=false, pin_vs_target=equal | — |
 
 ### Assertions (routing)
@@ -52,6 +53,7 @@ Wall-clock **compute** total ≈ **0.06s** (not operator wall time). Synthetic s
 - [x] First-qa dry-run `next_command` includes **`--apply-first-qa`** (not circular `--first-qa-plan` alone)
 - [x] First-qa apply success → **feed**
 - [x] Session complete with first_qa seeded → **feed**
+- [x] Session complete residual when unseeded + core_ready → **apply-first-qa** (aligned with #1002; not re-plan only)
 - [x] pin==explicit target → **no drift**
 
 ### Known residual (fixture, not product regression)

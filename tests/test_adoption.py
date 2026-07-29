@@ -209,6 +209,12 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         if ready.get("core_ready"):
             self.assertFalse(done.get("first_qa_seeded"))
             self.assertIn("first-qa-plan", done["next_command"])
+            # Stack with #1002: residual is apply, not circular re-plan (#1003).
+            self.assertIn("--apply-first-qa", done["next_command"])
+            self.assertNotEqual(
+                done["next_command"],
+                "gh plate adopt --first-qa-plan --json",
+            )
             self.assertNotEqual(done["next_command"], "gh plate feed --json")
         else:
             # empty-ish tree may not be core_ready; still must not blindly feed
