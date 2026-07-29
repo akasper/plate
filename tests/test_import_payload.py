@@ -229,11 +229,11 @@ class TestImportPayload(unittest.TestCase):
             again = import_payload(tmp, strategy="safe", dry_run=True)
             self.assertIn("CURRENT.md", again["would_skip"])
 
-    def test_seeds_releases_unreleased_layout(self):
-        """Import seeds .agentic/releases/unreleased so adoption core_ready can pass."""
+    def test_seeds_releases_and_plate_for_core_ready(self):
+        """Import seeds releases layout + .plate so offline core_ready is reachable."""
         from plate_core.import_payload import import_payload
         from plate_core.adoption import assess_adoption_readiness
-        import json
+        from plate_core.plate_config import get_plate_config_report
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -242,58 +242,41 @@ class TestImportPayload(unittest.TestCase):
                 ".agentic/releases/unreleased/README.md",
                 dry["would_create"],
             )
+            self.assertIn(".plate", dry["would_create"])
             applied = import_payload(tmp, strategy="safe", apply=True)
             self.assertIn(
                 ".agentic/releases/unreleased/README.md",
                 applied["created"],
             )
+            self.assertIn(".plate", applied["created"])
             self.assertTrue(
                 (root / ".agentic" / "releases" / "unreleased" / "README.md").is_file()
             )
-            # Valid JSON .plate (not YAML) + labels already from payload → core_ready
+            self.assertTrue((root / ".plate").is_file())
+            # JSON schema (not YAML)
+            self.assertTrue(
+                (root / ".plate").read_text(encoding="utf-8").lstrip().startswith("{")
+            )
+            rep = get_plate_config_report(root)
+            self.assertTrue(rep.valid, msg=getattr(rep, "errors", None))
+            # Second apply must not clobber custom .plate
             (root / ".plate").write_text(
-                json.dumps(
-                    {
-                        "version": "1.2",
-                        "methodology": {
-                            "epic_naming_pattern": "Epic: {name}",
-                            "marker_prefix": "PLATES-CORE",
-                            "feature_workflow": "feature/{slug}",
-                        },
-                        "extensions": {
-                            "enabled": True,
-                            "sources": [],
-                            "installed": {},
-                        },
-                        "overrides": {},
-                        "release": {"triggers": [], "default_track": None},
-                        "autonomy": {
-                            "enabled": False,
-                            "risk_tolerance": "off",
-                            "token_budget": {
-                                "daily": 50000,
-                                "per_cycle": 8000,
-                                "action": "throttle",
-                            },
-                            "cost_ceiling_usd": 10.0,
-                            "schedules_enabled": True,
-                            "loop": {
-                                "default_sleep_seconds": 300,
-                                "max_cycles": None,
-                            },
-                        },
-                    },
-                    indent=2,
-                )
-                + "\n",
+                (root / ".plate").read_text(encoding="utf-8").replace(
+                    '"risk_tolerance": "medium"',
+                    '"risk_tolerance": "off"',
+                ),
                 encoding="utf-8",
             )
+            again = import_payload(tmp, strategy="safe", apply=True)
+            self.assertIn(".plate", again["skipped"] or again["would_skip"])
+            self.assertIn('"risk_tolerance": "off"', (root / ".plate").read_text(encoding="utf-8"))
             ready = assess_adoption_readiness(root, include_optional=False)
             checks = {c["id"]: c["ok"] for c in ready.get("checks") or []}
             self.assertTrue(
                 checks.get("agentic_releases"),
                 msg=f"expected agentic_releases ok: {ready.get('checks')}",
             )
+            self.assertTrue(checks.get("plate_config"), msg=ready.get("checks"))
             self.assertTrue(ready.get("core_ready"), msg=ready)
 
     def test_next_command_dry_run_with_creates(self):

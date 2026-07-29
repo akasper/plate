@@ -1,7 +1,7 @@
 {
   "slug": "import-payload-next-command",
   "title": "import-payload emits single next_command",
-  "summary": "import-payload emits next_command (apply/escape-hatch/bootstrap/adopt) and seeds .agentic/releases/unreleased/README.md so adoption core_ready is reachable after local import without a bare mkdir gap.",
+  "summary": "import-payload: next_command routing; seed .agentic/releases/unreleased and DEFAULT_CONFIG .plate JSON when missing (never overwrite) so offline adoption core_ready is reachable after apply.",
   "issues": [
     "#996",
     "#633",
@@ -12,7 +12,7 @@
   "change_type": "feature",
   "surface": "src/plate_core/import_payload.py",
   "migration_impact": "Additive only. Clients reading next_steps continue to work; prefer next_command for agent routing (parity with adopt/self-migrate).",
-  "agent_notes": "After import-payload --json, follow next_command. Apply seeds releases/unreleased layout required by assess_adoption_readiness. .plate remains bootstrap/human (JSON schema v1.2) \u2014 not seeded by import.",
+  "agent_notes": "After import-payload --apply, expect .plate + releases/unreleased + next_command. Never overwrite existing .plate. .plate is JSON (v1.2), not YAML.",
   "breaking": false,
   "links": [
     "#996",
