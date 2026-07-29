@@ -50,10 +50,12 @@ Full public install notes: root `README.md` (Quick Start → Install versions). 
 2. **Local payload (reviewable diffs)**  
    ```bash
    gh plate import-payload --dry-run --strategy conservative --json
+   # Follow report.next_command (usually --apply same strategy; conflicts → escape-hatch)
    gh plate import-payload --apply --strategy conservative
    ```
    Prefer `conservative` so differing existing files become conflicts (not silent skips/overwrites).
    Use `safe` to skip any existing path; `force` only with explicit human approval.
+   JSON reports include a single **`next_command`** for agents (#996) — do not invent force-apply.
 
 3. **GitHub-side baseline**  
    ```bash
@@ -66,12 +68,14 @@ Full public install notes: root `README.md` (Quick Start → Install versions). 
      `.agentic/adoption/first_qa_seed.json` when Questions are present (#951).
    - Emits adoption-tailored next steps (Goals.md, CODEOWNERS, CI coexistence, migrate plan).
 
-4. **First Q&A seed (if not already seeded, #949)**  
+4. **First Q&A seed (if not already seeded, #949 / #1001)**  
    ```bash
    gh plate adopt --first-qa-plan --json
-   # Live create requires an injectable runner / bootstrap --apply path; CLI alone does not open issues.
+   # Dry-run next_command points at apply (do not re-plan in a loop):
+   gh plate adopt --first-qa-plan --apply-first-qa --json   # requires injectable runner
    ```
    Plans three starter Curiosity Questions (same catalog as bootstrap).  
+   Live create requires an injectable runner / bootstrap `--apply` path; CLI alone does not open issues.  
    MCP: `plate_adoption_first_qa_plan`.  
    Offline marker: `.agentic/adoption/first_qa_seed.json`.
 
@@ -94,12 +98,14 @@ Full public install notes: root `README.md` (Quick Start → Install versions). 
    Health also exposes `self_migrate_ready` / `self_migrate_drift` (#967).  
    MCP: `plate_self_migrate_verify`.
 
-7. **Complete session timer (#955)**  
+7. **Complete session timer (#955 / #1003)**  
    ```bash
    gh plate adopt --session-status --json
    gh plate adopt --complete-session --json
+   # Follow report.next_command: first-qa-plan if unseeded; feed only when first_qa_seeded
    ```
    Records `duration_minutes` and `within_30m` against the 30-minute budget.  
+   Does **not** jump to feed when `core_ready` but first Q&A is still unseeded (#1003).  
    This is **local proof evidence**, not a claim that every monorepo finished live E2E.
 
 8. **Optional cutover**  
