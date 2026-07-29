@@ -59,8 +59,9 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         self.assertTrue(report["core_ready"])
         self.assertEqual(report["estimated_minutes_remaining"], 0)
         self.assertEqual(report["core_failed"], 0)
-        # Unseeded first Q&A is the post-core next step (#949)
+        # Unseeded first Q&A is the post-core next step (#949/#1001)
         self.assertIn("first-qa-plan", report["next_command"])
+        self.assertIn("--apply-first-qa", report["next_command"])
 
     def test_optional_checks_do_not_block_core_ready(self):
         with TemporaryDirectory() as tmp:
@@ -97,6 +98,11 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         self.assertTrue(report["core_ready"])
         self.assertFalse(report["first_qa"]["seeded"])
         self.assertIn("first-qa-plan", report["next_command"])
+        self.assertIn("--apply-first-qa", report["next_command"])
+        self.assertNotEqual(
+            report["next_command"],
+            "gh plate adopt --first-qa-plan --json",
+        )
 
     def test_first_qa_plan_dry_run(self):
         """Proves: dry-run plan lists 3 starter Questions without writing marker (#949)."""
