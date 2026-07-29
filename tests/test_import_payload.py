@@ -229,6 +229,73 @@ class TestImportPayload(unittest.TestCase):
             again = import_payload(tmp, strategy="safe", dry_run=True)
             self.assertIn("CURRENT.md", again["would_skip"])
 
+    def test_seeds_releases_unreleased_layout(self):
+        """Import seeds .agentic/releases/unreleased so adoption core_ready can pass."""
+        from plate_core.import_payload import import_payload
+        from plate_core.adoption import assess_adoption_readiness
+        import json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dry = import_payload(tmp, strategy="safe", dry_run=True)
+            self.assertIn(
+                ".agentic/releases/unreleased/README.md",
+                dry["would_create"],
+            )
+            applied = import_payload(tmp, strategy="safe", apply=True)
+            self.assertIn(
+                ".agentic/releases/unreleased/README.md",
+                applied["created"],
+            )
+            self.assertTrue(
+                (root / ".agentic" / "releases" / "unreleased" / "README.md").is_file()
+            )
+            # Valid JSON .plate (not YAML) + labels already from payload → core_ready
+            (root / ".plate").write_text(
+                json.dumps(
+                    {
+                        "version": "1.2",
+                        "methodology": {
+                            "epic_naming_pattern": "Epic: {name}",
+                            "marker_prefix": "PLATES-CORE",
+                            "feature_workflow": "feature/{slug}",
+                        },
+                        "extensions": {
+                            "enabled": True,
+                            "sources": [],
+                            "installed": {},
+                        },
+                        "overrides": {},
+                        "release": {"triggers": [], "default_track": None},
+                        "autonomy": {
+                            "enabled": False,
+                            "risk_tolerance": "off",
+                            "token_budget": {
+                                "daily": 50000,
+                                "per_cycle": 8000,
+                                "action": "throttle",
+                            },
+                            "cost_ceiling_usd": 10.0,
+                            "schedules_enabled": True,
+                            "loop": {
+                                "default_sleep_seconds": 300,
+                                "max_cycles": None,
+                            },
+                        },
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            ready = assess_adoption_readiness(root, include_optional=False)
+            checks = {c["id"]: c["ok"] for c in ready.get("checks") or []}
+            self.assertTrue(
+                checks.get("agentic_releases"),
+                msg=f"expected agentic_releases ok: {ready.get('checks')}",
+            )
+            self.assertTrue(ready.get("core_ready"), msg=ready)
+
     def test_next_command_dry_run_with_creates(self):
         """Adopter path: dry-run with pending creates points at --apply (same strategy)."""
         from plate_core.import_payload import import_payload
