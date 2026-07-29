@@ -622,6 +622,31 @@ def start_adoption_session(
     }
 
 
+# Align with plan_first_qa_seed dry-run next_command (#1001 / #1002): after plan,
+# agents must not re-plan forever — point at apply (runner still required).
+_FIRST_QA_APPLY_CMD = "gh plate adopt --first-qa-plan --apply-first-qa --json"
+
+
+def _session_complete_next_command(
+    *,
+    core_ready: bool,
+    first_qa_seeded: bool,
+    readiness: dict[str, Any] | None = None,
+) -> str:
+    """Single next CLI after session complete (#1003 / #955).
+
+    Prefer residual adoption work over jumping straight to feed when first Q&A
+    is still unseeded (under-30m path integrity). When core is ready and first
+    Q&A is unseeded, route to the **apply** path (same as #1002 dry-run
+    next_command), not a circular re-plan of ``--first-qa-plan`` alone.
+    """
+    if not core_ready:
+        return str((readiness or {}).get("next_command") or "gh plate adopt --json")
+    if not first_qa_seeded:
+        return _FIRST_QA_APPLY_CMD
+    return "gh plate feed --json"
+
+
 def complete_adoption_session(
     repo_root: str | Path | None = None,
     *,
@@ -638,8 +663,9 @@ def complete_adoption_session(
             "error": "no_session",
             "repo_root": str(root),
             "marker_path": str(marker),
+            "next_command": "gh plate adopt --start-session --json",
             "note": "No session to complete. Start with gh plate adopt --start-session.",
-            "related_issues": ["#955", "#633"],
+            "related_issues": ["#955", "#633", "#1003"],
         }
 
     try:
@@ -650,10 +676,21 @@ def complete_adoption_session(
             "completed": False,
             "error": str(exc),
             "repo_root": str(root),
+            "next_command": "gh plate adopt --start-session --force --json",
         }
 
     if data.get("finished_at") and not now_iso:
-        # already complete — return snapshot
+        # already complete — return snapshot with residual next_command
+        core_ready = bool(data.get("core_ready"))
+        first_qa = bool(data.get("first_qa_seeded"))
+        readiness = None
+        if not core_ready:
+            try:
+                readiness = assess_adoption_readiness(root, include_optional=False)
+                core_ready = bool(readiness.get("core_ready"))
+                first_qa = bool((readiness.get("first_qa") or {}).get("seeded"))
+            except Exception:  # noqa: BLE001
+                readiness = None
         return {
             "ok": True,
             "completed": True,
@@ -664,9 +701,16 @@ def complete_adoption_session(
             "finished_at": data.get("finished_at"),
             "duration_minutes": data.get("duration_minutes"),
             "within_30m": data.get("within_30m"),
+            "core_ready": core_ready,
+            "first_qa_seeded": first_qa,
+            "next_command": _session_complete_next_command(
+                core_ready=core_ready,
+                first_qa_seeded=first_qa,
+                readiness=readiness,
+            ),
             "note": "Session already completed.",
             "session": data,
-            "related_issues": ["#955", "#633"],
+            "related_issues": ["#955", "#633", "#1003"],
         }
 
     started_at = data.get("started_at")
@@ -699,8 +743,13 @@ def complete_adoption_session(
             "core_ready": core_ready,
             "first_qa_seeded": first_qa,
             "elapsed_minutes": duration_minutes,
+            "next_command": _session_complete_next_command(
+                core_ready=core_ready,
+                first_qa_seeded=first_qa,
+                readiness=readiness,
+            ),
             "note": "Session not completed: core_ready is false (require_core_ready).",
-            "related_issues": ["#955", "#633"],
+            "related_issues": ["#955", "#633", "#1003"],
         }
 
     payload = {
@@ -723,6 +772,11 @@ def complete_adoption_session(
             "repo_root": str(root),
         }
 
+    next_cmd = _session_complete_next_command(
+        core_ready=core_ready,
+        first_qa_seeded=first_qa,
+        readiness=readiness,
+    )
     return {
         "ok": True,
         "completed": True,
@@ -737,15 +791,17 @@ def complete_adoption_session(
         "core_ready": core_ready,
         "first_qa_seeded": first_qa,
         "session": payload,
-        "next_command": "gh plate feed --json" if core_ready else readiness.get("next_command"),
+        "next_command": next_cmd,
         "note": (
             f"Adoption session complete in {duration_minutes}m "
-            f"(target {_TARGET_MINUTES}m, within_30m={within})."
+            f"(target {_TARGET_MINUTES}m, within_30m={within}). "
+            f"Next: `{next_cmd}` (#1003)."
         ),
-        "related_issues": ["#955", "#633", "#935", "#654"],
+        "related_issues": ["#955", "#633", "#935", "#654", "#1000", "#1003"],
         "ask_user_question": {
             "question": f"Adoption finished in {duration_minutes}m (within_30m={within}). Next?",
             "options": [
+                {"label": "Do next_command", "description": next_cmd},
                 {"label": "Open feed", "description": "gh plate feed --json"},
                 {"label": "Health", "description": "gh plate health --json"},
                 {"label": "Start new session", "description": "gh plate adopt --start-session --force"},
