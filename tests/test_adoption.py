@@ -172,6 +172,7 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         )
         self.assertEqual(rec.get("priority"), "first_qa_seed")
         self.assertIn("first-qa-plan", rec.get("next_command") or "")
+        self.assertIn("--apply-first-qa", rec.get("next_command") or "")
 
     def test_adoption_session_start_complete_within_30m(self):
         """Proves: session records duration and within_30m for under-30m proof (#955)."""
