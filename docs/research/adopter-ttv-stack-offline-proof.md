@@ -72,9 +72,10 @@ gh extension upgrade plate   # or reinstall akasper/gh-plate @ v0.8.0
 
 ## What remains for LIVE proof
 
-1. Human merge of the five PRs to `release` (risk-off).
-2. Third-party repo adopt under 30m wall-clock with real GitHub bootstrap + Q&A issues.
-3. Only then consider #633 / #654 LIVE boxes with PR citations + session artifact.
+1. ~~Human merge of the five PRs to `release` (risk-off).~~ **Done** 2026-07-29 (`release` @ `4f79237`).
+2. ~~Post-merge offline re-verify (Phase A).~~ See `docs/research/adopter-ttv-phase-a-post-merge-2026-07-29.md` (#1005 Phase A).
+3. Third-party repo adopt under 30m wall-clock with real GitHub bootstrap + Q&A issues (**#1005 Phase B**).
+4. Only then consider #633 / #654 LIVE boxes with PR citations + session artifact.
 
 ## Closing
 
