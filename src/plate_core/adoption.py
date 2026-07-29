@@ -192,13 +192,15 @@ def assess_adoption_readiness(
 
     core_ready = len(core_failed) == 0
     first_qa = first_qa_seed_status(root)
+    # Same apply routing as plan_first_qa_seed dry-run (#1001): do not re-plan forever.
+    first_qa_apply_cmd = "gh plate adopt --first-qa-plan --apply-first-qa --json"
 
     if not plate_ok:
         next_cmd = "gh plate import-payload --dry-run --strategy conservative --json"
     elif core_failed:
         next_cmd = "gh plate bootstrap --repo OWNER/REPO --adopt --apply"
     elif core_ready and not first_qa.get("seeded"):
-        next_cmd = "gh plate adopt --first-qa-plan --json"
+        next_cmd = first_qa_apply_cmd
     else:
         next_cmd = "gh plate health && gh plate feed --json"
 
@@ -217,8 +219,9 @@ def assess_adoption_readiness(
     next_steps.append("4. Verify: gh plate health; write mission text in docs/wiki/Goals.md")
     if core_ready and not first_qa.get("seeded"):
         next_steps.append(
-            "5. First Q&A seed: gh plate adopt --first-qa-plan --json "
-            "(optional --apply-first-qa with runner)"
+            "5. First Q&A seed: "
+            f"{first_qa_apply_cmd} "
+            "(injectable runner required for live issue create; #949/#1001)"
         )
     else:
         next_steps.append("5. First Q&A: gh plate feed / gh plate plan (product planning)")
@@ -246,8 +249,8 @@ def assess_adoption_readiness(
             else (
                 [
                     {
-                        "label": "First Q&A seed plan",
-                        "description": "gh plate adopt --first-qa-plan --json",
+                        "label": "First Q&A apply seed",
+                        "description": first_qa_apply_cmd,
                     },
                     {"label": "Open feed", "description": "gh plate feed --json"},
                     {"label": "Health only", "description": "gh plate health"},
