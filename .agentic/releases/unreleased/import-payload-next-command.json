@@ -1,13 +1,23 @@
 {
   "slug": "import-payload-next-command",
   "title": "import-payload emits single next_command",
-  "summary": "Add next_command to import-payload JSON/human report so adopters and agents get one actionable CLI after dry-run/apply (apply same strategy, escape-hatch on conflicts, bootstrap after apply, adopt when noop).",
-  "issues": ["#996", "#633", "#983", "#615"],
+  "summary": "import-payload emits next_command (apply/escape-hatch/bootstrap/adopt) and seeds .agentic/releases/unreleased/README.md so adoption core_ready is reachable after local import without a bare mkdir gap.",
+  "issues": [
+    "#996",
+    "#633",
+    "#983",
+    "#615"
+  ],
   "type": "feature",
   "change_type": "feature",
   "surface": "src/plate_core/import_payload.py",
   "migration_impact": "Additive only. Clients reading next_steps continue to work; prefer next_command for agent routing (parity with adopt/self-migrate).",
-  "agent_notes": "After plate_import_payload / gh plate import-payload --json, execute report.next_command unless human judgment is required (escape-hatch conflicts). Do not invent force apply from next_steps prose.",
+  "agent_notes": "After import-payload --json, follow next_command. Apply seeds releases/unreleased layout required by assess_adoption_readiness. .plate remains bootstrap/human (JSON schema v1.2) \u2014 not seeded by import.",
   "breaking": false,
-  "links": ["#996", "#633", "#615", "#622"]
+  "links": [
+    "#996",
+    "#633",
+    "#615",
+    "#622"
+  ]
 }

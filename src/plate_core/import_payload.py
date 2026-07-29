@@ -460,6 +460,9 @@ def plan_import_payload(
     # #618: CURRENT.md is repo-specific (not in payload globs) but required by
     # validate_plate_repo + feature detection — seed when missing.
     _seed_current_md_if_missing(target, report, apply=bool(apply))
+    # Adopter core_ready requires .agentic/releases[/unreleased] (#996 follow-on /
+    # under-30m path). Template payload ships .agentic/*.yml only — seed layout.
+    _seed_releases_layout_if_missing(target, report, apply=bool(apply))
 
     report.next_command = _next_command(report)
     report.next_steps = _next_steps(report)
@@ -531,6 +534,92 @@ def _seed_current_md_if_missing(
     if apply:
         dest.write_text(content, encoding="utf-8")
         report.created.append("CURRENT.md")
+
+
+# Minimal unreleased README so adoption readiness sees releases layout without
+# shipping every monorepo fragment. Keep short; full contract is upstream docs.
+MINIMAL_UNRELEASED_README = """# PLATE unreleased fragments
+
+This directory holds release-note fragments not yet tied to a versioned release.
+
+Author Feature/process changes as `<slug>.json` here (see PLATE fragment contract
+in upstream `akasper/plate` / `docs` and `AGENTS.md`). At release cut, fragments
+aggregate into `.agentic/releases/vX.Y.Z/`.
+
+This starter file was seeded by `gh plate import-payload` so adoption readiness
+(`core_ready`) can see a valid `.agentic/releases/unreleased/` layout.
+"""
+
+
+def _seed_releases_layout_if_missing(
+    target: Path,
+    report: ImportPayloadReport,
+    *,
+    apply: bool,
+) -> None:
+    """Ensure `.agentic/releases/unreleased/` exists for adoption core_ready.
+
+    assess_adoption_readiness requires ``.agentic/releases`` plus ``unreleased``
+    (or a ``v*`` dir). Template payload does not ship that empty tree, so pure
+    import left adopters stuck on bootstrap for a directory mkdir (#996 path).
+    """
+    releases = target / ".agentic" / "releases"
+    unreleased = releases / "unreleased"
+    readme = unreleased / "README.md"
+    rel = ".agentic/releases/unreleased/README.md"
+    decision_base = {
+        "path": rel,
+        "classification": "adoption_seed",
+        "target_path": rel,
+        "rule": None,
+    }
+
+    layout_ok = releases.is_dir() and (
+        unreleased.is_dir() or any(releases.glob("v*"))
+    )
+    if layout_ok and readme.is_file():
+        report.files.append(
+            PayloadFileDecision(
+                action="skip",
+                detail="releases/unreleased layout already present",
+                **decision_base,  # type: ignore[arg-type]
+            )
+        )
+        report.would_skip.append(rel)
+        if apply:
+            report.skipped.append(rel)
+        return
+
+    if layout_ok and not readme.is_file():
+        # Dir exists (maybe empty) — still seed README for discoverability
+        report.files.append(
+            PayloadFileDecision(
+                action="create",
+                detail="seed unreleased README for fragment authoring",
+                **decision_base,  # type: ignore[arg-type]
+            )
+        )
+        report.would_create.append(rel)
+        if apply:
+            readme.write_text(MINIMAL_UNRELEASED_README, encoding="utf-8")
+            report.created.append(rel)
+        return
+
+    report.files.append(
+        PayloadFileDecision(
+            action="create",
+            detail=(
+                "seed .agentic/releases/unreleased/ for adoption core_ready "
+                "(template payload omits empty releases tree)"
+            ),
+            **decision_base,  # type: ignore[arg-type]
+        )
+    )
+    report.would_create.append(rel)
+    if apply:
+        unreleased.mkdir(parents=True, exist_ok=True)
+        readme.write_text(MINIMAL_UNRELEASED_README, encoding="utf-8")
+        report.created.append(rel)
 
 
 def copy_template_payload_local(
