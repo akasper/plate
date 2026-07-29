@@ -463,6 +463,10 @@ def plan_import_payload(
     # Adopter core_ready requires .agentic/releases[/unreleased] (#996 follow-on /
     # under-30m path). Template payload ships .agentic/*.yml only — seed layout.
     _seed_releases_layout_if_missing(target, report, apply=bool(apply))
+    # Root .plate is not in template payload globs; seed DEFAULT_CONFIG JSON when
+    # missing so local import can reach adoption core_ready without remote bootstrap.
+    # Never overwrite an existing .plate (adopter customizations win).
+    _seed_plate_config_if_missing(target, report, apply=bool(apply))
 
     report.next_command = _next_command(report)
     report.next_steps = _next_steps(report)
@@ -620,6 +624,54 @@ def _seed_releases_layout_if_missing(
         unreleased.mkdir(parents=True, exist_ok=True)
         readme.write_text(MINIMAL_UNRELEASED_README, encoding="utf-8")
         report.created.append(rel)
+
+
+def _seed_plate_config_if_missing(
+    target: Path,
+    report: ImportPayloadReport,
+    *,
+    apply: bool,
+) -> None:
+    """Seed root ``.plate`` JSON from DEFAULT_CONFIG when absent (never overwrite).
+
+    Same baseline bootstrap writes remotely (#259). Local import path needs this
+    for ``assess_adoption_readiness`` plate_config check without GitHub API.
+    File format is **JSON** (YAML ``version: 1`` is invalid and fails verify).
+    """
+    dest = target / ".plate"
+    decision_base = {
+        "path": ".plate",
+        "classification": "adoption_seed",
+        "target_path": ".plate",
+        "rule": None,
+    }
+    if dest.exists():
+        report.files.append(
+            PayloadFileDecision(
+                action="skip",
+                detail=".plate already present (not overwritten)",
+                **decision_base,  # type: ignore[arg-type]
+            )
+        )
+        report.would_skip.append(".plate")
+        if apply:
+            report.skipped.append(".plate")
+        return
+
+    from .plate_config import DEFAULT_CONFIG
+
+    payload = json.dumps(DEFAULT_CONFIG, indent=2) + "\n"
+    report.files.append(
+        PayloadFileDecision(
+            action="create",
+            detail="seed DEFAULT_CONFIG .plate JSON for adoption core_ready (same as bootstrap)",
+            **decision_base,  # type: ignore[arg-type]
+        )
+    )
+    report.would_create.append(".plate")
+    if apply:
+        dest.write_text(payload, encoding="utf-8")
+        report.created.append(".plate")
 
 
 def copy_template_payload_local(
