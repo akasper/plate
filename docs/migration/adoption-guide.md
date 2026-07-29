@@ -6,6 +6,27 @@ Greenfield path: `docs/bootstrap/new-repository-checklist.md`.
 
 Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automated work. The steps below are the durable operator path; agents follow the same sequence via `plate_what_next` / feed process items.
 
+## Prerequisites (install path — do this first)
+
+Mismatched pins burn the under-30m budget. After **v0.8.0**, align runtime before step 0:
+
+```bash
+pip install -U 'plate-core==0.8.0'
+python -c "import plate_core; print(plate_core.__version__)"   # expect 0.8.0
+
+gh extension install akasper/gh-plate    # or: gh extension upgrade plate
+# If gh plate still locks an older plate-core (e.g. 0.7.2), reinstall the extension:
+#   gh extension remove plate && gh extension install akasper/gh-plate
+```
+
+| Check | Healthy signal |
+|---|---|
+| pip / import | `plate_core.__version__ == "0.8.0"` |
+| gh-plate | extension at **v0.8.0**; `PLATE_CORE_VERSION` content `0.8.0` |
+| Self-migrate | `gh plate self-migrate --verify --json` → no false drift when pin==target |
+
+Full public install notes: root `README.md` (Quick Start → Install versions). Local offline dry-run timings (not LIVE third-party E2E): `docs/research/adopter-install-path-0.8.0-parity.md`.
+
 ## Recommended sequence (<30m)
 
 0. **Start wall-clock session (optional but recommended, #955)**  
