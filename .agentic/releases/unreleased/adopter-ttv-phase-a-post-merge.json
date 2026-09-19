@@ -1,0 +1,10 @@
+{
+  "slug": "adopter-ttv-phase-a-post-merge",
+  "change_type": "docs",
+  "surface": "docs/research/adopter-ttv-phase-a-post-merge-2026-07-29.md",
+  "summary": "Phase A offline re-verify of adopter TTV next_command routing on merged release tip after #995–#1004; evidence for #1005 (not LIVE).",
+  "migration_impact": "No runtime migration. Adopter-path agents should cite the Phase A research note for post-merge offline proof and keep #654 LIVE boxes unchecked until Phase B.",
+  "agent_notes": "Stack is on release. Do not claim LIVE under-30m from Phase A. Phase B needs a throwaway GitHub repo + operator wall-clock. Human Task #1006 may still need PLATE-TASK-CLOSED comment.",
+  "breaking": false,
+  "links": ["#1005", "#1000", "#1006", "#983", "#633"]
+}
