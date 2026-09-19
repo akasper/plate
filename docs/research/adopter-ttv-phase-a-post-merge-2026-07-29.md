@@ -64,7 +64,7 @@ This Phase A note re-runs the same routing spine on the **actual** post-merge `r
 
 Minor count drift: would_create/created **121** on tip (was 119 in pre-merge note) — payload growth since the simulated stack, not a routing regression.
 
-## Phase B spine (unchanged)
+## Phase B spine (runner requirement clarified)
 
 ```bash
 pip install -U 'plate-core==0.8.0'
@@ -74,6 +74,11 @@ gh extension upgrade plate   # or reinstall akasper/gh-plate @ v0.8.0
 # in throwaway/target repo:
 gh plate adopt --start-session --json
 # follow next_command: import-payload → bootstrap --adopt → first-qa apply → feed
+# 
+# LIVE first-Q&A issue creation requires an injectable runner / `gh plate bootstrap --repo OWNER/REPO --adopt --apply` path.
+# CLI alone (`--apply-first-qa` without runner) returns `runner_required` rather than creating GitHub Questions.
+# Offline markers (`.agentic/adoption/first_qa_seed.json`) are NOT the same as LIVE GitHub Question creation.
+# See `docs/migration/adoption-guide.md` step 4 (lines ~71-80) for the injectable runner / bootstrap path.
 gh plate adopt --complete-session --json
 ```
 
