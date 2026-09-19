@@ -162,7 +162,7 @@ Reproduce the failure or document why reproduction is not yet possible. Add a re
 | Step | Required Behavior |
 |---|---|
 | 1 | Confirm the issue is labeled `Question` (or legacy `#question`) and clearly states the information goal and answer signal. |
-| 2 | Use batched review to process open questions (`/question-batch` slash command or `scripts/question_batch.sh`). |
+| 2 | **Present the question using host-native look-and-feel** (Copilot CLI native TUI, Grok Build `ask_user_question` arrow-key forms, or equivalent). Fall back to `gh plate qanda` CLI / plain text only when native UI is unavailable. Do not wait for the user to say "use native UI." |
 | 3 | Commit the answer artifact (for example `docs/research/<slug>.md`) and any resulting process updates. |
 | 4 | When the answer changes operating guidance, update `AGENTS.md` and `.agentic/skills.yml` in the same PR. |
 | 5 | Open a Documentation PR with `Closes #N` in the body. |
@@ -474,7 +474,7 @@ When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that i
 <!-- PLATES-CORE:BEGIN interactive-epic-planning -->
 ## Interactive Epic Planning
 
-When a user expresses intent to plan a new epic, offer a guided Q&A session that extracts requirements and creates the Epic issue and child stubs incrementally. This workflow applies in Copilot chat. MCP and CLI surfaces are reserved for Phase 2.
+When a user expresses intent to plan a new epic, offer a guided Q&A session that extracts requirements and creates the Epic issue and child stubs incrementally. **Present questions using host-native look-and-feel** (Copilot CLI native TUI, Grok Build `ask_user_question`, etc.) rather than free-form chat. This workflow applies in Copilot chat. MCP and CLI surfaces are reserved for Phase 2.
 
 ### Intent Detection
 

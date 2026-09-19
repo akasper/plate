@@ -1,0 +1,13 @@
+{
+  "slug": "988-host-native-prompts",
+  "title": "Always prefer host-native look-and-feel for agent-to-user interactive prompts",
+  "summary": "Universal principle: agents must prefer host-native UI (Copilot CLI TUI, Grok `ask_user_question`, etc.) over free-form chat for all interactive solicitation—Q&A, epic planning, blocking questions, what-next. Host matrix documented. Template AGENTS.md Question loop updated. Regression tests added.",
+  "issues": ["#988"],
+  "type": "feature",
+  "change_type": "feature",
+  "surface": "src/plate_core/agent_guidance.py, src/plate_core/template_payload/AGENTS.md, tests/test_host_native_interaction.py",
+  "migration_impact": "Additive guidance only. Agents should consistently use native TUI (ask_user_question, Copilot CLI forms) for interactive prompts without user reminder. Downstream AGENTS.md Question loops should be synced to remove chat-only language.",
+  "agent_notes": "Host-native interaction is now a universal principle (HOST_NATIVE_INTERACTION_PRINCIPLE in agent_guidance.py, first-class guidance section). Applies beyond Q&A to all agent→user interactive solicitation (epic planning, blocking questions, what-next, confirmations). Host matrix: Copilot CLI native TUI, Grok `ask_user_question`, fallback to gh plate qanda/CLI text. Template Question loop and interactive-epic-planning updated. Regression tests ensure guidance is present. Related: Design #144, bugs #509/#518/#512, Epic #656. Closes #988.",
+  "breaking": false,
+  "links": ["#988", "#656", "#144", "#509", "#518", "#512"]
+}
