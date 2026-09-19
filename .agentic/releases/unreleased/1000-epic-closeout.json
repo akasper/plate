@@ -1,0 +1,10 @@
+{
+  "slug": "1000-epic-closeout",
+  "change_type": "docs",
+  "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+  "summary": "First-slice closeout for Epic #1000 (Adopter time-to-value polish): Goals hybrid, import-payload next_command, install path 0.8.0 parity, first-qa/session next_command, merge Task, offline proof docs; children 7/7 closed.",
+  "migration_impact": "No runtime migration. Adopter-path agents should cite offline Phase A proof; do not claim #654 LIVE boxes without third-party E2E. Next Release #983 remains open.",
+  "agent_notes": "Epic #1000 marked status:implemented but remains OPEN per PLATE closeout convention. All success criteria met on release. LIVE under-30m proof is Phase B human-gated.",
+  "breaking": false,
+  "links": ["#1000", "#993", "#996", "#998", "#1001", "#1003", "#1005", "#1006", "#983", "#633", "#654"]
+}
