@@ -599,6 +599,38 @@ For **every new pull request**, add exactly one required PR type label (`Bug`, `
 
 For `Feature`, `Bug`, and issue-driven `Documentation` PRs, add the relevant milestone as well. Current rollout is warning-first: the PR issue-link workflow warns when the milestone is missing rather than failing immediately.
 
+## Script Policy and Platform Support
+
+**Default:** PLATE repositories use **POSIX shell (`.sh`) scripts only**. Do not create parallel PowerShell (`.ps1`) twins unless the project explicitly declares Windows support.
+
+**Platform support tiers:**
+
+1. **Default (no platform stated, or Unix-first / cross-platform without explicit Windows):** Ship **shell scripts only** (`.sh`). Do not require or invent parallel `.ps1` scripts.
+
+2. **Windows supported (developer explicitly states):** Keep shell scripts as primary **and also** provide PowerShell equivalents where operators need them (dual-stack). Both `.sh` and `.ps1` must implement the same behavior.
+
+3. **Windows-only (developer explicitly states):** PowerShell is sufficient; POSIX/shell scripts **may be eschewed**.
+
+**Determining platform support:** Platform support must come from **human-stated project intent** in one of these sources:
+- `SPEC.md` or project documentation
+- `.plate` configuration (future: `platforms` field)
+- Onboarding answers or bootstrap configuration
+- Explicit instruction during repository setup
+
+**Never infer platform support** from:
+- The developer's laptop operating system
+- The presence of Windows-specific dependencies
+- CI/CD platform choices
+
+**Agent responsibilities:**
+- When creating new scripts, check project platform support first
+- For default (POSIX-only) projects: create `.sh` only
+- For Windows-supported projects: create both `.sh` (primary) and `.ps1` (equivalent)
+- For Windows-only projects: create `.ps1` only
+- When modifying existing scripts, maintain consistency with the project's declared platform support
+
+**Script examples in this template:** The PLATE template payload includes both `.sh` and `.ps1` scripts for bootstrap, validation, and E2E recording operations. These dual scripts serve as reference implementations for projects that declare Windows support. Projects without explicit Windows support should use only the `.sh` versions and may safely omit the `.ps1` scripts.
+
 ## Upstream PLATE Template Synchronization
 
 <!-- PLATES-CORE:BEGIN upstream-template-sync -->

@@ -2,6 +2,14 @@
 
 This directory contains scripts for recording Playwright E2E test videos and converting them to optimized GIFs for documentation and wiki articles.
 
+## Platform Support
+
+**Script Policy:** By default, PLATE repositories ship **POSIX shell (`.sh`) scripts only**. PowerShell (`.ps1`) equivalents are provided when a project explicitly declares Windows support.
+
+This repository includes both `.sh` and `.ps1` versions of bootstrap, validation, and recording scripts to serve as reference implementations for Windows-supported projects. If your project does not require Windows support, you may use the `.sh` scripts exclusively and safely omit the `.ps1` files.
+
+For detailed policy guidance, see the "Script Policy and Platform Support" section in `AGENTS.md`.
+
 ## Quick Start
 
 ### macOS/Linux

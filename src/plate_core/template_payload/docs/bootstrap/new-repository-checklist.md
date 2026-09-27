@@ -4,16 +4,16 @@ Use this checklist immediately after creating a repository from the PLATE templa
 
 ## Fast Path
 
-From the generated repository root, choose the script for your operating system:
+From the generated repository root, run the bootstrap script:
 
-**macOS / Linux / WSL (bash):**
+**POSIX shell (macOS / Linux / WSL — default):**
 ```bash
 bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle @your-handle --remove-default-labels --protect-branch main
 # Add --init-wiki only if you plan to enable wiki sync.
 # Add --skip-delete-branch-on-merge only if this repository intentionally keeps merged branches.
 ```
 
-**Windows (PowerShell):**
+**PowerShell (Windows — for projects with explicit Windows support):**
 ```powershell
 .\scripts\BootstrapGitHub.ps1 -Repo OWNER/REPO -LocalRepo . -OwnerHandle @your-handle -RemoveDefaultLabels -ProtectBranch main
 # Add -InitWiki only if you plan to enable wiki sync.
@@ -21,6 +21,8 @@ bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle
 ```
 
 Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable GitHub bootstrap work that otherwise gets missed in brand-new repositories.
+
+**Platform note:** The template includes both `.sh` and `.ps1` versions. Projects without explicit Windows support may use the `.sh` scripts exclusively. See the "Script Policy and Platform Support" section in `AGENTS.md` for full policy guidance.
 
 `gh plate bootstrap --apply` covers the repository-scaffolding side of bootstrap: it copies the checked-in PLATE template payload into the repo so AGENTS, docs, workflows, scripts, and starter assets are present locally.
 

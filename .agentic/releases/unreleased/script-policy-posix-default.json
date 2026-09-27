@@ -1,0 +1,18 @@
+{
+  "slug": "script-policy-posix-default",
+  "change_type": "process",
+  "surface": "AGENTS.md, scripts/README.md, bootstrap docs",
+  "summary": "Establishes normative script policy: POSIX shell by default; PowerShell only when Windows support is explicit",
+  "migration_impact": "PLATE repositories now default to POSIX shell scripts only. PowerShell scripts are provided when a project explicitly declares Windows support. Template payload ships both as reference implementation since PLATE itself supports Windows operators.",
+  "migration_guidance": [
+    "1. Review your project's platform support stance: no explicit Windows requirement = POSIX-only, explicit Windows support = dual-stack (.sh + .ps1), Windows-only = .ps1 only.",
+    "2. If your project does not require Windows support, you may safely omit .ps1 scripts from new repositories created from this template.",
+    "3. When creating new scripts, agents must check project platform support first: default projects get .sh only, Windows-supported projects get both .sh (primary) and .ps1 (equivalent).",
+    "4. Platform support must come from human-stated project intent (SPEC.md, .plate config, onboarding answers, explicit instruction) — never inferred from developer OS or CI platform.",
+    "5. Existing dual-stack repositories (PLATE itself, template-derived repos with Windows support) may continue shipping both .sh and .ps1 without migration."
+  ],
+  "agent_notes": "When authoring or modifying scripts: (1) Check if the project explicitly declares Windows support via SPEC.md, .plate config, or bootstrap answers. (2) Default (no platform stated) = ship .sh only. (3) Windows-supported (explicit) = ship both .sh (primary) and .ps1 (equivalent behavior). (4) Windows-only (explicit) = .ps1 only. Never infer platform support from developer laptop OS, Windows dependencies, or CI choices. PLATE's own template payload ships dual scripts as reference implementation for Windows-supported projects.",
+  "breaking": false,
+  "links": ["#1017"],
+  "requires": []
+}
