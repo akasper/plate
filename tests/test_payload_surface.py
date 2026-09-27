@@ -57,6 +57,57 @@ class TestPayloadSurface(unittest.TestCase):
                 if "validate_plate_repo" in text:
                     self.assertIn("scripts/plate/validate_plate_repo", text)
 
+    def test_namespace_when_product_docs_exist(self):
+        """#1015: namespace PLATE docs under docs/plate/ when product docs present."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "docs").mkdir()
+            (Path(tmp) / "docs" / "prototype").mkdir()
+            (Path(tmp) / "docs" / "prototype" / "README.md").write_text(
+                "# Product Prototype Docs\n", encoding="utf-8"
+            )
+
+            dry = import_payload(tmp, strategy="safe", dry_run=True)
+            self.assertTrue(dry["namespace_docs"])
+            joined = " ".join(dry["would_create"])
+            # PLATE docs subdirs should be namespaced
+            self.assertIn("docs/plate/", joined)
+
+            applied = import_payload(tmp, strategy="safe", apply=True)
+            # PLATE scaffolding docs namespaced
+            self.assertTrue(
+                (Path(tmp) / "docs" / "plate" / "design").is_dir()
+                or (Path(tmp) / "docs" / "plate" / "wiki").is_dir()
+                or (Path(tmp) / "docs" / "plate" / "research").is_dir()
+            )
+            # product docs preserved
+            self.assertTrue(
+                (Path(tmp) / "docs" / "prototype" / "README.md").is_file()
+            )
+            # doc refs rewritten in AGENTS.md when present
+            agents_md = Path(tmp) / "AGENTS.md"
+            if agents_md.is_file():
+                text = agents_md.read_text(encoding="utf-8")
+                # Should have rewritten refs (if any existed)
+                if "docs/design/" in text or "docs/research/" in text:
+                    self.assertTrue(
+                        "docs/plate/design/" in text or "docs/plate/research/" in text
+                    )
+
+    def test_no_namespace_when_only_plate_docs_exist(self):
+        """Should not namespace when only PLATE scaffolding docs exist."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # Install first time (no product docs)
+            first = import_payload(tmp, strategy="safe", apply=True)
+            self.assertFalse(first["namespace_docs"])
+
+            # Install again (only PLATE docs present, namespaced or not)
+            second = import_payload(tmp, strategy="safe", dry_run=True)
+            self.assertFalse(second["namespace_docs"])
+
     def test_cli_payload_registered(self):
         from plate_core.cli import build_parser
 

@@ -1,0 +1,18 @@
+{
+  "slug": "namespace-docs-on-import",
+  "change_type": "feature",
+  "surface": "import_payload, payload_surface, template adoption",
+  "summary": "Install PLATE docs under docs/plate/ when target repo has product docs, preventing collision with adopter documentation trees.",
+  "migration_impact": "When importing PLATE into a repo that already has non-PLATE files under docs/, all PLATE documentation (design/, wiki/, research/, audits/, migration/, bootstrap/, marketing/, adr/, and root docs files) will install under docs/plate/ instead of the docs root. References in AGENTS.md, workflows, and payload markdown are rewritten automatically. Explicit --namespace-docs flag (or namespace_docs=True API parameter) available; default is auto-detect.",
+  "migration_guidance": [
+    "1. Existing PLATE repos with docs/ at root can continue as-is; no change required unless product docs are added.",
+    "2. New adopters with product docs/ will see PLATE scaffolding namespace automatically on import.",
+    "3. To force namespacing even without existing product docs, pass --namespace-docs to gh plate import-payload or namespace_docs=True to the API.",
+    "4. If manually migrating an existing install, move docs/{design,wiki,research,audits,migration,bootstrap,marketing,adr}/ to docs/plate/ and update any custom references.",
+    "5. Run gh plate health after import to verify all paths resolve correctly."
+  ],
+  "agent_notes": "When importing PLATE payload, use auto-detect (namespace_docs=None) unless user explicitly requests always-namespace or never-namespace. Treat docs/plate/ as the canonical location for PLATE scaffolding docs when namespacing is active. Update any agent prompts or skills that hard-code docs/ paths to check for both docs/ and docs/plate/ variants, or use should_namespace_docs() + namespace_docs_path() helpers from payload_surface.",
+  "breaking": false,
+  "links": ["#1015", "#621"],
+  "requires": []
+}

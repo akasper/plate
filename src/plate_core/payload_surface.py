@@ -38,6 +38,28 @@ PLATE_SCRIPT_BASENAMES: frozenset[str] = frozenset(
     }
 )
 
+# Plate-owned doc subdirectories under template payload docs/ (PLATE scaffolding)
+PLATE_DOCS_SUBDIRS: frozenset[str] = frozenset(
+    {
+        "adr",
+        "audits",
+        "bootstrap",
+        "design",
+        "marketing",
+        "migration",
+        "research",
+        "wiki",
+    }
+)
+
+# Plate-owned doc files at docs/ root (from template payload)
+PLATE_DOCS_ROOT_FILES: frozenset[str] = frozenset(
+    {
+        "README.md",
+        "playwright-e2e-guide.md",
+    }
+)
+
 
 def resolve_payload_root(template_repo: str | None = None) -> dict[str, Any]:
     """Resolve package/explicit payload root for agents."""
@@ -108,15 +130,21 @@ def classify_path(path: str, template_repo: str | None = None) -> dict[str, Any]
     rel = normalize_rel_path(path)
     m = load_template_payload_manifest()
     rule = match_path_rule(rel, m)
+    
+    # Suggest namespaced install paths when applicable
+    suggested = rel
+    if rel.startswith("scripts/"):
+        suggested = namespace_script_path(rel)
+    elif rel.startswith("docs/"):
+        suggested = namespace_docs_path(rel)
+    
     return {
         "ok": True,
         "path": rel,
         "included": should_include_template_file(rel, m),
         "classification": classify_template_file(rel, m),
         "path_rule": rule.to_dict() if rule else None,
-        "suggested_install_path": (
-            namespace_script_path(rel) if rel.startswith("scripts/") else rel
-        ),
+        "suggested_install_path": suggested,
         "is_plate_script": rel.startswith("scripts/")
         and Path(rel).name in PLATE_SCRIPT_BASENAMES,
     }
@@ -161,4 +189,62 @@ def rewrite_workflow_script_refs(text: str) -> str:
             continue
         out = out.replace(f"scripts/{name}", f"scripts/plate/{name}")
         out = out.replace(f"./scripts/{name}", f"./scripts/plate/{name}")
+    return out
+
+
+def namespace_docs_path(rel: str) -> str:
+    """Map docs/* → docs/plate/* when namespacing (#1015)."""
+    if rel.startswith("docs/plate/"):
+        return rel
+    if rel.startswith("docs/"):
+        return "docs/plate/" + rel[len("docs/") :]
+    return rel
+
+
+def should_namespace_docs(target: Path) -> bool:
+    """True when target already has product docs (not only PLATE scaffolding) (#1015)."""
+    docs = Path(target) / "docs"
+    if not docs.is_dir():
+        return False
+    for path in docs.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            rel_parts = path.relative_to(docs).parts
+        except ValueError:
+            continue
+        if not rel_parts:
+            continue
+        # Skip if under docs/plate/ (already namespaced PLATE docs)
+        if rel_parts[0] == "plate":
+            continue
+        # Skip if under a known PLATE scaffolding subdir at top level
+        if len(rel_parts) >= 1 and rel_parts[0] in PLATE_DOCS_SUBDIRS:
+            continue
+        # Skip if it's a known PLATE root doc file
+        if len(rel_parts) == 1 and rel_parts[0] in PLATE_DOCS_ROOT_FILES:
+            continue
+        # Any other path under docs/ is treated as product docs collision
+        return True
+    return False
+
+
+def rewrite_docs_refs(text: str) -> str:
+    """Rewrite docs/* → docs/plate/* in text files (#1015)."""
+    out = text
+    # Rewrite common patterns for docs/ paths
+    # Pattern 1: docs/subdir/ (most common)
+    for subdir in sorted(PLATE_DOCS_SUBDIRS, key=len, reverse=True):
+        out = out.replace(f"docs/{subdir}/", f"docs/plate/{subdir}/")
+        out = out.replace(f"`docs/{subdir}/", f"`docs/plate/{subdir}/")
+    # Pattern 2: docs/<filename> at root (less common but present)
+    # Be more careful here to avoid false positives - look for .md extension
+    out = out.replace("docs/README.md", "docs/plate/README.md")
+    out = out.replace("`docs/README.md", "`docs/plate/README.md")
+    # Pattern 3: Generic docs/ in paths (with trailing slash to avoid partial matches)
+    # Only replace when it looks like a path reference, not prose
+    import re
+    # Replace `docs/` (backtick-wrapped) with `docs/plate/`
+    out = re.sub(r'`docs/([a-zA-Z0-9_\-]+\.md)', r'`docs/plate/\1', out)
+    return out
     return out

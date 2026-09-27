@@ -98,6 +98,7 @@ class ImportPayloadReport:
     overwritten: list[str] = field(default_factory=list)
     next_steps: list[str] = field(default_factory=list)
     namespace_scripts: bool = False
+    namespace_docs: bool = False
     ok: bool = True
     error: str | None = None
 
@@ -111,6 +112,7 @@ class ImportPayloadReport:
             "template_source": self.template_source,
             "template_root": self.template_root,
             "namespace_scripts": self.namespace_scripts,
+            "namespace_docs": self.namespace_docs,
             "counts": {
                 "payload_files": len(self.files),
                 "would_create": len(self.would_create),
@@ -153,6 +155,32 @@ def _file_sha256(path: Path) -> str:
     h = hashlib.sha256()
     h.update(path.read_bytes())
     return h.hexdigest()
+
+
+def _should_rewrite_docs_refs(rel: str) -> bool:
+    """True when file should have docs/ refs rewritten during namespace (#1015)."""
+    # AGENTS.md at root references docs/ paths extensively
+    if rel == "AGENTS.md":
+        return True
+    # Workflows may reference docs/ paths
+    if rel.startswith(".github/workflows/"):
+        return True
+    # Issue templates may reference docs/
+    if rel.startswith(".github/ISSUE_TEMPLATE/"):
+        return True
+    # SPEC.md and other root markdown
+    if rel in ("SPEC.md", "CONTRIBUTING.md", "README.md", "CURRENT.md"):
+        return True
+    # Markdown files under .agentic/ that might reference docs/
+    if rel.startswith(".agentic/") and rel.endswith((".md", ".yml", ".yaml")):
+        return True
+    # Agent files and copilot instructions
+    if rel.startswith(".github/agents/") or rel == ".github/copilot-instructions.md":
+        return True
+    # Markdown files in scripts/ (like README.md) 
+    if rel.startswith("scripts/") and rel.endswith(".md"):
+        return True
+    return False
 
 
 def _decide_file(
@@ -227,16 +255,24 @@ def plan_import_payload(
     template_repo: str | None = None,
     apply: bool = False,
     namespace_scripts: bool | None = None,
+    namespace_docs: bool | None = None,
 ) -> ImportPayloadReport:
     """Plan (and optionally apply) template payload import into a local target dir.
 
     ``namespace_scripts``: when True, install PLATE scripts under ``scripts/plate/``
     and rewrite workflow script refs (#621). None = auto-detect if target has a
     non-empty product ``scripts/`` tree.
+    
+    ``namespace_docs``: when True, install PLATE docs under ``docs/plate/``
+    and rewrite doc refs (#1015). None = auto-detect if target has a
+    non-empty product ``docs/`` tree.
     """
     from .payload_surface import (
+        namespace_docs_path,
         namespace_script_path,
+        rewrite_docs_refs,
         rewrite_workflow_script_refs,
+        should_namespace_docs,
         should_namespace_scripts,
     )
 
@@ -285,6 +321,12 @@ def plan_import_payload(
         if namespace_scripts is not None
         else should_namespace_scripts(target)
     )
+    
+    nd = (
+        bool(namespace_docs)
+        if namespace_docs is not None
+        else should_namespace_docs(target)
+    )
 
     manifest = load_template_payload_manifest()
     rel_paths = list_payload_relative_paths(template_root)
@@ -295,12 +337,18 @@ def plan_import_payload(
         template_source=source_kind,
         template_root=str(template_root),
         namespace_scripts=ns,
+        namespace_docs=nd,
     )
 
     for rel in rel_paths:
         source = template_root / rel
-        # Prefer namespaced install path for plate scripts when adopting (#621)
-        preferred_rel = namespace_script_path(rel) if ns and rel.startswith("scripts/") else rel
+        # Prefer namespaced install path for plate scripts/docs when adopting (#621, #1015)
+        preferred_rel = rel
+        if ns and rel.startswith("scripts/"):
+            preferred_rel = namespace_script_path(rel)
+        elif nd and rel.startswith("docs/"):
+            preferred_rel = namespace_docs_path(rel)
+        
         dest = target / preferred_rel
         classification = classify_template_file(rel, manifest)
         decision = _decide_file(
@@ -311,22 +359,18 @@ def plan_import_payload(
             classification=classification,
             manifest=manifest,
         )
-        # Override target_path for namespaced scripts (path_rules install_as wins if set)
-        if ns and rel.startswith("scripts/") and decision.action in (
-            "create",
-            "create_as",
-            "overwrite",
-            "skip",
-            "conflict",
-        ):
-            if decision.action != "create_as" or not decision.target_path:
-                decision.target_path = preferred_rel
-            if preferred_rel != rel and decision.action == "create":
-                decision.detail = (
-                    f"{decision.detail}; namespaced to {preferred_rel} (#621)"
-                    if decision.detail
-                    else f"namespaced to {preferred_rel} (#621)"
-                )
+        # Override target_path for namespaced scripts/docs (path_rules install_as wins if set)
+        if (ns and rel.startswith("scripts/")) or (nd and rel.startswith("docs/")):
+            if decision.action in ("create", "create_as", "overwrite", "skip", "conflict"):
+                if decision.action != "create_as" or not decision.target_path:
+                    decision.target_path = preferred_rel
+                if preferred_rel != rel and decision.action == "create":
+                    issue_ref = "#621" if rel.startswith("scripts/") else "#1015"
+                    decision.detail = (
+                        f"{decision.detail}; namespaced to {preferred_rel} ({issue_ref})"
+                        if decision.detail
+                        else f"namespaced to {preferred_rel} ({issue_ref})"
+                    )
         report.files.append(decision)
         write_rel = decision.target_path or preferred_rel
         write_dest = target / write_rel
@@ -337,13 +381,14 @@ def plan_import_payload(
                 report.would_conflict.append(label)
                 if apply:
                     report.conflicts.append(label)
-                decision.action = "conflict"
+                    decision.action = "conflict"
                 decision.detail = f"{decision.detail}; install_as path also exists"
             else:
                 report.would_create.append(label)
                 if apply:
                     write_dest.parent.mkdir(parents=True, exist_ok=True)
                     data = source.read_bytes()
+                    # Rewrite script refs in workflows when namespacing scripts
                     if ns and (
                         rel.startswith(".github/workflows/")
                         or write_rel.startswith(".github/workflows/")
@@ -351,6 +396,13 @@ def plan_import_payload(
                         try:
                             text = data.decode("utf-8")
                             data = rewrite_workflow_script_refs(text).encode("utf-8")
+                        except UnicodeDecodeError:
+                            pass
+                    # Rewrite doc refs in text files when namespacing docs
+                    if nd and _should_rewrite_docs_refs(rel):
+                        try:
+                            text = data.decode("utf-8")
+                            data = rewrite_docs_refs(text).encode("utf-8")
                         except UnicodeDecodeError:
                             pass
                     write_dest.write_bytes(data)
@@ -361,6 +413,7 @@ def plan_import_payload(
             if apply:
                 write_dest.parent.mkdir(parents=True, exist_ok=True)
                 data = source.read_bytes()
+                # Rewrite script refs in workflows when namespacing scripts
                 if ns and (
                     rel.startswith(".github/workflows/")
                     or write_rel.startswith(".github/workflows/")
@@ -368,6 +421,13 @@ def plan_import_payload(
                     try:
                         text = data.decode("utf-8")
                         data = rewrite_workflow_script_refs(text).encode("utf-8")
+                    except UnicodeDecodeError:
+                        pass
+                # Rewrite doc refs in text files when namespacing docs
+                if nd and _should_rewrite_docs_refs(rel):
+                    try:
+                        text = data.decode("utf-8")
+                        data = rewrite_docs_refs(text).encode("utf-8")
                     except UnicodeDecodeError:
                         pass
                 write_dest.write_bytes(data)
@@ -390,6 +450,11 @@ def plan_import_payload(
         report.next_steps.insert(
             0,
             "PLATE scripts install under scripts/plate/; workflows rewritten to match (#621).",
+        )
+    if nd:
+        report.next_steps.insert(
+            0,
+            "PLATE docs install under docs/plate/; references rewritten to match (#1015).",
         )
     return report
 
@@ -463,6 +528,7 @@ def copy_template_payload_local(
     strategy: str = "safe",
     dry_run: bool = True,
     namespace_scripts: bool | None = None,
+    namespace_docs: bool | None = None,
 ) -> dict[str, Any]:
     """#620 local FS applier — same report as import_payload / plan_import_payload.
 
@@ -477,6 +543,7 @@ def copy_template_payload_local(
         dry_run=dry_run,
         apply=not dry_run,
         namespace_scripts=namespace_scripts,
+        namespace_docs=namespace_docs,
     )
 
 
@@ -694,6 +761,7 @@ def import_payload(
     dry_run: bool = True,
     apply: bool = False,
     namespace_scripts: bool | None = None,
+    namespace_docs: bool | None = None,
     escape_hatch_dir: str | Path | None = None,
     escape_hatch_on_conflict: bool = False,
 ) -> dict[str, Any]:
@@ -710,6 +778,7 @@ def import_payload(
         template_repo=template_repo,
         apply=do_apply,
         namespace_scripts=namespace_scripts,
+        namespace_docs=namespace_docs,
     )
     data = report.to_dict()
     hatch_dir: Path | None = None
