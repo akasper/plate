@@ -802,6 +802,18 @@ class ValidatorPlatformTests(unittest.TestCase):
             result = self._run(root)
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("invalid JSON", result.stderr)
+        for raw_platform in ("posix\n", "posix\r"):
+            with self.subTest(raw_platform=repr(raw_platform)):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    _validator_fixture(root, platform=None, gifs=["gif-from-video.sh"])
+                    _write(
+                        root / ".plate",
+                        json.dumps({"version": "1.3", "platform": raw_platform}),
+                    )
+                    result = self._run(root)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn("invalid platform", result.stderr)
 
     def _run_with_env(self, root: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -848,6 +860,8 @@ class ValidatorPlatformTests(unittest.TestCase):
                 ('{"platform": ["posix"]}', 1, "invalid platform"),
                 ('{"platform": " "}', 1, "invalid platform"),
                 ('{"platform": ""}', 1, "invalid platform"),
+                (json.dumps({"platform": "posix\n"}), 1, "invalid platform"),
+                (json.dumps({"platform": "posix\r"}), 1, "invalid platform"),
                 ('{"platform": null}', 0, "gif-from-video.sh"),
                 ('{"version": "1.3"}', 0, "gif-from-video.sh"),
                 ('{"platform": "windows"}', 0, "platform: windows"),
@@ -925,10 +939,12 @@ class PowerShellValidatorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _validator_fixture(root, platform=None, gifs=["gif-from-video.sh"])
-            _write(root / ".plate", json.dumps({"version": "1.3", "platform": ["posix"]}))
-            result = self._run(root)
-            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-            self.assertIn("invalid platform", result.stdout + result.stderr)
+            for platform in (["posix"], "posix\n", "posix\r"):
+                with self.subTest(platform=platform):
+                    _write(root / ".plate", json.dumps({"version": "1.3", "platform": platform}))
+                    result = self._run(root)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn("invalid platform", result.stdout + result.stderr)
 
     def test_empty_platform_fails_and_null_means_posix(self):
         with tempfile.TemporaryDirectory() as tmp:

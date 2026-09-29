@@ -40,22 +40,42 @@ if value not in allowed:
         file=sys.stderr,
     )
     sys.exit(2)
-print(value)
+# JSON encoding keeps a newline or CR inside the value intact. Command
+# substitution would otherwise delete a trailing newline and look like posix.
+print(json.dumps(value))
 PY
 )"; then
             exit 1
         fi
-        plate_platform="${plate_platform//$'\r'/}"
+        # Drop one trailing CR added by a CRLF print. Do not strip CR inside the token.
+        plate_platform="${plate_platform%$'\r'}"
+        case "$plate_platform" in
+            '"posix"') plate_platform="posix" ;;
+            '"posix-and-windows"') plate_platform="posix-and-windows" ;;
+            '"windows"') plate_platform="windows" ;;
+            *)
+                echo "invalid platform: $plate_platform" >&2
+                exit 1
+                ;;
+        esac
     elif command -v jq >/dev/null 2>&1; then
         # Real parser. A missing platform key or JSON null still means posix.
         # An empty string is invalid. Trailing commas are rejected.
+        # @json keeps newline and CR characters escaped so they cannot be
+        # stripped into a valid platform name.
         if ! parsed="$(jq -r '
             if type != "object" then
                 "error:object"
             elif (has("platform") | not) or (.platform | type) == "null" then
-                "posix"
+                "posix" | @json
             elif (.platform | type) == "string" then
-                if .platform == "" then "error:empty" else .platform end
+                if .platform == "posix" or .platform == "posix-and-windows" or .platform == "windows" then
+                    .platform | @json
+                elif .platform == "" then
+                    "error:empty"
+                else
+                    "error:value"
+                end
             else
                 "error:type"
             end
@@ -63,10 +83,11 @@ PY
             echo "invalid JSON in .plate: malformed object" >&2
             exit 1
         fi
-        parsed="${parsed//$'\r'/}"
+        parsed="${parsed%$'\r'}"
         case "$parsed" in
-            posix) plate_platform="posix" ;;
-            posix-and-windows|windows) plate_platform="$parsed" ;;
+            '"posix"') plate_platform="posix" ;;
+            '"posix-and-windows"') plate_platform="posix-and-windows" ;;
+            '"windows"') plate_platform="windows" ;;
             error:object)
                 echo ".plate must contain a top-level object" >&2
                 exit 1
@@ -75,8 +96,8 @@ PY
                 echo "invalid platform: .plate platform must be a string (allowed: posix, posix-and-windows, windows)" >&2
                 exit 1
                 ;;
-            error:empty)
-                echo "invalid platform: '' (allowed: posix, posix-and-windows, windows)" >&2
+            error:empty|error:value)
+                echo "invalid platform: value is not posix, posix-and-windows, or windows" >&2
                 exit 1
                 ;;
             *)
