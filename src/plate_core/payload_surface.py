@@ -6,6 +6,7 @@ MCP: ``plate_payload_*``
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -125,8 +126,11 @@ def _rewrite_windows_doc_script_refs(text: str, *, namespaced: bool) -> str:
     ``bash scripts/bootstrap_github.sh`` keeps its arguments and changes the
     wrapper to ``pwsh -File``. A namespaced copy uses ``scripts/plate/``.
     Shell long options on those command lines become the PowerShell parameter
-    names. Prose that only mentions a flag is left unchanged.
+    names. A ``chmod +x script.sh &&`` prefix is dropped so the Windows
+    command does not call Unix chmod. Prose that only mentions a flag is
+    left unchanged.
     """
+    text = re.sub(r"chmod \+x \S+\.sh &&\s*", "", text)
     dest_prefix = "scripts/plate/" if namespaced else "scripts/"
     pairs: list[tuple[str, str]] = []
     for sh_name, ps_name in _WINDOWS_DOC_SCRIPTS:

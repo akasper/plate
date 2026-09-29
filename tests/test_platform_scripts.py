@@ -263,6 +263,19 @@ class PlatformFilterTests(unittest.TestCase):
         )
         self.assertNotIn("bash scripts/check_toolchain.sh", copilot_windows)
         self.assertIn("pwsh -File scripts/CheckToolchain.ps1 .", copilot_windows)
+        chmod_line = '"record:headed": "chmod +x scripts/e2e-record.sh && ./scripts/e2e-record.sh --headed"\n'
+        chmod_windows = _lf(
+            prepare_copied_text("scripts/README.md", chmod_line, "windows", namespaced=False)
+        )
+        self.assertNotIn("chmod", chmod_windows)
+        self.assertIn("pwsh -File ./scripts/e2e-record.ps1 -Headed", chmod_windows)
+        script_readme = _lf((payload_root() / "scripts/README.md").read_text(encoding="utf-8"))
+        script_readme_windows = _lf(
+            prepare_copied_text("scripts/README.md", script_readme, "windows", namespaced=True)
+        )
+        self.assertNotIn("chmod +x", script_readme_windows)
+        self.assertNotIn("e2e-record.sh", script_readme_windows)
+        self.assertIn("pwsh -File ./scripts/plate/e2e-record.ps1", script_readme_windows)
         for rel in ("README.md", "docs/README.md", "docs/playwright-e2e-guide.md"):
             source = _lf((payload_root() / rel).read_text(encoding="utf-8"))
             copied = _lf(prepare_copied_text(rel, source, "windows", namespaced=False))
