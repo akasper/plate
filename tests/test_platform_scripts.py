@@ -685,12 +685,18 @@ class ValidatorPlatformTests(unittest.TestCase):
 
     def test_jq_fallback_parses_and_rejects_malformed(self):
         jq = shutil.which("jq")
-        grep = shutil.which("grep")
-        if jq is None or grep is None:
-            self.skipTest("jq and grep are required for the parser fallback")
+        # The success cases run the rest of the validator, which calls find and wc.
+        needed = {
+            "jq": jq,
+            "grep": shutil.which("grep"),
+            "find": shutil.which("find"),
+            "wc": shutil.which("wc"),
+        }
+        if any(path is None for path in needed.values()):
+            self.skipTest("jq, grep, find, and wc are required for the parser fallback")
         env = os.environ.copy()
         with tempfile.TemporaryDirectory() as bin_dir:
-            for tool in (jq, grep):
+            for tool in needed.values():
                 src = Path(tool)
                 shutil.copy2(src, Path(bin_dir) / src.name)
             env["PATH"] = bin_dir
