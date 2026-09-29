@@ -24,6 +24,16 @@ def _make_template_root() -> tempfile.TemporaryDirectory:
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_namespaced_goals_is_not_docs_without_goals(self):
+        """Proves: docs/plate/wiki/Goals.md suppresses local:docs_without_Goals (#1022)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            goals = root / "docs" / "plate" / "wiki"
+            goals.mkdir(parents=True)
+            (goals / "Goals.md").write_text("# Goals\n", encoding="utf-8")
+            _adopt, signals = detect_adoption_mode(local_root=root)
+        self.assertNotIn("local:docs_without_Goals", signals)
+
     @patch("plate_core.bootstrap.get_health")
     def test_dry_run_reports_planned_actions(self, mock_get_health):
         mock_get_health.return_value = HealthReport(

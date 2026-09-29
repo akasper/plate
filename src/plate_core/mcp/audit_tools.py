@@ -33,15 +33,22 @@ def _resolve_target_repo(repo: str | None) -> str:
     return resolve_repo(repo)
 
 
-def _fetch_goals_content(gh: GhClient, target: str) -> str:
-    """Best-effort fetch of docs/wiki/Goals.md (the convention home)."""
-    try:
-        resp = gh.api(f"repos/{target}/contents/docs/wiki/Goals.md")
-        if isinstance(resp, dict) and resp.get("content"):
-            return base64.b64decode(resp["content"]).decode("utf-8", errors="ignore")
-    except (GhApiError, Exception):
-        pass
-    return ""
+def _fetch_goals_content(gh: GhClient, target: str) -> tuple[str, str]:
+    """Best-effort fetch of the Goals page and the path that served it.
+
+    Tries ``docs/wiki/Goals.md``, then ``docs/plate/wiki/Goals.md`` (#1022).
+    """
+    from ..payload_surface import GOALS_WIKI_CONTENTS_RELS
+
+    for rel in GOALS_WIKI_CONTENTS_RELS:
+        try:
+            resp = gh.api(f"repos/{target}/contents/{rel}")
+            if isinstance(resp, dict) and resp.get("content"):
+                text = base64.b64decode(resp["content"]).decode("utf-8", errors="ignore")
+                return text, rel
+        except (GhApiError, Exception):
+            continue
+    return "", ""
 
 
 class PerformInformationAuditTool:
@@ -80,7 +87,7 @@ class PerformInformationAuditTool:
         gh = _get_gh_client(client)
         target = _resolve_target_repo(repo)
 
-        goals = _fetch_goals_content(gh, target)
+        goals, goals_rel = _fetch_goals_content(gh, target)
 
         proposed = []
 
@@ -129,7 +136,7 @@ class PerformInformationAuditTool:
                         "After Mission, derive Core Principles and How We Intend to Succeed (see convention doc)."
                     ),
                     "related_goals": ["Mission"],
-                    "provenance": "docs/wiki/Goals.md (present but Mission incomplete)",
+                    "provenance": f"{goals_rel} (present but Mission incomplete)",
                     "priority_rationale": "Blocks effective use of the Goals page by the audit engine and agents.",
                     "refinement_note": "",
                 })

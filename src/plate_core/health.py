@@ -13,6 +13,25 @@ from .github_client import GhApiError, GhClient
 REQUIRED_LABELS = ["Bug", "Feature", "Epic", "Documentation", "Research", "Design", "Question", "Task"]
 
 
+def _remote_goals_page_present(gh: GhClient, target: str) -> bool:
+    """True when Goals.md exists at the flat or namespaced wiki path (#1022).
+
+    The flat path is requested first. A missing flat page (``GhApiError``)
+    falls through to ``docs/plate/wiki/Goals.md``.
+    """
+    from .payload_surface import GOALS_WIKI_CONTENTS_RELS
+
+    for rel in GOALS_WIKI_CONTENTS_RELS:
+        try:
+            gh.api(f"repos/{target}/contents/{rel}")
+            return True
+        except GhApiError:
+            continue
+        except Exception:
+            return False
+    return False
+
+
 @dataclass
 class HealthReport:
     repo: str
@@ -225,13 +244,10 @@ def get_health(
         open_epics = 0
         errors.append(f"open_epics: {e}")
 
-    # Goals page (from #229 bootstrap / #262 health expansion)
-    goals_page_present = False
-    try:
-        gh.api(f"repos/{target}/contents/docs/wiki/Goals.md")
-        goals_page_present = True
-    except GhApiError:
-        goals_page_present = False
+    # Goals page (from #229 bootstrap / #262 health expansion).
+    # Overwritten again below after the curiosity probe; both sites share
+    # the flat-then-namespaced lookup (#1022).
+    goals_page_present = _remote_goals_page_present(gh, target)
 
     # Open Questions count (for #262, curiosity health)
     try:
@@ -331,15 +347,9 @@ def get_health(
         binary_artifacts_tracked = -1  # unknown in this environment
         errors.append(f"binary_artifacts: {e}")
 
-    # Goals page convention discovery / nudge (Epic #218 / #229): agents + health surfaces can reliably detect adoption of docs/wiki/Goals.md
-    goals_page_present = False
-    try:
-        gh.api(f"repos/{target}/contents/docs/wiki/Goals.md")
-        goals_page_present = True
-    except GhApiError:
-        pass
-    except Exception:
-        pass  # defensive; presence is best-effort
+    # Goals page convention discovery / nudge (Epic #218 / #229).
+    # Accept docs/wiki/Goals.md and docs/plate/wiki/Goals.md (#1022).
+    goals_page_present = _remote_goals_page_present(gh, target)
 
     label_ok = len(missing) == 0
     hygiene_ok = binary_artifacts_tracked == 0
