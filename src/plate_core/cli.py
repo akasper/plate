@@ -439,8 +439,9 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
             apply_mode=args.apply,
             adopt=adopt,
             local_root=getattr(args, "local_root", None),
+            platform=getattr(args, "platform", None),
         )
-    except (RuntimeError, GhApiError) as exc:
+    except (RuntimeError, GhApiError, PlateConfigError) as exc:
         if args.json:
             print(json.dumps({"error": str(exc)}))
         else:
@@ -452,6 +453,7 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
 
     print(f"Repo: {report.repo}")
     print(f"Mode: {'APPLY' if report.apply_mode else 'DRY-RUN'}")
+    print(f"Platform: {report.platform}")
     print(f"Adoption mode: {report.adoption_mode}")
     print(f"Template source: {report.template_source}")
     for action in report.actions:
@@ -3755,6 +3757,7 @@ def cmd_import_payload(args: argparse.Namespace) -> int:
         namespace_docs=nd,
         escape_hatch_dir=getattr(args, "escape_hatch", None),
         escape_hatch_on_conflict=bool(getattr(args, "escape_hatch_on_conflict", False)),
+        platform=getattr(args, "platform", None),
     )
     if getattr(args, "json", False):
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -3979,6 +3982,14 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument(
         "--local-root",
         help="Local checkout path for adoption heuristics (default: cwd)",
+    )
+    bootstrap.add_argument(
+        "--platform",
+        choices=["posix", "posix-and-windows", "windows"],
+        help=(
+            "Script platform for this run. Overrides remote .plate and is written on --apply. "
+            "Default: remote .plate platform, or posix when absent."
+        ),
     )
     bootstrap.add_argument("--json", action="store_true", help="Output JSON")
     bootstrap.set_defaults(func=cmd_bootstrap)
@@ -5134,6 +5145,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--escape-hatch-on-conflict",
         action="store_true",
         help="If conflicts exist, write escape-hatch bundle under target/.agentic/import-escape-hatch (#622)",
+    )
+    import_payload_p.add_argument(
+        "--platform",
+        choices=["posix", "posix-and-windows", "windows"],
+        help=(
+            "Script platform for this run. Overrides target .plate and is written on --apply. "
+            "Default: target .plate platform, or posix when absent."
+        ),
     )
     import_payload_p.add_argument("--json", action="store_true", help="Output JSON report")
     import_payload_p.set_defaults(func=cmd_import_payload)
