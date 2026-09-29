@@ -1,0 +1,16 @@
+{
+  "slug": "namespaced-goals-adoption-check",
+  "change_type": "fix",
+  "surface": "self-migrate, adoption, health, information audit",
+  "summary": "Treat docs/plate/wiki/Goals.md as the Goals page when PLATE docs are namespaced.",
+  "migration_impact": "No adopter file move. Repositories that already keep Goals at docs/plate/wiki/Goals.md pass gh plate self-migrate --verify after upgrading plate-core. Flat checkouts that still use docs/wiki/Goals.md are unchanged.",
+  "migration_guidance": [
+    "1. Upgrade plate-core to the release that includes this fix.",
+    "2. Re-run gh plate self-migrate --verify in the adopter checkout.",
+    "3. Leave docs/plate/wiki/Goals.md in place. Do not copy it back to docs/wiki/Goals.md."
+  ],
+  "agent_notes": "Adoption core_ready, self-migrate refresh paths, health goals_page_present, and the information audit Goals fetch accept docs/wiki/Goals.md and docs/plate/wiki/Goals.md. When docs/plate/ exists and neither file is present, the missing path reported to the operator is docs/plate/wiki/Goals.md.",
+  "breaking": false,
+  "links": ["#1022", "#1015"],
+  "requires": []
+}

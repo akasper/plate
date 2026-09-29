@@ -29,6 +29,8 @@ _VERSION_RE = re.compile(
 _PLAIN_VERSION_RE = re.compile(r"^v?(\d+\.\d+\.\d+)\s*$")
 
 # High-signal paths that self-migrate usually refreshes via import-payload / markers.
+# Goals stays listed at the flat path; _refresh_paths() retargets it when the
+# checkout uses docs/plate/wiki/Goals.md (#1022).
 _REFRESH_PATHS = (
     "AGENTS.md",
     ".plate",
@@ -38,6 +40,20 @@ _REFRESH_PATHS = (
     "docs/wiki/Goals.md",
     "SPEC.md",
 )
+
+
+def _refresh_paths(repo_root: Path) -> list[str]:
+    """Refresh paths for this checkout, with the Goals page layout resolved."""
+    from .payload_surface import GOALS_WIKI_FLAT_REL, resolve_local_goals_wiki
+
+    paths: list[str] = []
+    for rel in _REFRESH_PATHS:
+        if rel == GOALS_WIKI_FLAT_REL:
+            _path, resolved, _present = resolve_local_goals_wiki(repo_root)
+            paths.append(resolved)
+        else:
+            paths.append(rel)
+    return paths
 
 
 def _parse_semver(text: str | None) -> str | None:
@@ -316,7 +332,7 @@ def plan_self_migrate(
 
     present_refresh: list[dict[str, Any]] = []
     missing_refresh: list[str] = []
-    for rel in _REFRESH_PATHS:
+    for rel in _refresh_paths(root):
         p = root / rel
         if p.exists():
             has_marker = False
@@ -479,7 +495,7 @@ def plan_self_migrate(
 def _default_marker_paths(repo_root: Path) -> list[str]:
     """Prefer high-signal files that actually exist and contain markers."""
     out: list[str] = []
-    for rel in _REFRESH_PATHS:
+    for rel in _refresh_paths(repo_root):
         p = repo_root / rel
         if not p.is_file():
             continue
