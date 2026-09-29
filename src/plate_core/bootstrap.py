@@ -193,18 +193,20 @@ def resolve_bootstrap_platform(
 ) -> str:
     """Explicit argument wins, then a readable remote ``.plate``, then ``posix``.
 
-    A missing file, missing key, JSON null, or unreadable body falls back to
-    ``posix``. An empty string, JSON that does not parse, a non-object
-    document, and a platform outside the enum fail closed.
+    Any explicit value, including ``""`` and whitespace, is validated before
+    the remote file is read. A missing file, missing key, JSON null, or
+    unreadable body falls back to ``posix`` only when no explicit value was
+    passed. JSON that does not parse, a non-object document, and a platform
+    outside the enum fail closed.
     """
-    if explicit is not None and str(explicit).strip() != "":
+    if explicit is not None:
         if not isinstance(explicit, str):
             allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
             raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
         value = explicit.strip()
         if value not in ALLOWED_PLATFORMS:
             allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
-            raise PlateConfigError(f"invalid platform: {value!r} (allowed: {allowed})")
+            raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
         return value
     if not plate_config_present:
         return PLATFORM_POSIX

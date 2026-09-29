@@ -85,6 +85,10 @@ class PlateConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PlateConfig":
+        # JSON null is the same as a missing key. "" stays "" so validation rejects it.
+        stored_platform = data.get("platform", PLATFORM_POSIX)
+        if stored_platform is None:
+            stored_platform = PLATFORM_POSIX
         return cls(
             version=data.get("version", CURRENT_CONFIG_VERSION),
             methodology=data.get("methodology", {}),
@@ -92,7 +96,7 @@ class PlateConfig:
             overrides=data.get("overrides", {}),
             release=data.get("release", {}),
             autonomy=data.get("autonomy", {}),
-            platform=data.get("platform", PLATFORM_POSIX),
+            platform=stored_platform,
         )
 
 

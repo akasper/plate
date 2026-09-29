@@ -23,8 +23,10 @@ from plate_core.payload_surface import (
 )
 from plate_core.plate_config import (
     CURRENT_CONFIG_VERSION,
+    PlateConfig,
     PlateConfigError,
     _migrate_1_2_to_1_3,
+    load_plate_config,
     upgrade_plate_config_dict,
     validate_plate_config,
 )
@@ -328,6 +330,29 @@ class ImportPlatformTests(unittest.TestCase):
             null = import_payload(target, dry_run=True)
             self.assertTrue(null["ok"], null.get("error"))
             self.assertEqual(null["platform"], "posix")
+            for explicit in ("", " ", "\t"):
+                overridden = import_payload(target, dry_run=True, platform=explicit)
+                self.assertFalse(overridden["ok"], explicit)
+                self.assertIn("invalid platform", overridden["error"])
+
+    def test_null_platform_loads_as_posix_and_empty_stays_invalid(self):
+        self.assertEqual(PlateConfig.from_dict({"version": "1.3", "platform": None}).platform, "posix")
+        self.assertEqual(PlateConfig.from_dict({"version": "1.3"}).platform, "posix")
+        self.assertEqual(PlateConfig.from_dict({"version": "1.3", "platform": ""}).platform, "")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(
+                json.dumps({"version": "1.3", "platform": None}),
+                encoding="utf-8",
+            )
+            loaded = load_plate_config(root)
+            self.assertEqual(loaded.platform, "posix")
+            (root / ".plate").write_text(
+                json.dumps({"version": "1.3", "platform": ""}),
+                encoding="utf-8",
+            )
+            with self.assertRaises(PlateConfigError):
+                load_plate_config(root)
 
     def test_migration_leaves_empty_platform_for_the_schema(self):
         with self.assertRaises(PlateConfigError):
@@ -600,6 +625,16 @@ class BootstrapPlatformTests(unittest.TestCase):
         }
         self.assertEqual(
             resolve_bootstrap_platform(None, "akasper/plat", client, plate_config_present=True),
+            "posix",
+        )
+        client.api.reset_mock()
+        for explicit in ("", " ", "\t"):
+            with self.assertRaises(PlateConfigError) as caught:
+                resolve_bootstrap_platform(explicit, "akasper/plat", client, plate_config_present=True)
+            self.assertIn("invalid platform", str(caught.exception))
+        client.api.assert_not_called()
+        self.assertEqual(
+            resolve_bootstrap_platform(" posix ", "akasper/plat", client, plate_config_present=True),
             "posix",
         )
 

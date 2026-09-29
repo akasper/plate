@@ -336,9 +336,10 @@ def _next_steps(report: ImportPayloadReport) -> list[str]:
 def resolve_import_platform(explicit: str | None, target: Path) -> str:
     """CLI flag wins, then the target ``.plate`` value, then ``posix``.
 
-    Does not look at the operator machine. A missing key or JSON null means
-    ``posix``. An empty string and any other value outside the enum raise
-    ``PlateConfigError``.
+    Does not look at the operator machine. Any explicit value, including
+    ``""`` and whitespace, is validated before the target file is read. A
+    missing key or JSON null means ``posix``. An empty stored string and any
+    other value outside the enum raise ``PlateConfigError``.
     """
     from .plate_config import ALLOWED_PLATFORMS, PLATFORM_POSIX, PlateConfigError
 
@@ -347,11 +348,10 @@ def resolve_import_platform(explicit: str | None, target: Path) -> str:
             allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
             raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
         value = explicit.strip()
-        if value:
-            if value not in ALLOWED_PLATFORMS:
-                allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
-                raise PlateConfigError(f"invalid platform: {value!r} (allowed: {allowed})")
-            return value
+        if value not in ALLOWED_PLATFORMS:
+            allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+            raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
+        return value
 
     plate_path = target / ".plate"
     if not plate_path.is_file():
