@@ -177,8 +177,12 @@ def _should_rewrite_docs_refs(rel: str) -> bool:
     # Agent files and copilot instructions
     if rel.startswith(".github/agents/") or rel == ".github/copilot-instructions.md":
         return True
-    # Markdown files in scripts/ (like README.md) 
+    # Markdown files in scripts/ (like README.md)
     if rel.startswith("scripts/") and rel.endswith(".md"):
+        return True
+    # Payload docs are installed under docs/plate/ and must rewrite their own
+    # docs/wiki, docs/research, and sibling links (#1015 / #1016).
+    if rel.startswith("docs/") and rel.endswith((".md", ".yml", ".yaml", ".txt")):
         return True
     return False
 

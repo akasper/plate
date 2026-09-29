@@ -52,13 +52,22 @@ PLATE_DOCS_SUBDIRS: frozenset[str] = frozenset(
     }
 )
 
-# Plate-owned doc files at docs/ root (from template payload)
+# Plate-owned doc files at docs/ root (from template payload).
+# Filename alone is not ownership: product repos commonly ship docs/README.md.
+# A root file counts as PLATE only when its content contains every marker below.
 PLATE_DOCS_ROOT_FILES: frozenset[str] = frozenset(
     {
         "README.md",
         "playwright-e2e-guide.md",
     }
 )
+
+PLATE_DOCS_ROOT_CONTENT_MARKERS: dict[str, tuple[str, ...]] = {
+    "README.md": ("# Documentation Index", "playwright-e2e-guide.md"),
+    "playwright-e2e-guide.md": (
+        "# Playwright E2E Testing & Demo GIF Generation Guide",
+    ),
+}
 
 
 def resolve_payload_root(template_repo: str | None = None) -> dict[str, Any]:
@@ -201,6 +210,22 @@ def namespace_docs_path(rel: str) -> str:
     return rel
 
 
+def is_plate_owned_root_doc(path: Path) -> bool:
+    """True when ``path`` is a packaged PLATE docs/-root file, not adopter content.
+
+    ``docs/README.md`` and ``docs/playwright-e2e-guide.md`` are common product
+    filenames. Ownership requires the template content markers, not the name.
+    """
+    markers = PLATE_DOCS_ROOT_CONTENT_MARKERS.get(path.name)
+    if not markers:
+        return False
+    try:
+        head = path.read_text(encoding="utf-8", errors="replace")[:8000]
+    except OSError:
+        return False
+    return all(marker in head for marker in markers)
+
+
 def should_namespace_docs(target: Path) -> bool:
     """True when target already has product docs (not only PLATE scaffolding) (#1015)."""
     docs = Path(target) / "docs"
@@ -221,8 +246,8 @@ def should_namespace_docs(target: Path) -> bool:
         # Skip if under a known PLATE scaffolding subdir at top level
         if len(rel_parts) >= 1 and rel_parts[0] in PLATE_DOCS_SUBDIRS:
             continue
-        # Skip if it's a known PLATE root doc file
-        if len(rel_parts) == 1 and rel_parts[0] in PLATE_DOCS_ROOT_FILES:
+        # Skip packaged PLATE root docs. Same filename with other content is product.
+        if len(rel_parts) == 1 and is_plate_owned_root_doc(path):
             continue
         # Any other path under docs/ is treated as product docs collision
         return True

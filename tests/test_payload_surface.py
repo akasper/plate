@@ -95,6 +95,38 @@ class TestPayloadSurface(unittest.TestCase):
                         "docs/plate/design/" in text or "docs/plate/research/" in text
                     )
 
+    def test_product_readme_triggers_namespace_and_is_preserved(self):
+        """A product docs/README.md is not PLATE just because of the filename."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = Path(tmp) / "docs"
+            docs.mkdir()
+            readme = docs / "README.md"
+            readme.write_text("# Product handbook\n", encoding="utf-8")
+            guide = docs / "playwright-e2e-guide.md"
+            guide.write_text("# Our app e2e notes\n", encoding="utf-8")
+
+            dry = import_payload(tmp, strategy="force", dry_run=True)
+            self.assertTrue(dry["namespace_docs"])
+
+            applied = import_payload(tmp, strategy="force", apply=True)
+            self.assertTrue(applied["namespace_docs"])
+            self.assertEqual(readme.read_text(encoding="utf-8"), "# Product handbook\n")
+            self.assertEqual(guide.read_text(encoding="utf-8"), "# Our app e2e notes\n")
+            plate_readme = (docs / "plate" / "README.md").read_text(encoding="utf-8")
+            self.assertIn("docs/plate/wiki/", plate_readme)
+            self.assertNotIn("docs/wiki/", plate_readme)
+            home = (docs / "plate" / "wiki" / "Home.md").read_text(encoding="utf-8")
+            self.assertIn("docs/plate/wiki/", home)
+            self.assertNotIn("`docs/wiki/`", home)
+
+    def test_namespace_migration_guide_ships_in_payload(self):
+        from plate_core.payload_surface import list_payload_files
+
+        paths = {item["path"] for item in list_payload_files()["files"]}
+        self.assertIn("docs/migration/namespace-docs-migration.md", paths)
+
     def test_no_namespace_when_only_plate_docs_exist(self):
         """Should not namespace when only PLATE scaffolding docs exist."""
         from plate_core.import_payload import import_payload

@@ -1930,6 +1930,9 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             ns = args.get("namespace_scripts")
             if ns is not None:
                 ns = bool(ns)
+            nd = args.get("namespace_docs")
+            if nd is not None:
+                nd = bool(nd)
             payload = import_payload(
                 target_dir=args.get("target_dir") or args.get("target") or ".",
                 strategy=str(args.get("strategy") or "safe"),
@@ -1937,6 +1940,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 dry_run=dry,
                 apply=apply_mode,
                 namespace_scripts=ns,
+                namespace_docs=nd,
                 escape_hatch_dir=args.get("escape_hatch_dir") or args.get("escape_hatch"),
                 escape_hatch_on_conflict=bool(args.get("escape_hatch_on_conflict", False)),
             )
@@ -4852,6 +4856,8 @@ def run() -> None:
                                     "Import PLATE template payload into a local checkout (#616). "
                                     "Dry-run by default; set apply=true to write. Strategies: safe|conservative|force. "
                                     "namespace_scripts installs under scripts/plate/ when product scripts/ exists (#621). "
+                                    "namespace_docs installs under docs/plate/ when product docs/ exists (#1015); "
+                                    "omit for auto-detect, false to keep docs/ root. "
                                     "escape_hatch_dir writes plan.json+PLAN.md+DRAFT_PR_BODY.md for hard merges (#622); "
                                     "never force-overwrite high-value paths without human approval."
                                 ),
@@ -4883,6 +4889,10 @@ def run() -> None:
                                         "namespace_scripts": {
                                             "type": "boolean",
                                             "description": "Force scripts/plate/ install; omit for auto-detect.",
+                                        },
+                                        "namespace_docs": {
+                                            "type": "boolean",
+                                            "description": "Force docs/plate/ install; omit for auto-detect; false keeps docs/ root (#1015).",
                                         },
                                         "escape_hatch_dir": {
                                             "type": "string",
