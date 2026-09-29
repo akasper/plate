@@ -160,6 +160,37 @@ class TestImportPayload(unittest.TestCase):
         help_text = build_parser().format_help()
         self.assertIn("import-payload", help_text)
 
+    def test_cli_namespace_docs_tri_state(self):
+        """--namespace-docs / --no-namespace-docs reach import_payload (#1016)."""
+        import argparse
+        from io import StringIO
+        from unittest.mock import patch
+
+        from plate_core.cli import build_parser, cmd_import_payload
+
+        parser = build_parser()
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = Path(tmp) / "docs"
+            docs.mkdir()
+            (docs / "README.md").write_text("# Product handbook\n", encoding="utf-8")
+
+            forced = parser.parse_args(
+                ["import-payload", "--target-dir", tmp, "--namespace-docs", "--json"]
+            )
+            self.assertIsInstance(forced, argparse.Namespace)
+            buf = StringIO()
+            with patch("sys.stdout", buf):
+                self.assertEqual(cmd_import_payload(forced), 0)
+            self.assertTrue(json.loads(buf.getvalue())["namespace_docs"])
+
+            suppressed = parser.parse_args(
+                ["import-payload", "--target-dir", tmp, "--no-namespace-docs", "--json"]
+            )
+            buf = StringIO()
+            with patch("sys.stdout", buf):
+                self.assertEqual(cmd_import_payload(suppressed), 0)
+            self.assertFalse(json.loads(buf.getvalue())["namespace_docs"])
+
     def test_copy_template_payload_local_alias(self):
         """#620: bootstrap/agents can call copy_template_payload_local."""
         from plate_core.import_payload import copy_template_payload_local

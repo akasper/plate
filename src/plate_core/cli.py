@@ -3740,6 +3740,11 @@ def cmd_import_payload(args: argparse.Namespace) -> int:
         ns = True
     elif getattr(args, "no_namespace_scripts", False):
         ns = False
+    nd = None
+    if getattr(args, "namespace_docs", False):
+        nd = True
+    elif getattr(args, "no_namespace_docs", False):
+        nd = False
     report = import_payload(
         target_dir=getattr(args, "target_dir", None) or ".",
         strategy=getattr(args, "strategy", None) or "safe",
@@ -3747,6 +3752,7 @@ def cmd_import_payload(args: argparse.Namespace) -> int:
         dry_run=not do_apply,
         apply=do_apply,
         namespace_scripts=ns,
+        namespace_docs=nd,
         escape_hatch_dir=getattr(args, "escape_hatch", None),
         escape_hatch_on_conflict=bool(getattr(args, "escape_hatch_on_conflict", False)),
     )
@@ -5107,6 +5113,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-namespace-scripts",
         action="store_true",
         help="Keep PLATE scripts at scripts/ even if target has scripts/",
+    )
+    import_payload_p.add_argument(
+        "--namespace-docs",
+        action="store_true",
+        help="Force install PLATE docs under docs/plate/ (#1015)",
+    )
+    import_payload_p.add_argument(
+        "--no-namespace-docs",
+        action="store_true",
+        help="Keep PLATE docs at docs/ even if target has product docs/",
     )
     import_payload_p.add_argument(
         "--escape-hatch",
