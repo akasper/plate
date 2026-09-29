@@ -3,6 +3,38 @@
 from __future__ import annotations
 
 
+HOST_NATIVE_INTERACTION_PRINCIPLE = """
+## Host-Native Interactive Prompt Preference (Universal)
+
+**Default interaction channel for agent→user solicitation:** When asking the human anything interactive (Q&A, choices, confirmations, multi-option decisions, process steering, blocking questions, epic planning), agents **must prefer the host's native look-and-feel** over free-form prose questions in the transcript.
+
+**Host matrix (explicit and host-agnostic):**
+- **Copilot CLI** → native TUI / form primitives provided directly by Copilot CLI itself
+- **Grok Build** → `ask_user_question` (arrow-key forms, interactive configurator)
+- **Other hosts** → their native interactive configurator when available
+- **Fallback** → `gh plate qanda` / plain text only when native is unavailable or insufficient
+
+**Scope:** This preference applies **whenever the agent solicits structured human judgment**, not only when processing open `Question` issues. Examples:
+- Curiosity / Q&A mode (`Question` issues, batched review, answer recording)
+- Epic planning / interactive refinement sessions (acceptance criteria, scope, dependencies)
+- Blocking questions (Feature #147: create blocking Question as last resort)
+- What-next / contemplation decision prompts (which Epic to start, prioritization)
+- Process steering ("should I continue?", "approve this action?")
+
+**Not interactive solicitation (remains free-form):**
+- Braindumps, narrative capture, design discussion (user-initiated free-form is fine)
+- Status reports, progress summaries, completion comments (USAGE REPORT, PLATE markers)
+- Routine contemplation or health checks (automated, no user input needed)
+
+**Enforcement:**
+- Agents must **not** wait for the user to say "use the TUI" or "present this natively."
+- Default to native first; fall back to CLI/text with a note only when native is unavailable.
+- Keep native prompts quiet (transmit only question text, Answer signal checklist if present, and minimal options—no front matter, no "As the PLATE agent...").
+
+This principle is **host-agnostic** and **universal across all PLATE interactive flows**. It ensures the most seamless possible experience in the user's primary interface and reduces context inflation for any agent reading transcripts.
+"""
+
+
 PLAYWRIGHT_E2E_GUIDANCE = """
 ## Playwright E2E Testing
 
@@ -65,10 +97,16 @@ PLATE supports a Curiosity-driven workflow where informational goals are tracked
 - You detect multiple open `Question` issues relevant to the current Epic or task.
 - You need structured user input to unblock work or seed new work.
 
-### How to present questions (critical preference)
-- **Inside GitHub Copilot CLI (primary interface):** Strongly prefer using any *native* TUI, form, or interactive questioning primitives provided directly by the Copilot CLI itself. Only fall back to a custom terminal TUI if native capabilities are unavailable or insufficient for the question.
-- **Direct `gh plate qanda` usage or fallback:** Use lightweight custom TUI tools (e.g. gum/huh) or simple prompts.
-- The goal is the most seamless possible experience for the user in their primary interface.
+### How to present questions (host-native preference—see HOST_NATIVE_INTERACTION_PRINCIPLE)
+**Always prefer the host's native look-and-feel for interactive Q&A.** Do not use free-form chat unless native UI is unavailable.
+
+**Host matrix:**
+- **Copilot CLI** → native TUI / form primitives provided directly by Copilot CLI
+- **Grok Build** → `ask_user_question` (arrow-key forms, interactive configurator)
+- **Other hosts** → their native interactive configurator when available
+- **Fallback** → `gh plate qanda` / plain text only when native is unavailable
+
+Agents must **consistently default to native TUI** (e.g., `ask_user_question` in Grok Build, Copilot CLI interactive primitives) for PLATE Q&A. Include detection/fallback note if needed. Do not require user reminders. Do not use raw text prompts unless native is unavailable.
 
 ### Enforcement and follow-through for PLATE Q&A
 - **Mandatory use of native TUI forms for Q&A in PLATE contexts:** Agents must *consistently default to or use* Grok Build native TUI interactive configurator (arrow-key forms) via ask_user_question (or host native TUI) for interactive Q&A; include detection/fallback note; do not require user reminders. Do not use raw text prompts unless native is unavailable.
@@ -154,6 +192,7 @@ See AGENTS.md (new Task Management section + work loop examples), the host syste
 def get_agent_guidance_sections() -> dict[str, str]:
     """Return guidance sections for agents."""
     return {
+        "host_native_interaction": HOST_NATIVE_INTERACTION_PRINCIPLE,
         "playwright_e2e": PLAYWRIGHT_E2E_GUIDANCE,
         "qanda_curiosity": QANDA_CURIOSITY_GUIDANCE,
         "information_audit": INFORMATION_AUDIT_GUIDANCE,

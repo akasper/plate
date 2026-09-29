@@ -1,0 +1,7 @@
+{
+  "slug": "post-0.8.0-qanda-next-release-priorities",
+  "title": "Post-v0.8.0 Q&A: next-release priorities research note",
+  "summary": "Commit docs/research/post-0.8.0-next-release-priorities.md from Q&A session (adopter time-to-value must-ship, marketplace parallel human, adoption product bet). Closes Questions #989 #990 #992.",
+  "issues": ["#989", "#990", "#992", "#983"],
+  "type": "documentation"
+}

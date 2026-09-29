@@ -1,0 +1,11 @@
+{
+  "slug": "goals-md-hybrid-rewrite",
+  "title": "Rewrite Goals.md as hybrid PLATE mission SSOT",
+  "summary": "Replace example Mission/principles/success on docs/wiki/Goals.md with real PLATE claims; keep clearly marked adopter/template convention section; update Current State for v0.8.0 and #983 adopter theme. Closes Documentation #993 (hybrid decision from #991).",
+  "issues": ["#993", "#991", "#983"],
+  "type": "documentation",
+  "change_type": "docs",
+  "surface": "docs/wiki/Goals.md",
+  "migration_impact": "No required downstream migration. Adopters who copied the old example Goals text may refresh structure from the new Adopter/template convention section; PLATE product mission text is monorepo-specific.",
+  "agent_notes": "Treat docs/wiki/Goals.md Mission / Principles / How We Intend to Succeed / Current State as PLATE SSOT for Information Audits. The bottom Adopter/template section is convention only. Prefer Documentation PRs for Goals updates. Do not claim v1.0 or under-30m LIVE proof beyond what Current State lists."
+}

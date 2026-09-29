@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -11,8 +12,9 @@ from urllib.parse import quote
 
 from .github_client import GhApiError, GhClient
 from .health import REQUIRED_LABELS, get_health, resolve_repo
-from .plate_config import DEFAULT_CONFIG
 from .import_payload import list_payload_relative_paths
+from .payload_surface import filter_plate_scripts, prepare_copied_text
+from .plate_config import ALLOWED_PLATFORMS, DEFAULT_CONFIG, PLATFORM_POSIX, PlateConfigError
 from .template_payload import resolve_template_source
 
 
@@ -35,6 +37,7 @@ class BootstrapReport:
     apply_mode: bool
     actions: list[BootstrapAction]
     template_source: str = "unknown"
+    platform: str = "posix"
     adoption_mode: bool = False
     adoption_signals: list[str] = field(default_factory=list)
     next_steps: list[str] = field(default_factory=list)
@@ -44,6 +47,7 @@ class BootstrapReport:
             "repo": self.repo,
             "apply_mode": self.apply_mode,
             "template_source": self.template_source,
+            "platform": self.platform,
             "adoption_mode": self.adoption_mode,
             "adoption_signals": list(self.adoption_signals),
             "next_steps": list(self.next_steps),
@@ -163,10 +167,146 @@ def _template_payload_relative_paths(template_root: Path) -> list[str]:
     return list_payload_relative_paths(template_root)
 
 
-def _copy_template_payload(repo: str, default_branch: str, gh: GhClient, template_root: Path) -> tuple[int, int]:
+def _decode_github_text(payload: Any) -> str | None:
+    """Decode a GitHub contents API file body. Missing or empty content is None."""
+    if not isinstance(payload, dict):
+        return None
+    content = payload.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return None
+    try:
+        raw = base64.b64decode(content)
+    except (ValueError, TypeError):
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def resolve_bootstrap_platform(
+    explicit: str | None,
+    repo: str,
+    gh: GhClient,
+    *,
+    plate_config_present: bool,
+) -> str:
+    """Explicit argument wins, then a readable remote ``.plate``, then ``posix``.
+
+    Any explicit value, including ``""`` and whitespace, is validated before
+    the remote file is read. A missing file, missing key, JSON null, or
+    unreadable body falls back to ``posix`` only when no explicit value was
+    passed. JSON that does not parse, a non-object document, and a platform
+    outside the enum fail closed.
+    """
+    if explicit is not None:
+        if not isinstance(explicit, str):
+            allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+            raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
+        value = explicit.strip()
+        if value not in ALLOWED_PLATFORMS:
+            allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+            raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
+        return value
+    if not plate_config_present:
+        return PLATFORM_POSIX
+    endpoint = f"repos/{repo}/contents/.plate"
+    try:
+        payload = gh.api(endpoint)
+    except GhApiError as error:
+        if _is_missing_content_error(error):
+            return PLATFORM_POSIX
+        raise
+    text = _decode_github_text(payload)
+    if not text or not text.strip():
+        return PLATFORM_POSIX
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise PlateConfigError(f"invalid JSON in .plate: {exc}") from exc
+    if not isinstance(data, dict):
+        raise PlateConfigError(".plate must contain a top-level object")
+    stored = data.get("platform")
+    if stored is None:
+        return PLATFORM_POSIX
+    if not isinstance(stored, str) or stored not in ALLOWED_PLATFORMS:
+        allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+        raise PlateConfigError(f"invalid platform: {stored!r} (allowed: {allowed})")
+    return stored
+
+
+def _load_existing_remote_plate(repo: str, gh: GhClient) -> tuple[dict[str, Any], str] | None:
+    """Parse an existing remote ``.plate`` before bootstrap writes anything.
+
+    Returns ``None`` when the file is absent. An unreadable body, invalid JSON,
+    a non-object, or a missing blob sha raises ``RuntimeError``.
+    """
+    endpoint = f"repos/{repo}/contents/.plate"
+    try:
+        payload = gh.api(endpoint)
+    except GhApiError as error:
+        if _is_missing_content_error(error):
+            return None
+        raise
+    text = _decode_github_text(payload)
+    sha = payload.get("sha") if isinstance(payload, dict) else None
+    if text is None:
+        raise RuntimeError("Cannot update .plate platform: remote .plate content is unreadable.")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Cannot update .plate platform: invalid JSON ({exc})") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError("Cannot update .plate platform: .plate is not a JSON object.")
+    if not isinstance(sha, str) or not sha:
+        raise RuntimeError("Cannot update .plate platform: GitHub contents response has no sha.")
+    return data, sha
+
+
+def _write_remote_plate_platform(
+    repo: str,
+    branch: str,
+    gh: GhClient,
+    data: dict[str, Any],
+    sha: str,
+    platform: str,
+) -> None:
+    """PUT ``platform`` onto a ``.plate`` object that was already parsed."""
+    if data.get("platform") == platform:
+        return
+    updated = dict(data)
+    updated["platform"] = platform
+    encoded = base64.b64encode((json.dumps(updated, indent=2) + "\n").encode("utf-8")).decode("ascii")
+    gh.api(
+        f"repos/{repo}/contents/.plate",
+        method="PUT",
+        fields={
+            "message": f"Bootstrap: set .plate platform to {platform}",
+            "content": encoded,
+            "sha": sha,
+            "branch": branch,
+        },
+    )
+
+
+def _platform_copy_suffix(platform: str, omitted: list[str]) -> str:
+    suffix = f" for platform {platform}"
+    if omitted:
+        suffix += f"; omitted {len(omitted)} PLATE-owned script twin(s)"
+    return suffix
+
+
+def _copy_template_payload(
+    repo: str,
+    default_branch: str,
+    gh: GhClient,
+    template_root: Path,
+    *,
+    platform: str,
+) -> tuple[int, int]:
     copied = 0
     skipped = 0
-    rel_paths = _template_payload_relative_paths(template_root)
+    rel_paths, _omitted = filter_plate_scripts(_template_payload_relative_paths(template_root), platform)
     if not rel_paths:
         raise RuntimeError(f"No template payload files found under {template_root}")
 
@@ -185,7 +325,15 @@ def _copy_template_payload(repo: str, default_branch: str, gh: GhClient, templat
             skipped += 1
             continue
 
-        content = base64.b64encode(source.read_bytes()).decode("ascii")
+        raw = source.read_bytes()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            encoded = raw
+        else:
+            text = prepare_copied_text(rel, text, platform, namespaced=False)
+            encoded = text.encode("utf-8")
+        content = base64.b64encode(encoded).decode("ascii")
         try:
             gh.api(
                 endpoint,
@@ -246,6 +394,7 @@ def run_bootstrap(
     *,
     adopt: bool | None = None,
     local_root: str | Path | None = None,
+    platform: str | None = None,
 ) -> BootstrapReport:
     """Plan/apply baseline PLATE bootstrap.
 
@@ -275,7 +424,23 @@ def run_bootstrap(
     )
 
     template_root, template_source = resolve_template_source()
-    template_paths = _template_payload_relative_paths(template_root)
+    explicit_platform = platform is not None and str(platform).strip() != ""
+    resolved_platform = resolve_bootstrap_platform(
+        platform,
+        target,
+        gh,
+        plate_config_present=bool(getattr(health, "plate_config_present", False)),
+    )
+    template_paths, omitted_paths = filter_plate_scripts(
+        _template_payload_relative_paths(template_root),
+        resolved_platform,
+    )
+    platform_suffix = _platform_copy_suffix(resolved_platform, omitted_paths)
+    # An explicit platform persisted onto an existing .plate must be parsed
+    # before any apply write. A bad body fails the plan and the apply alike.
+    pending_plate: tuple[dict[str, Any], str] | None = None
+    if explicit_platform and bool(getattr(health, "plate_config_present", False)):
+        pending_plate = _load_existing_remote_plate(target, gh)
     actions.append(
         BootstrapAction(
             name="template-source",
@@ -285,10 +450,29 @@ def run_bootstrap(
     )
     if apply_mode:
         _validate_bootstrap_preconditions(target, repo_obj, default_branch, gh)
-        copied_count, skipped_count = _copy_template_payload(target, default_branch, gh, template_root)
+        if pending_plate is not None:
+            plate_data, plate_sha = pending_plate
+            _write_remote_plate_platform(
+                target,
+                default_branch,
+                gh,
+                plate_data,
+                plate_sha,
+                resolved_platform,
+            )
+        copied_count, skipped_count = _copy_template_payload(
+            target,
+            default_branch,
+            gh,
+            template_root,
+            platform=resolved_platform,
+        )
         if copied_count:
             state = "applied"
-            detail = f"Copied {copied_count} template payload files into the repository from {template_source}"
+            detail = (
+                f"Copied {copied_count} template payload files into the repository from {template_source}"
+                f"{platform_suffix}"
+            )
             if skipped_count:
                 detail += f" and skipped {skipped_count} existing file{'s' if skipped_count != 1 else ''}"
         else:
@@ -296,17 +480,21 @@ def run_bootstrap(
             detail = (
                 f"Template payload already present from {template_source} "
                 f"({skipped_count} existing file{'s' if skipped_count != 1 else ''})"
+                f"{platform_suffix}"
             )
     else:
         state = "planned"
         if adoption_mode:
             detail = (
                 f"Prefer local `gh plate import-payload --strategy conservative` for checkout files; "
-                f"remote would copy {len(template_paths)} template payload files from {template_source} "
-                f"(skips existing paths)"
+                f"remote would copy {len(template_paths)} template payload files from {template_source}"
+                f"{platform_suffix} (skips existing paths)"
             )
         else:
-            detail = f"Copy {len(template_paths)} template payload files into the repository from {template_source}"
+            detail = (
+                f"Copy {len(template_paths)} template payload files into the repository from {template_source}"
+                f"{platform_suffix}"
+            )
     actions.append(BootstrapAction(name="copy-template-payload", state=state, detail=detail))
 
     for label in health.missing_labels:
@@ -333,7 +521,9 @@ def run_bootstrap(
 
     if not health.plate_config_present:
         if apply_mode:
-            content = base64.b64encode((json.dumps(DEFAULT_CONFIG, indent=2) + "\n").encode("utf-8")).decode("ascii")
+            seeded = copy.deepcopy(DEFAULT_CONFIG)
+            seeded["platform"] = resolved_platform
+            content = base64.b64encode((json.dumps(seeded, indent=2) + "\n").encode("utf-8")).decode("ascii")
             gh.api(
                 f"repos/{target}/contents/.plate",
                 method="PUT",
@@ -344,10 +534,10 @@ def run_bootstrap(
                 },
             )
             state = "applied"
-            detail = "Initialized root .plate baseline config"
+            detail = f"Initialized root .plate baseline config (platform {resolved_platform})"
         else:
             state = "planned"
-            detail = "Initialize root .plate baseline config"
+            detail = f"Initialize root .plate baseline config (platform {resolved_platform})"
         actions.append(BootstrapAction(name="init-plate-config", state=state, detail=detail))
     else:
         actions.append(
@@ -357,6 +547,15 @@ def run_bootstrap(
                 detail="Root .plate config already present",
             )
         )
+        if explicit_platform:
+            plat_state = "applied" if apply_mode else "planned"
+            actions.append(
+                BootstrapAction(
+                    name="set-plate-platform",
+                    state=plat_state,
+                    detail=f"Set root .plate platform to {resolved_platform}",
+                )
+            )
 
     if health.open_epic_count == 0:
         if apply_mode:
@@ -509,6 +708,7 @@ def run_bootstrap(
         apply_mode=apply_mode,
         actions=actions,
         template_source=template_source,
+        platform=resolved_platform,
         adoption_mode=adoption_mode,
         adoption_signals=adoption_signals,
         next_steps=next_steps,

@@ -8,7 +8,7 @@ Priority (cheap → specific):
 5. Actionable local SPEC audit findings (#340 health/drift)
 6. Local adoption not core_ready → gh plate adopt / import-payload (#937 / #633 / #935)
 7. Active adoption session timer → continue under-30m path / complete-session (#957 / #955 / #633)
-8. Core adoption ready but first Q&A not seeded → gh plate adopt --first-qa-plan (#949 / #633)
+8. Core adoption ready but first Q&A not seeded → gh plate adopt --first-qa-plan --apply-first-qa (#949 / #633 / #1001)
 9. Self-migrate pin/payload drift → gh plate self-migrate --plan (#941 / #649 / #939)
 10. Concrete ready Feature/Bug candidates (status:ready-to-work or implementable)
 11. Active scheduled op runs (blocked/running/planned) (#933 / #659 / #641)
@@ -363,7 +363,8 @@ def recommend_what_next(
             next_cmd = str(adopt.get("next_command") or "gh plate adopt --json")
             phase = "finish readiness"
         elif not seeded:
-            next_cmd = "gh plate adopt --first-qa-plan --json"
+            # Align with plan_first_qa_seed / assess next_command (#1001): apply, not re-plan.
+            next_cmd = "gh plate adopt --first-qa-plan --apply-first-qa --json"
             phase = "seed first Q&A"
         else:
             next_cmd = "gh plate adopt --complete-session --json"
@@ -451,18 +452,21 @@ def recommend_what_next(
         and isinstance(first_qa, dict)
         and first_qa.get("seeded") is False
     ):
-        next_cmd = "gh plate adopt --first-qa-plan --json"
+        # Point at apply path (runner required); do not re-plan forever (#1001).
+        next_cmd = "gh plate adopt --first-qa-plan --apply-first-qa --json"
         return {
             "next_action": f"seed first Q&A after adoption: {next_cmd}",
             "prompt_segment": (
-                "Local adoption core_ready but first Q&A Questions not seeded (#949/#633). "
-                "1) `gh plate adopt --first-qa-plan --json` / plate_adoption_first_qa_plan  "
-                "2) Review 3 starter Curiosity Questions; apply only with explicit runner  "
+                "Local adoption core_ready but first Q&A Questions not seeded (#949/#633/#1001). "
+                "1) Follow next_command "
+                "`gh plate adopt --first-qa-plan --apply-first-qa --json` "
+                "with injectable runner (or plate_adoption_first_qa_plan apply)  "
+                "2) Optional dry-run first: `gh plate adopt --first-qa-plan --json`  "
                 "3) Then `gh plate feed --json` / product planning. "
-                "Dry-run default — no GitHub issue create without injectable runner."
+                "No GitHub issue create without injectable runner — do not re-plan in a loop."
                 + quiet
             ),
-            "rationale": "adoption core_ready; first_qa.seeded=false (#949/#935/#633)",
+            "rationale": "adoption core_ready; first_qa.seeded=false (#949/#935/#633/#1001)",
             "state_snapshot": state,
             "agent_type": agent_type or "general",
             "priority": "first_qa_seed",
@@ -471,7 +475,7 @@ def recommend_what_next(
                 "question": "Seed 3 starter Curiosity Questions for first Q&A?",
                 "options": [
                     {
-                        "label": "First Q&A seed plan",
+                        "label": "First Q&A apply seed",
                         "description": next_cmd,
                     },
                     {"label": "Open feed", "description": "gh plate feed --json"},

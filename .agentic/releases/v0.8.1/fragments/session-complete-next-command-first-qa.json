@@ -1,0 +1,28 @@
+{
+  "slug": "session-complete-next-command-first-qa",
+  "title": "complete-session next_command respects first_qa residual",
+  "summary": "complete_adoption_session next_command respects first_qa residual and routes unseeded core_ready sessions to --apply-first-qa (aligned with #1002); adoption-guide routing; compound offline TTV stack proof for Epic #1000.",
+  "issues": [
+    "#1003",
+    "#1000",
+    "#983",
+    "#955"
+  ],
+  "type": "feature",
+  "change_type": "feature",
+  "surface": "src/plate_core/adoption.py, docs/migration/adoption-guide.md, docs/research/adopter-ttv-stack-offline-proof.md",
+  "migration_impact": "Additive routing. Agents completing adopt sessions should follow next_command (first-qa apply before feed when unseeded; not a re-plan loop).",
+  "agent_notes": "After gh plate adopt --complete-session --json, if core_ready and first_qa_seeded=false run next_command with --apply-first-qa (runner required) before feed. Parent Epic #1000; stacks with #1002.",
+  "breaking": false,
+  "links": [
+    "#1000",
+    "#1002",
+    "#1003",
+    "#949",
+    "#955",
+    "#983",
+    "#995",
+    "#997",
+    "#999"
+  ]
+}
