@@ -520,12 +520,12 @@ For `Feature`, `Bug`, and issue-driven `Documentation` PRs, add the relevant mil
 
 **Agent responsibilities:**
 - When creating new scripts, check project platform support first
-- For default (POSIX-only) projects: create `.sh` only
+- For default projects (no explicit Windows support): create `.sh` only
 - For Windows-supported projects: create both `.sh` (primary) and `.ps1` (equivalent)
 - For Windows-only projects: create `.ps1` only
 - When modifying existing scripts, maintain consistency with the project's declared platform support
 
-**Migration note:** PLATE's own template payload currently ships dual scripts (`.sh` + `.ps1`) to support both Unix and Windows operators during bootstrap and ceremony operations. This represents an explicit Windows-support stance for PLATE itself and serves as the reference implementation for dual-stack scripting.
+**Migration note:** PLATE's own template payload currently ships dual scripts (`.sh` + `.ps1`) as the reference dual-stack. `gh plate import-payload` and `gh plate bootstrap --apply` still copy every manifest script, including `.ps1`. Default projects (no explicit Windows support) should delete `scripts/*.ps1` and `scripts/plate/*.ps1` after scaffold. Import-time filtering is #1019.
 
 ## CLI Body Patterns (PowerShell safety)
 

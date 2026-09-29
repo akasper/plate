@@ -22,7 +22,7 @@ bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle
 
 Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable GitHub bootstrap work that otherwise gets missed in brand-new repositories.
 
-**Platform note:** The template includes both `.sh` and `.ps1` versions. Projects without explicit Windows support may use the `.sh` scripts exclusively. See the "Script Policy and Platform Support" section in `AGENTS.md` for full policy guidance.
+**Platform note:** `gh plate bootstrap --apply` copies every manifest script, including `.ps1`. That copy is not platform-filtered yet. Default projects (no explicit Windows support) should run the `.sh` script above and delete `scripts/*.ps1` (and `scripts/plate/*.ps1` when namespaced) after scaffold. Import-time filtering is #1019. See "Script Policy and Platform Support" in `AGENTS.md`.
 
 `gh plate bootstrap --apply` covers the repository-scaffolding side of bootstrap: it copies the checked-in PLATE template payload into the repo so AGENTS, docs, workflows, scripts, and starter assets are present locally.
 

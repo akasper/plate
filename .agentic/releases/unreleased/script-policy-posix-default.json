@@ -3,16 +3,16 @@
   "change_type": "process",
   "surface": "AGENTS.md, scripts/README.md, bootstrap docs",
   "summary": "Establishes normative script policy: POSIX shell by default; PowerShell only when Windows support is explicit",
-  "migration_impact": "PLATE repositories now default to POSIX shell scripts only. PowerShell scripts are provided when a project explicitly declares Windows support. Template payload ships both as reference implementation since PLATE itself supports Windows operators.",
+  "migration_impact": "Authoring policy is POSIX shell by default and PowerShell only when Windows support is explicit. import-payload and bootstrap --apply still copy every manifest script, including .ps1. Default projects delete scripts/*.ps1 and scripts/plate/*.ps1 after scaffold. Import-time filtering is #1019.",
   "migration_guidance": [
-    "1. Review your project's platform support stance: no explicit Windows requirement = POSIX-only, explicit Windows support = dual-stack (.sh + .ps1), Windows-only = .ps1 only.",
-    "2. If your project does not require Windows support, you may safely omit .ps1 scripts from new repositories created from this template.",
-    "3. When creating new scripts, agents must check project platform support first: default projects get .sh only, Windows-supported projects get both .sh (primary) and .ps1 (equivalent).",
+    "1. Review platform stance: default projects (no explicit Windows support) author .sh only; explicit Windows support = dual-stack (.sh + .ps1); Windows-only = .ps1 only.",
+    "2. Scaffold still copies .ps1. Workaround until #1019: after import or bootstrap --apply, delete scripts/*.ps1 and scripts/plate/*.ps1 when Windows support was not declared.",
+    "3. When creating new scripts, check declared platform support first. Do not wait for an explicit POSIX statement: no Windows declaration means .sh only.",
     "4. Platform support must come from human-stated project intent (SPEC.md, .plate config, onboarding answers, explicit instruction) — never inferred from developer OS or CI platform.",
-    "5. Existing dual-stack repositories (PLATE itself, template-derived repos with Windows support) may continue shipping both .sh and .ps1 without migration."
+    "5. Existing dual-stack repositories (PLATE itself, adopters that declared Windows support) may keep both .sh and .ps1."
   ],
-  "agent_notes": "When authoring or modifying scripts: (1) Check if the project explicitly declares Windows support via SPEC.md, .plate config, or bootstrap answers. (2) Default (no platform stated) = ship .sh only. (3) Windows-supported (explicit) = ship both .sh (primary) and .ps1 (equivalent behavior). (4) Windows-only (explicit) = .ps1 only. Never infer platform support from developer laptop OS, Windows dependencies, or CI choices. PLATE's own template payload ships dual scripts as reference implementation for Windows-supported projects.",
+  "agent_notes": "When authoring or modifying scripts: (1) Check if the project explicitly declares Windows support via SPEC.md, .plate config, or bootstrap answers. (2) Default projects (no explicit Windows support) = ship .sh only. (3) Windows-supported (explicit) = ship both .sh (primary) and .ps1 (equivalent behavior). (4) Windows-only (explicit) = .ps1 only. Never infer platform support from developer laptop OS, Windows dependencies, or CI choices. import-payload and bootstrap still install the payload's .ps1 files; tell adopters to delete them unless Windows is declared. Filtering is #1019.",
   "breaking": false,
-  "links": ["#1017"],
+  "links": ["#1017", "#1018", "#1019"],
   "requires": []
 }
