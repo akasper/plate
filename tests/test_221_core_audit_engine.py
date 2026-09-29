@@ -5,6 +5,7 @@ This is the 'tests first' skeleton; full engine logic, integration, and E2E will
 in follow-up commits for this issue (one coherent PR per PLATE Feature process).
 """
 
+import base64
 import unittest
 
 from plate_core.mcp.audit_tools import PerformInformationAuditTool
@@ -65,6 +66,34 @@ class TestPerformInformationAuditTool(unittest.TestCase):
         self.assertTrue(
             any("Mission" in t or "Goals" in t or "risks" in t.lower() for t in titles),
             "Expected proposals grounded in Goals page per design",
+        )
+
+    def test_namespaced_goals_page_is_read(self):
+        """Proves: audit reads docs/plate/wiki/Goals.md when the flat page is absent (#1022)."""
+
+        class _Namespaced:
+            def api(self, endpoint, *args, **kwargs):
+                endpoint = str(endpoint)
+                if endpoint.endswith("contents/docs/wiki/Goals.md"):
+                    raise RuntimeError("missing flat goals")
+                if endpoint.endswith("contents/docs/plate/wiki/Goals.md"):
+                    return {
+                        "content": base64.b64encode(b"# Goals\n\nOverview only\n").decode()
+                    }
+                return {}
+
+        res = PerformInformationAuditTool.execute(
+            repo="akasper/plate",
+            dry_run=True,
+            max_questions=5,
+            include_defaults=False,
+            client=_Namespaced(),
+        )
+        self.assertTrue(
+            any(
+                "docs/plate/wiki/Goals.md" in p.get("provenance", "")
+                for p in res["proposed_questions"]
+            )
         )
 
     def test_respects_max_questions(self):
