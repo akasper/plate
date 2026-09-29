@@ -37,11 +37,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 ## Current State & Evidence
 
-*(Snapshot after v0.8.1 — update at major cuts and when North Star shifts.)*
+*(Snapshot after v0.8.2 — update at major cuts and when North Star shifts.)*
 
-**Shipped foundations (v0.8.0, public pin v0.8.1):**
+**Shipped foundations (v0.8.0, public pin v0.8.2):**
 
-- Public **PyPI** package `plate-core==0.8.1`, shared library for CLI / MCP / plugins.
+- Public **PyPI** package `plate-core==0.8.2`, shared library for CLI / MCP / plugins.
 - **`gh plate`** thin-shim extension path and release-track / ceremony tooling.
 - Autonomy and adoption foundations: budgeted AutonomyEngine, adopt / import-payload / self-migrate surfaces, quiet ops, baseline persona when PLATE signals are present.
 - Endless feed / Q&A / planning primitives and Information Audit Goals convention (Epic #218 lineage).
@@ -51,6 +51,10 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 - Adopter time-to-value routing, namespaced docs on import, host-native prompts, and a `.plate` `platform` setting (`posix`, `posix-and-windows`, `windows`).
 - Marketplace publication (#380 / #381) stays a **parallel human Task** track.
 - Goals hybrid rewrite: this page (#993, decision #991).
+
+**Shipped in v0.8.2 (was Next Release #1020):**
+
+- Adoption, health, self-migrate verify, and the information audit accept `docs/plate/wiki/Goals.md` as well as `docs/wiki/Goals.md`.
 
 **Not yet won (do not overclaim):**
 
