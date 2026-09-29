@@ -284,6 +284,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/migration/namespace-docs-migration.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/playwright-e2e-guide.md",
       "classification": "copy_to_downstream"
     },
