@@ -86,15 +86,16 @@ function Get-PlatePlatform {
         $value = $data.platform
     }
     # A missing key or JSON null means posix. Empty string is not a platform.
+    # A one-element array stringifies to its item, so require a real string.
     if ($null -eq $value) {
         return "posix"
     }
     $allowed = @("posix", "posix-and-windows", "windows")
-    if ($allowed -notcontains [string]$value) {
+    if ($value -isnot [string] -or $allowed -notcontains $value) {
         Write-Error "invalid platform: $value (allowed: posix, posix-and-windows, windows)"
         exit 1
     }
-    return [string]$value
+    return $value
 }
 
 function Test-PlateScript {

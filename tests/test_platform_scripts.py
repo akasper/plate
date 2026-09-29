@@ -921,6 +921,15 @@ class PowerShellValidatorTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("invalid platform", result.stdout + result.stderr)
 
+    def test_non_string_platform_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _validator_fixture(root, platform=None, gifs=["gif-from-video.sh"])
+            _write(root / ".plate", json.dumps({"version": "1.3", "platform": ["posix"]}))
+            result = self._run(root)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("invalid platform", result.stdout + result.stderr)
+
     def test_empty_platform_fails_and_null_means_posix(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
