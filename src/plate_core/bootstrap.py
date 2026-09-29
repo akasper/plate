@@ -13,7 +13,7 @@ from urllib.parse import quote
 from .github_client import GhApiError, GhClient
 from .health import REQUIRED_LABELS, get_health, resolve_repo
 from .import_payload import list_payload_relative_paths
-from .payload_surface import filter_plate_scripts, prepare_copied_text
+from .payload_surface import filter_plate_scripts, prepare_copied_text, resolve_local_goals_wiki
 from .plate_config import ALLOWED_PLATFORMS, DEFAULT_CONFIG, PLATFORM_POSIX, PlateConfigError
 from .template_payload import resolve_template_source
 
@@ -112,8 +112,9 @@ def detect_adoption_mode(
             )
             if wf and not (root / ".plate").is_file():
                 signals.append(f"local:workflows_without_.plate={len(wf)}")
-        if (root / "docs").is_dir() and not (root / "docs" / "wiki" / "Goals.md").is_file():
-            if not plate_present:
+        if (root / "docs").is_dir():
+            _goals_path, _goals_rel, goals_present = resolve_local_goals_wiki(root)
+            if not goals_present and not plate_present:
                 signals.append("local:docs_without_Goals")
     except OSError:
         pass
@@ -145,13 +146,16 @@ def _adoption_next_steps(*, adoption_mode: bool, health: Any) -> list[str]:
         ]
     steps = [
         "Adoption mode: prefer local `gh plate import-payload --strategy conservative --dry-run` then `--apply` before remote bootstrap file copy when working in a checkout.",
-        "Review CODEOWNERS / @handles, docs/wiki/Goals.md mission text, and CI coexistence (product CI + PLATE enforcement).",
+        "Review CODEOWNERS / @handles, the Goals wiki mission text (docs/wiki/Goals.md, or docs/plate/wiki/Goals.md when PLATE docs are namespaced), and CI coexistence (product CI + PLATE enforcement).",
         "Run `gh plate health` and fix remaining gaps; use `gh plate migrate plan` if this repo was template-derived.",
         "Do not seed duplicate Epics/Questions when real planning already exists — bootstrap skips when open Epics/Questions present.",
         "See docs/migration/adoption-guide.md for the full adoption path (#619 / #633).",
     ]
     if health is not None and not getattr(health, "goals_page_present", True):
-        steps.insert(1, "Seed or write docs/wiki/Goals.md (mission) for Information Audits.")
+        steps.insert(
+            1,
+            "Seed or write the Goals wiki page (docs/wiki/Goals.md, or docs/plate/wiki/Goals.md when PLATE docs are namespaced) for Information Audits.",
+        )
     if health is not None and not getattr(health, "plate_config_present", True):
         steps.insert(1, "Ensure root `.plate` exists (`gh plate config init` or bootstrap init-plate-config).")
     return steps

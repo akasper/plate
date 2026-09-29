@@ -505,6 +505,25 @@ class VerifySelfMigrateTests(unittest.TestCase):
         self.assertEqual(ids, {"no_drift", "adoption_core_ready", "plate_config_valid"})
         self.assertFalse(report["auto_apply"])
 
+    def test_verify_ready_when_goals_are_namespaced(self):
+        """Proves: docs/plate/wiki/Goals.md satisfies adoption verify (#1022)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._core_ready_tree(root, version="0.8.1")
+            flat = root / "docs" / "wiki" / "Goals.md"
+            namespaced = root / "docs" / "plate" / "wiki" / "Goals.md"
+            namespaced.parent.mkdir(parents=True)
+            flat.replace(namespaced)
+            (root / "docs" / "guide.md").write_text("# product\n", encoding="utf-8")
+            report = verify_self_migrate(root, target_version="0.8.1")
+            plan = plan_self_migrate(root, target_version="0.8.1")
+        self.assertTrue(report["ready"], report["failures"])
+        self.assertNotIn("adoption_not_core_ready", report["failures"])
+        present = {p["path"] for p in plan["refresh_paths_present"]}
+        self.assertIn("docs/plate/wiki/Goals.md", present)
+        self.assertNotIn("docs/wiki/Goals.md", present)
+        self.assertNotIn("docs/wiki/Goals.md", plan["refresh_paths_missing"])
+
     def test_verify_fails_on_pin_drift(self):
         """Proves: pin behind target fails no_drift check (#965)."""
         with TemporaryDirectory() as tmp:

@@ -53,6 +53,17 @@ class FakeClient:
         raise AssertionError(f"unexpected endpoint: {endpoint}")
 
 
+class NamespacedGoalsClient(FakeClient):
+    """Flat Goals 404s; the namespaced page exists (#1022)."""
+
+    def api(self, endpoint, **kwargs):
+        if endpoint.endswith("contents/docs/wiki/Goals.md"):
+            raise GhApiError("404 not found")
+        if endpoint.endswith("contents/docs/plate/wiki/Goals.md"):
+            return {"name": "Goals.md", "type": "file"}
+        return super().api(endpoint, **kwargs)
+
+
 class FailingClient:
     """Simulates partial failures for resilience tests (#270)."""
     def __init__(self):
@@ -102,6 +113,15 @@ class HealthTests(unittest.TestCase):
         # #340 fields always present
         self.assertEqual(report.spec_audit_status, "skipped")
         self.assertIn("spec_audit_status", d)
+
+    def test_goals_page_present_at_namespaced_path(self):
+        """Proves: health accepts docs/plate/wiki/Goals.md when the flat page is absent (#1022)."""
+        report = get_health(
+            repo="akasper/plate_core",
+            client=NamespacedGoalsClient(),
+            include_spec_audit=False,
+        )
+        self.assertTrue(report.goals_page_present)
 
     def test_health_budget_fields_from_snapshot(self):
         """#634/#783: health merges get_budget_snapshot into report."""

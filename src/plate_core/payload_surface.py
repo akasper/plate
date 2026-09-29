@@ -455,6 +455,39 @@ def namespace_docs_path(rel: str) -> str:
     return rel
 
 
+# Goals wiki page. Flat installs and this template source use the first path.
+# Namespaced adopter installs (#1015) use the second. Remote readers try the
+# flat path first so an un-namespaced checkout resolves in one request.
+GOALS_WIKI_FLAT_REL = "docs/wiki/Goals.md"
+GOALS_WIKI_NAMESPACED_REL = "docs/plate/wiki/Goals.md"
+GOALS_WIKI_CONTENTS_RELS: tuple[str, ...] = (
+    GOALS_WIKI_FLAT_REL,
+    GOALS_WIKI_NAMESPACED_REL,
+)
+
+
+def resolve_local_goals_wiki(repo_root: str | Path) -> tuple[Path, str, bool]:
+    """Locate the Goals wiki page for a flat or namespaced checkout.
+
+    Returns ``(absolute_path, repo-relative posix path, exists)``.
+
+    An existing namespaced page is canonical when both files are present.
+    When neither file exists, a ``docs/plate/`` directory means the expected
+    path is ``docs/plate/wiki/Goals.md``. Otherwise the expected path stays
+    ``docs/wiki/Goals.md``.
+    """
+    root = Path(repo_root)
+    namespaced = root.joinpath(*GOALS_WIKI_NAMESPACED_REL.split("/"))
+    flat = root.joinpath(*GOALS_WIKI_FLAT_REL.split("/"))
+    if namespaced.is_file():
+        return namespaced, GOALS_WIKI_NAMESPACED_REL, True
+    if flat.is_file():
+        return flat, GOALS_WIKI_FLAT_REL, True
+    if (root / "docs" / "plate").is_dir():
+        return namespaced, GOALS_WIKI_NAMESPACED_REL, False
+    return flat, GOALS_WIKI_FLAT_REL, False
+
+
 def is_plate_owned_root_doc(path: Path) -> bool:
     """True when ``path`` is a packaged PLATE docs/-root file, not adopter content.
 

@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from .payload_surface import resolve_local_goals_wiki
+
 # Shared catalog with bootstrap seed-initial-questions (#153 / #949).
 STARTER_QUESTIONS: list[dict[str, str]] = [
     {
@@ -115,15 +117,15 @@ def assess_adoption_readiness(
         )
     )
 
-    goals = root / "docs" / "wiki" / "Goals.md"
+    _goals_path, goals_rel, goals_ok = resolve_local_goals_wiki(root)
     checks.append(
         _check(
             check_id="goals_wiki",
-            title="docs/wiki/Goals.md present",
-            ok=goals.is_file(),
+            title=f"{goals_rel} present",
+            ok=goals_ok,
             minutes=4,
             fix_command="gh plate bootstrap --adopt --apply  # seeds Goals when wiki enabled",
-            detail="docs/wiki/Goals.md" if goals.is_file() else "missing",
+            detail=goals_rel if goals_ok else "missing",
         )
     )
 
@@ -212,11 +214,11 @@ def assess_adoption_readiness(
         next_steps.append(
             "2. Apply payload: gh plate import-payload --apply --strategy conservative"
         )
-    if not plate_ok or not goals.is_file() or not process_ok:
+    if not plate_ok or not goals_ok or not process_ok:
         next_steps.append(
             "3. GitHub baseline: gh plate bootstrap --adopt --apply (labels/wiki/.plate)"
         )
-    next_steps.append("4. Verify: gh plate health; write mission text in docs/wiki/Goals.md")
+    next_steps.append(f"4. Verify: gh plate health; write mission text in {goals_rel}")
     if core_ready and not first_qa.get("seeded"):
         next_steps.append(
             "5. First Q&A seed: "
