@@ -12,8 +12,22 @@ from typing import Any
 import yaml
 
 
-CURRENT_CONFIG_VERSION = "1.2"
-ALLOWED_CONFIG_TOP_LEVEL_KEYS = {"version", "methodology", "extensions", "overrides", "release", "autonomy"}
+CURRENT_CONFIG_VERSION = "1.3"
+PLATFORM_POSIX = "posix"
+PLATFORM_POSIX_AND_WINDOWS = "posix-and-windows"
+PLATFORM_WINDOWS = "windows"
+ALLOWED_PLATFORMS = frozenset(
+    {PLATFORM_POSIX, PLATFORM_POSIX_AND_WINDOWS, PLATFORM_WINDOWS}
+)
+ALLOWED_CONFIG_TOP_LEVEL_KEYS = {
+    "version",
+    "methodology",
+    "extensions",
+    "overrides",
+    "release",
+    "autonomy",
+    "platform",
+}
 ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release", "autonomy"}
 
 
@@ -51,6 +65,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "max_cycles": None,
         },
     },
+    # Absent key resolves to posix. PLATE's own repo sets posix-and-windows explicitly.
+    "platform": PLATFORM_POSIX,
 }
 
 
@@ -62,12 +78,17 @@ class PlateConfig:
     overrides: dict[str, Any] = field(default_factory=dict)
     release: dict[str, Any] = field(default_factory=dict)
     autonomy: dict[str, Any] = field(default_factory=dict)
+    platform: str = PLATFORM_POSIX
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PlateConfig":
+        # JSON null is the same as a missing key. "" stays "" so validation rejects it.
+        stored_platform = data.get("platform", PLATFORM_POSIX)
+        if stored_platform is None:
+            stored_platform = PLATFORM_POSIX
         return cls(
             version=data.get("version", CURRENT_CONFIG_VERSION),
             methodology=data.get("methodology", {}),
@@ -75,6 +96,7 @@ class PlateConfig:
             overrides=data.get("overrides", {}),
             release=data.get("release", {}),
             autonomy=data.get("autonomy", {}),
+            platform=stored_platform,
         )
 
 
@@ -319,6 +341,11 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
             raise PlateConfigError("'extensions.sources' must be a list if present")
         _normalize_installed_extensions(config)
 
+    platform = config.get("platform", None)
+    if platform is not None and (not isinstance(platform, str) or platform not in ALLOWED_PLATFORMS):
+        allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+        raise PlateConfigError(f"invalid platform: {platform!r} (allowed: {allowed})")
+
 
 def _migrate_1_0_to_1_1(config: dict[str, Any]) -> dict[str, Any]:
     upgraded = copy.deepcopy(config)
@@ -342,6 +369,18 @@ def _migrate_1_1_to_1_2(config: dict[str, Any]) -> dict[str, Any]:
     return upgraded
 
 
+def _migrate_1_2_to_1_3(config: dict[str, Any]) -> dict[str, Any]:
+    """Record script platform. A missing key or JSON null becomes posix.
+
+    An empty string is left in place so ``validate_plate_config`` rejects it.
+    """
+    upgraded = copy.deepcopy(config)
+    if "platform" not in upgraded or upgraded.get("platform") is None:
+        upgraded["platform"] = PLATFORM_POSIX
+    upgraded["version"] = "1.3"
+    return upgraded
+
+
 MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
     "1.0": (
         "1.1",
@@ -357,6 +396,14 @@ MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
         [
             "Add the 'autonomy' section (code DEFAULT is enabled at 'medium' risk tolerance per Epic #470 autonomous vision; the migration copies the live DEFAULT_CONFIG so new behavior is forward-compatible).",
             "To keep conservative behavior, explicitly set 'enabled: false' and/or 'risk_tolerance: off' (or 'low') in your .plate file. The section is now added with the current code defaults on upgrade.",
+        ],
+    ),
+    "1.2": (
+        "1.3",
+        _migrate_1_2_to_1_3,
+        [
+            "Add top-level 'platform' (posix | posix-and-windows | windows). A missing key migrates to posix: import and bootstrap copy PLATE-owned .sh scripts and omit PLATE-owned .ps1 twins.",
+            "Set platform to posix-and-windows to keep both script flavors, or windows to copy PLATE-owned .ps1 scripts and omit .sh twins. Do not infer the value from the operator machine.",
         ],
     ),
 }

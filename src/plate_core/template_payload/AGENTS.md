@@ -162,7 +162,7 @@ Reproduce the failure or document why reproduction is not yet possible. Add a re
 | Step | Required Behavior |
 |---|---|
 | 1 | Confirm the issue is labeled `Question` (or legacy `#question`) and clearly states the information goal and answer signal. |
-| 2 | Use batched review to process open questions (`/question-batch` slash command or `scripts/question_batch.sh`). |
+| 2 | **Present the question using host-native look-and-feel** (Copilot CLI native TUI, Grok Build `ask_user_question` arrow-key forms, or equivalent). Fall back to `gh plate qanda` CLI / plain text only when native UI is unavailable. Do not wait for the user to say "use native UI." |
 | 3 | Commit the answer artifact (for example `docs/research/<slug>.md`) and any resulting process updates. |
 | 4 | When the answer changes operating guidance, update `AGENTS.md` and `.agentic/skills.yml` in the same PR. |
 | 5 | Open a Documentation PR with `Closes #N` in the body. |
@@ -474,7 +474,7 @@ When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that i
 <!-- PLATES-CORE:BEGIN interactive-epic-planning -->
 ## Interactive Epic Planning
 
-When a user expresses intent to plan a new epic, offer a guided Q&A session that extracts requirements and creates the Epic issue and child stubs incrementally. This workflow applies in Copilot chat. MCP and CLI surfaces are reserved for Phase 2.
+When a user expresses intent to plan a new epic, offer a guided Q&A session that extracts requirements and creates the Epic issue and child stubs incrementally. **Present questions using host-native look-and-feel** (Copilot CLI native TUI, Grok Build `ask_user_question`, etc.) rather than free-form chat. This workflow applies in Copilot chat. MCP and CLI surfaces are reserved for Phase 2.
 
 ### Intent Detection
 
@@ -598,6 +598,38 @@ When opening pull requests through GitHub CLI, first run `gh plate release statu
 For **every new pull request**, add exactly one required PR type label (`Bug`, `Feature`, `Documentation`, or `Feedback Response`) at creation time. Unlabeled or multiply-labeled PRs fail CI immediately, and a repair comment will be posted on the PR with the exact `gh pr edit` command to fix it.
 
 For `Feature`, `Bug`, and issue-driven `Documentation` PRs, add the relevant milestone as well. Current rollout is warning-first: the PR issue-link workflow warns when the milestone is missing rather than failing immediately.
+
+## Script Policy and Platform Support
+
+**Default:** PLATE repositories use **POSIX shell (`.sh`) scripts only**. Do not create parallel PowerShell (`.ps1`) twins unless the project explicitly declares Windows support.
+
+**Platform support tiers:**
+
+1. **Default (no platform stated, or Unix-first / cross-platform without explicit Windows):** Ship **shell scripts only** (`.sh`). Do not require or invent parallel `.ps1` scripts.
+
+2. **Windows supported (developer explicitly states):** Keep shell scripts as primary **and also** provide PowerShell equivalents where operators need them (dual-stack). Both `.sh` and `.ps1` must implement the same behavior.
+
+3. **Windows-only (developer explicitly states):** PowerShell is sufficient; POSIX/shell scripts **may be eschewed**.
+
+**Determining platform support:** Platform support must come from **human-stated project intent** in one of these sources:
+- `SPEC.md` or project documentation
+- `.plate` configuration (`platform`: `posix` | `posix-and-windows` | `windows`; a missing key means `posix`)
+- Onboarding answers or bootstrap configuration
+- Explicit instruction during repository setup
+
+**Never infer platform support** from:
+- The developer's laptop operating system
+- The presence of Windows-specific dependencies
+- CI/CD platform choices
+
+**Agent responsibilities:**
+- When creating new scripts, check project platform support first
+- For default projects (no explicit Windows support): create `.sh` only
+- For Windows-supported projects: create both `.sh` (primary) and `.ps1` (equivalent)
+- For Windows-only projects: create `.ps1` only
+- When modifying existing scripts, maintain consistency with the project's declared platform support
+
+**`.plate` platform:** Set `platform` to `posix` (the default when the key is absent), `posix-and-windows`, or `windows`. `gh plate import-payload` and `gh plate bootstrap --apply` copy PLATE-owned scripts for that value. `posix` omits PLATE `.ps1` twins and validation requires `gif-from-video.sh` under `scripts/` or `scripts/plate/`. `posix-and-windows` copies both flavors and validation requires both GIF scripts; template CI still runs the shell validator. `windows` omits PLATE `.sh` twins, validation requires `gif-from-video.ps1` under `scripts/` or `scripts/plate/`, and the copied template CI test job runs `pwsh -File scripts/ValidatePlateRepo.ps1 -Root .` on `windows-latest`. The copied `process-gifs` job calls `gif-from-video.ps1` through `pwsh` and fails if that helper or `pwsh` is missing. `--platform` states the value for that run and is written into `.plate` on apply. The filter names PLATE-owned basenames only and does not delete adopter-owned scripts, including namespaced files under `scripts/plate/`. `scripts/README.md` and `scripts/dev-server.js` are always copied. The template payload stays the dual-stack superset. The PLATE repository itself sets `posix-and-windows`.
 
 ## Upstream PLATE Template Synchronization
 

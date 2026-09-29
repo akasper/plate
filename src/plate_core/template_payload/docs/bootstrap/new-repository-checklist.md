@@ -4,16 +4,16 @@ Use this checklist immediately after creating a repository from the PLATE templa
 
 ## Fast Path
 
-From the generated repository root, choose the script for your operating system:
+From the generated repository root, run the bootstrap script:
 
-**macOS / Linux / WSL (bash):**
+**POSIX shell (macOS / Linux / WSL — default):**
 ```bash
 bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle @your-handle --remove-default-labels --protect-branch main
 # Add --init-wiki only if you plan to enable wiki sync.
 # Add --skip-delete-branch-on-merge only if this repository intentionally keeps merged branches.
 ```
 
-**Windows (PowerShell):**
+**PowerShell (Windows — for projects with explicit Windows support):**
 ```powershell
 .\scripts\BootstrapGitHub.ps1 -Repo OWNER/REPO -LocalRepo . -OwnerHandle @your-handle -RemoveDefaultLabels -ProtectBranch main
 # Add -InitWiki only if you plan to enable wiki sync.
@@ -21,6 +21,8 @@ bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle
 ```
 
 Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable GitHub bootstrap work that otherwise gets missed in brand-new repositories.
+
+**Platform note:** Set `.plate` `platform` to `posix` (default when absent), `posix-and-windows`, or `windows`. `gh plate bootstrap --apply` and `gh plate import-payload` copy PLATE-owned scripts for that value and do not delete adopter-owned scripts. `posix` omits `.ps1` twins. `posix-and-windows` copies both and validation requires both GIF scripts. `windows` omits `.sh` twins, the copied CI job runs `ValidatePlateRepo.ps1` on `windows-latest`, and the copied `process-gifs` job calls `gif-from-video.ps1` through `pwsh`. Pass `--platform` to state it for that run; apply writes it into `.plate`. See "Script Policy and Platform Support" in `AGENTS.md`.
 
 `gh plate bootstrap --apply` covers the repository-scaffolding side of bootstrap: it copies the checked-in PLATE template payload into the repo so AGENTS, docs, workflows, scripts, and starter assets are present locally.
 

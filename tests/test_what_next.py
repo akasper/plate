@@ -806,6 +806,7 @@ class TestAdoptionSessionWhatNext(unittest.TestCase):
         )
         self.assertEqual(out["priority"], "adoption_session")
         self.assertIn("first-qa-plan", out.get("next_command") or "")
+        self.assertIn("--apply-first-qa", out.get("next_command") or "")
 
 
 class TestSelfMigrateWhatNext(unittest.TestCase):

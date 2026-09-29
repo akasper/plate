@@ -1,0 +1,192 @@
+{
+  "version": "0.8.1",
+  "summary": "PLATE 0.8.1 -- adopter time-to-value routing, namespaced docs on import, host-native prompts, and a .plate platform setting for POSIX and Windows scripts.",
+  "cut_at": "2026-09-29T20:17:24Z",
+  "fragment_count": 12,
+  "fragment_slugs": [
+    "1000-epic-closeout",
+    "988-host-native-prompts",
+    "adopter-ttv-phase-a-post-merge",
+    "first-qa-next-command-apply",
+    "goals-md-hybrid-rewrite",
+    "import-payload-next-command",
+    "install-path-0.8.0-parity",
+    "namespace-docs-on-import",
+    "post-0.8.0-qanda-next-release-priorities",
+    "restore-publish-pypi-workflow",
+    "script-policy-posix-default",
+    "session-complete-next-command-first-qa"
+  ],
+  "entries": [
+    {
+      "change_type": "docs",
+      "surface": "docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md",
+      "migration_impact": "No runtime migration. Adopter-path agents should cite offline Phase A proof; do not claim #654 LIVE boxes without third-party E2E. Next Release #983 remains open.",
+      "agent_notes": "Epic #1000 marked status:implemented but remains OPEN per PLATE closeout convention. All success criteria met on release. LIVE under-30m proof is Phase B human-gated.",
+      "links": [
+        "#1000",
+        "#993",
+        "#996",
+        "#998",
+        "#1001",
+        "#1003",
+        "#1005",
+        "#1006",
+        "#983",
+        "#633",
+        "#654"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/agent_guidance.py, src/plate_core/template_payload/AGENTS.md, tests/test_host_native_interaction.py",
+      "migration_impact": "Additive guidance only. Agents should consistently use native TUI (ask_user_question, Copilot CLI forms) for interactive prompts without user reminder. Downstream AGENTS.md Question loops should be synced to remove chat-only language.",
+      "agent_notes": "Host-native interaction is now a universal principle (HOST_NATIVE_INTERACTION_PRINCIPLE in agent_guidance.py, first-class guidance section). Applies beyond Q&A to all agent\u2192user interactive solicitation (epic planning, blocking questions, what-next, confirmations). Host matrix: Copilot CLI native TUI, Grok `ask_user_question`, fallback to gh plate qanda/CLI text. Template Question loop and interactive-epic-planning updated. Regression tests ensure guidance is present. Related: Design #144, bugs #509/#518/#512, Epic #656. Closes #988.",
+      "links": [
+        "#988",
+        "#656",
+        "#144",
+        "#509",
+        "#518",
+        "#512"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/research/adopter-ttv-phase-a-post-merge-2026-07-29.md",
+      "migration_impact": "No runtime migration. Adopter-path agents should cite the Phase A research note for post-merge offline proof and keep #654 LIVE boxes unchecked until Phase B.",
+      "agent_notes": "Stack is on release. Do not claim LIVE under-30m from Phase A. Phase B needs a throwaway GitHub repo + operator wall-clock. Human Task #1006 may still need PLATE-TASK-CLOSED comment.",
+      "links": [
+        "#1005",
+        "#1000",
+        "#1006",
+        "#983",
+        "#633"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/adoption.py, src/plate_core/what_next.py",
+      "migration_impact": "Additive routing only. Agents should execute next_command (apply-first-qa + runner) instead of re-planning from adopt status, what-next, or first-qa dry-run.",
+      "agent_notes": "On core_ready + first_qa unseeded, adopt status and what-next next_command are apply-first-qa (runner required). Do not loop on plan-only. Parent Epic #1000.",
+      "links": [
+        "#1001",
+        "#1000",
+        "#983",
+        "#949"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/wiki/Goals.md",
+      "migration_impact": "No required downstream migration. Adopters who copied the old example Goals text may refresh structure from the new Adopter/template convention section; PLATE product mission text is monorepo-specific.",
+      "agent_notes": "Treat docs/wiki/Goals.md Mission / Principles / How We Intend to Succeed / Current State as PLATE SSOT for Information Audits. The bottom Adopter/template section is convention only. Prefer Documentation PRs for Goals updates. Do not claim v1.0 or under-30m LIVE proof beyond what Current State lists."
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/import_payload.py",
+      "migration_impact": "Additive only. Clients reading next_steps continue to work; prefer next_command for agent routing (parity with adopt/self-migrate).",
+      "agent_notes": "After import-payload --apply, expect .plate + releases/unreleased + next_command. Never overwrite existing .plate. .plate is JSON (v1.2), not YAML.",
+      "links": [
+        "#996",
+        "#633",
+        "#615",
+        "#622"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "README.md, docs/migration/adoption-guide.md, docs/bootstrap/marketplace-install-checklist.md, docs/research/adopter-install-path-0.8.0-parity.md",
+      "migration_impact": "Adopters should pip install -U 'plate-core==0.8.0' and gh extension upgrade/reinstall gh-plate to v0.8.0. No code API change.",
+      "agent_notes": "Before under-30m adopt sessions, verify plate_core.__version__ and gh-plate PLATE_CORE_VERSION are 0.8.0. Do not claim #654 LIVE under-30m from docs/research/adopter-install-path-0.8.0-parity.md alone.",
+      "links": [
+        "#998",
+        "#983",
+        "#989",
+        "#992",
+        "#633",
+        "#649"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "import_payload, payload_surface, template adoption",
+      "migration_impact": "When importing PLATE into a repo that already has non-PLATE files under docs/, all PLATE documentation (design/, wiki/, research/, audits/, migration/, bootstrap/, marketing/, adr/, and root docs files) will install under docs/plate/ instead of the docs root. References in AGENTS.md, workflows, issue templates, and payload docs themselves are rewritten automatically. Root files docs/README.md and docs/playwright-e2e-guide.md count as PLATE only when their content matches the template markers, so a product README at that path triggers namespacing and is not overwritten. Explicit --namespace-docs / --no-namespace-docs (CLI) and namespace_docs (MCP plate_import_payload; omit to auto-detect) are wired through. The migration guide ships in the template payload at docs/migration/namespace-docs-migration.md.",
+      "agent_notes": "When importing PLATE payload, use auto-detect (namespace_docs=None) unless user explicitly requests always-namespace or never-namespace. Treat docs/plate/ as the canonical location for PLATE scaffolding docs when namespacing is active. Update any agent prompts or skills that hard-code docs/ paths to check for both docs/ and docs/plate/ variants, or use should_namespace_docs() + namespace_docs_path() helpers from payload_surface. Direct existing installations to docs/migration/namespace-docs-migration.md for migration steps.",
+      "migration_guidance": [
+        "1. Review the comprehensive migration guide at docs/migration/namespace-docs-migration.md.",
+        "2. For automatic migration: run 'gh plate import-payload --namespace-docs --strategy force --apply' to re-import with namespace.",
+        "3. For manual migration: move PLATE subdirs with 'git mv docs/{adr,audits,bootstrap,design,marketing,migration,research,wiki} docs/plate/' and update references.",
+        "4. Update doc references in AGENTS.md, workflows, issue templates using search commands in migration guide.",
+        "5. Update wiki sync workflows to use docs/plate/wiki/ instead of docs/wiki/.",
+        "6. Verify migration using checklist in migration guide.",
+        "7. For edge cases (mixed trees, customized wikis, open PRs, CI workflows), see dedicated sections in migration guide."
+      ],
+      "links": [
+        "#1015",
+        "#621",
+        "#1016"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "docs",
+      "surface": "",
+      "migration_impact": "",
+      "agent_notes": ""
+    },
+    {
+      "change_type": "feature",
+      "surface": "AGENTS.md, .plate platform, import-payload, bootstrap, template validators",
+      "migration_impact": "Schema 1.3 adds optional top-level platform: posix, posix-and-windows, or windows. A missing key migrates to posix and means import-payload and bootstrap omit PLATE-owned .ps1 twins. posix-and-windows copies both flavors and validation requires both GIF scripts. windows omits PLATE-owned .sh twins, rewrites the copied template CI test job to pwsh -File scripts/ValidatePlateRepo.ps1 -Root . on windows-latest, and points the copied process-gifs job at gif-from-video.ps1 through pwsh. Existing destination files are not deleted. Adopter-owned scripts are outside the PLATE basename filter. PLATE itself sets posix-and-windows. --platform overrides .plate for that run and is persisted on apply. Invalid values fail closed. The operator OS is not consulted.",
+      "agent_notes": "Read .plate platform before authoring or copying scripts. Absent or JSON null means posix: author and copy .sh only. An empty string is invalid. posix-and-windows: .sh is primary and each operator-facing script also has a .ps1. windows: .ps1 only, copied template CI uses ValidatePlateRepo.ps1 on windows-latest, and the copied process-gifs job calls gif-from-video.ps1 through pwsh. Never infer platform from the laptop OS. --platform is an explicit human instruction and must be persisted on apply. When a remote .plate already exists, parse it before copying templates. A windows copy rewrites markdown commands that call omitted .sh helpers so they invoke the copied .ps1 files. Omit PLATE-owned twins from the copy set; do not delete files already in the destination and do not touch adopter-owned scripts. Invalid platform values fail closed.",
+      "migration_guidance": [
+        "1. Set .plate platform to posix (default when absent), posix-and-windows, or windows. Do not infer it from the operator machine, Windows dependencies, or CI host.",
+        "2. import-payload and bootstrap --apply copy PLATE-owned script twins for that value only. posix omits .ps1. windows omits .sh and rewrites package.json record:e2e to pwsh -File scripts/e2e-record.ps1. posix-and-windows copies both. Namespaced copies retarget PLATE script paths inside copied scripts and package.json to scripts/plate/. scripts/README.md and scripts/dev-server.js always copy. Pass --platform to override .plate; apply writes the value back. A remote .plate that is not valid JSON fails bootstrap instead of being read as posix. An empty or whitespace-only platform string is invalid in every reader, including an explicit --platform, and does not fall through to the stored value. JSON null loads as posix. When --platform is set and a remote .plate already exists, bootstrap parses that file before copying templates.",
+        "3. Validation follows the same value and accepts scripts/ or scripts/plate/. posix requires gif-from-video.sh. posix-and-windows requires both GIF scripts and template CI stays on the shell validator. windows requires gif-from-video.ps1, the copied CI job runs ValidatePlateRepo.ps1 on windows-latest, and the copied process-gifs job calls gif-from-video.ps1 through pwsh. The PowerShell validator rejects a non-string platform, including a one-element array, the same way the shell validator does. A platform value with an embedded newline or carriage return is invalid in the shell validator and is not normalized to posix.",
+        "4. Do not delete scripts with a *.ps1 or *.sh glob. The filter is basename-only for PLATE twins (validate_plate_repo.sh, ValidatePlateRepo.ps1, bootstrap_github.sh, BootstrapGitHub.ps1, check_toolchain.sh, CheckToolchain.ps1, question_batch.sh, QuestionBatch.ps1, e2e-record.sh, e2e-record.ps1, gif-from-video.sh, gif-from-video.ps1) at scripts/ or scripts/plate/.",
+        "5. Dual-stack repositories, including PLATE, set platform to posix-and-windows so both flavors stay. The template payload on disk remains the superset; the destination platform decides the copy."
+      ],
+      "links": [
+        "#1017",
+        "#1018",
+        "#1019"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/adoption.py, docs/migration/adoption-guide.md, docs/research/adopter-ttv-stack-offline-proof.md",
+      "migration_impact": "Additive routing. Agents completing adopt sessions should follow next_command (first-qa apply before feed when unseeded; not a re-plan loop).",
+      "agent_notes": "After gh plate adopt --complete-session --json, if core_ready and first_qa_seeded=false run next_command with --apply-first-qa (runner required) before feed. Parent Epic #1000; stacks with #1002.",
+      "links": [
+        "#1000",
+        "#1002",
+        "#1003",
+        "#949",
+        "#955",
+        "#983",
+        "#995",
+        "#997",
+        "#999"
+      ]
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": "",
+  "closes_block": "Closes #1000, #993, #996, #998, #1001, #1003, #1005, #1006, #983, #633, #654, #988, #656, #144, #509, #518, #512, #949, #615, #622, #989, #992, #649, #1015, #621, #1016, #1017, #1018, #1019, #1002, #955, #995, #997, #999"
+}

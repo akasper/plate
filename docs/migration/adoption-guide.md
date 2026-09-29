@@ -6,6 +6,27 @@ Greenfield path: `docs/bootstrap/new-repository-checklist.md`.
 
 Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automated work. The steps below are the durable operator path; agents follow the same sequence via `plate_what_next` / feed process items.
 
+## Prerequisites (install path — do this first)
+
+Mismatched pins burn the under-30m budget. After **v0.8.1**, align runtime before step 0:
+
+```bash
+pip install -U 'plate-core==0.8.1'
+python -c "import plate_core; print(plate_core.__version__)"   # expect 0.8.1
+
+gh extension install akasper/gh-plate    # or: gh extension upgrade plate
+# If gh plate still locks an older plate-core (e.g. 0.7.2), reinstall the extension:
+#   gh extension remove plate && gh extension install akasper/gh-plate
+```
+
+| Check | Healthy signal |
+|---|---|
+| pip / import | `plate_core.__version__ == "0.8.1"` |
+| gh-plate | extension at **v0.8.1**; `PLATE_CORE_VERSION` content `0.8.1` |
+| Self-migrate | `gh plate self-migrate --verify --json` → no false drift when pin==target |
+
+Full public install notes: root `README.md` (Quick Start → Install versions). Local offline dry-run timings (not LIVE third-party E2E): `docs/research/adopter-install-path-0.8.0-parity.md`.
+
 ## Recommended sequence (<30m)
 
 0. **Start wall-clock session (optional but recommended, #955)**  
@@ -29,10 +50,12 @@ Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automa
 2. **Local payload (reviewable diffs)**  
    ```bash
    gh plate import-payload --dry-run --strategy conservative --json
+   # Follow report.next_command (usually --apply same strategy; conflicts → escape-hatch)
    gh plate import-payload --apply --strategy conservative
    ```
    Prefer `conservative` so differing existing files become conflicts (not silent skips/overwrites).
    Use `safe` to skip any existing path; `force` only with explicit human approval.
+   JSON reports include a single **`next_command`** for agents (#996) — do not invent force-apply.
 
 3. **GitHub-side baseline**  
    ```bash
@@ -45,12 +68,14 @@ Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automa
      `.agentic/adoption/first_qa_seed.json` when Questions are present (#951).
    - Emits adoption-tailored next steps (Goals.md, CODEOWNERS, CI coexistence, migrate plan).
 
-4. **First Q&A seed (if not already seeded, #949)**  
+4. **First Q&A seed (if not already seeded, #949 / #1001)**  
    ```bash
    gh plate adopt --first-qa-plan --json
-   # Live create requires an injectable runner / bootstrap --apply path; CLI alone does not open issues.
+   # Dry-run next_command points at apply (do not re-plan in a loop):
+   gh plate adopt --first-qa-plan --apply-first-qa --json   # requires injectable runner
    ```
    Plans three starter Curiosity Questions (same catalog as bootstrap).  
+   Live create requires an injectable runner / bootstrap `--apply` path; CLI alone does not open issues.  
    MCP: `plate_adoption_first_qa_plan`.  
    Offline marker: `.agentic/adoption/first_qa_seed.json`.
 
@@ -73,12 +98,14 @@ Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automa
    Health also exposes `self_migrate_ready` / `self_migrate_drift` (#967).  
    MCP: `plate_self_migrate_verify`.
 
-7. **Complete session timer (#955)**  
+7. **Complete session timer (#955 / #1003)**  
    ```bash
    gh plate adopt --session-status --json
    gh plate adopt --complete-session --json
+   # Follow report.next_command: first-qa-plan if unseeded; feed only when first_qa_seeded
    ```
    Records `duration_minutes` and `within_30m` against the 30-minute budget.  
+   Does **not** jump to feed when `core_ready` but first Q&A is still unseeded (#1003).  
    This is **local proof evidence**, not a claim that every monorepo finished live E2E.
 
 8. **Optional cutover**  

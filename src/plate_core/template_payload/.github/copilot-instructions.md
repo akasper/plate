@@ -2,7 +2,7 @@
 
 ## Build, test, and lint
 
-This template enforces baseline process validation through `bash scripts/validate_plate_repo.sh .` in `.github\workflows\ci.yml`.
+This template enforces baseline process validation through `bash scripts/validate_plate_repo.sh .` in `.github\workflows\ci.yml`. Validation follows `.plate` `platform`: absent or `posix` requires the shell GIF script, `posix-and-windows` requires both GIF scripts, and `windows` requires the PowerShell GIF script. Import and bootstrap rewrite a `windows` copy of this workflow to `pwsh -File scripts/ValidatePlateRepo.ps1 -Root .` on `windows-latest`. A `windows` copy of `test-e2e.yml` calls `gif-from-video.ps1` through `pwsh` in `process-gifs` and fails if that helper or `pwsh` is missing.
 
 Downstream PLATE repositories **must replace placeholder validation with concrete stack commands** once runtime manifests are present (`package.json`, `pyproject.toml`, `wally.toml`, `default.project.json`, etc.). The validator fails CI if runtime manifests exist but docs/CI still claim the placeholder template state.
 

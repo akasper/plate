@@ -362,6 +362,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 apply_mode=bool(args.get("apply", False)),
                 adopt=adopt_flag,
                 local_root=args.get("local_root"),
+                platform=args.get("platform"),
             ).to_dict()
         elif name == "plate_adoption_status":
             from .adoption import assess_adoption_readiness
@@ -1930,6 +1931,9 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             ns = args.get("namespace_scripts")
             if ns is not None:
                 ns = bool(ns)
+            nd = args.get("namespace_docs")
+            if nd is not None:
+                nd = bool(nd)
             payload = import_payload(
                 target_dir=args.get("target_dir") or args.get("target") or ".",
                 strategy=str(args.get("strategy") or "safe"),
@@ -1937,8 +1941,10 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 dry_run=dry,
                 apply=apply_mode,
                 namespace_scripts=ns,
+                namespace_docs=nd,
                 escape_hatch_dir=args.get("escape_hatch_dir") or args.get("escape_hatch"),
                 escape_hatch_on_conflict=bool(args.get("escape_hatch_on_conflict", False)),
+                platform=args.get("platform"),
             )
         elif name == "plate_payload_list":
             from .payload_surface import list_payload_files
@@ -2254,6 +2260,11 @@ def run() -> None:
                                         "local_root": {
                                             "type": "string",
                                             "description": "Local checkout path for adoption heuristics (default cwd).",
+                                        },
+                                        "platform": {
+                                            "type": "string",
+                                            "enum": ["posix", "posix-and-windows", "windows"],
+                                            "description": "Script platform for this run. Overrides remote .plate and is written when apply=true. Omit to use remote .plate, or posix when absent.",
                                         },
                                     },
                                 },
@@ -4852,6 +4863,10 @@ def run() -> None:
                                     "Import PLATE template payload into a local checkout (#616). "
                                     "Dry-run by default; set apply=true to write. Strategies: safe|conservative|force. "
                                     "namespace_scripts installs under scripts/plate/ when product scripts/ exists (#621). "
+                                    "namespace_docs installs under docs/plate/ when product docs/ exists (#1015); "
+                                    "omit for auto-detect, false to keep docs/ root. "
+                                    "platform is posix (default), posix-and-windows, or windows; "
+                                    "it filters PLATE-owned script twins and is written on apply. "
                                     "escape_hatch_dir writes plan.json+PLAN.md+DRAFT_PR_BODY.md for hard merges (#622); "
                                     "never force-overwrite high-value paths without human approval."
                                 ),
@@ -4883,6 +4898,15 @@ def run() -> None:
                                         "namespace_scripts": {
                                             "type": "boolean",
                                             "description": "Force scripts/plate/ install; omit for auto-detect.",
+                                        },
+                                        "namespace_docs": {
+                                            "type": "boolean",
+                                            "description": "Force docs/plate/ install; omit for auto-detect; false keeps docs/ root (#1015).",
+                                        },
+                                        "platform": {
+                                            "type": "string",
+                                            "enum": ["posix", "posix-and-windows", "windows"],
+                                            "description": "Script platform for this run. Overrides target .plate and is written when apply=true. Omit to use target .plate, or posix when absent.",
                                         },
                                         "escape_hatch_dir": {
                                             "type": "string",

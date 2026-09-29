@@ -97,7 +97,11 @@ class ImportPayloadReport:
     conflicts: list[str] = field(default_factory=list)
     overwritten: list[str] = field(default_factory=list)
     next_steps: list[str] = field(default_factory=list)
+    next_command: str = ""
     namespace_scripts: bool = False
+    namespace_docs: bool = False
+    platform: str = "posix"
+    omitted_for_platform: list[str] = field(default_factory=list)
     ok: bool = True
     error: str | None = None
 
@@ -111,6 +115,9 @@ class ImportPayloadReport:
             "template_source": self.template_source,
             "template_root": self.template_root,
             "namespace_scripts": self.namespace_scripts,
+            "namespace_docs": self.namespace_docs,
+            "platform": self.platform,
+            "omitted_for_platform": list(self.omitted_for_platform),
             "counts": {
                 "payload_files": len(self.files),
                 "would_create": len(self.would_create),
@@ -121,6 +128,7 @@ class ImportPayloadReport:
                 "skipped": len(self.skipped),
                 "conflicts": len(self.conflicts),
                 "overwritten": len(self.overwritten),
+                "omitted_for_platform": len(self.omitted_for_platform),
             },
             "would_create": list(self.would_create),
             "would_skip": list(self.would_skip),
@@ -132,6 +140,7 @@ class ImportPayloadReport:
             "overwritten": list(self.overwritten),
             "files": [f.to_dict() for f in self.files],
             "next_steps": list(self.next_steps),
+            "next_command": self.next_command or _next_command(self),
         }
 
 
@@ -153,6 +162,36 @@ def _file_sha256(path: Path) -> str:
     h = hashlib.sha256()
     h.update(path.read_bytes())
     return h.hexdigest()
+
+
+def _should_rewrite_docs_refs(rel: str) -> bool:
+    """True when file should have docs/ refs rewritten during namespace (#1015)."""
+    # AGENTS.md at root references docs/ paths extensively
+    if rel == "AGENTS.md":
+        return True
+    # Workflows may reference docs/ paths
+    if rel.startswith(".github/workflows/"):
+        return True
+    # Issue templates may reference docs/
+    if rel.startswith(".github/ISSUE_TEMPLATE/"):
+        return True
+    # SPEC.md and other root markdown
+    if rel in ("SPEC.md", "CONTRIBUTING.md", "README.md", "CURRENT.md"):
+        return True
+    # Markdown files under .agentic/ that might reference docs/
+    if rel.startswith(".agentic/") and rel.endswith((".md", ".yml", ".yaml")):
+        return True
+    # Agent files and copilot instructions
+    if rel.startswith(".github/agents/") or rel == ".github/copilot-instructions.md":
+        return True
+    # Markdown files in scripts/ (like README.md)
+    if rel.startswith("scripts/") and rel.endswith(".md"):
+        return True
+    # Payload docs are installed under docs/plate/ and must rewrite their own
+    # docs/wiki, docs/research, and sibling links (#1015 / #1016).
+    if rel.startswith("docs/") and rel.endswith((".md", ".yml", ".yaml", ".txt")):
+        return True
+    return False
 
 
 def _decide_file(
@@ -192,8 +231,82 @@ def _decide_file(
     )
 
 
+def _strategy_flag(strategy: str) -> str:
+    strat = str(strategy or "safe").lower()
+    if strat not in VALID_STRATEGIES:
+        strat = "safe"
+    return f"--strategy {strat}"
+
+
+def _next_command(report: ImportPayloadReport | dict[str, Any]) -> str:
+    """Single actionable next CLI for agents/adopters (parity with adopt/self-migrate).
+
+    Priority:
+    1. Invalid/error → re-run dry-run with a valid strategy
+    2. Dry-run with hard conflicts → escape-hatch plan for human review
+    3. Dry-run with pending writes → ``--apply`` same strategy
+    4. Apply wrote files → bootstrap GitHub-side adoption
+    5. Apply left conflicts → escape hatch (do not force)
+    6. Nothing pending → readiness/health
+    """
+    if isinstance(report, dict):
+        ok = report.get("ok", True)
+        error = report.get("error")
+        apply_mode = bool(report.get("apply_mode"))
+        strategy = str(report.get("strategy") or "safe")
+        would_create = list(report.get("would_create") or [])
+        would_overwrite = list(report.get("would_overwrite") or [])
+        would_conflict = list(report.get("would_conflict") or [])
+        created = list(report.get("created") or [])
+        overwritten = list(report.get("overwritten") or [])
+        conflicts = list(report.get("conflicts") or [])
+    else:
+        ok = report.ok
+        error = report.error
+        apply_mode = report.apply_mode
+        strategy = report.strategy
+        would_create = report.would_create
+        would_overwrite = report.would_overwrite
+        would_conflict = report.would_conflict
+        created = report.created
+        overwritten = report.overwritten
+        conflicts = report.conflicts
+
+    strat = _strategy_flag(strategy)
+    if not ok:
+        if error and "Invalid strategy" in str(error):
+            return "gh plate import-payload --dry-run --strategy conservative --json"
+        return f"gh plate import-payload --dry-run {strat} --json"
+
+    if not apply_mode:
+        if would_conflict:
+            return (
+                f"gh plate import-payload --dry-run {strat} "
+                "--escape-hatch .agentic/import-escape-hatch --json"
+            )
+        if would_create or would_overwrite:
+            return f"gh plate import-payload --apply {strat}"
+        return "gh plate adopt --json"
+
+    if conflicts and not (created or overwritten):
+        return (
+            f"gh plate import-payload --dry-run {strat} "
+            "--escape-hatch .agentic/import-escape-hatch --json"
+        )
+    if created or overwritten:
+        return "gh plate bootstrap --repo OWNER/REPO --adopt --apply"
+    if conflicts:
+        return (
+            f"gh plate import-payload --dry-run {strat} "
+            "--escape-hatch .agentic/import-escape-hatch --json"
+        )
+    return "gh plate adopt --json"
+
+
 def _next_steps(report: ImportPayloadReport) -> list[str]:
+    next_cmd = _next_command(report)
     steps = [
+        f"Next command: `{next_cmd}`",
         "Review would_create / would_conflict lists before --apply on real repos.",
         "After local apply: commit scaffolding, run `gh plate bootstrap --apply` (or `--adopt`) for labels/wiki/.plate GitHub-side setup.",
         "Run `gh plate health` and open the first Curiosity Q&A session when healthy.",
@@ -201,23 +314,82 @@ def _next_steps(report: ImportPayloadReport) -> list[str]:
     ]
     if report.would_conflict or report.conflicts:
         steps.insert(
-            0,
+            1,
             "Hard conflicts: run with --escape-hatch DIR (or plate_import_payload escape_hatch_dir) "
             "to write plan.json + PLAN.md + DRAFT_PR_BODY.md for human review (#622); "
             "do not use --strategy force without explicit human approval on high-value paths.",
         )
         steps.insert(
-            1,
+            2,
             "Resolve would_conflict paths manually or re-run with --strategy force only if intentional overwrite is desired.",
         )
     if report.apply_mode and (report.created or report.overwritten):
-        steps.insert(0, "git status + review diffs for newly written payload files.")
+        steps.insert(1, "git status + review diffs for newly written payload files.")
     if any(x == "CURRENT.md" or x.endswith("CURRENT.md") for x in report.would_create):
         steps.insert(
-            0,
+            1,
             "Fill CURRENT.md capability rows (or deprecate to fragments) once real features land.",
         )
     return steps
+
+
+def resolve_import_platform(explicit: str | None, target: Path) -> str:
+    """CLI flag wins, then the target ``.plate`` value, then ``posix``.
+
+    Does not look at the operator machine. Any explicit value, including
+    ``""`` and whitespace, is validated before the target file is read. A
+    missing key or JSON null means ``posix``. An empty stored string and any
+    other value outside the enum raise ``PlateConfigError``.
+    """
+    from .plate_config import ALLOWED_PLATFORMS, PLATFORM_POSIX, PlateConfigError
+
+    if explicit is not None:
+        if not isinstance(explicit, str):
+            allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+            raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
+        value = explicit.strip()
+        if value not in ALLOWED_PLATFORMS:
+            allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+            raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
+        return value
+
+    plate_path = target / ".plate"
+    if not plate_path.is_file():
+        return PLATFORM_POSIX
+    try:
+        data = json.loads(plate_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise PlateConfigError(f"invalid JSON in .plate: {exc}") from exc
+    if not isinstance(data, dict):
+        raise PlateConfigError(".plate must contain a top-level object")
+    stored = data.get("platform")
+    if stored is None:
+        return PLATFORM_POSIX
+    if not isinstance(stored, str) or stored not in ALLOWED_PLATFORMS:
+        allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+        raise PlateConfigError(f"invalid platform: {stored!r} (allowed: {allowed})")
+    return stored
+
+
+def _render_payload_bytes(
+    source: Path,
+    rel: str,
+    *,
+    platform: str,
+    namespaced_scripts: bool,
+    namespaced_docs: bool,
+) -> bytes:
+    data = source.read_bytes()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    from .payload_surface import prepare_copied_text, rewrite_docs_refs
+
+    text = prepare_copied_text(rel, text, platform, namespaced=namespaced_scripts)
+    if namespaced_docs and _should_rewrite_docs_refs(rel):
+        text = rewrite_docs_refs(text)
+    return text.encode("utf-8")
 
 
 def plan_import_payload(
@@ -227,18 +399,27 @@ def plan_import_payload(
     template_repo: str | None = None,
     apply: bool = False,
     namespace_scripts: bool | None = None,
+    namespace_docs: bool | None = None,
+    platform: str | None = None,
 ) -> ImportPayloadReport:
     """Plan (and optionally apply) template payload import into a local target dir.
 
     ``namespace_scripts``: when True, install PLATE scripts under ``scripts/plate/``
     and rewrite workflow script refs (#621). None = auto-detect if target has a
     non-empty product ``scripts/`` tree.
+    
+    ``namespace_docs``: when True, install PLATE docs under ``docs/plate/``
+    and rewrite doc refs (#1015). None = auto-detect if target has a
+    non-empty product ``docs/`` tree.
     """
     from .payload_surface import (
+        filter_plate_scripts,
+        namespace_docs_path,
         namespace_script_path,
-        rewrite_workflow_script_refs,
+        should_namespace_docs,
         should_namespace_scripts,
     )
+    from .plate_config import PlateConfigError
 
     strat = str(strategy or "safe").lower()
     if strat not in VALID_STRATEGIES:
@@ -285,9 +466,32 @@ def plan_import_payload(
         if namespace_scripts is not None
         else should_namespace_scripts(target)
     )
+    
+    nd = (
+        bool(namespace_docs)
+        if namespace_docs is not None
+        else should_namespace_docs(target)
+    )
+
+    explicit_platform = platform is not None and str(platform).strip() != ""
+    try:
+        resolved_platform = resolve_import_platform(platform, target)
+    except PlateConfigError as exc:
+        return ImportPayloadReport(
+            apply_mode=bool(apply),
+            strategy=strat,
+            target_dir=str(target),
+            template_source=source_kind,
+            template_root=str(template_root),
+            ok=False,
+            error=str(exc),
+        )
 
     manifest = load_template_payload_manifest()
-    rel_paths = list_payload_relative_paths(template_root)
+    rel_paths, omitted = filter_plate_scripts(
+        list_payload_relative_paths(template_root),
+        resolved_platform,
+    )
     report = ImportPayloadReport(
         apply_mode=bool(apply),
         strategy=strat,
@@ -295,12 +499,27 @@ def plan_import_payload(
         template_source=source_kind,
         template_root=str(template_root),
         namespace_scripts=ns,
+        namespace_docs=nd,
+        platform=resolved_platform,
+        omitted_for_platform=omitted,
     )
+    if explicit_platform and apply and (target / ".plate").is_file():
+        try:
+            _set_plate_platform(target / ".plate", resolved_platform)
+        except PlateConfigError as exc:
+            report.ok = False
+            report.error = str(exc)
+            return report
 
     for rel in rel_paths:
         source = template_root / rel
-        # Prefer namespaced install path for plate scripts when adopting (#621)
-        preferred_rel = namespace_script_path(rel) if ns and rel.startswith("scripts/") else rel
+        # Prefer namespaced install path for plate scripts/docs when adopting (#621, #1015)
+        preferred_rel = rel
+        if ns and rel.startswith("scripts/"):
+            preferred_rel = namespace_script_path(rel)
+        elif nd and rel.startswith("docs/"):
+            preferred_rel = namespace_docs_path(rel)
+        
         dest = target / preferred_rel
         classification = classify_template_file(rel, manifest)
         decision = _decide_file(
@@ -311,22 +530,18 @@ def plan_import_payload(
             classification=classification,
             manifest=manifest,
         )
-        # Override target_path for namespaced scripts (path_rules install_as wins if set)
-        if ns and rel.startswith("scripts/") and decision.action in (
-            "create",
-            "create_as",
-            "overwrite",
-            "skip",
-            "conflict",
-        ):
-            if decision.action != "create_as" or not decision.target_path:
-                decision.target_path = preferred_rel
-            if preferred_rel != rel and decision.action == "create":
-                decision.detail = (
-                    f"{decision.detail}; namespaced to {preferred_rel} (#621)"
-                    if decision.detail
-                    else f"namespaced to {preferred_rel} (#621)"
-                )
+        # Override target_path for namespaced scripts/docs (path_rules install_as wins if set)
+        if (ns and rel.startswith("scripts/")) or (nd and rel.startswith("docs/")):
+            if decision.action in ("create", "create_as", "overwrite", "skip", "conflict"):
+                if decision.action != "create_as" or not decision.target_path:
+                    decision.target_path = preferred_rel
+                if preferred_rel != rel and decision.action == "create":
+                    issue_ref = "#621" if rel.startswith("scripts/") else "#1015"
+                    decision.detail = (
+                        f"{decision.detail}; namespaced to {preferred_rel} ({issue_ref})"
+                        if decision.detail
+                        else f"namespaced to {preferred_rel} ({issue_ref})"
+                    )
         report.files.append(decision)
         write_rel = decision.target_path or preferred_rel
         write_dest = target / write_rel
@@ -337,22 +552,19 @@ def plan_import_payload(
                 report.would_conflict.append(label)
                 if apply:
                     report.conflicts.append(label)
-                decision.action = "conflict"
+                    decision.action = "conflict"
                 decision.detail = f"{decision.detail}; install_as path also exists"
             else:
                 report.would_create.append(label)
                 if apply:
                     write_dest.parent.mkdir(parents=True, exist_ok=True)
-                    data = source.read_bytes()
-                    if ns and (
-                        rel.startswith(".github/workflows/")
-                        or write_rel.startswith(".github/workflows/")
-                    ):
-                        try:
-                            text = data.decode("utf-8")
-                            data = rewrite_workflow_script_refs(text).encode("utf-8")
-                        except UnicodeDecodeError:
-                            pass
+                    data = _render_payload_bytes(
+                        source,
+                        rel,
+                        platform=resolved_platform,
+                        namespaced_scripts=ns,
+                        namespaced_docs=nd,
+                    )
                     write_dest.write_bytes(data)
                     report.created.append(label)
         elif decision.action == "overwrite":
@@ -360,16 +572,13 @@ def plan_import_payload(
             report.would_overwrite.append(label)
             if apply:
                 write_dest.parent.mkdir(parents=True, exist_ok=True)
-                data = source.read_bytes()
-                if ns and (
-                    rel.startswith(".github/workflows/")
-                    or write_rel.startswith(".github/workflows/")
-                ):
-                    try:
-                        text = data.decode("utf-8")
-                        data = rewrite_workflow_script_refs(text).encode("utf-8")
-                    except UnicodeDecodeError:
-                        pass
+                data = _render_payload_bytes(
+                    source,
+                    rel,
+                    platform=resolved_platform,
+                    namespaced_scripts=ns,
+                    namespaced_docs=nd,
+                )
                 write_dest.write_bytes(data)
                 report.overwritten.append(label)
         elif decision.action == "conflict":
@@ -384,12 +593,36 @@ def plan_import_payload(
     # #618: CURRENT.md is repo-specific (not in payload globs) but required by
     # validate_plate_repo + feature detection — seed when missing.
     _seed_current_md_if_missing(target, report, apply=bool(apply))
+    # Adopter core_ready requires .agentic/releases[/unreleased] (#996 follow-on /
+    # under-30m path). Template payload ships .agentic/*.yml only — seed layout.
+    _seed_releases_layout_if_missing(target, report, apply=bool(apply))
+    # Root .plate is not in template payload globs; seed DEFAULT_CONFIG JSON when
+    # missing so local import can reach adoption core_ready without remote bootstrap.
+    # Never overwrite an existing .plate (adopter customizations win).
+    _seed_plate_config_if_missing(
+        target,
+        report,
+        apply=bool(apply),
+        platform=resolved_platform,
+    )
 
+    report.next_command = _next_command(report)
     report.next_steps = _next_steps(report)
     if ns:
         report.next_steps.insert(
             0,
             "PLATE scripts install under scripts/plate/; workflows rewritten to match (#621).",
+        )
+    if nd:
+        report.next_steps.insert(
+            0,
+            "PLATE docs install under docs/plate/; references rewritten to match (#1015).",
+        )
+    if omitted:
+        report.next_steps.insert(
+            0,
+            f"Omitted {len(omitted)} PLATE-owned script twin(s) for platform {resolved_platform}. "
+            "Adopter-owned scripts are not removed.",
         )
     return report
 
@@ -456,6 +689,162 @@ def _seed_current_md_if_missing(
         report.created.append("CURRENT.md")
 
 
+# Minimal unreleased README so adoption readiness sees releases layout without
+# shipping every monorepo fragment. Keep short; full contract is upstream docs.
+MINIMAL_UNRELEASED_README = """# PLATE unreleased fragments
+
+This directory holds release-note fragments not yet tied to a versioned release.
+
+Author Feature/process changes as `<slug>.json` here (see PLATE fragment contract
+in upstream `akasper/plate` / `docs` and `AGENTS.md`). At release cut, fragments
+aggregate into `.agentic/releases/vX.Y.Z/`.
+
+This starter file was seeded by `gh plate import-payload` so adoption readiness
+(`core_ready`) can see a valid `.agentic/releases/unreleased/` layout.
+"""
+
+
+def _seed_releases_layout_if_missing(
+    target: Path,
+    report: ImportPayloadReport,
+    *,
+    apply: bool,
+) -> None:
+    """Ensure `.agentic/releases/unreleased/` exists for adoption core_ready.
+
+    assess_adoption_readiness requires ``.agentic/releases`` plus ``unreleased``
+    (or a ``v*`` dir). Template payload does not ship that empty tree, so pure
+    import left adopters stuck on bootstrap for a directory mkdir (#996 path).
+    """
+    releases = target / ".agentic" / "releases"
+    unreleased = releases / "unreleased"
+    readme = unreleased / "README.md"
+    rel = ".agentic/releases/unreleased/README.md"
+    decision_base = {
+        "path": rel,
+        "classification": "adoption_seed",
+        "target_path": rel,
+        "rule": None,
+    }
+
+    layout_ok = releases.is_dir() and (
+        unreleased.is_dir() or any(releases.glob("v*"))
+    )
+    if layout_ok and readme.is_file():
+        report.files.append(
+            PayloadFileDecision(
+                action="skip",
+                detail="releases/unreleased layout already present",
+                **decision_base,  # type: ignore[arg-type]
+            )
+        )
+        report.would_skip.append(rel)
+        if apply:
+            report.skipped.append(rel)
+        return
+
+    if layout_ok and not readme.is_file():
+        # Dir exists (maybe empty) — still seed README for discoverability
+        report.files.append(
+            PayloadFileDecision(
+                action="create",
+                detail="seed unreleased README for fragment authoring",
+                **decision_base,  # type: ignore[arg-type]
+            )
+        )
+        report.would_create.append(rel)
+        if apply:
+            readme.write_text(MINIMAL_UNRELEASED_README, encoding="utf-8")
+            report.created.append(rel)
+        return
+
+    report.files.append(
+        PayloadFileDecision(
+            action="create",
+            detail=(
+                "seed .agentic/releases/unreleased/ for adoption core_ready "
+                "(template payload omits empty releases tree)"
+            ),
+            **decision_base,  # type: ignore[arg-type]
+        )
+    )
+    report.would_create.append(rel)
+    if apply:
+        unreleased.mkdir(parents=True, exist_ok=True)
+        readme.write_text(MINIMAL_UNRELEASED_README, encoding="utf-8")
+        report.created.append(rel)
+
+
+def _set_plate_platform(path: Path, platform: str) -> None:
+    """Set ``platform`` on an existing ``.plate`` without touching other keys."""
+    from .plate_config import PlateConfigError
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise PlateConfigError(f"invalid JSON in .plate: {exc}") from exc
+    if not isinstance(data, dict):
+        raise PlateConfigError(".plate must contain a top-level object")
+    if data.get("platform") == platform:
+        return
+    data["platform"] = platform
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def _seed_plate_config_if_missing(
+    target: Path,
+    report: ImportPayloadReport,
+    *,
+    apply: bool,
+    platform: str | None = None,
+) -> None:
+    """Seed root ``.plate`` JSON from DEFAULT_CONFIG when absent (never overwrite).
+
+    Same baseline bootstrap writes remotely (#259). Local import path needs this
+    for ``assess_adoption_readiness`` plate_config check without GitHub API.
+    File format is **JSON** (YAML ``version: 1`` is invalid and fails verify).
+    """
+    dest = target / ".plate"
+    decision_base = {
+        "path": ".plate",
+        "classification": "adoption_seed",
+        "target_path": ".plate",
+        "rule": None,
+    }
+    if dest.exists():
+        report.files.append(
+            PayloadFileDecision(
+                action="skip",
+                detail=".plate already present (not overwritten)",
+                **decision_base,  # type: ignore[arg-type]
+            )
+        )
+        report.would_skip.append(".plate")
+        if apply:
+            report.skipped.append(".plate")
+        return
+
+    import copy
+
+    from .plate_config import DEFAULT_CONFIG
+
+    seeded = copy.deepcopy(DEFAULT_CONFIG)
+    if platform:
+        seeded["platform"] = platform
+    payload = json.dumps(seeded, indent=2) + "\n"
+    report.files.append(
+        PayloadFileDecision(
+            action="create",
+            detail="seed DEFAULT_CONFIG .plate JSON for adoption core_ready (same as bootstrap)",
+            **decision_base,  # type: ignore[arg-type]
+        )
+    )
+    report.would_create.append(".plate")
+    if apply:
+        dest.write_text(payload, encoding="utf-8")
+        report.created.append(".plate")
+
+
 def copy_template_payload_local(
     dest_root: str | Path,
     *,
@@ -463,6 +852,8 @@ def copy_template_payload_local(
     strategy: str = "safe",
     dry_run: bool = True,
     namespace_scripts: bool | None = None,
+    namespace_docs: bool | None = None,
+    platform: str | None = None,
 ) -> dict[str, Any]:
     """#620 local FS applier — same report as import_payload / plan_import_payload.
 
@@ -477,6 +868,8 @@ def copy_template_payload_local(
         dry_run=dry_run,
         apply=not dry_run,
         namespace_scripts=namespace_scripts,
+        namespace_docs=namespace_docs,
+        platform=platform,
     )
 
 
@@ -489,7 +882,9 @@ def format_import_payload_report(report: dict[str, Any] | ImportPayloadReport) -
         f"## import-payload ({mode}) strategy={data.get('strategy')}",
         f"- Target: {data.get('target_dir')}",
         f"- Source: {data.get('template_source')} ({data.get('template_root')})",
+        f"- Platform: {data.get('platform', 'posix')}",
         f"- Payload files: {counts.get('payload_files', 0)}",
+        f"- Omitted for platform: {counts.get('omitted_for_platform', 0)}",
         f"- Would create: {counts.get('would_create', 0)} | skip: {counts.get('would_skip', 0)} "
         f"| conflict: {counts.get('would_conflict', 0)} | overwrite: {counts.get('would_overwrite', 0)}",
     ]
@@ -510,6 +905,9 @@ def format_import_payload_report(report: dict[str, Any] | ImportPayloadReport) -
         lines.append("- Conflicts:")
         for p in conflict_sample:
             lines.append(f"  - {p}")
+    next_cmd = data.get("next_command") or ""
+    if next_cmd:
+        lines.append(f"- Next command: `{next_cmd}`")
     steps = data.get("next_steps") or []
     if steps:
         lines.append("- Next steps:")
@@ -694,6 +1092,8 @@ def import_payload(
     dry_run: bool = True,
     apply: bool = False,
     namespace_scripts: bool | None = None,
+    namespace_docs: bool | None = None,
+    platform: str | None = None,
     escape_hatch_dir: str | Path | None = None,
     escape_hatch_on_conflict: bool = False,
 ) -> dict[str, Any]:
@@ -710,6 +1110,8 @@ def import_payload(
         template_repo=template_repo,
         apply=do_apply,
         namespace_scripts=namespace_scripts,
+        namespace_docs=namespace_docs,
+        platform=platform,
     )
     data = report.to_dict()
     hatch_dir: Path | None = None

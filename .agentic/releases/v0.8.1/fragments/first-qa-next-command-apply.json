@@ -1,0 +1,13 @@
+{
+  "slug": "first-qa-next-command-apply",
+  "title": "first-qa plan next_command points at apply (not re-plan)",
+  "summary": "plan_first_qa_seed, assess_adoption_readiness, and what_next (first_qa_seed + adoption_session seed phase) set next_command to --apply-first-qa instead of circular --first-qa-plan; seeded/applied still route to feed.",
+  "issues": ["#1001", "#1000", "#983", "#949", "#633"],
+  "type": "feature",
+  "change_type": "feature",
+  "surface": "src/plate_core/adoption.py, src/plate_core/what_next.py",
+  "migration_impact": "Additive routing only. Agents should execute next_command (apply-first-qa + runner) instead of re-planning from adopt status, what-next, or first-qa dry-run.",
+  "agent_notes": "On core_ready + first_qa unseeded, adopt status and what-next next_command are apply-first-qa (runner required). Do not loop on plan-only. Parent Epic #1000.",
+  "breaking": false,
+  "links": ["#1001", "#1000", "#983", "#949"]
+}
