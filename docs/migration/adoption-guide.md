@@ -8,11 +8,11 @@ Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automa
 
 ## Prerequisites (install path — do this first)
 
-Mismatched pins burn the under-30m budget. After **v0.8.1**, align runtime before step 0:
+Mismatched pins burn the under-30m budget. After **v0.8.2**, align runtime before step 0:
 
 ```bash
-pip install -U 'plate-core==0.8.1'
-python -c "import plate_core; print(plate_core.__version__)"   # expect 0.8.1
+pip install -U 'plate-core==0.8.2'
+python -c "import plate_core; print(plate_core.__version__)"   # expect 0.8.2
 
 gh extension install akasper/gh-plate    # or: gh extension upgrade plate
 # If gh plate still locks an older plate-core (e.g. 0.7.2), reinstall the extension:
@@ -21,8 +21,8 @@ gh extension install akasper/gh-plate    # or: gh extension upgrade plate
 
 | Check | Healthy signal |
 |---|---|
-| pip / import | `plate_core.__version__ == "0.8.1"` |
-| gh-plate | extension at **v0.8.1**; `PLATE_CORE_VERSION` content `0.8.1` |
+| pip / import | `plate_core.__version__ == "0.8.2"` |
+| gh-plate | extension at **v0.8.2**; `PLATE_CORE_VERSION` content `0.8.2` |
 | Self-migrate | `gh plate self-migrate --verify --json` → no false drift when pin==target |
 
 Full public install notes: root `README.md` (Quick Start → Install versions). Local offline dry-run timings (not LIVE third-party E2E): `docs/research/adopter-install-path-0.8.0-parity.md`.
