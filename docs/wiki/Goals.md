@@ -37,19 +37,19 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 ## Current State & Evidence
 
-*(Snapshot after v0.8.0 — update at major cuts and when North Star shifts.)*
+*(Snapshot after v0.8.1 — update at major cuts and when North Star shifts.)*
 
-**Shipped foundations (v0.8.0):**
+**Shipped foundations (v0.8.0, public pin v0.8.1):**
 
-- Public **PyPI** package `plate-core==0.8.0`, shared library for CLI / MCP / plugins.
+- Public **PyPI** package `plate-core==0.8.1`, shared library for CLI / MCP / plugins.
 - **`gh plate`** thin-shim extension path and release-track / ceremony tooling.
 - Autonomy and adoption foundations: budgeted AutonomyEngine, adopt / import-payload / self-migrate surfaces, quiet ops, baseline persona when PLATE signals are present.
 - Endless feed / Q&A / planning primitives and Information Audit Goals convention (Epic #218 lineage).
 
-**Active product bet (Next Release #983):**
+**Shipped in v0.8.1 (was Next Release #983):**
 
-- Primary theme: **adopter time-to-value** (under-30m path polish) — not PM/fleet expansion or marketplace as product theme.
-- Marketplace publication (#380 / #381) is a **parallel human Task** track; does not block #983.
+- Adopter time-to-value routing, namespaced docs on import, host-native prompts, and a `.plate` `platform` setting (`posix`, `posix-and-windows`, `windows`).
+- Marketplace publication (#380 / #381) stays a **parallel human Task** track.
 - Goals hybrid rewrite: this page (#993, decision #991).
 
 **Not yet won (do not overclaim):**
