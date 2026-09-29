@@ -84,6 +84,62 @@ def filter_plate_scripts(rel_paths: list[str], platform: str) -> tuple[list[str]
     return kept, omitted
 
 
+_WINDOWS_DOC_SCRIPTS = (
+    ("e2e-record.sh", "e2e-record.ps1"),
+    ("gif-from-video.sh", "gif-from-video.ps1"),
+    ("validate_plate_repo.sh", "ValidatePlateRepo.ps1"),
+    ("bootstrap_github.sh", "BootstrapGitHub.ps1"),
+    ("check_toolchain.sh", "CheckToolchain.ps1"),
+    ("question_batch.sh", "QuestionBatch.ps1"),
+)
+
+_WINDOWS_DOC_FLAGS = (
+    ("--skip-gif", "-SkipGif"),
+    ("--headed", "-Headed"),
+    ("--debug", "-Debug"),
+    ("--help", "-Help"),
+    ("--quality", "-Quality"),
+    ("--start", "-Start"),
+    ("--duration", "-Duration"),
+    ("--fps", "-Fps"),
+    ("--width", "-Width"),
+)
+
+
+def _rewrite_windows_doc_script_refs(text: str, *, namespaced: bool) -> str:
+    """Point copied docs at the PowerShell helpers a windows copy ships.
+
+    ``./scripts/e2e-record.sh`` becomes ``pwsh -File ./scripts/e2e-record.ps1``.
+    A namespaced copy uses ``scripts/plate/``. Shell long options on those
+    command lines become the PowerShell parameter names. Prose that only
+    mentions a flag is left unchanged.
+    """
+    dest_prefix = "scripts/plate/" if namespaced else "scripts/"
+    pairs: list[tuple[str, str]] = []
+    for sh_name, ps_name in _WINDOWS_DOC_SCRIPTS:
+        ps_rel = f"{dest_prefix}{ps_name}"
+        ps_win = ps_rel.replace("/", "\\")
+        for folder in ("scripts/plate/", "scripts/"):
+            sh_rel = f"{folder}{sh_name}"
+            sh_win = sh_rel.replace("/", "\\")
+            pairs.append((f"./{sh_rel}", f"pwsh -File ./{ps_rel}"))
+            pairs.append((f".\\{sh_win}", f"pwsh -File .\\{ps_win}"))
+            pairs.append((sh_rel, ps_rel))
+            pairs.append((sh_win, ps_win))
+    for old, new in sorted(pairs, key=lambda item: len(item[0]), reverse=True):
+        text = text.replace(old, new)
+    # Bare names such as `e2e-record.sh` in prose, after path forms are gone.
+    for sh_name, ps_name in _WINDOWS_DOC_SCRIPTS:
+        text = text.replace(sh_name, ps_name)
+    lines: list[str] = []
+    for line in text.split("\n"):
+        if "e2e-record.ps1" in line or "gif-from-video.ps1" in line:
+            for old, new in _WINDOWS_DOC_FLAGS:
+                line = line.replace(old, new)
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def prepare_copied_text(rel: str, text: str, platform: str, *, namespaced: bool) -> str:
     """Adjust copied GitHub metadata for script namespacing and windows CI.
 
@@ -104,6 +160,11 @@ def prepare_copied_text(rel: str, text: str, platform: str, *, namespaced: bool)
         )
         text = text.replace("bash scripts/e2e-record.sh", f"pwsh -File {recorder}")
     if platform != PLATFORM_WINDOWS:
+        return text.replace("\n", newline) if newline != "\n" else text
+    if rel.endswith(".md") and not (
+        rel.startswith(".github/workflows/") or rel.endswith("copilot-instructions.md")
+    ):
+        text = _rewrite_windows_doc_script_refs(text, namespaced=namespaced)
         return text.replace("\n", newline) if newline != "\n" else text
     if not (rel.startswith(".github/workflows/") or rel.endswith("copilot-instructions.md")):
         return text.replace("\n", newline) if newline != "\n" else text
@@ -131,6 +192,8 @@ def prepare_copied_text(rel: str, text: str, platform: str, *, namespaced: bool)
         )
     if rel.endswith("test-e2e.yml"):
         text = _rewrite_windows_gif_job(text, namespaced=namespaced)
+    if rel.endswith(".md"):
+        text = _rewrite_windows_doc_script_refs(text, namespaced=namespaced)
     if newline != "\n":
         text = text.replace("\n", newline)
     return text

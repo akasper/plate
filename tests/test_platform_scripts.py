@@ -203,6 +203,35 @@ class PlatformFilterTests(unittest.TestCase):
         self.assertIn('.\\scripts\\plate\\gif-from-video.ps1', rewritten)
         self.assertNotIn('.\\scripts\\gif-from-video.ps1', rewritten.replace(".\\scripts\\plate\\", ".\\"))
 
+    def test_windows_docs_point_at_copied_powershell_helpers(self):
+        sample = "\n".join(
+            (
+                "Record with `./scripts/e2e-record.sh feature-name --headed`.",
+                "GIF: `./scripts/gif-from-video.sh recording.webm demo.gif --quality medium`.",
+                "Help: `./scripts/e2e-record.sh --help`.",
+            )
+        )
+        windows = _lf(prepare_copied_text("README.md", sample, "windows", namespaced=False))
+        self.assertNotIn("e2e-record.sh", windows)
+        self.assertNotIn("gif-from-video.sh", windows)
+        self.assertIn("pwsh -File ./scripts/e2e-record.ps1 feature-name -Headed", windows)
+        self.assertIn(
+            "pwsh -File ./scripts/gif-from-video.ps1 recording.webm demo.gif -Quality medium",
+            windows,
+        )
+        self.assertIn("pwsh -File ./scripts/e2e-record.ps1 -Help", windows)
+        namespaced = _lf(prepare_copied_text("docs/README.md", sample, "windows", namespaced=True))
+        self.assertIn("pwsh -File ./scripts/plate/e2e-record.ps1", namespaced)
+        self.assertNotIn("e2e-record.sh", namespaced)
+        posix = _lf(prepare_copied_text("README.md", sample, "posix", namespaced=False))
+        self.assertEqual(posix, sample)
+        for rel in ("README.md", "docs/README.md", "docs/playwright-e2e-guide.md"):
+            source = _lf((payload_root() / rel).read_text(encoding="utf-8"))
+            copied = _lf(prepare_copied_text(rel, source, "windows", namespaced=False))
+            self.assertNotIn("e2e-record.sh", copied, rel)
+            self.assertNotIn("gif-from-video.sh", copied, rel)
+            self.assertIn("e2e-record.ps1", copied, rel)
+
     def test_upgrade_missing_platform_becomes_posix_and_keeps_explicit(self):
         upgraded, _guidance, origin = upgrade_plate_config_dict(
             {"version": "1.2", "autonomy": {"enabled": False, "risk_tolerance": "off"}}
