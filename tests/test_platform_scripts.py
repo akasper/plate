@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from plate_core.bootstrap import run_bootstrap
+from plate_core.bootstrap import resolve_bootstrap_platform, run_bootstrap
 from plate_core.github_client import GhApiError
 from plate_core.health import HealthReport
 from plate_core.import_payload import import_payload, list_payload_relative_paths
@@ -168,6 +168,37 @@ class PlatformFilterTests(unittest.TestCase):
         )
         self.assertEqual(posix, source)
         self.assertIn("./scripts/gif-from-video.sh", source)
+
+    def test_windows_package_json_and_namespaced_recorder_paths(self):
+        source = _lf((payload_root() / "package.json").read_text(encoding="utf-8"))
+        windows = _lf(prepare_copied_text("package.json", source, "windows", namespaced=False))
+        self.assertIn('"record:e2e": "pwsh -File scripts/e2e-record.ps1"', windows)
+        self.assertNotIn("e2e-record.sh", windows)
+        namespaced_windows = _lf(
+            prepare_copied_text("package.json", source, "windows", namespaced=True)
+        )
+        self.assertIn(
+            '"record:e2e": "pwsh -File scripts/plate/e2e-record.ps1"',
+            namespaced_windows,
+        )
+        self.assertNotIn("e2e-record.sh", namespaced_windows)
+        posix = _lf(prepare_copied_text("package.json", source, "posix", namespaced=False))
+        self.assertEqual(posix, source)
+        posix_namespaced = _lf(
+            prepare_copied_text("package.json", source, "posix", namespaced=True)
+        )
+        self.assertIn("bash scripts/plate/e2e-record.sh", posix_namespaced)
+        self.assertIn("node scripts/plate/dev-server.js", posix_namespaced)
+
+        recorder = '$gifScript = ".\\scripts\\gif-from-video.ps1"\n'
+        rewritten = prepare_copied_text(
+            "scripts/e2e-record.ps1",
+            recorder,
+            "windows",
+            namespaced=True,
+        )
+        self.assertIn('.\\scripts\\plate\\gif-from-video.ps1', rewritten)
+        self.assertNotIn('.\\scripts\\gif-from-video.ps1', rewritten.replace(".\\scripts\\plate\\", ".\\"))
 
     def test_upgrade_missing_platform_becomes_posix_and_keeps_explicit(self):
         upgraded, _guidance, origin = upgrade_plate_config_dict(
@@ -499,6 +530,26 @@ class BootstrapPlatformTests(unittest.TestCase):
                     with self.assertRaises(PlateConfigError):
                         run_bootstrap("akasper/plat", apply_mode=False, client=client)
 
+    def test_malformed_remote_plate_json_fails_closed(self):
+        plate = {
+            "type": "file",
+            "encoding": "base64",
+            "content": base64.b64encode(b'{"platform": "posix",}').decode("ascii"),
+        }
+        client = Mock()
+        client.api.return_value = plate
+        with self.assertRaises(PlateConfigError) as caught:
+            resolve_bootstrap_platform(None, "akasper/plat", client, plate_config_present=True)
+        self.assertIn("invalid JSON", str(caught.exception))
+        client.api.return_value = {
+            "type": "file",
+            "encoding": "base64",
+            "content": base64.b64encode(b"[]").decode("ascii"),
+        }
+        with self.assertRaises(PlateConfigError) as caught:
+            resolve_bootstrap_platform(None, "akasper/plat", client, plate_config_present=True)
+        self.assertIn("top-level object", str(caught.exception))
+
 
 def _bash_executable() -> str | None:
     found = shutil.which("bash")
@@ -609,58 +660,58 @@ class ValidatorPlatformTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("invalid JSON", result.stderr)
 
-    def test_no_python_fallback_fails_closed(self):
-        git_usr = Path(r"C:\Program Files\Git\usr\bin")
-        if not git_usr.is_dir() or not (git_usr / "grep.exe").is_file():
-            self.skipTest("Git usr/bin is required to hide python from the fallback")
-        env = os.environ.copy()
-        env["PATH"] = str(git_usr)
-        cases = (
-            ("{not-json", "invalid JSON"),
-            ("{not-json}", "invalid JSON"),
-            ('{"platform": ["posix"]}', "must be a string"),
-            ('{"platform": 1}', "must be a string"),
-            ('{\n  "platform": "nope"\n}', "invalid platform"),
+    def _run_with_env(self, root: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [self.bash, str(self.script), str(root)],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
         )
-        for raw, needle in cases:
-            with self.subTest(raw=raw):
-                with tempfile.TemporaryDirectory() as tmp:
-                    root = Path(tmp)
-                    _validator_fixture(root, platform=None, gifs=["gif-from-video.sh"])
-                    _write(root / ".plate", raw)
-                    result = subprocess.run(
-                        [self.bash, str(self.script), str(root)],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                        env=env,
-                    )
-                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-                    self.assertIn(needle, result.stderr)
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _validator_fixture(root, platform=None, gifs=["gif-from-video.sh"])
-            _write(root / ".plate", '{\n  "version": "1.3"\n}\n')
-            result = subprocess.run(
-                [self.bash, str(self.script), str(root)],
-                capture_output=True,
-                text=True,
-                check=False,
-                env=env,
+
+    def test_no_parser_fallback_rejects_plate_file(self):
+        env = os.environ.copy()
+        with tempfile.TemporaryDirectory() as bin_dir:
+            env["PATH"] = bin_dir
+            for raw in ('{"platform":"posix",}', '{"version": "1.3"}', "{not-json"):
+                with self.subTest(raw=raw):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        root = Path(tmp)
+                        _validator_fixture(root, platform=None, gifs=["gif-from-video.sh"])
+                        _write(root / ".plate", raw)
+                        result = self._run_with_env(root, env)
+                        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                        self.assertIn("invalid JSON", result.stderr)
+
+    def test_jq_fallback_parses_and_rejects_malformed(self):
+        jq = shutil.which("jq")
+        grep = shutil.which("grep")
+        if jq is None or grep is None:
+            self.skipTest("jq and grep are required for the parser fallback")
+        env = os.environ.copy()
+        with tempfile.TemporaryDirectory() as bin_dir:
+            for tool in (jq, grep):
+                src = Path(tool)
+                shutil.copy2(src, Path(bin_dir) / src.name)
+            env["PATH"] = bin_dir
+            cases = (
+                ('{"platform":"posix",}', 1, "invalid JSON"),
+                ('{"platform": ["posix"]}', 1, "invalid platform"),
+                ('{"platform": " "}', 1, "invalid platform"),
+                ('{"version": "1.3"}', 0, "gif-from-video.sh"),
+                ('{"platform": "windows"}', 0, "platform: windows"),
             )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _validator_fixture(root, platform=None, gifs=["gif-from-video.ps1"])
-            _write(root / ".plate", '{ "platform" : "windows" }\n')
-            result = subprocess.run(
-                [self.bash, str(self.script), str(root)],
-                capture_output=True,
-                text=True,
-                check=False,
-                env=env,
-            )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for raw, expected, needle in cases:
+                with self.subTest(raw=raw):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        root = Path(tmp)
+                        gifs = ["gif-from-video.ps1"] if '"windows"' in raw else ["gif-from-video.sh"]
+                        _validator_fixture(root, platform=None, gifs=gifs)
+                        _write(root / ".plate", raw)
+                        result = self._run_with_env(root, env)
+                        self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                        blob = result.stdout + result.stderr
+                        self.assertIn(needle, blob)
 
 
 class PowerShellValidatorTests(unittest.TestCase):
@@ -705,6 +756,19 @@ class PowerShellValidatorTests(unittest.TestCase):
                         expected,
                         result.stdout + result.stderr,
                     )
+
+    def test_whitespace_platform_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _validator_fixture(
+                root,
+                platform=None,
+                gifs=["gif-from-video.sh", "gif-from-video.ps1"],
+            )
+            _write(root / ".plate", json.dumps({"version": "1.3", "platform": " "}))
+            result = self._run(root)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("invalid platform", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

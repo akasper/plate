@@ -85,7 +85,8 @@ function Get-PlatePlatform {
     if ($data.PSObject.Properties.Name -contains "platform") {
         $value = $data.platform
     }
-    if ([string]::IsNullOrWhiteSpace([string]$value)) {
+    # Missing, null, or "" means posix. Whitespace is not a platform value.
+    if ($null -eq $value -or ($value -is [string] -and $value.Length -eq 0)) {
         return "posix"
     }
     $allowed = @("posix", "posix-and-windows", "windows")

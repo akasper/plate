@@ -45,44 +45,43 @@ PY
             exit 1
         fi
         plate_platform="${plate_platform//$'\r'/}"
+    elif command -v jq >/dev/null 2>&1; then
+        # Real parser. A missing platform key or JSON null still means posix.
+        # Trailing commas and other malformed objects are rejected.
+        if ! parsed="$(jq -r '
+            if type != "object" then
+                "error:object"
+            elif (.platform | type) == "null" then
+                ""
+            elif (.platform | type) == "string" then
+                .platform
+            else
+                "error:type"
+            end
+        ' "$plate_file" 2>/dev/null)"; then
+            echo "invalid JSON in .plate: malformed object" >&2
+            exit 1
+        fi
+        parsed="${parsed//$'\r'/}"
+        case "$parsed" in
+            ""|posix) plate_platform="posix" ;;
+            posix-and-windows|windows) plate_platform="$parsed" ;;
+            error:object)
+                echo ".plate must contain a top-level object" >&2
+                exit 1
+                ;;
+            error:type)
+                echo "invalid platform: .plate platform must be a string (allowed: posix, posix-and-windows, windows)" >&2
+                exit 1
+                ;;
+            *)
+                echo "invalid platform: $parsed" >&2
+                exit 1
+                ;;
+        esac
     else
-        # No Python. A missing platform key still means posix. A file that is
-        # not a JSON object, or a platform value that is not a quoted string,
-        # fails closed the same way the Python path does.
-        flat="$(tr -d '\r' < "$plate_file" | tr '\n' ' ')"
-        if ! grep -q '{' <<< "$flat" || ! grep -q '}' <<< "$flat"; then
-            echo "invalid JSON in .plate: expected an object" >&2
-            exit 1
-        fi
-        inner="${flat#*\{}"
-        inner="${inner%\}*}"
-        compact="${inner//[[:space:]]/}"
-        if [[ -n "$compact" && "$compact" != *'"'* ]]; then
-            echo "invalid JSON in .plate: expected an object" >&2
-            exit 1
-        fi
-        if grep -qE '"platform"[[:space:]]*:' <<< "$flat"; then
-            if grep -qE '"platform"[[:space:]]*:[[:space:]]*(\[|\{|true|false|null|-?[0-9])' <<< "$flat"; then
-                echo "invalid platform: .plate platform must be a string (allowed: posix, posix-and-windows, windows)" >&2
-                exit 1
-            fi
-            extracted="$(grep -oE '"platform"[[:space:]]*:[[:space:]]*"[^"]*"' <<< "$flat" | head -n 1 || true)"
-            if [[ -z "$extracted" ]]; then
-                echo "invalid platform: .plate platform must be a string (allowed: posix, posix-and-windows, windows)" >&2
-                exit 1
-            fi
-            value="${extracted##*:}"
-            value="${value//\"/}"
-            value="${value//[[:space:]]/}"
-            case "$value" in
-                ""|posix) plate_platform="posix" ;;
-                posix-and-windows|windows) plate_platform="$value" ;;
-                *)
-                    echo "invalid platform: $value" >&2
-                    exit 1
-                    ;;
-            esac
-        fi
+        echo "invalid JSON in .plate: cannot parse without python3, python, or jq" >&2
+        exit 1
     fi
 fi
 

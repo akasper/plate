@@ -193,8 +193,8 @@ def resolve_bootstrap_platform(
 ) -> str:
     """Explicit argument wins, then a readable remote ``.plate``, then ``posix``.
 
-    Unreadable or empty contents fall back to ``posix`` so a missing body does
-    not crash planning. A decoded platform outside the enum fails closed.
+    A missing or unreadable body falls back to ``posix``. JSON that does not
+    parse, a non-object document, and a platform outside the enum fail closed.
     """
     if explicit is not None and str(explicit).strip() != "":
         if not isinstance(explicit, str):
@@ -219,10 +219,10 @@ def resolve_bootstrap_platform(
         return PLATFORM_POSIX
     try:
         data = json.loads(text)
-    except json.JSONDecodeError:
-        return PLATFORM_POSIX
+    except json.JSONDecodeError as exc:
+        raise PlateConfigError(f"invalid JSON in .plate: {exc}") from exc
     if not isinstance(data, dict):
-        return PLATFORM_POSIX
+        raise PlateConfigError(".plate must contain a top-level object")
     stored = data.get("platform")
     if stored is None or stored == "":
         return PLATFORM_POSIX

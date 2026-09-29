@@ -92,8 +92,17 @@ def prepare_copied_text(rel: str, text: str, platform: str, *, namespaced: bool)
     """
     newline = "\r\n" if "\r\n" in text else "\n"
     text = text.replace("\r\n", "\n")
-    if namespaced and rel.startswith(".github/"):
+    if namespaced and _copies_plate_script_refs(rel):
         text = rewrite_workflow_script_refs(text)
+    if platform == PLATFORM_WINDOWS and Path(rel).name == "package.json":
+        recorder = (
+            "scripts/plate/e2e-record.ps1" if namespaced else "scripts/e2e-record.ps1"
+        )
+        text = text.replace(
+            "bash scripts/plate/e2e-record.sh",
+            f"pwsh -File {recorder}",
+        )
+        text = text.replace("bash scripts/e2e-record.sh", f"pwsh -File {recorder}")
     if platform != PLATFORM_WINDOWS:
         return text.replace("\n", newline) if newline != "\n" else text
     if not (rel.startswith(".github/workflows/") or rel.endswith("copilot-instructions.md")):
@@ -328,14 +337,23 @@ def should_namespace_scripts(target: Path) -> bool:
     return False
 
 
+def _copies_plate_script_refs(rel: str) -> bool:
+    """True when namespacing should retarget PLATE script paths inside ``rel``."""
+    if rel.startswith(".github/") or Path(rel).name == "package.json":
+        return True
+    return rel.startswith("scripts/") and Path(rel).name in PLATE_SCRIPT_BASENAMES
+
+
 def rewrite_workflow_script_refs(text: str) -> str:
-    """Rewrite scripts/<plate-script> → scripts/plate/<plate-script> in workflow bodies."""
+    """Rewrite PLATE script paths to ``scripts/plate/`` (slash or backslash)."""
     out = text
     for name in sorted(PLATE_SCRIPT_BASENAMES, key=len, reverse=True):
         if name == "README.md":
             continue
         out = out.replace(f"scripts/{name}", f"scripts/plate/{name}")
         out = out.replace(f"./scripts/{name}", f"./scripts/plate/{name}")
+        out = out.replace(f"scripts\\{name}", f"scripts\\plate\\{name}")
+        out = out.replace(f".\\scripts\\{name}", f".\\scripts\\plate\\{name}")
     return out
 
 
