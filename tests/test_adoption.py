@@ -39,6 +39,9 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         self.assertIn("plate_config", ids)
         self.assertIn("agents_md", ids)
         self.assertIn("goals_wiki", ids)
+        goals = next(c for c in report["checks"] if c["id"] == "goals_wiki")
+        self.assertEqual(goals["title"], "docs/wiki/Goals.md present")
+        self.assertEqual(goals["detail"], "missing")
 
     def test_core_ready_when_minimum_files_present(self):
         """Proves: minimum adopt artifacts flip core_ready (#935)."""
@@ -62,6 +65,50 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         # Unseeded first Q&A is the post-core next step (#949/#1001)
         self.assertIn("first-qa-plan", report["next_command"])
         self.assertIn("--apply-first-qa", report["next_command"])
+
+    def _core_files(self, root: Path) -> None:
+        (root / ".plate").write_text("{}\n", encoding="utf-8")
+        (root / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+        unreleased = root / ".agentic" / "releases" / "unreleased"
+        unreleased.mkdir(parents=True)
+        (unreleased / "README.md").write_text("x\n", encoding="utf-8")
+        wf = root / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "plate-ci.yml").write_text("name: plate\n", encoding="utf-8")
+
+    def test_namespaced_goals_page_satisfies_core_ready(self):
+        """Proves: docs/plate/wiki/Goals.md counts as the Goals page (#1022)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._core_files(root)
+            goals = root / "docs" / "plate" / "wiki"
+            goals.mkdir(parents=True)
+            (goals / "Goals.md").write_text("# Goals\n", encoding="utf-8")
+            (root / "docs" / "guide.md").write_text("# product\n", encoding="utf-8")
+            report = assess_adoption_readiness(root, include_optional=False)
+        self.assertTrue(report["core_ready"])
+        goals_check = next(c for c in report["checks"] if c["id"] == "goals_wiki")
+        self.assertTrue(goals_check["ok"])
+        self.assertEqual(goals_check["title"], "docs/plate/wiki/Goals.md present")
+        self.assertEqual(goals_check["detail"], "docs/plate/wiki/Goals.md")
+        self.assertTrue(
+            any("docs/plate/wiki/Goals.md" in step for step in report["next_steps"])
+        )
+
+    def test_namespaced_checkout_missing_goals_reports_plate_path(self):
+        """Proves: a docs/plate tree without Goals names the namespaced path (#1022)."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._core_files(root)
+            plate_docs = root / "docs" / "plate" / "wiki"
+            plate_docs.mkdir(parents=True)
+            (root / "docs" / "guide.md").write_text("# product\n", encoding="utf-8")
+            report = assess_adoption_readiness(root, include_optional=False)
+        self.assertFalse(report["core_ready"])
+        goals_check = next(c for c in report["checks"] if c["id"] == "goals_wiki")
+        self.assertFalse(goals_check["ok"])
+        self.assertEqual(goals_check["title"], "docs/plate/wiki/Goals.md present")
+        self.assertEqual(goals_check["detail"], "missing")
 
     def test_optional_checks_do_not_block_core_ready(self):
         with TemporaryDirectory() as tmp:
