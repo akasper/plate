@@ -4,9 +4,9 @@ This directory contains scripts for recording Playwright E2E test videos and con
 
 ## Platform Support
 
-**Script Policy:** Default projects (no explicit Windows support) author and run POSIX shell (`.sh`) only. Add PowerShell (`.ps1`) only when Windows support is explicit.
+**Script Policy:** When adding scripts, default projects (no explicit Windows support) author POSIX shell (`.sh`) only. Add PowerShell (`.ps1`) only when Windows support is explicit.
 
-This directory still contains both `.sh` and `.ps1` copies as the reference dual-stack. `gh plate import-payload` and `gh plate bootstrap --apply` copy all of them; they do not drop `.ps1` on their own. If this project has not declared Windows support, delete `scripts/*.ps1` and `scripts/plate/*.ps1` after scaffold. Automatic filtering is #1019.
+This directory still contains both `.sh` and `.ps1` copies as the reference dual-stack. `gh plate import-payload` and `gh plate bootstrap --apply` copy all of them. Leave the copied `.ps1` files in place: `scripts/validate_plate_repo.sh` fails when `scripts/gif-from-video.ps1` is missing, and template CI runs that validator on every pull request. Do not remove them with a `scripts/*.ps1` or `scripts/plate/*.ps1` glob; that also deletes adopter-owned PowerShell. Automatic filtering and platform-aware validation are #1019.
 
 For the full policy, see "Script Policy and Platform Support" in `AGENTS.md`.
 
