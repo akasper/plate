@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .plate_config import PLATFORM_POSIX, PLATFORM_WINDOWS
 from .template_payload import (
     classify_template_file,
     load_template_payload_manifest,
@@ -37,6 +38,91 @@ PLATE_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "README.md",
     }
 )
+
+
+def plate_script_flavor(rel: str) -> str | None:
+    """Return ``sh`` or ``ps1`` for a PLATE-owned script twin, else None.
+
+    Adopter-owned scripts and non-script payload files (README, dev-server.js)
+    are not flavors that import filtering drops.
+    """
+    name = Path(rel).name
+    if name not in PLATE_SCRIPT_BASENAMES:
+        return None
+    if name.endswith(".ps1"):
+        return "ps1"
+    if name.endswith(".sh"):
+        return "sh"
+    return None
+
+
+def plate_script_included(rel: str, platform: str) -> bool:
+    """Whether a payload path is copied for ``platform``.
+
+    ``posix`` omits PLATE-owned ``.ps1`` twins. ``windows`` omits PLATE-owned
+    ``.sh`` twins. ``posix-and-windows`` copies both. Other files always copy.
+    """
+    flavor = plate_script_flavor(rel)
+    if flavor is None:
+        return True
+    if platform == PLATFORM_POSIX:
+        return flavor != "ps1"
+    if platform == PLATFORM_WINDOWS:
+        return flavor != "sh"
+    return True
+
+
+def filter_plate_scripts(rel_paths: list[str], platform: str) -> tuple[list[str], list[str]]:
+    """Split manifest paths into those copied and those omitted for ``platform``."""
+    kept: list[str] = []
+    omitted: list[str] = []
+    for rel in rel_paths:
+        if plate_script_included(rel, platform):
+            kept.append(rel)
+        else:
+            omitted.append(rel)
+    return kept, omitted
+
+
+def prepare_copied_text(rel: str, text: str, platform: str, *, namespaced: bool) -> str:
+    """Adjust copied GitHub metadata for script namespacing and windows CI.
+
+    Matches the template test job with either LF or CRLF and writes the same
+    newline style back, so a Windows checkout still flips ``runs-on``.
+    """
+    newline = "\r\n" if "\r\n" in text else "\n"
+    text = text.replace("\r\n", "\n")
+    if namespaced and rel.startswith(".github/"):
+        text = rewrite_workflow_script_refs(text)
+    if platform != PLATFORM_WINDOWS:
+        return text.replace("\n", newline) if newline != "\n" else text
+    if not (rel.startswith(".github/workflows/") or rel.endswith("copilot-instructions.md")):
+        return text.replace("\n", newline) if newline != "\n" else text
+    ps_name = (
+        "scripts/plate/ValidatePlateRepo.ps1"
+        if namespaced
+        else "scripts/ValidatePlateRepo.ps1"
+    )
+    bash_name = (
+        "scripts/plate/validate_plate_repo.sh"
+        if namespaced
+        else "scripts/validate_plate_repo.sh"
+    )
+    text = text.replace(f"bash {bash_name} .", f"pwsh -File {ps_name} -Root .")
+    if namespaced:
+        text = text.replace(
+            "bash scripts/validate_plate_repo.sh .",
+            f"pwsh -File {ps_name} -Root .",
+        )
+    if rel.endswith("ci.yml"):
+        text = text.replace(
+            "  test:\n    needs: labels\n    runs-on: ubuntu-latest\n",
+            "  test:\n    needs: labels\n    runs-on: windows-latest\n",
+            1,
+        )
+    if newline != "\n":
+        text = text.replace("\n", newline)
+    return text
 
 # Plate-owned doc subdirectories under template payload docs/ (PLATE scaffolding)
 PLATE_DOCS_SUBDIRS: frozenset[str] = frozenset(

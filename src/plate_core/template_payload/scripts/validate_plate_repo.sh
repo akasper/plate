@@ -5,6 +5,63 @@ set -euo pipefail
 ROOT_DIR="${1:-.}"
 ROOT_DIR="$(cd "$ROOT_DIR" && pwd)"
 
+# .plate platform: absent or empty means posix. Do not infer from the host OS.
+# posix-and-windows is matched as a full quoted value so it is not read as posix.
+plate_platform="posix"
+plate_file="$ROOT_DIR/.plate"
+if [[ -f "$plate_file" ]]; then
+    pybin=""
+    if command -v python3 >/dev/null 2>&1; then
+        pybin="python3"
+    elif command -v python >/dev/null 2>&1; then
+        pybin="python"
+    fi
+    if [[ -n "$pybin" ]]; then
+        if ! plate_platform="$("$pybin" - "$plate_file" <<'PY'
+import json, sys
+path = sys.argv[1]
+allowed = ("posix", "posix-and-windows", "windows")
+try:
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+except json.JSONDecodeError as exc:
+    print(f"invalid JSON in .plate: {exc}", file=sys.stderr)
+    sys.exit(2)
+if not isinstance(data, dict):
+    print(".plate must contain a top-level object", file=sys.stderr)
+    sys.exit(2)
+value = data.get("platform")
+if value is None or value == "":
+    value = "posix"
+if value not in allowed:
+    print(
+        f"invalid platform: {value!r} (allowed: posix, posix-and-windows, windows)",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+print(value)
+PY
+)"; then
+            exit 1
+        fi
+        plate_platform="${plate_platform//$'\r'/}"
+    else
+        extracted="$(grep -oE '"platform"[[:space:]]*:[[:space:]]*"[^"]*"' "$plate_file" | head -n 1 || true)"
+        if [[ -n "$extracted" ]]; then
+            value="${extracted##*:}"
+            value="${value//\"/}"
+            value="${value//[[:space:]]/}"
+            case "$value" in
+                posix|posix-and-windows|windows) plate_platform="$value" ;;
+                *)
+                    echo "invalid platform: $value" >&2
+                    exit 1
+                    ;;
+            esac
+        fi
+    fi
+fi
+
 # Color codes for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -110,20 +167,36 @@ else
     print_check "package.json found" "fail"
 fi
 
-# Check GIF generation scripts
-echo ""
-echo "🎬 GIF Generation Scripts:"
-if [[ -f "$ROOT_DIR/scripts/gif-from-video.sh" ]]; then
-    print_check "scripts/gif-from-video.sh present" "pass"
-else
-    print_check "scripts/gif-from-video.sh present" "fail"
-fi
+# Check GIF generation scripts for the declared platform.
+# Accept scripts/ or scripts/plate/ so namespaced installs still validate.
+script_exists() {
+    local name="$1"
+    [[ -f "$ROOT_DIR/scripts/$name" || -f "$ROOT_DIR/scripts/plate/$name" ]]
+}
 
-if [[ -f "$ROOT_DIR/scripts/gif-from-video.ps1" ]]; then
-    print_check "scripts/gif-from-video.ps1 present" "pass"
-else
-    print_check "scripts/gif-from-video.ps1 present" "fail"
-fi
+require_gif() {
+    local name="$1"
+    if script_exists "$name"; then
+        print_check "scripts/$name present" "pass"
+    else
+        print_check "scripts/$name present" "fail"
+    fi
+}
+
+echo ""
+echo "🎬 GIF Generation Scripts (platform: $plate_platform):"
+case "$plate_platform" in
+    posix)
+        require_gif "gif-from-video.sh"
+        ;;
+    windows)
+        require_gif "gif-from-video.ps1"
+        ;;
+    posix-and-windows)
+        require_gif "gif-from-video.sh"
+        require_gif "gif-from-video.ps1"
+        ;;
+esac
 
 # Check CI workflow
 echo ""

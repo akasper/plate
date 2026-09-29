@@ -613,7 +613,7 @@ For `Feature`, `Bug`, and issue-driven `Documentation` PRs, add the relevant mil
 
 **Determining platform support:** Platform support must come from **human-stated project intent** in one of these sources:
 - `SPEC.md` or project documentation
-- `.plate` configuration (future: `platforms` field)
+- `.plate` configuration (`platform`: `posix` | `posix-and-windows` | `windows`; a missing key means `posix`)
 - Onboarding answers or bootstrap configuration
 - Explicit instruction during repository setup
 
@@ -629,7 +629,7 @@ For `Feature`, `Bug`, and issue-driven `Documentation` PRs, add the relevant mil
 - For Windows-only projects: create `.ps1` only
 - When modifying existing scripts, maintain consistency with the project's declared platform support
 
-**Script examples in this template:** The payload includes both `.sh` and `.ps1` scripts as the reference dual-stack. `gh plate import-payload` and `gh plate bootstrap --apply` copy every manifest script, including `.ps1`. Default projects run the `.sh` scripts and leave the copied `.ps1` files in place. `scripts/validate_plate_repo.sh` exits non-zero when `scripts/gif-from-video.ps1` is missing, and `.github/workflows/ci.yml` runs that validator on every pull request. Do not delete `scripts/*.ps1` or `scripts/plate/*.ps1`: those globs also remove adopter-owned PowerShell. Import filtering, validation that follows a declared platform, and any later removal limited to PLATE-owned basenames are #1019.
+**`.plate` platform:** Set `platform` to `posix` (the default when the key is absent), `posix-and-windows`, or `windows`. `gh plate import-payload` and `gh plate bootstrap --apply` copy PLATE-owned scripts for that value. `posix` omits PLATE `.ps1` twins and validation requires `gif-from-video.sh` under `scripts/` or `scripts/plate/`. `posix-and-windows` copies both flavors and validation requires both GIF scripts; template CI still runs the shell validator. `windows` omits PLATE `.sh` twins, validation requires `gif-from-video.ps1` under `scripts/` or `scripts/plate/`, and the copied template CI job runs `pwsh -File scripts/ValidatePlateRepo.ps1 -Root .` on `windows-latest`. `--platform` states the value for that run and is written into `.plate` on apply. The filter names PLATE-owned basenames only and does not delete adopter-owned scripts, including namespaced files under `scripts/plate/`. `scripts/README.md` and `scripts/dev-server.js` are always copied. The template payload stays the dual-stack superset. The PLATE repository itself sets `posix-and-windows`.
 
 ## Upstream PLATE Template Synchronization
 

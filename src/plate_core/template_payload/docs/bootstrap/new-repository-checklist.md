@@ -22,7 +22,7 @@ bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle
 
 Both scripts require only `gh` (GitHub CLI) and `git`. They cover the repeatable GitHub bootstrap work that otherwise gets missed in brand-new repositories.
 
-**Platform note:** `gh plate bootstrap --apply` copies every manifest script, including `.ps1`. That copy is not platform-filtered yet. Default projects (no explicit Windows support) run the `.sh` script above and leave the copied `.ps1` files in place. `scripts/validate_plate_repo.sh` fails when `scripts/gif-from-video.ps1` is missing, and `.github/workflows/ci.yml` runs that validator on every pull request. Do not delete PowerShell with a `*.ps1` glob; that also removes adopter-owned scripts, including namespaced copies under `scripts/plate/`. Filtering and platform-aware validation are #1019. See "Script Policy and Platform Support" in `AGENTS.md`.
+**Platform note:** Set `.plate` `platform` to `posix` (default when absent), `posix-and-windows`, or `windows`. `gh plate bootstrap --apply` and `gh plate import-payload` copy PLATE-owned scripts for that value and do not delete adopter-owned scripts. `posix` omits `.ps1` twins. `posix-and-windows` copies both and validation requires both GIF scripts. `windows` omits `.sh` twins and the copied CI job runs `ValidatePlateRepo.ps1` on `windows-latest`. Pass `--platform` to state it for that run; apply writes it into `.plate`. See "Script Policy and Platform Support" in `AGENTS.md`.
 
 `gh plate bootstrap --apply` covers the repository-scaffolding side of bootstrap: it copies the checked-in PLATE template payload into the repo so AGENTS, docs, workflows, scripts, and starter assets are present locally.
 

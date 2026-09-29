@@ -64,4 +64,60 @@ if ($hasRuntime) {
     }
 }
 
+function Get-PlatePlatform {
+    param([string]$Root)
+    $path = Join-Path $Root ".plate"
+    if (-not (Test-Path -LiteralPath $path)) {
+        return "posix"
+    }
+    try {
+        $raw = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+        $data = $raw | ConvertFrom-Json
+    } catch {
+        Write-Error "invalid JSON in .plate: $($_.Exception.Message)"
+        exit 1
+    }
+    if ($null -eq $data -or -not ($data -is [System.Management.Automation.PSCustomObject] -or $data -is [hashtable])) {
+        Write-Error ".plate must contain a top-level object"
+        exit 1
+    }
+    $value = $null
+    if ($data.PSObject.Properties.Name -contains "platform") {
+        $value = $data.platform
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$value)) {
+        return "posix"
+    }
+    $allowed = @("posix", "posix-and-windows", "windows")
+    if ($allowed -notcontains [string]$value) {
+        Write-Error "invalid platform: $value (allowed: posix, posix-and-windows, windows)"
+        exit 1
+    }
+    return [string]$value
+}
+
+function Test-PlateScript {
+    param([string]$Root, [string]$Name)
+    $direct = Join-Path $Root (Join-Path "scripts" $Name)
+    $namespaced = Join-Path $Root (Join-Path "scripts" (Join-Path "plate" $Name))
+    return (Test-Path -LiteralPath $direct) -or (Test-Path -LiteralPath $namespaced)
+}
+
+$platePlatform = Get-PlatePlatform -Root $Root
+switch ($platePlatform) {
+    "posix" { $gifChecks = @("gif-from-video.sh") }
+    "windows" { $gifChecks = @("gif-from-video.ps1") }
+    "posix-and-windows" { $gifChecks = @("gif-from-video.sh", "gif-from-video.ps1") }
+    default {
+        Write-Error "invalid platform: $platePlatform"
+        exit 1
+    }
+}
+foreach ($name in $gifChecks) {
+    if (-not (Test-PlateScript -Root $Root -Name $name)) {
+        Write-Error "Required script is missing for platform ${platePlatform}: scripts/$name"
+        exit 1
+    }
+}
+
 Write-Host "PLATE repository validation passed."
