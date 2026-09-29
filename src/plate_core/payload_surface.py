@@ -105,14 +105,27 @@ _WINDOWS_DOC_FLAGS = (
     ("--width", "-Width"),
 )
 
+# Longer flags first so a short token is not taken out of a longer one.
+_WINDOWS_BOOTSTRAP_FLAGS = (
+    ("--skip-runtime-toolchain-check", "-SkipRuntimeToolchainCheck"),
+    ("--set-delete-branch-on-merge", "-SetDeleteBranchOnMerge"),
+    ("--remove-default-labels", "-RemoveDefaultLabels"),
+    ("--protect-branch", "-ProtectBranch"),
+    ("--owner-handle", "-OwnerHandle"),
+    ("--local-repo", "-LocalRepo"),
+    ("--init-wiki", "-InitWiki"),
+    ("--repo", "-Repo"),
+)
+
 
 def _rewrite_windows_doc_script_refs(text: str, *, namespaced: bool) -> str:
     """Point copied docs at the PowerShell helpers a windows copy ships.
 
     ``./scripts/e2e-record.sh`` becomes ``pwsh -File ./scripts/e2e-record.ps1``.
-    A namespaced copy uses ``scripts/plate/``. Shell long options on those
-    command lines become the PowerShell parameter names. Prose that only
-    mentions a flag is left unchanged.
+    ``bash scripts/bootstrap_github.sh`` keeps its arguments and changes the
+    wrapper to ``pwsh -File``. A namespaced copy uses ``scripts/plate/``.
+    Shell long options on those command lines become the PowerShell parameter
+    names. Prose that only mentions a flag is left unchanged.
     """
     dest_prefix = "scripts/plate/" if namespaced else "scripts/"
     pairs: list[tuple[str, str]] = []
@@ -122,6 +135,12 @@ def _rewrite_windows_doc_script_refs(text: str, *, namespaced: bool) -> str:
         for folder in ("scripts/plate/", "scripts/"):
             sh_rel = f"{folder}{sh_name}"
             sh_win = sh_rel.replace("/", "\\")
+            # bash wrappers before bare paths, or `bash scripts/foo.sh`
+            # becomes `bash scripts/Foo.ps1` and never invokes PowerShell.
+            pairs.append((f"bash ./{sh_rel}", f"pwsh -File ./{ps_rel}"))
+            pairs.append((f"bash {sh_rel}", f"pwsh -File {ps_rel}"))
+            pairs.append((f"bash .\\{sh_win}", f"pwsh -File .\\{ps_win}"))
+            pairs.append((f"bash {sh_win}", f"pwsh -File {ps_win}"))
             pairs.append((f"./{sh_rel}", f"pwsh -File ./{ps_rel}"))
             pairs.append((f".\\{sh_win}", f"pwsh -File .\\{ps_win}"))
             pairs.append((sh_rel, ps_rel))
@@ -135,6 +154,9 @@ def _rewrite_windows_doc_script_refs(text: str, *, namespaced: bool) -> str:
     for line in text.split("\n"):
         if "e2e-record.ps1" in line or "gif-from-video.ps1" in line:
             for old, new in _WINDOWS_DOC_FLAGS:
+                line = line.replace(old, new)
+        if "BootstrapGitHub.ps1" in line:
+            for old, new in _WINDOWS_BOOTSTRAP_FLAGS:
                 line = line.replace(old, new)
         lines.append(line)
     return "\n".join(lines)

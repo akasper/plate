@@ -225,6 +225,44 @@ class PlatformFilterTests(unittest.TestCase):
         self.assertNotIn("e2e-record.sh", namespaced)
         posix = _lf(prepare_copied_text("README.md", sample, "posix", namespaced=False))
         self.assertEqual(posix, sample)
+        wrapped = "\n".join(
+            (
+                "bash scripts/bootstrap_github.sh --repo OWNER/REPO --local-repo . --owner-handle @you --remove-default-labels --set-delete-branch-on-merge --protect-branch main",
+                "bash ./scripts/check_toolchain.sh .",
+                "bash scripts/check_toolchain.sh .",
+            )
+        )
+        wrapped_windows = _lf(prepare_copied_text("README.md", wrapped, "windows", namespaced=False))
+        self.assertNotIn("bash ", wrapped_windows)
+        self.assertNotIn(".sh", wrapped_windows)
+        self.assertIn(
+            "pwsh -File scripts/BootstrapGitHub.ps1 -Repo OWNER/REPO -LocalRepo . -OwnerHandle @you -RemoveDefaultLabels -SetDeleteBranchOnMerge -ProtectBranch main",
+            wrapped_windows,
+        )
+        self.assertIn("pwsh -File ./scripts/CheckToolchain.ps1 .", wrapped_windows)
+        self.assertIn("pwsh -File scripts/CheckToolchain.ps1 .", wrapped_windows)
+        wrapped_ns = _lf(
+            prepare_copied_text(".github/copilot-instructions.md", wrapped, "windows", namespaced=True)
+        )
+        self.assertIn("pwsh -File scripts/plate/CheckToolchain.ps1 .", wrapped_ns)
+        self.assertNotIn("check_toolchain.sh", wrapped_ns)
+        readme = _lf((payload_root() / "README.md").read_text(encoding="utf-8"))
+        readme_windows = _lf(prepare_copied_text("README.md", readme, "windows", namespaced=False))
+        self.assertNotIn("bash scripts/bootstrap_github.sh", readme_windows)
+        self.assertIn("pwsh -File scripts/BootstrapGitHub.ps1", readme_windows)
+        copilot = _lf(
+            (payload_root() / ".github/copilot-instructions.md").read_text(encoding="utf-8")
+        )
+        copilot_windows = _lf(
+            prepare_copied_text(
+                ".github/copilot-instructions.md",
+                copilot,
+                "windows",
+                namespaced=False,
+            )
+        )
+        self.assertNotIn("bash scripts/check_toolchain.sh", copilot_windows)
+        self.assertIn("pwsh -File scripts/CheckToolchain.ps1 .", copilot_windows)
         for rel in ("README.md", "docs/README.md", "docs/playwright-e2e-guide.md"):
             source = _lf((payload_root() / rel).read_text(encoding="utf-8"))
             copied = _lf(prepare_copied_text(rel, source, "windows", namespaced=False))
