@@ -193,8 +193,9 @@ def resolve_bootstrap_platform(
 ) -> str:
     """Explicit argument wins, then a readable remote ``.plate``, then ``posix``.
 
-    A missing or unreadable body falls back to ``posix``. JSON that does not
-    parse, a non-object document, and a platform outside the enum fail closed.
+    A missing file, missing key, JSON null, or unreadable body falls back to
+    ``posix``. An empty string, JSON that does not parse, a non-object
+    document, and a platform outside the enum fail closed.
     """
     if explicit is not None and str(explicit).strip() != "":
         if not isinstance(explicit, str):
@@ -224,7 +225,7 @@ def resolve_bootstrap_platform(
     if not isinstance(data, dict):
         raise PlateConfigError(".plate must contain a top-level object")
     stored = data.get("platform")
-    if stored is None or stored == "":
+    if stored is None:
         return PLATFORM_POSIX
     if not isinstance(stored, str) or stored not in ALLOWED_PLATFORMS:
         allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
@@ -232,14 +233,18 @@ def resolve_bootstrap_platform(
     return stored
 
 
-def _persist_remote_plate_platform(repo: str, branch: str, gh: GhClient, platform: str) -> None:
-    """Write ``platform`` onto an existing remote ``.plate`` without other edits."""
+def _load_existing_remote_plate(repo: str, gh: GhClient) -> tuple[dict[str, Any], str] | None:
+    """Parse an existing remote ``.plate`` before bootstrap writes anything.
+
+    Returns ``None`` when the file is absent. An unreadable body, invalid JSON,
+    a non-object, or a missing blob sha raises ``RuntimeError``.
+    """
     endpoint = f"repos/{repo}/contents/.plate"
     try:
         payload = gh.api(endpoint)
     except GhApiError as error:
         if _is_missing_content_error(error):
-            return
+            return None
         raise
     text = _decode_github_text(payload)
     sha = payload.get("sha") if isinstance(payload, dict) else None
@@ -251,14 +256,27 @@ def _persist_remote_plate_platform(repo: str, branch: str, gh: GhClient, platfor
         raise RuntimeError(f"Cannot update .plate platform: invalid JSON ({exc})") from exc
     if not isinstance(data, dict):
         raise RuntimeError("Cannot update .plate platform: .plate is not a JSON object.")
+    if not isinstance(sha, str) or not sha:
+        raise RuntimeError("Cannot update .plate platform: GitHub contents response has no sha.")
+    return data, sha
+
+
+def _write_remote_plate_platform(
+    repo: str,
+    branch: str,
+    gh: GhClient,
+    data: dict[str, Any],
+    sha: str,
+    platform: str,
+) -> None:
+    """PUT ``platform`` onto a ``.plate`` object that was already parsed."""
     if data.get("platform") == platform:
         return
-    if not sha:
-        raise RuntimeError("Cannot update .plate platform: GitHub contents response has no sha.")
-    data["platform"] = platform
-    encoded = base64.b64encode((json.dumps(data, indent=2) + "\n").encode("utf-8")).decode("ascii")
+    updated = dict(data)
+    updated["platform"] = platform
+    encoded = base64.b64encode((json.dumps(updated, indent=2) + "\n").encode("utf-8")).decode("ascii")
     gh.api(
-        endpoint,
+        f"repos/{repo}/contents/.plate",
         method="PUT",
         fields={
             "message": f"Bootstrap: set .plate platform to {platform}",
@@ -416,6 +434,11 @@ def run_bootstrap(
         resolved_platform,
     )
     platform_suffix = _platform_copy_suffix(resolved_platform, omitted_paths)
+    # An explicit platform persisted onto an existing .plate must be parsed
+    # before any apply write. A bad body fails the plan and the apply alike.
+    pending_plate: tuple[dict[str, Any], str] | None = None
+    if explicit_platform and bool(getattr(health, "plate_config_present", False)):
+        pending_plate = _load_existing_remote_plate(target, gh)
     actions.append(
         BootstrapAction(
             name="template-source",
@@ -425,6 +448,16 @@ def run_bootstrap(
     )
     if apply_mode:
         _validate_bootstrap_preconditions(target, repo_obj, default_branch, gh)
+        if pending_plate is not None:
+            plate_data, plate_sha = pending_plate
+            _write_remote_plate_platform(
+                target,
+                default_branch,
+                gh,
+                plate_data,
+                plate_sha,
+                resolved_platform,
+            )
         copied_count, skipped_count = _copy_template_payload(
             target,
             default_branch,
@@ -513,11 +546,7 @@ def run_bootstrap(
             )
         )
         if explicit_platform:
-            if apply_mode:
-                _persist_remote_plate_platform(target, default_branch, gh, resolved_platform)
-                plat_state = "applied"
-            else:
-                plat_state = "planned"
+            plat_state = "applied" if apply_mode else "planned"
             actions.append(
                 BootstrapAction(
                     name="set-plate-platform",

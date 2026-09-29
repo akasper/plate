@@ -336,8 +336,9 @@ def _next_steps(report: ImportPayloadReport) -> list[str]:
 def resolve_import_platform(explicit: str | None, target: Path) -> str:
     """CLI flag wins, then the target ``.plate`` value, then ``posix``.
 
-    Does not look at the operator machine. An unknown stored or explicit value
-    raises ``PlateConfigError``.
+    Does not look at the operator machine. A missing key or JSON null means
+    ``posix``. An empty string and any other value outside the enum raise
+    ``PlateConfigError``.
     """
     from .plate_config import ALLOWED_PLATFORMS, PLATFORM_POSIX, PlateConfigError
 
@@ -362,7 +363,7 @@ def resolve_import_platform(explicit: str | None, target: Path) -> str:
     if not isinstance(data, dict):
         raise PlateConfigError(".plate must contain a top-level object")
     stored = data.get("platform")
-    if stored is None or stored == "":
+    if stored is None:
         return PLATFORM_POSIX
     if not isinstance(stored, str) or stored not in ALLOWED_PLATFORMS:
         allowed = ", ".join(sorted(ALLOWED_PLATFORMS))

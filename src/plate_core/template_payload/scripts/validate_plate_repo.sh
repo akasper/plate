@@ -5,7 +5,8 @@ set -euo pipefail
 ROOT_DIR="${1:-.}"
 ROOT_DIR="$(cd "$ROOT_DIR" && pwd)"
 
-# .plate platform: absent or empty means posix. Do not infer from the host OS.
+# .plate platform: a missing file, missing key, or JSON null means posix.
+# An empty string is invalid. Do not infer from the host OS.
 # posix-and-windows is matched as a full quoted value so it is not read as posix.
 plate_platform="posix"
 plate_file="$ROOT_DIR/.plate"
@@ -31,7 +32,7 @@ if not isinstance(data, dict):
     print(".plate must contain a top-level object", file=sys.stderr)
     sys.exit(2)
 value = data.get("platform")
-if value is None or value == "":
+if value is None:
     value = "posix"
 if value not in allowed:
     print(
@@ -47,14 +48,14 @@ PY
         plate_platform="${plate_platform//$'\r'/}"
     elif command -v jq >/dev/null 2>&1; then
         # Real parser. A missing platform key or JSON null still means posix.
-        # Trailing commas and other malformed objects are rejected.
+        # An empty string is invalid. Trailing commas are rejected.
         if ! parsed="$(jq -r '
             if type != "object" then
                 "error:object"
-            elif (.platform | type) == "null" then
-                ""
+            elif (has("platform") | not) or (.platform | type) == "null" then
+                "posix"
             elif (.platform | type) == "string" then
-                .platform
+                if .platform == "" then "error:empty" else .platform end
             else
                 "error:type"
             end
@@ -64,7 +65,7 @@ PY
         fi
         parsed="${parsed//$'\r'/}"
         case "$parsed" in
-            ""|posix) plate_platform="posix" ;;
+            posix) plate_platform="posix" ;;
             posix-and-windows|windows) plate_platform="$parsed" ;;
             error:object)
                 echo ".plate must contain a top-level object" >&2
@@ -72,6 +73,10 @@ PY
                 ;;
             error:type)
                 echo "invalid platform: .plate platform must be a string (allowed: posix, posix-and-windows, windows)" >&2
+                exit 1
+                ;;
+            error:empty)
+                echo "invalid platform: '' (allowed: posix, posix-and-windows, windows)" >&2
                 exit 1
                 ;;
             *)

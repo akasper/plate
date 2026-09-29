@@ -24,6 +24,7 @@ from plate_core.payload_surface import (
 from plate_core.plate_config import (
     CURRENT_CONFIG_VERSION,
     PlateConfigError,
+    _migrate_1_2_to_1_3,
     upgrade_plate_config_dict,
     validate_plate_config,
 )
@@ -310,6 +311,37 @@ class ImportPlatformTests(unittest.TestCase):
             self.assertEqual(report["platform"], "posix")
             self.assertIn("scripts/gif-from-video.ps1", report["omitted_for_platform"])
 
+    def test_empty_stored_platform_fails_and_null_means_posix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            (target / ".plate").write_text(
+                json.dumps({"version": "1.3", "platform": ""}),
+                encoding="utf-8",
+            )
+            empty = import_payload(target, dry_run=True)
+            self.assertFalse(empty["ok"])
+            self.assertIn("invalid platform", empty["error"])
+            (target / ".plate").write_text(
+                json.dumps({"version": "1.3", "platform": None}),
+                encoding="utf-8",
+            )
+            null = import_payload(target, dry_run=True)
+            self.assertTrue(null["ok"], null.get("error"))
+            self.assertEqual(null["platform"], "posix")
+
+    def test_migration_leaves_empty_platform_for_the_schema(self):
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config({"version": "1.3", "platform": ""})
+        left = _migrate_1_2_to_1_3({"version": "1.2", "platform": ""})
+        self.assertEqual(left["platform"], "")
+        self.assertEqual(_migrate_1_2_to_1_3({"version": "1.2"})["platform"], "posix")
+        self.assertEqual(
+            _migrate_1_2_to_1_3({"version": "1.2", "platform": None})["platform"],
+            "posix",
+        )
+        with self.assertRaises(PlateConfigError):
+            upgrade_plate_config_dict({"version": "1.2", "platform": ""})
+
 
 class BootstrapPlatformTests(unittest.TestCase):
     def _health(self, *, present: bool, open_epics: int = 1, open_questions: int = 1) -> HealthReport:
@@ -482,6 +514,7 @@ class BootstrapPlatformTests(unittest.TestCase):
         self.assertFalse(stored["autonomy"]["enabled"])
         self.assertEqual(plate_put["fields"]["sha"], "sha-9")
         endpoints = [item["endpoint"] for item in puts]
+        self.assertTrue(endpoints[0].endswith("/contents/.plate"))
         self.assertTrue(any(item.endswith("gif-from-video.sh") for item in endpoints))
         self.assertFalse(any(item.endswith("gif-from-video.ps1") for item in endpoints))
 
@@ -549,6 +582,80 @@ class BootstrapPlatformTests(unittest.TestCase):
         with self.assertRaises(PlateConfigError) as caught:
             resolve_bootstrap_platform(None, "akasper/plat", client, plate_config_present=True)
         self.assertIn("top-level object", str(caught.exception))
+
+    def test_empty_stored_platform_fails_and_null_means_posix(self):
+        client = Mock()
+        client.api.return_value = {
+            "type": "file",
+            "encoding": "base64",
+            "content": base64.b64encode(b'{"version":"1.3","platform":""}').decode("ascii"),
+        }
+        with self.assertRaises(PlateConfigError) as caught:
+            resolve_bootstrap_platform(None, "akasper/plat", client, plate_config_present=True)
+        self.assertIn("invalid platform", str(caught.exception))
+        client.api.return_value = {
+            "type": "file",
+            "encoding": "base64",
+            "content": base64.b64encode(b'{"version":"1.3","platform":null}').decode("ascii"),
+        }
+        self.assertEqual(
+            resolve_bootstrap_platform(None, "akasper/plat", client, plate_config_present=True),
+            "posix",
+        )
+
+    def test_explicit_platform_rejects_bad_plate_before_writes(self):
+        puts: list[str] = []
+        plate: dict = {}
+
+        def api_side(endpoint, *args, **kwargs):
+            endpoint = str(endpoint)
+            method = kwargs.get("method", "GET")
+            if method == "PUT":
+                puts.append(endpoint)
+                return {}
+            if endpoint == "repos/akasper/plat":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if endpoint.endswith("/git/ref/heads/main"):
+                return {"ref": "refs/heads/main"}
+            if endpoint.endswith("/contents/.plate"):
+                return plate
+            return {}
+
+        bodies = (
+            {
+                "type": "file",
+                "sha": "sha-bad",
+                "encoding": "base64",
+                "content": base64.b64encode(b'{"platform": "posix",}').decode("ascii"),
+            },
+            {"type": "file", "sha": "sha-unread"},
+        )
+        for body in bodies:
+            plate.clear()
+            plate.update(body)
+            puts.clear()
+            client = Mock()
+            client.api.side_effect = api_side
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                self._template(root)
+                with patch("plate_core.bootstrap.resolve_template_source", return_value=(root, "explicit_path")):
+                    with patch("plate_core.bootstrap.get_health", return_value=self._health(present=True)):
+                        with self.assertRaises(RuntimeError):
+                            run_bootstrap(
+                                "akasper/plat",
+                                apply_mode=False,
+                                client=client,
+                                platform="windows",
+                            )
+                        with self.assertRaises(RuntimeError):
+                            run_bootstrap(
+                                "akasper/plat",
+                                apply_mode=True,
+                                client=client,
+                                platform="windows",
+                            )
+            self.assertEqual(puts, [])
 
 
 def _bash_executable() -> str | None:
@@ -624,6 +731,7 @@ class ValidatorPlatformTests(unittest.TestCase):
             ("posix-and-windows", ["gif-from-video.sh", "gif-from-video.ps1"], 0),
             ("posix-and-windows", ["gif-from-video.sh"], 1),
             (None, ["gif-from-video.sh"], 0),
+            ("", ["gif-from-video.sh"], 1),
         )
         for platform, gifs, expected in cases:
             with self.subTest(platform=platform, gifs=gifs):
@@ -704,6 +812,8 @@ class ValidatorPlatformTests(unittest.TestCase):
                 ('{"platform":"posix",}', 1, "invalid JSON"),
                 ('{"platform": ["posix"]}', 1, "invalid platform"),
                 ('{"platform": " "}', 1, "invalid platform"),
+                ('{"platform": ""}', 1, "invalid platform"),
+                ('{"platform": null}', 0, "gif-from-video.sh"),
                 ('{"version": "1.3"}', 0, "gif-from-video.sh"),
                 ('{"platform": "windows"}', 0, "platform: windows"),
             )
@@ -775,6 +885,25 @@ class PowerShellValidatorTests(unittest.TestCase):
             result = self._run(root)
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("invalid platform", result.stdout + result.stderr)
+
+    def test_empty_platform_fails_and_null_means_posix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _validator_fixture(
+                root,
+                platform=None,
+                gifs=["gif-from-video.sh", "gif-from-video.ps1"],
+            )
+            _write(root / ".plate", json.dumps({"version": "1.3", "platform": ""}))
+            result = self._run(root)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("invalid platform", result.stdout + result.stderr)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _validator_fixture(root, platform=None, gifs=["gif-from-video.sh"])
+            _write(root / ".plate", json.dumps({"version": "1.3", "platform": None}))
+            result = self._run(root)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

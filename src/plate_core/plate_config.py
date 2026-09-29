@@ -366,9 +366,12 @@ def _migrate_1_1_to_1_2(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _migrate_1_2_to_1_3(config: dict[str, Any]) -> dict[str, Any]:
-    """Record script platform. Missing key becomes posix and does not clobber an explicit value."""
+    """Record script platform. A missing key or JSON null becomes posix.
+
+    An empty string is left in place so ``validate_plate_config`` rejects it.
+    """
     upgraded = copy.deepcopy(config)
-    if not upgraded.get("platform"):
+    if "platform" not in upgraded or upgraded.get("platform") is None:
         upgraded["platform"] = PLATFORM_POSIX
     upgraded["version"] = "1.3"
     return upgraded
