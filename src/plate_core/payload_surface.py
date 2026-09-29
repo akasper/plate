@@ -120,8 +120,60 @@ def prepare_copied_text(rel: str, text: str, platform: str, *, namespaced: bool)
             "  test:\n    needs: labels\n    runs-on: windows-latest\n",
             1,
         )
+    if rel.endswith("test-e2e.yml"):
+        text = _rewrite_windows_gif_job(text, namespaced=namespaced)
     if newline != "\n":
         text = text.replace("\n", newline)
+    return text
+
+
+def _rewrite_windows_gif_job(text: str, *, namespaced: bool) -> str:
+    """Point process-gifs at the PowerShell helper a windows copy actually ships.
+
+    The job stays on ubuntu-latest: its size checks are bash, and GitHub's
+    Ubuntu image provides pwsh. The shell twin is not copied for windows, so
+    a missing helper or a missing pwsh fails the step instead of being hidden
+    by ``|| true``. Per-video conversion errors stay non-fatal.
+    """
+    gif = "scripts/plate/gif-from-video.ps1" if namespaced else "scripts/gif-from-video.ps1"
+    shell = "scripts/plate/gif-from-video.sh" if namespaced else "scripts/gif-from-video.sh"
+    old = f'              ./{shell} "$video" "$gif_name" --quality medium || true'
+    if old not in text:
+        return text
+    checked = (
+        f'              gif_script="./{gif}"\n'
+        '              if [[ ! -f "$gif_script" ]]; then\n'
+        '                echo "Required GIF script is missing: $gif_script" >&2\n'
+        "                exit 1\n"
+        "              fi\n"
+        "              if ! command -v pwsh >/dev/null 2>&1; then\n"
+        '                echo "pwsh is required to run $gif_script" >&2\n'
+        "                exit 1\n"
+        "              fi\n"
+        '              pwsh -File "$gif_script" -InputVideo "$video" -OutputGif "$gif_name" -Quality medium || true'
+    )
+    text = text.replace(old, checked, 1)
+    anchor = (
+        "      - name: Download test videos\n"
+        "        uses: actions/download-artifact@v4\n"
+        "        with:\n"
+        "          name: playwright-videos\n"
+        "\n"
+        "      - name: Convert videos to GIFs\n"
+    )
+    install = (
+        "      - name: Download test videos\n"
+        "        uses: actions/download-artifact@v4\n"
+        "        with:\n"
+        "          name: playwright-videos\n"
+        "\n"
+        "      - name: Install ffmpeg\n"
+        "        run: sudo apt-get update && sudo apt-get install -y ffmpeg\n"
+        "\n"
+        "      - name: Convert videos to GIFs\n"
+    )
+    if anchor in text:
+        text = text.replace(anchor, install, 1)
     return text
 
 # Plate-owned doc subdirectories under template payload docs/ (PLATE scaffolding)

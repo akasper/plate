@@ -6,7 +6,7 @@ This directory contains scripts for recording Playwright E2E test videos and con
 
 **Script Policy:** When adding scripts, default projects (`platform` absent or `posix`) author POSIX shell (`.sh`) only. `posix-and-windows` keeps `.sh` primary and adds a `.ps1` twin. `windows` authors `.ps1` only.
 
-This directory is the reference dual-stack. Import and bootstrap copy PLATE-owned scripts for the destination `.plate` `platform` and omit the other flavor. They do not delete adopter-owned scripts. `posix` validation requires `gif-from-video.sh`. `posix-and-windows` requires both GIF scripts. `windows` requires `gif-from-video.ps1`, and the copied CI job runs `ValidatePlateRepo.ps1` on `windows-latest`.
+This directory is the reference dual-stack. Import and bootstrap copy PLATE-owned scripts for the destination `.plate` `platform` and omit the other flavor. They do not delete adopter-owned scripts. `posix` validation requires `gif-from-video.sh`. `posix-and-windows` requires both GIF scripts. `windows` requires `gif-from-video.ps1`, the copied CI job runs `ValidatePlateRepo.ps1` on `windows-latest`, and the copied `process-gifs` job calls `gif-from-video.ps1` through `pwsh`.
 
 For the full policy, see "Script Policy and Platform Support" in `AGENTS.md`.
 

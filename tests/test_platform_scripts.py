@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -127,6 +128,46 @@ class PlatformFilterTests(unittest.TestCase):
             namespaced=False,
         )
         self.assertEqual(untouched, source)
+
+    def test_windows_e2e_gif_job_calls_powershell_helper(self):
+        source = _lf((payload_root() / ".github" / "workflows" / "test-e2e.yml").read_text(encoding="utf-8"))
+        rewritten = _lf(
+            prepare_copied_text(
+                ".github/workflows/test-e2e.yml",
+                source,
+                "windows",
+                namespaced=False,
+            )
+        )
+        self.assertNotIn("gif-from-video.sh", rewritten)
+        self.assertIn('gif_script="./scripts/gif-from-video.ps1"', rewritten)
+        self.assertIn('pwsh -File "$gif_script"', rewritten)
+        self.assertIn("sudo apt-get install -y ffmpeg", rewritten)
+        self.assertIn("Required GIF script is missing", rewritten)
+        self.assertIn("name: Playwright E2E Tests", rewritten)
+        self.assertIn("runs-on: ubuntu-latest", rewritten)
+
+        namespaced = _lf(
+            prepare_copied_text(
+                ".github/workflows/test-e2e.yml",
+                source,
+                "windows",
+                namespaced=True,
+            )
+        )
+        self.assertIn('gif_script="./scripts/plate/gif-from-video.ps1"', namespaced)
+        self.assertNotIn("gif-from-video.sh", namespaced)
+
+        posix = _lf(
+            prepare_copied_text(
+                ".github/workflows/test-e2e.yml",
+                source,
+                "posix",
+                namespaced=False,
+            )
+        )
+        self.assertEqual(posix, source)
+        self.assertIn("./scripts/gif-from-video.sh", source)
 
     def test_upgrade_missing_platform_becomes_posix_and_keeps_explicit(self):
         upgraded, _guidance, origin = upgrade_plate_config_dict(
@@ -567,6 +608,59 @@ class ValidatorPlatformTests(unittest.TestCase):
             result = self._run(root)
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("invalid JSON", result.stderr)
+
+    def test_no_python_fallback_fails_closed(self):
+        git_usr = Path(r"C:\Program Files\Git\usr\bin")
+        if not git_usr.is_dir() or not (git_usr / "grep.exe").is_file():
+            self.skipTest("Git usr/bin is required to hide python from the fallback")
+        env = os.environ.copy()
+        env["PATH"] = str(git_usr)
+        cases = (
+            ("{not-json", "invalid JSON"),
+            ("{not-json}", "invalid JSON"),
+            ('{"platform": ["posix"]}', "must be a string"),
+            ('{"platform": 1}', "must be a string"),
+            ('{\n  "platform": "nope"\n}', "invalid platform"),
+        )
+        for raw, needle in cases:
+            with self.subTest(raw=raw):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    _validator_fixture(root, platform=None, gifs=["gif-from-video.sh"])
+                    _write(root / ".plate", raw)
+                    result = subprocess.run(
+                        [self.bash, str(self.script), str(root)],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        env=env,
+                    )
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn(needle, result.stderr)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _validator_fixture(root, platform=None, gifs=["gif-from-video.sh"])
+            _write(root / ".plate", '{\n  "version": "1.3"\n}\n')
+            result = subprocess.run(
+                [self.bash, str(self.script), str(root)],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _validator_fixture(root, platform=None, gifs=["gif-from-video.ps1"])
+            _write(root / ".plate", '{ "platform" : "windows" }\n')
+            result = subprocess.run(
+                [self.bash, str(self.script), str(root)],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 class PowerShellValidatorTests(unittest.TestCase):

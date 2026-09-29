@@ -46,13 +46,37 @@ PY
         fi
         plate_platform="${plate_platform//$'\r'/}"
     else
-        extracted="$(grep -oE '"platform"[[:space:]]*:[[:space:]]*"[^"]*"' "$plate_file" | head -n 1 || true)"
-        if [[ -n "$extracted" ]]; then
+        # No Python. A missing platform key still means posix. A file that is
+        # not a JSON object, or a platform value that is not a quoted string,
+        # fails closed the same way the Python path does.
+        flat="$(tr -d '\r' < "$plate_file" | tr '\n' ' ')"
+        if ! grep -q '{' <<< "$flat" || ! grep -q '}' <<< "$flat"; then
+            echo "invalid JSON in .plate: expected an object" >&2
+            exit 1
+        fi
+        inner="${flat#*\{}"
+        inner="${inner%\}*}"
+        compact="${inner//[[:space:]]/}"
+        if [[ -n "$compact" && "$compact" != *'"'* ]]; then
+            echo "invalid JSON in .plate: expected an object" >&2
+            exit 1
+        fi
+        if grep -qE '"platform"[[:space:]]*:' <<< "$flat"; then
+            if grep -qE '"platform"[[:space:]]*:[[:space:]]*(\[|\{|true|false|null|-?[0-9])' <<< "$flat"; then
+                echo "invalid platform: .plate platform must be a string (allowed: posix, posix-and-windows, windows)" >&2
+                exit 1
+            fi
+            extracted="$(grep -oE '"platform"[[:space:]]*:[[:space:]]*"[^"]*"' <<< "$flat" | head -n 1 || true)"
+            if [[ -z "$extracted" ]]; then
+                echo "invalid platform: .plate platform must be a string (allowed: posix, posix-and-windows, windows)" >&2
+                exit 1
+            fi
             value="${extracted##*:}"
             value="${value//\"/}"
             value="${value//[[:space:]]/}"
             case "$value" in
-                posix|posix-and-windows|windows) plate_platform="$value" ;;
+                ""|posix) plate_platform="posix" ;;
+                posix-and-windows|windows) plate_platform="$value" ;;
                 *)
                     echo "invalid platform: $value" >&2
                     exit 1
