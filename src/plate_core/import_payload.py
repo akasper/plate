@@ -100,6 +100,8 @@ class ImportPayloadReport:
     next_command: str = ""
     namespace_scripts: bool = False
     namespace_docs: bool = False
+    platform: str = "posix"
+    omitted_for_platform: list[str] = field(default_factory=list)
     ok: bool = True
     error: str | None = None
 
@@ -114,6 +116,8 @@ class ImportPayloadReport:
             "template_root": self.template_root,
             "namespace_scripts": self.namespace_scripts,
             "namespace_docs": self.namespace_docs,
+            "platform": self.platform,
+            "omitted_for_platform": list(self.omitted_for_platform),
             "counts": {
                 "payload_files": len(self.files),
                 "would_create": len(self.would_create),
@@ -124,6 +128,7 @@ class ImportPayloadReport:
                 "skipped": len(self.skipped),
                 "conflicts": len(self.conflicts),
                 "overwritten": len(self.overwritten),
+                "omitted_for_platform": len(self.omitted_for_platform),
             },
             "would_create": list(self.would_create),
             "would_skip": list(self.would_skip),
@@ -328,6 +333,65 @@ def _next_steps(report: ImportPayloadReport) -> list[str]:
     return steps
 
 
+def resolve_import_platform(explicit: str | None, target: Path) -> str:
+    """CLI flag wins, then the target ``.plate`` value, then ``posix``.
+
+    Does not look at the operator machine. Any explicit value, including
+    ``""`` and whitespace, is validated before the target file is read. A
+    missing key or JSON null means ``posix``. An empty stored string and any
+    other value outside the enum raise ``PlateConfigError``.
+    """
+    from .plate_config import ALLOWED_PLATFORMS, PLATFORM_POSIX, PlateConfigError
+
+    if explicit is not None:
+        if not isinstance(explicit, str):
+            allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+            raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
+        value = explicit.strip()
+        if value not in ALLOWED_PLATFORMS:
+            allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+            raise PlateConfigError(f"invalid platform: {explicit!r} (allowed: {allowed})")
+        return value
+
+    plate_path = target / ".plate"
+    if not plate_path.is_file():
+        return PLATFORM_POSIX
+    try:
+        data = json.loads(plate_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise PlateConfigError(f"invalid JSON in .plate: {exc}") from exc
+    if not isinstance(data, dict):
+        raise PlateConfigError(".plate must contain a top-level object")
+    stored = data.get("platform")
+    if stored is None:
+        return PLATFORM_POSIX
+    if not isinstance(stored, str) or stored not in ALLOWED_PLATFORMS:
+        allowed = ", ".join(sorted(ALLOWED_PLATFORMS))
+        raise PlateConfigError(f"invalid platform: {stored!r} (allowed: {allowed})")
+    return stored
+
+
+def _render_payload_bytes(
+    source: Path,
+    rel: str,
+    *,
+    platform: str,
+    namespaced_scripts: bool,
+    namespaced_docs: bool,
+) -> bytes:
+    data = source.read_bytes()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    from .payload_surface import prepare_copied_text, rewrite_docs_refs
+
+    text = prepare_copied_text(rel, text, platform, namespaced=namespaced_scripts)
+    if namespaced_docs and _should_rewrite_docs_refs(rel):
+        text = rewrite_docs_refs(text)
+    return text.encode("utf-8")
+
+
 def plan_import_payload(
     target_dir: str | Path = ".",
     *,
@@ -336,6 +400,7 @@ def plan_import_payload(
     apply: bool = False,
     namespace_scripts: bool | None = None,
     namespace_docs: bool | None = None,
+    platform: str | None = None,
 ) -> ImportPayloadReport:
     """Plan (and optionally apply) template payload import into a local target dir.
 
@@ -348,13 +413,13 @@ def plan_import_payload(
     non-empty product ``docs/`` tree.
     """
     from .payload_surface import (
+        filter_plate_scripts,
         namespace_docs_path,
         namespace_script_path,
-        rewrite_docs_refs,
-        rewrite_workflow_script_refs,
         should_namespace_docs,
         should_namespace_scripts,
     )
+    from .plate_config import PlateConfigError
 
     strat = str(strategy or "safe").lower()
     if strat not in VALID_STRATEGIES:
@@ -408,8 +473,25 @@ def plan_import_payload(
         else should_namespace_docs(target)
     )
 
+    explicit_platform = platform is not None and str(platform).strip() != ""
+    try:
+        resolved_platform = resolve_import_platform(platform, target)
+    except PlateConfigError as exc:
+        return ImportPayloadReport(
+            apply_mode=bool(apply),
+            strategy=strat,
+            target_dir=str(target),
+            template_source=source_kind,
+            template_root=str(template_root),
+            ok=False,
+            error=str(exc),
+        )
+
     manifest = load_template_payload_manifest()
-    rel_paths = list_payload_relative_paths(template_root)
+    rel_paths, omitted = filter_plate_scripts(
+        list_payload_relative_paths(template_root),
+        resolved_platform,
+    )
     report = ImportPayloadReport(
         apply_mode=bool(apply),
         strategy=strat,
@@ -418,7 +500,16 @@ def plan_import_payload(
         template_root=str(template_root),
         namespace_scripts=ns,
         namespace_docs=nd,
+        platform=resolved_platform,
+        omitted_for_platform=omitted,
     )
+    if explicit_platform and apply and (target / ".plate").is_file():
+        try:
+            _set_plate_platform(target / ".plate", resolved_platform)
+        except PlateConfigError as exc:
+            report.ok = False
+            report.error = str(exc)
+            return report
 
     for rel in rel_paths:
         source = template_root / rel
@@ -467,24 +558,13 @@ def plan_import_payload(
                 report.would_create.append(label)
                 if apply:
                     write_dest.parent.mkdir(parents=True, exist_ok=True)
-                    data = source.read_bytes()
-                    # Rewrite script refs in workflows when namespacing scripts
-                    if ns and (
-                        rel.startswith(".github/workflows/")
-                        or write_rel.startswith(".github/workflows/")
-                    ):
-                        try:
-                            text = data.decode("utf-8")
-                            data = rewrite_workflow_script_refs(text).encode("utf-8")
-                        except UnicodeDecodeError:
-                            pass
-                    # Rewrite doc refs in text files when namespacing docs
-                    if nd and _should_rewrite_docs_refs(rel):
-                        try:
-                            text = data.decode("utf-8")
-                            data = rewrite_docs_refs(text).encode("utf-8")
-                        except UnicodeDecodeError:
-                            pass
+                    data = _render_payload_bytes(
+                        source,
+                        rel,
+                        platform=resolved_platform,
+                        namespaced_scripts=ns,
+                        namespaced_docs=nd,
+                    )
                     write_dest.write_bytes(data)
                     report.created.append(label)
         elif decision.action == "overwrite":
@@ -492,24 +572,13 @@ def plan_import_payload(
             report.would_overwrite.append(label)
             if apply:
                 write_dest.parent.mkdir(parents=True, exist_ok=True)
-                data = source.read_bytes()
-                # Rewrite script refs in workflows when namespacing scripts
-                if ns and (
-                    rel.startswith(".github/workflows/")
-                    or write_rel.startswith(".github/workflows/")
-                ):
-                    try:
-                        text = data.decode("utf-8")
-                        data = rewrite_workflow_script_refs(text).encode("utf-8")
-                    except UnicodeDecodeError:
-                        pass
-                # Rewrite doc refs in text files when namespacing docs
-                if nd and _should_rewrite_docs_refs(rel):
-                    try:
-                        text = data.decode("utf-8")
-                        data = rewrite_docs_refs(text).encode("utf-8")
-                    except UnicodeDecodeError:
-                        pass
+                data = _render_payload_bytes(
+                    source,
+                    rel,
+                    platform=resolved_platform,
+                    namespaced_scripts=ns,
+                    namespaced_docs=nd,
+                )
                 write_dest.write_bytes(data)
                 report.overwritten.append(label)
         elif decision.action == "conflict":
@@ -530,7 +599,12 @@ def plan_import_payload(
     # Root .plate is not in template payload globs; seed DEFAULT_CONFIG JSON when
     # missing so local import can reach adoption core_ready without remote bootstrap.
     # Never overwrite an existing .plate (adopter customizations win).
-    _seed_plate_config_if_missing(target, report, apply=bool(apply))
+    _seed_plate_config_if_missing(
+        target,
+        report,
+        apply=bool(apply),
+        platform=resolved_platform,
+    )
 
     report.next_command = _next_command(report)
     report.next_steps = _next_steps(report)
@@ -543,6 +617,12 @@ def plan_import_payload(
         report.next_steps.insert(
             0,
             "PLATE docs install under docs/plate/; references rewritten to match (#1015).",
+        )
+    if omitted:
+        report.next_steps.insert(
+            0,
+            f"Omitted {len(omitted)} PLATE-owned script twin(s) for platform {resolved_platform}. "
+            "Adopter-owned scripts are not removed.",
         )
     return report
 
@@ -695,11 +775,28 @@ def _seed_releases_layout_if_missing(
         report.created.append(rel)
 
 
+def _set_plate_platform(path: Path, platform: str) -> None:
+    """Set ``platform`` on an existing ``.plate`` without touching other keys."""
+    from .plate_config import PlateConfigError
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise PlateConfigError(f"invalid JSON in .plate: {exc}") from exc
+    if not isinstance(data, dict):
+        raise PlateConfigError(".plate must contain a top-level object")
+    if data.get("platform") == platform:
+        return
+    data["platform"] = platform
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
 def _seed_plate_config_if_missing(
     target: Path,
     report: ImportPayloadReport,
     *,
     apply: bool,
+    platform: str | None = None,
 ) -> None:
     """Seed root ``.plate`` JSON from DEFAULT_CONFIG when absent (never overwrite).
 
@@ -727,9 +824,14 @@ def _seed_plate_config_if_missing(
             report.skipped.append(".plate")
         return
 
+    import copy
+
     from .plate_config import DEFAULT_CONFIG
 
-    payload = json.dumps(DEFAULT_CONFIG, indent=2) + "\n"
+    seeded = copy.deepcopy(DEFAULT_CONFIG)
+    if platform:
+        seeded["platform"] = platform
+    payload = json.dumps(seeded, indent=2) + "\n"
     report.files.append(
         PayloadFileDecision(
             action="create",
@@ -751,6 +853,7 @@ def copy_template_payload_local(
     dry_run: bool = True,
     namespace_scripts: bool | None = None,
     namespace_docs: bool | None = None,
+    platform: str | None = None,
 ) -> dict[str, Any]:
     """#620 local FS applier — same report as import_payload / plan_import_payload.
 
@@ -766,6 +869,7 @@ def copy_template_payload_local(
         apply=not dry_run,
         namespace_scripts=namespace_scripts,
         namespace_docs=namespace_docs,
+        platform=platform,
     )
 
 
@@ -778,7 +882,9 @@ def format_import_payload_report(report: dict[str, Any] | ImportPayloadReport) -
         f"## import-payload ({mode}) strategy={data.get('strategy')}",
         f"- Target: {data.get('target_dir')}",
         f"- Source: {data.get('template_source')} ({data.get('template_root')})",
+        f"- Platform: {data.get('platform', 'posix')}",
         f"- Payload files: {counts.get('payload_files', 0)}",
+        f"- Omitted for platform: {counts.get('omitted_for_platform', 0)}",
         f"- Would create: {counts.get('would_create', 0)} | skip: {counts.get('would_skip', 0)} "
         f"| conflict: {counts.get('would_conflict', 0)} | overwrite: {counts.get('would_overwrite', 0)}",
     ]
@@ -987,6 +1093,7 @@ def import_payload(
     apply: bool = False,
     namespace_scripts: bool | None = None,
     namespace_docs: bool | None = None,
+    platform: str | None = None,
     escape_hatch_dir: str | Path | None = None,
     escape_hatch_on_conflict: bool = False,
 ) -> dict[str, Any]:
@@ -1004,6 +1111,7 @@ def import_payload(
         apply=do_apply,
         namespace_scripts=namespace_scripts,
         namespace_docs=namespace_docs,
+        platform=platform,
     )
     data = report.to_dict()
     hatch_dir: Path | None = None
