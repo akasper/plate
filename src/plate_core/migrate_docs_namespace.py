@@ -306,6 +306,9 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
                         )
                     )
                     plan.ok = False
+                    plan.errors.append(
+                        f"Conflict: both docs/{plate_dir}/ and docs/plate/{plate_dir}/ exist with different contents"
+                    )
             else:
                 plan.actions.append(
                     MigrationAction(
@@ -528,6 +531,7 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
                     plan.errors.append(
                         f"Failed to rewrite links in {action.source}: {e}"
                     )
+                    plan.ok = False
                 
         elif action.action_type == "update_refs":
             file_path = target_path / action.source
