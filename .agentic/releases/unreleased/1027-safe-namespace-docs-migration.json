@@ -1,0 +1,20 @@
+{
+  "slug": "1027-safe-namespace-docs-migration",
+  "change_type": "feature",
+  "surface": "docs/migration/, gh plate CLI, MCP server",
+  "summary": "Adds safe migrate-docs-namespace command and fixes destructive migration guide (#1027, #1028)",
+  "migration_impact": "Existing PLATE adopters can now safely migrate docs from docs/ to docs/plate/ namespace using the new `gh plate migrate-docs-namespace` command (dry-run by default). The migration guide no longer recommends the destructive `--strategy force` path that overwrites AGENTS.md. The command uses git mv, preserves customizations, rewrites references, and is idempotent.",
+  "migration_guidance": [
+    "1. If you've already adopted PLATE and have docs at docs/ root with product docs, you need to migrate to docs/plate/.",
+    "2. Install plate-core v0.8.3+ and the gh plate extension: `gh extension install akasper/gh-plate`",
+    "3. Dry-run first: `gh plate migrate-docs-namespace` (reviews the plan without changes)",
+    "4. Apply if the plan looks good: `gh plate migrate-docs-namespace --apply`",
+    "5. The command moves PLATE doc dirs (adr/, audits/, bootstrap/, design/, marketing/, migration/, research/, wiki/) to docs/plate/, preserves AGENTS.md/SPEC.md/CURRENT.md, and updates path references.",
+    "6. Commit the changes: `git commit -m 'Migrate PLATE docs to docs/plate/ namespace'`",
+    "7. Re-run is safe (idempotent) if needed."
+  ],
+  "agent_notes": "When migrating PLATE docs to docs/plate/ namespace, use `gh plate migrate-docs-namespace` (or `plate_migrate_docs_namespace` MCP tool, or `python -m plate_core.cli migrate-docs-namespace`). Always dry-run first. Never use `gh plate import-payload --strategy force` for migration as it overwrites customized files and leaves duplicates. The migration command preserves AGENTS.md, SPEC.md, CURRENT.md, and all product documentation, only moving PLATE-owned directories and updating references.",
+  "breaking": false,
+  "links": ["#1027", "#1028"],
+  "requires": ["0.8.3"]
+}
