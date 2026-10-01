@@ -611,9 +611,16 @@ def cmd_migrate_docs_namespace(args: argparse.Namespace) -> int:
     move_files = [a for a in plan.actions if a.action_type == "move_file"]
     skip_actions = [a for a in plan.actions if a.action_type == "skip"]
     update_refs = [a for a in plan.actions if a.action_type == "update_refs"]
+    conflicts = [a for a in plan.actions if a.action_type == "conflict"]
+    
+    if conflicts:
+        print("\n⚠️  CONFLICTS (manual resolution required):")
+        for action in conflicts:
+            print(f"  ✗ {action.source} and {action.target}")
+            print(f"    {action.reason}")
     
     if move_dirs:
-        print("MOVE DIRECTORIES:")
+        print("MOVE DIRECTORIES:" if not conflicts else "\nMOVE DIRECTORIES:")
         for action in move_dirs:
             status = "✓" if apply else "→"
             print(f"  {status} {action.source} → {action.target}")
@@ -627,7 +634,12 @@ def cmd_migrate_docs_namespace(args: argparse.Namespace) -> int:
     if skip_actions:
         print("\nSKIPPED (already migrated):")
         for action in skip_actions:
-            print(f"  ○ {action.source} (target exists)")
+            # Show what reconciliation will do if applicable
+            if "Identical duplicate" in action.reason:
+                suffix = " - will remove source" if apply else " - would remove source in --apply"
+                print(f"  ○ {action.source}{suffix}")
+            else:
+                print(f"  ○ {action.source} (target exists)")
     
     if update_refs:
         print("\nUPDATE REFERENCES:")

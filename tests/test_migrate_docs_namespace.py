@@ -482,17 +482,11 @@ class TestMigrationApplication(unittest.TestCase):
             import shutil
             shutil.rmtree(repo.parent)
     
-    def test_move_failure_stops_before_reference_updates(self):
-        """Test that move failure stops execution before reference updates."""
+    def test_successful_migration_updates_references(self):
+        """Test that successful migration updates references correctly."""
         repo = create_temp_repo()
         try:
-            # Test that if git mv fails, we return immediately without updating references
-            # The actual failure mode is tested implicitly - if git mv fails, 
-            # apply_migration sets plan.ok=False and returns immediately.
-            # This is verified by the code structure itself (early return after git mv failure)
-            
-            # For this test, we just verify that the early-return logic is in place
-            # by checking that a successful migration does update references
+            # Verify that a successful migration updates all references
             design_dir = repo / "docs/design"
             design_dir.mkdir(parents=True)
             (design_dir / "feature.md").write_text("# Test", encoding="utf-8")
@@ -503,13 +497,17 @@ class TestMigrationApplication(unittest.TestCase):
             subprocess.run(["git", "add", "."], cwd=repo, check=True)
             subprocess.run(["git", "commit", "-m", "Add docs"], cwd=repo, check=True)
             
-            # Successful migration should update references
+            # Migration should succeed and update references
             result = apply_migration(repo)
             self.assertTrue(result.ok, "Migration should succeed")
             
             content = agents_path.read_text(encoding="utf-8")
             self.assertIn("docs/plate/design/", content,
                          "References should be updated after successful migration")
+            
+            # Verify the move happened
+            self.assertFalse((repo / "docs/design").exists(), "Source should be moved")
+            self.assertTrue((repo / "docs/plate/design/feature.md").exists(), "Target should exist")
         finally:
             import shutil
             shutil.rmtree(repo.parent)
