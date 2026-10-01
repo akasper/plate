@@ -31,6 +31,7 @@ from .release import (
     get_release_target_epic_guidance,
 )
 from .migration import generate_migration_plan, apply_migration_plan
+from .migrate_docs_namespace import migrate_docs_namespace
 from .costs import get_cost_report
 from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle, simulate_autonomy_action
 from .checkpoint import create_checkpoint, decide_checkpoint, get_checkpoint, list_checkpoints, list_open_checkpoints
@@ -568,6 +569,83 @@ def cmd_adopt(args: argparse.Namespace) -> int:
         print(f"  - {step}")
     print(f"Guide: {report.get('guide')}")
     return 0 if report.get("ok") else 1
+
+
+def cmd_migrate_docs_namespace(args: argparse.Namespace) -> int:
+    """Migrate PLATE docs from docs/ root to docs/plate/ namespace."""
+    from pathlib import Path
+    
+    target_dir = Path(args.target_dir) if hasattr(args, "target_dir") and args.target_dir else Path.cwd()
+    apply = getattr(args, "apply", False)
+    
+    plan = migrate_docs_namespace(target_dir=target_dir, apply=apply)
+    
+    if args.json:
+        print(json.dumps(plan.to_dict(), indent=2))
+        return 0 if plan.ok else 1
+    
+    # Human-readable output
+    print(f"PLATE docs namespace migration ({'APPLY' if apply else 'DRY-RUN'})")
+    print(f"Target: {plan.target_dir}")
+    print()
+    
+    if plan.errors:
+        print("ERRORS:")
+        for error in plan.errors:
+            print(f"  ✗ {error}")
+        print()
+        return 1
+    
+    if plan.warnings:
+        print("WARNINGS:")
+        for warning in plan.warnings:
+            print(f"  ⚠ {warning}")
+        print()
+    
+    if not plan.actions:
+        print("Nothing to do. Migration complete or not needed.")
+        return 0
+    
+    # Group actions by type
+    move_dirs = [a for a in plan.actions if a.action_type == "move_dir"]
+    move_files = [a for a in plan.actions if a.action_type == "move_file"]
+    skip_actions = [a for a in plan.actions if a.action_type == "skip"]
+    update_refs = [a for a in plan.actions if a.action_type == "update_refs"]
+    
+    if move_dirs:
+        print("MOVE DIRECTORIES:")
+        for action in move_dirs:
+            status = "✓" if apply else "→"
+            print(f"  {status} {action.source} → {action.target}")
+    
+    if move_files:
+        print("\nMOVE FILES:")
+        for action in move_files:
+            status = "✓" if apply else "→"
+            print(f"  {status} {action.source} → {action.target}")
+    
+    if skip_actions:
+        print("\nSKIPPED (already migrated):")
+        for action in skip_actions:
+            print(f"  ○ {action.source} (target exists)")
+    
+    if update_refs:
+        print("\nUPDATE REFERENCES:")
+        for action in update_refs:
+            status = "✓" if apply else "→"
+            print(f"  {status} {action.source} ({action.reason})")
+    
+    print()
+    if not apply:
+        print("This was a DRY-RUN. Use --apply to perform the migration.")
+    else:
+        print("Migration complete!")
+        print("\nNext steps:")
+        print("  1. Review changes: git status && git diff")
+        print("  2. Test locally: verify links and CI")
+        print("  3. Commit: git commit -m 'Migrate PLATE docs to docs/plate/ namespace'")
+    
+    return 0 if plan.ok else 1
 
 
 def cmd_self_migrate(args: argparse.Namespace) -> int:
@@ -5084,6 +5162,27 @@ def build_parser() -> argparse.ArgumentParser:
     m_apply.add_argument("--repo", help="owner/name")
     m_apply.add_argument("--json", action="store_true")
     m_apply.set_defaults(func=cmd_migrate_apply)
+
+    migrate_docs_ns = sub.add_parser(
+        "migrate-docs-namespace",
+        help="Migrate PLATE docs from docs/ root to docs/plate/ namespace (#1027)",
+    )
+    migrate_docs_ns.add_argument(
+        "--target-dir",
+        default=".",
+        help="Repository root directory (default: current directory)",
+    )
+    migrate_docs_ns.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the migration (default: dry-run only)",
+    )
+    migrate_docs_ns.add_argument(
+        "--json",
+        action="store_true",
+        help="Output JSON",
+    )
+    migrate_docs_ns.set_defaults(func=cmd_migrate_docs_namespace)
 
     import_payload_p = sub.add_parser(
         "import-payload",
