@@ -56,14 +56,17 @@ REFERENCE_FILES = [
     ".github/copilot-instructions.md",
     ".github/agents/*.agent.md",
     ".agentic/skills.yml",
+    ".agentic/migration.yml",
     "scripts/README.md",
+    "scripts/bootstrap_github.sh",
+    "scripts/BootstrapGitHub.ps1",
 ]
 
 
 @dataclass
 class MigrationAction:
     """Represents a single migration action."""
-    action_type: str  # move_dir | move_file | skip | update_refs
+    action_type: str  # move_dir | move_file | skip | update_refs | conflict | rewrite_links
     source: str
     target: str | None = None
     reason: str = ""
@@ -100,6 +103,8 @@ class MigrationPlan:
                 "move_file": len([a for a in self.actions if a.action_type == "move_file"]),
                 "skip": len([a for a in self.actions if a.action_type == "skip"]),
                 "update_refs": len([a for a in self.actions if a.action_type == "update_refs"]),
+                "conflict": len([a for a in self.actions if a.action_type == "conflict"]),
+                "rewrite_links": len([a for a in self.actions if a.action_type == "rewrite_links"]),
             },
         }
 
@@ -188,6 +193,63 @@ def _update_references_in_file(
     return changed, count
 
 
+def _rewrite_relative_links(content: str) -> str:
+    """Rewrite relative links when moving README from docs/ to docs/plate/.
+    
+    Links like ../AGENTS.md need to become ../../AGENTS.md
+    Links like ../tests/e2e need to become ../../tests/e2e
+    """
+    # Match markdown links: [text](../path) or [text](../)
+    def rewrite_link(match):
+        text = match.group(1)
+        path = match.group(2)
+        # If it starts with ../, add another ../
+        if path.startswith("../"):
+            return f"[{text}](../{path})"
+        return match.group(0)
+    
+    # Pattern: [text](../something)
+    content = re.sub(r'\[([^\]]+)\]\((\.\.\/[^)]+)\)', rewrite_link, content)
+    
+    return content
+
+
+def _directories_are_identical(dir1: Path, dir2: Path) -> bool:
+    """Check if two directories have identical contents (structure and content).
+    
+    Returns True only if both dirs exist, have the same file structure,
+    and all files have identical content.
+    """
+    if not (dir1.exists() and dir2.exists()):
+        return False
+    
+    if not (dir1.is_dir() and dir2.is_dir()):
+        return False
+    
+    # Get all relative file paths in both directories
+    files1 = {f.relative_to(dir1) for f in dir1.rglob("*") if f.is_file()}
+    files2 = {f.relative_to(dir2) for f in dir2.rglob("*") if f.is_file()}
+    
+    # Different file structure
+    if files1 != files2:
+        return False
+    
+    # Check that all files have identical content
+    for rel_path in files1:
+        file1 = dir1 / rel_path
+        file2 = dir2 / rel_path
+        try:
+            content1 = file1.read_bytes()
+            content2 = file2.read_bytes()
+            if content1 != content2:
+                return False
+        except (OSError, UnicodeDecodeError):
+            # If we can't read, consider them different
+            return False
+    
+    return True
+
+
 def plan_migration(target_dir: Path | str) -> MigrationPlan:
     """Plan the migration of PLATE docs to docs/plate/ namespace.
     
@@ -223,14 +285,27 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
         
         if source_dir.exists() and source_dir.is_dir():
             if target_dir_path.exists():
-                plan.actions.append(
-                    MigrationAction(
-                        action_type="skip",
-                        source=f"docs/{plate_dir}/",
-                        target=f"docs/plate/{plate_dir}/",
-                        reason="Target already exists (idempotent)",
+                # Both exist - check if identical
+                if _directories_are_identical(source_dir, target_dir_path):
+                    plan.actions.append(
+                        MigrationAction(
+                            action_type="skip",
+                            source=f"docs/{plate_dir}/",
+                            target=f"docs/plate/{plate_dir}/",
+                            reason="Identical duplicate - will reconcile by removing source",
+                        )
                     )
-                )
+                else:
+                    # Conflicting duplicates
+                    plan.actions.append(
+                        MigrationAction(
+                            action_type="conflict",
+                            source=f"docs/{plate_dir}/",
+                            target=f"docs/plate/{plate_dir}/",
+                            reason="Both exist with different contents - manual resolution needed",
+                        )
+                    )
+                    plan.ok = False
             else:
                 plan.actions.append(
                     MigrationAction(
@@ -261,6 +336,15 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
                     source="docs/README.md",
                     target="docs/plate/README.md",
                     reason="PLATE template README",
+                )
+            )
+            # Add link rewriting action for moved README
+            plan.actions.append(
+                MigrationAction(
+                    action_type="rewrite_links",
+                    source="docs/plate/README.md",
+                    target=None,
+                    reason="Fix relative links after move from docs/ to docs/plate/",
                 )
             )
     
@@ -339,11 +423,19 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
     docs_dir = target_path / "docs"
     plate_docs_dir = docs_dir / "plate"
     
-    # Create docs/plate/ if needed
+    # Preflight check: verify all moves are possible before doing anything
     move_actions = [
         a for a in plan.actions
         if a.action_type in ("move_dir", "move_file")
     ]
+    for action in move_actions:
+        source_path = target_path / action.source
+        if not source_path.exists():
+            plan.ok = False
+            plan.errors.append(f"Preflight failed: source does not exist: {action.source}")
+            return plan
+    
+    # Create docs/plate/ if needed
     if move_actions and not plate_docs_dir.exists():
         try:
             plate_docs_dir.mkdir(parents=True, exist_ok=True)
@@ -372,6 +464,8 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
                     f"Failed to git mv {action.source}: {e.stderr}"
                 )
                 plan.ok = False
+                # Stop immediately - do not continue with reference updates
+                return plan
                 
         elif action.action_type == "move_file":
             source_path = target_path / action.source
@@ -391,6 +485,49 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
                     f"Failed to git mv {action.source}: {e.stderr}"
                 )
                 plan.ok = False
+                # Stop immediately - do not continue with reference updates
+                return plan
+                
+        elif action.action_type == "skip":
+            # Handle reconciliation of identical duplicates
+            if "Identical duplicate" in action.reason:
+                source_path = target_path / action.source
+                try:
+                    subprocess.run(
+                        ["git", "rm", "-rf", str(source_path)],
+                        cwd=target_path,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                except subprocess.CalledProcessError as e:
+                    plan.ok = False
+                    plan.errors.append(
+                        f"Failed to reconcile duplicate {action.source}: {e.stderr}"
+                    )
+                    return plan
+        
+        elif action.action_type == "rewrite_links":
+            # Rewrite relative links in moved files
+            file_path = target_path / action.source
+            if file_path.exists():
+                try:
+                    content = file_path.read_text(encoding="utf-8")
+                    new_content = _rewrite_relative_links(content)
+                    if new_content != content:
+                        file_path.write_text(new_content, encoding="utf-8")
+                        # Stage the change
+                        subprocess.run(
+                            ["git", "add", str(file_path)],
+                            cwd=target_path,
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                        )
+                except (OSError, subprocess.CalledProcessError) as e:
+                    plan.errors.append(
+                        f"Failed to rewrite links in {action.source}: {e}"
+                    )
                 
         elif action.action_type == "update_refs":
             file_path = target_path / action.source
