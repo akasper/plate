@@ -165,8 +165,9 @@ def _update_references_in_file(
     
     # Update references for each actually-moved PLATE doc directory
     for plate_dir in dirs_moved:
-        # Match paths like docs/design/ or docs/design or `docs/design with word boundaries
-        # to avoid false matches (docs/design-foo, docs/plate/design)
+        # Match paths like docs/design/ or docs/design or `docs/design with proper boundaries.
+        # Use negative lookahead (?![\w/-]) instead of \b to prevent false matches on
+        # hyphenated siblings like docs/design-system or docs/wiki-archive.
         patterns = [
             # Match docs/design/ (with trailing slash)
             (rf"\bdocs/{plate_dir}/", rf"docs/plate/{plate_dir}/"),
