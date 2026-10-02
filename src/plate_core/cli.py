@@ -612,6 +612,7 @@ def cmd_migrate_docs_namespace(args: argparse.Namespace) -> int:
     skip_actions = [a for a in plan.actions if a.action_type == "skip"]
     update_refs = [a for a in plan.actions if a.action_type == "update_refs"]
     conflicts = [a for a in plan.actions if a.action_type == "conflict"]
+    manual_followup = [a for a in plan.actions if a.action_type == "manual_followup"]
     
     if conflicts:
         print("\n⚠️  CONFLICTS (manual resolution required):")
@@ -646,6 +647,20 @@ def cmd_migrate_docs_namespace(args: argparse.Namespace) -> int:
         for action in update_refs:
             status = "✓" if apply else "→"
             print(f"  {status} {action.source} ({action.reason})")
+    
+    if manual_followup:
+        print("\nMANUAL FOLLOW-UP (protected files not modified):")
+        # Group by file
+        by_file = {}
+        for action in manual_followup:
+            if action.source not in by_file:
+                by_file[action.source] = []
+            by_file[action.source].append(action.reason)
+        
+        for file, reasons in by_file.items():
+            print(f"  ⚠ {file}")
+            for reason in reasons:
+                print(f"      {reason}")
     
     print()
     if not apply:
@@ -5355,3 +5370,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

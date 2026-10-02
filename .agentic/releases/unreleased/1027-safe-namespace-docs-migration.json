@@ -13,7 +13,7 @@
     "6. Commit the changes: `git commit -m 'Migrate PLATE docs to docs/plate/ namespace'`",
     "7. Re-run is safe (idempotent) if needed."
   ],
-  "agent_notes": "When migrating PLATE docs to docs/plate/ namespace, use `gh plate migrate-docs-namespace` (or `plate_migrate_docs_namespace` MCP tool, or `python -m plate_core.cli migrate-docs-namespace`). Always dry-run first. Never use `gh plate import-payload --strategy force` for migration as it overwrites customized files and leaves duplicates. The migration command preserves AGENTS.md, SPEC.md, CURRENT.md, and all product documentation, only moving PLATE-owned directories and updating references.",
+  "agent_notes": "When migrating PLATE docs to docs/plate/ namespace, use `gh plate migrate-docs-namespace` (or `plate_migrate_docs_namespace` MCP tool, or `python -m plate_core.cli migrate-docs-namespace`). Always dry-run first. Never use `gh plate import-payload --strategy force` for migration as it overwrites customized files and leaves duplicates. The migration command preserves AGENTS.md, SPEC.md, CURRENT.md, and all product documentation, only moving PLATE-owned directories and files. It rewrites references in all tracked files EXCEPT protected files (AGENTS.md, SPEC.md, CURRENT.md); stale references in those are reported as manual follow-up items. All changes (moves and reference updates) are staged for atomic commit.",
   "breaking": false,
   "links": ["#1027", "#1028"],
   "requires": ["0.8.3"]

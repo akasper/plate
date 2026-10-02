@@ -154,9 +154,14 @@ def _find_files_matching_patterns(
 
 
 def _update_references_in_file(
-    file_path: Path, dry_run: bool = True
+    file_path: Path, root_files_moved: list[str], dry_run: bool = True
 ) -> tuple[bool, int]:
     """Update doc/ references to docs/plate/ in a file.
+    
+    Args:
+        file_path: File to update
+        root_files_moved: List of root files being moved (e.g. ["README.md", "playwright-e2e-guide.md"])
+        dry_run: If True, do not write changes
     
     Returns (changed, count) where changed is True if file was modified
     and count is the number of replacements made.
@@ -185,12 +190,81 @@ def _update_references_in_file(
                 content = new_content
                 count += n
     
+    # Update references for moved root files (docs/README.md, docs/playwright-e2e-guide.md)
+    for root_file in root_files_moved:
+        # Match various reference forms:
+        # - docs/playwright-e2e-guide.md
+        # - `docs/playwright-e2e-guide.md`
+        # - docs/playwright-e2e-guide.md) (markdown link)
+        # - ../docs/playwright-e2e-guide.md (relative from subdirs)
+        patterns = [
+            (rf"docs/{root_file}", rf"docs/plate/{root_file}"),
+            (rf"`docs/{root_file}", rf"`docs/plate/{root_file}"),
+            (rf"\.\./docs/{root_file}", rf"../docs/plate/{root_file}"),
+        ]
+        for old_pattern, new_pattern in patterns:
+            new_content, n = re.subn(old_pattern, new_pattern, content)
+            if n > 0:
+                content = new_content
+                count += n
+    
     changed = content != original
     
     if changed and not dry_run:
         file_path.write_text(content, encoding="utf-8")
     
     return changed, count
+
+
+def _is_protected_file(file_path: Path, target_dir: Path) -> bool:
+    """Check if a file is protected from automatic modification.
+    
+    Protected files: AGENTS.md, SPEC.md, CURRENT.md, and product docs.
+    """
+    rel_path = file_path.relative_to(target_dir)
+    protected_names = {"AGENTS.md", "SPEC.md", "CURRENT.md"}
+    return rel_path.name in protected_names or str(rel_path) in protected_names
+
+
+def _find_stale_references_in_file(
+    file_path: Path, root_files_moved: list[str], dirs_moved: list[str]
+) -> list[tuple[int, str, str]]:
+    """Find stale references to moved files/dirs in a protected file.
+    
+    Args:
+        file_path: Protected file to scan
+        root_files_moved: Root files being moved (e.g. ["README.md", "playwright-e2e-guide.md"])
+        dirs_moved: Directories being moved (e.g. ["design", "wiki"])
+    
+    Returns list of (line_number, old_ref, new_ref) tuples.
+    """
+    if not file_path.exists():
+        return []
+    
+    try:
+        lines = file_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    
+    stale_refs = []
+    for i, line in enumerate(lines, start=1):
+        # Check for root file references
+        for root_file in root_files_moved:
+            # Look for references like docs/playwright-e2e-guide.md
+            old_pattern = f"docs/{root_file}"
+            new_pattern = f"docs/plate/{root_file}"
+            if old_pattern in line and new_pattern not in line:
+                stale_refs.append((i, old_pattern, new_pattern))
+        
+        # Check for directory references
+        for dir_name in dirs_moved:
+            # Look for references like docs/design/ or docs/design (without trailing slash)
+            old_pattern = f"docs/{dir_name}/"
+            new_pattern = f"docs/plate/{dir_name}/"
+            if old_pattern in line and new_pattern not in line:
+                stale_refs.append((i, old_pattern, new_pattern))
+    
+    return stale_refs
 
 
 def _rewrite_relative_links(content: str) -> str:
@@ -446,6 +520,24 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
                 )
             )
     
+    # Determine which root files and directories are being moved
+    root_files_moved = []
+    dirs_moved = []
+    for action in plan.actions:
+        if action.action_type in ("move_file", "skip"):
+            # Extract filename from source like "docs/README.md" or "docs/playwright-e2e-guide.md"
+            if action.source.startswith("docs/") and "/" not in action.source[5:]:
+                # It's a root file like docs/README.md
+                filename = action.source.split("/", 1)[1]
+                if filename not in root_files_moved:
+                    root_files_moved.append(filename)
+        elif action.action_type in ("move_dir",):
+            # Extract directory name from source like "docs/design/"
+            if action.source.startswith("docs/") and action.source.endswith("/"):
+                dir_name = action.source[5:-1]  # Remove "docs/" prefix and trailing "/"
+                if dir_name not in dirs_moved:
+                    dirs_moved.append(dir_name)
+    
     # Plan reference updates
     ref_files = _find_files_matching_patterns(target_path, REFERENCE_FILES)
     for ref_file in ref_files:
@@ -454,17 +546,40 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
         if not ref_file.is_file():
             continue
         
-        # Check if file has references that need updating
-        changed, count = _update_references_in_file(ref_file, dry_run=True)
-        if changed:
-            plan.actions.append(
-                MigrationAction(
-                    action_type="update_refs",
-                    source=str(relative),
-                    target=None,
-                    reason=f"{count} reference(s) to update",
+        # Check if this is a protected file
+        if _is_protected_file(ref_file, target_path):
+            # For protected files, find stale references but don't update them
+            stale_refs = _find_stale_references_in_file(ref_file, root_files_moved, dirs_moved)
+            if stale_refs:
+                # Group by unique (old, new) pairs
+                unique_refs = {}
+                for line_num, old, new in stale_refs:
+                    key = (old, new)
+                    if key not in unique_refs:
+                        unique_refs[key] = []
+                    unique_refs[key].append(line_num)
+                
+                for (old, new), lines in unique_refs.items():
+                    plan.actions.append(
+                        MigrationAction(
+                            action_type="manual_followup",
+                            source=str(relative),
+                            target=None,
+                            reason=f"Lines {', '.join(map(str, lines))}: {old} → {new}",
+                        )
+                    )
+        else:
+            # Check if file has references that need updating
+            changed, count = _update_references_in_file(ref_file, root_files_moved, dry_run=True)
+            if changed:
+                plan.actions.append(
+                    MigrationAction(
+                        action_type="update_refs",
+                        source=str(relative),
+                        target=None,
+                        reason=f"{count} reference(s) to update",
+                    )
                 )
-            )
     
     # Check if there's anything to do
     move_actions = [
@@ -607,15 +722,38 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
                     plan.ok = False
                 
         elif action.action_type == "update_refs":
+            # Determine which root files are being moved (needed for reference updates)
+            root_files_moved = []
+            for a in plan.actions:
+                if a.action_type in ("move_file", "skip"):
+                    if a.source.startswith("docs/") and "/" not in a.source[5:]:
+                        filename = a.source.split("/", 1)[1]
+                        if filename not in root_files_moved:
+                            root_files_moved.append(filename)
+            
             file_path = target_path / action.source
             try:
                 changed, count = _update_references_in_file(
-                    file_path, dry_run=False
+                    file_path, root_files_moved, dry_run=False
                 )
-                if not changed:
+                if changed:
+                    # Stage the updated file
+                    subprocess.run(
+                        ["git", "add", str(file_path)],
+                        cwd=target_path,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                elif not changed:
                     plan.warnings.append(
                         f"Expected to update {action.source} but no changes made"
                     )
+            except subprocess.CalledProcessError as e:
+                plan.errors.append(
+                    f"Failed to stage {action.source}: {e.stderr}"
+                )
+                plan.ok = False
             except Exception as e:
                 plan.errors.append(
                     f"Failed to update references in {action.source}: {e}"

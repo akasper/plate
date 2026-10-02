@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -172,13 +173,10 @@ class TestMigrationPlanning(unittest.TestCase):
             self.assertIn("docs/README.md", file_sources)
             self.assertIn("docs/playwright-e2e-guide.md", file_sources)
             
-            # Should have reference updates
-            update_refs = [a for a in plan.actions if a.action_type == "update_refs"]
-            self.assertGreater(len(update_refs), 0)
-            
-            # AGENTS.md should be in reference updates
-            ref_sources = {a.source for a in update_refs}
-            self.assertIn("AGENTS.md", ref_sources)
+            # Should have manual followup for AGENTS.md (protected file)
+            manual_followup = [a for a in plan.actions if a.action_type == "manual_followup"]
+            followup_sources = {a.source for a in manual_followup}
+            self.assertIn("AGENTS.md", followup_sources, "AGENTS.md should be in manual followup (protected)")
         finally:
             import shutil
             shutil.rmtree(repo.parent)
@@ -221,13 +219,15 @@ class TestMigrationApplication(unittest.TestCase):
             self.assertTrue((docs / "api").exists())
             self.assertTrue((docs / "api" / "index.md").exists())
             
-            # Check that references were updated
+            # AGENTS.md is protected - check references were NOT updated
             agents_content = (repo / "AGENTS.md").read_text()
-            self.assertIn("docs/plate/design/", agents_content)
-            self.assertIn("docs/plate/wiki/", agents_content)
-            self.assertIn("docs/plate/research/", agents_content)
-            # Old references should be gone
-            self.assertNotIn("docs/design/", agents_content.replace("docs/plate/design/", ""))
+            # Old references should still be there (not updated)
+            self.assertIn("docs/design/", agents_content)
+            self.assertIn("docs/wiki/", agents_content)
+            self.assertIn("docs/research/", agents_content)
+            # Should have manual_followup actions for AGENTS.md
+            followup = [a for a in plan.actions if a.action_type == "manual_followup" and "AGENTS.md" in a.source]
+            self.assertGreater(len(followup), 0, "Should have manual followup actions for AGENTS.md")
         finally:
             import shutil
             shutil.rmtree(repo.parent)
@@ -251,14 +251,20 @@ class TestMigrationApplication(unittest.TestCase):
             # Check that SPEC.md still exists at root (not moved)
             self.assertTrue((repo / "SPEC.md").exists())
             
-            # Check that its references were updated
+            # SPEC.md is protected - references should NOT be updated
             spec_content = (repo / "SPEC.md").read_text()
-            self.assertIn("docs/plate/design/", spec_content)
+            self.assertIn("docs/design/", spec_content, "SPEC.md should not be modified (protected)")
             
-            # AGENTS.md should also be preserved at root with updated refs
+            # AGENTS.md is also protected - references should NOT be updated
             self.assertTrue((repo / "AGENTS.md").exists())
             agents_content = (repo / "AGENTS.md").read_text()
-            self.assertIn("docs/plate/design/", agents_content)
+            self.assertIn("docs/design/", agents_content, "AGENTS.md should not be modified (protected)")
+            
+            # Should have manual_followup actions for both
+            followup = [a for a in plan.actions if a.action_type == "manual_followup"]
+            followup_sources = {a.source for a in followup}
+            self.assertIn("SPEC.md", followup_sources, "Should list SPEC.md for manual followup")
+            self.assertIn("AGENTS.md", followup_sources, "Should list AGENTS.md for manual followup")
         finally:
             import shutil
             shutil.rmtree(repo.parent)
@@ -486,13 +492,14 @@ class TestMigrationApplication(unittest.TestCase):
         """Test that successful migration updates references correctly."""
         repo = create_temp_repo()
         try:
-            # Verify that a successful migration updates all references
+            # Verify that a successful migration updates references in non-protected files
             design_dir = repo / "docs/design"
             design_dir.mkdir(parents=True)
             (design_dir / "feature.md").write_text("# Test", encoding="utf-8")
             
-            agents_path = repo / "AGENTS.md"
-            agents_path.write_text("See docs/design/ for details.", encoding="utf-8")
+            # Use CONTRIBUTING.md instead of AGENTS.md (which is protected)
+            contributing_path = repo / "CONTRIBUTING.md"
+            contributing_path.write_text("See docs/design/ for details.", encoding="utf-8")
             
             subprocess.run(["git", "add", "."], cwd=repo, check=True)
             subprocess.run(["git", "commit", "-m", "Add docs"], cwd=repo, check=True)
@@ -501,9 +508,9 @@ class TestMigrationApplication(unittest.TestCase):
             result = apply_migration(repo)
             self.assertTrue(result.ok, "Migration should succeed")
             
-            content = agents_path.read_text(encoding="utf-8")
+            content = contributing_path.read_text(encoding="utf-8")
             self.assertIn("docs/plate/design/", content,
-                         "References should be updated after successful migration")
+                         "References should be updated after successful migration in non-protected files")
             
             # Verify the move happened
             self.assertFalse((repo / "docs/design").exists(), "Source should be moved")
@@ -692,6 +699,188 @@ class TestMigrationApplication(unittest.TestCase):
             conflict_actions = [a for a in plan.actions if a.action_type == "conflict" and "README" in a.source]
             self.assertEqual(len(conflict_actions), 1, "Should have conflict action for README")
             self.assertIn("README", plan.errors[0], "Should have error about README conflict")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+
+class TestModuleEntrypoint(unittest.TestCase):
+    """Test that the module can be invoked with python -m."""
+    
+    def test_module_entrypoint_help(self):
+        """Test that python -m plate_core.cli migrate-docs-namespace --help works."""
+        result = subprocess.run(
+            [sys.executable, "-m", "plate_core.cli", "migrate-docs-namespace", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, "Should exit with 0 for --help")
+        self.assertIn("migrate-docs-namespace", result.stdout, "Should show command help")
+        self.assertIn("--apply", result.stdout, "Should show --apply option")
+
+
+class TestRootFileReferenceRewriting(unittest.TestCase):
+    """Test reference rewriting for moved root files."""
+    
+    def test_root_file_references_updated(self):
+        """Test that references to moved root files are updated."""
+        repo = create_temp_repo()
+        try:
+            # Create PLATE README and playwright guide
+            docs_dir = repo / "docs"
+            docs_dir.mkdir(parents=True)
+            
+            readme = docs_dir / "README.md"
+            readme.write_text(
+                "# Documentation Index\n\nSee playwright-e2e-guide.md\n",
+                encoding="utf-8"
+            )
+            
+            guide = docs_dir / "playwright-e2e-guide.md"
+            guide.write_text(
+                "Playwright E2E Testing & Demo GIF Generation Guide\n",
+                encoding="utf-8"
+            )
+            
+            # Create a file that references the guide
+            contributing = repo / "CONTRIBUTING.md"
+            contributing.write_text(
+                "See `docs/playwright-e2e-guide.md` for testing.\n"
+                "Also see docs/playwright-e2e-guide.md) for more.\n",
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add docs"], cwd=repo, check=True)
+            
+            plan = plan_migration(repo)
+            self.assertTrue(plan.ok, "Plan should succeed")
+            
+            # Should have update_refs action for CONTRIBUTING.md
+            update_actions = [a for a in plan.actions if a.action_type == "update_refs"]
+            update_sources = {a.source for a in update_actions}
+            self.assertIn("CONTRIBUTING.md", update_sources, "Should update CONTRIBUTING.md")
+            
+            # Apply and verify
+            result = apply_migration(repo)
+            self.assertTrue(result.ok, "Apply should succeed")
+            
+            # Check references were updated
+            updated_content = contributing.read_text(encoding="utf-8")
+            self.assertIn("docs/plate/playwright-e2e-guide.md", updated_content)
+            self.assertNotIn("docs/playwright-e2e-guide.md", updated_content)
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+    
+    def test_protected_files_not_modified(self):
+        """Test that protected files (AGENTS.md, SPEC.md, CURRENT.md) are not modified."""
+        repo = create_temp_repo()
+        try:
+            # Create PLATE playwright guide
+            docs_dir = repo / "docs"
+            docs_dir.mkdir(parents=True)
+            
+            guide = docs_dir / "playwright-e2e-guide.md"
+            guide.write_text(
+                "Playwright E2E Testing & Demo GIF Generation Guide\n",
+                encoding="utf-8"
+            )
+            
+            # Create protected files with references
+            agents = repo / "AGENTS.md"
+            agents.write_text(
+                "See docs/playwright-e2e-guide.md for E2E testing.\n",
+                encoding="utf-8"
+            )
+            
+            spec = repo / "SPEC.md"
+            spec.write_text(
+                "Evidence: docs/playwright-e2e-guide.md\n",
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add docs"], cwd=repo, check=True)
+            
+            plan = plan_migration(repo)
+            self.assertTrue(plan.ok, "Plan should succeed")
+            
+            # Should have manual_followup actions for protected files
+            followup_actions = [a for a in plan.actions if a.action_type == "manual_followup"]
+            followup_sources = {a.source for a in followup_actions}
+            self.assertIn("AGENTS.md", followup_sources, "Should list AGENTS.md for manual followup")
+            self.assertIn("SPEC.md", followup_sources, "Should list SPEC.md for manual followup")
+            
+            # Apply
+            result = apply_migration(repo)
+            self.assertTrue(result.ok, "Apply should succeed")
+            
+            # Verify protected files were NOT modified
+            agents_content = agents.read_text(encoding="utf-8")
+            spec_content = spec.read_text(encoding="utf-8")
+            self.assertIn("docs/playwright-e2e-guide.md", agents_content, "AGENTS.md should not be modified")
+            self.assertIn("docs/playwright-e2e-guide.md", spec_content, "SPEC.md should not be modified")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+
+class TestReferenceStaging(unittest.TestCase):
+    """Test that reference updates are staged."""
+    
+    def test_reference_updates_staged(self):
+        """Test that reference files are staged after update."""
+        repo = create_temp_repo()
+        try:
+            # Create PLATE docs
+            docs_dir = repo / "docs"
+            docs_dir.mkdir(parents=True)
+            
+            guide = docs_dir / "playwright-e2e-guide.md"
+            guide.write_text(
+                "Playwright E2E Testing & Demo GIF Generation Guide\n",
+                encoding="utf-8"
+            )
+            
+            # Create file with reference
+            contributing = repo / "CONTRIBUTING.md"
+            contributing.write_text(
+                "See docs/playwright-e2e-guide.md for testing.\n",
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add docs"], cwd=repo, check=True)
+            
+            # Apply migration
+            result = apply_migration(repo)
+            self.assertTrue(result.ok, "Apply should succeed")
+            
+            # Check staged files
+            staged = subprocess.run(
+                ["git", "diff", "--cached", "--name-only"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            staged_files = staged.stdout.strip().split("\n")
+            
+            # Should include the moved file and the reference update
+            self.assertIn("docs/plate/playwright-e2e-guide.md", staged_files, "Moved file should be staged")
+            self.assertIn("CONTRIBUTING.md", staged_files, "Reference file should be staged")
+            
+            # Commit should leave clean working tree
+            subprocess.run(["git", "commit", "-m", "Migrate docs"], cwd=repo, check=True)
+            status = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertEqual(status.stdout.strip(), "", "Working tree should be clean after commit")
         finally:
             import shutil
             shutil.rmtree(repo.parent)
