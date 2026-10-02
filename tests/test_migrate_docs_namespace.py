@@ -1115,6 +1115,85 @@ jobs:
             import shutil
             shutil.rmtree(repo.parent)
 
+    def test_protected_file_stale_refs_without_trailing_slash(self):
+        """Test that stale reference scanner detects directory refs without trailing slashes."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            wiki_dir = docs_dir / "wiki"
+            wiki_dir.mkdir(parents=True)
+            (wiki_dir / "Home.md").write_text("# Wiki\n", encoding="utf-8")
+            
+            # Create AGENTS.md with directory reference WITHOUT trailing slash (like bash test)
+            agents_md = repo / "AGENTS.md"
+            agents_md.write_text(
+                "# Agents\n\n"
+                "Check if docs/wiki exists.\n"  # No trailing slash
+                "See docs/wiki/ for guides.\n",  # With trailing slash
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add wiki and AGENTS.md"], cwd=repo, check=True)
+            
+            # Plan migration (AGENTS.md is protected, should get manual_followup)
+            plan = plan_migration(repo)
+            self.assertTrue(plan.ok, f"Planning should succeed, got errors: {plan.errors}")
+            
+            # Check that both forms are caught as stale references
+            followups = [a for a in plan.actions if a.action_type == "manual_followup"]
+            self.assertTrue(len(followups) > 0, "Should have manual_followup for protected file")
+            
+            agents_followups = [a for a in followups if "AGENTS.md" in a.source]
+            self.assertTrue(len(agents_followups) > 0, "Should have followup for AGENTS.md")
+            
+            # Should catch both docs/wiki (no slash) and docs/wiki/ (with slash)
+            reasons = " ".join(a.reason for a in agents_followups)
+            self.assertIn("docs/wiki", reasons, "Should detect docs/wiki reference")
+            self.assertIn("docs/plate/wiki", reasons, "Should suggest docs/plate/wiki fix")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+    def test_plan_only_checks_moved_directories(self):
+        """Test that planning only reports references to directories actually being moved."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            wiki_dir = docs_dir / "wiki"
+            wiki_dir.mkdir(parents=True)
+            (wiki_dir / "Home.md").write_text("# Wiki\n", encoding="utf-8")
+            
+            # Create file referencing both wiki (exists) and design (doesn't exist)
+            contributing = repo / "CONTRIBUTING.md"
+            contributing.write_text(
+                "See docs/wiki/ for guides.\n"
+                "See docs/design/ for architecture.\n",  # design/ doesn't exist
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add wiki only"], cwd=repo, check=True)
+            
+            # Plan migration
+            plan = plan_migration(repo)
+            self.assertTrue(plan.ok, f"Planning should succeed, got errors: {plan.errors}")
+            
+            # Check that only wiki is in update_refs actions (not design)
+            update_actions = [a for a in plan.actions if a.action_type == "update_refs"]
+            contrib_updates = [a for a in update_actions if "CONTRIBUTING.md" in a.source]
+            
+            # Should have CONTRIBUTING.md in update list (for wiki reference)
+            self.assertEqual(len(contrib_updates), 1, "Should have one update action for CONTRIBUTING.md")
+            
+            # The count should be 1 (only wiki), not 2 (wiki + design)
+            # Check the reason string
+            reason = contrib_updates[0].reason
+            self.assertIn("1 reference", reason, f"Should report 1 reference (wiki only), got: {reason}")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
 
 if __name__ == '__main__':
     unittest.main()
