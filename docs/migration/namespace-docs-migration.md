@@ -281,7 +281,7 @@ git push
 ## Important notes
 
 - **Only `docs/` paths are affected.** This migration does not touch CI, workflows (beyond reference updates), or any code.
-- **AGENTS.md, SPEC.md, and CURRENT.md are never moved or overwritten** by the migration command. Only their internal path references are updated.
+- **AGENTS.md, SPEC.md, and CURRENT.md are never moved or overwritten** by the migration command. Stale references in these protected files are reported as manual follow-ups, not auto-rewritten.
 - **Product documentation stays at `docs/` root.** Only PLATE scaffolding moves to `docs/plate/`.
 - **The migration is idempotent.** Running it multiple times is safe.
 
