@@ -611,6 +611,90 @@ class TestMigrationApplication(unittest.TestCase):
         finally:
             import shutil
             shutil.rmtree(repo.parent)
+    
+    def test_duplicate_readme_identical_after_transform(self):
+        """Test that duplicate README files identical after transform are reconciled."""
+        repo = create_temp_repo()
+        try:
+            # Create README at both locations with transform applied
+            docs_dir = repo / "docs"
+            plate_docs_dir = docs_dir / "plate"
+            docs_dir.mkdir(parents=True)
+            plate_docs_dir.mkdir(parents=True)
+            
+            # Source with original links (must have markers for _is_plate_readme)
+            source_readme = docs_dir / "README.md"
+            source_readme.write_text(
+                "# Documentation Index\n\n"
+                "See [playwright-e2e-guide.md](./playwright-e2e-guide.md) and [AGENTS.md](../AGENTS.md).\n",
+                encoding="utf-8"
+            )
+            
+            # Target with transformed links (../ -> ../../)
+            target_readme = plate_docs_dir / "README.md"
+            target_readme.write_text(
+                "# Documentation Index\n\n"
+                "See [playwright-e2e-guide.md](./playwright-e2e-guide.md) and [AGENTS.md](../../AGENTS.md).\n",
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add duplicates"], cwd=repo, check=True)
+            
+            plan = plan_migration(repo)
+            self.assertTrue(plan.ok, "Plan should succeed with identical-after-transform duplicates")
+            
+            skip_actions = [
+                a for a in plan.actions 
+                if a.action_type == "skip" and "Identical after transformation" in a.reason
+            ]
+            self.assertEqual(len(skip_actions), 1, "Should have one reconciliation action for README")
+            
+            # Apply and verify reconciliation
+            result = apply_migration(repo)
+            self.assertTrue(result.ok, "Apply should succeed")
+            self.assertFalse((repo / "docs/README.md").exists(), "Source README should be removed")
+            self.assertTrue((repo / "docs/plate/README.md").exists(), "Target README should remain")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+    
+    def test_duplicate_readme_conflict(self):
+        """Test that duplicate README files with different content report conflict."""
+        repo = create_temp_repo()
+        try:
+            # Create README at both locations with different content
+            docs_dir = repo / "docs"
+            plate_docs_dir = docs_dir / "plate"
+            docs_dir.mkdir(parents=True)
+            plate_docs_dir.mkdir(parents=True)
+            
+            # Must have markers for _is_plate_readme
+            source_readme = docs_dir / "README.md"
+            source_readme.write_text(
+                "# Documentation Index\n\nOriginal content with playwright-e2e-guide.md reference.\n",
+                encoding="utf-8"
+            )
+            
+            target_readme = plate_docs_dir / "README.md"
+            target_readme.write_text(
+                "# Documentation Index\n\nDifferent content with playwright-e2e-guide.md reference.\n",
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add conflicting READMEs"], cwd=repo, check=True)
+            
+            plan = plan_migration(repo)
+            
+            # Should report conflict
+            self.assertFalse(plan.ok, "Plan should fail with conflicting README duplicates")
+            conflict_actions = [a for a in plan.actions if a.action_type == "conflict" and "README" in a.source]
+            self.assertEqual(len(conflict_actions), 1, "Should have conflict action for README")
+            self.assertIn("README", plan.errors[0], "Should have error about README conflict")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
 
 
 if __name__ == '__main__':

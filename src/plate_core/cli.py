@@ -635,8 +635,8 @@ def cmd_migrate_docs_namespace(args: argparse.Namespace) -> int:
         print("\nSKIPPED (already migrated):")
         for action in skip_actions:
             # Show what reconciliation will do if applicable
-            if "Identical duplicate" in action.reason:
-                suffix = " - will remove source" if apply else " - would remove source in --apply"
+            if "reconcile by removing source" in action.reason:
+                suffix = " - removing source" if apply else " - would remove source in --apply"
                 print(f"  ○ {action.source}{suffix}")
             else:
                 print(f"  ○ {action.source} (target exists)")
