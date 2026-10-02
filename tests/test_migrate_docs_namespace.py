@@ -91,8 +91,8 @@ class TestPlateFileDetection(unittest.TestCase):
     
     def test_is_plate_readme(self):
         """Test PLATE README detection."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as tmp:
-            tmp_path = Path(tmp.name)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp) / "README.md"
             
             # PLATE README
             tmp_path.write_text(
@@ -105,13 +105,11 @@ class TestPlateFileDetection(unittest.TestCase):
             tmp_path.write_text("# My Product Docs\n\nDifferent content.\n")
             self.assertFalse(_is_plate_readme(tmp_path))
             
-            # Cleanup
-            tmp_path.unlink()
 
     def test_is_plate_playwright_guide(self):
         """Test PLATE playwright guide detection."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as tmp:
-            tmp_path = Path(tmp.name)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp) / "playwright-e2e-guide.md"
             
             # PLATE guide
             tmp_path.write_text(
@@ -122,6 +120,10 @@ class TestPlateFileDetection(unittest.TestCase):
             
             # Custom guide
             tmp_path.write_text("# My Custom Testing Guide\n\nDifferent content.\n")
+            self.assertFalse(_is_plate_playwright_guide(tmp_path))
+
+            # Mentioning the template title without its heading is not ownership.
+            tmp_path.write_text("Custom guide mentioning Playwright E2E Testing & Demo GIF Generation Guide.\n")
             self.assertFalse(_is_plate_playwright_guide(tmp_path))
             
             # Cleanup
@@ -404,6 +406,44 @@ class TestMigrationApplication(unittest.TestCase):
             import shutil
             shutil.rmtree(repo.parent)
 
+    def test_dirty_reference_file_fails_preflight_without_staging(self):
+        """Test that applying a migration does not stage pre-existing edits."""
+        repo = create_temp_repo()
+        try:
+            design_dir = repo / "docs/design"
+            design_dir.mkdir(parents=True)
+            (design_dir / "example.md").write_text("# Design\n", encoding="utf-8")
+            contributing = repo / "CONTRIBUTING.md"
+            contributing.write_text("See docs/design/ for details.\n", encoding="utf-8")
+
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add docs"], cwd=repo, check=True)
+            contributing.write_text(
+                "Pre-existing edit.\nSee docs/design/ for details.\n",
+                encoding="utf-8",
+            )
+
+            result = apply_migration(repo)
+
+            self.assertFalse(result.ok, "Dirty planned files should fail preflight")
+            self.assertTrue(
+                any("pre-existing changes: CONTRIBUTING.md" in error for error in result.errors),
+                "The preflight error should identify the dirty file",
+            )
+            self.assertTrue(design_dir.exists(), "No move should happen before the preflight")
+            self.assertIn("Pre-existing edit.", contributing.read_text(encoding="utf-8"))
+            staged = subprocess.run(
+                ["git", "diff", "--cached", "--", "CONTRIBUTING.md"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertEqual(staged.stdout, "", "Pre-existing edits must not be staged")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
     def test_template_payload_guide_sync(self):
         """Test that docs/migration guide is synced to template payload."""
         repo_guide = Path(__file__).parent.parent / "docs/migration/namespace-docs-migration.md"
@@ -422,6 +462,11 @@ class TestMigrationApplication(unittest.TestCase):
             repo_content,
             template_content,
             "Migration guide in template payload must match repository guide",
+        )
+        self.assertIn(
+            "sed 's|(\\.\\./|(\\.\\./\\.\\./|g'",
+            repo_content,
+            "The manual rewrite must preserve the Markdown link delimiter",
         )
     
     def test_duplicate_directories_conflict(self):
@@ -779,7 +824,7 @@ class TestRootFileReferenceRewriting(unittest.TestCase):
             
             guide = docs_dir / "playwright-e2e-guide.md"
             guide.write_text(
-                "Playwright E2E Testing & Demo GIF Generation Guide\n",
+                "# Playwright E2E Testing & Demo GIF Generation Guide\n",
                 encoding="utf-8"
             )
             
@@ -824,7 +869,7 @@ class TestRootFileReferenceRewriting(unittest.TestCase):
             
             guide = docs_dir / "playwright-e2e-guide.md"
             guide.write_text(
-                "Playwright E2E Testing & Demo GIF Generation Guide\n",
+                "# Playwright E2E Testing & Demo GIF Generation Guide\n",
                 encoding="utf-8"
             )
             
@@ -880,7 +925,7 @@ class TestReferenceStaging(unittest.TestCase):
             
             guide = docs_dir / "playwright-e2e-guide.md"
             guide.write_text(
-                "Playwright E2E Testing & Demo GIF Generation Guide\n",
+                "# Playwright E2E Testing & Demo GIF Generation Guide\n",
                 encoding="utf-8"
             )
             

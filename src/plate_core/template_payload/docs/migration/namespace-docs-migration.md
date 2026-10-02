@@ -137,7 +137,7 @@ If you moved `docs/README.md` to `docs/plate/README.md`, its relative links are 
 ```bash
 # Option: Manual sed rewrite (portable)
 if [ -f "docs/plate/README.md" ]; then
-  sed 's|(../|\.\./\.\./|g' docs/plate/README.md > docs/plate/README.md.tmp
+  sed 's|(\.\./|(\.\./\.\./|g' docs/plate/README.md > docs/plate/README.md.tmp
   mv docs/plate/README.md.tmp docs/plate/README.md
   git add docs/plate/README.md
 fi
