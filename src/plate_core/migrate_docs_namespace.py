@@ -614,11 +614,17 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
     docs_dir = target_path / "docs"
     plate_docs_dir = docs_dir / "plate"
     
-    # Preflight check: verify all moves are possible before doing anything
+    # Preflight check: verify all moves and reconciliations are possible before doing anything
     move_actions = [
         a for a in plan.actions
         if a.action_type in ("move_dir", "move_file")
     ]
+    # Also check skip actions that involve reconciliation (source removal)
+    reconcile_actions = [
+        a for a in plan.actions
+        if a.action_type == "skip" and "reconcile by removing source" in a.reason
+    ]
+    
     for action in move_actions:
         source_path = target_path / action.source
         if not source_path.exists():
@@ -643,6 +649,27 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
             plan.ok = False
             plan.errors.append(
                 f"Preflight failed: source is not tracked by Git: {action.source}"
+            )
+            return plan
+    
+    # Preflight reconciliation actions (source removal for identical duplicates)
+    for action in reconcile_actions:
+        source_path = target_path / action.source
+        if not source_path.exists():
+            plan.ok = False
+            plan.errors.append(f"Preflight failed: reconciliation source does not exist: {action.source}")
+            return plan
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", action.source],
+            cwd=target_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tracked.returncode != 0:
+            plan.ok = False
+            plan.errors.append(
+                f"Preflight failed: reconciliation source is not tracked by Git: {action.source}"
             )
             return plan
     
