@@ -252,11 +252,21 @@ def _find_stale_references_in_file(
         
         # Check for directory references
         for dir_name in dirs_moved:
-            # Look for references like docs/design/ or docs/design (without trailing slash)
-            old_pattern = f"docs/{dir_name}/"
-            new_pattern = f"docs/plate/{dir_name}/"
-            if old_pattern in line and new_pattern not in line:
-                stale_refs.append((i, old_pattern, new_pattern))
+            # Look for references like docs/design/ (with trailing slash)
+            old_pattern_slash = f"docs/{dir_name}/"
+            new_pattern_slash = f"docs/plate/{dir_name}/"
+            if old_pattern_slash in line and new_pattern_slash not in line:
+                stale_refs.append((i, old_pattern_slash, new_pattern_slash))
+            
+            # Also check docs/design (without trailing slash, e.g. in `[ -d docs/wiki ]`)
+            # Use word boundaries to avoid false matches like docs/wiki-system
+            old_pattern_bare = f"docs/{dir_name}"
+            new_pattern_bare = f"docs/plate/{dir_name}"
+            # Simple check: if the bare pattern exists but not already namespaced
+            if old_pattern_bare in line and new_pattern_bare not in line:
+                # Avoid duplicate if we already caught the slash version
+                if (i, old_pattern_slash, new_pattern_slash) not in stale_refs:
+                    stale_refs.append((i, old_pattern_bare, new_pattern_bare))
     
     return stale_refs
 
@@ -564,9 +574,9 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
                     )
         else:
             # Check if file has references that need updating
-            # For planning, assume all PLATE dirs might move
+            # Use the computed dirs_moved set so the plan matches what apply will execute
             changed, count = _update_references_in_file(
-                ref_file, root_files_moved, PLATE_DOC_DIRS, dry_run=True
+                ref_file, root_files_moved, dirs_moved, dry_run=True
             )
             if changed:
                 plan.actions.append(
