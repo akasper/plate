@@ -250,6 +250,30 @@ def _directories_are_identical(dir1: Path, dir2: Path) -> bool:
     return True
 
 
+def _files_are_identical_after_transform(source_file: Path, target_file: Path) -> bool:
+    """Check if source file matches target after link transformation.
+    
+    For README files moved from docs/ to docs/plate/, relative links like
+    ../AGENTS.md should become ../../AGENTS.md in the target.
+    
+    Returns True if target is the transformed equivalent of source.
+    """
+    if not (source_file.exists() and target_file.exists()):
+        return False
+    
+    try:
+        source_content = source_file.read_text(encoding="utf-8")
+        target_content = target_file.read_text(encoding="utf-8")
+        
+        # Apply the expected transformation to source
+        expected_target = _rewrite_relative_links(source_content)
+        
+        # Compare transformed source with actual target
+        return expected_target == target_content
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
 def plan_migration(target_dir: Path | str) -> MigrationPlan:
     """Plan the migration of PLATE docs to docs/plate/ namespace.
     
@@ -324,14 +348,30 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
     if _is_plate_readme(readme_path):
         target_readme = plate_docs_dir / "README.md"
         if target_readme.exists():
-            plan.actions.append(
-                MigrationAction(
-                    action_type="skip",
-                    source="docs/README.md",
-                    target="docs/plate/README.md",
-                    reason="Target already exists (idempotent)",
+            # Both exist - check if target is the transformed equivalent of source
+            if _files_are_identical_after_transform(readme_path, target_readme):
+                plan.actions.append(
+                    MigrationAction(
+                        action_type="skip",
+                        source="docs/README.md",
+                        target="docs/plate/README.md",
+                        reason="Identical after transformation - will reconcile by removing source",
+                    )
                 )
-            )
+            else:
+                # Different content - conflict
+                plan.actions.append(
+                    MigrationAction(
+                        action_type="conflict",
+                        source="docs/README.md",
+                        target="docs/plate/README.md",
+                        reason="Both exist with different content - manual resolution needed",
+                    )
+                )
+                plan.ok = False
+                plan.errors.append(
+                    "Conflict: both docs/README.md and docs/plate/README.md exist with different content"
+                )
         else:
             plan.actions.append(
                 MigrationAction(
@@ -355,14 +395,47 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
     if _is_plate_playwright_guide(playwright_guide):
         target_guide = plate_docs_dir / "playwright-e2e-guide.md"
         if target_guide.exists():
-            plan.actions.append(
-                MigrationAction(
-                    action_type="skip",
-                    source="docs/playwright-e2e-guide.md",
-                    target="docs/plate/playwright-e2e-guide.md",
-                    reason="Target already exists (idempotent)",
+            # Both exist - check if identical (no link transformation for this file)
+            try:
+                source_content = playwright_guide.read_bytes()
+                target_content = target_guide.read_bytes()
+                if source_content == target_content:
+                    plan.actions.append(
+                        MigrationAction(
+                            action_type="skip",
+                            source="docs/playwright-e2e-guide.md",
+                            target="docs/plate/playwright-e2e-guide.md",
+                            reason="Identical duplicate - will reconcile by removing source",
+                        )
+                    )
+                else:
+                    # Different content - conflict
+                    plan.actions.append(
+                        MigrationAction(
+                            action_type="conflict",
+                            source="docs/playwright-e2e-guide.md",
+                            target="docs/plate/playwright-e2e-guide.md",
+                            reason="Both exist with different content - manual resolution needed",
+                        )
+                    )
+                    plan.ok = False
+                    plan.errors.append(
+                        "Conflict: both docs/playwright-e2e-guide.md and docs/plate/playwright-e2e-guide.md exist with different content"
+                    )
+            except (OSError, UnicodeDecodeError):
+                # Can't read - treat as conflict
+                plan.actions.append(
+                    MigrationAction(
+                        action_type="conflict",
+                        source="docs/playwright-e2e-guide.md",
+                        target="docs/plate/playwright-e2e-guide.md",
+                        reason="Cannot compare files - manual resolution needed",
+                    )
                 )
-            )
+                plan.ok = False
+                plan.errors.append(
+                    "Conflict: cannot compare docs/playwright-e2e-guide.md and docs/plate/playwright-e2e-guide.md"
+                )
         else:
             plan.actions.append(
                 MigrationAction(
@@ -492,8 +565,8 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
                 return plan
                 
         elif action.action_type == "skip":
-            # Handle reconciliation of identical duplicates
-            if "Identical duplicate" in action.reason:
+            # Handle reconciliation of identical duplicates (dirs and files)
+            if "Identical" in action.reason and "reconcile by removing source" in action.reason:
                 source_path = target_path / action.source
                 try:
                     subprocess.run(
