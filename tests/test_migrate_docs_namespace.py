@@ -927,5 +927,42 @@ class TestReferenceStaging(unittest.TestCase):
             shutil.rmtree(repo.parent)
 
 
+class TestPreflightChecks(unittest.TestCase):
+    """Test preflight validation before migration."""
+    
+    def test_preflight_fails_on_untracked_reconciliation_source(self):
+        """Test that preflight fails if reconciliation source is untracked."""
+        repo = create_temp_repo()
+        try:
+            # Create identical duplicates (both tracked initially)
+            docs_dir = repo / "docs"
+            plate_docs_dir = docs_dir / "plate" / "design"
+            docs_dir.mkdir(parents=True)
+            plate_docs_dir.mkdir(parents=True)
+            
+            source_dir = docs_dir / "design"
+            source_dir.mkdir()
+            (source_dir / "feature.md").write_text("# Same", encoding="utf-8")
+            (plate_docs_dir / "feature.md").write_text("# Same", encoding="utf-8")
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add duplicates"], cwd=repo, check=True)
+            
+            # Now remove the source from git tracking (but leave the file)
+            subprocess.run(["git", "rm", "--cached", "-r", "docs/design"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Untrack source"], cwd=repo, check=True)
+            
+            # Migration should fail at preflight
+            result = apply_migration(repo)
+            self.assertFalse(result.ok, "Should fail preflight with untracked reconciliation source")
+            self.assertTrue(
+                any("reconciliation source is not tracked" in e for e in result.errors),
+                "Should report untracked reconciliation source in errors"
+            )
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+
 if __name__ == '__main__':
     unittest.main()
