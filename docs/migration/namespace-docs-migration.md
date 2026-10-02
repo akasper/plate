@@ -111,7 +111,7 @@ mkdir -p docs/plate
 
 # 2. Move PLATE scaffolding directories
 for dir in adr audits bootstrap design marketing migration research wiki; do
-  if [ -d "docs/$dir" ]; then
+  if [ -d "docs/$dir" ] && [ ! -d "docs/plate/$dir" ]; then
     git mv "docs/$dir" "docs/plate/$dir"
   fi
 done
