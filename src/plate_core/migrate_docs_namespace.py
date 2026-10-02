@@ -170,12 +170,12 @@ def _update_references_in_file(
         patterns = [
             # Match docs/design/ (with trailing slash)
             (rf"\bdocs/{plate_dir}/", rf"docs/plate/{plate_dir}/"),
-            # Match docs/design (without trailing slash, followed by word boundary)
-            (rf"\bdocs/{plate_dir}\b", rf"docs/plate/{plate_dir}"),
+            # Match docs/design (without trailing slash or another path segment)
+            (rf"\bdocs/{plate_dir}(?![\w/-])", rf"docs/plate/{plate_dir}"),
             # Match `docs/design/ (backtick + path with slash)
             (rf"`docs/{plate_dir}/", rf"`docs/plate/{plate_dir}/"),
-            # Match `docs/design (backtick + path without slash)
-            (rf"`docs/{plate_dir}\b", rf"`docs/plate/{plate_dir}"),
+            # Match `docs/design (backtick + path without slash or another segment)
+            (rf"`docs/{plate_dir}(?![\w/-])", rf"`docs/plate/{plate_dir}"),
         ]
         for old_pattern, new_pattern in patterns:
             new_content, n = re.subn(old_pattern, new_pattern, content)
