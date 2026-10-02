@@ -139,13 +139,14 @@ def _find_files_matching_patterns(
 
 
 def _update_references_in_file(
-    file_path: Path, root_files_moved: list[str], dry_run: bool = True
+    file_path: Path, root_files_moved: list[str], dirs_moved: list[str], dry_run: bool = True
 ) -> tuple[bool, int]:
     """Update doc/ references to docs/plate/ in a file.
     
     Args:
         file_path: File to update
         root_files_moved: List of root files being moved (e.g. ["README.md", "playwright-e2e-guide.md"])
+        dirs_moved: List of directories actually moved (e.g. ["design", "wiki"])
         dry_run: If True, do not write changes
     
     Returns (changed, count) where changed is True if file was modified
@@ -162,12 +163,19 @@ def _update_references_in_file(
     original = content
     count = 0
     
-    # Update references for each PLATE doc directory
-    for plate_dir in PLATE_DOC_DIRS:
-        # Match paths like docs/design/ or `docs/design/
+    # Update references for each actually-moved PLATE doc directory
+    for plate_dir in dirs_moved:
+        # Match paths like docs/design/ or docs/design or `docs/design with word boundaries
+        # to avoid false matches (docs/design-foo, docs/plate/design)
         patterns = [
-            (rf"docs/{plate_dir}/", rf"docs/plate/{plate_dir}/"),
+            # Match docs/design/ (with trailing slash)
+            (rf"\bdocs/{plate_dir}/", rf"docs/plate/{plate_dir}/"),
+            # Match docs/design (without trailing slash, followed by word boundary)
+            (rf"\bdocs/{plate_dir}\b", rf"docs/plate/{plate_dir}"),
+            # Match `docs/design/ (backtick + path with slash)
             (rf"`docs/{plate_dir}/", rf"`docs/plate/{plate_dir}/"),
+            # Match `docs/design (backtick + path without slash)
+            (rf"`docs/{plate_dir}\b", rf"`docs/plate/{plate_dir}"),
         ]
         for old_pattern, new_pattern in patterns:
             new_content, n = re.subn(old_pattern, new_pattern, content)
@@ -555,7 +563,10 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
                     )
         else:
             # Check if file has references that need updating
-            changed, count = _update_references_in_file(ref_file, root_files_moved, dry_run=True)
+            # For planning, assume all PLATE dirs might move
+            changed, count = _update_references_in_file(
+                ref_file, root_files_moved, PLATE_DOC_DIRS, dry_run=True
+            )
             if changed:
                 plan.actions.append(
                     MigrationAction(
@@ -807,10 +818,24 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
                         if filename not in root_files_moved:
                             root_files_moved.append(filename)
             
+            # Determine which directories were actually moved or reconciled
+            dirs_moved = []
+            for a in plan.actions:
+                if a.action_type == "move_dir":
+                    # Extract dir name from source like "docs/design/"
+                    dir_name = a.source.replace("docs/", "").rstrip("/")
+                    if dir_name and dir_name not in dirs_moved:
+                        dirs_moved.append(dir_name)
+                elif a.action_type == "skip" and "reconcile by removing source" in a.reason:
+                    # Extract dir name from source like "docs/wiki/"
+                    dir_name = a.source.replace("docs/", "").rstrip("/")
+                    if dir_name and dir_name not in dirs_moved:
+                        dirs_moved.append(dir_name)
+            
             file_path = target_path / action.source
             try:
                 changed, count = _update_references_in_file(
-                    file_path, root_files_moved, dry_run=False
+                    file_path, root_files_moved, dirs_moved, dry_run=False
                 )
                 if changed:
                     # Stage the updated file

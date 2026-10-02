@@ -640,6 +640,11 @@ class TestMigrationApplication(unittest.TestCase):
             wiki_dir.mkdir(parents=True)
             (wiki_dir / "Home.md").write_text("# Home", encoding="utf-8")
             
+            # Create the referenced migration dir so it gets moved
+            migration_dir = repo / "docs/migration"
+            migration_dir.mkdir(parents=True)
+            (migration_dir / "guide.md").write_text("# Guide", encoding="utf-8")
+            
             subprocess.run(["git", "add", "."], cwd=repo, check=True)
             subprocess.run(["git", "commit", "-m", "Add scripts"], cwd=repo, check=True)
             
@@ -1031,6 +1036,78 @@ class TestPreflightChecks(unittest.TestCase):
                 any("contains uncommitted or untracked content" in e for e in result.errors),
                 f"Should report untracked content in errors, got: {result.errors}"
             )
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+    def test_directory_references_without_trailing_slash(self):
+        """Test that directory references without trailing slashes are updated (e.g. if [ -d docs/wiki ])."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            wiki_dir = docs_dir / "wiki"
+            wiki_dir.mkdir(parents=True)
+            (wiki_dir / "Home.md").write_text("# Wiki Home\n", encoding="utf-8")
+            
+            # Create a workflow with both forms (with and without trailing slash)
+            workflows_dir = repo / ".github" / "workflows"
+            workflows_dir.mkdir(parents=True)
+            workflow_content = """name: Sync Wiki
+on: push
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - if: |
+          [ -d docs/wiki ]
+        run: rsync -av docs/wiki/ /output/
+"""
+            (workflows_dir / "sync.yml").write_text(workflow_content, encoding="utf-8")
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add wiki and workflow"], cwd=repo, check=True)
+            
+            # Apply migration
+            result = apply_migration(repo)
+            self.assertTrue(result.ok, f"Migration should succeed, got errors: {result.errors}")
+            
+            # Check that both forms were updated
+            updated_workflow = (workflows_dir / "sync.yml").read_text(encoding="utf-8")
+            self.assertIn("[ -d docs/plate/wiki ]", updated_workflow, "Should update reference without trailing slash")
+            self.assertIn("docs/plate/wiki/", updated_workflow, "Should update reference with trailing slash")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+    def test_only_moved_directories_are_rewritten(self):
+        """Test that only actually-moved directories have their references updated."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            wiki_dir = docs_dir / "wiki"
+            wiki_dir.mkdir(parents=True)
+            (wiki_dir / "Home.md").write_text("# Wiki\n", encoding="utf-8")
+            
+            # Create a file that references both wiki (exists) and design (doesn't exist)
+            contributing = repo / "CONTRIBUTING.md"
+            contributing.write_text(
+                "See docs/wiki/ for guides.\n"
+                "See docs/design/ for architecture.\n",
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add wiki only"], cwd=repo, check=True)
+            
+            # Apply migration
+            result = apply_migration(repo)
+            self.assertTrue(result.ok, f"Migration should succeed, got errors: {result.errors}")
+            
+            # Check that only wiki reference was updated (not design, since it wasn't moved)
+            updated_content = contributing.read_text(encoding="utf-8")
+            self.assertIn("docs/plate/wiki/", updated_content, "Should update wiki reference")
+            self.assertIn("docs/design/", updated_content, "Should NOT update design reference (not moved)")
+            self.assertNotIn("docs/plate/design/", updated_content, "Should NOT create plate/design reference")
         finally:
             import shutil
             shutil.rmtree(repo.parent)

@@ -668,7 +668,7 @@ def cmd_migrate_docs_namespace(args: argparse.Namespace) -> int:
     else:
         print("Migration complete!")
         print("\nNext steps:")
-        print("  1. Review changes: git status && git diff")
+        print("  1. Review changes: git status && git diff --cached")
         print("  2. Test locally: verify links and CI")
         print("  3. Commit: git commit -m 'Migrate PLATE docs to docs/plate/ namespace'")
     
