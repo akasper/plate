@@ -637,8 +637,15 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
             return plan
         status_lines = status.stdout.splitlines()
         source_action = action.action_type in ("move_dir", "move_file") or action in reconcile_actions
-        if status_lines and source_action and all(line.startswith("?? ") for line in status_lines):
-            continue
+        if status_lines and source_action:
+            # Any status output (including untracked files) fails preflight for moves/reconciliations.
+            # This prevents silently moving/deleting untracked content alongside tracked files.
+            plan.ok = False
+            plan.errors.append(
+                f"Preflight failed: {action.source} contains uncommitted or untracked content. "
+                f"Commit or stash changes before migrating."
+            )
+            return plan
         if status_lines:
             plan.ok = False
             plan.errors.append(

@@ -562,8 +562,8 @@ class TestMigrationApplication(unittest.TestCase):
 
             self.assertFalse(result.ok, "An untracked move source should fail preflight")
             self.assertTrue(
-                any("not tracked by Git: docs/wiki/" in error for error in result.errors),
-                "The preflight error should identify the untracked source",
+                any("docs/wiki" in error and "untracked content" in error for error in result.errors),
+                f"The preflight error should identify the untracked source, got: {result.errors}",
             )
             self.assertTrue(design_dir.exists(), "Earlier tracked source must not be moved")
             self.assertFalse(
@@ -1001,8 +1001,35 @@ class TestPreflightChecks(unittest.TestCase):
             result = apply_migration(repo)
             self.assertFalse(result.ok, "Should fail preflight with untracked reconciliation source")
             self.assertTrue(
-                any("reconciliation source is not tracked" in e for e in result.errors),
-                "Should report untracked reconciliation source in errors"
+                any("docs/design" in e and "untracked content" in e for e in result.errors),
+                f"Should report untracked content in errors, got: {result.errors}"
+            )
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+    def test_preflight_fails_on_mixed_tracked_untracked_directory(self):
+        """Test that preflight fails if a directory contains both tracked files and untracked files."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            design_dir = docs_dir / "design"
+            design_dir.mkdir(parents=True)
+            
+            # Add a tracked file and commit
+            (design_dir / "tracked.md").write_text("# Tracked content\n", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add tracked file"], cwd=repo, check=True)
+            
+            # Now add an untracked file in the same directory (without staging/committing)
+            (design_dir / "untracked.md").write_text("# Untracked content\n", encoding="utf-8")
+            
+            # Migration should fail at preflight because design/ has untracked content
+            result = apply_migration(repo)
+            self.assertFalse(result.ok, "Should fail preflight with mixed tracked/untracked directory")
+            self.assertTrue(
+                any("contains uncommitted or untracked content" in e for e in result.errors),
+                f"Should report untracked content in errors, got: {result.errors}"
             )
         finally:
             import shutil
