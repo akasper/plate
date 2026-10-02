@@ -531,7 +531,7 @@ def plan_migration(target_dir: Path | str) -> MigrationPlan:
                 filename = action.source.split("/", 1)[1]
                 if filename not in root_files_moved:
                     root_files_moved.append(filename)
-        elif action.action_type in ("move_dir",):
+        if action.action_type in ("move_dir", "skip"):
             # Extract directory name from source like "docs/design/"
             if action.source.startswith("docs/") and action.source.endswith("/"):
                 dir_name = action.source[5:-1]  # Remove "docs/" prefix and trailing "/"
@@ -624,6 +624,26 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
         if not source_path.exists():
             plan.ok = False
             plan.errors.append(f"Preflight failed: source does not exist: {action.source}")
+            return plan
+        target_path_full = target_path / action.target
+        if target_path_full.exists():
+            plan.ok = False
+            plan.errors.append(
+                f"Preflight failed: destination already exists: {action.target}"
+            )
+            return plan
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", action.source],
+            cwd=target_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tracked.returncode != 0:
+            plan.ok = False
+            plan.errors.append(
+                f"Preflight failed: source is not tracked by Git: {action.source}"
+            )
             return plan
     
     # Create docs/plate/ if needed

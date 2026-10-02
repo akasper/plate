@@ -462,7 +462,8 @@ class TestMigrationApplication(unittest.TestCase):
             
             (design_dir / "feature.md").write_text("# Same content", encoding="utf-8")
             (plate_design_dir / "feature.md").write_text("# Same content", encoding="utf-8")
-            
+            (repo / "AGENTS.md").write_text("See docs/design/ for details.\n", encoding="utf-8")
+
             subprocess.run(["git", "add", "."], cwd=repo, check=True)
             subprocess.run(["git", "commit", "-m", "Add duplicates"], cwd=repo, check=True)
             
@@ -475,6 +476,15 @@ class TestMigrationApplication(unittest.TestCase):
                 if a.action_type == "skip" and "Identical duplicate" in a.reason
             ]
             self.assertGreater(len(skip_actions), 0, "Should have reconciliation action")
+            followups = [
+                a for a in plan.actions
+                if a.action_type == "manual_followup" and a.source == "AGENTS.md"
+            ]
+            self.assertGreater(
+                len(followups),
+                0,
+                "Protected references to a reconciled directory should be reported",
+            )
             
             # Apply and verify reconciliation
             result = apply_migration(repo)
@@ -483,6 +493,37 @@ class TestMigrationApplication(unittest.TestCase):
             self.assertTrue(
                 (repo / "docs/plate/design/feature.md").exists(),
                 "Target should remain"
+            )
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+    def test_untracked_later_move_fails_preflight_without_partial_migration(self):
+        """Test that all move sources are preflighted before any move is applied."""
+        repo = create_temp_repo()
+        try:
+            docs = repo / "docs"
+            design_dir = docs / "design"
+            wiki_dir = docs / "wiki"
+            design_dir.mkdir(parents=True)
+            wiki_dir.mkdir()
+            (design_dir / "feature.md").write_text("# Tracked", encoding="utf-8")
+            (wiki_dir / "guide.md").write_text("# Untracked", encoding="utf-8")
+
+            subprocess.run(["git", "add", "docs/design"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add tracked design docs"], cwd=repo, check=True)
+
+            result = apply_migration(repo)
+
+            self.assertFalse(result.ok, "An untracked move source should fail preflight")
+            self.assertTrue(
+                any("not tracked by Git: docs/wiki/" in error for error in result.errors),
+                "The preflight error should identify the untracked source",
+            )
+            self.assertTrue(design_dir.exists(), "Earlier tracked source must not be moved")
+            self.assertFalse(
+                (docs / "plate" / "design").exists(),
+                "No earlier move should be applied before preflight completes",
             )
         finally:
             import shutil
