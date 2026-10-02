@@ -29,17 +29,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .payload_surface import PLATE_DOCS_SUBDIRS, is_plate_owned_root_doc
+
 # PLATE-owned doc directories that should be moved
-PLATE_DOC_DIRS = [
-    "adr",
-    "audits",
-    "bootstrap",
-    "design",
-    "marketing",
-    "migration",
-    "research",
-    "wiki",
-]
+PLATE_DOC_DIRS = sorted(PLATE_DOCS_SUBDIRS)
 
 # Files that are never moved (only their references are updated)
 PROTECTED_FILES = {"AGENTS.md", "SPEC.md", "CURRENT.md"}
@@ -126,21 +119,12 @@ def _is_git_repo(target_dir: Path) -> bool:
 
 def _is_plate_readme(path: Path) -> bool:
     """Check if README.md is the PLATE template version."""
-    if not path.exists():
-        return False
-    content = path.read_text(encoding="utf-8")
-    return (
-        "# Documentation Index" in content
-        and "playwright-e2e-guide.md" in content
-    )
+    return is_plate_owned_root_doc(path)
 
 
 def _is_plate_playwright_guide(path: Path) -> bool:
     """Check if playwright-e2e-guide.md is the PLATE template version."""
-    if not path.exists():
-        return False
-    content = path.read_text(encoding="utf-8")
-    return "Playwright E2E Testing & Demo GIF Generation Guide" in content
+    return is_plate_owned_root_doc(path)
 
 
 def _find_files_matching_patterns(
@@ -624,6 +608,43 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
         a for a in plan.actions
         if a.action_type == "skip" and "reconcile by removing source" in a.reason
     ]
+
+    affected_actions = [
+        a for a in plan.actions
+        if a.action_type in ("move_dir", "move_file", "update_refs", "rewrite_links")
+        or a in reconcile_actions
+    ]
+    for action in affected_actions:
+        status = subprocess.run(
+            [
+                "git",
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+                "--",
+                action.source,
+            ],
+            cwd=target_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if status.returncode != 0:
+            plan.ok = False
+            plan.errors.append(
+                f"Preflight failed: cannot check status for {action.source}: {status.stderr.strip()}"
+            )
+            return plan
+        status_lines = status.stdout.splitlines()
+        source_action = action.action_type in ("move_dir", "move_file") or action in reconcile_actions
+        if status_lines and source_action and all(line.startswith("?? ") for line in status_lines):
+            continue
+        if status_lines:
+            plan.ok = False
+            plan.errors.append(
+                f"Preflight failed: planned path has pre-existing changes: {action.source}"
+            )
+            return plan
     
     for action in move_actions:
         source_path = target_path / action.source
