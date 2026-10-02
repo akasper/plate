@@ -3,7 +3,8 @@
 Addresses #1027: provides a purpose-built migration command that:
 - Uses git mv to move PLATE-owned doc directories
 - Preserves customized files (AGENTS.md, SPEC.md, CURRENT.md, product docs)
-- Rewrites references in repository files
+- Rewrites references in workflows, scripts, and selected repository files
+- Reports stale references in protected files as manual follow-ups
 - Is idempotent (safe to re-run)
 - Dry-run by default
 
@@ -14,8 +15,8 @@ PLATE-owned root doc files (only if they match template content):
 - README.md (must contain "# Documentation Index" and "playwright-e2e-guide.md")
 - playwright-e2e-guide.md (must contain template title)
 
-Never touched:
-- AGENTS.md, SPEC.md, CURRENT.md (only their internal references are updated)
+Never moved or overwritten:
+- AGENTS.md, SPEC.md, CURRENT.md (stale references reported for manual correction)
 - Product documentation directories
 - Any files outside docs/
 """
