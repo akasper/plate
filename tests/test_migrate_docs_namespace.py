@@ -1061,6 +1061,7 @@ jobs:
       - if: |
           [ -d docs/wiki ]
         run: rsync -av docs/wiki/ /output/
+      - run: echo "docs/wiki-system `docs/wiki-system`"
 """
             (workflows_dir / "sync.yml").write_text(workflow_content, encoding="utf-8")
             
@@ -1075,6 +1076,8 @@ jobs:
             updated_workflow = (workflows_dir / "sync.yml").read_text(encoding="utf-8")
             self.assertIn("[ -d docs/plate/wiki ]", updated_workflow, "Should update reference without trailing slash")
             self.assertIn("docs/plate/wiki/", updated_workflow, "Should update reference with trailing slash")
+            self.assertIn('docs/wiki-system `docs/wiki-system`', updated_workflow)
+            self.assertNotIn("docs/plate/wiki-system", updated_workflow)
         finally:
             import shutil
             shutil.rmtree(repo.parent)
