@@ -130,47 +130,78 @@ fi
 # Examples: docs/api/, docs/tutorial/, docs/architecture/, etc.
 ```
 
-### 4. Rewrite references in repository files
+### 4. Fix relative links in moved root files
 
-After moving files, update references. **Note:** The `migrate-docs-namespace` command does this automatically. For manual migration:
+If you moved `docs/README.md` to `docs/plate/README.md`, its relative links are now broken:
+
+```bash
+# Option: Manual sed rewrite (portable)
+if [ -f "docs/plate/README.md" ]; then
+  sed 's|(../|\.\./\.\./|g' docs/plate/README.md > docs/plate/README.md.tmp
+  mv docs/plate/README.md.tmp docs/plate/README.md
+  git add docs/plate/README.md
+fi
+
+# The file went one level deeper, so:
+# - ../AGENTS.md becomes ../../AGENTS.md
+# - ../tests/e2e/ becomes ../../tests/e2e/
+# - ./playwright-e2e-guide.md stays the same (same-directory links are fine)
+```
+
+### 5. Rewrite references in repository files
+
+After moving files and directories, update references throughout the repository. **Note:** The `migrate-docs-namespace` command does this automatically. For manual migration:
 
 ```bash
 # Portable reference rewriting (works on macOS and Linux)
 # Create a temporary rewrite script
 cat > /tmp/rewrite-refs.sh << 'EOF'
 #!/bin/sh
+# Rewrite directory references
 for dir in design research wiki audits migration bootstrap marketing adr; do
-  # Use a temp file for portable in-place edit
   sed "s|docs/$dir/|docs/plate/$dir/|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
   sed "s|\`docs/$dir/|\`docs/plate/$dir/|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
 done
+
+# Rewrite root file references (if you moved them)
+sed "s|docs/playwright-e2e-guide\.md|docs/plate/playwright-e2e-guide.md|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+sed "s|docs/README\.md|docs/plate/README.md|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+sed "s|\`docs/playwright-e2e-guide\.md|\`docs/plate/playwright-e2e-guide.md|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+sed "s|\.\./docs/playwright-e2e-guide\.md|../docs/plate/playwright-e2e-guide.md|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
 EOF
 chmod +x /tmp/rewrite-refs.sh
 
-# Apply to key files
-/tmp/rewrite-refs.sh AGENTS.md
-/tmp/rewrite-refs.sh SPEC.md  # if it exists and has doc refs
+# Apply to key files (but NOT AGENTS.md, SPEC.md, CURRENT.md - review those manually)
+/tmp/rewrite-refs.sh CONTRIBUTING.md
+/tmp/rewrite-refs.sh README.md
+# Add other files that reference docs
 
 # Review changes
-git diff AGENTS.md SPEC.md
+git diff
 ```
 
+**Important:** Do NOT automatically rewrite `AGENTS.md`, `SPEC.md`, or `CURRENT.md`. Review those files manually for stale references, as they may contain critical product or process documentation that needs careful handling.
+
 **Files to check for doc references:**
-- `AGENTS.md` (main source of docs/ refs)
-- `SPEC.md`
+- `AGENTS.md` (review manually - do not auto-rewrite)
+- `SPEC.md` (review manually - do not auto-rewrite)
+- `CURRENT.md` (review manually - do not auto-rewrite)
 - `CONTRIBUTING.md`
+- `README.md`
 - `.github/workflows/*.yml` (especially sync-wiki-on-merge.yml)
 - `.github/ISSUE_TEMPLATE/*.yml`
 - `.github/copilot-instructions.md`
 - `.github/agents/*.agent.md`
 - `.agentic/skills.yml`
 - `scripts/README.md` or other script docs
+- `scripts/bootstrap_github.sh` and `scripts/BootstrapGitHub.ps1` (may reference docs/wiki/Home.md)
+- `.agentic/migration.yml` (may reference docs/migration/)
 - Any custom markdown in `.agentic/`
 
 Search command to find all references:
 ```bash
 # Find all doc refs across the repo (excluding .git)
-rg 'docs/(design|wiki|research|audits|migration|bootstrap|marketing|adr)/' \
+rg 'docs/(design|wiki|research|audits|migration|bootstrap|marketing|adr|playwright-e2e-guide|README)' \
   --type md --type yaml --type yml --type sh --type ps1 \
   | grep -v '^Binary'
 ```
