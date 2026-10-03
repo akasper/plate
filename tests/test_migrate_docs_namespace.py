@@ -1312,5 +1312,93 @@ jobs:
             shutil.rmtree(repo.parent)
 
 
+    def test_protected_file_scanner_root_files_use_boundaries(self):
+        """Regression: root-file stale-ref scanner should use boundary regex like directory scanner."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            readme_src = docs_dir / "README.md"
+            readme_src.parent.mkdir(parents=True, exist_ok=True)
+            readme_src.write_text(
+                "# Documentation Index\n\n"
+                "See [playwright-e2e-guide.md](./playwright-e2e-guide.md).\n",
+                encoding="utf-8"
+            )
+            
+            # Create AGENTS.md with root file refs (some valid, some false positives)
+            agents_md = repo / "AGENTS.md"
+            agents_md.write_text(
+                "# Agents\n\n"
+                "Copy docs/README.md to docs/README.md.bak for backup.\n"  # .bak should NOT be flagged
+                "See docs/README.md for index.\n"  # This SHOULD be flagged
+                "Path docs/READMEXmd is unrelated.\n",  # No separator, should NOT be flagged
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add README and AGENTS.md"], cwd=repo, check=True)
+            
+            # Plan migration
+            plan = plan_migration(repo)
+            self.assertTrue(plan.ok, f"Planning should succeed, got errors: {plan.errors}")
+            
+            # Check manual_followup for AGENTS.md
+            followups = [a for a in plan.actions if a.action_type == "manual_followup"]
+            agents_followups = [a for a in followups if "AGENTS.md" in a.source]
+            self.assertTrue(len(agents_followups) > 0, "Should have followup for AGENTS.md")
+            
+            reasons = " ".join(a.reason for a in agents_followups)
+            # Should catch the exact match
+            self.assertIn("docs/README.md", reasons, "Should detect docs/README.md reference")
+            # Should NOT flag false positives
+            self.assertNotIn("README.md.bak", reasons,
+                           "Should NOT flag docs/README.md.bak (has extension)")
+            self.assertNotIn("READMEXmd", reasons,
+                           "Should NOT flag docs/READMEXmd (no path separator)")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+    def test_protected_file_scanner_root_files_detect_mixed_lines(self):
+        """Regression: root-file scanner should detect old refs even with new on same line."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            readme_src = docs_dir / "README.md"
+            readme_src.parent.mkdir(parents=True, exist_ok=True)
+            readme_src.write_text(
+                "# Documentation Index\n\n"
+                "See [playwright-e2e-guide.md](./playwright-e2e-guide.md).\n",
+                encoding="utf-8"
+            )
+            
+            # Create AGENTS.md with both old and new paths on same line
+            agents_md = repo / "AGENTS.md"
+            agents_md.write_text(
+                "# Agents\n\n"
+                "Migrate docs/README.md to docs/plate/README.md now.\n",
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add README and AGENTS.md"], cwd=repo, check=True)
+            
+            # Plan migration
+            plan = plan_migration(repo)
+            self.assertTrue(plan.ok, f"Planning should succeed, got errors: {plan.errors}")
+            
+            # Check that AGENTS.md IS flagged for the old docs/README.md reference
+            followups = [a for a in plan.actions if a.action_type == "manual_followup"]
+            agents_followups = [a for a in followups if "AGENTS.md" in a.source]
+            self.assertTrue(len(agents_followups) > 0,
+                           "Should flag AGENTS.md even with both old and new paths on same line")
+            
+            reasons = " ".join(a.reason for a in agents_followups)
+            self.assertIn("docs/README.md", reasons, "Should detect old docs/README.md reference")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+
 if __name__ == '__main__':
     unittest.main()
