@@ -304,6 +304,25 @@ class McpTests(unittest.TestCase):
         self.assertIn("plate_config_upgrade", names)
         self.assertIn("plate_release_target_epic", names)
         self.assertIn("plate_release_cleanup_branches", names)
+        self.assertIn("plate_migrate_docs_namespace", names)
+
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.migrate_docs_namespace")
+    def test_tools_call_plate_migrate_docs_namespace(self, mock_migrate, mock_write):
+        expected = {"ok": True, "apply_mode": True, "actions": []}
+        mock_migrate.return_value.to_dict.return_value = expected
+
+        _handle_tools_call(
+            22,
+            {
+                "name": "plate_migrate_docs_namespace",
+                "arguments": {"target_dir": "/tmp/repo", "apply": True},
+            },
+        )
+
+        mock_migrate.assert_called_once_with(target_dir="/tmp/repo", apply=True)
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload, expected)
 
     @patch("plate_core.mcp_server._write")
     @patch(

@@ -32,6 +32,7 @@ from .release import (
     get_release_target_epic_guidance,
 )
 from .migration import generate_migration_plan, apply_migration_plan
+from .migrate_docs_namespace import migrate_docs_namespace
 from .contemplation import ContemplationEngine, trigger_contemplation
 from .costs import get_cost_report
 from .autonomy import get_autonomy_status, get_budget_snapshot, run_autonomy_cycle
@@ -1921,6 +1922,11 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             plan = generate_migration_plan()
             results = apply_migration_plan(plan, dry_run=dry)
             payload = {"results": results, "dry_run": dry}
+        elif name == "plate_migrate_docs_namespace":
+            apply_mode = bool(args.get("apply", False))
+            target_dir = args.get("target_dir") or "."
+            plan = migrate_docs_namespace(target_dir=target_dir, apply=apply_mode)
+            payload = plan.to_dict()
         elif name == "plate_import_payload":
             from .import_payload import import_payload
 
@@ -4854,6 +4860,30 @@ def run() -> None:
                                     "properties": {
                                         "repo": {"type": "string", "description": "owner/name. Optional."},
                                         "dry_run": {"type": "boolean", "description": "Simulate only (default true for safety)."},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_migrate_docs_namespace",
+                                "description": (
+                                    "Migrate PLATE docs from docs/ root to docs/plate/ namespace (#1027). "
+                                    "Uses git mv to move PLATE-owned doc directories (adr, audits, bootstrap, design, "
+                                    "marketing, migration, research, wiki) and PLATE root doc files. "
+                                    "Preserves AGENTS.md, SPEC.md, CURRENT.md and all product docs. "
+                                    "Rewrites references in repository files. Idempotent (safe to re-run). "
+                                    "Dry-run by default; set apply=true to perform the migration."
+                                ),
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "target_dir": {
+                                            "type": "string",
+                                            "description": "Repository root directory (default: current directory)",
+                                        },
+                                        "apply": {
+                                            "type": "boolean",
+                                            "description": "Apply the migration (default: false for dry-run)",
+                                        },
                                     },
                                 },
                             },
