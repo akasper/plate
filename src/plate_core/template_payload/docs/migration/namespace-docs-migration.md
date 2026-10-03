@@ -98,12 +98,14 @@ gh plate migrate-docs-namespace --apply
 # - Be idempotent (safe to re-run)
 ```
 
-**Option B: Manual migration (always safe, works with any plate-core version)**
+**Option B: Manual migration (requires review, works with any plate-core version)**
 
 Use when:
 - You don't have the migration command yet (plate-core < v0.8.3)
 - You want full control over what moves where
 - You have heavily customized content that needs review
+
+The commands below check for PLATE ownership markers before moving root files.
 
 ```bash
 # 1. Create the namespace directory
@@ -116,14 +118,22 @@ for dir in adr audits bootstrap design marketing migration research wiki; do
   fi
 done
 
-# 3. Move PLATE root files (if present and not customized)
-if [ -f "docs/README.md" ]; then
-  # Review content first - if it's product docs, keep it at root
+# 3. Move PLATE root files (only when PLATE-owned, not product docs)
+# README.md: check for PLATE template markers
+if [ -f "docs/README.md" ] && \
+   grep -q "# Documentation Index" docs/README.md && \
+   grep -q "playwright-e2e-guide.md" docs/README.md; then
   git mv "docs/README.md" "docs/plate/README.md"
+else
+  echo "Skipping docs/README.md (not PLATE template or product docs)"
 fi
 
-if [ -f "docs/playwright-e2e-guide.md" ]; then
+# playwright-e2e-guide.md: check for PLATE template title
+if [ -f "docs/playwright-e2e-guide.md" ] && \
+   grep -q "# Playwright E2E Testing & Demo GIF Generation Guide" docs/playwright-e2e-guide.md; then
   git mv "docs/playwright-e2e-guide.md" "docs/plate/playwright-e2e-guide.md"
+else
+  echo "Skipping docs/playwright-e2e-guide.md (not PLATE template or customized)"
 fi
 
 # 4. Your product docs stay at docs/ root (no move needed)
