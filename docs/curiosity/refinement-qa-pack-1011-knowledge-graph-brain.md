@@ -4,20 +4,21 @@
 **Parent Epic:** #1010 — Knowledge graph brain  
 **Milestone:** Knowledge graph brain  
 **Prepared for:** Andrew (solopreneur, prefers slow-paced agent-delegated work)  
-**Estimated time:** 15-20 minutes total  
+**Status:** Answered by Andrew on 2026-10-03. Recorded on PR #1026. Question #1011 stays open until that PR merges.
 
 ---
 
 ## Overview
 
-This pack helps refine Epic #1010 (Knowledge graph brain) by clarifying:
-1. **Ontology & from-scratch build** — which artifacts become nodes/edges, PLATE-aware vs generic
-2. **Query UX** — how agents search the brain (CLI/MCP surfaces)
-3. **Token savings** — measurement baseline, targets, verification
-4. **Refresh model** — keeping the graph aligned with GitHub truth
-5. **SaaS vs local-first** — productization path and boundary
+Andrew answered all 16 questions. Epic #1010 ships a local-first knowledge graph for PLATE process memory.
 
-The answers will shape concrete child issues, define success metrics, and determine whether this Epic ships as core PLATE capability or explores SaaS optionality.
+- Coarse nodes, deep PLATE ontology. Sources are Issues, PRs (including review threads), Milestones, release fragments, AGENTS/SPEC/CURRENT/`.plate`, `docs/plate/` design and research, and wiki pages. Not code, commits, or CI.
+- Edges include Issue→Issue depends-on/blocks. No file or function edges.
+- CLI and MCP return a narrow cited subgraph. Existing surfaces augment the graph and fall back to the GitHub API.
+- v1 answers seven process queries. Token target is 30–50% on process-heavy queries, measured synthetic-first, then a controlled experiment, then ongoing monitoring.
+- Refresh is on-demand plus periodic, full rebuild, local-first. SaaS is out of scope, including the later browser UI.
+
+Docs for this Epic live under `docs/plate/` (#1015). This pack does not change `.plate`.
 
 ---
 
@@ -36,6 +37,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** A (coarse) — PLATE-aware brain, not a generic code index. Target is process memory, not IDE autocomplete.
 
+**Answer (Andrew):** A. Coarse PLATE entities.
+
 ---
 
 ### Q2: PLATE-specific ontology depth
@@ -49,6 +52,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 **Rationale:** Deep ontology unlocks intelligent queries (what-next, PM, autonomy) without re-parsing process rules. Shallow is simpler but duplicates logic in every query.
 
 **Recommended:** A (deep) — the "killer feature" is PLATE-aware intelligence, not another generic repo graph.
+
+**Answer (Andrew):** A. Deep PLATE ontology.
 
 ---
 
@@ -74,6 +79,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** First 7 checked (GitHub + PLATE artifacts) — core process memory. Defer code/commit/CI to future if token savings justify complexity.
 
+**Answer (Andrew):** Issues, PRs (including review threads), Milestones, release fragments, AGENTS/SPEC/CURRENT/`.plate`, `docs/plate/` design and research, wiki pages. Not code, commits, or CI.
+
 ---
 
 ### Q4: Edge semantics
@@ -91,12 +98,14 @@ The answers will shape concrete child issues, define success metrics, and determ
 - ☑ Wiki page → Feature (describes)
 - ☐ File → PR (changed in)
 - ☐ Function → File (defined in)
-- ☐ Issue → Issue (depends on, blocks)
+- ☑ Issue → Issue (depends on, blocks)
 - ☐ Other: _____________
 
 **Rationale:** Edges enable graph traversal ("show me all Features blocking Epic X", "which docs explain this Question"). More edges = more query power but more maintenance.
 
 **Recommended:** First 8 checked — PLATE process relationships only. Defer code-level edges unless use case emerges.
+
+**Answer (Andrew):** Feature/Task/Question→Epic; PR→Issue; Fragment→Feature; Epic→Release; Design doc→Epic/Feature; Wiki→Feature; plus Issue→Issue (depends on / blocks). Not file or function code edges. The depends-on/blocks edge is in v1 scope.
 
 ---
 
@@ -115,6 +124,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** B (CLI + MCP) — humans debug, agents use MCP. Natural language can be a future enhancement.
 
+**Answer (Andrew):** B. CLI + MCP.
+
 ---
 
 ### Q6: Query result format
@@ -130,6 +141,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** A (narrow cited) — agents get compact JSON; can fetch full entities via GitHub API if needed.
 
+**Answer (Andrew):** A. Narrow cited subgraph.
+
 ---
 
 ### Q7: Integration with existing surfaces
@@ -144,6 +157,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 **Rationale:** Augment preserves reliability (GitHub is truth). Replace creates hard dependency. Separate misses the opportunity to accelerate existing workflows.
 
 **Recommended:** A (augment) — brain is a smart cache, not a new SOR.
+
+**Answer (Andrew):** A. Augment with fallback.
 
 ---
 
@@ -167,6 +182,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** First 7 checked — PLATE process queries only. Defer code/CI/provenance.
 
+**Answer (Andrew):** All 7 process queries: blocking Features, refinement Issues, release base branch, human Tasks per Epic, fragments per Feature, wiki/Goals lookup, PRs awaiting human review. Code, CI, and provenance queries stay deferred.
+
 ---
 
 ## Theme C: Token Savings & Verification
@@ -184,6 +201,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** C first (synthetic benchmark for v1 proof), then A (controlled experiment for production claim). B for ongoing monitoring.
 
+**Answer (Andrew):** C. Synthetic benchmark first, then A. Controlled experiment. B. Monitoring is ongoing.
+
 ---
 
 ### Q10: Token savings target
@@ -199,6 +218,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** A (30-50% for process queries) — proves value without overpromising.
 
+**Answer (Andrew):** A. 30–50% for process-heavy queries.
+
 ---
 
 ### Q11: Failure mode handling
@@ -213,6 +234,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 **Rationale:** Fallback preserves reliability. Warning trades accuracy for speed. Refusal blocks progress.
 
 **Recommended:** A (fallback) — GitHub is truth; brain is a best-effort optimization.
+
+**Answer (Andrew):** A. Fallback to the GitHub API.
 
 ---
 
@@ -231,6 +254,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** A (on-demand + periodic) — ship local-first; defer webhooks to SaaS exploration.
 
+**Answer (Andrew):** A. On-demand + periodic.
+
 ---
 
 ### Q13: Incremental vs full rebuild
@@ -244,6 +269,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 **Rationale:** Full rebuild is easier to reason about and test. Incremental is premature optimization until we prove repos are too large.
 
 **Recommended:** A (full rebuild for v1) — optimize later if needed.
+
+**Answer (Andrew):** A. Full rebuild for v1.
 
 ---
 
@@ -262,6 +289,8 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** A (local-first for v1) — prove value without SaaS dependency. Explore SaaS as separate Epic after adoption proof.
 
+**Answer (Andrew):** A. Local-first only for v1.
+
 ---
 
 ### Q15: SaaS value proposition (if pursued later)
@@ -275,12 +304,14 @@ The answers will shape concrete child issues, define success metrics, and determ
 - ☑ Advanced analytics (velocity, cost trends, Epic health across repos)
 - ☐ Public marketplace (search other orgs' PLATE best practices)
 - ☐ Embeddings / semantic search (natural language → graph query)
-- ☐ Browser UI (visual graph explorer)
+- ☑ Browser UI (visual graph explorer)
 - ☐ Other: _____________
 
 **Rationale:** Determines SaaS scope and whether it's a distinct product or just "hosted version of local KG."
 
 **Recommended:** First 4 checked — team/enterprise value. Defer marketplace/embeddings/UI until demand proven.
+
+**Answer (Andrew):** Multi-repo search, team sharing, webhooks for real-time refresh, advanced analytics, plus a browser UI / visual graph explorer. Not embeddings. These are the later value proposition only. Q16 keeps them out of this Epic.
 
 ---
 
@@ -297,149 +328,133 @@ The answers will shape concrete child issues, define success metrics, and determ
 
 **Recommended:** A (out of scope) — mention SaaS in Epic body as future path; prioritize local-first proof.
 
+**Answer (Andrew):** A. Out of scope. No SaaS spike in this Epic.
+
 ---
 
-## Proposed Scope (Draft)
+## Proposed Scope
 
-Based on the above Q&A, the refined Epic #1010 would include:
+Launch scope for Epic #1010, from Andrew's answers. SaaS is not part of this Epic.
 
 ### In scope
-1. **From-scratch KG build** (coarse PLATE process ontology)
-   - Nodes: Epic, Feature, Question, Task, Release, PR, fragment, docs, wiki
-   - Edges: belongs-to, closes, documents, links, blocks (PLATE relationships only)
-   - Sources: GitHub Issues/PRs + fragments + AGENTS/SPEC/CURRENT + docs/plate/ + wiki + milestones
-   - Build: full rebuild (local, on-demand + periodic via autonomy procedure)
-   - Storage: `.agentic/kg/graph.json` (or similar repo-local file)
+1. **From-scratch knowledge graph** (coarse nodes, deep PLATE ontology)
+   - Nodes: Epic, Feature, Question, Task, Release, PR (including review threads), fragment, design/research doc, wiki page, milestone.
+   - Deep PLATE properties (success criteria, risk, release track, fragment semver impact, and similar process fields).
+   - Edges: Feature, Task, and Question → Epic; PR → Issue; fragment → Feature; Epic → Release; design doc → Epic or Feature; wiki page → Feature; **Issue → Issue (depends-on / blocks)**.
+   - No file or function edges.
+   - Sources: GitHub Issues; Pull Requests including review threads; Milestones; release fragments; `AGENTS.md`, `SPEC.md`, `CURRENT.md`, `.plate`; `docs/plate/` design and research; wiki pages.
+   - Not sources: code structure, commits, CI workflow files, Actions run history.
+   - Build: local-first full rebuild. Storage under `.agentic/kg/` (working file `graph.json`).
+   - Refresh: on-demand (`gh plate kg refresh`) plus a periodic autonomy procedure. Not webhooks, and not refresh-on-every-query.
 
 2. **Query surface** (CLI + MCP)
-   - CLI: `gh plate kg refresh`, `gh plate kg query "..."`, `gh plate kg get <entity>`
-   - MCP: `plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse`
-   - Result format: narrow cited JSON subgraphs (optimized for prompt insertion)
-   - Query examples: "Features blocking Epic X", "open refinement Questions", "current release base", "Tasks for Epic Y", "fragments for Feature Z"
+   - CLI: `gh plate kg refresh`, `gh plate kg query`, `gh plate kg get`.
+   - MCP: `plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse`.
+   - Result format: narrow cited JSON subgraph (nodes, edges, GitHub URLs, short snippets).
+   - v1 query set:
+     1. Which Features block an Epic?
+     2. Which open Issues need refinement?
+     3. What is the current release base branch?
+     4. Which human Tasks belong to an Epic?
+     5. Which fragments address a Feature?
+     6. What does the wiki/Goals page say about a topic?
+     7. Which PRs are awaiting human review?
 
-3. **Integration with existing surfaces** (augment with fallback)
-   - `plate_what_next`, `plate_epic_status`, PM orchestrator optionally query brain if available
-   - Fallback to GitHub API if brain stale/missing
-   - Staleness detection and logging
+3. **Augment existing surfaces, with fallback**
+   - `plate_what_next`, `plate_epic_status`, and the PM orchestrator may read the graph when it is fresh.
+   - If the graph is missing or stale, they fall back to the GitHub API and log the fallback.
+   - GitHub stays the source of record. The graph is a derived cache.
 
-4. **Token savings verification**
-   - Synthetic benchmark: 20 standard process queries (what-next, epic status, plan epic, etc.)
-   - Measure token cost with brain vs naive full-context
-   - Target: 30-50% reduction for process-heavy queries
-   - Controlled experiment (optional): run same task with/without brain; compare prompt tokens
+4. **Token savings**
+   - Target: **30–50%** fewer tokens on process-heavy queries versus naive full context.
+   - Measurement order: synthetic benchmark first, then a controlled experiment (same task with and without the graph), then ongoing monitoring.
 
-5. **Refresh model**
-   - On-demand: `gh plate kg refresh` (manual)
-   - Periodic: autonomy procedure (nightly or configurable)
-   - Full rebuild (no incremental update in v1)
-   - GitHub remains source of record; brain is derived cache
+### Success criteria
+- [ ] A local full rebuild produces the coarse, deep PLATE graph from the sources above, including Issue→Issue depends-on/blocks, and excludes code, commits, and CI
+- [ ] CLI and MCP return a narrow cited subgraph for all seven v1 queries
+- [ ] `plate_what_next` and `plate_epic_status` use a fresh graph and fall back to the GitHub API when the graph is missing or stale
+- [ ] Refresh is on-demand and periodic, and each refresh is a full rebuild
+- [ ] A synthetic benchmark, then a controlled experiment, then a monitoring note, are published against the 30–50% process-query bar
+- [ ] No SaaS, webhook, browser UI, or embedding work lands in this Epic
 
 ### Explicitly out of scope (non-goals)
-- Code-level graph (functions, classes, imports) — defer unless use case emerges
-- Real-time webhook-driven refresh — requires server; local-first first
-- Incremental graph updates — premature optimization
-- SaaS hosting / multi-repo search / team sharing — separate Epic after local proof
-- Natural language query translation — future enhancement
-- Browser UI / visual graph explorer — defer
-- Replacing GitHub as source of record — brain is always a derived cache
+- Code, commit, and CI nodes, and file/function edges
+- Code-call, CI-log, and provenance queries
+- Incremental updates and refresh-on-every-query
+- Real-time webhook refresh
+- Natural-language query translation
+- Embeddings / semantic search
+- Replacing GitHub as the source of record
+- SaaS, including every item in Vision / later
+
+### Vision / later (not this Epic)
+Q16 keeps a hosted product out of #1010. If a later Epic pursues it, the value proposition Andrew named is:
+
+- Multi-repo search
+- Team sharing
+- Webhooks for real-time refresh
+- Advanced analytics
+- Browser UI / visual graph explorer
+
+Embeddings are not part of that later list.
 
 ---
 
 ## Candidate Child Issues (Ordered)
 
-Based on answers, the Epic would decompose into ~7-9 child issues:
+Nine stubs, created and linked as sub-issues of #1010. The optional SaaS research spike is dropped (Q16). Each child should carry `status:stub` and `need:refinement` until its own refinement. Milestone for every child: **Knowledge graph brain**.
 
-1. **Research: PLATE Process Ontology for KG** (#1010.1)
-   - Define node types (Epic, Feature, PR, fragment, etc.) + properties
-   - Define edge types (belongs-to, closes, documents, etc.)
-   - Survey existing property graph / RDF ontologies for inspiration
+The integration token created these issues and linked them, and could not add labels or the milestone. Apply the labels below if they are missing.
+
+1. **#1039 — Research: PLATE process ontology for the knowledge graph**
+   - Coarse node types, deep PLATE properties, and the edge set including Issue→Issue depends-on/blocks. Excludes code edges.
    - Output: `docs/plate/research/kg-ontology.md`
-   - Labels: `Research`, `area:backend`, `area:agent`, `risk:low`
+   - Labels: `Research`, `area:backend`, `area:agent`, `risk:low`, `status:stub`, `need:refinement`
 
-2. **Research: Token Savings Baseline & Measurement Strategy** (#1010.2)
-   - Design synthetic benchmark (20 standard queries)
-   - Measure naive full-context prompt token cost per query
-   - Design controlled experiment protocol (same task, with/without brain)
-   - Define success bar (30-50% savings for process queries)
+2. **#1040 — Research: Token savings baseline and measurement strategy**
+   - Synthetic benchmark first, then controlled-experiment protocol, then the ongoing monitoring signal. Success bar 30–50% on process-heavy queries. The seven v1 queries are the benchmark core.
    - Output: `docs/plate/research/kg-token-savings-baseline.md`
-   - Labels: `Research`, `area:product`, `area:agent`, `risk:low`
+   - Labels: `Research`, `area:product`, `area:agent`, `risk:low`, `status:stub`, `need:refinement`
 
-3. **Design: KG Build Pipeline & Storage Model** (#1010.3)
-   - Specify build sources (GitHub Issues/PRs + fragments + process docs + wiki)
-   - Design full-rebuild algorithm (fetch → parse → graph construction)
-   - Design storage format (`.agentic/kg/graph.json` schema)
-   - Specify refresh triggers (on-demand CLI + periodic procedure)
+3. **#1041 — Design: Knowledge graph build pipeline and storage model**
+   - Local full rebuild from the agreed sources, `.agentic/kg/` schema, staleness timestamp, on-demand plus periodic triggers. No webhooks.
    - Output: `docs/plate/design/kg-build-pipeline.md`
-   - Labels: `Design`, `area:backend`, `risk:low`
+   - Labels: `Design`, `area:backend`, `risk:low`, `status:stub`, `need:refinement`
 
-4. **Design: Query API & Result Format** (#1010.4)
-   - Specify MCP tools (`plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse`)
-   - Specify CLI commands (`gh plate kg refresh`, `gh plate kg query`, etc.)
-   - Design narrow cited JSON result format (optimize for prompt insertion)
-   - Define staleness detection and fallback logic
+4. **#1042 — Design: Knowledge graph query API and result format**
+   - CLI and MCP operations, narrow cited JSON, a traversal for each of the seven queries, GitHub API fallback when stale.
    - Output: `docs/plate/design/kg-query-api.md`
-   - Labels: `Design`, `area:backend`, `area:agent`, `risk:low`
+   - Labels: `Design`, `area:backend`, `area:agent`, `risk:low`, `status:stub`, `need:refinement`
 
-5. **Feature: KG Build Implementation** (#1010.5)
-   - Implement from-scratch build: fetch GitHub data + parse + construct graph per ontology
-   - Implement storage to `.agentic/kg/graph.json` (or DB backend)
-   - Implement `gh plate kg refresh` CLI
-   - Add staleness metadata (last_refresh timestamp)
-   - Labels: `Feature`, `area:backend`, `risk:medium`
-   - Fragment: describe new KG capability + build command
+5. **#1043 — Feature: Knowledge graph build and refresh**
+   - `gh plate kg refresh` writes the local graph, including depends-on/blocks, and does not ingest code, commits, or CI.
+   - Labels: `Feature`, `area:backend`, `risk:medium`, `status:stub`, `need:refinement`
 
-6. **Feature: KG Query Implementation (MCP + CLI)** (#1010.6)
-   - Implement `plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse` MCP tools
-   - Implement `gh plate kg query`, `gh plate kg get` CLI
-   - Return narrow cited JSON per design
-   - Handle staleness: fallback to GitHub API with logging
-   - Labels: `Feature`, `area:backend`, `area:agent`, `risk:medium`
-   - Fragment: describe MCP query surface
+6. **#1044 — Feature: Knowledge graph query CLI and MCP**
+   - `gh plate kg query` / `gh plate kg get` and `plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse`. Narrow cited results. Fallback to the GitHub API.
+   - Labels: `Feature`, `area:backend`, `area:agent`, `risk:medium`, `status:stub`, `need:refinement`
 
-7. **Feature: Integration with plate_what_next & plate_epic_status** (#1010.7)
-   - Augment `plate_what_next` to optionally query brain for open PRs, ready issues, Epic state
-   - Augment `plate_epic_status` to query brain for child Features, blockers
-   - Fallback to GitHub API if brain unavailable/stale
-   - Labels: `Feature`, `area:agent`, `area:product`, `risk:medium`
+7. **#1045 — Feature: Augment what-next and epic status with the knowledge graph**
+   - Optional graph reads on `plate_what_next` and `plate_epic_status`, with the same GitHub API fallback.
+   - Labels: `Feature`, `area:agent`, `area:product`, `risk:medium`, `status:stub`, `need:refinement`
 
-8. **Feature: Periodic Refresh Autonomy Procedure** (#1010.8)
-   - Create `.agentic/procedures/kg-refresh-nightly.json` (or similar)
-   - Schedule: nightly (or configurable)
-   - Risk level: low (read-only refresh)
-   - Action: run `gh plate kg refresh`
-   - Labels: `Feature`, `area:infra`, `risk:low`
+8. **#1046 — Feature: Periodic knowledge graph refresh procedure**
+   - `.agentic/procedures/` entry that runs the same full rebuild. Not a webhook listener.
+   - Labels: `Feature`, `area:infra`, `risk:low`, `status:stub`, `need:refinement`
 
-9. **Research: Token Savings Verification & Benchmark Report** (#1010.9)
-   - Run synthetic benchmark: 20 queries with brain vs naive context
-   - Measure token savings per query
-   - Run controlled experiment (optional): same task with/without brain
-   - Output: `docs/plate/research/kg-token-savings-report.md` with results
-   - Success bar: 30-50% savings for process-heavy queries
-   - Labels: `Research`, `area:product`, `risk:low`
-
-**Optional (if SaaS spike is in-scope):**
-10. **Research: SaaS KG Hosting Architecture (Optional Spike)** (#1010.10)
-    - Sketch multi-repo search, team sharing, webhooks, analytics
-    - Estimate complexity, hosting cost, auth requirements
-    - Propose SaaS value proposition and pricing model
-    - Output: `docs/plate/research/kg-saas-architecture.md`
-    - Labels: `Research`, `area:product`, `area:backend`, `risk:low`
-    - Note: Implementation deferred to separate Epic
+9. **#1047 — Research: Token savings verification and benchmark report**
+   - Run synthetic first, then the controlled experiment, and describe monitoring. Report against the 30–50% bar.
+   - Output: `docs/plate/research/kg-token-savings-report.md`
+   - Labels: `Research`, `area:product`, `risk:low`, `status:stub`, `need:refinement`
 
 ---
 
-## Next Steps (for Andrew)
+## Recording status
 
-1. **Answer these 16 questions** (15-20 minutes) — recommended defaults are marked.
-2. **Review proposed scope** — adjust in-scope / out-of-scope boundaries, especially SaaS deferral.
-3. **Review candidate child issues** — reorder, merge, split, or add as needed.
-4. **Approve or refine** — agent will then:
-   - Update Epic #1010 body with concrete scope, non-goals, success criteria
-   - Create the 7-10 child issues as stubs (labeled, linked to milestone, `need:refinement` removed)
-   - Close Question #1011 via Documentation PR with this pack + Epic updates
-   - Mark #1010 as `status:ready-to-work` (no longer a stub)
-
-**Estimated total effort to ship:** 6-8 weeks of agent time (3 Research + 2 Design + 4 Features), assuming no blocking dependencies. No calendar time estimate per PLATE doctrine.
+- Answers above are Andrew's, from the 2026-10-03 reply (pack-QN format). This pack has 16 questions; Q8 in the #1009 pack is unrelated.
+- Child issues #1039–#1047 exist and are sub-issues of #1010. No SaaS spike issue was opened.
+- Epic #1010 keeps `status:stub` and `need:refinement`. The scope is now concrete, and the children are still stubs. Process docs clear those labels at `mark_ready`, not when the parent Q&A is answered.
+- Question #1011 stays open until PR #1026 merges. The token that opened the children cannot comment on #1011 or edit #1010; the comment and the replacement Epic body are in the PR description.
 
 ---
 
