@@ -1195,5 +1195,122 @@ jobs:
             shutil.rmtree(repo.parent)
 
 
+    def test_protected_file_scanner_ignores_hyphenated_siblings(self):
+        """Regression: stale ref scanner should NOT flag docs/wiki-system when wiki is moved."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            wiki_dir = docs_dir / "wiki"
+            wiki_dir.mkdir(parents=True)
+            (wiki_dir / "Home.md").write_text("# Wiki\n", encoding="utf-8")
+            
+            # Create AGENTS.md referencing a hyphenated sibling (not the moved dir)
+            agents_md = repo / "AGENTS.md"
+            agents_md.write_text(
+                "# Agents\n\n"
+                "See docs/wiki-system for the system wiki.\n"
+                "Not to be confused with docs/wiki for PLATE docs.\n",
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add wiki and AGENTS.md"], cwd=repo, check=True)
+            
+            # Plan migration
+            plan = plan_migration(repo)
+            self.assertTrue(plan.ok, f"Planning should succeed, got errors: {plan.errors}")
+            
+            # Check that AGENTS.md is NOT flagged for docs/wiki-system
+            followups = [a for a in plan.actions if a.action_type == "manual_followup"]
+            agents_followups = [a for a in followups if "AGENTS.md" in a.source]
+            
+            for followup in agents_followups:
+                self.assertNotIn("wiki-system", followup.reason,
+                                f"Should NOT flag docs/wiki-system: {followup.reason}")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+    def test_protected_file_scanner_detects_old_ref_with_new_on_same_line(self):
+        """Regression: scanner should detect old refs even when new ref is on same line."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            wiki_dir = docs_dir / "wiki"
+            wiki_dir.mkdir(parents=True)
+            (wiki_dir / "Home.md").write_text("# Wiki\n", encoding="utf-8")
+            
+            # Create AGENTS.md with both old and new references on the same line
+            agents_md = repo / "AGENTS.md"
+            agents_md.write_text(
+                "# Agents\n\n"
+                "Migrating docs/wiki to docs/plate/wiki is required.\n",
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add wiki and AGENTS.md"], cwd=repo, check=True)
+            
+            # Plan migration
+            plan = plan_migration(repo)
+            self.assertTrue(plan.ok, f"Planning should succeed, got errors: {plan.errors}")
+            
+            # Check that AGENTS.md IS flagged for the old docs/wiki reference
+            followups = [a for a in plan.actions if a.action_type == "manual_followup"]
+            agents_followups = [a for a in followups if "AGENTS.md" in a.source]
+            self.assertTrue(len(agents_followups) > 0,
+                           "Should flag AGENTS.md even though both old and new paths are present")
+            
+            reasons = " ".join(a.reason for a in agents_followups)
+            self.assertIn("docs/wiki", reasons, "Should detect old docs/wiki reference")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+    def test_root_file_rewriting_ignores_file_extensions(self):
+        """Regression: root file rewriting should NOT match docs/README.md.bak or docs/READMEXmd."""
+        repo = create_temp_repo()
+        try:
+            docs_dir = repo / "docs"
+            readme_src = docs_dir / "README.md"
+            readme_src.parent.mkdir(parents=True, exist_ok=True)
+            readme_src.write_text(
+                "# Documentation Index\n\n"
+                "See [playwright-e2e-guide.md](./playwright-e2e-guide.md).\n",
+                encoding="utf-8"
+            )
+            
+            # Create CONTRIBUTING.md with references (this file IS in REFERENCE_FILES)
+            test_file = repo / "CONTRIBUTING.md"
+            test_file.write_text(
+                "# Contributing\n\n"
+                "Copy docs/README.md to docs/README.md.bak for backup.\n"
+                "Do not process docs/READMEXmd (different file).\n"
+                "Link to docs/README.md for index.\n",  # This SHOULD be rewritten
+                encoding="utf-8"
+            )
+            
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "Add README and CONTRIBUTING"], cwd=repo, check=True)
+            
+            # Apply migration
+            result = apply_migration(repo)
+            self.assertTrue(result.ok, f"Migration should succeed, got errors: {result.errors}")
+            
+            # Check that only the exact match was rewritten
+            updated_content = test_file.read_text(encoding="utf-8")
+            self.assertIn("docs/README.md.bak", updated_content,
+                         "Should NOT rewrite docs/README.md.bak (has extension)")
+            self.assertIn("docs/READMEXmd", updated_content,
+                         "Should NOT rewrite docs/READMEXmd (no path separator)")
+            self.assertIn("docs/plate/README.md", updated_content,
+                         "SHOULD rewrite exact match docs/README.md")
+            self.assertNotIn("Link to docs/README.md for", updated_content,
+                            "Should have replaced exact match")
+        finally:
+            import shutil
+            shutil.rmtree(repo.parent)
+
+
 if __name__ == '__main__':
     unittest.main()

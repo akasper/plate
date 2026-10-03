@@ -191,10 +191,14 @@ def _update_references_in_file(
         # - `docs/playwright-e2e-guide.md`
         # - docs/playwright-e2e-guide.md) (markdown link)
         # - ../docs/playwright-e2e-guide.md (relative from subdirs)
+        # Escape the filename and add terminal boundary to avoid matching
+        # docs/README.md.bak or docs/READMEXmd
+        # Use (?![\w/.-]) to prevent matching extensions like .bak
+        escaped_file = re.escape(root_file)
         patterns = [
-            (rf"docs/{root_file}", rf"docs/plate/{root_file}"),
-            (rf"`docs/{root_file}", rf"`docs/plate/{root_file}"),
-            (rf"\.\./docs/{root_file}", rf"../docs/plate/{root_file}"),
+            (rf"docs/{escaped_file}(?![\w/.-])", rf"docs/plate/{root_file}"),
+            (rf"`docs/{escaped_file}(?![\w/.-])", rf"`docs/plate/{root_file}"),
+            (rf"\.\./docs/{escaped_file}(?![\w/.-])", rf"../docs/plate/{root_file}"),
         ]
         for old_pattern, new_pattern in patterns:
             new_content, n = re.subn(old_pattern, new_pattern, content)
@@ -252,21 +256,30 @@ def _find_stale_references_in_file(
         
         # Check for directory references
         for dir_name in dirs_moved:
-            # Look for references like docs/design/ (with trailing slash)
-            old_pattern_slash = f"docs/{dir_name}/"
-            new_pattern_slash = f"docs/plate/{dir_name}/"
-            if old_pattern_slash in line and new_pattern_slash not in line:
-                stale_refs.append((i, old_pattern_slash, new_pattern_slash))
+            # Use terminal-boundary regex to avoid false matches like docs/wiki-system
+            # Match docs/design/ (with slash) or docs/design (at path terminator)
+            # Pattern matches either:
+            # - docs/design followed by / (for docs/design/)
+            # - docs/design NOT followed by word char, ., or - (for bare docs/design)
+            # This prevents matching docs/design-system or docs/design.md
+            pattern = rf"\bdocs/{re.escape(dir_name)}(?:/|(?![\w.-]))"
+            replacement_base = f"docs/plate/{dir_name}"
             
-            # Also check docs/design (without trailing slash, e.g. in `[ -d docs/wiki ]`)
-            # Use word boundaries to avoid false matches like docs/wiki-system
-            old_pattern_bare = f"docs/{dir_name}"
-            new_pattern_bare = f"docs/plate/{dir_name}"
-            # Simple check: if the bare pattern exists but not already namespaced
-            if old_pattern_bare in line and new_pattern_bare not in line:
-                # Avoid duplicate if we already caught the slash version
-                if (i, old_pattern_slash, new_pattern_slash) not in stale_refs:
-                    stale_refs.append((i, old_pattern_bare, new_pattern_bare))
+            # Find all matches in the line
+            for match in re.finditer(pattern, line):
+                matched_text = match.group(0)
+                # Determine the replacement (add slash if original had it)
+                if matched_text.endswith("/"):
+                    old_ref = matched_text
+                    new_ref = replacement_base + "/"
+                else:
+                    old_ref = matched_text
+                    new_ref = replacement_base
+                
+                # Report each old reference found (don't suppress if new also exists)
+                # Only add if not already in the list for this line
+                if (i, old_ref, new_ref) not in stale_refs:
+                    stale_refs.append((i, old_ref, new_ref))
     
     return stale_refs
 
