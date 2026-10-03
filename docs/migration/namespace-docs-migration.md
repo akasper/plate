@@ -113,7 +113,11 @@ mkdir -p docs/plate
 
 # 2. Move PLATE scaffolding directories
 for dir in adr audits bootstrap design marketing migration research wiki; do
-  if [ -d "docs/$dir" ] && [ ! -d "docs/plate/$dir" ]; then
+  if [ -d "docs/$dir" ]; then
+    if [ -d "docs/plate/$dir" ]; then
+      echo "ERROR: Both docs/$dir and docs/plate/$dir exist. Reconcile manually before migrating."
+      exit 1
+    fi
     git mv "docs/$dir" "docs/plate/$dir"
   fi
 done

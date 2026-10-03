@@ -246,13 +246,20 @@ def _find_stale_references_in_file(
     
     stale_refs = []
     for i, line in enumerate(lines, start=1):
-        # Check for root file references
+        # Check for root file references using boundary-aware regex
         for root_file in root_files_moved:
-            # Look for references like docs/playwright-e2e-guide.md
-            old_pattern = f"docs/{root_file}"
-            new_pattern = f"docs/plate/{root_file}"
-            if old_pattern in line and new_pattern not in line:
-                stale_refs.append((i, old_pattern, new_pattern))
+            # Use terminal-boundary regex to avoid false matches like docs/README.md.bak
+            # Pattern matches docs/README.md but NOT docs/README.md.bak or docs/READMEXmd
+            pattern = rf"\bdocs/{re.escape(root_file)}(?![\w/.-])"
+            
+            # Find all matches in the line
+            for match in re.finditer(pattern, line):
+                old_ref = match.group(0)
+                new_ref = f"docs/plate/{root_file}"
+                
+                # Report each old reference found (don't suppress if new also exists)
+                if (i, old_ref, new_ref) not in stale_refs:
+                    stale_refs.append((i, old_ref, new_ref))
         
         # Check for directory references
         for dir_name in dirs_moved:
