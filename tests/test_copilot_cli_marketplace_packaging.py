@@ -95,7 +95,7 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         # Prefer pinned install after v0.8.0 (#998); unpinned form also acceptable.
         self.assertIn("pip install", readme)
         self.assertTrue(
-            "plate-core==0.8.2" in readme or "pip install plate-core" in readme,
+            "plate-core==0.8.3" in readme or "pip install plate-core" in readme,
             msg="README must document plate-core pip install (pinned or unpinned)",
         )
         self.assertIn("There is no separate GitHub-run submission process for Copilot CLI or Grok Build marketplaces", readme)
@@ -115,7 +115,7 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         self.assertIn("source: \"plugin\"", checklist)
         self.assertIn("pip install", checklist)
         self.assertTrue(
-            "plate-core==0.8.2" in checklist or "pip install plate-core" in checklist,
+            "plate-core==0.8.3" in checklist or "pip install plate-core" in checklist,
             msg="checklist must document plate-core pip install (pinned or unpinned)",
         )
         self.assertIn("do not agent-complete", checklist)
