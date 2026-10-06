@@ -14,13 +14,13 @@ issues must close via a PR that commits the required artifact and includes
 from __future__ import annotations
 
 import re
-import subprocess
 from datetime import datetime, timezone
 from typing import Any
 
 from .curiosity.answers import parse_plate_answer_blocks
 from .github_client import GhClient, GhApiError
 from .health import resolve_repo
+from .procutil import run_hidden
 
 _CHECKLIST_ITEM_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\[(?: |x|X)\]\s+(.*\S)\s*$")
 _ANSWER_SIGNAL_SECTION_RE = re.compile(
@@ -524,7 +524,7 @@ def apply_mutation_pr_plan(
 def _git_head_sha() -> str:
     """Best-effort HEAD SHA for contemplation provenance (#923)."""
     try:
-        proc = subprocess.run(
+        proc = run_hidden(
             ["git", "rev-parse", "HEAD"],
             capture_output=True,
             text=True,

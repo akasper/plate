@@ -2,6 +2,22 @@
 
 **Context:** Feature #1015 introduces automatic namespacing of PLATE documentation under `docs/plate/` when importing into repositories that have product documentation. This guide helps existing PLATE adopters migrate their installations.
 
+## Prerequisites
+
+Before migrating, ensure you have:
+
+- **plate-core v0.8.3 or later** for the `migrate-docs-namespace` command, OR
+- **Manual migration capability** (git, basic shell commands)
+- **The `gh plate` CLI extension installed** (for the migration command)
+  ```bash
+  # Install the gh plate extension if needed
+  gh extension install akasper/gh-plate
+  
+  # Or use the Python API directly
+  pip install --upgrade plate-core
+  python -m plate_core.cli migrate-docs-namespace [--apply]
+  ```
+
 ## Who needs to migrate?
 
 **You need to migrate if:**
@@ -13,6 +29,18 @@
 - Your repository has no `docs/` directory yet
 - You have no product docs under `docs/` (only PLATE scaffolding)
 - PLATE docs are already under `docs/plate/` (from a prior manual namespace)
+
+## Decision tree
+
+```
+Do you have PLATE docs at docs/ root (design/, wiki/, etc.)?
+├─ No → Skip migration, you're done
+└─ Yes → Do you have product docs under docs/ too?
+    ├─ No → You can keep PLATE at docs/ root (no namespace needed)
+    └─ Yes → Migrate PLATE docs to docs/plate/
+        ├─ Have plate-core v0.8.3+? → Use `gh plate migrate-docs-namespace`
+        └─ Older version? → Use manual migration (Option B below)
+```
 
 ## Migration checklist
 
@@ -45,31 +73,39 @@ git checkout main  # or your working branch
 
 ### 3. Choose your migration path
 
-**Option A: Automatic re-import (recommended for clean installs)**
+**⚠️ IMPORTANT: The automatic re-import path is NOT SAFE for migration.**
 
-Use when:
-- You haven't customized PLATE scaffolding docs
-- You're okay with PLATE overwriting existing PLATE files
-- Product docs are clearly separate
+`gh plate import-payload --namespace-docs` creates NEW files under `docs/plate/` but **does NOT move or remove** existing files from `docs/`. This leaves duplicates and does not preserve your customizations. The `--strategy force` flag will **overwrite your customized AGENTS.md** with the generic template.
+
+**For safe migration, use the purpose-built migration command or manual migration.**
+
+**Option A: Use the migration command (recommended, requires plate-core v0.8.3+)**
 
 ```bash
-# Pull latest PLATE with namespace support
-# Then re-import with explicit namespace flag
-gh plate import-payload --namespace-docs --strategy force --apply
+# Dry-run first to see what will be moved
+gh plate migrate-docs-namespace
+
+# Review the plan, then apply
+gh plate migrate-docs-namespace --apply
 
 # This will:
-# - Move docs/{adr,audits,bootstrap,design,marketing,migration,research,wiki}/ → docs/plate/
-# - Move docs/README.md, docs/playwright-e2e-guide.md → docs/plate/
-# - Rewrite references in AGENTS.md, workflows, issue templates
-# - Preserve your product docs at docs/ root
+# - Use git mv to move PLATE doc directories: adr/, audits/, bootstrap/, design/, 
+#   marketing/, migration/, research/, wiki/ → docs/plate/
+# - Move PLATE root doc files (README.md, playwright-e2e-guide.md if they match templates)
+# - Preserve AGENTS.md, SPEC.md, CURRENT.md and all product docs (never touched)
+# - Rewrite references in repository files
+# - Report any issues
+# - Be idempotent (safe to re-run)
 ```
 
-**Option B: Manual migration (required for customized content)**
+**Option B: Manual migration (requires review, works with any plate-core version)**
 
 Use when:
-- You've customized PLATE scaffolding (wiki pages, design docs, etc.)
+- You don't have the migration command yet (plate-core < v0.8.3)
 - You want full control over what moves where
-- You have mixed content that needs review
+- You have heavily customized content that needs review
+
+The commands below check for PLATE ownership markers before moving root files.
 
 ```bash
 # 1. Create the namespace directory
@@ -78,64 +114,108 @@ mkdir -p docs/plate
 # 2. Move PLATE scaffolding directories
 for dir in adr audits bootstrap design marketing migration research wiki; do
   if [ -d "docs/$dir" ]; then
+    if [ -d "docs/plate/$dir" ]; then
+      echo "ERROR: Both docs/$dir and docs/plate/$dir exist. Reconcile manually before migrating."
+      exit 1
+    fi
     git mv "docs/$dir" "docs/plate/$dir"
   fi
 done
 
-# 3. Move PLATE root files (if present and not customized)
-if [ -f "docs/README.md" ]; then
-  # Review content first - if it's product docs, keep it at root
+# 3. Move PLATE root files (only when PLATE-owned, not product docs)
+# README.md: check for PLATE template markers
+if [ -f "docs/README.md" ] && \
+   grep -q "# Documentation Index" docs/README.md && \
+   grep -q "playwright-e2e-guide.md" docs/README.md; then
   git mv "docs/README.md" "docs/plate/README.md"
+else
+  echo "Skipping docs/README.md (not PLATE template or product docs)"
 fi
 
-if [ -f "docs/playwright-e2e-guide.md" ]; then
+# playwright-e2e-guide.md: check for PLATE template title
+if [ -f "docs/playwright-e2e-guide.md" ] && \
+   grep -q "# Playwright E2E Testing & Demo GIF Generation Guide" docs/playwright-e2e-guide.md; then
   git mv "docs/playwright-e2e-guide.md" "docs/plate/playwright-e2e-guide.md"
+else
+  echo "Skipping docs/playwright-e2e-guide.md (not PLATE template or customized)"
 fi
 
 # 4. Your product docs stay at docs/ root (no move needed)
 # Examples: docs/api/, docs/tutorial/, docs/architecture/, etc.
 ```
 
-### 4. Rewrite references in repository files
+### 4. Fix relative links in moved root files
 
-After moving files, update references:
+If you moved `docs/README.md` to `docs/plate/README.md`, its relative links are now broken:
 
 ```bash
-# AGENTS.md is the primary file with docs/ references
-# Update paths manually or use sed (review output before committing):
+# Option: Manual sed rewrite (portable)
+if [ -f "docs/plate/README.md" ]; then
+  sed 's|(\.\./|(\.\./\.\./|g' docs/plate/README.md > docs/plate/README.md.tmp
+  mv docs/plate/README.md.tmp docs/plate/README.md
+  git add docs/plate/README.md
+fi
 
-# Example replacements:
-sed -i.bak 's|docs/design/|docs/plate/design/|g' AGENTS.md
-sed -i.bak 's|docs/research/|docs/plate/research/|g' AGENTS.md
-sed -i.bak 's|docs/wiki/|docs/plate/wiki/|g' AGENTS.md
-sed -i.bak 's|docs/audits/|docs/plate/audits/|g' AGENTS.md
-sed -i.bak 's|docs/migration/|docs/plate/migration/|g' AGENTS.md
-sed -i.bak 's|`docs/design/|`docs/plate/design/|g' AGENTS.md
-# ... repeat for other subdirs
-
-# Check for backtick-wrapped paths too
-grep -n '`docs/' AGENTS.md
-
-# Review changes
-git diff AGENTS.md
+# The file went one level deeper, so:
+# - ../AGENTS.md becomes ../../AGENTS.md
+# - ../tests/e2e/ becomes ../../tests/e2e/
+# - ./playwright-e2e-guide.md stays the same (same-directory links are fine)
 ```
 
+### 5. Rewrite references in repository files
+
+After moving files and directories, update references throughout the repository. **Note:** The `migrate-docs-namespace` command does this automatically. For manual migration:
+
+```bash
+# Portable reference rewriting (works on macOS and Linux)
+# Create a temporary rewrite script
+cat > /tmp/rewrite-refs.sh << 'EOF'
+#!/bin/sh
+# Rewrite directory references
+for dir in design research wiki audits migration bootstrap marketing adr; do
+  sed "s|docs/$dir/|docs/plate/$dir/|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+  sed "s|\`docs/$dir/|\`docs/plate/$dir/|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+done
+
+# Rewrite root file references (if you moved them)
+sed "s|docs/playwright-e2e-guide\.md|docs/plate/playwright-e2e-guide.md|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+sed "s|docs/README\.md|docs/plate/README.md|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+sed "s|\`docs/playwright-e2e-guide\.md|\`docs/plate/playwright-e2e-guide.md|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+sed "s|\.\./docs/playwright-e2e-guide\.md|../docs/plate/playwright-e2e-guide.md|g" "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+EOF
+chmod +x /tmp/rewrite-refs.sh
+
+# Apply to key files (but NOT AGENTS.md, SPEC.md, CURRENT.md - review those manually)
+/tmp/rewrite-refs.sh CONTRIBUTING.md
+/tmp/rewrite-refs.sh README.md
+# Add other files that reference docs
+
+# Review changes
+git diff
+```
+
+**Important:** Do NOT automatically rewrite `AGENTS.md`, `SPEC.md`, or `CURRENT.md`. Review those files manually for stale references, as they may contain critical product or process documentation that needs careful handling.
+
 **Files to check for doc references:**
-- `AGENTS.md` (main source of docs/ refs)
-- `SPEC.md`
+- `AGENTS.md` (review manually - do not auto-rewrite)
+- `SPEC.md` (review manually - do not auto-rewrite)
+- `CURRENT.md` (review manually - do not auto-rewrite)
 - `CONTRIBUTING.md`
+- `README.md`
 - `.github/workflows/*.yml` (especially sync-wiki-on-merge.yml)
 - `.github/ISSUE_TEMPLATE/*.yml`
 - `.github/copilot-instructions.md`
 - `.github/agents/*.agent.md`
 - `.agentic/skills.yml`
 - `scripts/README.md` or other script docs
+- `scripts/bootstrap_github.sh` and `scripts/BootstrapGitHub.ps1` (may reference docs/wiki/Home.md)
+- `.agentic/migration.yml` (may reference docs/migration/)
 - Any custom markdown in `.agentic/`
 
 Search command to find all references:
 ```bash
 # Find all doc refs across the repo (excluding .git)
-rg 'docs/(design|wiki|research|audits|migration|bootstrap|marketing|adr)/' \
+rg 'docs/(design|wiki|research|audits|migration|bootstrap|marketing|adr|playwright-e2e-guide|README)' \
   --type md --type yaml --type yml --type sh --type ps1 \
   | grep -v '^Binary'
 ```
@@ -168,19 +248,29 @@ ls -la docs/
 # Should see your product dirs: api/, tutorial/, etc.
 # Plus the new plate/ subdir
 
-# 3. Verify no broken links
-# If you have a link checker:
-# npm run check-links
-# Or manually check key docs:
-cat AGENTS.md | grep 'docs/' | head -20
+# 3. Verify no duplicates (old PLATE dirs should be gone from docs/ root)
+for dir in adr audits bootstrap design marketing migration research wiki; do
+  if [ -d "docs/$dir" ]; then
+    echo "WARNING: docs/$dir still exists (should have moved to docs/plate/$dir)"
+  fi
+done
 
-# 4. Test workflows
+# 4. Verify no broken links
+grep -r 'docs/\(design\|wiki\|research\|audits\|migration\|bootstrap\|marketing\|adr\)/' \
+  AGENTS.md SPEC.md .github/ .agentic/ 2>/dev/null | grep -v 'docs/plate/' || echo "All refs updated"
+
+# 5. Verify AGENTS.md was not overwritten (check git log)
+git log -1 --stat AGENTS.md
+# Should only show reference updates, not a complete rewrite
+
+# 6. Test workflows
 git add -A
 git commit -m "Migrate PLATE docs to docs/plate/ namespace"
 # Push to a test branch and verify CI passes
 
-# 5. Run PLATE health check (if available)
+# 7. Run PLATE health check (plate-core v0.8.3+)
 gh plate health
+# Or: python -m plate_core.cli health
 ```
 
 ### 7. Update open pull requests
@@ -202,6 +292,13 @@ git merge main  # brings in the migration
 git push
 ```
 
+## Important notes
+
+- **Only `docs/` paths are affected.** This migration does not touch CI, workflows (beyond reference updates), or any code.
+- **AGENTS.md, SPEC.md, and CURRENT.md are never moved or overwritten** by the migration command. Stale references in these protected files are reported as manual follow-ups, not auto-rewritten.
+- **Product documentation stays at `docs/` root.** Only PLATE scaffolding moves to `docs/plate/`.
+- **The migration is idempotent.** Running it multiple times is safe.
+
 ## Edge cases and special situations
 
 ### Mixed product + PLATE docs trees
@@ -212,6 +309,7 @@ git push
 - Move only PLATE subdirs (adr, audits, bootstrap, design, marketing, migration, research, wiki) to `docs/plate/`
 - Keep product subdirs (`api/`, `tutorial/`, etc.) at `docs/` root
 - After migration: `docs/api/` and `docs/plate/design/` coexist peacefully
+- The migration command handles this automatically
 
 ### Customized wiki pages
 
@@ -274,17 +372,16 @@ Example workflow change:
 
 **Solution:**
 ```bash
-# With product docs present, auto-detect will namespace:
-gh plate import-payload --strategy safe --apply
-
-# Or explicitly:
+# With product docs present and docs already migrated to docs/plate/:
 gh plate import-payload --namespace-docs --strategy safe --apply
 
 # This will:
-# - Detect your product docs
 # - Install new/updated PLATE files under docs/plate/
 # - Skip files that already exist (safe strategy)
+# - NOT move your existing files (use migrate-docs-namespace for that)
 ```
+
+**Warning:** `import-payload` does NOT migrate existing files. It only creates new ones. Use `migrate-docs-namespace` to move existing PLATE docs from `docs/` to `docs/plate/`.
 
 ## Rollback procedure
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
+from ..procutil import run_hidden
 from ..template_payload import resolve_template_source_root
 
 
@@ -166,7 +166,7 @@ class RecordE2eGifTool:
 
             # Call the recording script
             if is_windows:
-                result = subprocess.run(
+                result = run_hidden(
                     ["powershell", "-File", str(script_path), test_name, quality],
                     cwd=str(repo),
                     capture_output=True,
@@ -174,7 +174,7 @@ class RecordE2eGifTool:
                     timeout=_E2E_RECORDING_TIMEOUT,
                 )
             else:
-                result = subprocess.run(
+                result = run_hidden(
                     ["bash", str(script_path), test_name, quality],
                     cwd=str(repo),
                     capture_output=True,
