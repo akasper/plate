@@ -612,10 +612,12 @@ class PrBabysitTests(unittest.TestCase):
         post_calls = [c for c in fake.calls if c[1] == "POST" and "/comments" in c[0] and "graphql" not in c[0]]
         self.assertEqual(len(post_calls), 0)
 
-    @patch("plate_core.pr_babysit.subprocess")
+    @patch("plate_core.pr_babysit.check_output_hidden")
+    @patch("plate_core.pr_babysit.check_call_hidden")
+    @patch("plate_core.pr_babysit.run_hidden")
     @patch("plate_core.pr_babysit.tempfile.mkdtemp")
     @patch("plate_core.pr_babysit.shutil.rmtree")
-    def test_babysit_pr_local_rebase_success(self, mock_rmtree, mock_mkdtemp, mock_subprocess):
+    def test_babysit_pr_local_rebase_success(self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output):
         """Test local-rebase strategy performs rebase and push when out of sync."""
         repo = "akasper/plate"
         pr = 112
@@ -643,8 +645,9 @@ class PrBabysitTests(unittest.TestCase):
 
         # mock worktree and git calls for success path
         mock_mkdtemp.return_value = "/tmp/fake-worktree"
-        mock_subprocess.check_call.return_value = None  # fetch, worktree add, push
-        mock_subprocess.run.return_value = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        mock_check_output.return_value = "/tmp/repo\n"
+        mock_check_call.return_value = 0
+        mock_run.return_value = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
         report = babysit_pr(
             repo=repo, pr_number=pr, act=True, branch_update_strategy="local-rebase", client=fake
@@ -658,10 +661,12 @@ class PrBabysitTests(unittest.TestCase):
         # no copilot trigger for local-rebase
         self.assertFalse(report.merge_trigger_posted)
 
-    @patch("plate_core.pr_babysit.subprocess")
+    @patch("plate_core.pr_babysit.check_output_hidden")
+    @patch("plate_core.pr_babysit.check_call_hidden")
+    @patch("plate_core.pr_babysit.run_hidden")
     @patch("plate_core.pr_babysit.tempfile.mkdtemp")
     @patch("plate_core.pr_babysit.shutil.rmtree")
-    def test_babysit_pr_local_rebase_conflict(self, mock_rmtree, mock_mkdtemp, mock_subprocess):
+    def test_babysit_pr_local_rebase_conflict(self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output):
         """Test local-rebase reports conflict without crashing."""
         repo = "akasper/plate"
         pr = 112
@@ -688,9 +693,10 @@ class PrBabysitTests(unittest.TestCase):
         )
 
         mock_mkdtemp.return_value = "/tmp/fake-worktree"
-        # first run for rebase fails (conflict)
-        mock_subprocess.run.return_value = type("R", (), {"returncode": 1, "stdout": "conflict!", "stderr": ""})()
-        mock_subprocess.check_call.side_effect = [None, None]  # fetch, worktree add; rebase aborts inside
+        mock_check_output.return_value = "/tmp/repo\n"
+        mock_check_call.return_value = 0
+        # rebase fails (conflict); abort and worktree remove use the same helper
+        mock_run.return_value = type("R", (), {"returncode": 1, "stdout": "conflict!", "stderr": ""})()
 
         report = babysit_pr(
             repo=repo, pr_number=pr, act=True, branch_update_strategy="local-rebase", client=fake

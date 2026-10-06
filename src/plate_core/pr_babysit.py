@@ -27,16 +27,22 @@ See quiet_operations guidance (including new CI Diagnosis First and Full PR Gree
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
+import time
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .github_client import GhClient
 from .health import resolve_repo
+from .procutil import check_call_hidden, check_output_hidden, run_hidden
 
 
 # Known bot / automated reviewer logins and patterns (#496 expands beyond early third-party list).
@@ -638,7 +644,7 @@ def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = N
     if repo_dir is None:
         # detect from cwd
         try:
-            repo_dir = subprocess.check_output(
+            repo_dir = check_output_hidden(
                 ["git", "rev-parse", "--show-toplevel"], text=True, cwd="."
             ).strip()
         except Exception as e:
@@ -654,23 +660,23 @@ def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = N
             # still proceed for rebase (which creates its own worktree) but surface warning
             pass
         # fresh fetch
-        subprocess.check_call(["git", "-C", repo_dir, "fetch", "origin", base_ref, head_ref], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        check_call_hidden(["git", "-C", repo_dir, "fetch", "origin", base_ref, head_ref], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         worktree_path = tempfile.mkdtemp(prefix="plate-babysit-rebase-")
         # add worktree at the head_ref tip
-        subprocess.check_call(
+        check_call_hidden(
             ["git", "-C", repo_dir, "worktree", "add", "--detach", worktree_path, f"origin/{head_ref}"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
 
         # rebase in the worktree
-        rebase_res = subprocess.run(
+        rebase_res = run_hidden(
             ["git", "-C", worktree_path, "rebase", f"origin/{base_ref}"],
             capture_output=True, text=True
         )
         if rebase_res.returncode != 0:
             # abort to clean
-            subprocess.run(["git", "-C", worktree_path, "rebase", "--abort"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            run_hidden(["git", "-C", worktree_path, "rebase", "--abort"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return {
                 "success": False,
                 "conflict": True,
@@ -679,7 +685,7 @@ def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = N
             }
 
         # push back (force-with-lease for safety)
-        push_res = subprocess.run(
+        push_res = run_hidden(
             ["git", "-C", worktree_path, "push", "origin", f"HEAD:{head_ref}", "--force-with-lease"],
             capture_output=True, text=True
         )
@@ -698,7 +704,7 @@ def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = N
     finally:
         if worktree_path:
             try:
-                subprocess.run(
+                run_hidden(
                     ["git", "-C", repo_dir, "worktree", "remove", "--force", worktree_path],
                     check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
@@ -718,7 +724,7 @@ def cleanup_git_locks(repo_dir: str | None = None) -> dict:
     """
     if repo_dir is None:
         try:
-            repo_dir = subprocess.check_output(
+            repo_dir = check_output_hidden(
                 ["git", "rev-parse", "--show-toplevel"], text=True, cwd="."
             ).strip()
         except Exception as e:
@@ -747,7 +753,7 @@ def verify_worktree_is_isolated() -> dict:
     Use in guidance/persona: always run `git rev-parse --show-toplevel` (or this helper) before edits/rebase in worktree; abort if not isolated.
     """
     try:
-        toplevel = subprocess.check_output(
+        toplevel = check_output_hidden(
             ["git", "rev-parse", "--show-toplevel"], text=True, cwd="."
         ).strip()
         is_isolated = (
@@ -760,6 +766,210 @@ def verify_worktree_is_isolated() -> dict:
         return {"is_isolated": is_isolated, "toplevel": toplevel, "warning": warning}
     except Exception as e:
         return {"is_isolated": False, "toplevel": "", "warning": f"git rev-parse --show-toplevel failed: {e}"}
+
+
+# Windows Job Objects do not follow a host that launches ``--watch`` detached.
+# The pidfile is how a later ``gh plate pr babysit --stop`` finds that process.
+# ``.plate`` is the JSON config file, so watch pids live under ``.agentic/babysit/``.
+_WATCH_PID_PREFIX = "babysit-"
+_WATCH_PID_DIR = Path(".agentic") / "babysit"
+_STILL_ACTIVE = 259
+_ERROR_ACCESS_DENIED = 5
+
+
+def babysit_watch_pid_path(repo: str, pr_number: int, *, root: Path | None = None) -> Path:
+    """Path of the pidfile for one PR watch loop."""
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", repo).strip("-") or "repo"
+    base = Path(root) if root is not None else Path.cwd()
+    return base / _WATCH_PID_DIR / f"{_WATCH_PID_PREFIX}{slug}-{int(pr_number)}.pid"
+
+
+def pid_is_alive(pid: int) -> bool:
+    """True when ``pid`` still names a running process.
+
+    Access denied counts as alive so a watch loop does not exit just because
+    it cannot query its parent. A missing process counts as dead.
+    """
+    try:
+        pid_i = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid_i <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        kernel = ctypes.windll.kernel32
+        handle = kernel.OpenProcess(0x1000, False, pid_i)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return kernel.GetLastError() == _ERROR_ACCESS_DENIED
+        try:
+            code = wintypes.DWORD()
+            if not kernel.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return True
+            return int(code.value) == _STILL_ACTIVE
+        finally:
+            kernel.CloseHandle(handle)
+    try:
+        os.kill(pid_i, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def read_babysit_watch_pid(path: Path) -> dict | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeError):
+        return None
+    if not isinstance(data, dict) or "pid" not in data:
+        return None
+    return data
+
+
+def iter_babysit_watch_pids(
+    *,
+    repo: str | None = None,
+    pr_number: int | None = None,
+    root: Path | None = None,
+) -> list[tuple[Path, dict]]:
+    base = Path(root) if root is not None else Path.cwd()
+    directory = base / _WATCH_PID_DIR
+    if not directory.is_dir():
+        return []
+    found: list[tuple[Path, dict]] = []
+    for path in sorted(directory.glob(f"{_WATCH_PID_PREFIX}*.pid")):
+        data = read_babysit_watch_pid(path)
+        if not data:
+            continue
+        if repo is not None and str(data.get("repo") or "") != repo:
+            continue
+        if pr_number is not None and int(data.get("pr_number") or -1) != int(pr_number):
+            continue
+        found.append((path, data))
+    return found
+
+
+def claim_babysit_watch(
+    repo: str,
+    pr_number: int,
+    *,
+    root: Path | None = None,
+    pid: int | None = None,
+    ppid: int | None = None,
+) -> dict:
+    """Record this process as the watcher, or report the one already running.
+
+    A pidfile whose process has exited is replaced. Returns ``claimed`` false
+    when another live watcher owns the same repo and PR.
+    """
+    path = babysit_watch_pid_path(repo, pr_number, root=root)
+    existing = read_babysit_watch_pid(path) if path.exists() else None
+    if existing:
+        existing_pid = int(existing.get("pid") or 0)
+        own_pid = int(pid if pid is not None else os.getpid())
+        if existing_pid != own_pid and pid_is_alive(existing_pid):
+            return {"claimed": False, "existing": existing, "pidfile": str(path)}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "pid": int(pid if pid is not None else os.getpid()),
+        "ppid": int(ppid if ppid is not None else os.getppid()),
+        "repo": repo,
+        "pr_number": int(pr_number),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return {"claimed": True, "existing": None, "pidfile": str(path), **payload}
+
+
+def clear_babysit_watch_pid(path: Path, *, pid: int | None = None) -> None:
+    """Remove a pidfile. When ``pid`` is set, leave a file owned by someone else."""
+    if pid is not None:
+        current = read_babysit_watch_pid(path)
+        if current and int(current.get("pid") or -1) != int(pid):
+            return
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+
+
+def terminate_pid(pid: int) -> None:
+    """Stop a watcher process. On Windows, stop its child consoles too."""
+    pid_i = int(pid)
+    if sys.platform == "win32":
+        proc = run_hidden(
+            ["taskkill", "/F", "/T", "/PID", str(pid_i)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0 and pid_is_alive(pid_i):
+            detail = (proc.stderr or proc.stdout or "taskkill failed").strip()
+            raise RuntimeError(detail)
+        return
+    os.kill(pid_i, signal.SIGTERM)
+
+
+def stop_babysit_watchers(
+    *,
+    repo: str | None = None,
+    pr_number: int | None = None,
+    root: Path | None = None,
+) -> list[dict]:
+    """Stop watchers recorded under ``.agentic/babysit/*.pid``.
+
+    Dead pidfiles are removed. The current process is never killed.
+    """
+    stopped: list[dict] = []
+    for path, data in iter_babysit_watch_pids(repo=repo, pr_number=pr_number, root=root):
+        pid = int(data.get("pid") or 0)
+        alive = pid_is_alive(pid)
+        error: str | None = None
+        if alive and pid == os.getpid():
+            error = "refusing to stop the current process"
+        elif alive:
+            try:
+                terminate_pid(pid)
+            except Exception as exc:  # noqa: BLE001 — report and keep the pidfile
+                error = str(exc)
+        if error is None:
+            clear_babysit_watch_pid(path, pid=pid)
+        stopped.append(
+            {
+                "pid": pid,
+                "ppid": data.get("ppid"),
+                "repo": data.get("repo"),
+                "pr_number": data.get("pr_number"),
+                "was_alive": alive,
+                "stopped": error is None,
+                "error": error,
+                "pidfile": str(path),
+            }
+        )
+    return stopped
+
+
+def sleep_until_watch_interval(seconds: int, ppid: int, sleeper=time.sleep) -> bool:
+    """Sleep up to ``seconds``, returning False once ``ppid`` has exited.
+
+    Checks about once a second so a dead parent does not wait out the full poll
+    interval before the watch loop stops.
+    """
+    remaining = max(int(seconds), 1)
+    while remaining > 0:
+        if not pid_is_alive(ppid):
+            return False
+        sleeper(min(1, remaining))
+        remaining -= 1
+    return pid_is_alive(ppid)
 
 
 def babysit_pr(

@@ -297,7 +297,7 @@ Example
         self.assertIn("session_id: sess-1", log)
 
     def test_git_head_sha_unknown_on_failure(self):
-        with patch("plate_core.contemplation.subprocess.run", side_effect=OSError("no git")):
+        with patch("plate_core.contemplation.run_hidden", side_effect=OSError("no git")):
             self.assertEqual(_git_head_sha(), "unknown")
 
     def test_detect_artifact_mutation_intents_high_risk_agents(self):

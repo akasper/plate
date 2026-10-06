@@ -452,7 +452,7 @@ class McpTests(unittest.TestCase):
             recs = " ".join(res.get("recommendations", []))
             self.assertTrue("evidence" in recs.lower() or "GIF" in recs or "record" in recs.lower() or not recs)
 
-    @patch("plate_core.mcp.tools.subprocess.run")
+    @patch("plate_core.mcp.tools.run_hidden")
     def test_record_e2e_gif_tool_trimming_and_size_advice(self, mock_run):
         """#263: RecordE2eGifTool accepts trim params, returns size/quality/recommendations, advises trim for large GIFs."""
         from plate_core.mcp.tools import RecordE2eGifTool
@@ -461,6 +461,7 @@ class McpTests(unittest.TestCase):
             p = Path(tmp)
             (p / "scripts").mkdir(parents=True)
             (p / "scripts" / "e2e-record.sh").touch()
+            (p / "scripts" / "e2e-record.ps1").touch()
             gif_dir = p / "tests" / "e2e" / "fixtures" / "gifs"
             gif_dir.mkdir(parents=True)
             gif = gif_dir / "demo.gif"
