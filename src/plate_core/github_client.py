@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import random
 import re
-import subprocess
 import time
 from dataclasses import dataclass
+
+from .procutil import run_hidden
 
 
 class GhApiError(RuntimeError):
@@ -63,7 +64,7 @@ class GhClient:
 
         last_err = None
         for attempt in range(retries):
-            proc = subprocess.run(
+            proc = run_hidden(
                 cmd,
                 capture_output=True,
                 text=True,

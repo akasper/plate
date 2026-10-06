@@ -358,7 +358,7 @@ class HealthTests(unittest.TestCase):
 
         Uses parametrized cases including dotted names, trailing .git, and .git.git
         ambiguity cases from the issue and Release Risk Review feedback.
-        Mocks subprocess.run to avoid real git calls (per review guidance).
+        Mocks run_hidden to avoid real git calls (per review guidance).
         """
         cases = [
             ("git@github.com:akasper/u.ai.git", "akasper/u.ai"),
@@ -370,7 +370,7 @@ class HealthTests(unittest.TestCase):
             ("git@github.com:quux/u.ai", "quux/u.ai"),  # dotted without .git suffix in remote url
         ]
         for remote_url, expected in cases:
-            with patch("plate_core.health.subprocess.run") as mock_run:
+            with patch("plate_core.health.run_hidden") as mock_run:
                 mock_run.return_value = MagicMock(
                     returncode=0, stdout=remote_url + "\n", stderr=""
                 )

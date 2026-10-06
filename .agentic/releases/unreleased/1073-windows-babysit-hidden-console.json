@@ -1,0 +1,16 @@
+{
+  "slug": "1073-windows-babysit-hidden-console",
+  "change_type": "fix",
+  "surface": "gh plate CLI, MCP server, plate_core subprocess",
+  "summary": "Hide Windows consoles when PLATE runs gh or git, and make babysit --watch stoppable (#1073).",
+  "migration_impact": "No repository migration. Windows agents that babysit a PR no longer flash focus-stealing console windows on each poll. A watcher started with --watch stops when its parent process exits, or with `gh plate pr babysit --stop`.",
+  "migration_guidance": [
+    "1. Upgrade plate-core and gh-plate to the release that contains this fix (targeted at 0.8.3).",
+    "2. Stop any watcher left from an older build: `gh plate pr babysit --stop`, or taskkill the leftover python.exe.",
+    "3. Start watches with `gh plate pr babysit <pr> --watch`. Stop them with `gh plate pr babysit --stop`."
+  ],
+  "agent_notes": "On Windows, do not spawn gh or git with shell=True or a bare subprocess call. Use plate_core.procutil.run_hidden so CREATE_NO_WINDOW is set and text is decoded as UTF-8. Babysit --watch writes .agentic/babysit/babysit-<owner>-<repo>-<pr>.pid and exits when the parent process dies. Stop a leftover watcher with `gh plate pr babysit --stop` rather than leaving a detached poll loop running. Copilot CLI sessions hit the same gh/git console spawn.",
+  "breaking": false,
+  "links": ["#1073", "#1063"],
+  "requires": ["0.8.3"]
+}
