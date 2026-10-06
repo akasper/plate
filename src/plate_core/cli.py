@@ -21,8 +21,16 @@ from .context_map import ContextMapError, get_context_route, list_context_routes
 from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .github_client import GhApiError
-from .health import get_health
-from .pr_babysit import babysit_pr, get_pr_merge_gates
+from .health import get_health, resolve_repo
+from .pr_babysit import (
+    babysit_pr,
+    claim_babysit_watch,
+    clear_babysit_watch_pid,
+    get_pr_merge_gates,
+    pid_is_alive,
+    sleep_until_watch_interval,
+    stop_babysit_watchers,
+)
 from .release import (
     cleanup_dead_branches,
     cut_release as core_cut_release,
@@ -886,15 +894,68 @@ def cmd_config_upgrade(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_pr_babysit(args: argparse.Namespace) -> int:
-    if args.watch:
-        import time
+def _print_babysit_watch_tick(report) -> None:
+    print(f"Repo: {report.repo} | PR #{report.pr_number}")
+    print(
+        f"Detected threads: {report.detected_threads}, actionable: {report.actionable_threads}, "
+        f"scope: {report.pr_review_scope}, "
+        f"trigger posted: {'yes' if report.trigger_comment_posted else 'no'}"
+    )
+    if report.trigger_comment_url:
+        print(f"Trigger comment: {report.trigger_comment_url}")
+    if report.out_of_sync:
+        print(f"Base branch sync: OUT OF SYNC ({report.merge_state})")
+        if report.merge_trigger_posted:
+            print(f"Merge trigger posted: {report.merge_trigger_url}")
 
+
+def cmd_pr_babysit(args: argparse.Namespace) -> int:
+    if getattr(args, "stop", False):
+        stopped = stop_babysit_watchers(repo=args.repo, pr_number=args.pr_number)
+        if args.json:
+            print(json.dumps({"stopped": stopped}))
+        elif not stopped:
+            print("No babysit watchers found.")
+        else:
+            for item in stopped:
+                state = "stopped" if item["stopped"] else f"not stopped ({item['error']})"
+                print(f"{item.get('repo')} #{item.get('pr_number')} pid {item.get('pid')}: {state}")
+        return 0 if all(item["stopped"] for item in stopped) else 1
+
+    if args.pr_number is None:
+        print("pr_number is required unless --stop is set.", file=sys.stderr)
+        return 2
+
+    if args.watch:
         try:
-            while True:
+            target = resolve_repo(args.repo)
+        except Exception as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        claim = claim_babysit_watch(target, args.pr_number)
+        if not claim["claimed"]:
+            existing = claim.get("existing") or {}
+            payload = {"already_running": True, "repo": target, "pr_number": args.pr_number, **existing}
+            if args.json:
+                print(json.dumps(payload))
+            else:
+                print(
+                    f"Babysit watch already running for {target} #{args.pr_number} "
+                    f"(pid {existing.get('pid')}). Stop it with: gh plate pr babysit --stop"
+                )
+            return 0
+        pidfile = Path(claim["pidfile"])
+        ppid = int(claim["ppid"])
+        if not args.json:
+            print(
+                f"Watching {target} #{args.pr_number} (pid {claim['pid']}). "
+                "Stop with: gh plate pr babysit --stop"
+            )
+        try:
+            while pid_is_alive(ppid):
                 report = babysit_pr(
                     pr_number=args.pr_number,
-                    repo=args.repo,
+                    repo=target,
                     agent_logins=args.agents,
                     act=args.act,
                     branch_update_strategy=args.branch_update_strategy,
@@ -903,22 +964,15 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                 if args.json:
                     print(json.dumps(report.to_dict()))
                 else:
-                    print(f"Repo: {report.repo} | PR #{report.pr_number}")
-                    print(
-                        f"Detected threads: {report.detected_threads}, actionable: {report.actionable_threads}, "
-                        f"scope: {report.pr_review_scope}, "
-                        f"trigger posted: {'yes' if report.trigger_comment_posted else 'no'}"
-                    )
-                    if report.trigger_comment_url:
-                        print(f"Trigger comment: {report.trigger_comment_url}")
-                    if report.out_of_sync:
-                        print(f"Base branch sync: OUT OF SYNC ({report.merge_state})")
-                        if report.merge_trigger_posted:
-                            print(f"Merge trigger posted: {report.merge_trigger_url}")
+                    _print_babysit_watch_tick(report)
                     print(f"Sleeping {args.interval}s...\n")
-                time.sleep(args.interval)
+                if not sleep_until_watch_interval(args.interval, ppid):
+                    break
         except KeyboardInterrupt:
             return 0
+        finally:
+            clear_babysit_watch_pid(pidfile, pid=int(claim["pid"]))
+        return 0
 
     report = babysit_pr(
         pr_number=args.pr_number,
@@ -4273,7 +4327,12 @@ def build_parser() -> argparse.ArgumentParser:
         "babysit",
         help="Monitor a PR for actionable review feedback and optionally post a local babysit trigger",
     )
-    babysit.add_argument("pr_number", type=int, help="Pull request number")
+    babysit.add_argument(
+        "pr_number",
+        nargs="?",
+        type=int,
+        help="Pull request number (omit with --stop to stop every recorded watcher)",
+    )
     babysit.add_argument("--repo", help="owner/name; defaults to git remote origin")
     babysit.add_argument(
         "--agents",
@@ -4292,7 +4351,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="copilot-request",
         help="How to handle out-of-sync base branch: copilot-request (default), local-rebase, or none",
     )
-    babysit.add_argument("--watch", action="store_true", help="Continuously monitor the PR")
+    babysit.add_argument(
+        "--watch",
+        action="store_true",
+        help="Continuously monitor the PR. Stops when the parent process exits. Records .agentic/babysit/<repo>-<pr>.pid",
+    )
+    babysit.add_argument(
+        "--stop",
+        action="store_true",
+        help="Stop babysit --watch processes recorded in .agentic/babysit (one PR, or all when pr_number is omitted)",
+    )
     babysit.add_argument("--interval", type=int, default=60, help="Polling interval in seconds for --watch mode")
     babysit.add_argument("--json", action="store_true", help="Output JSON")
     babysit.set_defaults(func=cmd_pr_babysit)

@@ -54,3 +54,5 @@ Link to versioned per-feature change files under `.agentic/releases/` and any ge
 ## Operations and Maintenance
 
 List setup, deployment, troubleshooting, and release pages when they exist.
+
+- [Troubleshooting](Troubleshooting.md) — Windows console flashes while babysitting a PR (#1073). Fuller guide is #1063.

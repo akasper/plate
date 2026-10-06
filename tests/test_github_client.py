@@ -11,14 +11,14 @@ class GhClientFieldSerializationTests(unittest.TestCase):
 
     def _captured_cmd(self, fields: dict) -> list[str]:
         """Run GhClient.api with given fields and return the command that would have been executed."""
-        with patch("plate_core.github_client.subprocess.run") as mock_run:
+        with patch("plate_core.github_client.run_hidden") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
             GhClient().api("repos/owner/repo", method="PATCH", fields=fields)
             return mock_run.call_args[0][0]
 
     def test_get_requests_force_get_method_even_with_fields(self):
         """GET requests with query fields must stay GET so gh does not reinterpret them as POST."""
-        with patch("plate_core.github_client.subprocess.run") as mock_run:
+        with patch("plate_core.github_client.run_hidden") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
             GhClient().api("repos/owner/repo/issues", fields={"labels": "Question"})
             cmd = mock_run.call_args[0][0]
@@ -74,7 +74,7 @@ class GhClientResilienceTests(unittest.TestCase):
         self.assertIn("[REDACTED]", safe)
 
     def test_api_retries_on_transient_and_succeeds(self):
-        with patch("plate_core.github_client.subprocess.run") as mock_run:
+        with patch("plate_core.github_client.run_hidden") as mock_run:
             # First two fail (rate), third succeeds
             mock_run.side_effect = [
                 MagicMock(returncode=1, stdout="", stderr="API rate limit exceeded"),
@@ -87,7 +87,7 @@ class GhClientResilienceTests(unittest.TestCase):
             self.assertEqual(mock_run.call_count, 3)
 
     def test_api_raises_after_retries_exhausted(self):
-        with patch("plate_core.github_client.subprocess.run") as mock_run:
+        with patch("plate_core.github_client.run_hidden") as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="rate limit")
             client = GhClient()
             with self.assertRaises(GhApiError) as ctx:
@@ -100,7 +100,7 @@ class GhClientDiscussionsTests(unittest.TestCase):
     """Feature #329: GhClient discussion helpers (REST + GraphQL paths for #329 MCP surface)."""
 
     def test_list_discussions_builds_endpoint_and_passes_params(self):
-        with patch("plate_core.github_client.subprocess.run") as mock_run:
+        with patch("plate_core.github_client.run_hidden") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout='[{"number":54,"title":"foo"}]', stderr="")
             res = GhClient().list_discussions("akasper", "plate", per_page=5, state="open")
             cmd = mock_run.call_args[0][0]
@@ -116,7 +116,7 @@ class GhClientDiscussionsTests(unittest.TestCase):
             MagicMock(returncode=0, stdout='{"data":{"repository":{"id":"R_123"}} }', stderr=""),
             MagicMock(returncode=0, stdout='{"data":{"createDiscussion":{"discussion":{"number":999,"title":"new"}}}}', stderr=""),
         ]
-        with patch("plate_core.github_client.subprocess.run", side_effect=responses) as mock_run:
+        with patch("plate_core.github_client.run_hidden", side_effect=responses) as mock_run:
             res = GhClient().create_discussion("akasper", "plate", category_id="DIC_foo", title="t", body="b")
             self.assertEqual(res.get("number"), 999)
             # At least 2 calls made

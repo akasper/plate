@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from .payload_surface import PLATE_DOCS_SUBDIRS, is_plate_owned_root_doc
+from .procutil import run_hidden
 
 # PLATE-owned doc directories that should be moved
 PLATE_DOC_DIRS = sorted(PLATE_DOCS_SUBDIRS)
@@ -106,7 +107,7 @@ class MigrationPlan:
 def _is_git_repo(target_dir: Path) -> bool:
     """Check if the target directory is inside a git repository."""
     try:
-        result = subprocess.run(
+        result = run_hidden(
             ["git", "rev-parse", "--git-dir"],
             cwd=target_dir,
             capture_output=True,
@@ -658,7 +659,7 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
         or a in reconcile_actions
     ]
     for action in affected_actions:
-        status = subprocess.run(
+        status = run_hidden(
             [
                 "git",
                 "status",
@@ -709,7 +710,7 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
                 f"Preflight failed: destination already exists: {action.target}"
             )
             return plan
-        tracked = subprocess.run(
+        tracked = run_hidden(
             ["git", "ls-files", "--error-unmatch", "--", action.source],
             cwd=target_path,
             capture_output=True,
@@ -730,7 +731,7 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
             plan.ok = False
             plan.errors.append(f"Preflight failed: reconciliation source does not exist: {action.source}")
             return plan
-        tracked = subprocess.run(
+        tracked = run_hidden(
             ["git", "ls-files", "--error-unmatch", "--", action.source],
             cwd=target_path,
             capture_output=True,
@@ -761,7 +762,7 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
             
             try:
                 # Use git mv for proper git tracking
-                result = subprocess.run(
+                result = run_hidden(
                     ["git", "mv", str(source_path), str(target_path_full)],
                     cwd=target_path,
                     capture_output=True,
@@ -782,7 +783,7 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
             
             try:
                 # Use git mv for proper git tracking
-                result = subprocess.run(
+                result = run_hidden(
                     ["git", "mv", str(source_path), str(target_path_full)],
                     cwd=target_path,
                     capture_output=True,
@@ -802,7 +803,7 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
             if "Identical" in action.reason and "reconcile by removing source" in action.reason:
                 source_path = target_path / action.source
                 try:
-                    subprocess.run(
+                    run_hidden(
                         ["git", "rm", "-rf", str(source_path)],
                         cwd=target_path,
                         check=True,
@@ -826,7 +827,7 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
                     if new_content != content:
                         file_path.write_text(new_content, encoding="utf-8")
                         # Stage the change
-                        subprocess.run(
+                        run_hidden(
                             ["git", "add", str(file_path)],
                             cwd=target_path,
                             check=True,
@@ -870,7 +871,7 @@ def apply_migration(target_dir: Path | str) -> MigrationPlan:
                 )
                 if changed:
                     # Stage the updated file
-                    subprocess.run(
+                    run_hidden(
                         ["git", "add", str(file_path)],
                         cwd=target_path,
                         check=True,
