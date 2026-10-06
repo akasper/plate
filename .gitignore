@@ -101,6 +101,9 @@ __pypackages__/
 celerybeat-schedule
 celerybeat.pid
 
+# PR babysit watch loops (#1073). Recreated by `gh plate pr babysit --watch`.
+.agentic/babysit/
+
 # SageMath parsed files
 *.sage.py
 

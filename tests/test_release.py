@@ -33,7 +33,6 @@ from plate_core.release import (
     repair_release_standing_state,
 )
 from plate_core.github_client import GhApiError
-import plate_core.release as release_mod
 
 
 class ListVersionsTests(unittest.TestCase):
@@ -1262,8 +1261,7 @@ class FinalizeAutomationTests(unittest.TestCase):
             self.assertFalse(info.get("created", False))
 
     @patch("plate_core.release.GhClient")
-    @patch.object(release_mod, "subprocess")
-    def test_create_dry_run_and_assets(self, mock_subprocess, mock_client_cls):
+    def test_create_dry_run_and_assets(self, mock_client_cls):
         mock_client = mock_client_cls.return_value
         mock_client.api.side_effect = GhApiError("404 not found")
         with TemporaryDirectory() as tmp:
@@ -1272,14 +1270,13 @@ class FinalizeAutomationTests(unittest.TestCase):
             self.assertTrue(info["would_create"])
             self.assertIn("assets", info)
             self.assertIn("notes.md", info.get("assets", []))
-            # the patch.object replaces the bound 'subprocess' name in the release module for duration of test.
 
     @patch("plate_core.release.GhClient")
-    @patch.object(release_mod, "subprocess")
-    def test_guarded_reset_dry_or_no_apply_prints_command(self, mock_subprocess, mock_client_cls):
+    @patch("plate_core.release.run_hidden")
+    def test_guarded_reset_dry_or_no_apply_prints_command(self, mock_run, mock_client_cls):
         mock_client = mock_client_cls.return_value
         # Make ls-remote (the git call inside perform) succeed for the guard so we reach would_reset
-        mock_subprocess.run.return_value = type("P", (), {"stdout": "abc123 refs/tags/v0.7.1", "returncode": 0})()
+        mock_run.return_value = type("P", (), {"stdout": "abc123 refs/tags/v0.7.1", "returncode": 0})()
         with TemporaryDirectory() as tmp:
             d = self._make_versioned_release(tmp, "0.7.1")
             info = perform_guarded_hard_reset("0.7.1", releases_dir=d, dry_run=True, apply=False, client=mock_client)
@@ -1336,7 +1333,7 @@ class ReleaseStandingRepairTests(unittest.TestCase):
 
         client.api.side_effect = api
         with patch("plate_core.release.resolve_repo", return_value="owner/repo"), patch(
-            "plate_core.release.subprocess.run",
+            "plate_core.release.run_hidden",
             return_value=type("P", (), {"stdout": "", "returncode": 0})(),
         ), patch("plate_core.release.Path") as MockPath:
             # No local versioned release dirs
@@ -1388,7 +1385,7 @@ class ReleaseStandingRepairTests(unittest.TestCase):
 
         client.api.side_effect = api
         with patch("plate_core.release.resolve_repo", return_value="owner/repo"), patch(
-            "plate_core.release.subprocess.run",
+            "plate_core.release.run_hidden",
             return_value=type("P", (), {"stdout": "", "returncode": 0})(),
         ):
             out = repair_release_standing_state(

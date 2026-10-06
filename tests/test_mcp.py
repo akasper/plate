@@ -304,6 +304,25 @@ class McpTests(unittest.TestCase):
         self.assertIn("plate_config_upgrade", names)
         self.assertIn("plate_release_target_epic", names)
         self.assertIn("plate_release_cleanup_branches", names)
+        self.assertIn("plate_migrate_docs_namespace", names)
+
+    @patch("plate_core.mcp_server._write")
+    @patch("plate_core.mcp_server.migrate_docs_namespace")
+    def test_tools_call_plate_migrate_docs_namespace(self, mock_migrate, mock_write):
+        expected = {"ok": True, "apply_mode": True, "actions": []}
+        mock_migrate.return_value.to_dict.return_value = expected
+
+        _handle_tools_call(
+            22,
+            {
+                "name": "plate_migrate_docs_namespace",
+                "arguments": {"target_dir": "/tmp/repo", "apply": True},
+            },
+        )
+
+        mock_migrate.assert_called_once_with(target_dir="/tmp/repo", apply=True)
+        payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+        self.assertEqual(payload, expected)
 
     @patch("plate_core.mcp_server._write")
     @patch(
@@ -433,7 +452,7 @@ class McpTests(unittest.TestCase):
             recs = " ".join(res.get("recommendations", []))
             self.assertTrue("evidence" in recs.lower() or "GIF" in recs or "record" in recs.lower() or not recs)
 
-    @patch("plate_core.mcp.tools.subprocess.run")
+    @patch("plate_core.mcp.tools.run_hidden")
     def test_record_e2e_gif_tool_trimming_and_size_advice(self, mock_run):
         """#263: RecordE2eGifTool accepts trim params, returns size/quality/recommendations, advises trim for large GIFs."""
         from plate_core.mcp.tools import RecordE2eGifTool
@@ -442,6 +461,7 @@ class McpTests(unittest.TestCase):
             p = Path(tmp)
             (p / "scripts").mkdir(parents=True)
             (p / "scripts" / "e2e-record.sh").touch()
+            (p / "scripts" / "e2e-record.ps1").touch()
             gif_dir = p / "tests" / "e2e" / "fixtures" / "gifs"
             gif_dir.mkdir(parents=True)
             gif = gif_dir / "demo.gif"

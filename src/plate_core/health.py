@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from dataclasses import asdict, dataclass, field
 
 from .github_client import GhApiError, GhClient
+from .procutil import run_hidden
 
 
 REQUIRED_LABELS = ["Bug", "Feature", "Epic", "Documentation", "Research", "Design", "Question", "Task"]
@@ -172,7 +172,7 @@ def summarize_spec_audit_for_health(
 
 
 def _repo_from_git_remote() -> str:
-    proc = subprocess.run(
+    proc = run_hidden(
         ["git", "config", "--get", "remote.origin.url"],
         capture_output=True,
         text=True,
@@ -328,7 +328,7 @@ def get_health(
     # Uses git ls-files to detect any tracked .pyc, __pycache__, or common binaries
     binary_artifacts_tracked = 0
     try:
-        proc = subprocess.run(
+        proc = run_hidden(
             ["git", "ls-files", "--cached"],
             capture_output=True,
             text=True,

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from .costs import get_cost_report
+from .procutil import run_hidden
 from .epics import get_epic_status
 from .health import get_health
 from .plate_config import load_plate_config, get_plate_config_report
@@ -125,7 +126,7 @@ def collect_git_diff_preview(
 
     def _run(args: list[str]) -> tuple[int, str, str]:
         try:
-            proc = subprocess.run(
+            proc = run_hidden(
                 args,
                 cwd=str(root),
                 capture_output=True,

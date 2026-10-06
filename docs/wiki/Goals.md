@@ -37,11 +37,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 ## Current State & Evidence
 
-*(Snapshot after v0.8.2 — update at major cuts and when North Star shifts.)*
+*(Snapshot after v0.8.3 — update at major cuts and when North Star shifts.)*
 
-**Shipped foundations (v0.8.0, public pin v0.8.2):**
+**Shipped foundations (v0.8.0, public pin v0.8.3):**
 
-- Public **PyPI** package `plate-core==0.8.2`, shared library for CLI / MCP / plugins.
+- Public **PyPI** package `plate-core==0.8.3`, shared library for CLI / MCP / plugins.
 - **`gh plate`** thin-shim extension path and release-track / ceremony tooling.
 - Autonomy and adoption foundations: budgeted AutonomyEngine, adopt / import-payload / self-migrate surfaces, quiet ops, baseline persona when PLATE signals are present.
 - Endless feed / Q&A / planning primitives and Information Audit Goals convention (Epic #218 lineage).
@@ -55,6 +55,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 **Shipped in v0.8.2 (was Next Release #1020):**
 
 - Adoption, health, self-migrate verify, and the information audit accept `docs/plate/wiki/Goals.md` as well as `docs/wiki/Goals.md`.
+
+**Shipped in v0.8.3 (was Next Release #1024):**
+
+- Safe `gh plate migrate-docs-namespace` (dry-run by default) and a migration guide that no longer recommends overwriting `AGENTS.md`.
+- Windows `gh` and `git` calls hide console windows. `gh plate pr babysit --watch` stops when its parent exits, or with `gh plate pr babysit --stop`.
 
 **Not yet won (do not overclaim):**
 

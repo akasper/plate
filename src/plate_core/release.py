@@ -15,6 +15,7 @@ from urllib.parse import quote, quote_plus
 
 from .github_client import GhApiError, GhClient
 from .health import resolve_repo
+from .procutil import check_output_hidden, run_hidden
 from .version_sync import find_repo_root, read_repository_versions, sync_repository_version
 
 
@@ -902,8 +903,7 @@ def bump_version(current: tuple[int, int, int], bump: str) -> tuple[int, int, in
 
 def _git_versions(repo_root: Path) -> list[tuple[int, int, int]]:
     try:
-        import subprocess
-        out = subprocess.check_output(
+        out = check_output_hidden(
             ["git", "-C", str(repo_root), "tag", "--list", "v*"],
             text=True,
             stderr=subprocess.DEVNULL,
@@ -1269,7 +1269,7 @@ def create_github_release(
         for asset in assets:
             cmd.extend(["--asset", str(asset)])
 
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        proc = run_hidden(cmd, capture_output=True, text=True, check=False)
         if proc.returncode != 0:
             try:
                 rel = gh.api(f"repos/{target}/releases/tags/{tag}")
@@ -1326,7 +1326,7 @@ def perform_guarded_hard_reset(
     # only matches annotated tags and would cause the first lookup to always
     # fail for our tags, falling back silently. See review on #601.
     try:
-        ls = subprocess.run(
+        ls = run_hidden(
             ["git", "ls-remote", "--tags", "origin", tag],
             capture_output=True, text=True, check=False
         )
@@ -1363,19 +1363,36 @@ def perform_guarded_hard_reset(
 
     try:
         root = find_repo_root(Path("."))
-        proc = subprocess.run(
-            shell_cmd,
-            shell=True,
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if proc.returncode != 0:
+        # Run the three git steps without a shell so Windows does not flash
+        # cmd.exe (#1073). Failure of one step stops the rest, same as `&&`.
+        steps = [
+            ["git", "fetch", "origin", tag],
+            ["git", "update-ref", f"refs/heads/{target_branch}", f"refs/tags/{tag}"],
+            ["git", "push", "--force-with-lease", "origin", target_branch],
+        ]
+        stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
+        failed = False
+        for step in steps:
+            proc = run_hidden(
+                step,
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if proc.stdout:
+                stdout_parts.append(proc.stdout)
+            if proc.stderr:
+                stderr_parts.append(proc.stderr)
+            if proc.returncode != 0:
+                failed = True
+                break
+        if failed:
             return {
                 "error": "reset_command_failed",
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
+                "stdout": "".join(stdout_parts),
+                "stderr": "".join(stderr_parts),
                 "command": shell_cmd,
             }
         return {
@@ -1513,7 +1530,7 @@ def diagnose_release_standing_state(
     any_versioned_history = False
     try:
         # any v* tag or versioned release dir implies prior release activity
-        tags = subprocess.run(
+        tags = run_hidden(
             ["git", "tag", "-l", "v*"],
             capture_output=True,
             text=True,
