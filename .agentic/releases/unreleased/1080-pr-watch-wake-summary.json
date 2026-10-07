@@ -1,0 +1,16 @@
+{
+  "slug": "1080-pr-watch-wake-summary",
+  "change_type": "feature",
+  "surface": "plate_core.pr_watch_summary, docs/wiki/PR-Babysit-Wake-Summary.md",
+  "summary": "Add wake-summary builders so PR babysit watch can act on deltas without reloading full PR state (#1080).",
+  "migration_impact": "No downstream repo migration. Watch integration lands in a follow-up PR; this release only adds the pure summary module and agent wiki guidance.",
+  "migration_guidance": [
+    "1. Upgrade plate-core when the release containing #1080 ships.",
+    "2. On wake, prefer build_wake_summary/render_wake_summary over full GraphQL PR reload unless merge conflict or missing detail requires it.",
+    "3. Read docs/wiki/PR-Babysit-Wake-Summary.md for agent operating rules."
+  ],
+  "agent_notes": "On babysit watch wake, call build_wake_summary with REST deltas and prev/cur snapshots. Act on render_wake_summary output when is_actionable is true. Do not poll _load_pr_data every tick; reload full PR state only when the summary indicates merge conflict or insufficient detail.",
+  "breaking": false,
+  "links": ["#1080", "#1077"],
+  "requires": []
+}
