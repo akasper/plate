@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from plate_core.pr_watch_backoff import Backoff, SystemWatchClock, should_stop
 
 
