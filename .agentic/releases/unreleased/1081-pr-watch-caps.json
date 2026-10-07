@@ -1,0 +1,16 @@
+{
+  "slug": "1081-pr-watch-caps",
+  "change_type": "feature",
+  "surface": "plate_core pr babysit watch",
+  "summary": "Persist per-PR spend caps (max wakes, max hours) for babysit --watch (#1081).",
+  "migration_impact": "No repository migration. Watch loops can use local cap ledgers under .agentic/babysit/ once wired into the CLI; this release only adds the library module.",
+  "migration_guidance": [
+    "1. Upgrade plate-core to the release that contains this module.",
+    "2. Cap ledgers are stored at .agentic/babysit/<owner>-<repo>-<pr>.caps.json (gitignored).",
+    "3. After a cap pause, resume with `gh plate pr babysit <n> --watch` once integration lands."
+  ],
+  "agent_notes": "Use plate_core.pr_watch_caps for wake/hour limits before polling GitHub in a watch loop. Post at most one cap PR comment containing <!-- plate-babysit-cap -->; use has_cap_note to dedupe. Do not bypass caps by deleting the ledger unless the human explicitly resets babysit spend.",
+  "breaking": false,
+  "links": ["#1081", "#1077"],
+  "requires": []
+}
