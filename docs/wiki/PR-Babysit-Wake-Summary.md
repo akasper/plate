@@ -1,0 +1,30 @@
+# PR babysit wake summary (#1080)
+
+When `gh plate pr babysit --watch` wakes on new activity, agents should act on the **wake summary** only. The summary is built from REST deltas plus lightweight fields (`head_sha`, `mergeable_state`, `ci_state`) — not a full GraphQL PR reload.
+
+## On wake
+
+1. Read `render_wake_summary(...)` output (or the structured dict from `build_wake_summary`).
+2. If `is_actionable(summary)` is false, skip work for this tick.
+3. Address new human review comments, reviews, and issue comments listed in the summary.
+4. React to CI and merge-state transitions shown in the summary.
+5. When the summary reports a new `head_commit`, assume the branch moved; re-run only the checks you need for that change.
+
+## Do not reload full PR state by default
+
+Avoid calling `_load_pr_data` / full babysit GraphQL on every poll. Use the summary unless you need detail the delta cannot provide, for example:
+
+- Merge conflicts or ambiguous `mergeable_state` (`dirty`, `unknown`) that require line-level conflict inspection.
+- A review comment excerpt is insufficient and you must fetch the full thread.
+
+## Filtering
+
+The builder drops bot authors (`[bot]` suffix), `ignore_logins`, and any body containing the babysit marker prefix `<!-- plate-babysit` so trigger comments do not re-wake the loop.
+
+## API
+
+- `build_wake_summary(delta, prev, cur, *, ignore_logins=frozenset()) -> dict`
+- `render_wake_summary(summary) -> str`
+- `is_actionable(summary) -> bool`
+
+Implemented in `plate_core.pr_watch_summary`.
