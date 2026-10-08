@@ -19,11 +19,11 @@ Avoid calling `_load_pr_data` / full babysit GraphQL on every poll. Use the summ
 
 ## Filtering
 
-The builder drops bot authors (`[bot]` suffix), `ignore_logins`, and any body containing the babysit marker prefix `<!-- plate-babysit` so trigger comments do not re-wake the loop.
+The builder drops bot authors (`[bot]` suffix) from issue-comment chatter, `ignore_logins`, and any body containing either trigger marker (`<!-- plate-pr-babysit -->` or `<!-- plate-pr-merge-trigger -->`). Review comments and formal reviews are retained according to the configured review scope (default `all`).
 
 ## API
 
-- `build_wake_summary(delta, prev, cur, *, ignore_logins=frozenset()) -> dict`
+- `build_wake_summary(delta, prev, cur, *, ignore_logins=frozenset(), review_scope=None, agent_logins=None) -> dict`
 - `render_wake_summary(summary) -> str`
 - `is_actionable(summary) -> bool`
 
