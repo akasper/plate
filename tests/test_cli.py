@@ -14,6 +14,7 @@ from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.features import FeatureFlag, FeatureReport
 from plate_core.health import HealthReport
 from plate_core.migration import generate_migration_plan, apply_migration_plan
+from plate_core.pr_watch_caps import CapLedger, WatchCaps, save_ledger
 
 
 class CliTests(unittest.TestCase):
@@ -222,6 +223,86 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["pr_number"], 112)
         self.assertTrue(payload["trigger_comment_posted"])
 
+    @patch("plate_core.cli.clear_babysit_watch_pid")
+    @patch("plate_core.cli.sleep_until_watch_interval")
+    @patch("plate_core.cli.pid_is_alive", return_value=True)
+    @patch("plate_core.cli.GhClient")
+    @patch("plate_core.cli.WatchCaps", return_value=WatchCaps(max_wakes=1, max_hours=12))
+    @patch("plate_core.cli.caps_path")
+    @patch("plate_core.cli.claim_babysit_watch")
+    @patch("plate_core.cli.resolve_repo", return_value="owner/repo")
+    @patch("plate_core.cli.babysit_pr")
+    def test_pr_babysit_watch_enforces_cap_and_reports_status(
+        self,
+        mock_babysit,
+        _mock_resolve_repo,
+        mock_claim,
+        mock_caps_path,
+        _mock_caps,
+        mock_gh,
+        _mock_pid_alive,
+        mock_sleep,
+        _mock_clear_pid,
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger_path = Path(directory) / "watch.caps.json"
+            mock_caps_path.return_value = ledger_path
+            save_ledger(
+                ledger_path,
+                CapLedger(
+                    started_at="2026-10-07T00:00:00+00:00",
+                    wakes=10,
+                    paused_reason="max wakes reached (10)",
+                ),
+            )
+            mock_claim.return_value = {
+                "claimed": True,
+                "pidfile": str(Path(directory) / "watch.pid"),
+                "pid": 123,
+                "ppid": 456,
+            }
+            mock_babysit.return_value = BabysitReport(
+                repo="owner/repo",
+                pr_number=42,
+                detected_threads=0,
+                actionable_threads=0,
+                trigger_comment_posted=False,
+            )
+            gh = mock_gh.return_value
+            gh.api.side_effect = [
+                {"state": "OPEN"},
+                [],
+                {"html_url": "https://github.com/owner/repo/pull/42#issuecomment-1"},
+            ]
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(
+                    ["pr", "babysit", "42", "--repo", "owner/repo", "--watch", "--reset-caps", "--json"]
+                )
+
+            self.assertEqual(code, 0)
+            self.assertEqual(mock_babysit.call_count, 1)
+            mock_sleep.assert_not_called()
+            self.assertEqual(gh.api.call_count, 3)
+            self.assertTrue(ledger_path.is_file())
+            self.assertEqual(json.loads(ledger_path.read_text())["wakes"], 1)
+            self.assertIn("<!-- plate-babysit-cap -->", gh.api.call_args_list[-1].kwargs["fields"]["body"])
+            lines = [json.loads(line) for line in out.getvalue().splitlines()]
+            self.assertEqual(lines[0]["watch_caps"], "wakes 1/1, 0h/12h")
+            self.assertIn("max wakes", lines[1]["paused_reason"])
+            self.assertTrue(lines[1]["pause_comment_posted"])
+
+            status_out = io.StringIO()
+            with patch("plate_core.cli.caps_path", return_value=ledger_path), patch(
+                "plate_core.cli.resolve_repo", return_value="owner/repo"
+            ), redirect_stdout(status_out):
+                status_code = main(["pr", "babysit", "42", "--repo", "owner/repo", "--status", "--json"])
+            self.assertEqual(status_code, 0)
+            status = json.loads(status_out.getvalue())
+            self.assertEqual(status["wakes"], 1)
+            self.assertIn("wakes 1/1", status["status"])
+            self.assertIn("max wakes", status["paused_reason"])
+
     @patch("plate_core.cli.core_cut_release")
     def test_release_cut_json_output(self, mock_core_cut):
         """First-class release cut using core (for #261)."""
@@ -316,7 +397,9 @@ class CliTests(unittest.TestCase):
             BabysitReport("owner/repo", 123, 1, 0, False),
         ]
         with (
+            tempfile.TemporaryDirectory() as directory,
             patch("plate_core.cli.resolve_repo", return_value="owner/repo"),
+            patch("plate_core.cli.caps_path", return_value=Path(directory) / "watch.caps.json"),
             patch(
                 "plate_core.cli.claim_babysit_watch",
                 return_value={
@@ -354,7 +437,9 @@ class CliTests(unittest.TestCase):
 
     def test_babysit_watch_stops_on_closed_pr_and_clears_pidfile(self):
         with (
+            tempfile.TemporaryDirectory() as directory,
             patch("plate_core.cli.resolve_repo", return_value="owner/repo"),
+            patch("plate_core.cli.caps_path", return_value=Path(directory) / "watch.caps.json"),
             patch(
                 "plate_core.cli.claim_babysit_watch",
                 return_value={
@@ -393,7 +478,9 @@ class CliTests(unittest.TestCase):
 
         clock = FakeClock()
         with (
+            tempfile.TemporaryDirectory() as directory,
             patch("plate_core.cli.resolve_repo", return_value="owner/repo"),
+            patch("plate_core.cli.caps_path", return_value=Path(directory) / "watch.caps.json"),
             patch(
                 "plate_core.cli.claim_babysit_watch",
                 return_value={
