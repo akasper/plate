@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from .pr_babysit import _author_in_scope, resolve_pr_review_scope
+from .pr_babysit import _author_in_scope, _default_agent_match, resolve_pr_review_scope
 
 BABYSIT_BODY_MARKERS = (
     "<!-- plate-pr-babysit -->",
@@ -22,7 +22,7 @@ def _login(user: Mapping[str, Any] | None) -> str:
 
 
 def _is_bot_login(login: str) -> bool:
-    return login.endswith("[bot]")
+    return _default_agent_match(login)
 
 
 def _has_babysit_marker(body: str) -> bool:
@@ -58,7 +58,7 @@ def _should_drop_review(
 
 
 def _excerpt(body: str | None, limit: int = BODY_EXCERPT_MAX) -> str:
-    text = (body or "").replace("\r\n", "\n").strip()
+    text = " ".join((body or "").split())
     if len(text) <= limit:
         return text
     return text[: limit - 1] + "…"
@@ -194,80 +194,149 @@ def is_actionable(summary: Mapping[str, Any]) -> bool:
     return False
 
 
-def _render_list_section(
-    title: str,
-    lines: list[str],
-    cap: int,
-) -> tuple[list[str], int]:
-    """Return rendered lines and count omitted."""
-    if not lines:
-        return [], 0
-    shown = lines[:cap]
-    omitted = max(0, len(lines) - len(shown))
-    block = [title] + [f"  {line}" for line in shown]
-    if omitted:
-        block.append(f"  +{omitted} more")
-    return block, omitted
+def _truncate_utf8(text: str, max_bytes: int) -> str:
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    if max_bytes <= len("…".encode("utf-8")):
+        return encoded[:max_bytes].decode("utf-8", errors="ignore")
+    return encoded[: max_bytes - len("…".encode("utf-8"))].decode(
+        "utf-8", errors="ignore"
+    ) + "…"
+
+
+def _render_comment_line(
+    prefix: str,
+    excerpt: str,
+    url: str,
+    max_bytes: int,
+) -> str | None:
+    suffix = f" ({url})" if url else ""
+    fixed_bytes = len((prefix + suffix).encode("utf-8"))
+    if fixed_bytes > max_bytes:
+        if len(suffix.encode("utf-8")) >= max_bytes:
+            return None
+        prefix = _truncate_utf8(prefix, max_bytes - len(suffix.encode("utf-8")))
+        fixed_bytes = len((prefix + suffix).encode("utf-8"))
+    return prefix + _truncate_utf8(excerpt, max_bytes - fixed_bytes) + suffix
 
 
 def render_wake_summary(summary: Mapping[str, Any]) -> str:
     """Render a terse, agent-facing wake text (target under ~2 KB)."""
     parts: list[str] = ["PR wake summary"]
 
-    rc_lines = [
-        f"{item['path']}:{item.get('line')} @{item['author']}: {item['excerpt']} ({item['html_url']})"
-        for item in summary.get("review_comments") or []
-    ]
-    parts.extend(_render_list_section("Review comments:", rc_lines, _DEFAULT_LIST_CAP)[0])
-
-    rev_lines = [
-        f"{item['state']} by @{item['author']}" for item in summary.get("reviews") or []
-    ]
-    parts.extend(_render_list_section("Reviews:", rev_lines, _DEFAULT_LIST_CAP)[0])
-
-    ic_lines = [
-        f"@{item['author']}: {item['excerpt']} ({item['html_url']})"
-        for item in summary.get("issue_comments") or []
-    ]
-    parts.extend(_render_list_section("Issue comments:", ic_lines, _DEFAULT_LIST_CAP)[0])
-
     ci = summary.get("ci_transition")
     if ci:
-        parts.append(f"CI: {ci.get('from')} -> {ci.get('to')}")
+        parts.append(
+            f"CI: {_truncate_utf8(str(ci.get('from') or ''), 128)}"
+            f" -> {_truncate_utf8(str(ci.get('to') or ''), 128)}"
+        )
 
     merge = summary.get("merge_state_change")
     if merge:
-        parts.append(f"Merge state: {merge.get('from')} -> {merge.get('to')}")
+        parts.append(
+            f"Merge state: {_truncate_utf8(str(merge.get('from') or ''), 128)}"
+            f" -> {_truncate_utf8(str(merge.get('to') or ''), 128)}"
+        )
 
     head = summary.get("head_commit")
     if head:
         prev_sha = head.get("previous_sha") or "(none)"
-        parts.append(f"Head commit: {prev_sha} -> {head.get('sha')}")
+        parts.append(
+            f"Head commit: {_truncate_utf8(str(prev_sha), 128)}"
+            f" -> {_truncate_utf8(str(head.get('sha') or ''), 128)}"
+        )
 
-    text = "\n".join(parts).strip()
-    if len(text.encode("utf-8")) <= RENDER_BYTE_BUDGET:
-        return text
+    review_comments = summary.get("review_comments") or []
+    reviews = summary.get("reviews") or []
+    issue_comments = summary.get("issue_comments") or []
+    sections: list[tuple[str, list[str | tuple[str, str, str]], int]] = []
 
-    # Shrink list caps until within budget or minimal.
-    cap = _DEFAULT_LIST_CAP
-    while cap > 1:
-        cap -= 1
-        parts = ["PR wake summary"]
-        parts.extend(_render_list_section("Review comments:", rc_lines, cap)[0])
-        parts.extend(_render_list_section("Reviews:", rev_lines, cap)[0])
-        parts.extend(_render_list_section("Issue comments:", ic_lines, cap)[0])
-        if ci:
-            parts.append(f"CI: {ci.get('from')} -> {ci.get('to')}")
-        if merge:
-            parts.append(f"Merge state: {merge.get('from')} -> {merge.get('to')}")
-        if head:
-            prev_sha = head.get("previous_sha") or "(none)"
-            parts.append(f"Head commit: {prev_sha} -> {head.get('sha')}")
-        text = "\n".join(parts).strip()
-        if len(text.encode("utf-8")) <= RENDER_BYTE_BUDGET:
-            return text
+    review_lines = []
+    for item in review_comments[:_DEFAULT_LIST_CAP]:
+        path = _truncate_utf8(str(item.get("path") or ""), 120)
+        author = _truncate_utf8(str(item.get("author") or ""), 64)
+        prefix = f"{path}:{item.get('line')} @{author}: "
+        review_lines.append(
+            (prefix, str(item.get("excerpt") or ""), str(item.get("html_url") or ""))
+        )
+    sections.append(
+        (
+            "Review comments:",
+            review_lines,
+            max(0, len(review_comments) - _DEFAULT_LIST_CAP),
+        )
+    )
 
-    encoded = text.encode("utf-8")
-    ellipsis = "…"
-    prefix = encoded[: RENDER_BYTE_BUDGET - len(ellipsis.encode("utf-8"))]
-    return prefix.decode("utf-8", errors="ignore").rstrip() + ellipsis
+    review_lines = [
+        f"{_truncate_utf8(str(item.get('state') or ''), 96)} by "
+        f"@{_truncate_utf8(str(item.get('author') or ''), 64)}"
+        for item in reviews[:_DEFAULT_LIST_CAP]
+    ]
+    sections.append(
+        ("Reviews:", review_lines, max(0, len(reviews) - _DEFAULT_LIST_CAP))
+    )
+
+    issue_lines = []
+    for item in issue_comments[:_DEFAULT_LIST_CAP]:
+        author = _truncate_utf8(str(item.get("author") or ""), 64)
+        issue_lines.append(
+            (
+                f"@{author}: ",
+                str(item.get("excerpt") or ""),
+                str(item.get("html_url") or ""),
+            )
+        )
+    sections.append(
+        (
+            "Issue comments:",
+            issue_lines,
+            max(0, len(issue_comments) - _DEFAULT_LIST_CAP),
+        )
+    )
+
+    omitted_for_size = 0
+    reserve_bytes = 96 if any(lines or omitted for _, lines, omitted in sections) else 0
+    for title, lines, omitted in sections:
+        if not lines and not omitted:
+            continue
+        heading = title
+        if len("\n".join(parts + [heading]).encode("utf-8")) > (
+            RENDER_BYTE_BUDGET - reserve_bytes
+        ):
+            omitted_for_size += len(lines) + omitted
+            continue
+        parts.append(heading)
+        for line in lines:
+            available = (
+                RENDER_BYTE_BUDGET
+                - reserve_bytes
+                - len("\n".join(parts).encode("utf-8"))
+                - 3
+            )
+            if available <= 0:
+                omitted_for_size += 1
+                continue
+            if isinstance(line, tuple):
+                shortened_line = _render_comment_line(*line, available)
+                if shortened_line is None:
+                    omitted_for_size += 1
+                    continue
+            else:
+                shortened_line = _truncate_utf8(line, available)
+            parts.append(f"  {shortened_line}")
+        if omitted:
+            marker = f"  +{omitted} more omitted; fetch full PR details."
+            if len("\n".join(parts + [marker]).encode("utf-8")) <= (
+                RENDER_BYTE_BUDGET - reserve_bytes
+            ):
+                parts.append(marker)
+            else:
+                omitted_for_size += omitted
+
+    if omitted_for_size:
+        parts.append(
+            "Additional summary content omitted to preserve state changes; "
+            "fetch full PR details."
+        )
+    return "\n".join(parts).strip()

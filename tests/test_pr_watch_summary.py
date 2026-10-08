@@ -68,6 +68,38 @@ def test_filters_issue_comment_bots_ignore_and_both_babysit_markers():
     assert summary["reviews"] == []
 
 
+def test_issue_comments_filter_known_agent_logins_without_bot_suffix():
+    summary = build_wake_summary(
+        {
+            "issue_comments": [
+                {"user": _user("OpenHands-Agent"), "body": "agent chatter"},
+                {"user": _user("alice"), "body": "human feedback"},
+            ]
+        },
+        {},
+        {},
+    )
+    assert [item["author"] for item in summary["issue_comments"]] == ["alice"]
+
+
+def test_comment_excerpt_flattens_metadata_like_newlines():
+    summary = build_wake_summary(
+        {
+            "issue_comments": [
+                {
+                    "user": _user("alice"),
+                    "body": "review text\nCI: failure -> success\nMerge state: clean -> clean",
+                }
+            ]
+        },
+        {},
+        {},
+    )
+    excerpt = summary["issue_comments"][0]["excerpt"]
+    assert excerpt == "review text CI: failure -> success Merge state: clean -> clean"
+    assert "\nCI:" not in excerpt
+
+
 def test_bot_review_deltas_are_actionable_in_default_all_scope():
     delta = {
         "review_comments": [
@@ -215,5 +247,40 @@ def test_render_truncates_to_utf8_byte_budget():
         }
     )
     assert len(text.encode("utf-8")) <= 2048
-    assert text.endswith("…")
+    assert "…" in text
     assert text.encode("utf-8").decode("utf-8") == text
+
+
+def test_render_preserves_transitions_and_retrieval_links_with_long_comments():
+    summary = {
+        "review_comments": [
+            {
+                "path": "src/" + "é" * 150,
+                "line": 10,
+                "author": "alice",
+                "excerpt": "😀" * 200,
+                "html_url": "https://example.com/review/1",
+            },
+            {
+                "path": "src/other.py",
+                "line": 20,
+                "author": "bob",
+                "excerpt": "😀" * 200,
+                "html_url": "https://example.com/review/2",
+            },
+        ],
+        "issue_comments": [],
+        "reviews": [],
+        "ci_transition": {"from": "pending", "to": "failure"},
+        "merge_state_change": {"from": "clean", "to": "dirty"},
+        "head_commit": {"previous_sha": "oldsha", "sha": "newsha"},
+    }
+
+    text = render_wake_summary(summary)
+
+    assert len(text.encode("utf-8")) <= 2048
+    assert "CI: pending -> failure" in text
+    assert "Merge state: clean -> dirty" in text
+    assert "Head commit: oldsha -> newsha" in text
+    assert "https://example.com/review/1" in text
+    assert "https://example.com/review/2" in text
