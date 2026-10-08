@@ -19,7 +19,7 @@ Avoid calling `_load_pr_data` / full babysit GraphQL on every poll. Use the summ
 
 ## Filtering
 
-The builder drops bot authors (`[bot]` suffix) from issue-comment chatter, `ignore_logins`, and any body containing either trigger marker (`<!-- plate-pr-babysit -->` or `<!-- plate-pr-merge-trigger -->`). Review comments and formal reviews are retained according to the configured review scope (default `all`).
+The builder drops known bot/agent authors, `ignore_logins`, and any body containing either trigger marker (`<!-- plate-pr-babysit -->` or `<!-- plate-pr-merge-trigger -->`) from issue-comment chatter. Review comments and formal reviews are retained according to the configured review scope (default `all`). Rendered comment excerpts flatten whitespace, and summaries preserve state transitions while shortening or identifying omitted comment content within the byte budget.
 
 ## API
 
