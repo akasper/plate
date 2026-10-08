@@ -1,0 +1,15 @@
+{
+  "slug": "1078-cheap-pr-change-detection",
+  "change_type": "feature",
+  "surface": "plate_core pr watch probe",
+  "summary": "Add pr_watch_probe module for ETag-based PR polling and comment/review deltas (#1078).",
+  "migration_impact": "No downstream migration until a follow-up PR wires the probe into gh plate pr babysit --watch. Libraries may import plate_core.pr_watch_probe for cheap change detection.",
+  "migration_guidance": [
+    "1. Upgrade plate-core when this ships on the release track.",
+    "2. Babysit --watch behavior is unchanged until the watch loop integration lands in a later Epic #1077 slice."
+  ],
+  "agent_notes": "Use probe_pr with an injected or GhApiHttp client; a 304 avoids reloading the PR resource, while commit status and check runs are polled each probe. Persist ProbeState under .agentic/babysit/<owner>-<repo>-<pr>.probe.json. fetch_delta loads only new comments and reviews since last_checked_at.",
+  "breaking": false,
+  "links": ["#1078", "#1077"],
+  "requires": ["0.8.4"]
+}
