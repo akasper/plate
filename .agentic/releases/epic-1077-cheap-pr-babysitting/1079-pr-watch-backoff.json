@@ -1,0 +1,15 @@
+{
+  "slug": "1079-pr-watch-backoff",
+  "change_type": "feature",
+  "surface": "plate_core pr babysit watch loop",
+  "summary": "Add exponential poll backoff and watch stop conditions for cheap PR babysitting (#1079).",
+  "migration_impact": "No downstream action required. Existing --interval remains supported as a deprecated alias for --min-interval.",
+  "migration_guidance": [
+    "1. Use --min-interval and --max-interval to configure polling backoff.",
+    "2. Use --max-hours to stop a watch after a wall-clock duration."
+  ],
+  "agent_notes": "The --watch loop uses exponential backoff, resetting when the babysit report changes, and stops on merge, close, or --max-hours. The watcher always removes its pidfile on exit.",
+  "breaking": false,
+  "links": ["#1079", "#1077"],
+  "requires": ["0.8.4"]
+}

@@ -61,7 +61,8 @@ def test_should_stop_max_hours_exceeded() -> None:
     now = start + timedelta(hours=5)
     pr = {"state": "OPEN"}
     assert should_stop(pr, start, now, max_hours=4.0) == "max_hours_exceeded"
-    assert should_stop(pr, start, now, max_hours=5.0) is None
+    assert should_stop(pr, start, now, max_hours=5.0) == "max_hours_exceeded"
+    assert should_stop(pr, start, now - timedelta(seconds=1), max_hours=5.0) is None
 
 
 def test_should_stop_open_pr_within_budget() -> None:

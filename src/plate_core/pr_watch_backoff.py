@@ -1,8 +1,4 @@
-"""Exponential backoff and stop conditions for PR babysit --watch (#1079).
-
-Wiring into the watch loop lands in a follow-up PR; this module is pure logic
-with injectable clocks for tests.
-"""
+"""Exponential backoff and stop conditions for PR babysit --watch (#1079)."""
 
 from __future__ import annotations
 
@@ -103,6 +99,6 @@ def should_stop(
         return "closed"
     if max_hours > 0:
         elapsed_hours = (now - started_at).total_seconds() / 3600.0
-        if elapsed_hours > max_hours:
+        if elapsed_hours >= max_hours:
             return "max_hours_exceeded"
     return None
