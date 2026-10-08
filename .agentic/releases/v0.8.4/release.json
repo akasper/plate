@@ -1,0 +1,91 @@
+{
+  "version": "0.8.4",
+  "summary": "PLATE 0.8.4 -- babysit --watch backs off and enforces spend caps. Cheap PR change detection and delta wake summaries ship as libraries for the watcher.",
+  "cut_at": "2026-10-08T22:25:19Z",
+  "fragment_count": 4,
+  "fragment_slugs": [
+    "1080-pr-watch-wake-summary",
+    "1078-cheap-pr-change-detection",
+    "1079-pr-watch-backoff",
+    "1081-pr-watch-caps"
+  ],
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "plate_core.pr_watch_summary, docs/wiki/PR-Babysit-Wake-Summary.md",
+      "migration_impact": "No downstream repo migration. Watch integration lands in a follow-up PR; this release only adds the pure summary module and agent wiki guidance.",
+      "agent_notes": "On babysit watch wake, call build_wake_summary with REST deltas and prev/cur snapshots. Act on render_wake_summary output when is_actionable is true. Do not poll _load_pr_data every tick; reload full PR state only when the summary indicates merge conflict or insufficient detail.",
+      "migration_guidance": [
+        "1. Upgrade plate-core when the release containing #1080 ships.",
+        "2. On wake, prefer build_wake_summary/render_wake_summary over full GraphQL PR reload unless merge conflict or missing detail requires it.",
+        "3. Read docs/wiki/PR-Babysit-Wake-Summary.md for agent operating rules."
+      ],
+      "links": [
+        "#1080",
+        "#1077"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core pr watch probe",
+      "migration_impact": "No downstream migration until a follow-up PR wires the probe into gh plate pr babysit --watch. Libraries may import plate_core.pr_watch_probe for cheap change detection.",
+      "agent_notes": "Use probe_pr with an injected or GhApiHttp client; a 304 avoids reloading the PR resource, while commit status and check runs are polled each probe. Persist ProbeState under .agentic/babysit/<owner>-<repo>-<pr>.probe.json. fetch_delta loads only new comments and reviews since last_checked_at.",
+      "migration_guidance": [
+        "1. Upgrade plate-core when this ships on the release track.",
+        "2. Babysit --watch behavior is unchanged until the watch loop integration lands in a later Epic #1077 slice."
+      ],
+      "links": [
+        "#1078",
+        "#1077"
+      ],
+      "requires": [
+        "0.8.4"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core pr babysit watch loop",
+      "migration_impact": "No downstream action required. Existing --interval remains supported as a deprecated alias for --min-interval.",
+      "agent_notes": "The --watch loop uses exponential backoff, resetting when the babysit report changes, and stops on merge, close, or --max-hours. The watcher always removes its pidfile on exit.",
+      "migration_guidance": [
+        "1. Use --min-interval and --max-interval to configure polling backoff.",
+        "2. Use --max-hours to stop a watch after a wall-clock duration."
+      ],
+      "links": [
+        "#1079",
+        "#1077"
+      ],
+      "requires": [
+        "0.8.4"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core pr babysit watch",
+      "migration_impact": "No repository migration. Watch loops use local cap ledgers under .agentic/babysit/ and pause when either default spend cap is reached.",
+      "agent_notes": "Babysit watch caps are enforced before and after each poll. A cap pause posts at most one PR comment containing <!-- plate-babysit-cap -->; the --status option reports saved wake and elapsed-hour usage. A human must explicitly pass --reset-caps to start a new budget.",
+      "migration_guidance": [
+        "1. Upgrade plate-core to the release that contains watch cap integration.",
+        "2. Inspect saved usage with `gh plate pr babysit <n> --status`.",
+        "3. After a cap pause, start a new budget with `gh plate pr babysit <n> --watch --reset-caps`."
+      ],
+      "links": [
+        "#1081",
+        "#1077"
+      ]
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": "",
+  "closes_block": "Closes #1080, #1077, #1078, #1079, #1081"
+}
