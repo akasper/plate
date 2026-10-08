@@ -31,7 +31,11 @@ class TestPrWatchCaps(unittest.TestCase):
             path = caps_path("acme/widgets", 42, root=root)
             self.assertEqual(
                 path,
-                root / ".agentic" / "babysit" / "acme-widgets-42.caps.json",
+                root / ".agentic" / "babysit" / "4-acme-7-widgets-42.caps.json",
+            )
+            self.assertNotEqual(
+                caps_path("a-b/c", 42, root=root),
+                caps_path("a/b-c", 42, root=root),
             )
 
     def test_caps_path_rejects_invalid_repo_slug(self) -> None:

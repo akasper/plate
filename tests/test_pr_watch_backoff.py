@@ -46,6 +46,8 @@ def test_should_stop_merged() -> None:
     now = start + timedelta(hours=1)
     assert should_stop({"merged": True, "state": "MERGED"}, start, now, 24.0) == "merged"
     assert should_stop({"mergedAt": "2026-01-01T12:00:00Z"}, start, now, 24.0) == "merged"
+    assert should_stop({"merged_at": "2026-01-01T12:00:00Z", "state": "closed"}, start, now, 24.0) == "merged"
+    assert should_stop({"merged_at": "2026-01-01T12:00:00Z"}, start, now, 24.0) == "merged"
 
 
 def test_should_stop_closed() -> None:
@@ -54,6 +56,7 @@ def test_should_stop_closed() -> None:
     assert should_stop({"state": "CLOSED"}, start, now, 24.0) == "closed"
     assert should_stop({"state": "closed", "merged": False}, start, now, 24.0) == "closed"
     assert should_stop({"closedAt": "2026-01-01T12:00:00Z"}, start, now, 24.0) == "closed"
+    assert should_stop({"closed_at": "2026-01-01T12:00:00Z"}, start, now, 24.0) == "closed"
 
 
 def test_should_stop_max_hours_exceeded() -> None:
