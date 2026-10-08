@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -268,7 +269,11 @@ class CliTests(unittest.TestCase):
                 trigger_comment_posted=False,
             )
             gh = mock_gh.return_value
-            gh.api.side_effect = [[], {"html_url": "https://github.com/owner/repo/pull/42#issuecomment-1"}]
+            gh.api.side_effect = [
+                {"state": "OPEN"},
+                [],
+                {"html_url": "https://github.com/owner/repo/pull/42#issuecomment-1"},
+            ]
             out = io.StringIO()
             with redirect_stdout(out):
                 code = main(
@@ -278,7 +283,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(mock_babysit.call_count, 1)
             mock_sleep.assert_not_called()
-            self.assertEqual(gh.api.call_count, 2)
+            self.assertEqual(gh.api.call_count, 3)
             self.assertTrue(ledger_path.is_file())
             self.assertEqual(json.loads(ledger_path.read_text())["wakes"], 1)
             self.assertIn("<!-- plate-babysit-cap -->", gh.api.call_args_list[-1].kwargs["fields"]["body"])
@@ -382,6 +387,127 @@ class CliTests(unittest.TestCase):
         self.assertIn("would_pause=True", text)
         self.assertIn("Budget remaining tokens: 7000/50000", text)
         self.assertIn("Open checkpoints: 1", text)
+
+    def test_babysit_watch_uses_backoff_and_resets_on_report_change(self):
+        reports = [
+            BabysitReport("owner/repo", 123, 0, 0, False),
+            BabysitReport("owner/repo", 123, 0, 0, False),
+            BabysitReport("owner/repo", 123, 1, 0, False),
+            BabysitReport("owner/repo", 123, 1, 0, False),
+            BabysitReport("owner/repo", 123, 1, 0, False),
+        ]
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("plate_core.cli.resolve_repo", return_value="owner/repo"),
+            patch("plate_core.cli.caps_path", return_value=Path(directory) / "watch.caps.json"),
+            patch(
+                "plate_core.cli.claim_babysit_watch",
+                return_value={
+                    "claimed": True,
+                    "pidfile": "/tmp/babysit-watch.pid",
+                    "pid": 99,
+                    "ppid": 100,
+                },
+            ),
+            patch("plate_core.cli.pid_is_alive", side_effect=[True, True, True, True, True, False]),
+            patch("plate_core.cli.babysit_pr", side_effect=reports),
+            patch("plate_core.cli.GhClient") as mock_client,
+            patch("plate_core.cli.sleep_until_watch_interval", side_effect=[True, True, True, True, True]) as sleep,
+            patch("plate_core.cli.clear_babysit_watch_pid") as clear_pid,
+        ):
+            mock_client.return_value.api.return_value = {"state": "OPEN"}
+            self.assertEqual(
+                main(
+                    [
+                        "pr",
+                        "babysit",
+                        "123",
+                        "--watch",
+                        "--min-interval",
+                        "5",
+                        "--max-interval",
+                        "20",
+                    ]
+                ),
+                0,
+            )
+
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [5, 5, 5, 5, 10])
+        clear_pid.assert_called_once()
+
+    def test_babysit_watch_stops_on_closed_pr_and_clears_pidfile(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("plate_core.cli.resolve_repo", return_value="owner/repo"),
+            patch("plate_core.cli.caps_path", return_value=Path(directory) / "watch.caps.json"),
+            patch(
+                "plate_core.cli.claim_babysit_watch",
+                return_value={
+                    "claimed": True,
+                    "pidfile": "/tmp/babysit-watch.pid",
+                    "pid": 99,
+                    "ppid": 100,
+                },
+            ),
+            patch("plate_core.cli.pid_is_alive", return_value=True),
+            patch(
+                "plate_core.cli.babysit_pr",
+                return_value=BabysitReport("owner/repo", 123, 0, 0, False),
+            ) as babysit,
+            patch("plate_core.cli.GhClient") as mock_client,
+            patch("plate_core.cli.sleep_until_watch_interval") as sleep,
+            patch("plate_core.cli.clear_babysit_watch_pid") as clear_pid,
+        ):
+            mock_client.return_value.api.return_value = {"state": "CLOSED"}
+            self.assertEqual(main(["pr", "babysit", "123", "--watch"]), 0)
+
+        sleep.assert_not_called()
+        babysit.assert_not_called()
+        clear_pid.assert_called_once()
+
+    def test_babysit_watch_stops_at_max_hours_with_fake_clock(self):
+        class FakeClock:
+            def __init__(self):
+                self.current = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+            def now(self):
+                return self.current
+
+            def advance(self, seconds):
+                self.current += timedelta(seconds=seconds)
+
+        clock = FakeClock()
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("plate_core.cli.resolve_repo", return_value="owner/repo"),
+            patch("plate_core.cli.caps_path", return_value=Path(directory) / "watch.caps.json"),
+            patch(
+                "plate_core.cli.claim_babysit_watch",
+                return_value={
+                    "claimed": True,
+                    "pidfile": "/tmp/babysit-watch.pid",
+                    "pid": 99,
+                    "ppid": 100,
+                },
+            ),
+            patch("plate_core.cli.pid_is_alive", side_effect=[True, True]),
+            patch(
+                "plate_core.cli.babysit_pr",
+                return_value=BabysitReport("owner/repo", 123, 0, 0, False),
+            ),
+            patch("plate_core.cli.GhClient") as mock_client,
+            patch("plate_core.cli.SystemWatchClock", return_value=clock),
+            patch(
+                "plate_core.cli.sleep_until_watch_interval",
+                side_effect=lambda seconds, _ppid: (clock.advance(seconds) or True),
+            ) as sleep,
+            patch("plate_core.cli.clear_babysit_watch_pid") as clear_pid,
+        ):
+            mock_client.return_value.api.return_value = {"state": "OPEN"}
+            self.assertEqual(main(["pr", "babysit", "123", "--watch", "--max-hours", "0.0002"]), 0)
+
+        sleep.assert_called_once_with(1, 100)
+        clear_pid.assert_called_once()
 
 
 if __name__ == "__main__":
