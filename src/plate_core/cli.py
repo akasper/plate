@@ -20,7 +20,7 @@ from .baseline_catalog import (
 from .context_map import ContextMapError, get_context_route, list_context_routes
 from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
-from .github_client import GhApiError
+from .github_client import GhApiError, GhClient
 from .health import get_health, resolve_repo
 from .pr_babysit import (
     babysit_pr,
@@ -31,6 +31,7 @@ from .pr_babysit import (
     sleep_until_watch_interval,
     stop_babysit_watchers,
 )
+from .pr_watch_backoff import Backoff, SystemWatchClock, should_stop
 from .release import (
     cleanup_dead_branches,
     cut_release as core_cut_release,
@@ -946,6 +947,14 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
             return 0
         pidfile = Path(claim["pidfile"])
         ppid = int(claim["ppid"])
+        clock = SystemWatchClock()
+        started_at = clock.now()
+        backoff = Backoff(
+            min_interval=args.min_interval,
+            max_interval=args.max_interval,
+        )
+        client = GhClient()
+        previous_report = None
         if not args.json:
             print(
                 f"Watching {target} #{args.pr_number} (pid {claim['pid']}). "
@@ -953,6 +962,12 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
             )
         try:
             while pid_is_alive(ppid):
+                pr = client.api(f"repos/{target}/pulls/{args.pr_number}")
+                stop_reason = should_stop(pr, started_at, clock.now(), args.max_hours)
+                if stop_reason:
+                    if not args.json:
+                        print(f"Stopping watch: {stop_reason}.")
+                    break
                 report = babysit_pr(
                     pr_number=args.pr_number,
                     repo=target,
@@ -965,8 +980,17 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                     print(json.dumps(report.to_dict()))
                 else:
                     _print_babysit_watch_tick(report)
-                    print(f"Sleeping {args.interval}s...\n")
-                if not sleep_until_watch_interval(args.interval, ppid):
+                report_state = report.to_dict()
+                interval = backoff.next_interval(report_state != previous_report)
+                previous_report = report_state
+                if args.max_hours > 0:
+                    remaining = args.max_hours * 3600 - (clock.now() - started_at).total_seconds()
+                    if remaining <= 0:
+                        continue
+                    interval = min(interval, max(1, int(remaining)))
+                if not args.json:
+                    print(f"Sleeping {interval}s...\n")
+                if not sleep_until_watch_interval(interval, ppid):
                     break
         except KeyboardInterrupt:
             return 0
@@ -4361,7 +4385,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Stop babysit --watch processes recorded in .agentic/babysit (one PR, or all when pr_number is omitted)",
     )
-    babysit.add_argument("--interval", type=int, default=60, help="Polling interval in seconds for --watch mode")
+    babysit.add_argument(
+        "--min-interval",
+        "--interval",
+        dest="min_interval",
+        type=int,
+        default=60,
+        help="Minimum polling interval in seconds for --watch mode (--interval is deprecated)",
+    )
+    babysit.add_argument(
+        "--max-interval",
+        type=int,
+        default=1800,
+        help="Maximum polling interval in seconds for --watch mode",
+    )
+    babysit.add_argument(
+        "--max-hours",
+        type=float,
+        default=0,
+        help="Stop --watch after this many hours (0 disables the limit)",
+    )
     babysit.add_argument("--json", action="store_true", help="Output JSON")
     babysit.set_defaults(func=cmd_pr_babysit)
 
