@@ -28,6 +28,8 @@ class CapLedger:
     wakes: int = 0
     paused_reason: str | None = None
     cap_note_posted: bool = False
+    max_wakes: int | None = None
+    max_hours: float | None = None
 
 
 def _repo_slug(repo: str) -> str:
@@ -64,11 +66,15 @@ def load_ledger(path: Path, *, now: datetime | None = None) -> CapLedger:
         t = now or datetime.now().astimezone()
         return CapLedger(started_at=_iso(t), wakes=0, paused_reason=None)
     raw = json.loads(path.read_text(encoding="utf-8"))
+    max_wakes = raw.get("max_wakes")
+    max_hours = raw.get("max_hours")
     return CapLedger(
         started_at=str(raw["started_at"]),
         wakes=int(raw.get("wakes", 0)),
         paused_reason=raw.get("paused_reason"),
         cap_note_posted=bool(raw.get("cap_note_posted", False)),
+        max_wakes=int(max_wakes) if max_wakes is not None else None,
+        max_hours=float(max_hours) if max_hours is not None else None,
     )
 
 
