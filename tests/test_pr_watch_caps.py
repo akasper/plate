@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from plate_core.pr_watch_caps import (
     CAP_NOTE_MARKER,
     CapLedger,
@@ -25,6 +27,12 @@ UTC = timezone.utc
 def test_caps_path_uses_owner_repo_slug(tmp_path: Path) -> None:
     path = caps_path("acme/widgets", 42, root=tmp_path)
     assert path == tmp_path / ".agentic" / "babysit" / "acme-widgets-42.caps.json"
+
+
+@pytest.mark.parametrize("repo", ["owner/repo/extra", "/repo", "owner/", "../repo", "owner/../../outside"])
+def test_caps_path_rejects_invalid_repo_slug(repo: str, tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        caps_path(repo, 42, root=tmp_path)
 
 
 def test_ledger_round_trip(tmp_path: Path) -> None:
@@ -81,6 +89,13 @@ def test_status_line_format() -> None:
     assert status_line(ledger, caps, now) == "wakes 3/10, 2.5h/12h"
 
 
+def test_status_line_rounds_tiny_elapsed_time_to_zero() -> None:
+    caps = WatchCaps()
+    started = datetime(2026, 10, 7, 0, 0, tzinfo=UTC)
+    ledger = CapLedger(started_at=started.isoformat())
+    assert status_line(ledger, caps, started + timedelta(microseconds=1)) == "wakes 0/10, 0h/12h"
+
+
 def test_cap_note_body_includes_marker_and_resume() -> None:
     caps = WatchCaps()
     started = datetime(2026, 10, 7, 0, 0, tzinfo=UTC)
@@ -88,7 +103,7 @@ def test_cap_note_body_includes_marker_and_resume() -> None:
     body = cap_note_body(ledger.paused_reason, ledger, caps)
     assert body.startswith(CAP_NOTE_MARKER)
     assert "Babysit watch paused" in body
-    assert "gh plate pr babysit <n> --watch" in body
+    assert "gh plate pr babysit <n> --watch --reset-caps" in body
     assert "wakes 10/10" in body
 
 

@@ -7,6 +7,7 @@ can stop after max wakes or max elapsed hours without re-polling GitHub every ti
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,9 +30,12 @@ class CapLedger:
 
 
 def _repo_slug(repo: str) -> str:
-    if "/" not in repo:
+    parts = repo.split("/")
+    if len(parts) != 2 or not all(parts):
         raise ValueError(f"repo must be owner/name, got: {repo!r}")
-    owner, name = repo.split("/", 1)
+    owner, name = parts
+    if any(part in {".", ".."} or re.fullmatch(r"[A-Za-z0-9_.-]+", part) is None for part in parts):
+        raise ValueError(f"repo must be owner/name, got: {repo!r}")
     return f"{owner}-{name}"
 
 
@@ -112,7 +116,8 @@ def cap_note_body(reason: str, ledger: CapLedger, caps: WatchCaps) -> str:
         f"{CAP_NOTE_MARKER}\n"
         f"Babysit watch paused: {reason}.\n"
         f"{status}\n"
-        "Resume with `gh plate pr babysit <n> --watch` (replace `<n>` with this PR number)."
+        "Start a new watch budget with "
+        "`gh plate pr babysit <n> --watch --reset-caps` (replace `<n>` with this PR number)."
     )
 
 
@@ -137,6 +142,11 @@ def status_line(ledger: CapLedger, caps: WatchCaps, now: datetime) -> str:
     elif started.tzinfo is not None and now.tzinfo is None:
         now = now.replace(tzinfo=started.tzinfo)
     elapsed_h = max(0.0, (now - started).total_seconds() / 3600.0)
-    hours_fmt = f"{elapsed_h:.1f}h" if abs(elapsed_h - round(elapsed_h)) > 0.05 else f"{elapsed_h:g}h"
+    if elapsed_h < 0.05:
+        hours_fmt = "0h"
+    elif abs(elapsed_h - round(elapsed_h)) > 0.05:
+        hours_fmt = f"{elapsed_h:.1f}h"
+    else:
+        hours_fmt = f"{elapsed_h:g}h"
     max_h_fmt = f"{caps.max_hours:g}h"
     return f"wakes {ledger.wakes}/{caps.max_wakes}, {hours_fmt}/{max_h_fmt}"

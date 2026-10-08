@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from .bootstrap import run_bootstrap
@@ -20,7 +21,7 @@ from .baseline_catalog import (
 from .context_map import ContextMapError, get_context_route, list_context_routes
 from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
-from .github_client import GhApiError
+from .github_client import GhApiError, GhClient
 from .health import get_health, resolve_repo
 from .pr_babysit import (
     babysit_pr,
@@ -30,6 +31,18 @@ from .pr_babysit import (
     pid_is_alive,
     sleep_until_watch_interval,
     stop_babysit_watchers,
+)
+from .pr_watch_caps import (
+    CapLedger,
+    WatchCaps,
+    cap_note_body,
+    caps_path,
+    check_caps,
+    has_cap_note,
+    load_ledger,
+    record_wake,
+    save_ledger,
+    status_line,
 )
 from .release import (
     cleanup_dead_branches,
@@ -909,6 +922,39 @@ def _print_babysit_watch_tick(report) -> None:
             print(f"Merge trigger posted: {report.merge_trigger_url}")
 
 
+def _post_watch_cap_pause(repo: str, pr_number: int, reason: str, ledger: CapLedger, caps: WatchCaps) -> str | None:
+    client = GhClient()
+    endpoint = f"repos/{repo}/issues/{pr_number}/comments"
+    comments = client.api(f"{endpoint}?per_page=100&sort=created&direction=desc") or []
+    if has_cap_note(comments):
+        return None
+    response = client.api(endpoint, method="POST", fields={"body": cap_note_body(reason, ledger, caps)}) or {}
+    return response.get("html_url")
+
+
+def _print_watch_cap_status(repo: str, pr_number: int, ledger: CapLedger, caps: WatchCaps, *, as_json: bool) -> None:
+    line = status_line(ledger, caps, datetime.now().astimezone())
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "repo": repo,
+                    "pr_number": pr_number,
+                    "status": line,
+                    "wakes": ledger.wakes,
+                    "max_wakes": caps.max_wakes,
+                    "max_hours": caps.max_hours,
+                    "paused_reason": ledger.paused_reason,
+                }
+            )
+        )
+        return
+    print(f"Repo: {repo} | PR #{pr_number}")
+    print(line)
+    if ledger.paused_reason:
+        print(f"Paused: {ledger.paused_reason}. Start a new budget with --watch --reset-caps.")
+
+
 def cmd_pr_babysit(args: argparse.Namespace) -> int:
     if getattr(args, "stop", False):
         stopped = stop_babysit_watchers(repo=args.repo, pr_number=args.pr_number)
@@ -926,12 +972,27 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
         print("pr_number is required unless --stop is set.", file=sys.stderr)
         return 2
 
-    if args.watch:
+    if args.status and args.watch:
+        print("--status cannot be combined with --watch.", file=sys.stderr)
+        return 2
+    if args.reset_caps and not args.watch:
+        print("--reset-caps requires --watch.", file=sys.stderr)
+        return 2
+
+    if args.watch or args.status:
         try:
             target = resolve_repo(args.repo)
+            ledger_path = caps_path(target, args.pr_number)
         except Exception as exc:
             print(str(exc), file=sys.stderr)
             return 1
+
+        caps = WatchCaps()
+        if args.status:
+            ledger = load_ledger(ledger_path)
+            _print_watch_cap_status(target, args.pr_number, ledger, caps, as_json=args.json)
+            return 0
+
         claim = claim_babysit_watch(target, args.pr_number)
         if not claim["claimed"]:
             existing = claim.get("existing") or {}
@@ -944,6 +1005,9 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                     f"(pid {existing.get('pid')}). Stop it with: gh plate pr babysit --stop"
                 )
             return 0
+        if args.reset_caps:
+            ledger_path.unlink(missing_ok=True)
+        ledger = load_ledger(ledger_path)
         pidfile = Path(claim["pidfile"])
         ppid = int(claim["ppid"])
         if not args.json:
@@ -953,6 +1017,26 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
             )
         try:
             while pid_is_alive(ppid):
+                pause_reason = check_caps(ledger, caps, datetime.now().astimezone())
+                if pause_reason:
+                    save_ledger(ledger_path, ledger)
+                    note_url = _post_watch_cap_pause(target, args.pr_number, pause_reason, ledger, caps)
+                    payload = {
+                        "repo": target,
+                        "pr_number": args.pr_number,
+                        "paused_reason": pause_reason,
+                        "status": status_line(ledger, caps, datetime.now().astimezone()),
+                        "pause_comment_posted": note_url is not None,
+                        "pause_comment_url": note_url,
+                    }
+                    if args.json:
+                        print(json.dumps(payload))
+                    else:
+                        _print_watch_cap_status(target, args.pr_number, ledger, caps, as_json=False)
+                        if note_url:
+                            print(f"Pause comment: {note_url}")
+                    break
+
                 report = babysit_pr(
                     pr_number=args.pr_number,
                     repo=target,
@@ -961,10 +1045,36 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                     branch_update_strategy=args.branch_update_strategy,
                     pr_review_scope=getattr(args, "scope", None),
                 )
+                record_wake(ledger)
+                pause_reason = check_caps(ledger, caps, datetime.now().astimezone())
+                save_ledger(ledger_path, ledger)
                 if args.json:
-                    print(json.dumps(report.to_dict()))
+                    payload = report.to_dict()
+                    payload["watch_caps"] = status_line(ledger, caps, datetime.now().astimezone())
+                    payload["paused_reason"] = pause_reason
+                    print(json.dumps(payload))
                 else:
                     _print_babysit_watch_tick(report)
+                    print(status_line(ledger, caps, datetime.now().astimezone()))
+                if pause_reason:
+                    note_url = _post_watch_cap_pause(target, args.pr_number, pause_reason, ledger, caps)
+                    if args.json:
+                        print(
+                            json.dumps(
+                                {
+                                    "repo": target,
+                                    "pr_number": args.pr_number,
+                                    "paused_reason": pause_reason,
+                                    "pause_comment_posted": note_url is not None,
+                                    "pause_comment_url": note_url,
+                                }
+                            )
+                        )
+                    else:
+                        if note_url:
+                            print(f"Pause comment: {note_url}")
+                    break
+                if not args.json:
                     print(f"Sleeping {args.interval}s...\n")
                 if not sleep_until_watch_interval(args.interval, ppid):
                     break
@@ -4354,7 +4464,13 @@ def build_parser() -> argparse.ArgumentParser:
     babysit.add_argument(
         "--watch",
         action="store_true",
-        help="Continuously monitor the PR. Stops when the parent process exits. Records .agentic/babysit/<repo>-<pr>.pid",
+        help="Continuously monitor the PR until stopped or a spend cap is reached",
+    )
+    babysit.add_argument("--status", action="store_true", help="Show saved watch-cap usage without polling GitHub")
+    babysit.add_argument(
+        "--reset-caps",
+        action="store_true",
+        help="Start a new watch budget, clearing this PR's saved cap ledger (requires --watch)",
     )
     babysit.add_argument(
         "--stop",
