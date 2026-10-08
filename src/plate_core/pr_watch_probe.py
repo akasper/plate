@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Protocol
@@ -74,7 +74,7 @@ class HttpClient(Protocol):
 def probe_state_path(repo: str, pr: int, root: Path | str | None = None) -> Path:
     owner, name = _split_repo(repo)
     base = Path(root) if root is not None else Path.cwd()
-    return base / ".agentic" / "babysit" / f"{owner}-{name}-{pr}.probe.json"
+    return base / ".agentic" / "babysit" / f"{len(owner)}-{owner}-{len(name)}-{name}-{pr}.probe.json"
 
 
 def load_probe_state(path: Path | str) -> ProbeState | None:
@@ -172,18 +172,26 @@ def probe_pr(
     ci_state = state.ci_state
     if head_sha:
         _, _, status_json = http.get(f"/repos/{owner}/{name}/commits/{head_sha}/status", None)
-        _, _, checks_json = http.get(
-            f"/repos/{owner}/{name}/commits/{head_sha}/check-runs",
-            {"Accept": "application/vnd.github+json"},
-        )
         status_state = status_json.get("state") if isinstance(status_json, dict) else None
-        check_runs = checks_json.get("check_runs", []) if isinstance(checks_json, dict) else []
+        check_runs: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            _, _, checks_json = http.get(
+                f"/repos/{owner}/{name}/commits/{head_sha}/check-runs?per_page=100&page={page}",
+                {"Accept": "application/vnd.github+json"},
+            )
+            page_runs = checks_json.get("check_runs", []) if isinstance(checks_json, dict) else []
+            if not isinstance(page_runs, list):
+                break
+            check_runs.extend(run for run in page_runs if isinstance(run, dict))
+            if len(page_runs) < 100:
+                break
+            page += 1
         check_states = [
             "pending"
             if str(run.get("status") or "").lower() != "completed"
             else str(run.get("conclusion") or "").lower()
             for run in check_runs
-            if isinstance(run, dict)
         ]
         if "pending" in check_states or str(status_state or "").lower() in ("pending", "expected"):
             ci_state = "pending"
@@ -221,13 +229,24 @@ def _filter_since(items: list[dict[str, Any]], last_id: int) -> list[dict[str, A
     return out
 
 
+def _last_page(headers: Mapping[str, str]) -> int | None:
+    link = _header_get(headers, "link") or ""
+    for part in link.split(","):
+        if 'rel="last"' not in part:
+            continue
+        match = re.search(r"[?&]page=(\d+)", part)
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def fetch_delta(
     http: HttpClient,
     repo: str,
     pr: int,
     state: ProbeState | None,
 ) -> dict[str, Any]:
-    """Return only new issue comments, review comments, and reviews since last probe."""
+    """Return deltas and updated cursors; callers should persist the returned state."""
     state = state or ProbeState()
     owner, name = _split_repo(repo)
     since = state.last_checked_at or "1970-01-01T00:00:00Z"
@@ -241,23 +260,54 @@ def fetch_delta(
         None,
     )
     reviews: list[dict[str, Any]] = []
-    page = 1
-    while True:
-        _, _, page_reviews = http.get(
-            f"/repos/{owner}/{name}/pulls/{pr}/reviews?per_page=100&page={page}",
-            None,
-        )
-        if not isinstance(page_reviews, list):
-            break
-        reviews.extend(page_reviews)
-        if len(page_reviews) < 100:
-            break
-        page += 1
+    reviews_path = f"/repos/{owner}/{name}/pulls/{pr}/reviews"
+    _, first_headers, first_page = http.get(f"{reviews_path}?per_page=100&page=1", None)
+    last_page = _last_page(first_headers)
+    if isinstance(first_page, list):
+        if last_page is not None:
+            pages = range(last_page, 0, -1)
+            for page in pages:
+                page_reviews = first_page if page == 1 else http.get(
+                    f"{reviews_path}?per_page=100&page={page}", None
+                )[2]
+                if not isinstance(page_reviews, list):
+                    break
+                reviews.extend(page_reviews)
+                if any(int(item.get("id") or 0) <= state.last_review_id for item in page_reviews):
+                    break
+        else:
+            page = 1
+            page_reviews = first_page
+            while isinstance(page_reviews, list):
+                reviews.extend(page_reviews)
+                if len(page_reviews) < 100:
+                    break
+                page += 1
+                page_reviews = http.get(f"{reviews_path}?per_page=100&page={page}", None)[2]
 
     ic_list = issue_comments if isinstance(issue_comments, list) else []
     rc_list = review_comments if isinstance(review_comments, list) else []
+    new_issue_comments = _filter_since(ic_list, state.last_issue_comment_id)
+    new_review_comments = _filter_since(rc_list, state.last_review_comment_id)
+    new_reviews = _filter_since(reviews, state.last_review_id)
+    new_state = replace(
+        state,
+        last_issue_comment_id=max([
+            state.last_issue_comment_id,
+            *(int(item.get("id") or 0) for item in new_issue_comments),
+        ]),
+        last_review_comment_id=max([
+            state.last_review_comment_id,
+            *(int(item.get("id") or 0) for item in new_review_comments),
+        ]),
+        last_review_id=max([
+            state.last_review_id,
+            *(int(item.get("id") or 0) for item in new_reviews),
+        ]),
+    )
     return {
-        "issue_comments": _filter_since(ic_list, state.last_issue_comment_id),
-        "review_comments": _filter_since(rc_list, state.last_review_comment_id),
-        "reviews": _filter_since(reviews, state.last_review_id),
+        "issue_comments": new_issue_comments,
+        "review_comments": new_review_comments,
+        "reviews": new_reviews,
+        "new_state": new_state,
     }
