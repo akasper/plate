@@ -1,9 +1,9 @@
 """Cheap PR change detection for babysit watch loops (#1078).
 
 Uses conditional GET (``If-None-Match``) on the pull request resource so an
-unchanged PR costs exactly one REST round-trip per probe. When the PR body
-changes, compares ``head.sha``, ``updated_at``, and ``mergeable_state``, and
-fetches combined commit status only if ``head.sha`` or ``updated_at`` moved.
+unchanged PR costs one PR-resource round-trip per probe. Compares ``head.sha``,
+``updated_at``, and ``mergeable_state``; commit status and check runs are
+polled on every probe so CI-only transitions are detected.
 
 Default HTTP client: ``gh api -i`` via :func:`plate_core.procutil.run_hidden`,
 which reliably returns ``304 Not Modified`` with response headers (including
@@ -128,6 +128,12 @@ class GhApiHttp:
             cmd.extend(["-H", f"{key}: {value}"])
         proc = run_hidden(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
         if proc.returncode != 0:
+            try:
+                response = _parse_gh_api_i(proc.stdout or "")
+                if response[0] == 304:
+                    return response
+            except (RuntimeError, json.JSONDecodeError):
+                pass
             err = (proc.stderr or proc.stdout or "gh api failed").strip()
             raise RuntimeError(err)
         return _parse_gh_api_i(proc.stdout or "")
@@ -147,27 +153,46 @@ def probe_pr(
     if state.etag:
         req_headers["If-None-Match"] = state.etag
 
-    status, resp_headers, body = http.get(pull_path, req_headers)
     checked_at = _utc_now_iso()
+    status, resp_headers, body = http.get(pull_path, req_headers)
 
-    if status == 304:
-        new_state = ProbeState(**asdict(state))
-        new_state.last_checked_at = checked_at
-        return ProbeResult(changed=False, not_modified=True, pr=None, new_state=new_state)
-
-    if status != 200:
+    if status not in (200, 304):
         raise RuntimeError(f"unexpected status {status} for {pull_path}")
 
     etag = _header_get(resp_headers, "etag") or state.etag
-    head_sha = (body.get("head") or {}).get("sha")
-    updated_at = body.get("updated_at")
-    mergeable_state = body.get("mergeable_state")
+    if status == 200:
+        head_sha = (body.get("head") or {}).get("sha")
+        updated_at = body.get("updated_at")
+        mergeable_state = body.get("mergeable_state")
+    else:
+        head_sha = state.head_sha
+        updated_at = state.updated_at
+        mergeable_state = state.mergeable_state
 
     ci_state = state.ci_state
-    head_or_time_changed = head_sha != state.head_sha or updated_at != state.updated_at
-    if head_or_time_changed and head_sha:
+    if head_sha:
         _, _, status_json = http.get(f"/repos/{owner}/{name}/commits/{head_sha}/status", None)
-        ci_state = status_json.get("state") if isinstance(status_json, dict) else ci_state
+        _, _, checks_json = http.get(
+            f"/repos/{owner}/{name}/commits/{head_sha}/check-runs",
+            {"Accept": "application/vnd.github+json"},
+        )
+        status_state = status_json.get("state") if isinstance(status_json, dict) else None
+        check_runs = checks_json.get("check_runs", []) if isinstance(checks_json, dict) else []
+        check_states = [
+            "pending"
+            if str(run.get("status") or "").lower() != "completed"
+            else str(run.get("conclusion") or "").lower()
+            for run in check_runs
+            if isinstance(run, dict)
+        ]
+        if "pending" in check_states or str(status_state or "").lower() in ("pending", "expected"):
+            ci_state = "pending"
+        elif any(value in ("failure", "timed_out", "cancelled", "action_required", "startup_failure") for value in check_states):
+            ci_state = "failure"
+        elif str(status_state or "").lower() in ("failure", "error"):
+            ci_state = str(status_state).lower()
+        elif status_state or check_states:
+            ci_state = "success"
 
     changed = (
         head_sha != state.head_sha
@@ -187,7 +212,7 @@ def probe_pr(
         last_review_comment_id=state.last_review_comment_id,
         last_review_id=state.last_review_id,
     )
-    return ProbeResult(changed=changed, not_modified=False, pr=body, new_state=new_state)
+    return ProbeResult(changed=changed, not_modified=status == 304, pr=body if status == 200 else None, new_state=new_state)
 
 
 def _filter_since(items: list[dict[str, Any]], last_id: int) -> list[dict[str, Any]]:
@@ -215,14 +240,24 @@ def fetch_delta(
         f"/repos/{owner}/{name}/pulls/{pr}/comments?since={since}",
         None,
     )
-    _, _, reviews = http.get(f"/repos/{owner}/{name}/pulls/{pr}/reviews", None)
+    reviews: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        _, _, page_reviews = http.get(
+            f"/repos/{owner}/{name}/pulls/{pr}/reviews?per_page=100&page={page}",
+            None,
+        )
+        if not isinstance(page_reviews, list):
+            break
+        reviews.extend(page_reviews)
+        if len(page_reviews) < 100:
+            break
+        page += 1
 
     ic_list = issue_comments if isinstance(issue_comments, list) else []
     rc_list = review_comments if isinstance(review_comments, list) else []
-    rev_list = reviews if isinstance(reviews, list) else []
-
     return {
         "issue_comments": _filter_since(ic_list, state.last_issue_comment_id),
         "review_comments": _filter_since(rc_list, state.last_review_comment_id),
-        "reviews": _filter_since(rev_list, state.last_review_id),
+        "reviews": _filter_since(reviews, state.last_review_id),
     }
