@@ -27,16 +27,18 @@ class CapLedger:
     started_at: str
     wakes: int = 0
     paused_reason: str | None = None
+    cap_note_posted: bool = False
 
 
 def _repo_slug(repo: str) -> str:
+    """Length-prefixed owner and name so ``a-b/c`` and ``a/b-c`` do not collide."""
     parts = repo.split("/")
     if len(parts) != 2 or not all(parts):
         raise ValueError(f"repo must be owner/name, got: {repo!r}")
     owner, name = parts
     if any(part in {".", ".."} or re.fullmatch(r"[A-Za-z0-9_.-]+", part) is None for part in parts):
         raise ValueError(f"repo must be owner/name, got: {repo!r}")
-    return f"{owner}-{name}"
+    return f"{len(owner)}-{owner}-{len(name)}-{name}"
 
 
 def caps_path(repo: str, pr: int, root: Path | str | None = None) -> Path:
@@ -66,6 +68,7 @@ def load_ledger(path: Path, *, now: datetime | None = None) -> CapLedger:
         started_at=str(raw["started_at"]),
         wakes=int(raw.get("wakes", 0)),
         paused_reason=raw.get("paused_reason"),
+        cap_note_posted=bool(raw.get("cap_note_posted", False)),
     )
 
 

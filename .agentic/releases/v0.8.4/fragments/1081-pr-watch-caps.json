@@ -7,9 +7,10 @@
   "migration_guidance": [
     "1. Upgrade plate-core to the release that contains watch cap integration.",
     "2. Inspect saved usage with `gh plate pr babysit <n> --status`.",
-    "3. After a cap pause, start a new budget with `gh plate pr babysit <n> --watch --reset-caps`."
+    "3. Set a budget with `--max-wakes` (default 10) and `--cap-hours` (default 12).",
+    "4. After a cap pause, start a new budget with `gh plate pr babysit <n> --watch --reset-caps`."
   ],
-  "agent_notes": "Babysit watch caps are enforced before and after each poll. A cap pause posts at most one PR comment containing <!-- plate-babysit-cap -->; the --status option reports saved wake and elapsed-hour usage. A human must explicitly pass --reset-caps to start a new budget.",
+  "agent_notes": "Babysit watch caps are enforced before and after each poll. Pass --max-wakes and --cap-hours to change the defaults. A cap pause posts at most one PR comment containing <!-- plate-babysit-cap -->. The ledger records cap_note_posted, and a later pause still searches newer comment pages for that marker. The --status option reports saved wake and elapsed-hour usage. A human must explicitly pass --reset-caps to start a new budget. Cap ledger filenames are length-prefixed so owner/name pairs that share a hyphenated slug do not share a budget.",
   "breaking": false,
   "links": ["#1081", "#1077"],
   "requires": []

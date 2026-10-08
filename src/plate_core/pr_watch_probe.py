@@ -240,6 +240,25 @@ def _last_page(headers: Mapping[str, str]) -> int | None:
     return None
 
 
+def _paged_list(http: HttpClient, path: str) -> list[dict[str, Any]]:
+    """GET a list endpoint, following pages of up to 100 items."""
+    items: list[dict[str, Any]] = []
+    page = 1
+    joiner = "&" if "?" in path else "?"
+    while True:
+        _, headers, body = http.get(f"{path}{joiner}per_page=100&page={page}", None)
+        if not isinstance(body, list) or not body:
+            break
+        items.extend(item for item in body if isinstance(item, dict))
+        last = _last_page(headers)
+        if last is not None and page >= last:
+            break
+        if len(body) < 100:
+            break
+        page += 1
+    return items
+
+
 def fetch_delta(
     http: HttpClient,
     repo: str,
@@ -251,13 +270,11 @@ def fetch_delta(
     owner, name = _split_repo(repo)
     since = state.last_checked_at or "1970-01-01T00:00:00Z"
 
-    _, _, issue_comments = http.get(
-        f"/repos/{owner}/{name}/issues/{pr}/comments?since={since}",
-        None,
+    issue_comments = _paged_list(
+        http, f"/repos/{owner}/{name}/issues/{pr}/comments?since={since}"
     )
-    _, _, review_comments = http.get(
-        f"/repos/{owner}/{name}/pulls/{pr}/comments?since={since}",
-        None,
+    review_comments = _paged_list(
+        http, f"/repos/{owner}/{name}/pulls/{pr}/comments?since={since}"
     )
     reviews: list[dict[str, Any]] = []
     reviews_path = f"/repos/{owner}/{name}/pulls/{pr}/reviews"
@@ -285,10 +302,8 @@ def fetch_delta(
                 page += 1
                 page_reviews = http.get(f"{reviews_path}?per_page=100&page={page}", None)[2]
 
-    ic_list = issue_comments if isinstance(issue_comments, list) else []
-    rc_list = review_comments if isinstance(review_comments, list) else []
-    new_issue_comments = _filter_since(ic_list, state.last_issue_comment_id)
-    new_review_comments = _filter_since(rc_list, state.last_review_comment_id)
+    new_issue_comments = _filter_since(issue_comments, state.last_issue_comment_id)
+    new_review_comments = _filter_since(review_comments, state.last_review_comment_id)
     new_reviews = _filter_since(reviews, state.last_review_id)
     new_state = replace(
         state,

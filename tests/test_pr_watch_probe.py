@@ -235,11 +235,11 @@ class PrWatchProbeTests(unittest.TestCase):
         http = _RecordingHttp(
             {
                 (
-                    "/repos/o/r/issues/4/comments?since=2026-01-01T12:00:00Z",
+                    "/repos/o/r/issues/4/comments?since=2026-01-01T12:00:00Z&per_page=100&page=1",
                     frozenset(),
                 ): (200, {}, [{"id": 99}, {"id": 101, "body": "hi"}]),
                 (
-                    "/repos/o/r/pulls/4/comments?since=2026-01-01T12:00:00Z",
+                    "/repos/o/r/pulls/4/comments?since=2026-01-01T12:00:00Z&per_page=100&page=1",
                     frozenset(),
                 ): (200, {}, [{"id": 201}]),
                 ("/repos/o/r/pulls/4/reviews?per_page=100&page=1", frozenset()): (
@@ -258,14 +258,52 @@ class PrWatchProbeTests(unittest.TestCase):
         self.assertEqual(delta["new_state"].last_review_id, 6)
         self.assertEqual(state.last_issue_comment_id, 100)
 
+    def test_fetch_delta_paginates_issue_and_review_comments(self):
+        since = "1970-01-01T00:00:00Z"
+        issue_page_1 = [{"id": i} for i in range(1, 101)]
+        issue_page_2 = [{"id": 101}, {"id": 102}]
+        review_page_1 = [{"id": i} for i in range(1, 101)]
+        review_page_2 = [{"id": 150}]
+        http = _RecordingHttp(
+            {
+                (f"/repos/o/r/issues/4/comments?since={since}&per_page=100&page=1", frozenset()): (
+                    200,
+                    {},
+                    issue_page_1,
+                ),
+                (f"/repos/o/r/issues/4/comments?since={since}&per_page=100&page=2", frozenset()): (
+                    200,
+                    {},
+                    issue_page_2,
+                ),
+                (f"/repos/o/r/pulls/4/comments?since={since}&per_page=100&page=1", frozenset()): (
+                    200,
+                    {},
+                    review_page_1,
+                ),
+                (f"/repos/o/r/pulls/4/comments?since={since}&per_page=100&page=2", frozenset()): (
+                    200,
+                    {},
+                    review_page_2,
+                ),
+                ("/repos/o/r/pulls/4/reviews?per_page=100&page=1", frozenset()): (200, {}, []),
+            }
+        )
+        delta = fetch_delta(http, "o/r", 4, ProbeState())
+        self.assertEqual(len(delta["issue_comments"]), 102)
+        self.assertEqual(delta["issue_comments"][-1]["id"], 102)
+        self.assertEqual(delta["review_comments"][-1]["id"], 150)
+        self.assertEqual(delta["new_state"].last_issue_comment_id, 102)
+        self.assertEqual(delta["new_state"].last_review_comment_id, 150)
+
     def test_fetch_delta_paginates_reviews(self):
         empty = (200, {}, [])
         first_page = [{"id": i} for i in range(1, 101)]
         second_page = [{"id": i} for i in range(101, 201)]
         http = _RecordingHttp(
             {
-                ("/repos/o/r/issues/4/comments?since=1970-01-01T00:00:00Z", frozenset()): empty,
-                ("/repos/o/r/pulls/4/comments?since=1970-01-01T00:00:00Z", frozenset()): empty,
+                ("/repos/o/r/issues/4/comments?since=1970-01-01T00:00:00Z&per_page=100&page=1", frozenset()): empty,
+                ("/repos/o/r/pulls/4/comments?since=1970-01-01T00:00:00Z&per_page=100&page=1", frozenset()): empty,
                 ("/repos/o/r/pulls/4/reviews?per_page=100&page=1", frozenset()): (200, {}, first_page),
                 ("/repos/o/r/pulls/4/reviews?per_page=100&page=2", frozenset()): (200, {}, second_page),
                 ("/repos/o/r/pulls/4/reviews?per_page=100&page=3", frozenset()): (200, {}, [{"id": 201}]),
@@ -288,8 +326,8 @@ class PrWatchProbeTests(unittest.TestCase):
         third_page = [{"id": 201}, {"id": 202}]
         http = _RecordingHttp(
             {
-                ("/repos/o/r/issues/4/comments?since=1970-01-01T00:00:00Z", frozenset()): empty,
-                ("/repos/o/r/pulls/4/comments?since=1970-01-01T00:00:00Z", frozenset()): empty,
+                ("/repos/o/r/issues/4/comments?since=1970-01-01T00:00:00Z&per_page=100&page=1", frozenset()): empty,
+                ("/repos/o/r/pulls/4/comments?since=1970-01-01T00:00:00Z&per_page=100&page=1", frozenset()): empty,
                 ("/repos/o/r/pulls/4/reviews?per_page=100&page=1", frozenset()): (
                     200,
                     {"Link": '<https://api.github.com/repos/o/r/pulls/4/reviews?per_page=100&page=3>; rel="last"'},

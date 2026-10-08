@@ -63,7 +63,7 @@ def _pr_merged(pr: dict[str, Any]) -> bool:
     state = pr.get("state")
     if isinstance(state, str) and state.upper() == "MERGED":
         return True
-    if pr.get("mergedAt"):
+    if pr.get("mergedAt") or pr.get("merged_at"):
         return True
     return False
 
@@ -78,7 +78,7 @@ def _pr_closed_unmerged(pr: dict[str, Any]) -> bool:
             return True
     if pr.get("closed") is True:
         return True
-    if pr.get("closedAt"):
+    if pr.get("closedAt") or pr.get("closed_at"):
         return True
     return False
 

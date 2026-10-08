@@ -923,13 +923,42 @@ def _print_babysit_watch_tick(report) -> None:
             print(f"Merge trigger posted: {report.merge_trigger_url}")
 
 
-def _post_watch_cap_pause(repo: str, pr_number: int, reason: str, ledger: CapLedger, caps: WatchCaps) -> str | None:
+def _cap_note_comment_pages(client: GhClient, repo: str, pr_number: int):
+    """Yield issue-comment pages, newest first, until a short page."""
+    endpoint = f"repos/{repo}/issues/{pr_number}/comments"
+    page = 1
+    while True:
+        comments = client.api(
+            f"{endpoint}?per_page=100&sort=created&direction=desc&page={page}"
+        ) or []
+        if not isinstance(comments, list) or not comments:
+            return
+        yield comments
+        if len(comments) < 100:
+            return
+        page += 1
+
+
+def _post_watch_cap_pause(
+    repo: str,
+    pr_number: int,
+    reason: str,
+    ledger: CapLedger,
+    caps: WatchCaps,
+    ledger_path: Path,
+) -> str | None:
+    if ledger.cap_note_posted:
+        return None
     client = GhClient()
     endpoint = f"repos/{repo}/issues/{pr_number}/comments"
-    comments = client.api(f"{endpoint}?per_page=100&sort=created&direction=desc") or []
-    if has_cap_note(comments):
-        return None
+    for comments in _cap_note_comment_pages(client, repo, pr_number):
+        if has_cap_note(comments):
+            ledger.cap_note_posted = True
+            save_ledger(ledger_path, ledger)
+            return None
     response = client.api(endpoint, method="POST", fields={"body": cap_note_body(reason, ledger, caps)}) or {}
+    ledger.cap_note_posted = True
+    save_ledger(ledger_path, ledger)
     return response.get("html_url")
 
 
@@ -981,6 +1010,12 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
         return 2
 
     if args.watch or args.status:
+        if args.max_wakes < 1:
+            print("--max-wakes must be at least 1.", file=sys.stderr)
+            return 2
+        if args.cap_hours <= 0:
+            print("--cap-hours must be positive.", file=sys.stderr)
+            return 2
         try:
             target = resolve_repo(args.repo)
             ledger_path = caps_path(target, args.pr_number)
@@ -988,7 +1023,7 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
             print(str(exc), file=sys.stderr)
             return 1
 
-        caps = WatchCaps()
+        caps = WatchCaps(max_wakes=args.max_wakes, max_hours=args.cap_hours)
         if args.status:
             ledger = load_ledger(ledger_path)
             _print_watch_cap_status(target, args.pr_number, ledger, caps, as_json=args.json)
@@ -1035,7 +1070,9 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                 pause_reason = check_caps(ledger, caps, datetime.now().astimezone())
                 if pause_reason:
                     save_ledger(ledger_path, ledger)
-                    note_url = _post_watch_cap_pause(target, args.pr_number, pause_reason, ledger, caps)
+                    note_url = _post_watch_cap_pause(
+                        target, args.pr_number, pause_reason, ledger, caps, ledger_path
+                    )
                     payload = {
                         "repo": target,
                         "pr_number": args.pr_number,
@@ -1071,7 +1108,9 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                     _print_babysit_watch_tick(report)
                     print(status_line(ledger, caps, datetime.now().astimezone()))
                 if pause_reason:
-                    note_url = _post_watch_cap_pause(target, args.pr_number, pause_reason, ledger, caps)
+                    note_url = _post_watch_cap_pause(
+                        target, args.pr_number, pause_reason, ledger, caps, ledger_path
+                    )
                     if args.json:
                         print(
                             json.dumps(
@@ -4517,6 +4556,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0,
         help="Stop --watch after this many hours (0 disables the limit)",
+    )
+    babysit.add_argument(
+        "--max-wakes",
+        type=int,
+        default=10,
+        help="Pause --watch after this many babysit wakes in the saved cap ledger (default 10)",
+    )
+    babysit.add_argument(
+        "--cap-hours",
+        type=float,
+        default=12.0,
+        help="Pause --watch after this many elapsed hours in the saved cap ledger (default 12)",
     )
     babysit.add_argument("--json", action="store_true", help="Output JSON")
     babysit.set_defaults(func=cmd_pr_babysit)
