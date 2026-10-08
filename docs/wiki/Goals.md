@@ -37,11 +37,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 ## Current State & Evidence
 
-*(Snapshot after v0.8.3 — update at major cuts and when North Star shifts.)*
+*(Snapshot after v0.8.4 — update at major cuts and when North Star shifts.)*
 
-**Shipped foundations (v0.8.0, public pin v0.8.3):**
+**Shipped foundations (v0.8.0, public pin v0.8.4):**
 
-- Public **PyPI** package `plate-core==0.8.3`, shared library for CLI / MCP / plugins.
+- Public **PyPI** package `plate-core==0.8.4`, shared library for CLI / MCP / plugins.
 - **`gh plate`** thin-shim extension path and release-track / ceremony tooling.
 - Autonomy and adoption foundations: budgeted AutonomyEngine, adopt / import-payload / self-migrate surfaces, quiet ops, baseline persona when PLATE signals are present.
 - Endless feed / Q&A / planning primitives and Information Audit Goals convention (Epic #218 lineage).
@@ -60,6 +60,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 - Safe `gh plate migrate-docs-namespace` (dry-run by default) and a migration guide that no longer recommends overwriting `AGENTS.md`.
 - Windows `gh` and `git` calls hide console windows. `gh plate pr babysit --watch` stops when its parent exits, or with `gh plate pr babysit --stop`.
+
+**Shipped in v0.8.4 (was Next Release #1075):**
+
+- `gh plate pr babysit --watch` backs off while a pull request is quiet and stops on merge, close, or a wall-clock cap. Spend caps limit wakes and hours. One pause note is posted when a cap is hit. `--status` reports saved usage. `--reset-caps` starts a new budget (#1077, #1079, #1081).
+- Cheap PR change detection (`pr_watch_probe`) and delta wake summaries (`pr_watch_summary`) ship as libraries. The watch loop does not call them yet (#1078, #1080).
 
 **Not yet won (do not overclaim):**
 
