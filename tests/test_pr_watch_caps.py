@@ -53,6 +53,18 @@ class TestPrWatchCaps(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         caps_path(repo, 42, root=root)
 
+    def test_ledger_round_trip_keeps_saved_caps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = caps_path("acme/widgets", 3, root=Path(tmp))
+            ledger = CapLedger(
+                started_at="2026-10-07T00:00:00+00:00",
+                wakes=1,
+                max_wakes=2,
+                max_hours=4.0,
+            )
+            save_ledger(path, ledger)
+            self.assertEqual(load_ledger(path), ledger)
+
     def test_ledger_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

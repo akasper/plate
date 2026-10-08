@@ -923,6 +923,13 @@ def _print_babysit_watch_tick(report) -> None:
             print(f"Merge trigger posted: {report.merge_trigger_url}")
 
 
+def _caps_from_ledger(ledger: CapLedger, fallback: WatchCaps) -> WatchCaps:
+    """Use the budget stored on ``ledger`` when a watch has already saved one."""
+    if ledger.max_wakes is None or ledger.max_hours is None:
+        return fallback
+    return WatchCaps(max_wakes=int(ledger.max_wakes), max_hours=float(ledger.max_hours))
+
+
 def _cap_note_comment_pages(client: GhClient, repo: str, pr_number: int):
     """Yield issue-comment pages, newest first, until a short page."""
     endpoint = f"repos/{repo}/issues/{pr_number}/comments"
@@ -1023,9 +1030,10 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
             print(str(exc), file=sys.stderr)
             return 1
 
-        caps = WatchCaps(max_wakes=args.max_wakes, max_hours=args.cap_hours)
+        requested = WatchCaps(max_wakes=args.max_wakes, max_hours=args.cap_hours)
         if args.status:
             ledger = load_ledger(ledger_path)
+            caps = _caps_from_ledger(ledger, requested)
             _print_watch_cap_status(target, args.pr_number, ledger, caps, as_json=args.json)
             return 0
 
@@ -1044,6 +1052,10 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
         if args.reset_caps:
             ledger_path.unlink(missing_ok=True)
         ledger = load_ledger(ledger_path)
+        if ledger.max_wakes is None or ledger.max_hours is None:
+            ledger.max_wakes = requested.max_wakes
+            ledger.max_hours = requested.max_hours
+        caps = _caps_from_ledger(ledger, requested)
         pidfile = Path(claim["pidfile"])
         ppid = int(claim["ppid"])
         clock = SystemWatchClock()
@@ -4526,7 +4538,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Continuously monitor the PR until stopped or a spend cap is reached",
     )
-    babysit.add_argument("--status", action="store_true", help="Show saved watch-cap usage without polling GitHub")
+    babysit.add_argument(
+        "--status",
+        action="store_true",
+        help="Show the saved watch budget and usage without polling GitHub",
+    )
     babysit.add_argument(
         "--reset-caps",
         action="store_true",
@@ -4561,13 +4577,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-wakes",
         type=int,
         default=10,
-        help="Pause --watch after this many babysit wakes in the saved cap ledger (default 10)",
+        help="Wake budget stored when a cap ledger is created (default 10). Later watches keep the saved budget until --reset-caps.",
     )
     babysit.add_argument(
         "--cap-hours",
         type=float,
         default=12.0,
-        help="Pause --watch after this many elapsed hours in the saved cap ledger (default 12)",
+        help="Hour budget stored when a cap ledger is created (default 12). Later watches keep the saved budget until --reset-caps.",
     )
     babysit.add_argument("--json", action="store_true", help="Output JSON")
     babysit.set_defaults(func=cmd_pr_babysit)

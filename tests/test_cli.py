@@ -409,9 +409,21 @@ class CliTests(unittest.TestCase):
                         "4",
                     ]
                 )
-        self.assertEqual(code, 0)
-        payload = json.loads(out.getvalue().splitlines()[0])
-        self.assertEqual(payload["watch_caps"], "wakes 1/2, 0h/4h")
+            self.assertEqual(code, 0)
+            payload = json.loads(out.getvalue().splitlines()[0])
+            self.assertEqual(payload["watch_caps"], "wakes 1/2, 0h/4h")
+            saved = json.loads(ledger_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["max_wakes"], 2)
+            self.assertEqual(saved["max_hours"], 4.0)
+
+            status_out = io.StringIO()
+            with redirect_stdout(status_out):
+                status_code = main(["pr", "babysit", "42", "--repo", "owner/repo", "--status", "--json"])
+            self.assertEqual(status_code, 0)
+            status = json.loads(status_out.getvalue())
+            self.assertEqual(status["max_wakes"], 2)
+            self.assertEqual(status["max_hours"], 4.0)
+            self.assertEqual(status["status"], "wakes 1/2, 0h/4h")
 
     @patch("plate_core.cli.core_cut_release")
     def test_release_cut_json_output(self, mock_core_cut):
