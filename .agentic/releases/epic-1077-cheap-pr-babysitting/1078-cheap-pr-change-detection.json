@@ -8,7 +8,7 @@
     "1. Upgrade plate-core when this ships on the release track.",
     "2. Babysit --watch behavior is unchanged until the watch loop integration lands in a later Epic #1077 slice."
   ],
-  "agent_notes": "Use probe_pr with a injected or GhApiHttp client for one REST GET per unchanged PR (304). Persist ProbeState under .agentic/babysit/<owner>-<repo>-<pr>.probe.json. fetch_delta loads only new comments and reviews since last_checked_at.",
+  "agent_notes": "Use probe_pr with an injected or GhApiHttp client; a 304 avoids reloading the PR resource, while commit status and check runs are polled each probe. Persist ProbeState under .agentic/babysit/<owner>-<repo>-<pr>.probe.json. fetch_delta loads only new comments and reviews since last_checked_at.",
   "breaking": false,
   "links": ["#1078", "#1077"],
   "requires": ["0.8.4"]

@@ -2,8 +2,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from plate_core.pr_watch_probe import (
+    GhApiHttp,
     ProbeState,
     fetch_delta,
     load_probe_state,
@@ -52,22 +55,62 @@ class PrWatchProbeTests(unittest.TestCase):
         p = probe_state_path("octo/repo", 42, root="/tmp/root")
         self.assertEqual(p, Path("/tmp/root/.agentic/babysit/octo-repo-42.probe.json"))
 
-    def test_probe_304_unchanged_single_request(self):
-        state = ProbeState(etag='W/"etag1"', head_sha="abc", updated_at="t1", mergeable_state="clean")
+    def test_probe_304_unchanged_pr_resource(self):
+        state = ProbeState(etag='W/"etag1"', head_sha="abc", updated_at="t1", mergeable_state="clean", ci_state="success")
         http = _RecordingHttp(
             {
                 (
                     "/repos/o/r/pulls/1",
                     frozenset({("If-None-Match", 'W/"etag1"')}),
                 ): (304, {}, None),
+                ("/repos/o/r/commits/abc/status", frozenset()): (200, {}, {"state": "success"}),
+                (
+                    "/repos/o/r/commits/abc/check-runs",
+                    frozenset({("Accept", "application/vnd.github+json")}),
+                ): (200, {}, {"check_runs": [{"status": "completed", "conclusion": "success"}]}),
             }
         )
         result = probe_pr(http, "o/r", 1, state)
         self.assertTrue(result.not_modified)
         self.assertFalse(result.changed)
         self.assertIsNone(result.pr)
-        self.assertEqual(len(http.calls), 1)
+        self.assertEqual(len(http.calls), 3)
         self.assertEqual(http.calls[0][0], "/repos/o/r/pulls/1")
+
+    def test_gh_api_http_accepts_nonzero_304_response(self):
+        proc = SimpleNamespace(
+            returncode=1,
+            stdout="HTTP/2.0 304 Not Modified\r\nETag: W/\"same\"\r\n\r\n",
+            stderr="gh: HTTP 304",
+        )
+        with patch("plate_core.pr_watch_probe.run_hidden", return_value=proc):
+            status, headers, body = GhApiHttp().get("/repos/o/r/pulls/1")
+        self.assertEqual(status, 304)
+        self.assertEqual(headers["ETag"], 'W/"same"')
+        self.assertEqual(body, {})
+
+    def test_probe_check_run_transition_on_304_same_head(self):
+        state = ProbeState(
+            etag='W/"etag1"',
+            head_sha="abc",
+            updated_at="t1",
+            mergeable_state="clean",
+            ci_state="pending",
+        )
+        http = _RecordingHttp(
+            {
+                ("/repos/o/r/pulls/1", frozenset({("If-None-Match", 'W/"etag1"')})): (304, {}, None),
+                ("/repos/o/r/commits/abc/status", frozenset()): (200, {}, {"state": "success"}),
+                (
+                    "/repos/o/r/commits/abc/check-runs",
+                    frozenset({("Accept", "application/vnd.github+json")}),
+                ): (200, {}, {"check_runs": [{"status": "completed", "conclusion": "success"}]}),
+            }
+        )
+        result = probe_pr(http, "o/r", 1, state)
+        self.assertTrue(result.not_modified)
+        self.assertTrue(result.changed)
+        self.assertEqual(result.new_state.ci_state, "success")
 
     def test_probe_new_commit_fetches_status(self):
         state = ProbeState(
@@ -93,6 +136,10 @@ class PrWatchProbeTests(unittest.TestCase):
                     {},
                     {"state": "success"},
                 ),
+                (
+                    "/repos/o/r/commits/newsha/check-runs",
+                    frozenset({("Accept", "application/vnd.github+json")}),
+                ): (200, {}, {"check_runs": [{"status": "completed", "conclusion": "success"}]}),
             }
         )
         result = probe_pr(http, "o/r", 2, state)
@@ -117,13 +164,30 @@ class PrWatchProbeTests(unittest.TestCase):
                         "mergeable_state": "unstable",
                     },
                 ),
-                ("/repos/o/r/commits/sha2/status", frozenset()): (200, {}, {"state": "failure"}),
+                ("/repos/o/r/commits/sha2/status", frozenset()): (200, {}, {"state": "success"}),
+                (
+                    "/repos/o/r/commits/sha2/check-runs",
+                    frozenset({("Accept", "application/vnd.github+json")}),
+                ): (200, {}, {"check_runs": [{"status": "completed", "conclusion": "failure"}]}),
             }
         )
         result = probe_pr(http, "o/r", 3, state)
         self.assertTrue(result.changed)
         self.assertEqual(result.new_state.ci_state, "failure")
         self.assertEqual(result.new_state.mergeable_state, "unstable")
+
+    def test_checkpoint_is_recorded_before_request(self):
+        events = []
+
+        class OrderedHttp:
+            def get(self, path, headers=None):
+                events.append("request")
+                return 304, {}, None
+
+        with patch("plate_core.pr_watch_probe._utc_now_iso", side_effect=lambda: events.append("checkpoint") or "t0"):
+            result = probe_pr(OrderedHttp(), "o/r", 1, ProbeState(etag='W/"etag"'))
+        self.assertEqual(events, ["checkpoint", "request"])
+        self.assertEqual(result.new_state.last_checked_at, "t0")
 
     def test_fetch_delta_new_comment(self):
         state = ProbeState(
@@ -142,7 +206,7 @@ class PrWatchProbeTests(unittest.TestCase):
                     "/repos/o/r/pulls/4/comments?since=2026-01-01T12:00:00Z",
                     frozenset(),
                 ): (200, {}, [{"id": 201}]),
-                ("/repos/o/r/pulls/4/reviews", frozenset()): (
+                ("/repos/o/r/pulls/4/reviews?per_page=100&page=1", frozenset()): (
                     200,
                     {},
                     [{"id": 5}, {"id": 6, "state": "COMMENTED"}],
@@ -153,6 +217,29 @@ class PrWatchProbeTests(unittest.TestCase):
         self.assertEqual([c["id"] for c in delta["issue_comments"]], [101])
         self.assertEqual([c["id"] for c in delta["review_comments"]], [201])
         self.assertEqual([r["id"] for r in delta["reviews"]], [6])
+
+    def test_fetch_delta_paginates_reviews(self):
+        empty = (200, {}, [])
+        first_page = [{"id": i} for i in range(1, 101)]
+        second_page = [{"id": i} for i in range(101, 201)]
+        http = _RecordingHttp(
+            {
+                ("/repos/o/r/issues/4/comments?since=1970-01-01T00:00:00Z", frozenset()): empty,
+                ("/repos/o/r/pulls/4/comments?since=1970-01-01T00:00:00Z", frozenset()): empty,
+                ("/repos/o/r/pulls/4/reviews?per_page=100&page=1", frozenset()): (200, {}, first_page),
+                ("/repos/o/r/pulls/4/reviews?per_page=100&page=2", frozenset()): (200, {}, second_page),
+                ("/repos/o/r/pulls/4/reviews?per_page=100&page=3", frozenset()): (200, {}, [{"id": 201}]),
+            }
+        )
+        delta = fetch_delta(http, "o/r", 4, ProbeState(last_review_id=99))
+        self.assertEqual(len(delta["reviews"]), 102)
+        self.assertEqual(delta["reviews"][0]["id"], 100)
+        self.assertEqual(delta["reviews"][-1]["id"], 201)
+        self.assertEqual([call[0] for call in http.calls][-3:], [
+            "/repos/o/r/pulls/4/reviews?per_page=100&page=1",
+            "/repos/o/r/pulls/4/reviews?per_page=100&page=2",
+            "/repos/o/r/pulls/4/reviews?per_page=100&page=3",
+        ])
 
 
 if __name__ == "__main__":
