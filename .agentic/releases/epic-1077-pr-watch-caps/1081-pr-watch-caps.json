@@ -1,0 +1,16 @@
+{
+  "slug": "1081-pr-watch-caps",
+  "change_type": "feature",
+  "surface": "plate_core pr babysit watch",
+  "summary": "Enforce persisted max-wake and max-hours caps for babysit --watch, with deduplicated pause notes and status output (#1081).",
+  "migration_impact": "No repository migration. Watch loops use local cap ledgers under .agentic/babysit/ and pause when either default spend cap is reached.",
+  "migration_guidance": [
+    "1. Upgrade plate-core to the release that contains watch cap integration.",
+    "2. Inspect saved usage with `gh plate pr babysit <n> --status`.",
+    "3. After a cap pause, start a new budget with `gh plate pr babysit <n> --watch --reset-caps`."
+  ],
+  "agent_notes": "Babysit watch caps are enforced before and after each poll. A cap pause posts at most one PR comment containing <!-- plate-babysit-cap -->; the --status option reports saved wake and elapsed-hour usage. A human must explicitly pass --reset-caps to start a new budget.",
+  "breaking": false,
+  "links": ["#1081", "#1077"],
+  "requires": []
+}
