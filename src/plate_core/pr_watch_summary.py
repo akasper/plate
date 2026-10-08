@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-BABYSIT_BODY_MARKER = "<!-- plate-babysit"
+from .pr_babysit import _author_in_scope, resolve_pr_review_scope
+
+BABYSIT_BODY_MARKERS = (
+    "<!-- plate-pr-babysit -->",
+    "<!-- plate-pr-merge-trigger -->",
+)
 BODY_EXCERPT_MAX = 200
 RENDER_BYTE_BUDGET = 2048
 _DEFAULT_LIST_CAP = 8
@@ -20,6 +25,10 @@ def _is_bot_login(login: str) -> bool:
     return login.endswith("[bot]")
 
 
+def _has_babysit_marker(body: str) -> bool:
+    return any(marker in body for marker in BABYSIT_BODY_MARKERS)
+
+
 def _should_drop_comment(body: str | None, login: str, ignore_logins: frozenset[str]) -> bool:
     if not login:
         return True
@@ -27,7 +36,23 @@ def _should_drop_comment(body: str | None, login: str, ignore_logins: frozenset[
         return True
     if _is_bot_login(login):
         return True
-    if BABYSIT_BODY_MARKER in (body or ""):
+    if _has_babysit_marker(body or ""):
+        return True
+    return False
+
+
+def _should_drop_review(
+    body: str | None,
+    login: str,
+    ignore_logins: frozenset[str],
+    review_scope: str,
+    agent_logins: str | None,
+) -> bool:
+    if not login or login in ignore_logins:
+        return True
+    if _has_babysit_marker(body or ""):
+        return True
+    if not _author_in_scope(login, scope=review_scope, agent_logins=agent_logins):
         return True
     return False
 
@@ -42,11 +67,15 @@ def _excerpt(body: str | None, limit: int = BODY_EXCERPT_MAX) -> str:
 def _filter_review_comments(
     items: Sequence[Mapping[str, Any]],
     ignore_logins: frozenset[str],
+    review_scope: str,
+    agent_logins: str | None,
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for raw in items:
         login = _login(raw.get("user"))
-        if _should_drop_comment(str(raw.get("body") or ""), login, ignore_logins):
+        if _should_drop_review(
+            str(raw.get("body") or ""), login, ignore_logins, review_scope, agent_logins
+        ):
             continue
         line = raw.get("line")
         if line is None:
@@ -85,14 +114,14 @@ def _filter_issue_comments(
 def _filter_reviews(
     items: Sequence[Mapping[str, Any]],
     ignore_logins: frozenset[str],
+    review_scope: str,
+    agent_logins: str | None,
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for raw in items:
         login = _login(raw.get("user"))
-        if not login or login in ignore_logins or _is_bot_login(login):
-            continue
         body = str(raw.get("body") or "")
-        if BABYSIT_BODY_MARKER in body:
+        if _should_drop_review(body, login, ignore_logins, review_scope, agent_logins):
             continue
         out.append(
             {
@@ -109,11 +138,24 @@ def build_wake_summary(
     cur: Mapping[str, Any],
     *,
     ignore_logins: frozenset[str] = frozenset(),
+    review_scope: str | None = None,
+    agent_logins: str | None = None,
 ) -> dict[str, Any]:
     """Build a structured wake summary from REST deltas and lightweight PR snapshots."""
-    review_comments = _filter_review_comments(delta.get("review_comments") or [], ignore_logins)
+    effective_review_scope = resolve_pr_review_scope(review_scope)
+    review_comments = _filter_review_comments(
+        delta.get("review_comments") or [],
+        ignore_logins,
+        effective_review_scope,
+        agent_logins,
+    )
     issue_comments = _filter_issue_comments(delta.get("issue_comments") or [], ignore_logins)
-    reviews = _filter_reviews(delta.get("reviews") or [], ignore_logins)
+    reviews = _filter_reviews(
+        delta.get("reviews") or [],
+        ignore_logins,
+        effective_review_scope,
+        agent_logins,
+    )
 
     prev_head = prev.get("head_sha")
     cur_head = cur.get("head_sha")
@@ -225,4 +267,7 @@ def render_wake_summary(summary: Mapping[str, Any]) -> str:
         if len(text.encode("utf-8")) <= RENDER_BYTE_BUDGET:
             return text
 
-    return text[:RENDER_BYTE_BUDGET].rstrip() + "…"
+    encoded = text.encode("utf-8")
+    ellipsis = "…"
+    prefix = encoded[: RENDER_BYTE_BUDGET - len(ellipsis.encode("utf-8"))]
+    return prefix.decode("utf-8", errors="ignore").rstrip() + ellipsis
