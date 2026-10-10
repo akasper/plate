@@ -28,3 +28,13 @@ The builder drops known bot/agent authors, `ignore_logins`, and any body contain
 - `is_actionable(summary) -> bool`
 
 Implemented in `plate_core.pr_watch_summary`.
+
+## How the watcher uses this
+
+Each `gh plate pr babysit --watch` tick loads persisted probe state and calls `probe_pr` for lightweight REST probing (a conditional PR GET plus commit status and check runs). When `probe_pr` reports `changed=False`, the tick is quiet: no `babysit_pr`, no `record_wake`, and exponential backoff via `Backoff.next_interval(False)`. A `304` on the PR resource alone does not imply quietness; CI or check-run transitions can set `changed=True` even when the PR body is unchanged.
+
+On the first tick (no saved probe file), the loop always runs one full `babysit_pr` for a baseline, then saves probe state and continues probing.
+
+When the probe reports a change, the watcher calls `fetch_delta`, builds a wake summary with `build_wake_summary`, and runs `babysit_pr` only when `is_actionable(summary)` is true (printing `render_wake_summary` unless `--json`). Non-actionable deltas (for example bot-only issue comments) are quiet ticks. Optional `--full-every N` forces a full babysit every N ticks as a safety net.
+
+Merged or closed pull requests stop the loop when `should_stop` sees a `200` probe body; `304` skips that check because terminal states always change `updated_at`.
