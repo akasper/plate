@@ -85,6 +85,63 @@ class TestPrWatchSummaryDedupe(unittest.TestCase):
             loaded = load_resolved(path)
             self.assertEqual(loaded.fingerprints, ledger.fingerprints)
 
+    def test_different_suggestion_yields_different_fingerprint(self):
+        base = {
+            "user": _user("copilot-pull-request-reviewer[bot]"),
+            "path": "src/foo.py",
+            "line": 3,
+            "body": "Use this fix.\n```suggestion\nfoo = 1\n```",
+        }
+        other = dict(base)
+        other["body"] = "Use this fix.\n```suggestion\nfoo = 2\n```"
+        self.assertNotEqual(comment_fingerprint(base), comment_fingerprint(other))
+
+    def test_different_start_line_yields_different_fingerprint(self):
+        body = "Please update this line."
+        first = {
+            "user": _user("copilot-pull-request-reviewer[bot]"),
+            "path": "src/foo.py",
+            "start_line": 1,
+            "line": 3,
+            "body": body,
+        }
+        second = {
+            "user": _user("copilot-pull-request-reviewer[bot]"),
+            "path": "src/foo.py",
+            "start_line": 2,
+            "line": 3,
+            "body": body,
+        }
+        self.assertNotEqual(comment_fingerprint(first), comment_fingerprint(second))
+
+    def test_human_comment_not_suppressed_by_resolved_copilot_fingerprint(self):
+        copilot_comment = {
+            "user": _user("copilot-pull-request-reviewer[bot]"),
+            "body": "Please update this line.",
+            "path": "src/foo.py",
+            "line": 3,
+        }
+        human_comment = {
+            "user": _user("alice"),
+            "body": "Please update this line.",
+            "path": "src/foo.py",
+            "line": 3,
+        }
+        fingerprint = comment_fingerprint(copilot_comment)
+        self.assertNotEqual(fingerprint, comment_fingerprint(human_comment))
+
+        delta = {"review_comments": [human_comment], "issue_comments": [], "reviews": []}
+        summary = build_wake_summary(
+            delta,
+            {"head_sha": "a"},
+            {"head_sha": "a"},
+            resolved=frozenset({fingerprint}),
+        )
+        self.assertEqual(len(summary["review_comments"]), 1)
+        self.assertEqual(summary["review_comments"][0]["author"], "alice")
+        self.assertEqual(summary["suppressed_repeats"], 0)
+        self.assertTrue(is_actionable(summary))
+
     def test_build_wake_summary_without_resolved_unchanged(self):
         delta = {
             "issue_comments": [
