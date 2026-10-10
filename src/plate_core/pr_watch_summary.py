@@ -11,7 +11,11 @@ from typing import Any, Mapping, Sequence
 
 from .pr_babysit import _author_in_scope, _default_agent_match, resolve_pr_review_scope
 
-_SUGGESTION_FENCE = re.compile(r"```suggestion\s*[\s\S]*?```", re.IGNORECASE)
+_SUGGESTION_FENCE = re.compile(r"```suggestion\s*([\s\S]*?)```", re.IGNORECASE)
+
+_COPILOT_REVIEWER_LOGINS = frozenset(
+    {"copilot", "copilot-pull-request-reviewer[bot]"}
+)
 
 BABYSIT_BODY_MARKERS = (
     "<!-- plate-pr-babysit -->",
@@ -71,20 +75,39 @@ def _excerpt(body: str | None, limit: int = BODY_EXCERPT_MAX) -> str:
     return text[: limit - 1] + "…"
 
 
+def _is_copilot_reviewer(login: str) -> bool:
+    return login.lower() in _COPILOT_REVIEWER_LOGINS
+
+
 def _normalize_comment_body(body: str) -> str:
-    text = _SUGGESTION_FENCE.sub("", body or "")
+    def _normalize_fence(match: re.Match[str]) -> str:
+        inner = " ".join((match.group(1) or "").lower().split())
+        return f"```suggestion {inner}```"
+
+    text = _SUGGESTION_FENCE.sub(_normalize_fence, body or "")
     return " ".join(text.lower().split())
 
 
+def _comment_line_range(comment: Mapping[str, Any]) -> tuple[str, str]:
+    start = comment.get("original_start_line")
+    if start is None:
+        start = comment.get("start_line")
+    end = comment.get("original_line")
+    if end is None:
+        end = comment.get("line")
+    return (
+        str(start if start is not None else ""),
+        str(end if end is not None else ""),
+    )
+
+
 def comment_fingerprint(comment: Mapping[str, Any]) -> str:
-    """Stable fingerprint for a review comment (path, line, normalized body)."""
+    """Stable fingerprint for a review comment (path, lines, body, author)."""
     path = str(comment.get("path") or "")
-    line = comment.get("original_line")
-    if line is None:
-        line = comment.get("line")
-    line_str = str(line if line is not None else "")
+    start_str, end_str = _comment_line_range(comment)
     body = _normalize_comment_body(str(comment.get("body") or ""))
-    payload = f"{path}\0{line_str}\0{body}"
+    author = _login(comment.get("user")).lower()
+    payload = f"{path}\0{start_str}\0{end_str}\0{body}\0{author}"
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
@@ -146,7 +169,11 @@ def _filter_review_comments(
             str(raw.get("body") or ""), login, ignore_logins, review_scope, agent_logins
         ):
             continue
-        if resolved and comment_fingerprint(raw) in resolved:
+        if (
+            resolved
+            and _is_copilot_reviewer(login)
+            and comment_fingerprint(raw) in resolved
+        ):
             suppressed_repeats += 1
             continue
         line = raw.get("line")
