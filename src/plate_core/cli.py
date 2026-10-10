@@ -1251,7 +1251,7 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                     break
 
                 force_full = full_every > 0 and tick % full_every == 0
-                quiet_tick = probe_result.not_modified or not probe_result.changed
+                quiet_tick = not probe_result.changed
                 run_babysit = no_saved_state or force_full
                 wake_summary: dict | None = None
                 state_to_save: ProbeState = probe_result.new_state

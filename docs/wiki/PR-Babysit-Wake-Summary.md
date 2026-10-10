@@ -31,7 +31,7 @@ Implemented in `plate_core.pr_watch_summary`.
 
 ## How the watcher uses this
 
-Each `gh plate pr babysit --watch` tick loads persisted probe state, calls `probe_pr` (conditional GET on the pull request), and treats `304 Not Modified` or an unchanged snapshot as a quiet tick: no `babysit_pr`, no `record_wake`, and exponential backoff via `Backoff.next_interval(False)`.
+Each `gh plate pr babysit --watch` tick loads persisted probe state and calls `probe_pr` for lightweight REST probing (a conditional PR GET plus commit status and check runs). When `probe_pr` reports `changed=False`, the tick is quiet: no `babysit_pr`, no `record_wake`, and exponential backoff via `Backoff.next_interval(False)`. A `304` on the PR resource alone does not imply quietness; CI or check-run transitions can set `changed=True` even when the PR body is unchanged.
 
 On the first tick (no saved probe file), the loop always runs one full `babysit_pr` for a baseline, then saves probe state and continues probing.
 
