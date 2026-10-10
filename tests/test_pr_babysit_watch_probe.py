@@ -46,6 +46,25 @@ def _probe_304(state: ProbeState) -> ProbeResult:
     )
 
 
+def _probe_304_ci_changed(state: ProbeState) -> ProbeResult:
+    return ProbeResult(
+        changed=True,
+        not_modified=True,
+        pr=None,
+        new_state=ProbeState(
+            etag=state.etag,
+            head_sha=state.head_sha,
+            updated_at=state.updated_at,
+            mergeable_state=state.mergeable_state,
+            ci_state="success",
+            last_checked_at="2026-01-01T00:00:02Z",
+            last_issue_comment_id=state.last_issue_comment_id,
+            last_review_comment_id=state.last_review_comment_id,
+            last_review_id=state.last_review_id,
+        ),
+    )
+
+
 class BabysitWatchProbeWiringTests(unittest.TestCase):
     def _run_watch(
         self,
@@ -222,6 +241,38 @@ class BabysitWatchProbeWiringTests(unittest.TestCase):
 
         mocks["babysit"].assert_not_called()
         mocks["sleep"].assert_not_called()
+
+    def test_304_with_ci_change_runs_babysit_and_records_wake(self):
+        prev = ProbeState(
+            etag='W/"etag"',
+            head_sha="abc",
+            updated_at="2026-01-01T00:00:00Z",
+            mergeable_state="clean",
+            ci_state="pending",
+            last_checked_at="2026-01-01T00:00:00Z",
+        )
+        probe = _probe_304_ci_changed(prev)
+        delta_state = probe.new_state
+        delta = {
+            "issue_comments": [],
+            "review_comments": [],
+            "reviews": [],
+            "new_state": delta_state,
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            probe_path = Path(directory) / "probe.json"
+            save_probe_state(probe_path, prev)
+            _, mocks = self._run_watch(
+                directory,
+                [probe],
+                fetch_delta_side_effect=[delta],
+                pid_alive=[True, False],
+            )
+
+        mocks["fetch_delta"].assert_called_once()
+        mocks["babysit"].assert_called_once()
+        mocks["record_wake"].assert_called_once()
 
     def test_full_every_forces_periodic_babysit(self):
         saved = ProbeState(etag='W/"etag"', head_sha="abc")
