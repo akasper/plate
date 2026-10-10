@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .pr_babysit import _author_in_scope, _default_agent_match, resolve_pr_review_scope
+
+_SUGGESTION_FENCE = re.compile(r"```suggestion\s*([\s\S]*?)```", re.IGNORECASE)
+
+_COPILOT_REVIEWER_LOGINS = frozenset(
+    {"copilot", "copilot-pull-request-reviewer[bot]"}
+)
 
 BABYSIT_BODY_MARKERS = (
     "<!-- plate-pr-babysit -->",
@@ -64,18 +75,106 @@ def _excerpt(body: str | None, limit: int = BODY_EXCERPT_MAX) -> str:
     return text[: limit - 1] + "…"
 
 
+def _is_copilot_reviewer(login: str) -> bool:
+    return login.lower() in _COPILOT_REVIEWER_LOGINS
+
+
+def _normalize_comment_body(body: str) -> str:
+    def _normalize_fence(match: re.Match[str]) -> str:
+        inner = " ".join((match.group(1) or "").lower().split())
+        return f"```suggestion {inner}```"
+
+    text = _SUGGESTION_FENCE.sub(_normalize_fence, body or "")
+    return " ".join(text.lower().split())
+
+
+def _comment_line_range(comment: Mapping[str, Any]) -> tuple[str, str]:
+    start = comment.get("original_start_line")
+    if start is None:
+        start = comment.get("start_line")
+    end = comment.get("original_line")
+    if end is None:
+        end = comment.get("line")
+    return (
+        str(start if start is not None else ""),
+        str(end if end is not None else ""),
+    )
+
+
+def comment_fingerprint(comment: Mapping[str, Any]) -> str:
+    """Stable fingerprint for a review comment (path, lines, body, author)."""
+    path = str(comment.get("path") or "")
+    start_str, end_str = _comment_line_range(comment)
+    body = _normalize_comment_body(str(comment.get("body") or ""))
+    author = _login(comment.get("user")).lower()
+    payload = f"{path}\0{start_str}\0{end_str}\0{body}\0{author}"
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+@dataclass
+class ResolvedLedger:
+    """Fingerprints of review comments already resolved on this PR."""
+
+    fingerprints: set[str] = field(default_factory=set)
+
+    def to_json(self) -> dict[str, list[str]]:
+        return {"fingerprints": sorted(self.fingerprints)}
+
+    @classmethod
+    def from_json(cls, data: Mapping[str, Any]) -> ResolvedLedger:
+        raw = data.get("fingerprints") or []
+        return cls(fingerprints={str(item) for item in raw})
+
+
+def resolved_path(repo: str, pr: int | str, root: str | Path | None = None) -> Path:
+    """Path to the per-PR resolved-comment ledger under .agentic/babysit/."""
+    owner, name = repo.split("/", 1)
+    base = Path(root or ".") / ".agentic" / "babysit"
+    return base / f"{owner}-{name}-{pr}.resolved.json"
+
+
+def load_resolved(path: str | Path) -> ResolvedLedger:
+    file_path = Path(path)
+    if not file_path.is_file():
+        return ResolvedLedger()
+    with file_path.open(encoding="utf-8") as handle:
+        return ResolvedLedger.from_json(json.load(handle))
+
+
+def save_resolved(path: str | Path, ledger: ResolvedLedger) -> None:
+    file_path = Path(path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with file_path.open("w", encoding="utf-8") as handle:
+        json.dump(ledger.to_json(), handle, indent=2)
+        handle.write("\n")
+
+
+def mark_resolved(ledger: ResolvedLedger, comments: Sequence[Mapping[str, Any]]) -> None:
+    for comment in comments:
+        ledger.fingerprints.add(comment_fingerprint(comment))
+
+
 def _filter_review_comments(
     items: Sequence[Mapping[str, Any]],
     ignore_logins: frozenset[str],
     review_scope: str,
     agent_logins: str | None,
-) -> list[dict[str, Any]]:
+    resolved: frozenset[str] = frozenset(),
+) -> tuple[list[dict[str, Any]], int]:
     out: list[dict[str, Any]] = []
+    suppressed_repeats = 0
     for raw in items:
         login = _login(raw.get("user"))
         if _should_drop_review(
             str(raw.get("body") or ""), login, ignore_logins, review_scope, agent_logins
         ):
+            continue
+        if (
+            resolved
+            and _is_copilot_reviewer(login)
+            and comment_fingerprint(raw) in resolved
+        ):
+            suppressed_repeats += 1
             continue
         line = raw.get("line")
         if line is None:
@@ -89,7 +188,7 @@ def _filter_review_comments(
                 "html_url": raw.get("html_url") or "",
             }
         )
-    return out
+    return out, suppressed_repeats
 
 
 def _filter_issue_comments(
@@ -140,14 +239,16 @@ def build_wake_summary(
     ignore_logins: frozenset[str] = frozenset(),
     review_scope: str | None = None,
     agent_logins: str | None = None,
+    resolved: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Build a structured wake summary from REST deltas and lightweight PR snapshots."""
     effective_review_scope = resolve_pr_review_scope(review_scope)
-    review_comments = _filter_review_comments(
+    review_comments, suppressed_repeats = _filter_review_comments(
         delta.get("review_comments") or [],
         ignore_logins,
         effective_review_scope,
         agent_logins,
+        resolved,
     )
     issue_comments = _filter_issue_comments(delta.get("issue_comments") or [], ignore_logins)
     reviews = _filter_reviews(
@@ -182,6 +283,7 @@ def build_wake_summary(
         "ci_transition": ci_transition,
         "merge_state_change": merge_state_change,
         "head_commit": head_commit,
+        "suppressed_repeats": suppressed_repeats,
     }
 
 
