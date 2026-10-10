@@ -1,0 +1,16 @@
+{
+  "slug": "1092-code-review-skill",
+  "change_type": "feature",
+  "surface": ".github/skills/code-review/SKILL.md, template_payload adopt path",
+  "summary": "Ship a Copilot code-review skill for PLATE PR checks (#1092, Epic #1091).",
+  "migration_impact": "Downstream repos that adopt or refresh template payload receive `.github/skills/code-review/SKILL.md` for GitHub Copilot code review on PLATE pull requests.",
+  "migration_guidance": [
+    "1. Upgrade plate-core or re-run `gh plate import-payload` / bootstrap adopt when this release ships.",
+    "2. Ensure `.github/skills/code-review/SKILL.md` exists on integration branches so Copilot review on PRs can load it from the head branch.",
+    "3. No `.plate` changes are required for this skill alone."
+  ],
+  "agent_notes": "Copilot code review loads skills from `.github/skills/` on the PR head branch; the `code-review` directory name improves discovery. Use the checklist for Feature/Bug/Documentation PRs: issue link, fragment location, labels, procutil subprocesses, unittest not pytest, and accurate claims.",
+  "breaking": false,
+  "links": ["#1092", "#1091"],
+  "requires": []
+}
