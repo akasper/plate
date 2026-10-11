@@ -1,0 +1,15 @@
+{
+  "slug": "wheel-payload-pyyaml-fix",
+  "change_type": "fix",
+  "surface": "pyproject.toml / MANIFEST.in / plate-core wheel",
+  "summary": "Ship the full template_payload tree in the plate-core wheel and declare PyYAML as a runtime dependency (#1115).",
+  "migration_impact": "Upgrade plate-core on the patch track; pip install plate-core pulls PyYAML and import-payload plans the full template file set.",
+  "migration_guidance": [
+    "1. Upgrade plate-core to the release that includes this fix.",
+    "2. Re-run gh plate bootstrap --apply or import-payload if a prior incomplete wheel left partial template files."
+  ],
+  "agent_notes": "Wheel packaging now grafts template_payload (including .github and .agentic) via MANIFEST.in; label descriptions are capped at 100 characters for GitHub label sync.",
+  "breaking": false,
+  "links": ["#1115"],
+  "requires": ["0.8.4"]
+}
