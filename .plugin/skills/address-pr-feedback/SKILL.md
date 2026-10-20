@@ -3,11 +3,36 @@ name: Address PR Feedback
 description: Reply to every PR review thread, resolve it, and re-query until zero unresolved threads remain (except human-escalated items).
 ---
 
+<!-- PLATE-GENERATED:BEGIN skills-surface -->
+<!-- Do not edit generated skill surfaces manually. -->
+<!-- Source of truth: src/plate_core/data/baseline_catalog.yml -->
+<!-- Regenerate: python3 scripts/generate-plugin-skills.py -->
+
 # Address PR Feedback
 
 > Skill id: `address-pr-feedback`
+> Generated from the baseline catalog. Regenerate with `python3 scripts/generate-plugin-skills.py`.
 
-Mandatory whenever you fix PR review feedback, babysit a PR, or promise "address feedback". Push fixes to the **existing** PR branch only.
+Reply to every PR review thread, resolve it, and re-query until zero unresolved threads remain (except human-escalated items).
+
+**Owning agents:** software-engineer, ci-engineer
+
+## Inputs
+
+- PR number
+- Unresolved review threads (via plate helpers or GraphQL fallback)
+
+## Outputs
+
+- In-thread replies with commit SHA or decline reason
+- Resolved review threads
+- Zero-unresolved re-query confirmation
+
+## Examples
+
+- After pushing a fix for Copilot feedback, run the per-thread loop until the re-query returns zero unresolved threads.
+
+<!-- PLATE-GENERATED:END skills-surface -->
 
 ## Per-thread loop
 
@@ -67,3 +92,4 @@ mutation($threadId:ID!) {
   }
 }' -f threadId=THREAD_NODE_ID
 ```
+

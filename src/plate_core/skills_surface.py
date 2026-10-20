@@ -130,6 +130,8 @@ def render_skill_md(skill: BaselineSkill, *, regenerate_command: str = REGENERAT
         "",
         GENERATED_FOOTER.rstrip(),
     ]
+    if skill.procedure:
+        lines.extend(["", skill.procedure.rstrip(), ""])
     return "\n".join(lines) + "\n"
 
 
