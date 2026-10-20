@@ -9,6 +9,7 @@ from plate_core.template_payload import (
     classify_template_file,
     load_template_payload_manifest,
     manifest_path,
+    match_path_rule,
     payload_root,
     should_include_template_file,
 )
@@ -30,10 +31,26 @@ class TemplatePayloadManifestTests(unittest.TestCase):
             "copy_to_downstream",
         )
 
-    def test_manifest_excludes_agentic_costs(self):
+    def test_manifest_includes_agentic_costs_starter(self):
         manifest = load_template_payload_manifest()
-        self.assertFalse(should_include_template_file(".agentic/COSTS.md", manifest))
-        self.assertEqual(classify_template_file(".agentic/COSTS.md", manifest), "exclude")
+        self.assertTrue(should_include_template_file(".agentic/COSTS.md", manifest))
+        self.assertEqual(classify_template_file(".agentic/COSTS.md", manifest), "copy_to_downstream")
+        rule = match_path_rule(".agentic/COSTS.md", manifest)
+        self.assertIsNotNone(rule)
+        self.assertEqual(rule.on_conflict, "preserve_existing")
+
+    def test_path_rules_costs_preserve_existing(self):
+        from plate_core.template_payload import match_path_rule, resolve_conflict_plan
+
+        manifest = load_template_payload_manifest()
+        plan = resolve_conflict_plan(
+            ".agentic/COSTS.md",
+            dest_exists=True,
+            identical=False,
+            strategy="safe",
+            manifest=manifest,
+        )
+        self.assertEqual(plan["action"], "skip")
 
     def test_path_rules_ci_install_as(self):
         """#617: differing ci.yml plans install as plate-ci.yml."""

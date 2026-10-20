@@ -4,6 +4,10 @@
   "selection_manifest": "src/plate_core/data/template_payload_manifest.yml",
   "files": [
     {
+      "path": ".agentic/COSTS.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".agentic/audit.yml",
       "classification": "copy_to_downstream"
     },

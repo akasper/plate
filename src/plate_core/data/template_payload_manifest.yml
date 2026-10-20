@@ -16,10 +16,8 @@ include_globs:
   - "package.json"
   - "playwright.config.ts"
 
-# Telemetry and workspace-specific runtime artifacts are intentionally excluded.
+# Local-only test media and spikes — not shipped to downstream adopters (#1152).
 exclude_globs:
-  - ".agentic/COSTS.md"
-  # Local-only test media and spikes — not shipped to downstream adopters (#1152).
   - "tests/spike-videos/**"
   - "tests/e2e/fixtures/gifs/*.gif"
   - "tests/e2e/fixtures/gifs/*.webm"
@@ -60,3 +58,7 @@ path_rules:
       - ".github/CODEOWNERS"
     on_conflict: conflict
     reason: "May contain local customizations; review before replace"
+  - globs:
+      - ".agentic/COSTS.md"
+    on_conflict: preserve_existing
+    reason: "Repository cost history must not be overwritten by bootstrap or adopt"
