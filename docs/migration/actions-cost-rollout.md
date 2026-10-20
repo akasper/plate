@@ -2,6 +2,10 @@
 
 This note supports rolling out workflow changes that reduce GitHub Actions minutes and Copilot spend (issue-event guards, `PLATE_COPILOT_AUTOSTART`, PR concurrency, push-to-`main` only for Pages/E2E) from `akasper/plate` into private repositories that copied the PLATE template.
 
+**Also treat `akasper/plate_template` as a source of copies.** That separate template repository still ships the pre-cost-control workflows, so new repos created from it inherit the old behavior. Apply the same workflow changes there **first or in parallel with `akasper/plate`**, or retire `plate_template` as the bootstrap source so it stops re-seeding expensive automation.
+
+Account-level **Copilot auto-review** is a separate control: check [github.com/settings/copilot](https://github.com/settings/copilot) manually during rollout (independent of `PLATE_COPILOT_AUTOSTART`).
+
 ## How adopters receive the update
 
 1. **Upgrade path (preferred):** From the adopter repo, run `gh plate import-payload` (or your established `gh plate bootstrap` / upgrade procedure) after pinning to a `plate-core` release that includes these workflow changes. Review the diff under `.github/workflows/` before merge.
@@ -19,10 +23,15 @@ This note supports rolling out workflow changes that reduce GitHub Actions minut
 
 Optional: set repository variable `PLATE_COPILOT_AUTOSTART=true` only on repos that explicitly want automatic `@copilot` kickoff comments and Copilot coding-agent assignment from platform monitor.
 
+### `discussion-monitoring.yml` (not in plate payload)
+
+`.github/workflows/discussion-monitoring.yml` (with `@copilot` comments) is **not** in `akasper/plate`'s template payload but exists in **akasper/AlpacaAgent**, **akasper/sketchbook**, **akasper/flashbang.ai**, and **akasper/plate_template**. During rollout, each of those repos needs the `PLATE_COPILOT_AUTOSTART` gate added to that workflow locally, or the workflow removed—`gh plate import-payload` alone will not fix it.
+
 ## Suggested rollout order (highest burn first)
 
 Prioritize repos with the heaviest issue and PR event volume (typical private PLATE adopters):
 
+0. **akasper/plate_template** — update or retire before new repos copy stale workflows.
 1. **u.ai** — high issue/PR churn; import workflow guards first.
 2. **smakks_revenge**
 3. **PaperTiger**
