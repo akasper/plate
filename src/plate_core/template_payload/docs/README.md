@@ -164,7 +164,7 @@ All documentation in this directory should:
 - **[Playwright Docs](https://playwright.dev/)** — Official E2E testing framework
 - **[GitHub Wiki Help](https://docs.github.com/en/communities/documenting-your-project-with-wikis)** — Wiki documentation best practices
 - **[Markdown Guide](https://www.markdownguide.org/)** — Markdown syntax reference
-- **[PLATE Template](https://github.com/akasper/plate_template)** — This repository
+- **[PLATE (`akasper/plate`)](https://github.com/akasper/plate)** — Methodology, `plate-core`, and `gh plate` tooling
 
 ---
 

@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 import fnmatch
+import os
 from typing import Any
+import warnings
 
 import yaml
 
@@ -295,13 +297,19 @@ def resolve_conflict_plan(
     }
 
 
+def _legacy_template_sibling_opt_in() -> bool:
+    raw = os.environ.get("PLATE_ALLOW_LEGACY_TEMPLATE_SIBLING", "")
+    return raw.strip().lower() in ("1", "true", "yes")
+
+
 def resolve_template_source_root(template_repo: str | None = None) -> Path:
     """Resolve source root for scaffold assets.
 
     Priority:
     1. Explicit template_repo path (for migration/backfill)
-    2. Checked-in payload in this repository
-    3. Legacy sibling plate_template checkout fallback
+    2. Checked-in payload in this repository (default for `gh plate bootstrap`)
+    3. Legacy sibling ``plate_template`` checkout only when
+       ``PLATE_ALLOW_LEGACY_TEMPLATE_SIBLING`` is set (deprecated)
     """
     source_root, _source_kind = resolve_template_source(template_repo)
     return source_root
@@ -315,7 +323,7 @@ def resolve_template_source(template_repo: str | None = None) -> tuple[Path, str
         source_kind is one of:
         - "explicit_path"
         - "package_payload"
-        - "legacy_sibling_fallback"
+        - "legacy_sibling_fallback" (deprecated; requires env opt-in)
     """
     if template_repo:
         explicit = Path(template_repo).resolve()
@@ -327,11 +335,20 @@ def resolve_template_source(template_repo: str | None = None) -> tuple[Path, str
     if payload.exists():
         return payload, "package_payload"
 
-    fallback = Path.cwd().resolve().parent / "plate_template"
-    if fallback.exists():
-        return fallback, "legacy_sibling_fallback"
+    if _legacy_template_sibling_opt_in():
+        fallback = Path.cwd().resolve().parent / "plate_template"
+        if fallback.exists():
+            warnings.warn(
+                "Resolving scaffold assets from a sibling plate_template checkout is deprecated. "
+                "Use the plate-core package payload (default) or pass an explicit template_repo path. "
+                "Do not clone akasper/plate_template for new repositories; use `gh plate bootstrap`.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return fallback, "legacy_sibling_fallback"
 
     raise RuntimeError(
-        "No template source found. Expected either an explicit template_repo, "
-        f"a checked-in payload at {payload}, or a sibling plate_template checkout."
+        "No template source found. Expected either an explicit template_repo path "
+        f"or the checked-in package payload at {payload}. "
+        "Start new repositories with `gh plate bootstrap`; do not clone or sync from akasper/plate_template."
     )
