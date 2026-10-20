@@ -7,7 +7,6 @@ include_globs:
   - "docs/**"
   - "scripts/**"
   - "tests/e2e/**"
-  - "tests/spike-videos/**"
   - "tests/README.md"
   - "AGENTS.md"
   - "CHANGELOG.md"
@@ -20,6 +19,12 @@ include_globs:
 # Telemetry and workspace-specific runtime artifacts are intentionally excluded.
 exclude_globs:
   - ".agentic/COSTS.md"
+  # Local-only test media and spikes — not shipped to downstream adopters (#1152).
+  - "tests/spike-videos/**"
+  - "tests/e2e/fixtures/gifs/*.gif"
+  - "tests/e2e/fixtures/gifs/*.webm"
+  - "tests/e2e/fixtures/gifs/*.mp4"
+  - "tests/e2e/fixtures/gifs/*.png"
 
 # Payload files are scaffolding assets to be copied into adopting repositories.
 copy_to_downstream_globs:

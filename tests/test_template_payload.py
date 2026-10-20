@@ -79,6 +79,36 @@ class TemplatePayloadManifestTests(unittest.TestCase):
         self.assertEqual(plan["action"], "conflict")
 
 
+class TemplatePayloadSizeGuardTests(unittest.TestCase):
+    """Downstream payload must not ship large test media (#1152)."""
+
+    _MEDIA_SUFFIXES = (".gif", ".webm", ".mp4")
+    _MAX_BYTES = 1_048_576
+    _MAX_PNG_BYTES = 32_768
+
+    def test_manifest_selected_files_within_size_limits(self):
+        manifest = load_template_payload_manifest()
+        root = payload_root()
+        violations: list[str] = []
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root).as_posix()
+            if not should_include_template_file(rel, manifest):
+                continue
+            size = path.stat().st_size
+            lower = rel.lower()
+            if lower.endswith(self._MEDIA_SUFFIXES):
+                violations.append(f"{rel}: binary media must not be in payload")
+                continue
+            if lower.endswith(".png") and size > self._MAX_PNG_BYTES:
+                violations.append(f"{rel}: png larger than {self._MAX_PNG_BYTES} bytes")
+                continue
+            if size > self._MAX_BYTES:
+                violations.append(f"{rel}: {size} bytes exceeds {self._MAX_BYTES}")
+        self.assertEqual(violations, [])
+
+
 class TemplatePayloadInventoryTests(unittest.TestCase):
     def test_inventory_file_exists_and_matches_payload(self):
         inventory_path = (

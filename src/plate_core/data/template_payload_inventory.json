@@ -432,10 +432,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": "tests/e2e/fixtures/gifs/homepage-demo.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": "tests/e2e/pages/base-page.ts",
       "classification": "copy_to_downstream"
     },
@@ -449,34 +445,6 @@
     },
     {
       "path": "tests/e2e/specs/failing-example.spec.ts",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/TEST_RESULTS.md",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-10s.webm",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-high.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-low.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-medium.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-trimmed-5s-low.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-trimmed-5s.gif",
       "classification": "copy_to_downstream"
     }
   ]

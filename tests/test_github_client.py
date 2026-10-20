@@ -63,6 +63,40 @@ class GhClientFieldSerializationTests(unittest.TestCase):
         self.assertEqual(cmd[wiki_idx], "-F")
 
 
+class GhClientJsonInputTests(unittest.TestCase):
+    """Contents API bodies must use --input JSON, not argv (#1152)."""
+
+    def test_multi_mb_content_not_passed_on_argv(self):
+        big = "A" * (5 * 1024 * 1024)
+        with patch("plate_core.github_client.run_hidden") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
+            GhClient().api(
+                "repos/owner/repo/contents/large.bin",
+                method="PUT",
+                fields={"message": "add", "content": big, "branch": "main"},
+            )
+            cmd = mock_run.call_args[0][0]
+            self.assertIn("--input", cmd)
+            joined = " ".join(cmd)
+            self.assertNotIn(big, joined)
+            self.assertNotIn(big[:1024], joined)
+            body = mock_run.call_args[1].get("input") or ""
+            self.assertIn(big, body)
+
+    def test_content_field_always_uses_json_input(self):
+        small_b64 = "c21hbGw="
+        with patch("plate_core.github_client.run_hidden") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
+            GhClient().api(
+                "repos/owner/repo/contents/x",
+                method="PUT",
+                fields={"message": "m", "content": small_b64, "branch": "main"},
+            )
+            cmd = mock_run.call_args[0][0]
+            self.assertIn("--input", cmd)
+            self.assertNotIn("-f", cmd)
+
+
 class GhClientResilienceTests(unittest.TestCase):
     """Retry/backoff, rate limit tolerance, secret redaction (#270)."""
 
