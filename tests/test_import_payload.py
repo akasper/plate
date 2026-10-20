@@ -7,6 +7,23 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# Manifest path_rules mark this as on_conflict: conflict (not preserve_existing).
+_CONFLICT_FIXTURE_REL = "package.json"
+
+
+def _seed_differing_payload_file(target: str | Path, rel: str = _CONFLICT_FIXTURE_REL) -> Path:
+    """Apply payload once, then modify ``rel`` so conservative import reports a conflict."""
+    from plate_core.import_payload import import_payload
+
+    root = Path(target)
+    applied = import_payload(root, strategy="safe", apply=True)
+    dest = root / rel
+    if not dest.is_file():
+        created = applied.get("created") or []
+        raise AssertionError(f"{rel!r} not found in {created}")
+    dest.write_text(dest.read_text(encoding="utf-8") + "\n# local change\n", encoding="utf-8")
+    return dest
+
 
 class TestImportPayload(unittest.TestCase):
     def test_dry_run_empty_target_creates_plan(self):
@@ -44,10 +61,8 @@ class TestImportPayload(unittest.TestCase):
         from plate_core.import_payload import import_payload
 
         with tempfile.TemporaryDirectory() as tmp:
-            first = import_payload(tmp, strategy="safe", apply=True)
-            rel = first["created"][0]
-            dest = Path(tmp) / rel
-            dest.write_text(dest.read_text(encoding="utf-8") + "\n# local change\n", encoding="utf-8")
+            rel = _CONFLICT_FIXTURE_REL
+            dest = _seed_differing_payload_file(tmp, rel)
 
             report = import_payload(tmp, strategy="conservative", dry_run=True)
             self.assertIn(rel, report["would_conflict"])
@@ -86,12 +101,8 @@ class TestImportPayload(unittest.TestCase):
             target = Path(tmp) / "tgt"
             hatch = Path(tmp) / "hatch"
             target.mkdir()
-            first = import_payload(target, strategy="safe", apply=True)
-            rel = first["created"][0]
-            (target / rel).write_text(
-                (target / rel).read_text(encoding="utf-8") + "\n# local\n",
-                encoding="utf-8",
-            )
+            rel = _CONFLICT_FIXTURE_REL
+            _seed_differing_payload_file(target, rel)
             report = import_payload(
                 target,
                 strategy="conservative",
@@ -118,9 +129,9 @@ class TestImportPayload(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "tgt"
             target.mkdir()
-            first = import_payload(target, strategy="safe", apply=True)
-            rel = first["created"][0]
-            (target / rel).write_text("changed\n", encoding="utf-8")
+            rel = _CONFLICT_FIXTURE_REL
+            dest = _seed_differing_payload_file(target, rel)
+            dest.write_text("changed\n", encoding="utf-8")
             report = import_payload(
                 target,
                 strategy="conservative",
@@ -332,10 +343,8 @@ class TestImportPayload(unittest.TestCase):
         from plate_core.import_payload import import_payload
 
         with tempfile.TemporaryDirectory() as tmp:
-            first = import_payload(tmp, strategy="safe", apply=True)
-            rel = first["created"][0]
-            dest = Path(tmp) / rel
-            dest.write_text(dest.read_text(encoding="utf-8") + "\n# local\n", encoding="utf-8")
+            rel = _CONFLICT_FIXTURE_REL
+            _seed_differing_payload_file(tmp, rel)
             report = import_payload(tmp, strategy="conservative", dry_run=True)
             self.assertTrue(report["would_conflict"])
             self.assertIn("--escape-hatch", report["next_command"])
