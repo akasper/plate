@@ -17,6 +17,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           ORCHESTRATOR_WORKFLOW: ${{ vars.PLATE_MAIN_ORCHESTRATOR_WORKFLOW }}
+          COPILOT_AUTOSTART: ${{ vars.PLATE_COPILOT_AUTOSTART == 'true' }}
         with:
           script: |
             const issue = context.payload.issue;
@@ -53,6 +54,25 @@ jobs:
               }
             }
 
+            const autostart = String(process.env.COPILOT_AUTOSTART || '').toLowerCase() === 'true';
+            const kickoffBlock = autostart
+              ? [
+                  '```text',
+                  '@copilot start',
+                  `issue: #${issue.number}`,
+                  'mode: feature-implementation',
+                  'pr_title_rule: no bracketed prefixes; no Closes/Fixes/Resolves in title; closing keywords belong in PR body only',
+                  '```'
+                ]
+              : [
+                  '```text',
+                  'Manual kickoff: start your coding agent on this issue when ready.',
+                  `issue: #${issue.number}`,
+                  'mode: feature-implementation',
+                  'pr_title_rule: no bracketed prefixes; no Closes/Fixes/Resolves in title; closing keywords belong in PR body only',
+                  '(Set repository variable PLATE_COPILOT_AUTOSTART=true to enable automatic @copilot mentions.)',
+                  '```'
+                ];
             const body = dispatched
               ? [
                   'PLATES kickoff: dispatched the main orchestrator workflow for this ready Feature issue.',
@@ -65,12 +85,7 @@ jobs:
                   '',
                   'No orchestrator workflow is configured, so this comment acts as the GitHub-native start trigger.',
                   '',
-                  '```text',
-                  '@copilot start',
-                  `issue: #${issue.number}`,
-                  'mode: feature-implementation',
-                  'pr_title_rule: no bracketed prefixes; no Closes/Fixes/Resolves in title; closing keywords belong in PR body only',
-                  '```'
+                  ...kickoffBlock
                 ].join('\n');
 
             await github.rest.issues.createComment({

@@ -181,6 +181,7 @@ jobs:
           FEEDBACK_URL: ${{ steps.detect.outputs.feedback_url }}
           STATE_LABEL: ${{ steps.detect.outputs.state_label }}
           TRIGGER_MARKER: ${{ steps.detect.outputs.marker }}
+          COPILOT_AUTOSTART: ${{ vars.PLATE_COPILOT_AUTOSTART == 'true' }}
         with:
           # COPILOT_TRIGGER_PAT is preferred because @copilot routing often requires a
           # user token. If absent, fallback to GITHUB_TOKEN (best effort).
@@ -194,9 +195,13 @@ jobs:
             const stateLabel = process.env.STATE_LABEL;
             const MARKER = process.env.TRIGGER_MARKER;
 
+            const autostart = String(process.env.COPILOT_AUTOSTART || '').toLowerCase() === 'true';
+            const opener = autostart
+              ? `@copilot Please address @${reviewer}'s ${stateLabel} feedback on this PR (**#${prNumber}: ${prTitle}**).`
+              : `PLATES feedback follow-up: address @${reviewer}'s ${stateLabel} feedback on this PR (**#${prNumber}: ${prTitle}**). (Set PLATE_COPILOT_AUTOSTART=true for automatic @copilot routing.)`;
             const triggerBody = [
               MARKER,
-              `@copilot Please address @${reviewer}'s ${stateLabel} feedback on this PR (**#${prNumber}: ${prTitle}**).`,
+              opener,
               '',
               `Feedback thread: ${feedbackUrl}`,
               '',

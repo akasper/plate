@@ -7,6 +7,10 @@ on:
     branches: [release, 'release-*', 'release-v*']
     # For post-merge 'implemented' labeling on release track branches (#556)
 
+concurrency:
+  group: pr-issue-link-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   issues: read

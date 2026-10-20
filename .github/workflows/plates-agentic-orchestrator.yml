@@ -6,6 +6,13 @@ on:
 
 jobs:
   orchestrate:
+    if: |
+      github.event.issue != null && !github.event.issue.pull_request && (
+        github.event.action == 'closed' ||
+        github.event.action == 'reopened' ||
+        (github.event.action == 'labeled' && contains(fromJSON('["status:ready-to-work","status:blocked"]'), github.event.label.name)) ||
+        (github.event.action == 'unlabeled' && contains(fromJSON('["status:ready-to-work","status:blocked"]'), github.event.label.name))
+      )
     runs-on: ubuntu-latest
     permissions:
       issues: write
