@@ -31,7 +31,7 @@ Special modes:
 - **Autonomy (#480):** status → dry-run if unsure → `plate_autonomy_run_cycle` / `gh plate autonomy --run|--loop`; skill `run-autonomy-cycle`.
 - **Loops / babysit watch / what_next /loop:** MCP over CLI dumps; terse one-sentence bullets only (quiet_operations). No no-op comments.
 - Bg cmds: record task_id, poll get_/monitor, cheap fallback on kill.
-- PR green / feedback: start with pr-babysit skill not hand-rolling. Use encapsulated review helpers (no raw GraphQL/jq). Follow Full PR Green + worktree verify (#514).
+- PR green / feedback: **`address-pr-feedback` skill** (reply in-thread, resolve, re-query until zero unresolved). `gh plate pr babysit` for broader green work; prefer encapsulated helpers; skill documents exact GraphQL fallback when helpers missing (#1155). Follow Full PR Green + worktree verify (#514).
 - **Complex multi-step (babysit, Q&A, PR green, ceremonies):** start with todo_write; mark done immediately (no batch). See guidance/AGENTS. (Addresses #515.)
 - CI Diagnosis First: `gh pr checks` + `gh run view` before local pytest.
 - **Verification / local runs:** use check-work or targeted pytest; warn before long runs (see guidance).

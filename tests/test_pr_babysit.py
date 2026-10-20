@@ -924,6 +924,26 @@ class PrBabysitTests(unittest.TestCase):
         doc = getattr(mod, "__doc__", "") or ""
         self.assertIn("explicitly resolve the corresponding review threads", doc)
 
+    def test_address_pr_feedback_skill_reply_resolve_requery_gate_1155(self):
+        """Regression test for #1155: address-pr-feedback skill exists with reply+resolve+zero-unresolved re-query gate; AGENTS.md references it."""
+        skill_path = Path("plugin/skills/address-pr-feedback/SKILL.md")
+        self.assertTrue(skill_path.is_file(), "address-pr-feedback skill must ship under plugin/skills/")
+        skill = skill_path.read_text(encoding="utf-8")
+        self.assertIn("addPullRequestReviewThreadReply", skill)
+        self.assertIn("resolveReviewThread", skill)
+        self.assertIn("zero", skill.lower())
+        self.assertIn("unresolved", skill.lower())
+        self.assertTrue(
+            Path(".plugin/skills/address-pr-feedback/SKILL.md").is_file(),
+            "skill must be mirrored under .plugin/skills/",
+        )
+
+        with open("AGENTS.md", encoding="utf-8") as f:
+            agents = f.read()
+        self.assertIn("address-pr-feedback", agents)
+        self.assertIn("plugin/skills/address-pr-feedback/SKILL.md", agents)
+        self.assertIn("zero unresolved threads", agents)
+
     def test_complete_babysit_make_green_from_single_high_level_prompt(self):
         """Regression test for #519: guidance and AGENTS must describe a complete 'turn PR green' / full babysit flow from a *single high-level prompt* (not category-by-category), where the agent handles all agent-actionable gates (conflicts, labels, threads, tests) comprehensively using the skill + helpers, reporting summary only at end."""
         from plate_core.agent_guidance import QUIET_OPERATIONS_GUIDANCE
