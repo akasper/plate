@@ -1,6 +1,6 @@
 # PLATE
 
-**PLATE** (Process Lifecycle Agentic Task Engine) is a GitHub-native methodology and tooling monorepo for agent-driven software delivery. Humans keep judgment; agents do the toil; GitHub preserves truth.
+**PLATE** (Product Lifecycle Automation Toolkit and Engine) is a GitHub-native methodology and tooling monorepo for agent-driven software delivery. Humans keep judgment; agents do the toil; GitHub preserves truth.
 
 This repository (`akasper/plate`) is the **implementation monorepo**. The installable Python package on PyPI is still named **`plate-core`** (import path `plate_core`); the product name is PLATE.
 

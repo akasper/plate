@@ -1,4 +1,4 @@
-"""Minimal MCP stdio server for plate_core v1 baseline."""
+"""MCP stdio server for Product Lifecycle Automation Toolkit and Engine (PLATE) / plate_core."""
 
 from __future__ import annotations
 
