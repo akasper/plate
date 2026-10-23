@@ -1,9 +1,11 @@
+import base64
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from plate_core.bootstrap import detect_adoption_mode, run_bootstrap
+from plate_core.payload_surface import prepare_copied_text
 from plate_core.github_client import GhApiError
 from plate_core.health import HealthReport
 
@@ -387,11 +389,11 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(plate_puts, "Expected PUT to create .plate on apply when missing")
 
     @patch("plate_core.bootstrap.get_health")
-    def test_apply_fails_with_actionable_error_when_default_branch_ref_missing(self, mock_get_health):
+    def test_apply_creates_initial_commit_on_empty_repository(self, mock_get_health):
         mock_get_health.return_value = HealthReport(
             repo="akasper/empty-repo",
-            label_coverage_ok=True,
-            missing_labels=[],
+            label_coverage_ok=False,
+            missing_labels=["Feature"],
             binary_artifacts_tracked=0,
             branch_protection_enabled=False,
             open_epic_count=0,
@@ -403,15 +405,36 @@ class BootstrapTests(unittest.TestCase):
             curiosity_answers_present=False,
         )
         client = Mock()
+        ref_seen = {"count": 0}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
+            method = k.get("method", "GET")
             if endpoint == "repos/akasper/empty-repo":
-                return {"has_wiki": False, "default_branch": "main"}
+                return {"has_wiki": False, "default_branch": "main", "permissions": {"push": True}}
             if endpoint == "repos/akasper/empty-repo/git/ref/heads/main":
-                raise GhApiError("gh: Not Found (HTTP 404)")
+                ref_seen["count"] += 1
+                if ref_seen["count"] < 2:
+                    raise GhApiError("gh: Not Found (HTTP 404)")
+                return {"ref": "refs/heads/main"}
+            if endpoint == "repos/akasper/empty-repo/contents/README.md" and method == "PUT":
+                return {"content": {"sha": "readme"}}
             if "/issues?" in endpoint and "labels=Question" in endpoint:
                 return []
+            if endpoint.startswith("repos/akasper/empty-repo/contents/"):
+                if method == "GET":
+                    raise GhApiError("gh: Not Found (HTTP 404)")
+                return {}
+            if endpoint == "repos/akasper/empty-repo/labels":
+                return {}
+            if endpoint == "repos/akasper/empty-repo/issues" and method == "POST":
+                return {"number": 1}
+            if endpoint == "repos/akasper/empty-repo/branches/main":
+                return {"commit": {"sha": "abc123"}}
+            if endpoint.startswith("repos/akasper/empty-repo/branches/"):
+                raise GhApiError("HTTP 404")
+            if endpoint == "repos/akasper/empty-repo/git/refs" and method == "POST":
+                return {}
             return {}
 
         client.api.side_effect = api_side
@@ -421,11 +444,114 @@ class BootstrapTests(unittest.TestCase):
                 "plate_core.bootstrap.resolve_template_source",
                 return_value=(template_root, "explicit_path"),
             ):
-                with self.assertRaises(RuntimeError) as ctx:
-                    run_bootstrap("akasper/empty-repo", apply_mode=True, client=client)
-        msg = str(ctx.exception)
-        self.assertIn("default branch ref", msg)
-        self.assertIn("create an initial commit", msg.lower())
+                report = run_bootstrap("akasper/empty-repo", apply_mode=True, client=client)
+
+        readme_puts = [
+            c
+            for c in client.api.call_args_list
+            if c.args and "contents/README.md" in str(c.args[0]) and c.kwargs.get("method") == "PUT"
+        ]
+        self.assertTrue(readme_puts, "Expected initial README commit on empty repo")
+        self.assertEqual(ref_seen["count"], 2, "Should re-check default branch ref after seeding")
+        plate_action = next(a for a in report.actions if a.name == "init-plate-config")
+        self.assertEqual(plate_action.state, "applied")
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_rerun_after_partial_run_skips_identical_and_finishes_steps(self, mock_get_health):
+        """#1152: identical remote files are skipped; labels/.plate/questions/branches still run."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/partial-repo",
+            label_coverage_ok=False,
+            missing_labels=["Feature", "Epic"],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=False,
+            open_epic_count=0,
+            status="warn",
+            goals_page_present=False,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        agents_text = prepare_copied_text("AGENTS.md", "# AGENTS\n", "posix", namespaced=False)
+        agents_b64 = base64.b64encode(agents_text.encode("utf-8")).decode("ascii")
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/partial-repo":
+                return {"has_wiki": False, "default_branch": "main", "permissions": {"push": True}}
+            if endpoint == "repos/akasper/partial-repo/git/ref/heads/main":
+                return {"ref": "refs/heads/main"}
+            if endpoint == "repos/akasper/partial-repo/contents/AGENTS.md" and method == "GET":
+                return {"content": agents_b64, "encoding": "base64"}
+            if endpoint.startswith("repos/akasper/partial-repo/contents/"):
+                if method == "GET":
+                    raise GhApiError("gh: Not Found (HTTP 404)")
+                return {}
+            if endpoint == "repos/akasper/partial-repo/labels" and method == "POST":
+                return {}
+            if endpoint == "repos/akasper/partial-repo/issues" and method == "POST":
+                return {"number": 42}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint == "repos/akasper/partial-repo/branches/main":
+                return {"commit": {"sha": "deadbeef"}}
+            if endpoint.startswith("repos/akasper/partial-repo/branches/"):
+                raise GhApiError("HTTP 404")
+            if endpoint == "repos/akasper/partial-repo/git/refs" and method == "POST":
+                return {}
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                report = run_bootstrap("akasper/partial-repo", apply_mode=True, client=client)
+
+        template_puts = [
+            c
+            for c in client.api.call_args_list
+            if c.args
+            and "repos/akasper/partial-repo/contents/" in str(c.args[0])
+            and c.kwargs.get("method") == "PUT"
+        ]
+        put_paths = [str(c.args[0]) for c in template_puts]
+        self.assertFalse(any("AGENTS.md" in p for p in put_paths), "Identical AGENTS.md must not be re-uploaded")
+        self.assertTrue(any("docs/wiki/Goals.md" in p for p in put_paths), "Missing files should still upload")
+
+        label_posts = [
+            c for c in client.api.call_args_list if c.args and c.args[0] == "repos/akasper/partial-repo/labels"
+        ]
+        self.assertEqual(len(label_posts), 2)
+
+        question_posts = [
+            c
+            for c in client.api.call_args_list
+            if c.args
+            and c.args[0] == "repos/akasper/partial-repo/issues"
+            and c.kwargs.get("method") == "POST"
+            and "Question" in str(c.kwargs.get("fields", {}).get("labels", []))
+        ]
+        self.assertEqual(len(question_posts), 3)
+
+        plate_puts = [c for c in template_puts if ".plate" in str(c.args[0])]
+        self.assertTrue(plate_puts, "Expected .plate initialization on partial rerun")
+
+        branch_posts = [
+            c
+            for c in client.api.call_args_list
+            if c.args and c.args[0] == "repos/akasper/partial-repo/git/refs" and c.kwargs.get("method") == "POST"
+        ]
+        self.assertEqual(len(branch_posts), 4, "Release track branches should be created")
+
+        copy_action = next(a for a in report.actions if a.name == "copy-template-payload")
+        self.assertEqual(copy_action.state, "applied")
+        self.assertIn("skipped", copy_action.detail.lower())
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_wraps_contents_404_with_repo_branch_path_context(self, mock_get_health):
