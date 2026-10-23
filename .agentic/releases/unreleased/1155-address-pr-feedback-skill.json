@@ -1,0 +1,16 @@
+{
+  "slug": "1155-address-pr-feedback-skill",
+  "change_type": "fix",
+  "surface": "plugin skills, AGENTS.md, plate persona",
+  "summary": "Add address-pr-feedback skill with mandatory reply+resolve per-thread loop and zero-unresolved re-query done gate; point babysit guidance at the skill and document sanctioned GraphQL fallback (#1155).",
+  "migration_impact": "Downstream repos receive the skill via plugin/bootstrap. Agents addressing PR feedback must reply in-thread, resolve each thread, and re-query until zero unresolved remain (except need:human-review escalations).",
+  "migration_guidance": [
+    "1. Upgrade plate-core / re-import plugin payload so `plugin/skills/address-pr-feedback/SKILL.md` is present.",
+    "2. When addressing review feedback, read and follow the address-pr-feedback skill before declaring done.",
+    "3. Prefer plate_resolve_review_thread / gh plate pr babysit --act; use the skill's gh api graphql fallback only when helpers are unavailable."
+  ],
+  "agent_notes": "Address feedback is not complete until a re-query of reviewThreads shows zero unresolved threads (excluding explicit human escalations with need:human-review). Every thread gets an in-thread reply (commit SHA or decline reason) before resolveReviewThread. See plugin/skills/address-pr-feedback/SKILL.md and AGENTS.md babysit step 7.",
+  "breaking": false,
+  "links": ["#1155"],
+  "requires": []
+}

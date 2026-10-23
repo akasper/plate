@@ -17,6 +17,10 @@
         ],
         "skills": [
           {
+            "name": "Address PR Feedback",
+            "description": "Reply to every PR review thread, resolve it, and re-query until zero unresolved threads remain (except human-escalated…"
+          },
+          {
             "name": "Audit SPEC.md and CURRENT.md",
             "description": "Compare intended product state with implemented state and flag drift."
           },

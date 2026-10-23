@@ -10,13 +10,14 @@
 
 Canonical source: `src/plate_core/data/baseline_catalog.yml`
 
-This catalog defines **27** baseline skills used by PLATE agents.
+This catalog defines **28** baseline skills used by PLATE agents.
 Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same directory.
 
 ## Index
 
 | ID | Name | Owning agents |
 | --- | --- | --- |
+| `address-pr-feedback` | Address PR Feedback | `software-engineer`, `ci-engineer` |
 | `audit-security-posture` | Audit Security Posture | `security-auditor` |
 | `audit-spec-current` | Audit SPEC.md and CURRENT.md | `software-engineer`, `research-agent` |
 | `calculate-costs` | Calculate Costs | `accountant` |
@@ -46,6 +47,29 @@ Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same director
 | `what-next-plate-process` | What Next? (PLATE Process Guidance) | `research-agent` |
 
 ## Details
+
+### `address-pr-feedback` — Address PR Feedback
+
+Reply to every PR review thread, resolve it, and re-query until zero unresolved threads remain (except human-escalated items).
+
+**Owning agents:** `software-engineer`, `ci-engineer`
+
+**Inputs**
+
+- PR number
+- Unresolved review threads (via plate helpers or GraphQL fallback)
+
+**Outputs**
+
+- In-thread replies with commit SHA or decline reason
+- Resolved review threads
+- Zero-unresolved re-query confirmation
+
+**Examples**
+
+- After pushing a fix for Copilot feedback, run the per-thread loop until the re-query returns zero unresolved threads.
+
+**Plugin skill file:** `skills/address-pr-feedback/SKILL.md`
 
 ### `audit-security-posture` — Audit Security Posture
 
