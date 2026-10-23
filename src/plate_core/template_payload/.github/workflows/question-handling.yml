@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   batch-open-questions:
+    if: startsWith(trim(github.event.comment.body), '/question-batch') || startsWith(trim(github.event.comment.body), '/QUESTION-BATCH')
     runs-on: ubuntu-latest
     steps:
       - name: Handle /question-batch slash command

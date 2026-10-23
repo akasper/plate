@@ -33,6 +33,8 @@ jobs:
     steps:
       - name: Create GitHub platform research issue
         uses: actions/github-script@v7
+        env:
+          COPILOT_AUTOSTART: ${{ vars.PLATE_COPILOT_AUTOSTART == 'true' }}
         with:
           script: |
             const today = new Date().toISOString().split('T')[0];
@@ -99,4 +101,27 @@ jobs:
             });
 
             core.info(`Created monitoring issue #${issue.data.number}: ${issue.data.html_url}`);
+
+            const autostart = String(process.env.COPILOT_AUTOSTART || '').toLowerCase() === 'true';
+            if (autostart) {
+              try {
+                await github.rest.issues.addAssignees({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.data.number,
+                  assignees: ['copilot-swe-agent'],
+                });
+                core.info('Assigned copilot-swe-agent (PLATE_COPILOT_AUTOSTART=true).');
+              } catch (error) {
+                core.warning(`Could not assign copilot-swe-agent: ${error.message}`);
+              }
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.data.number,
+                body: 'PLATES platform monitor: research issue opened. Start your coding agent manually, or set repository variable `PLATE_COPILOT_AUTOSTART=true` to auto-assign Copilot.',
+              });
+            }
+
             core.setOutput('issue_number', issue.data.number);
