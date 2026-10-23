@@ -99,7 +99,7 @@ class PlateAcronymExpansionTests(unittest.TestCase):
                 continue
             rel = path.relative_to(REPO_ROOT).as_posix()
             for legacy in LEGACY_PLATE_ACRONYM_EXPANSIONS:
-                if legacy in text:
+                if legacy.casefold() in text.casefold():
                     offenders.append(f"{rel}: contains `{legacy}`")
         self.assertEqual(
             offenders,
