@@ -216,6 +216,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/bootstrap/starting-a-new-repository.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/design/README.md",
       "classification": "copy_to_downstream"
     },
