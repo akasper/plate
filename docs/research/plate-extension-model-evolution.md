@@ -7,6 +7,8 @@
 
 ## Research Question
 
+> **Historical:** `akasper/plate_template` is retired; new repositories use [starting-a-new-repository.md](../bootstrap/starting-a-new-repository.md).
+
 How should PLATE extensions evolve when the core methodology moves from `plate_template` to `akasper/plate` ownership?
 
 ## Sources

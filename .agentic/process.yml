@@ -2,7 +2,8 @@ process:
   name: "Process Lifecycle Agentic Task Engine"
   short_name: "PLATE"
   version: "0.6"
-  template_repository: "akasper/plate_template"
+  methodology_repository: "akasper/plate"
+  scaffold_delivery: "plate-core-package-payload"
   authority_model:
     doctrine_source: "PLATE book or governing methodology document"
     template_artifact_source: "this repository"

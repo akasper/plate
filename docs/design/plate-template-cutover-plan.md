@@ -1,5 +1,7 @@
 # Phased Cutover Plan: `plate_template` -> `plate` Methodology Ownership
 
+> **Historical:** `akasper/plate_template` is retired; new repositories use [starting-a-new-repository.md](../bootstrap/starting-a-new-repository.md).
+
 - **Issue:** #110 (Epic #89)
 - **Designed by:** @copilot (agent session)
 - **Date:** 2026-05-28
