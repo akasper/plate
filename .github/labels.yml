@@ -3,7 +3,7 @@
 
 - name: "Feedback Response"
   color: "e4e669"
-  description: "PLATES task or PR addressing third-party agent review feedback (often auto-created)."
+  description: "PLATES issue/PR type for third-party agent feedback work (not auto-created; no Epic milestone)."
 
 - name: "Bug"
   color: "d73a4a"

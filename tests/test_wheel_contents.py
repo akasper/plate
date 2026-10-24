@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import importlib.util
 import re
 import shutil
@@ -16,6 +17,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_PAYLOAD_SRC = REPO_ROOT / "src" / "plate_core" / "template_payload"
+INVENTORY_PATH = REPO_ROOT / "src" / "plate_core" / "data" / "template_payload_inventory.json"
 WHEEL_PREFIX = "plate_core/template_payload/"
 LABELS_PATHS = (
     REPO_ROOT / ".github" / "labels.yml",
@@ -52,11 +54,19 @@ def _read_wheel_metadata(wheel_path: Path) -> str:
         return archive.read(meta_names[0]).decode("utf-8")
 
 
+def _inventory_template_payload_paths() -> set[str]:
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    files = inventory.get("files", [])
+    return {item["path"] for item in files if isinstance(item, dict) and item.get("path")}
+
+
 class TestWheelContents(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        if importlib.util.find_spec("setuptools") is None:
-            raise unittest.SkipTest("setuptools is not importable; cannot build wheel")
+        if importlib.util.find_spec("setuptools") is None or importlib.util.find_spec("wheel") is None:
+            raise unittest.SkipTest(
+                "setuptools and wheel are required to build a plate-core wheel for this test"
+            )
         cls._wheel_dir = Path(tempfile.mkdtemp(prefix="plate-wheel-test-"))
         proc = subprocess.run(
             [
@@ -75,12 +85,13 @@ class TestWheelContents(unittest.TestCase):
             text=True,
         )
         if proc.returncode != 0:
-            raise unittest.SkipTest(
-                f"pip wheel failed (setuptools/wheel may be missing): {proc.stderr or proc.stdout}"
+            raise AssertionError(
+                "pip wheel failed (packaging regression):\n"
+                f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
             )
         wheels = sorted(cls._wheel_dir.glob("plate_core-*.whl"))
         if not wheels:
-            raise unittest.SkipTest("pip wheel produced no plate_core wheel")
+            raise AssertionError("pip wheel succeeded but produced no plate_core-*.whl")
         cls.wheel_path = wheels[-1]
 
     @classmethod
@@ -93,6 +104,18 @@ class TestWheelContents(unittest.TestCase):
         expected = _template_payload_source_paths()
         actual = _wheel_template_payload_paths(self.wheel_path)
         self.assertEqual(expected, actual)
+
+    def test_wheel_matches_template_payload_inventory(self) -> None:
+        expected = _inventory_template_payload_paths()
+        self.assertGreater(len(expected), 0, "template_payload_inventory.json lists no files")
+        actual = _wheel_template_payload_paths(self.wheel_path)
+        missing = sorted(expected - actual)
+        self.assertEqual(
+            [],
+            missing,
+            msg=f"wheel missing {len(missing)} template_payload file(s) from inventory: "
+            f"{missing[:10]}{'...' if len(missing) > 10 else ''}",
+        )
 
     def test_wheel_includes_key_payload_paths(self) -> None:
         names = _wheel_template_payload_paths(self.wheel_path)
