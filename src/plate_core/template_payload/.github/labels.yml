@@ -3,7 +3,7 @@
 
 - name: "Feedback Response"
   color: "e4e669"
-  description: "Issue or PR type: PLATES-generated task or resulting PR that addresses third-party agent review feedback. Auto-created by plates-address-pr-feedback.yml."
+  description: "PLATES issue/PR type for third-party agent feedback work (not auto-created; no Epic milestone)."
 
 - name: "Bug"
   color: "d73a4a"
@@ -38,7 +38,7 @@
   description: "Issue type: human-only blocker or explicitly requested human action item."
 - name: "Spike"
   color: "c2e0c6"
-  description: "Issue type: time-boxed investigation with a defined question and hard timebox. Produces an answer or explicit discard decision."
+  description: "Time-boxed investigation with a defined question; produces an answer or explicit discard."
 
 - name: "area:product"
   color: "bfd4f2"
@@ -107,7 +107,7 @@
   description: "Needs wiki synchronization or human review of wiki-sync output."
 - name: "need:refinement"
   color: "ededed"
-  description: "Stub issue created during planning; acceptance criteria and scope details are incomplete and require refinement before implementation starts."
+  description: "Planning stub: acceptance criteria and scope incomplete; refine before implementation."
 
 - name: "auto-merge"
   color: "0e8a16"
@@ -115,7 +115,7 @@
 
 - name: "no-issue"
   color: "ededed"
-  description: "This PR does not resolve a tracked issue (chore, dependency bump, hotfix). Silences the issue-link check."
+  description: "PR with no tracked issue (chore, dependency bump, hotfix). Silences the issue-link check."
 
 - name: "status:blocked"
   color: "b60205"
@@ -123,9 +123,12 @@
 - name: "status:ready-to-work"
   color: "0e8a16"
   description: "Feature issue has no open native GitHub blockers and can be started by PLATES triggers."
+- name: "status:stub"
+  color: "ededed"
+  description: "Issue is intentionally a stub needing more detail via normal PLATE definition. See AGENTS.md."
 - name: "no-guidance-update"
   color: "ededed"
-  description: "PR closes a Question issue whose answer does not change operating guidance. Skips the AGENTS.md/skills.yml update check."
+  description: "Question answer PR that does not change operating guidance; skips AGENTS.md/skills.yml check."
 
 - name: "Epic: example"
   color: "5319e7"
@@ -135,7 +138,7 @@
 # These may be newer than the baseline payload; downstreams adopting the refinement will sync them.
 - name: "Release"
   color: "0052cc"
-  description: "Issue type: planned PLATE release with pre-release checklist, extension hooks, and semver traceability."
+  description: "Issue type: planned PLATE release with checklist, extension hooks, and semver traceability."
 - name: "Major"
   color: "b60205"
   description: "Release track: this change is part of the next major release (breaking or large scope)."

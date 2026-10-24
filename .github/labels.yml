@@ -3,7 +3,7 @@
 
 - name: "Feedback Response"
   color: "e4e669"
-  description: "Issue or PR type: PLATES-generated task or resulting PR that addresses third-party agent review feedback. Auto-created by plates-address-pr-feedback.yml."
+  description: "PLATES issue/PR type for third-party agent feedback work (not auto-created; no Epic milestone)."
 
 - name: "Bug"
   color: "d73a4a"
@@ -28,7 +28,7 @@
   description: "Issue type: existing-project PLATE adoption task."
 - name: "Release"
   color: "0052cc"
-  description: "Issue type: planned PLATE release with pre-release checklist, extension hooks, and semver traceability."
+  description: "Issue type: planned PLATE release with checklist, extension hooks, and semver traceability."
 
 # Semver release track labels (refined ceremony). Every changing issue (Feature, Bug, Documentation, etc.)
 # carries exactly one to declare intent and target the matching release-major/minor/patch branch during
@@ -125,7 +125,7 @@
 
 - name: "no-issue"
   color: "ededed"
-  description: "This PR does not resolve a tracked issue (chore, dependency bump, hotfix). Silences the issue-link check."
+  description: "PR with no tracked issue (chore, dependency bump, hotfix). Silences the issue-link check."
 
 - name: "status:blocked"
   color: "b60205"
@@ -135,10 +135,10 @@
   description: "Feature issue has no open native GitHub blockers and can be started by PLATES triggers."
 - name: "status:stub"
   color: "ededed"
-  description: "Issue (of any type) is intentionally a stub — it still needs substantial detail via the normal PLATE definition process. See AGENTS.md § Stub Issues."
+  description: "Issue is intentionally a stub needing more detail via normal PLATE definition. See AGENTS.md."
 - name: "status:implemented"
   color: "0e8a16"
-  description: "Issue (Feature/Bug/etc) has been merged to a release/next track branch (implemented in RC) but not yet released to main+tag. See Epic #556 and release ceremony."
+  description: "Merged to release/next track (RC) but not yet on main+tag. See Epic #556 and release ceremony."
 - name: "no-guidance-update"
   color: "ededed"
-  description: "PR closes a Question issue whose answer does not change operating guidance. Skips the AGENTS.md/skills.yml update check."
+  description: "Question answer PR that does not change operating guidance; skips AGENTS.md/skills.yml check."
