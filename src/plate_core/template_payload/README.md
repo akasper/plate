@@ -33,15 +33,15 @@ If a claim is not supported by per-feature change files in `.agentic/releases/`,
 
 ## Getting started: PLATE onboarding
 
-### 1. Create your repository
+### 1. Start the repository
 
-Create an empty GitHub repository (or use an existing project repo). **Do not** use GitHub's "Use this template" flow on `akasper/plate_template`.
+Follow **`docs/bootstrap/starting-a-new-repository.md`**: install pinned `plate-core` + `gh plate`, create an empty repo with `gh repo create` (never `--template`), then `gh plate bootstrap --repo OWNER/NAME --greenfield` and `--apply`.
 
-### 2. Run repository bootstrap
+### 2. Run GitHub bootstrap helpers
 
-From the repository root:
+From the repository root after scaffold import:
 
-Run `gh plate bootstrap --apply` to materialize the PLATE scaffold (AGENTS, docs, workflows, scripts, and starter assets). Then run the GitHub bootstrap scripts below to apply labels, wiki, and branch protection.
+`gh plate bootstrap --greenfield --apply` materializes the PLATE scaffold (AGENTS, docs, workflows, scripts, labels, and starter issues). Use the scripts below for wiki and branch protection if not already applied by bootstrap.
 
 **macOS / Linux / WSL**
 ```bash

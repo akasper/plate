@@ -25,19 +25,26 @@ class ResolveTemplateSourceTests(unittest.TestCase):
         self.assertTrue(root.exists())
 
     def test_resolve_template_source_raises_without_payload_or_opt_in(self):
-        missing = Path("/tmp/plate-nonexistent-payload-for-test")
-        with patch("plate_core.template_payload.payload_root", return_value=missing):
-            env = os.environ.copy()
-            env.pop("PLATE_ALLOW_LEGACY_TEMPLATE_SIBLING", None)
-            with patch.dict(os.environ, env, clear=True):
-                with self.assertRaises(RuntimeError) as ctx:
-                    resolve_template_source()
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            repo = base / "my-repo"
+            legacy = base / "plate_template"
+            repo.mkdir()
+            legacy.mkdir()
+            missing_payload = base / "no-payload"
+            with patch("plate_core.template_payload.payload_root", return_value=missing_payload):
+                env = os.environ.copy()
+                env.pop("PLATE_ALLOW_LEGACY_TEMPLATE_SIBLING", None)
+                with patch.dict(os.environ, env, clear=True):
+                    with patch("plate_core.template_payload.Path.cwd", return_value=repo):
+                        with self.assertRaises(RuntimeError) as ctx:
+                            resolve_template_source()
         self.assertIn("gh plate bootstrap", str(ctx.exception))
         self.assertIn("do not clone", str(ctx.exception).lower())
 
     def test_legacy_sibling_requires_explicit_opt_in(self):
         with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp)
+            base = Path(tmp).resolve()
             repo = base / "my-repo"
             legacy = base / "plate_template"
             repo.mkdir()
@@ -50,7 +57,7 @@ class ResolveTemplateSourceTests(unittest.TestCase):
                             warnings.simplefilter("always")
                             root, kind = resolve_template_source()
         self.assertEqual(kind, "legacy_sibling_fallback")
-        self.assertEqual(root, legacy)
+        self.assertEqual(root.resolve(), legacy.resolve())
         self.assertTrue(any(isinstance(w.message, DeprecationWarning) for w in caught))
 
 

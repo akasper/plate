@@ -35,7 +35,7 @@ docs/
 | Document | Purpose |
 |----------|---------|
 | **[Wiki: Feature Showcase](./wiki/feature-showcase.md)** | How to capture and embed demo GIFs in documentation. Includes format standards, embedding syntax, examples, and GIF gallery index. |
-| **[Forward-Port Plan: Playwright E2E](./forward-port-plans/playwright-e2e-adoption.md)** | Guide for adopting Playwright E2E testing in downstream projects from this template. |
+| **[Forward-Port Plan: Playwright E2E](./forward-port-plans/playwright-e2e-adoption.md)** | Guide for adopting Playwright E2E testing in downstream projects via `gh plate import-payload`. |
 
 ### Architecture & Design
 

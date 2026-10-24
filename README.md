@@ -38,6 +38,8 @@ See `AGENTS.md`, `SPEC.md`, and `docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.m
 
 ## Quick Start
 
+**New repository?** See **[docs/bootstrap/starting-a-new-repository.md](docs/bootstrap/starting-a-new-repository.md)** (empty `gh repo create`, then `gh plate bootstrap --greenfield`). Existing codebase: `docs/migration/adoption-guide.md`.
+
 ### Install versions (pip + gh-plate pin)
 
 After the **v0.8.4** cut, public surfaces are:

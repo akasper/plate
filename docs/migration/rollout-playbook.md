@@ -1,5 +1,7 @@
 # PLATE Methodology Ownership Rollout Playbook and Adoption Guide
 
+> **Historical:** `akasper/plate_template` is retired; new repositories use [starting-a-new-repository.md](../bootstrap/starting-a-new-repository.md).
+
 **Issue:** #128 (child of closed Epic #126 / post #89)
 
 **Status:** Complete (autonomous implementation cycle)

@@ -1,11 +1,11 @@
 {
   "slug": "1151-stop-plate-template-bootstrap",
   "change_type": "process",
-  "surface": "AGENTS.md, template payload, template_payload.py, process.yml",
-  "summary": "Stop recommending akasper/plate_template on the bootstrap path; new repos use gh plate bootstrap and upgrades use plate-core import-payload/self-migrate.",
+  "surface": "AGENTS.md, template payload, template_payload.py, process.yml, docs/bootstrap/starting-a-new-repository.md",
+  "summary": "Stop recommending akasper/plate_template on the bootstrap path; canonical greenfield doc uses gh plate bootstrap --greenfield; upgrades use import-payload/self-migrate; agents forbidden from template clone or hand-copy.",
   "migration_impact": "Downstream repos should remove plate_template upstream remotes from agent docs and onboarding. Legacy plate_template forks upgrade via gh plate tooling only.",
   "migration_guidance": [
-    "1. Do not create, clone, or sync from akasper/plate_template; start new repos with gh plate bootstrap.",
+    "1. Do not create, clone, fork, or gh repo create --template from akasper/plate_template; start new repos per docs/bootstrap/starting-a-new-repository.md.",
     "2. Replace git-fetch upstream template sync instructions with gh plate self-migrate and gh plate import-payload.",
     "3. Remove template_repository: akasper/plate_template from .agentic/process.yml if present; use methodology_repository: akasper/plate.",
     "4. PLATE_ALLOW_LEGACY_TEMPLATE_SIBLING=1 enables deprecated sibling plate_template resolution only for exceptional local dev."
