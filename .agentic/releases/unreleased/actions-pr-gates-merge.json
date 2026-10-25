@@ -1,0 +1,15 @@
+{
+  "slug": "actions-pr-gates-merge",
+  "change_type": "process",
+  "surface": ".github/workflows/plate-pr-gates.yml + template_payload + gh plate health",
+  "summary": "Merge PLATE PR gate workflows into a single pr-gates job to cut billed Actions minutes while preserving gate logic and failure messages.",
+  "migration_impact": "Branch protection must require pr-gates instead of legacy per-gate job contexts; run gh plate health to detect stale names.",
+  "migration_guidance": [
+    "Import plate-pr-gates.yml and delete pr-title-check, pr-issue-link-check, pr-documentation-check, feedback-resolution-check, and audit workflows.",
+    "Update required checks to labels, test, and pr-gates (see docs/migration/actions-cost-rollout.md).",
+    "Remove deprecated contexts: check-pr-title, check-issue-links, feature-change-files, feedback-resolution, audit, validate-release-pr."
+  ],
+  "agent_notes": "validate-release-pr moved from ci.yml into pr-gates; heavy-release in ci.yml depends on test only. Builder: scripts/build_plate_pr_gates_workflow.py regenerates YAML from step anchors.",
+  "breaking": true,
+  "links": ["#1209", "#1177", "#1150"]
+}

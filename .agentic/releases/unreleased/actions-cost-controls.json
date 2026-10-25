@@ -7,7 +7,7 @@
   "migration_guidance": [
     "Run gh plate import-payload (or upgrade) and merge the .github/workflows diff.",
     "Leave PLATE_COPILOT_AUTOSTART unset (or false) unless automatic @copilot kickoff is desired.",
-    "Confirm branch protection still lists ci, pr-issue-link-check, pr-title-check, label-check (issues), feedback-resolution-check, release, and publish workflows as before.",
+    "After #1209 lands, require pr-gates (merged gates), labels, and test; use gh plate health to find stale per-gate contexts.",
     "Follow docs/migration/actions-cost-rollout.md for private adopter rollout order."
   ],
   "agent_notes": "Issue workflows use job-level if: to skip runners on irrelevant events. plates-start-feature and plates-unblock-features omit @copilot unless PLATE_COPILOT_AUTOSTART=true. PR workflows use concurrency with cancel-in-progress except release/publish.",

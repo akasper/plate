@@ -24,7 +24,7 @@ class TemplatePayloadCurrentMdCutoverTests(unittest.TestCase):
         self.assertNotIn("CURRENT.md", readme)
 
     def test_template_feature_gate_uses_release_change_files(self):
-        workflow = read(".github/workflows/pr-documentation-check.yml")
+        workflow = read(".github/workflows/plate-pr-gates.yml")
         self.assertIn(".agentic/releases/", workflow)
         self.assertNotIn("CURRENT.md", workflow)
 
@@ -46,18 +46,18 @@ class TemplatePayloadCurrentMdCutoverTests(unittest.TestCase):
 
     def test_template_payload_workflows_use_milestones_and_fragments(self):
         label_check = read(".github/workflows/label-check.yml")
-        issue_link = read(".github/workflows/pr-issue-link-check.yml")
-        doc_check = read(".github/workflows/pr-documentation-check.yml")
+        gates = read(".github/workflows/plate-pr-gates.yml")
         ci = read(".github/workflows/ci.yml")
         release = read(".github/workflows/release.yml")
 
         self.assertIn("requiresMilestone", label_check)
         self.assertIn("Release issues must be assigned to a GitHub milestone.", label_check)
-        self.assertIn("Development sidebar", issue_link)
-        self.assertIn("--milestone", issue_link)
-        self.assertIn(".agentic/releases/unreleased/", doc_check)
-        self.assertIn("release fragment", doc_check)
-        self.assertIn("validate-release-pr", ci)
+        self.assertIn("Development sidebar", gates)
+        self.assertIn("--milestone", gates)
+        self.assertIn(".agentic/releases/unreleased/", gates)
+        self.assertIn("release fragment", gates)
+        self.assertIn("Gate — validate release PR", gates)
+        self.assertNotIn("validate-release-pr:", ci)
         self.assertIn("git ls-remote --tags origin", ci)
         self.assertIn("pull_request:", release)
         self.assertIn("github.event.pull_request.merge_commit_sha", release)
