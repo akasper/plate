@@ -9,14 +9,19 @@ Use this checklist when reviewing a pull request. Comment on anything that fails
 
 ## Issue link and PR type
 
-- The PR body links its driving issue with `Closes #n`, `Fixes #n`, or `Resolves #n` (or the repo's documented equivalent).
-- Feature, Bug, and Documentation PRs must link exactly one issue this way.
-- The PR carries the correct type label (`Feature`, `Bug`, or `Documentation`) and it matches the linked issue type.
+- When the PR should close a driving issue on merge, the body includes `Closes #n`, `Fixes #n`, or `Resolves #n` (or the repo's documented equivalent). `Feedback Response` PRs are exempt from the issue-link gate where AGENTS.md says so.
+- The PR carries exactly one required type label: `Bug`, `Feature`, `Documentation`, or `Feedback Response`.
+- When a closing keyword links an issue, the PR type label must follow AGENTS.md issue-to-PR mapping:
+  - `Feature` issue → `Feature`
+  - `Bug` issue → `Bug`
+  - `Research`, `Design`, `Question`, `Audit`, `Migration`, `Epic`, and `Release` issues → `Documentation`
+  - `Task` issues normally close via the Task completion comment; use `Documentation` when a PR artifact is required for follow-up docs.
 
 ## Release fragment
 
 - A release fragment exists for this change when the work is a Feature or changes PLATE process, templates, agent surfaces, or tooling.
 - The fragment is valid JSON with required fields (`slug`, `change_type`, `surface`, `summary`, `migration_impact`, `agent_notes`).
+- `change_type` is one of `feature`, `fix`, `docs`, `process`, or `breaking` (per `.agentic/releases/unreleased/README.md`) and matches the actual change (for example `feature` for Feature work, `fix` for bug fixes—a `fix` fragment for feature work fails review).
 - Epic-scoped work lives under `.agentic/releases/epic-<NNN>-<slug>/`; other unreleased work lives under `.agentic/releases/unreleased/`, per the releases README.
 
 ## Labels and scope
