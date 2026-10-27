@@ -29,7 +29,7 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn("'Release'", workflow)  # or the array now includes Release in requiresMilestone
 
     def test_pr_issue_link_check_accepts_development_links(self):
-        workflow = read_text(".github/workflows/pr-issue-link-check.yml")
+        workflow = read_text(".github/workflows/plate-pr-gates.yml")
 
         self.assertIn("CONNECTED_EVENT", workflow)
         self.assertIn("timelineItems", workflow)
@@ -48,7 +48,7 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn("warning-first check", design_doc)
 
     def test_pr_title_check_enforces_human_readable_titles(self):
-        workflow = read_text(".github/workflows/pr-title-check.yml")
+        workflow = read_text(".github/workflows/plate-pr-gates.yml")
 
         self.assertIn("hasBracketPrefix", workflow)
         self.assertIn("hasClosingKeyword", workflow)
@@ -72,9 +72,9 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn("Delete branch on merge", design_doc)
 
     def test_release_ci_validates_versions_and_remote_tag_conflicts(self):
-        workflow = read_text(".github/workflows/ci.yml")
+        workflow = read_text(".github/workflows/plate-pr-gates.yml")
 
-        self.assertIn("validate-release-pr", workflow)
+        self.assertIn("Gate — validate release PR", workflow)
         self.assertIn("validate_release_workspace", workflow)
         self.assertIn("git ls-remote --tags origin", workflow)
         self.assertIn("Release tag ${RELEASE_TAG} already exists on origin.", workflow)

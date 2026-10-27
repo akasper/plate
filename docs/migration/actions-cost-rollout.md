@@ -18,7 +18,7 @@ Account-level **Copilot auto-review** is a separate control: check [github.com/s
 | Issue workflows still enforce labels/milestones | `label-check.yml` behavior must remain intact |
 | Feature kickoff still works | `status:ready-to-work` on a `Feature` issue should comment or dispatch orchestrator |
 | Copilot is off by default | Do **not** set `PLATE_COPILOT_AUTOSTART` until you intend to pay for agent wakes |
-| PR gates unchanged | `ci`, `pr-issue-link-check`, `pr-title-check`, `feedback-resolution-check`, `auto-merge` still required in branch protection |
+| PR gates (merged #1209) | Replace separate gate contexts with **`pr-gates`** plus existing **`labels`** and **`test`**. Remove deprecated contexts: `check-pr-title`, `check-issue-links`, `feature-change-files`, `feedback-resolution`, `audit`, `validate-release-pr`. Run `gh plate health` to flag stale names. |
 | Release/publish not cancelled mid-flight | `release.yml` and publish workflows use `cancel-in-progress: false` |
 
 Optional: set repository variable `PLATE_COPILOT_AUTOSTART=true` only on repos that explicitly want automatic `@copilot` kickoff comments and Copilot coding-agent assignment from platform monitor.
@@ -46,8 +46,24 @@ For each repo:
 2. Watch Actions usage for 48–72 hours; confirm minute count drops on issue label/edit noise.
 3. Enable `PLATE_COPILOT_AUTOSTART=true` only if automatic agent kickoff is desired.
 
+## Merged PR gates (#1209) — branch protection
+
+After importing `plate-pr-gates.yml` and removing the legacy gate workflows, update default-branch protection **required status checks**:
+
+| Remove (deprecated job contexts) | Add / keep |
+|---|---|
+| `check-pr-title`, `check-issue-links`, `feature-change-files`, `feedback-resolution`, `audit`, `validate-release-pr` | **`pr-gates`** (single merged job) |
+| (unchanged) | **`labels`**, **`test`**, release/publish workflows as before |
+
+`gh plate health` (and `plate_health` MCP) reports `stale_required_check_contexts` when deprecated names remain. Planned #1195 may add a separate **`ai-review`** required check; that is independent of `pr-gates`.
+
+### Before / after job count (sample PR)
+
+On a typical PR synchronize event, GitHub previously scheduled **six** billable gate jobs (`check-pr-title`, `check-issue-links`, `feature-change-files`, `feedback-resolution`, `audit`, and `validate-release-pr` when applicable), each incurring at least one billed minute. The merged workflow schedules **one** `pr-gates` job that runs the same gates sequentially (~one billed minute per workflow run, plus the separate `test` / `labels` workflows).
+
 ## Related PLATE artifacts
 
 - Migration fragment: `.agentic/releases/unreleased/actions-cost-controls.json`
+- Merged gates fragment: `.agentic/releases/unreleased/actions-pr-gates-merge.json`
 - Operator guidance: `AGENTS.md` (Copilot review and Actions cost sections)
 - Epic context: Copilot triage and wake gating (#1136, #1137 under Epic #1129)
