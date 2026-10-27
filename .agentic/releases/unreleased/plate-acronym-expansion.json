@@ -1,0 +1,10 @@
+{
+  "slug": "plate-acronym-expansion",
+  "change_type": "docs",
+  "surface": "README, AGENTS.md, SPEC.md, docs/wiki/Goals.md, .agentic/process.yml, template_payload, pyproject.toml, CLI/MCP help",
+  "summary": "PLATE now expands to Product Lifecycle Automation Toolkit and Engine everywhere in shipped surfaces (#1157).",
+  "migration_impact": "Downstream repos that spelled out the old PLATE acronym should refresh copy from template_payload or adopt Product Lifecycle Automation Toolkit and Engine in local README/AGENTS.md/process.yml when syncing.",
+  "agent_notes": "Use Product Lifecycle Automation Toolkit and Engine when spelling out PLATE. The acronym PLATE, package plate-core, import plate_core, and gh plate are unchanged. Historical release fragments under .agentic/releases/v* are intentionally not rewritten.",
+  "breaking": false,
+  "links": ["#1157"]
+}
