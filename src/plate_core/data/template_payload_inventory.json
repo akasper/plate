@@ -96,10 +96,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": ".github/workflows/plate-pr-gates.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": ".github/workflows/auto-label-feedback-responses.yml",
       "classification": "copy_to_downstream"
     },
@@ -116,12 +112,15 @@
       "classification": "copy_to_downstream"
     },
     {
-    {
       "path": ".github/workflows/label-check.yml",
       "classification": "copy_to_downstream"
     },
     {
       "path": ".github/workflows/pages.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plate-pr-gates.yml",
       "classification": "copy_to_downstream"
     },
     {
@@ -148,7 +147,6 @@
       "path": ".github/workflows/platform-monitor.yml",
       "classification": "copy_to_downstream"
     },
-    {
     {
       "path": ".github/workflows/question-handling.yml",
       "classification": "copy_to_downstream"

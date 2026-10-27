@@ -279,7 +279,7 @@ jobs:
             const hasReleaseChangeFile = hasFragment || hasLegacyFile;
             if (!hasReleaseChangeFile) {
               core.setFailed(
-                'Feature pull requests must include a release fragment in .agentic/releases/unreleased/<slug>.json. ' +
+                'Feature pull requests must include per-feature change files (a release fragment) in .agentic/releases/unreleased/<slug>.json. ' +
                 'See .agentic/releases/unreleased/README.md for the required schema. ' +
                 'If this PR is not a Feature, remove the Feature label.'
               );

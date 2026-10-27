@@ -43,7 +43,7 @@ PR_GATE_STEP_CONTRACTS: tuple[dict[str, str], ...] = (
     },
     {
         "step_name": "Gate — Feature release fragment",
-        "failure_marker": "Feature pull requests must include a release fragment",
+        "failure_marker": "per-feature change files",
     },
     {
         "step_name": "Gate — feedback resolution",

@@ -58,7 +58,7 @@ class TemplatePayloadCurrentMdCutoverTests(unittest.TestCase):
         self.assertIn("release fragment", gates)
         self.assertIn("Gate — validate release PR", gates)
         self.assertNotIn("validate-release-pr:", ci)
-        self.assertIn("git ls-remote --tags origin", ci)
+        self.assertIn("git ls-remote --tags origin", gates)
         self.assertIn("pull_request:", release)
         self.assertIn("github.event.pull_request.merge_commit_sha", release)
 
