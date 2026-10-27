@@ -1,6 +1,6 @@
 # PLATE Template
 
-**Process Lifecycle Agentic Task Engine (PLATE)** scaffold ships in **`plate-core`** (`gh plate bootstrap`). **Do not create, clone, or sync from `akasper/plate_template`**—that repository is legacy.
+**PLATE** (Product Lifecycle Automation Toolkit and Engine) scaffold ships in **`plate-core`** (`gh plate bootstrap`). **Do not create, clone, or sync from `akasper/plate_template`**—that repository is legacy.
 
 PLATE is a GitHub-first delivery model where:
 
