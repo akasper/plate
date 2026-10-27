@@ -80,6 +80,16 @@ def find_stale_required_check_contexts(contexts: list[str]) -> list[str]:
     return sorted(present & DEPRECATED_PR_GATE_CHECK_CONTEXTS)
 
 
+def missing_recommended_check_contexts(contexts: list[str]) -> list[str]:
+    """Return recommended contexts absent from branch protection (case-insensitive)."""
+    present = {c.strip().lower() for c in contexts if c and c.strip()}
+    return sorted(
+        name
+        for name in RECOMMENDED_REQUIRED_CHECK_CONTEXTS
+        if name.lower() not in present
+    )
+
+
 def validate_merged_pr_gates_workflow(text: str) -> list[str]:
     """Return human-readable errors when the merged workflow drifts from contract."""
     errors: list[str] = []

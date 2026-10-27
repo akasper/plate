@@ -19,7 +19,7 @@ on:
     types: [labeled, opened]
 
 concurrency:
-  group: auto-label-feedback-${{ github.event.pull_request.number || github.ref }}
+  group: auto-label-feedback-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || github.event.action }}
   cancel-in-progress: true
 
 jobs:

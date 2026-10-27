@@ -5,6 +5,7 @@ from plate_core.pr_gates_contract import (
     PLATE_PR_GATES_CHECK_NAME,
     PR_GATE_STEP_CONTRACTS,
     find_stale_required_check_contexts,
+    missing_recommended_check_contexts,
     validate_merged_pr_gates_workflow,
     workflow_paths,
 )
@@ -47,6 +48,12 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
 
     def test_recommended_check_name_is_pr_gates(self):
         self.assertEqual(PLATE_PR_GATES_CHECK_NAME, "pr-gates")
+
+    def test_recommended_checks_match_branch_protection_case_insensitively(self):
+        self.assertEqual(
+            missing_recommended_check_contexts(["Labels", "test", "pr-gates"]),
+            [],
+        )
 
 
 if __name__ == "__main__":

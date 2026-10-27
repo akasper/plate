@@ -10,7 +10,7 @@ from .github_client import GhApiError, GhClient
 from .pr_gates_contract import (
     PLATE_PR_GATES_CHECK_NAME,
     find_stale_required_check_contexts,
-    RECOMMENDED_REQUIRED_CHECK_CONTEXTS,
+    missing_recommended_check_contexts as compute_missing_recommended_check_contexts,
 )
 from .procutil import run_hidden
 
@@ -250,9 +250,8 @@ def get_health(
         stale_required_check_contexts = find_stale_required_check_contexts(
             branch_protection_required_contexts
         )
-        recommended = set(RECOMMENDED_REQUIRED_CHECK_CONTEXTS)
-        missing_recommended_check_contexts = sorted(
-            recommended - set(branch_protection_required_contexts)
+        missing_recommended_check_contexts = compute_missing_recommended_check_contexts(
+            branch_protection_required_contexts
         )
         if stale_required_check_contexts:
             errors.append(

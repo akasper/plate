@@ -191,7 +191,7 @@ jobs:
             const autostart = String(process.env.COPILOT_AUTOSTART || '').toLowerCase() === 'true';
             const opener = autostart
               ? `@copilot Please address @${reviewer}'s ${stateLabel} feedback on this PR (**#${prNumber}: ${prTitle}**).`
-              : `PLATES feedback follow-up: address @${reviewer}'s ${stateLabel} feedback on this PR (**#${prNumber}: ${prTitle}**). (Set PLATE_COPILOT_AUTOSTART=true for automatic @copilot routing.)`;
+              : `PLATES feedback follow-up: address @${reviewer}'s ${stateLabel} feedback on this PR (**#${prNumber}: ${prTitle}**). (Set PLATE_COPILOT_AUTOSTART=true for automatic Copilot routing.)`;
             const triggerBody = [
               MARKER,
               opener,
