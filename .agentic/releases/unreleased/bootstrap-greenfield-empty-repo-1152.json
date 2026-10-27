@@ -1,0 +1,16 @@
+{
+  "slug": "bootstrap-greenfield-empty-repo-1152",
+  "change_type": "fix",
+  "surface": "gh plate bootstrap --greenfield --apply",
+  "summary": "Greenfield bootstrap handles empty repos, avoids argv overflow on large payload uploads, omits test media from the template payload, and ships a generic `.agentic/COSTS.md` starter (#1152).",
+  "migration_impact": "Downstream adopters on plate-core with this fix can run `gh plate bootstrap --greenfield --apply` on an empty GitHub repository without a manual README commit. Re-running apply after a partial failure is safe: identical files are skipped and remaining bootstrap steps still run. Bootstrap adds `.agentic/COSTS.md` only when missing; existing cost logs are preserved.",
+  "migration_guidance": [
+    "1. Upgrade plate-core / gh-plate to a build that includes this fix.",
+    "2. On empty repositories, run `gh plate bootstrap --repo OWNER/REPO --greenfield --apply` without seeding an initial commit manually.",
+    "3. If a prior apply stopped mid-way, rerun the same command; it will skip files that already match the template and complete labels, `.plate`, starter questions, and release branches."
+  ],
+  "agent_notes": "GitHub contents PUT bodies use `gh api --input` JSON (never argv). Template payload excludes tests/spike-videos and large e2e GIF fixtures. Bootstrap seeds README.md when the default branch ref is missing. Payload includes a generic `.agentic/COSTS.md` header (no harvested rows); manifest `preserve_existing` skips overwrite when a cost log already exists.",
+  "breaking": false,
+  "links": ["#1152"],
+  "requires": []
+}

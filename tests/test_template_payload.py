@@ -11,6 +11,7 @@ from plate_core.template_payload import (
     classify_template_file,
     load_template_payload_manifest,
     manifest_path,
+    match_path_rule,
     payload_root,
     resolve_template_source,
     should_include_template_file,
@@ -77,10 +78,26 @@ class TemplatePayloadManifestTests(unittest.TestCase):
             "copy_to_downstream",
         )
 
-    def test_manifest_excludes_agentic_costs(self):
+    def test_manifest_includes_agentic_costs_starter(self):
         manifest = load_template_payload_manifest()
-        self.assertFalse(should_include_template_file(".agentic/COSTS.md", manifest))
-        self.assertEqual(classify_template_file(".agentic/COSTS.md", manifest), "exclude")
+        self.assertTrue(should_include_template_file(".agentic/COSTS.md", manifest))
+        self.assertEqual(classify_template_file(".agentic/COSTS.md", manifest), "copy_to_downstream")
+        rule = match_path_rule(".agentic/COSTS.md", manifest)
+        self.assertIsNotNone(rule)
+        self.assertEqual(rule.on_conflict, "preserve_existing")
+
+    def test_path_rules_costs_preserve_existing(self):
+        from plate_core.template_payload import match_path_rule, resolve_conflict_plan
+
+        manifest = load_template_payload_manifest()
+        plan = resolve_conflict_plan(
+            ".agentic/COSTS.md",
+            dest_exists=True,
+            identical=False,
+            strategy="safe",
+            manifest=manifest,
+        )
+        self.assertEqual(plan["action"], "skip")
 
     def test_path_rules_ci_install_as(self):
         """#617: differing ci.yml plans install as plate-ci.yml."""
@@ -124,6 +141,36 @@ class TemplatePayloadManifestTests(unittest.TestCase):
             manifest=manifest,
         )
         self.assertEqual(plan["action"], "conflict")
+
+
+class TemplatePayloadSizeGuardTests(unittest.TestCase):
+    """Downstream payload must not ship large test media (#1152)."""
+
+    _MEDIA_SUFFIXES = (".gif", ".webm", ".mp4")
+    _MAX_BYTES = 1_048_576
+    _MAX_PNG_BYTES = 32_768
+
+    def test_manifest_selected_files_within_size_limits(self):
+        manifest = load_template_payload_manifest()
+        root = payload_root()
+        violations: list[str] = []
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root).as_posix()
+            if not should_include_template_file(rel, manifest):
+                continue
+            size = path.stat().st_size
+            lower = rel.lower()
+            if lower.endswith(self._MEDIA_SUFFIXES):
+                violations.append(f"{rel}: binary media must not be in payload")
+                continue
+            if lower.endswith(".png") and size > self._MAX_PNG_BYTES:
+                violations.append(f"{rel}: png larger than {self._MAX_PNG_BYTES} bytes")
+                continue
+            if size > self._MAX_BYTES:
+                violations.append(f"{rel}: {size} bytes exceeds {self._MAX_BYTES}")
+        self.assertEqual(violations, [])
 
 
 class TemplatePayloadInventoryTests(unittest.TestCase):
