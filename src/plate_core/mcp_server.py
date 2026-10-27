@@ -23,7 +23,13 @@ from .epics import get_epic_status
 from .features import get_features
 from .health import get_health
 from .mcp.tools import InitPlaywrightTool, RecordE2eGifTool, ValidateE2eTestsTool
-from .pr_babysit import babysit_pr, get_actionable_review_threads, get_pr_merge_gates, resolve_review_thread
+from .pr_babysit import (
+    babysit_pr,
+    get_actionable_review_threads,
+    get_pr_merge_gates,
+    get_unresolved_review_threads,
+    resolve_review_thread,
+)
 from .plate_config import apply_plate_config_upgrade, get_plate_config_report, init_plate_config
 from .release import (
     cleanup_dead_branches,
@@ -746,6 +752,21 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     repo=args.get("repo"),
                     agent_logins=args.get("agent_logins"),
                     pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
+                ),
+            }
+        elif name == "plate_get_unresolved_review_threads":
+            pr_number = args.get("pr_number")
+            if pr_number is None:
+                raise ValueError("pr_number is required")
+            pr_number = int(pr_number)
+            if pr_number <= 0:
+                raise ValueError("pr_number must be > 0")
+            payload = {
+                "repo": args.get("repo"),
+                "pr_number": pr_number,
+                "threads": get_unresolved_review_threads(
+                    pr_number=pr_number,
+                    repo=args.get("repo"),
                 ),
             }
         elif name == "plate_what_next":
@@ -2918,6 +2939,24 @@ def run() -> None:
                                         },
                                     },
                                     "required": ["thread_id"],
+                                },
+                            },
+                            {
+                                "name": "plate_get_unresolved_review_threads",
+                                "description": "List all unresolved review threads (isResolved: false, including outdated) for address-pr-feedback fetch and done gate (#1155). Use plate_get_actionable_review_threads for scoped actionable work only.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "pr_number": {
+                                            "type": "integer",
+                                            "description": "Pull request number.",
+                                        },
+                                    },
+                                    "required": ["pr_number"],
                                 },
                             },
                             {

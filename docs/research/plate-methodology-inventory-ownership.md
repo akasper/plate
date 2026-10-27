@@ -7,6 +7,8 @@
 
 ## Research Question
 
+> **Historical:** `akasper/plate_template` is retired; new repositories use [starting-a-new-repository.md](../bootstrap/starting-a-new-repository.md).
+
 What PLATE methodology assets currently live in `akasper/plate_template`, which assets already exist in `akasper/plate`, and which should be tool-owned vs repo-owned after cutover?
 
 ## Sources

@@ -398,11 +398,11 @@ The canonical design artifact for Release ceremony changes lives in `docs/design
 
 
 
-Preferred flow is now **local babysitting** driven by `gh plate pr babysit <number>`. CI is intentionally narrowed to enforcement-only (`feedback-resolution` check). The `plate` agent persona (plugin/agents/plate.agent.md and mirror) no longer includes babysitting steps (deprecated in favor of the dedicated local CLI/MCP flow; see PR #120 and this PR's Q&A/Curiosity updates).
+Preferred flow is now **local babysitting** driven by `gh plate pr babysit <number>`. CI is intentionally narrowed to enforcement-only (`feedback-resolution` check). The `plate` agent persona (plugin/agents/plate.agent.md and mirror) no longer includes babysitting steps (deprecated in favor of the dedicated local CLI/MCP flow; see PR #120 and this PR's Q&A/Curiosity updates). For review-thread reply + resolve discipline, follow the **`address-pr-feedback` skill** (`.agentic/skills/address-pr-feedback/SKILL.md` after bootstrap; `plugin/skills/address-pr-feedback/SKILL.md` in the plate-core plugin tree).
 
 Use this loop:
 
-1. Before babysitting (or any PR-related work), run `gh plate release status` *proactively first* to confirm the track/base and pending fragments. Then start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread` (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance). (Addresses #513.)
+1. Before babysitting (or any PR-related work), run `gh plate release status` *proactively first* to confirm the track/base and pending fragments. Then start or join babysitting locally (`gh plate pr babysit <number> [--act] [--watch] [--branch-update-strategy <strategy>]`) using MCP tools `plate_pr_babysit` + `plate_resolve_review_thread`, and the **`address-pr-feedback` skill** for the per-thread reply/resolve loop (the `/agent plate` persona focuses on health/epic/features/delegation + native Q&A/curiosity per recent guidance). (Addresses #513.)
 
 **Quiet Agents note:** For looped or long-running babysitting/monitoring, the supervising agent must follow the quiet_operations rules (see `plugin/agents/plate.agent.md` Behavior rules + Special modes, and `src/plate_core/agent_guidance.py` QUIET_OPERATIONS_GUIDANCE): only terse bullet-list one-sentence turn summaries in the terminal; post GitHub comments on the PR only for meaningful forward progress (not "checked, 0 actionable" no-ops). The persona and catalog constraints are the primary enforcement surface. Information Audits (#218) are now part of the core capability: agents should use `plate_perform_information_audit` (dry_run first) to discover gaps against the Goals page (#224) and generate Questions. Guidance in plugin/agents/plate.agent.md and agent_guidance.py (INFORMATION_AUDIT_GUIDANCE, plus the new quiet section). Catalog defaults (#222) and extensibility (#226) apply.
 2. The babysitter automatically detects two types of issues:
@@ -417,7 +417,7 @@ Use this loop:
    - Comprehensively inspect *all* current failing gates at the start and after every push using the pr-babysit skill's get_pr_merge_gates helper (or equivalent) + gh commands. Common checklist (mental model for "make this PR mergeable"):
      - Labels (Bug/Feature + area:* + risk:* + Epic:* if applicable; check with gh issue view or edit)
      - Merge state / base sync (mergeStateStatus: BLOCKED, BEHIND, CONFLICTING, DIRTY, UNKNOWN -> use babysit with local-rebase or copilot-request)
-     - Feedback-resolution: unresolved review threads (esp. third-party agents) -> use plate_pr_babysit + plate_get_actionable_review_threads + plate_resolve_review_thread (encapsulated; handles pagination/DBID/ANSI internally; addresses #516). Do not hand-roll GraphQL/jq/mktemp/sed.
+     - Feedback-resolution: unresolved review threads (esp. third-party agents) -> follow the **`address-pr-feedback` skill**; use `plate_get_unresolved_review_threads` for fetch/done gate, `plate_get_actionable_review_threads` for scoped actionable work, and `plate_resolve_review_thread` per thread (encapsulated; addresses #516/#1155). Do not hand-roll GraphQL/jq/mktemp/sed except the exact documented fallback in the skill file above.
      - CI / test jobs, title check, issue-link check, feature-change-files (if Feature), audit, deploy, etc. (via gh pr checks)
      - Other: documentation gate, etc.
      Use plate_pr_babysit + gh pr checks + gh run view on specific failing jobs (see CI Diagnosis First) + gh issue view for labels. Fix what you can, push, re-inspect, repeat until only human items (e.g. owner CHANGES_REQUESTED, high-risk) remain. Report one-sentence summary only then. (Addresses #526.)
@@ -430,13 +430,13 @@ Use this loop:
 4. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 5. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
 6. For all other actionable comments: push a code change or reply explaining why no change is needed
-7. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the encapsulated helper: `plate_resolve_review_thread` (MCP) / `resolve_review_thread` (Python) / `gh plate pr babysit --act` (which detects + reports, and **auto-resolves outdated unresolved threads** per #605). The helpers encapsulate the GraphQL mutation, node IDs, pagination, and extraction. Prefer `--act` after pushes so outdated threads are closed without a separate resolve pass.
+7. After addressing each comment (via code change, applied suggestion, or explanatory reply), follow step 3–4 of the **`address-pr-feedback` skill**: reply in-thread (commit SHA or reason), then resolve that thread via `plate_resolve_review_thread` (MCP) / `resolve_review_thread` (Python) / the skill's `resolveReviewThread` mutation — **one thread at a time, only after its reply**. Do not use `gh plate pr babysit --act` as a per-thread resolver (`--act` bulk-closes outdated threads without checking replies; #605 is separate from the reply loop). **"Address feedback" is done only when `plate_get_unresolved_review_threads` (or the skill GraphQL fallback) returns zero unresolved threads** (except threads escalated with `need:human-review` and an in-thread comment).
 8. **PR review scope (#496):** Default is `all` (humans + bots, including Copilot). Configure via `.plate` `autonomy.pr_review_scope` (`all` | `bot-only` | `human-only`) or `gh plate pr babysit --scope …`. Prefer applying fenced ` ```suggestion` ` blocks when `prefer_apply_suggestion` is true; never auto-apply on high-risk paths (AGENTS.md, workflows, SPEC, secrets, `.plate`). Do **not** re-request Copilot review in a loop — work existing unresolved threads first.
-   (The raw mutation + `repository.pullRequest.reviewThreads` + databaseId matching is implementation detail only; agents must not construct it manually with jq/mktemp/sed/etc. See pr_babysit.get_actionable_review_threads and plate_get_actionable_review_threads. Addresses #516.)
+   (Prefer encapsulated helpers; see `get_unresolved_review_threads` / `plate_get_unresolved_review_threads` for the done gate. When helpers are unavailable, use only the exact `gh api graphql` fallback in the address-pr-feedback skill — not ad-hoc jq/mktemp/sed. Addresses #516, #1155.)
 8. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
 9. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
 
-The pr-babysit skill (and `gh plate pr babysit`) should be used by default for these flows and ideally support a " --until-green" / comprehensive make-mergeable mode that implements the loop above with appropriate quiet output and escalation. See the updated skill docstring and guidance for details (addresses #528 and the cluster of related PR-green / gates Bugs).
+The **`address-pr-feedback` skill** (reply + resolve + zero-unresolved re-query gate) and `gh plate pr babysit` should be used by default for these flows and ideally support a " --until-green" / comprehensive make-mergeable mode that implements the loop above with appropriate quiet output and escalation. See the updated skill docstring and guidance for details (addresses #528, #1155, and the cluster of related PR-green / gates Bugs).
 
 **Base Branch Sync Handling:**
 
@@ -573,23 +573,22 @@ Use `--body-file` (or the equivalent here-string + temp file) for every agent-au
 ## Upstream PLATE Template Synchronization
 
 <!-- PLATES-CORE:BEGIN upstream-template-sync -->
-Downstream PLATE repositories often customize baseline files such as `AGENTS.md`, `.agentic/skills.yml`, and workflow definitions. Sync from the canonical upstream template repository `akasper/plate_template`.
+Downstream PLATE repositories often customize baseline files such as `AGENTS.md`, `.agentic/skills.yml`, and workflow definitions.
 
-If needed, configure the upstream remote first:
+**Do not create, clone, fork, or `gh repo create --template` from `akasper/plate_template` or any template repository.** That GitHub template is retired. Never hand-copy files from `src/plate_core/template_payload/` into a target repo. Start new repositories only via **[docs/bootstrap/starting-a-new-repository.md](docs/bootstrap/starting-a-new-repository.md)** (`gh plate bootstrap` / `gh plate import-payload`).
 
-```bash
-git remote add upstream https://github.com/akasper/plate_template.git
-```
+Upgrade and sync scaffold behavior through **`plate-core`** (`gh plate import-payload`, `gh plate self-migrate`, and related surfaces)—not a `plate_template` git remote.
 
-Do not overwrite these files wholesale during upgrades.
+Do not overwrite customized files wholesale during upgrades.
 
 Use **sectional synchronization** for core behavior updates:
 
-1. Compare upstream and downstream files to identify changed `PLATES-CORE` blocks.
-2. Copy only the relevant core blocks into downstream files, preserving local sections outside those markers.
-3. Open an atomic PR labeled `Feature` (or `Documentation` for doc-only syncs) and include `Closes #N` when tied to an issue.
-4. Update per-feature change files in `.agentic/releases/` with imported behavior and evidence links.
-5. Run the repository's required checks before requesting review.
+1. Plan upgrades with `gh plate self-migrate --plan` (use `--verify` after apply).
+2. Import scaffold files with `gh plate import-payload` (dry-run first; pick a safe strategy).
+3. For marker-owned files, merge only upstream `PLATES-CORE` blocks (via `gh plate self-migrate` marker merge or manual sectional import).
+4. Open an atomic PR labeled `Feature` (or `Documentation` for doc-only syncs) and include `Closes #N` when tied to an issue.
+5. Update per-feature change files in `.agentic/releases/` with imported behavior and evidence links.
+6. Run the repository's required checks before requesting review.
 
 Marker format for sync-safe blocks:
 
@@ -614,4 +613,4 @@ Escalate to a human when product intent is ambiguous, acceptance criteria confli
 
 ## Prohibited Actions
 
-Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body.
+Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not clone, fork, or `gh repo create --template` from `akasper/plate_template` (or any template repo), and must not hand-copy PLATE payload files—use `gh plate bootstrap` and `gh plate import-payload` only. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body.

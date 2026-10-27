@@ -25,9 +25,10 @@ class BaselineSkill:
     outputs: tuple[str, ...]
     examples: tuple[str, ...]
     owning_agent_ids: tuple[str, ...]
+    procedure: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "id": self.id,
             "name": self.name,
             "description": self.description,
@@ -36,6 +37,9 @@ class BaselineSkill:
             "examples": list(self.examples),
             "owning_agent_ids": list(self.owning_agent_ids),
         }
+        if self.procedure:
+            payload["procedure"] = self.procedure
+        return payload
 
 
 @dataclass(frozen=True)
@@ -181,6 +185,13 @@ def _load_skills(raw_skills: Any) -> tuple[BaselineSkill, ...]:
         _require(isinstance(skill_id, str) and skill_id, "skill.id must be a non-empty string")
         _require(skill_id not in seen, f"duplicate skill id: {skill_id}")
         seen.add(skill_id)
+        raw_procedure = item.get("procedure", "")
+        if raw_procedure is None:
+            raw_procedure = ""
+        _require(
+            isinstance(raw_procedure, str),
+            f"skill {skill_id} procedure must be a string when present",
+        )
         skills.append(
             BaselineSkill(
                 id=skill_id,
@@ -190,6 +201,7 @@ def _load_skills(raw_skills: Any) -> tuple[BaselineSkill, ...]:
                 outputs=_as_str_tuple(item.get("outputs", []), f"skill {skill_id} outputs"),
                 examples=_as_str_tuple(item.get("examples", []), f"skill {skill_id} examples"),
                 owning_agent_ids=_as_str_tuple(item.get("owning_agent_ids", []), f"skill {skill_id} owning_agent_ids"),
+                procedure=raw_procedure,
             )
         )
     return tuple(skills)

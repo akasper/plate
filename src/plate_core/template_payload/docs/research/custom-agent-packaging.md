@@ -7,7 +7,7 @@
 
 ## Research Question
 
-What is the best way to package custom agents (e.g., a marketing or research agent) for Copilot CLI directly via the `plate_template` template repository? Can agents be packaged according to the PLATE `extension` methodology?
+What is the best way to package custom agents (e.g., a marketing or research agent) for Copilot CLI via the PLATE scaffold delivered by `gh plate bootstrap` / `plate-core`? Can agents be packaged according to the PLATE `extension` methodology?
 
 ## Sources
 

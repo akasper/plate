@@ -1,8 +1,8 @@
 # Adopting PLATE into an existing repository
 
-Use this guide when **adding PLATE to a mature codebase** (not a brand-new repo from the PLATE template).
+Use this guide when **adding PLATE to a mature codebase** (an existing product repo, not a greenfield bootstrap).
 
-Greenfield path: `docs/bootstrap/new-repository-checklist.md`.
+Greenfield path: **[docs/bootstrap/starting-a-new-repository.md](../bootstrap/starting-a-new-repository.md)** and **[new-repository-checklist.md](../bootstrap/new-repository-checklist.md)**.
 
 Epic #633 targets a healthy PLATE state in **under 30 minutes** of mostly automated work. The steps below are the durable operator path; agents follow the same sequence via `plate_what_next` / feed process items.
 
