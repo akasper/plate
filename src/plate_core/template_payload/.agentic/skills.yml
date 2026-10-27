@@ -136,7 +136,7 @@ skills:
       - "test internal logic or non-browser services with Playwright (use unit tests instead)"
   # PLATES-CORE:BEGIN template-sync-skill
   - id: "template-sync"
-    description: "Import upstream PLATE template behavior changes while preserving downstream customizations."
+    description: "Upgrade PLATE scaffold via gh plate import-payload / self-migrate (plate-core); never sync from akasper/plate_template."
     allowed_artifacts:
       - "AGENTS.md"
       - ".agentic/skills.yml"

@@ -1,5 +1,6 @@
 import base64
 import json
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
@@ -37,10 +38,11 @@ class FeatureDetectionTests(unittest.TestCase):
         here = Path(__file__).parent
         self.assertFalse(detect_playwright_e2e_local(here))
 
-        # The plate_template sibling (from workspace layout) should have it
-        template = here.parent.parent / "plate_template"
-        if template.exists():
-            self.assertTrue(detect_playwright_e2e_local(template))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "playwright.config.ts").write_text("// config\n", encoding="utf-8")
+            (root / "tests" / "e2e").mkdir(parents=True)
+            self.assertTrue(detect_playwright_e2e_local(root))
 
     def test_get_features_playwright_e2e_requires_dep_with_e2e_dir_on_gh(self):
         client = Mock()

@@ -630,23 +630,22 @@ For `Feature`, `Bug`, and issue-driven `Documentation` PRs, add the relevant mil
 ## Upstream PLATE Template Synchronization
 
 <!-- PLATES-CORE:BEGIN upstream-template-sync -->
-Downstream PLATE repositories often customize baseline files such as `AGENTS.md`, `.agentic/skills.yml`, and workflow definitions. Sync from the canonical upstream template repository `akasper/plate_template`.
+Downstream PLATE repositories often customize baseline files such as `AGENTS.md`, `.agentic/skills.yml`, and workflow definitions.
 
-If needed, configure the upstream remote first:
+**Do not create, clone, fork, or `gh repo create --template` from `akasper/plate_template` or any template repository.** That GitHub template is retired. Never hand-copy PLATE payload files into a target repo. Start new repositories only via **`docs/bootstrap/starting-a-new-repository.md`** (`gh plate bootstrap` / `gh plate import-payload`).
 
-```bash
-git remote add upstream https://github.com/akasper/plate_template.git
-```
+Upgrade and sync scaffold behavior through **`plate-core`** (`gh plate import-payload`, `gh plate self-migrate`, and related surfaces)—not a `plate_template` git remote.
 
-Do not overwrite these files wholesale during upgrades.
+Do not overwrite customized files wholesale during upgrades.
 
 Use **sectional synchronization** for core behavior updates:
 
-1. Compare upstream and downstream files to identify changed `PLATES-CORE` blocks.
-2. Copy only the relevant core blocks into downstream files, preserving local sections outside those markers.
-3. Open an atomic PR labeled `Feature` (or `Documentation` for doc-only syncs) and include `Closes #N` when tied to an issue.
-4. Update per-feature change files in `.agentic/releases/` with the imported behavior and evidence links.
-5. Run the repository's required checks before requesting review.
+1. Plan upgrades with `gh plate self-migrate --plan` (use `--verify` after apply).
+2. Import scaffold files with `gh plate import-payload` (dry-run first; pick a safe strategy).
+3. For marker-owned files, merge only upstream `PLATES-CORE` blocks (via `gh plate self-migrate` marker merge or manual sectional import).
+4. Open an atomic PR labeled `Feature` (or `Documentation` for doc-only syncs) and include `Closes #N` when tied to an issue.
+5. Update per-feature change files in `.agentic/releases/` with the imported behavior and evidence links.
+6. Run the repository's required checks before requesting review.
 
 Marker format for sync-safe blocks:
 
@@ -676,4 +675,4 @@ Escalate to a human when product intent is ambiguous, acceptance criteria confli
 
 ## Prohibited Actions
 
-Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`; `Feedback Response` PRs remain exempt from the issue-link rule. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body, except for `Feedback Response` PRs.
+Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not clone, fork, or `gh repo create --template` from `akasper/plate_template` (or any template repo), and must not hand-copy PLATE payload files—use `gh plate bootstrap` and `gh plate import-payload` only. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`; `Feedback Response` PRs remain exempt from the issue-link rule. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body, except for `Feedback Response` PRs.
