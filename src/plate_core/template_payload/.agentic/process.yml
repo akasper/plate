@@ -1,5 +1,5 @@
 process:
-  name: "Process Lifecycle Agentic Task Engine"
+  name: "Product Lifecycle Automation Toolkit and Engine"
   short_name: "PLATE"
   version: "0.6"
   methodology_repository: "akasper/plate"
