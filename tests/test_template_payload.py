@@ -1,6 +1,8 @@
 import json
+import os
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,8 +13,53 @@ from plate_core.template_payload import (
     manifest_path,
     match_path_rule,
     payload_root,
+    resolve_template_source,
     should_include_template_file,
 )
+
+
+class ResolveTemplateSourceTests(unittest.TestCase):
+    def test_resolve_template_source_defaults_to_package_payload(self):
+        root, kind = resolve_template_source()
+        self.assertEqual(kind, "package_payload")
+        self.assertEqual(root, payload_root())
+        self.assertTrue(root.exists())
+
+    def test_resolve_template_source_raises_without_payload_or_opt_in(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            repo = base / "my-repo"
+            legacy = base / "plate_template"
+            repo.mkdir()
+            legacy.mkdir()
+            missing_payload = base / "no-payload"
+            with patch("plate_core.template_payload.payload_root", return_value=missing_payload):
+                env = os.environ.copy()
+                env.pop("PLATE_ALLOW_LEGACY_TEMPLATE_SIBLING", None)
+                with patch.dict(os.environ, env, clear=True):
+                    with patch("plate_core.template_payload.Path.cwd", return_value=repo):
+                        with self.assertRaises(RuntimeError) as ctx:
+                            resolve_template_source()
+        self.assertIn("gh plate bootstrap", str(ctx.exception))
+        self.assertIn("do not clone", str(ctx.exception).lower())
+
+    def test_legacy_sibling_requires_explicit_opt_in(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            repo = base / "my-repo"
+            legacy = base / "plate_template"
+            repo.mkdir()
+            legacy.mkdir()
+            missing_payload = base / "no-payload"
+            with patch("plate_core.template_payload.payload_root", return_value=missing_payload):
+                with patch("plate_core.template_payload.Path.cwd", return_value=repo):
+                    with patch.dict(os.environ, {"PLATE_ALLOW_LEGACY_TEMPLATE_SIBLING": "1"}):
+                        with warnings.catch_warnings(record=True) as caught:
+                            warnings.simplefilter("always")
+                            root, kind = resolve_template_source()
+        self.assertEqual(kind, "legacy_sibling_fallback")
+        self.assertEqual(root.resolve(), legacy.resolve())
+        self.assertTrue(any(isinstance(w.message, DeprecationWarning) for w in caught))
 
 
 class TemplatePayloadManifestTests(unittest.TestCase):
