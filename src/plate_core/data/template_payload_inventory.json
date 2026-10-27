@@ -96,6 +96,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".github/skills/code-review/SKILL.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".github/workflows/audit.yml",
       "classification": "copy_to_downstream"
     },
