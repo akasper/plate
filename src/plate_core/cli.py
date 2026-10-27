@@ -4232,7 +4232,10 @@ def cmd_skill_show(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="gh plate", description="PLATE core CLI extension")
+    parser = argparse.ArgumentParser(
+        prog="gh plate",
+        description="Product Lifecycle Automation Toolkit and Engine (PLATE) — GitHub CLI extension",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     health = sub.add_parser("health", help="Show PLATE health summary")
