@@ -206,6 +206,28 @@ class PrBabysitTests(unittest.TestCase):
         self.assertEqual(len(actionable), 1)
         self.assertEqual(actionable[0]["thread_id"], "T1")
 
+    def test_extract_unresolved_threads_includes_outdated_1155(self):
+        threads = [
+            {
+                "id": "T-out",
+                "isResolved": False,
+                "isOutdated": True,
+                "comments": {"nodes": [{"author": {"login": "bot"}, "url": "u"}]},
+            },
+            {
+                "id": "T-res",
+                "isResolved": True,
+                "isOutdated": False,
+                "comments": {"nodes": []},
+            },
+        ]
+        from plate_core.pr_babysit import _extract_unresolved_threads
+
+        items = _extract_unresolved_threads(threads)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["thread_id"], "T-out")
+        self.assertTrue(items[0]["is_outdated"])
+
     def test_extract_outdated_unresolved_threads_for_605(self):
         threads = [
             {
@@ -937,12 +959,20 @@ class PrBabysitTests(unittest.TestCase):
             Path(".plugin/skills/address-pr-feedback/SKILL.md").is_file(),
             "skill must be mirrored under .plugin/skills/",
         )
+        template_skill = Path(
+            "src/plate_core/template_payload/.agentic/skills/address-pr-feedback/SKILL.md"
+        )
+        self.assertTrue(
+            template_skill.is_file(),
+            "address-pr-feedback skill must ship in template payload for bootstrap",
+        )
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
         self.assertIn("address-pr-feedback", agents)
-        self.assertIn("plugin/skills/address-pr-feedback/SKILL.md", agents)
-        self.assertIn("zero unresolved threads", agents)
+        self.assertIn(".agentic/skills/address-pr-feedback/SKILL.md", agents)
+        self.assertIn("plate_get_unresolved_review_threads", skill)
+        self.assertIn("zero unresolved threads", agents.lower())
 
     def test_complete_babysit_make_green_from_single_high_level_prompt(self):
         """Regression test for #519: guidance and AGENTS must describe a complete 'turn PR green' / full babysit flow from a *single high-level prompt* (not category-by-category), where the agent handles all agent-actionable gates (conflicts, labels, threads, tests) comprehensively using the skill + helpers, reporting summary only at end."""
@@ -1006,7 +1036,8 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
-        self.assertIn("use plate_pr_babysit + plate_get_actionable_review_threads + plate_resolve_review_thread (encapsulated", agents)
+        self.assertIn("plate_get_unresolved_review_threads", agents)
+        self.assertIn("plate_resolve_review_thread", agents)
         self.assertIn("Do not hand-roll GraphQL/jq/mktemp/sed", agents)
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:

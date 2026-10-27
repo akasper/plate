@@ -57,7 +57,7 @@ Reply to every PR review thread, resolve it, and re-query until zero unresolved 
 **Inputs**
 
 - PR number
-- Unresolved review threads (via plate helpers or GraphQL fallback)
+- Unresolved review threads (via plate_get_unresolved_review_threads or GraphQL fallback)
 
 **Outputs**
 

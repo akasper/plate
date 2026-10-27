@@ -20,7 +20,7 @@ Reply to every PR review thread, resolve it, and re-query until zero unresolved 
 ## Inputs
 
 - PR number
-- Unresolved review threads (via plate helpers or GraphQL fallback)
+- Unresolved review threads (via plate_get_unresolved_review_threads or GraphQL fallback)
 
 ## Outputs
 
@@ -38,16 +38,16 @@ Reply to every PR review thread, resolve it, and re-query until zero unresolved 
 
 Repeat until no unresolved threads remain (see Done gate):
 
-1. **Fetch unresolved threads** — prefer `plate_get_actionable_review_threads` / `gh plate pr babysit <N>`; include outdated threads that still show `isResolved: false`.
+1. **Fetch unresolved threads** — use `plate_get_unresolved_review_threads` (every `isResolved: false`, including outdated) or the GraphQL fallback below. Do **not** use `plate_get_actionable_review_threads` for fetch/done gate (it skips outdated threads).
 2. **Act** — apply the fix, apply a ` ```suggestion ` block (unless wrong or high-risk), or decline with a brief reason.
 3. **Reply in-thread** — post on the thread (not only a top-level PR comment). Cite the fix commit SHA or the decline reason.
-4. **Resolve** — `plate_resolve_review_thread` or `gh plate pr babysit <N> --act` (auto-resolves outdated threads after pushes). Resolve only after the reply is posted.
+4. **Resolve** — `plate_resolve_review_thread` with that thread's ID (or the `resolveReviewThread` mutation below) **only after** that thread's reply. Do **not** use `gh plate pr babysit --act` as a per-thread resolver (`--act` bulk-closes outdated threads without checking replies).
 
 Human judgment (credentials, architecture, security): reply explaining the blocker, add `need:human-review`, leave the thread **unresolved**.
 
 ## Done gate (required)
 
-Re-query unresolved threads (same fetch as step 1). **Not done** until the query returns **zero** unresolved threads, except threads explicitly escalated to a human with `need:human-review` and an in-thread comment.
+Re-query with `plate_get_unresolved_review_threads` (same contract as step 1). **Not done** until the query returns **zero** unresolved threads, except threads explicitly escalated to a human with `need:human-review` and an in-thread comment.
 
 ## GraphQL fallback (helpers unavailable)
 

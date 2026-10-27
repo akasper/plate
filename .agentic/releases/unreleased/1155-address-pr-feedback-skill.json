@@ -1,15 +1,15 @@
 {
   "slug": "1155-address-pr-feedback-skill",
   "change_type": "fix",
-  "surface": "plugin skills, AGENTS.md, plate persona",
-  "summary": "Add address-pr-feedback skill with mandatory reply+resolve per-thread loop and zero-unresolved re-query done gate; point babysit guidance at the skill and document sanctioned GraphQL fallback (#1155).",
-  "migration_impact": "Downstream repos receive the skill via plugin/bootstrap. Agents addressing PR feedback must reply in-thread, resolve each thread, and re-query until zero unresolved remain (except need:human-review escalations).",
+  "surface": "plugin skills, template payload, AGENTS.md, pr_babysit helpers",
+  "summary": "Address-pr-feedback skill: plate_get_unresolved_review_threads for fetch/done gate (includes outdated), per-thread resolve only, skill ships in template payload at .agentic/skills/address-pr-feedback/SKILL.md (#1155).",
+  "migration_impact": "Bootstrapped repos receive `.agentic/skills/address-pr-feedback/SKILL.md`. Agents must use plate_get_unresolved_review_threads (or skill GraphQL fallback) for the zero-unresolved gate and plate_resolve_review_thread per thread after reply.",
   "migration_guidance": [
-    "1. Upgrade plate-core / re-import plugin payload so `plugin/skills/address-pr-feedback/SKILL.md` is present.",
-    "2. When addressing review feedback, read and follow the address-pr-feedback skill before declaring done.",
-    "3. Prefer plate_resolve_review_thread / gh plate pr babysit --act; use the skill's gh api graphql fallback only when helpers are unavailable."
+    "1. Re-bootstrap or re-import template payload to pick up `.agentic/skills/address-pr-feedback/SKILL.md`.",
+    "2. Follow the address-pr-feedback skill: fetch/re-query with plate_get_unresolved_review_threads; resolve each thread with plate_resolve_review_thread after its in-thread reply.",
+    "3. Do not use gh plate pr babysit --act as a per-thread resolver."
   ],
-  "agent_notes": "Address feedback is not complete until a re-query of reviewThreads shows zero unresolved threads (excluding explicit human escalations with need:human-review). Every thread gets an in-thread reply (commit SHA or decline reason) before resolveReviewThread. See plugin/skills/address-pr-feedback/SKILL.md and AGENTS.md babysit step 7.",
+  "agent_notes": "Done gate counts all isResolved:false threads including outdated. Babysit --act remains a separate bulk outdated auto-resolve (#605), not a substitute for the reply+resolve loop.",
   "breaking": false,
   "links": ["#1155"],
   "requires": []

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "source_repository": "akasper/plate_template",
+  "source_repository": "akasper/plate",
   "selection_manifest": "src/plate_core/data/template_payload_manifest.yml",
   "files": [
     {
@@ -25,6 +25,10 @@
     },
     {
       "path": ".agentic/skills.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/skills/address-pr-feedback/SKILL.md",
       "classification": "copy_to_downstream"
     },
     {
