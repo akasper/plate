@@ -85,7 +85,7 @@ Your answer (multi-line; Ctrl-D or native submit when done):
 
 **Visual evidence / recording:**
 
-- Leverage existing playwright-e2e + e2e-record.sh / gif-from-video patterns in plate_template and tests/e2e.
+- Leverage existing playwright-e2e + e2e-record.sh / gif-from-video patterns in the plate-core template payload and tests/e2e.
 - Record native Copilot flows (where possible) + custom gh plate fallback.
 - Store in docs/design or spike-videos/ as in prior PRs.
 

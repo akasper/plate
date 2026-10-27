@@ -1,10 +1,10 @@
 # New Repository Bootstrap Checklist
 
-Use this checklist immediately after creating a repository from the PLATE template. It separates the steps that can be standardized from the ones that still require human judgment.
+Use this checklist after **[starting-a-new-repository.md](./starting-a-new-repository.md)** (empty repo + `gh plate bootstrap --greenfield --apply`). It separates steps that can be standardized from ones that still require human judgment.
 
 ## Fast Path
 
-From the generated repository root, run the bootstrap script:
+From the repository root (after bootstrap has copied the scaffold), run the GitHub bootstrap script:
 
 **POSIX shell (macOS / Linux / WSL — default):**
 ```bash
