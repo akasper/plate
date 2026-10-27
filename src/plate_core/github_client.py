@@ -29,6 +29,21 @@ def _fields_require_json_input(fields: dict) -> bool:
     return False
 
 
+def _json_api_body(endpoint: str, field_map: dict) -> str:
+    """Serialize API body for ``gh api --input`` (GraphQL needs a ``variables`` object)."""
+    if endpoint == "graphql":
+        payload: dict[str, object] = {"query": field_map.get("query", "")}
+        if "operationName" in field_map:
+            payload["operationName"] = field_map["operationName"]
+        variables = {
+            k: v for k, v in field_map.items() if k not in ("query", "operationName")
+        }
+        if variables:
+            payload["variables"] = variables
+        return json.dumps(payload)
+    return json.dumps(field_map)
+
+
 def _sanitize_error(msg: str) -> str:
     """Redact potential secrets/tokens from error messages (secret-safety for #270)."""
     # Redact common token patterns (ghp_, gho_, bearer, etc.) and any long hex-ish that might be token
@@ -65,7 +80,7 @@ class GhClient:
         json_input: str | None = None
         if use_json_input:
             cmd.extend(["--input", "-"])
-            json_input = json.dumps(field_map)
+            json_input = _json_api_body(endpoint, field_map)
         else:
             for key, value in field_map.items():
                 if isinstance(value, bool):

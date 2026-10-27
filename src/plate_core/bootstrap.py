@@ -225,7 +225,7 @@ def _ensure_default_branch_ref(repo: str, default_branch: str, gh: GhClient) -> 
         gh.api(ref_endpoint)
         return
     except GhApiError as error:
-        if not _is_missing_content_error(error):
+        if not (_is_missing_content_error(error) or _is_empty_repository_error(error)):
             raise
 
     readme = (

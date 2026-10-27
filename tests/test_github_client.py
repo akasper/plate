@@ -1,5 +1,6 @@
 """Tests for GhClient field serialization and resilience (#270 error/rate/secret)."""
 
+import json
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -155,6 +156,31 @@ class GhClientDiscussionsTests(unittest.TestCase):
             self.assertEqual(res.get("number"), 999)
             # At least 2 calls made
             self.assertGreaterEqual(mock_run.call_count, 2)
+
+    def test_create_discussion_long_body_uses_graphql_variables_in_json_input(self):
+        """Regression: long GraphQL variable values must nest under ``variables`` (#1152)."""
+        long_body = "x" * 5000
+        responses = [
+            MagicMock(returncode=0, stdout='{"data":{"repository":{"id":"R_123"}}}', stderr=""),
+            MagicMock(
+                returncode=0,
+                stdout='{"data":{"createDiscussion":{"discussion":{"number":1,"title":"t"}}}}',
+                stderr="",
+            ),
+        ]
+        with patch("plate_core.github_client.run_hidden", side_effect=responses) as mock_run:
+            GhClient().create_discussion(
+                "akasper", "plate", category_id="DIC_foo", title="t", body=long_body
+            )
+        mutation_call = mock_run.call_args_list[-1]
+        cmd = mutation_call[0][0]
+        self.assertIn("--input", cmd)
+        payload = json.loads(mutation_call[1]["input"])
+        self.assertIn("variables", payload)
+        self.assertEqual(payload["variables"]["body"], long_body)
+        self.assertEqual(payload["variables"]["repositoryId"], "R_123")
+        self.assertNotIn("body", payload)
+        self.assertNotIn("repositoryId", payload)
 
 
 if __name__ == "__main__":
