@@ -1,6 +1,6 @@
 # PLATE Template
 
-`plate_template` is the canonical starter repository for the **Process Lifecycle Agentic Task Engine (PLATE)** methodology.
+`plate_template` is the canonical starter repository for the **Product Lifecycle Automation Toolkit and Engine (PLATE)** methodology.
 
 PLATE is a GitHub-first delivery model where:
 

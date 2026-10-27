@@ -11,7 +11,7 @@ updated_at: "2026-07-26"
 
 ## Purpose of PLATE
 
-**PLATE** (Project Lifecycle Agentic Task Ecosystem) is the operating system for reliable, high-velocity agentic software development on GitHub. It empowers AI agents to own as much of the end-to-end software development lifecycle (SDLC) as possible — planning, implementation, testing, documentation, triage, and deployment — while enforcing **test-first discipline** (TDD/BDD), continuous verifiable progress, atomic PRs, and human judgment on architecture, risk, and releases.
+**PLATE** (Product Lifecycle Automation Toolkit and Engine) is the operating system for reliable, high-velocity agentic software development on GitHub. It empowers AI agents to own as much of the end-to-end software development lifecycle (SDLC) as possible — planning, implementation, testing, documentation, triage, and deployment — while enforcing **test-first discipline** (TDD/BDD), continuous verifiable progress, atomic PRs, and human judgment on architecture, risk, and releases.
 
 GitHub is the default single source of truth: Issues for planning, Milestones for Epic tracking, Projects for roadmap visualization, Workflows for gates, Copilot agents + MCP for execution, Pages/Wiki for docs/marketing. PLATE makes this ecosystem inspectable, actionable, and autonomously operable via shared runtime surfaces (`gh plate`, `plate-mcp`, Copilot CLI plugin).
 
