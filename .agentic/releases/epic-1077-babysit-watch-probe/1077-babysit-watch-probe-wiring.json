@@ -1,0 +1,16 @@
+{
+  "slug": "1077-babysit-watch-probe-wiring",
+  "change_type": "feature",
+  "surface": "plate_core.cli (gh plate pr babysit --watch), docs/wiki/PR-Babysit-Wake-Summary.md",
+  "summary": "Wire pr_watch_probe and pr_watch_summary into babysit --watch so quiet ticks use lightweight REST probing (a conditional PR GET plus commit status and check runs) instead of full GraphQL reload (#1077).",
+  "migration_impact": "No downstream repo migration. Watch mode behavior changes: unchanged PRs no longer wake the full babysit path every poll.",
+  "migration_guidance": [
+    "1. Upgrade plate-core when the release containing #1077 ships.",
+    "2. Rely on wake summaries on changed ticks; use --full-every N as an optional safety net for periodic full babysit.",
+    "3. Read docs/wiki/PR-Babysit-Wake-Summary.md for watcher loop semantics."
+  ],
+  "agent_notes": "gh plate pr babysit --watch probes with If-None-Match each tick, runs full babysit only on first tick, actionable wake summaries, or --full-every N. Quiet ticks print 'No change; sleeping Ns' and exponential backoff without record_wake.",
+  "breaking": false,
+  "links": ["#1077", "#1078", "#1080"],
+  "requires": []
+}
