@@ -1,0 +1,16 @@
+{
+  "slug": "1155-address-pr-feedback-skill",
+  "change_type": "fix",
+  "surface": "plugin skills, template payload, AGENTS.md, pr_babysit helpers",
+  "summary": "Address-pr-feedback skill: plate_get_unresolved_review_threads for fetch/done gate (includes outdated), per-thread resolve only, skill ships in template payload at .agentic/skills/address-pr-feedback/SKILL.md (#1155).",
+  "migration_impact": "Bootstrapped repos receive `.agentic/skills/address-pr-feedback/SKILL.md`. Agents must use plate_get_unresolved_review_threads (or skill GraphQL fallback) for the zero-unresolved gate and plate_resolve_review_thread per thread after reply.",
+  "migration_guidance": [
+    "1. Re-bootstrap or re-import template payload to pick up `.agentic/skills/address-pr-feedback/SKILL.md`.",
+    "2. Follow the address-pr-feedback skill: fetch/re-query with plate_get_unresolved_review_threads; resolve each thread with plate_resolve_review_thread after its in-thread reply.",
+    "3. Do not use gh plate pr babysit --act as a per-thread resolver."
+  ],
+  "agent_notes": "Done gate counts all isResolved:false threads including outdated. Babysit --act remains a separate bulk outdated auto-resolve (#605), not a substitute for the reply+resolve loop.",
+  "breaking": false,
+  "links": ["#1155"],
+  "requires": []
+}

@@ -441,16 +441,12 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
 
 ## Third-Party Agent Feedback
 
-When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that is **not** already labeled `Feedback Response`, the `.github/workflows/plates-address-pr-feedback.yml` workflow posts a structured `@copilot` trigger comment directly on that same PR. The automation uses `COPILOT_TRIGGER_PAT` (preferred) with fallback to `GITHUB_TOKEN`, applies a dedupe marker, and intentionally avoids creating a new issue or opening a separate PR. `Feedback Response` PRs are already in the dedicated response lane and are skipped by that workflow. The Copilot Coding Agent should:
+When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that is **not** already labeled `Feedback Response`, the `.github/workflows/plates-address-pr-feedback.yml` workflow posts a structured `@copilot` trigger comment directly on that same PR. The automation uses `COPILOT_TRIGGER_PAT` (preferred) with fallback to `GITHUB_TOKEN`, applies a dedupe marker, and intentionally avoids creating a new issue or opening a separate PR. `Feedback Response` PRs are already in the dedicated response lane and are skipped by that workflow. The Copilot Coding Agent should follow the **`address-pr-feedback` skill** (`.agentic/skills/address-pr-feedback/SKILL.md`, copied on bootstrap/import-payload):
 
 1. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 2. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
 3. For all other actionable comments: push a code change or reply explaining why no change is needed
-4. After addressing each comment (via code change, applied suggestion, or explanatory reply), resolve its review thread using the GitHub GraphQL `resolveReviewThread` mutation:
-   ```graphql
-   mutation { resolveReviewThread(input: { threadId: "THREAD_NODE_ID" }) { thread { isResolved } } }
-   ```
-   To find `THREAD_NODE_ID` for a given comment, query `repository.pullRequest.reviewThreads` and match on `comments.nodes.databaseId`.
+4. After addressing each comment (via code change, applied suggestion, or explanatory reply), **reply in-thread** (commit SHA or reason), then resolve that thread with `plate_resolve_review_thread` (or the skill's `resolveReviewThread` mutation) **only after its reply** — not via `gh plate pr babysit --act` (bulk outdated auto-resolve). When plate helpers are unavailable, use only the exact `gh api graphql` fallback in `.agentic/skills/address-pr-feedback/SKILL.md` (`reviewThreads` with `isResolved: false` including outdated, pagination, `addPullRequestReviewThreadReply`, `resolveReviewThread`). **"Address feedback" is done only when the skill's re-query returns zero unresolved threads** (except threads escalated with `need:human-review` and an in-thread comment).
 5. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
 6. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
 
