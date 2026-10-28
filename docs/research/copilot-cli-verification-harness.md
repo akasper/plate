@@ -1,5 +1,7 @@
 # Copilot CLI Verification Harness Strategy
 
+> **Historical:** `akasper/plate_template` is retired; new repositories use [starting-a-new-repository.md](../bootstrap/starting-a-new-repository.md).
+
 - **Issue:** #67
 - **Researched by:** Copilot / plate_core automation
 - **Date:** 2026-05-27

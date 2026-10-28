@@ -1,8 +1,9 @@
 process:
-  name: "Process Lifecycle Agentic Task Engine"
+  name: "Product Lifecycle Automation Toolkit and Engine"
   short_name: "PLATE"
   version: "0.6"
-  template_repository: "akasper/plate_template"
+  methodology_repository: "akasper/plate"
+  scaffold_delivery: "plate-core-package-payload"
   authority_model:
     doctrine_source: "PLATE book or governing methodology document"
     template_artifact_source: "this repository"
@@ -196,18 +197,15 @@ workflows:
     name: "PLATE Label Check"
     path: ".github/workflows/label-check.yml"
     required: true
-  pr_title_check:
-    name: "PLATE PR Title Check"
-    path: ".github/workflows/pr-title-check.yml"
+  pr_gates:
+    name: "PLATE PR Gates"
+    path: ".github/workflows/plate-pr-gates.yml"
+    required_check: "pr-gates"
     required: true
   question_handling:
     name: "Question Handling"
     path: ".github/workflows/question-handling.yml"
     required: true
-  pr_documentation_check:
-    name: "PR Documentation Check"
-    path: ".github/workflows/pr-documentation-check.yml"
-    required_for_feature_prs: true
   sync_wiki_on_merge:
     name: "Sync to Wiki on Merge"
     path: ".github/workflows/sync-wiki-on-merge.yml"
@@ -219,9 +217,6 @@ workflows:
   ci:
     name: "CI"
     path: ".github/workflows/ci.yml"
-  audit:
-    name: "PLATE Audit"
-    path: ".github/workflows/audit.yml"
   release:
     name: "Release"
     path: ".github/workflows/release.yml"

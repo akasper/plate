@@ -25,7 +25,7 @@ jobs:
   post-cost-summary:
     runs-on: ubuntu-latest
     # Only run when issues are closed (not deleted)
-    if: github.event.action == 'closed'
+    if: github.event.action == 'closed' && github.event.issue != null && !github.event.issue.pull_request
     steps:
       - name: Gather and post cost summary
         uses: actions/github-script@v7

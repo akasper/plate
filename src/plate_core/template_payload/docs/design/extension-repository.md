@@ -153,7 +153,7 @@ This keeps publishing lightweight and avoids requiring a central service on day 
 PLATE should also maintain an optional curated registry file, for example:
 
 ```text
-https://raw.githubusercontent.com/akasper/plate_template/main/.agentic/extension-registry.yml
+https://raw.githubusercontent.com/akasper/plate/main/.agentic/extension-registry.yml
 ```
 
 That registry would list vetted extensions, default trust policies, and compatibility notes. It behaves like Homebrew taps or a package index mirror: helpful, but not the only way to install.

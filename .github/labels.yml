@@ -3,7 +3,7 @@
 
 - name: "Feedback Response"
   color: "e4e669"
-  description: "PLATES issue/PR type for third-party agent feedback work (not auto-created; no Epic milestone)."
+  description: "Issue/PR type: task or PR for third-party agent review feedback (AGENTS.md feedback lifecycle)."
 
 - name: "Bug"
   color: "d73a4a"
@@ -28,7 +28,7 @@
   description: "Issue type: existing-project PLATE adoption task."
 - name: "Release"
   color: "0052cc"
-  description: "Issue type: planned PLATE release with checklist, extension hooks, and semver traceability."
+  description: "Issue type: planned PLATE release (checklist, extension hooks, semver). See release ceremony."
 
 # Semver release track labels (refined ceremony). Every changing issue (Feature, Bug, Documentation, etc.)
 # carries exactly one to declare intent and target the matching release-major/minor/patch branch during
@@ -125,7 +125,7 @@
 
 - name: "no-issue"
   color: "ededed"
-  description: "PR with no tracked issue (chore, dependency bump, hotfix). Silences the issue-link check."
+  description: "PR does not close a tracked issue (chore, bump, hotfix). Silences issue-link check."
 
 - name: "status:blocked"
   color: "b60205"
@@ -135,10 +135,10 @@
   description: "Feature issue has no open native GitHub blockers and can be started by PLATES triggers."
 - name: "status:stub"
   color: "ededed"
-  description: "Issue is intentionally a stub needing more detail via normal PLATE definition. See AGENTS.md."
+  description: "Issue intentionally lacks detail; refine via PLATE stub process (AGENTS.md Stub Issues)."
 - name: "status:implemented"
   color: "0e8a16"
-  description: "Merged to release/next track (RC) but not yet on main+tag. See Epic #556 and release ceremony."
+  description: "Merged to release/next track (RC) but not yet shipped to main+tag (#556, release ceremony)."
 - name: "no-guidance-update"
   color: "ededed"
-  description: "Question answer PR that does not change operating guidance; skips AGENTS.md/skills.yml check."
+  description: "Question answer does not change operating guidance; skips AGENTS.md/skills update check."

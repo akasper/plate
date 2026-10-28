@@ -1,4 +1,8 @@
-"""Sync reusable scaffolding files from plate_template into plate template payload."""
+"""Copy scaffold files from an explicit source checkout into the plate-core template payload.
+
+Adopters must not use ``akasper/plate_template``. This maintainer-only script expects
+``--template-repo`` pointing at a full checkout (historically a legacy template clone).
+"""
 
 from __future__ import annotations
 
@@ -15,10 +19,6 @@ from plate_core.template_payload import (
     payload_root,
     should_include_template_file,
 )
-
-
-def _default_template_repo(repo_root: Path) -> Path:
-    return (repo_root.parent / "plate_template").resolve()
 
 
 def _repo_root() -> Path:
@@ -54,11 +54,13 @@ def _remove_stale_files(payload_dir: Path, expected: set[str]) -> list[str]:
 
 def main() -> int:
     repo_root = _repo_root()
-    parser = argparse.ArgumentParser(description="Sync template payload from plate_template")
+    parser = argparse.ArgumentParser(
+        description="Copy scaffold files into plate-core template payload (maintainer-only; requires --template-repo)",
+    )
     parser.add_argument(
         "--template-repo",
-        default=str(_default_template_repo(repo_root)),
-        help="Path to plate_template repository clone",
+        required=True,
+        help="Path to a checkout of scaffold source files (do not point adopters at akasper/plate_template)",
     )
     parser.add_argument(
         "--payload-root",
@@ -100,7 +102,7 @@ def main() -> int:
 
     inventory = {
         "schema_version": 1,
-        "source_repository": "akasper/plate_template",
+        "source_repository": "akasper/plate",
         "selection_manifest": "src/plate_core/data/template_payload_manifest.yml",
         "files": [
             {

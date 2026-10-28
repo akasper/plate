@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 from urllib.parse import quote
 
 from .github_client import GhApiError, GhClient
+from .github_labels import prepare_label_description
 from .health import REQUIRED_LABELS, get_health, resolve_repo
 from .import_payload import list_payload_relative_paths
 from .payload_surface import filter_plate_scripts, prepare_copied_text, resolve_local_goals_wiki
@@ -166,6 +168,101 @@ def _is_missing_content_error(error: GhApiError) -> bool:
     return "404" in message or "not found" in message
 
 
+def _is_empty_repository_error(error: GhApiError) -> bool:
+    message = str(error).lower()
+    return "409" in message and "empty" in message
+
+
+def _put_repository_file(
+    gh: GhClient,
+    repo: str,
+    rel_path: str,
+    *,
+    message: str,
+    encoded_bytes: bytes,
+    branch: str | None = None,
+    sha: str | None = None,
+) -> None:
+    """Create or update a file via the GitHub contents API (JSON body, not argv)."""
+    body: dict[str, Any] = {
+        "message": message,
+        "content": base64.b64encode(encoded_bytes).decode("ascii"),
+    }
+    if branch:
+        body["branch"] = branch
+    if sha:
+        body["sha"] = sha
+    endpoint = f"repos/{repo}/contents/{quote(rel_path, safe='/')}"
+    gh.api(endpoint, method="PUT", fields=body)
+
+
+def _local_template_file_bytes(rel: str, source: Path, platform: str) -> bytes:
+    raw = source.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw
+    text = prepare_copied_text(rel, text, platform, namespaced=False)
+    return text.encode("utf-8")
+
+
+def _remote_file_digest(payload: Any) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    content = payload.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return None
+    try:
+        raw = base64.b64decode(content, validate=False)
+    except (ValueError, TypeError):
+        return None
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _ensure_default_branch_ref(repo: str, default_branch: str, gh: GhClient) -> None:
+    """Ensure the default branch ref exists; create an initial commit on empty repos."""
+    ref_endpoint = f"repos/{repo}/git/ref/heads/{quote(default_branch, safe='')}"
+    try:
+        gh.api(ref_endpoint)
+        return
+    except GhApiError as error:
+        if not (_is_missing_content_error(error) or _is_empty_repository_error(error)):
+            raise
+
+    readme = (
+        "# Repository\n\n"
+        "Initial commit created by `gh plate bootstrap --greenfield --apply`.\n"
+    )
+    try:
+        _put_repository_file(
+            gh,
+            repo,
+            "README.md",
+            message="Bootstrap: initial commit for PLATE greenfield setup",
+            encoded_bytes=readme.encode("utf-8"),
+        )
+    except GhApiError as error:
+        if _is_empty_repository_error(error):
+            # Retry without branch — empty repos accept the first contents PUT only.
+            _put_repository_file(
+                gh,
+                repo,
+                "README.md",
+                message="Bootstrap: initial commit for PLATE greenfield setup",
+                encoded_bytes=readme.encode("utf-8"),
+            )
+        else:
+            raise
+
+    try:
+        gh.api(ref_endpoint)
+    except GhApiError as error:
+        raise RuntimeError(
+            f"Bootstrap could not create or verify default branch ref '{default_branch}' in {repo}. "
+            f"Original error: {error}"
+        ) from error
+
+
 def _template_payload_relative_paths(template_root: Path) -> list[str]:
     """Shared planner with import_payload (#620) — same manifest-filtered paths."""
     return list_payload_relative_paths(template_root)
@@ -280,16 +377,14 @@ def _write_remote_plate_platform(
         return
     updated = dict(data)
     updated["platform"] = platform
-    encoded = base64.b64encode((json.dumps(updated, indent=2) + "\n").encode("utf-8")).decode("ascii")
-    gh.api(
-        f"repos/{repo}/contents/.plate",
-        method="PUT",
-        fields={
-            "message": f"Bootstrap: set .plate platform to {platform}",
-            "content": encoded,
-            "sha": sha,
-            "branch": branch,
-        },
+    _put_repository_file(
+        gh,
+        repo,
+        ".plate",
+        message=f"Bootstrap: set .plate platform to {platform}",
+        encoded_bytes=(json.dumps(updated, indent=2) + "\n").encode("utf-8"),
+        branch=branch,
+        sha=sha,
     )
 
 
@@ -320,33 +415,30 @@ def _copy_template_payload(
             raise RuntimeError(f"Template payload file missing: {source}")
 
         endpoint = f"repos/{repo}/contents/{quote(rel, safe='/')}"
+        remote_payload: Any | None = None
         try:
-            gh.api(endpoint)
+            remote_payload = gh.api(endpoint)
         except GhApiError as error:
-            if not _is_missing_content_error(error):
+            if not _is_missing_content_error(error) and not _is_empty_repository_error(error):
                 raise
         else:
+            local_digest = hashlib.sha256(_local_template_file_bytes(rel, source, platform)).hexdigest()
+            remote_digest = _remote_file_digest(remote_payload)
+            if remote_digest is None or remote_digest == local_digest:
+                skipped += 1
+                continue
             skipped += 1
             continue
 
-        raw = source.read_bytes()
+        encoded = _local_template_file_bytes(rel, source, platform)
         try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            encoded = raw
-        else:
-            text = prepare_copied_text(rel, text, platform, namespaced=False)
-            encoded = text.encode("utf-8")
-        content = base64.b64encode(encoded).decode("ascii")
-        try:
-            gh.api(
-                endpoint,
-                method="PUT",
-                fields={
-                    "message": f"Bootstrap: initialize {rel} from PLATE template payload",
-                    "content": content,
-                    "branch": default_branch,
-                },
+            _put_repository_file(
+                gh,
+                repo,
+                rel,
+                message=f"Bootstrap: initialize {rel} from PLATE template payload",
+                encoded_bytes=encoded,
+                branch=default_branch,
             )
         except GhApiError as error:
             if _is_missing_content_error(error):
@@ -378,17 +470,7 @@ def _validate_bootstrap_preconditions(repo: str, repo_obj: dict, default_branch:
             f"for {repo}. Authenticate with an account/token that can push to the repository."
         )
 
-    ref_endpoint = f"repos/{repo}/git/ref/heads/{quote(default_branch, safe='')}"
-    try:
-        gh.api(ref_endpoint)
-    except GhApiError as error:
-        if _is_missing_content_error(error):
-            raise RuntimeError(
-                f"Bootstrap requires an existing default branch ref ('{default_branch}') in {repo}, "
-                "but it was not found. If this is a brand-new empty repository, create an initial commit "
-                "(for example README.md on the default branch) and rerun `gh plate bootstrap --apply`."
-            ) from error
-        raise
+    _ensure_default_branch_ref(repo, default_branch, gh)
 
 
 def run_bootstrap(
@@ -502,16 +584,27 @@ def run_bootstrap(
     actions.append(BootstrapAction(name="copy-template-payload", state=state, detail=detail))
 
     for label in health.missing_labels:
+        description, _desc_warning = prepare_label_description(f"PLATE label: {label}")
         if apply_mode:
-            gh.api(
-                f"repos/{target}/labels",
-                method="POST",
-                fields={"name": label, "color": DEFAULT_LABEL_COLOR, "description": f"PLATE label: {label}"},
-            )
-            state = "applied"
+            try:
+                gh.api(
+                    f"repos/{target}/labels",
+                    method="POST",
+                    fields={
+                        "name": label,
+                        "color": DEFAULT_LABEL_COLOR,
+                        "description": description,
+                    },
+                )
+                state = "applied"
+                detail = label
+            except GhApiError as exc:
+                state = "failed"
+                detail = f"{label}: {exc}"
         else:
             state = "planned"
-        actions.append(BootstrapAction(name="create-label", state=state, detail=label))
+            detail = label
+        actions.append(BootstrapAction(name="create-label", state=state, detail=detail))
 
     if not repo_obj.get("has_wiki", False):
         if apply_mode:
@@ -527,15 +620,13 @@ def run_bootstrap(
         if apply_mode:
             seeded = copy.deepcopy(DEFAULT_CONFIG)
             seeded["platform"] = resolved_platform
-            content = base64.b64encode((json.dumps(seeded, indent=2) + "\n").encode("utf-8")).decode("ascii")
-            gh.api(
-                f"repos/{target}/contents/.plate",
-                method="PUT",
-                fields={
-                    "message": "Bootstrap: initialize .plate baseline config (Epic #259)",
-                    "content": content,
-                    "branch": default_branch,
-                },
+            _put_repository_file(
+                gh,
+                target,
+                ".plate",
+                message="Bootstrap: initialize .plate baseline config (Epic #259)",
+                encoded_bytes=(json.dumps(seeded, indent=2) + "\n").encode("utf-8"),
+                branch=default_branch,
             )
             state = "applied"
             detail = f"Initialized root .plate baseline config (platform {resolved_platform})"

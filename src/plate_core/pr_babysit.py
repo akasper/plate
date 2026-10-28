@@ -267,6 +267,27 @@ def _extract_actionable_threads(
     return actionable
 
 
+def _extract_unresolved_threads(threads: list[dict]) -> list[dict]:
+    """All threads with ``isResolved: false``, including outdated (#1155 done gate)."""
+    unresolved: list[dict] = []
+    for thread in threads:
+        if thread.get("isResolved"):
+            continue
+        comments = (thread.get("comments") or {}).get("nodes") or []
+        last = comments[-1] if comments else {}
+        author = ((last.get("author") or {}).get("login") or "").strip()
+        unresolved.append(
+            {
+                "thread_id": thread.get("id"),
+                "is_outdated": bool(thread.get("isOutdated")),
+                "author": author,
+                "path": thread.get("path") or last.get("path") or "",
+                "url": last.get("url"),
+            }
+        )
+    return unresolved
+
+
 def _extract_outdated_unresolved_threads(threads: list[dict]) -> list[dict]:
     """Threads that are still open but outdated (code moved) — candidates for auto-resolve (#605).
 
@@ -1169,6 +1190,23 @@ def get_actionable_review_threads(
     return _extract_actionable_threads(threads, agent_logins, scope=scope)
 
 
+def get_unresolved_review_threads(
+    pr_number: int,
+    repo: str | None = None,
+    *,
+    client: GhClient | None = None,
+) -> list[dict]:
+    """List every unresolved review thread (``isResolved: false``), including outdated.
+
+    Use for the address-pr-feedback fetch + done gate (#1155). Actionable work still uses
+    ``get_actionable_review_threads`` (non-outdated, scope-filtered).
+    """
+    target = resolve_repo(repo)
+    gh = client or GhClient()
+    pr_data = _load_pr_data(gh, target, pr_number)
+    return _extract_unresolved_threads(pr_data.get("reviewThreads", []))
+
+
 def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhClient | None = None) -> dict:
     """Helper in the pr-babysit skill (or small procedure) to enumerate and address common merge gates for a comprehensive 'make this PR mergeable' operation.
 
@@ -1200,14 +1238,13 @@ def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhCli
     threads = pr_data.get("reviewThreads", [])
     scope = resolve_pr_review_scope(None)
     actionable = _extract_actionable_threads(threads, None, scope=scope)
+    unresolved_all = _extract_unresolved_threads(threads)
     ci = _summarize_status_check_rollup(pr_data.get("statusCheckRollup"))
     review_decision = pr_data.get("reviewDecision")
     gate_eval = evaluate_babysit_gates(
         {
             "merge_state": sync_info.get("state"),
-            "unresolved_review_threads": len(
-                [t for t in threads if not t.get("isResolved") and not t.get("isOutdated")]
-            ),
+            "unresolved_review_threads": len(unresolved_all),
             "actionable_agent_threads": len(actionable),
             "review_decision": review_decision,
             **ci,
@@ -1219,9 +1256,7 @@ def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhCli
         "pr_number": pr_number,
         "merge_state": sync_info.get("state"),
         "out_of_sync": sync_info.get("out_of_sync"),
-        "unresolved_review_threads": len(
-            [t for t in threads if not t.get("isResolved") and not t.get("isOutdated")]
-        ),
+        "unresolved_review_threads": len(unresolved_all),
         "actionable_agent_threads": len(actionable),
         "pr_review_scope": scope,
         "threads_with_suggestions": sum(1 for a in actionable if a.get("has_suggestion")),

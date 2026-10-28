@@ -15,6 +15,35 @@ class GhApiError(RuntimeError):
     """Raised when a `gh api` call fails."""
 
 
+# Strings longer than this must not be passed via ``-f`` argv (E2BIG / overflow).
+LARGE_STRING_ARGV_LIMIT = 4096
+
+
+def _fields_require_json_input(fields: dict) -> bool:
+    """True when ``fields`` must be sent as a JSON body (stdin), not ``-f`` argv."""
+    for key, value in fields.items():
+        if key == "content" and isinstance(value, str):
+            return True
+        if isinstance(value, str) and len(value) > LARGE_STRING_ARGV_LIMIT:
+            return True
+    return False
+
+
+def _json_api_body(endpoint: str, field_map: dict) -> str:
+    """Serialize API body for ``gh api --input`` (GraphQL needs a ``variables`` object)."""
+    if endpoint == "graphql":
+        payload: dict[str, object] = {"query": field_map.get("query", "")}
+        if "operationName" in field_map:
+            payload["operationName"] = field_map["operationName"]
+        variables = {
+            k: v for k, v in field_map.items() if k not in ("query", "operationName")
+        }
+        if variables:
+            payload["variables"] = variables
+        return json.dumps(payload)
+    return json.dumps(field_map)
+
+
 def _sanitize_error(msg: str) -> str:
     """Redact potential secrets/tokens from error messages (secret-safety for #270)."""
     # Redact common token patterns (ghp_, gho_, bearer, etc.) and any long hex-ish that might be token
@@ -45,33 +74,42 @@ class GhClient:
         retries: max attempts (default 3 for rate/transient tolerance).
         base_backoff: seconds base for exp backoff + jitter.
         """
+        field_map = dict(fields or {})
+        use_json_input = bool(field_map) and _fields_require_json_input(field_map)
         cmd = ["gh", "api", endpoint, "-X", method]
-        for key, value in (fields or {}).items():
-            if isinstance(value, bool):
-                cmd.extend(["-F", f"{key}={'true' if value else 'false'}"])
-            elif isinstance(value, (int, float)):
-                cmd.extend(["-F", f"{key}={value}"])
-            elif isinstance(value, (list, tuple)):
-                for item in value:
-                    if isinstance(item, bool):
-                        cmd.extend(["-F", f"{key}[]={'true' if item else 'false'}"])
-                    elif isinstance(item, (int, float)):
-                        cmd.extend(["-F", f"{key}[]={item}"])
-                    else:
-                        cmd.extend(["-f", f"{key}[]={item}"])
-            else:
-                cmd.extend(["-f", f"{key}={value}"])
+        json_input: str | None = None
+        if use_json_input:
+            cmd.extend(["--input", "-"])
+            json_input = _json_api_body(endpoint, field_map)
+        else:
+            for key, value in field_map.items():
+                if isinstance(value, bool):
+                    cmd.extend(["-F", f"{key}={'true' if value else 'false'}"])
+                elif isinstance(value, (int, float)):
+                    cmd.extend(["-F", f"{key}={value}"])
+                elif isinstance(value, (list, tuple)):
+                    for item in value:
+                        if isinstance(item, bool):
+                            cmd.extend(["-F", f"{key}[]={'true' if item else 'false'}"])
+                        elif isinstance(item, (int, float)):
+                            cmd.extend(["-F", f"{key}[]={item}"])
+                        else:
+                            cmd.extend(["-f", f"{key}[]={item}"])
+                else:
+                    cmd.extend(["-f", f"{key}={value}"])
 
         last_err = None
         for attempt in range(retries):
-            proc = run_hidden(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
-            )
+            run_kwargs: dict = {
+                "capture_output": True,
+                "text": True,
+                "encoding": "utf-8",
+                "errors": "replace",
+                "check": False,
+            }
+            if json_input is not None:
+                run_kwargs["input"] = json_input
+            proc = run_hidden(cmd, **run_kwargs)
             if proc.returncode == 0:
                 out = proc.stdout.strip()
                 return json.loads(out) if out else {}

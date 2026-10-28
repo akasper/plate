@@ -10,12 +10,18 @@ permissions:
 
 jobs:
   unblock-ready-features:
+    if: |
+      github.event.issue != null && !github.event.issue.pull_request && (
+        github.event.action == 'closed' ||
+        (github.event.action == 'labeled' && contains(fromJSON('["status:blocked","status:ready-to-work"]'), github.event.label.name))
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Promote unblocked Feature issues to ready
         uses: actions/github-script@v8
         env:
           ORCHESTRATOR_WORKFLOW: ${{ vars.PLATE_MAIN_ORCHESTRATOR_WORKFLOW }}
+          COPILOT_AUTOSTART: ${{ vars.PLATE_COPILOT_AUTOSTART == 'true' }}
         with:
           script: |
             const owner = context.repo.owner;
@@ -138,6 +144,25 @@ jobs:
                 }
               }
 
+              const autostart = String(process.env.COPILOT_AUTOSTART || '').toLowerCase() === 'true';
+              const kickoffBlock = autostart
+                ? [
+                    '```text',
+                    '@copilot start',
+                    `issue: #${feature.number}`,
+                    'mode: feature-implementation',
+                    'pr_title_rule: no bracketed prefixes; no Closes/Fixes/Resolves in title; closing keywords belong in PR body only',
+                    '```'
+                  ]
+                : [
+                    '```text',
+                    'Manual kickoff: start your coding agent on this issue when ready.',
+                    `issue: #${feature.number}`,
+                    'mode: feature-implementation',
+                    'pr_title_rule: no bracketed prefixes; no Closes/Fixes/Resolves in title; closing keywords belong in PR body only',
+                    '(Set repository variable PLATE_COPILOT_AUTOSTART=true to enable automatic @copilot mentions.)',
+                    '```'
+                  ];
               const kickoffBody = dispatched
                 ? [
                     'PLATES kickoff: dispatched the main orchestrator workflow for this ready Feature issue.',
@@ -150,12 +175,7 @@ jobs:
                     '',
                     'No orchestrator workflow is configured, so this comment acts as the GitHub-native start trigger.',
                     '',
-                    '```text',
-                    '@copilot start',
-                    `issue: #${feature.number}`,
-                    'mode: feature-implementation',
-                    'pr_title_rule: no bracketed prefixes; no Closes/Fixes/Resolves in title; closing keywords belong in PR body only',
-                    '```'
+                    ...kickoffBlock
                   ].join('\n');
 
               await github.rest.issues.createComment({

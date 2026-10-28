@@ -1,0 +1,16 @@
+{
+  "slug": "actions-cost-controls",
+  "change_type": "process",
+  "surface": ".github/workflows/ + template_payload workflows",
+  "summary": "Reduce Actions minutes and Copilot spend via issue-event job guards, opt-in PLATE_COPILOT_AUTOSTART, PR concurrency, and main-only push deploys.",
+  "migration_impact": "Adopter repos should re-import template workflows; Copilot autostart is off until PLATE_COPILOT_AUTOSTART=true.",
+  "migration_guidance": [
+    "Run gh plate import-payload (or upgrade) and merge the .github/workflows diff.",
+    "Leave PLATE_COPILOT_AUTOSTART unset (or false) unless automatic @copilot kickoff is desired.",
+    "After #1209 lands, require pr-gates (merged gates), labels, and test; use gh plate health to find stale per-gate contexts.",
+    "Follow docs/migration/actions-cost-rollout.md for private adopter rollout order."
+  ],
+  "agent_notes": "Issue workflows use job-level if: to skip runners on irrelevant events. plates-start-feature and plates-unblock-features omit @copilot unless PLATE_COPILOT_AUTOSTART=true. PR workflows use concurrency with cancel-in-progress except release/publish.",
+  "breaking": false,
+  "links": ["#1136", "#1137"]
+}

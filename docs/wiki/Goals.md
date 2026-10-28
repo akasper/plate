@@ -8,7 +8,7 @@ Depth that does not fit here may live in `SPEC.md` (implementation), release not
 
 ## Mission
 
-PLATE (Process Lifecycle Agentic Task Engine) exists to make **reliable, high-velocity agentic software development the default** way teams build on GitHub.
+PLATE (Product Lifecycle Automation Toolkit and Engine) exists to make **reliable, high-velocity agentic software development the default** way teams build on GitHub.
 
 We build the operating system for agent-driven development: conventions, tools, and runtime surfaces (`plate-core`, `gh plate`, `plate-mcp`, CLI agent plugins) that let AI agents own the majority of the software development lifecycle while **humans keep judgment** on risk, architecture, product direction, and irreversible external actions. **GitHub preserves truth** — Issues, PRs, labels, milestones, release fragments, and wiki source are the durable project memory.
 

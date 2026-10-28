@@ -1,6 +1,6 @@
 # PLATE
 
-**PLATE** (Process Lifecycle Agentic Task Engine) is a GitHub-native methodology and tooling monorepo for agent-driven software delivery. Humans keep judgment; agents do the toil; GitHub preserves truth.
+**PLATE** (Product Lifecycle Automation Toolkit and Engine) is a GitHub-native methodology and tooling monorepo for agent-driven software delivery. Humans keep judgment; agents do the toil; GitHub preserves truth.
 
 This repository (`akasper/plate`) is the **implementation monorepo**. The installable Python package on PyPI is still named **`plate-core`** (import path `plate_core`); the product name is PLATE.
 
@@ -37,6 +37,8 @@ PLATE tooling reads GitHub + local `.plate` / `.agentic/` state and drives proce
 See `AGENTS.md`, `SPEC.md`, and `docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md` for operating rules and first-slice surface status. Release **#654** tracks v1.0.0 readiness (do not claim 1.0 without checklist E2E).
 
 ## Quick Start
+
+**New repository?** See **[docs/bootstrap/starting-a-new-repository.md](docs/bootstrap/starting-a-new-repository.md)** (empty `gh repo create`, then `gh plate bootstrap --greenfield`). Existing codebase: `docs/migration/adoption-guide.md`.
 
 ### Install versions (pip + gh-plate pin)
 
@@ -188,7 +190,7 @@ gh plate features --repo owner/repo
 
 Output example:
 ```
-Repo: akasper/plate_template
+Repo: akasper/plate
 
 Autonomous Mode.................... ✅ ENABLED
 Platform Monitor Workflow.......... ⏹️  NOT CONFIGURED
@@ -225,7 +227,7 @@ plate/                     # monorepo (product: PLATE)
 
 ## Contributing
 
-This repository follows the [PLATE methodology](https://github.com/akasper/plate_template). See `AGENTS.md` for agent operating rules and the full PLATE workflow.
+This repository follows the [PLATE methodology](https://github.com/akasper/plate/tree/main/docs). See `AGENTS.md` for agent operating rules and the full PLATE workflow.
 
 ---
 
@@ -234,11 +236,11 @@ This repository follows the [PLATE methodology](https://github.com/akasper/plate
 If your repository started from an older `plate_template` release and has local process customizations, avoid full-file replacement during upgrades.
 
 <!-- PLATES-CORE:BEGIN keeping-your-fork-current -->
-Use this sync flow:
+Use this sync flow (via `plate-core`, not `akasper/plate_template`):
 
-1. Fetch upstream template updates (`git fetch upstream`) and review diffs for `AGENTS.md`, `.agentic/skills.yml`, `.agentic/releases/`, and workflows in `.github/workflows/` that contain `PLATES-CORE` markers.
-2. Import only upstream-owned `PLATES-CORE` sections into your customized files.
-3. Preserve local sections outside those markers.
+1. Run `gh plate self-migrate --plan` and review planned scaffold / marker changes for `AGENTS.md`, `.agentic/skills.yml`, `.agentic/releases/`, and workflows with `PLATES-CORE` markers.
+2. Apply scaffold updates with `gh plate import-payload` (dry-run first) and marker merges via `gh plate self-migrate` as needed.
+3. Preserve local sections outside `PLATES-CORE` markers.
 4. Open an atomic PR with the correct PR type label and issue linkage (`Closes #N` when applicable).
 5. Update per-feature change files in `.agentic/releases/` with imported behavior and evidence.
 6. Run required checks before merge.

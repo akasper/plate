@@ -1,8 +1,12 @@
 {
   "schema_version": 1,
-  "source_repository": "akasper/plate_template",
+  "source_repository": "akasper/plate",
   "selection_manifest": "src/plate_core/data/template_payload_manifest.yml",
   "files": [
+    {
+      "path": ".agentic/COSTS.md",
+      "classification": "copy_to_downstream"
+    },
     {
       "path": ".agentic/audit.yml",
       "classification": "copy_to_downstream"
@@ -25,6 +29,10 @@
     },
     {
       "path": ".agentic/skills.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/skills/address-pr-feedback/SKILL.md",
       "classification": "copy_to_downstream"
     },
     {
@@ -100,10 +108,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": ".github/workflows/audit.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": ".github/workflows/auto-label-feedback-responses.yml",
       "classification": "copy_to_downstream"
     },
@@ -120,15 +124,15 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": ".github/workflows/feedback-resolution-check.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": ".github/workflows/label-check.yml",
       "classification": "copy_to_downstream"
     },
     {
       "path": ".github/workflows/pages.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plate-pr-gates.yml",
       "classification": "copy_to_downstream"
     },
     {
@@ -153,18 +157,6 @@
     },
     {
       "path": ".github/workflows/platform-monitor.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": ".github/workflows/pr-documentation-check.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": ".github/workflows/pr-issue-link-check.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": ".github/workflows/pr-title-check.yml",
       "classification": "copy_to_downstream"
     },
     {
@@ -217,6 +209,10 @@
     },
     {
       "path": "docs/bootstrap/new-repository-checklist.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/bootstrap/starting-a-new-repository.md",
       "classification": "copy_to_downstream"
     },
     {
@@ -289,6 +285,10 @@
     },
     {
       "path": "docs/migration/namespace-docs-migration.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/self-hosted-runners.md",
       "classification": "copy_to_downstream"
     },
     {
@@ -436,10 +436,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": "tests/e2e/fixtures/gifs/homepage-demo.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": "tests/e2e/pages/base-page.ts",
       "classification": "copy_to_downstream"
     },
@@ -453,34 +449,6 @@
     },
     {
       "path": "tests/e2e/specs/failing-example.spec.ts",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/TEST_RESULTS.md",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-10s.webm",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-high.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-low.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-medium.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-trimmed-5s-low.gif",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "tests/spike-videos/test-trimmed-5s.gif",
       "classification": "copy_to_downstream"
     }
   ]

@@ -1,6 +1,6 @@
 # PLATE Template
 
-`plate_template` is the canonical starter repository for the **Process Lifecycle Agentic Task Engine (PLATE)** methodology.
+**PLATE** (Product Lifecycle Automation Toolkit and Engine) scaffold ships in **`plate-core`** (`gh plate bootstrap`). **Do not create, clone, or sync from `akasper/plate_template`**—that repository is legacy.
 
 PLATE is a GitHub-first delivery model where:
 
@@ -33,15 +33,15 @@ If a claim is not supported by per-feature change files in `.agentic/releases/`,
 
 ## Getting started: PLATE onboarding
 
-### 1. Create your repository from this template
+### 1. Start the repository
 
-Use GitHub's "Use this template" flow to create a new repository.
+Follow **`docs/bootstrap/starting-a-new-repository.md`**: install pinned `plate-core` + `gh plate`, create an empty repo with `gh repo create` (never `--template`), then `gh plate bootstrap --repo OWNER/NAME --greenfield` and `--apply`.
 
-### 2. Run repository bootstrap
+### 2. Run GitHub bootstrap helpers
 
-From the new repository root:
+From the repository root after scaffold import:
 
-First, run `gh plate bootstrap --apply` to materialize the repository-level PLATE scaffold (AGENTS, docs, workflows, scripts, and starter assets). Then run the GitHub bootstrap scripts below to apply labels, wiki, and branch protection.
+`gh plate bootstrap --greenfield --apply` materializes the PLATE scaffold (AGENTS, docs, workflows, scripts, labels, and starter issues). Use the scripts below for wiki and branch protection if not already applied by bootstrap.
 
 **macOS / Linux / WSL**
 ```bash
@@ -113,10 +113,10 @@ See [`docs/README.md`](docs/README.md) for complete documentation index.
 If your repository started from an older `plate_template` release and has local process customizations, avoid full-file replacement during upgrades.
 
 <!-- PLATES-CORE:BEGIN keeping-your-fork-current -->
-Use this sync flow:
+Use this sync flow (via `plate-core`, not `akasper/plate_template`):
 
-1. Fetch upstream template updates (`git fetch upstream`) and review diffs for `AGENTS.md`, `.agentic/skills.yml`, per-feature change files in `.agentic/releases/`, and workflows in `.github/workflows/` that contain `PLATES-CORE` markers.
-2. Import only upstream-owned `PLATES-CORE` sections into your customized files.
+1. Run `gh plate self-migrate --plan` and review planned changes for `AGENTS.md`, `.agentic/skills.yml`, per-feature change files in `.agentic/releases/`, and workflows with `PLATES-CORE` markers.
+2. Apply scaffold updates with `gh plate import-payload` (dry-run first) and merge marker-owned sections via `gh plate self-migrate` as needed.
 3. Preserve local sections outside those markers.
 4. Open an atomic PR with the correct PR type label and issue linkage (`Closes #N` when applicable).
 5. Update your per-feature change files in `.agentic/releases/` entry with imported behavior and evidence.

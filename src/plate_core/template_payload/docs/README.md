@@ -35,7 +35,7 @@ docs/
 | Document | Purpose |
 |----------|---------|
 | **[Wiki: Feature Showcase](./wiki/feature-showcase.md)** | How to capture and embed demo GIFs in documentation. Includes format standards, embedding syntax, examples, and GIF gallery index. |
-| **[Forward-Port Plan: Playwright E2E](./forward-port-plans/playwright-e2e-adoption.md)** | Guide for adopting Playwright E2E testing in downstream projects from this template. |
+| **[Forward-Port Plan: Playwright E2E](./forward-port-plans/playwright-e2e-adoption.md)** | Guide for adopting Playwright E2E testing in downstream projects via `gh plate import-payload`. |
 
 ### Architecture & Design
 
@@ -60,6 +60,7 @@ docs/
 | **[audits/](./audits/)** | Security reviews, compliance audits, and team health assessments. |
 | **[marketing/](./marketing/)** | Release notes, project announcements, and external messaging. |
 | **[migration/](./migration/)** | Data migration guides, API deprecation notices, and upgrade paths. |
+| **[Self-hosted runners](./migration/self-hosted-runners.md)** | Optional private-repo local runners: isolation, security warnings, idle-only policy, and hosted fallback (#1210). |
 
 ---
 
@@ -164,7 +165,7 @@ All documentation in this directory should:
 - **[Playwright Docs](https://playwright.dev/)** — Official E2E testing framework
 - **[GitHub Wiki Help](https://docs.github.com/en/communities/documenting-your-project-with-wikis)** — Wiki documentation best practices
 - **[Markdown Guide](https://www.markdownguide.org/)** — Markdown syntax reference
-- **[PLATE Template](https://github.com/akasper/plate_template)** — This repository
+- **[PLATE (`akasper/plate`)](https://github.com/akasper/plate)** — Methodology, `plate-core`, and `gh plate` tooling
 
 ---
 

@@ -1,15 +1,15 @@
 # New Repository Bootstrap Checklist
 
-Use this checklist immediately after creating a repository from the PLATE template. It separates the steps that can be standardized from the ones that still require human judgment.
+Use this checklist after **[starting-a-new-repository.md](./starting-a-new-repository.md)** (empty repo + `gh plate bootstrap --greenfield --apply`). It separates steps that can be standardized from ones that still require human judgment.
 
 > **Adopting into an existing/mature repo?** Do not use only this greenfield checklist.  
 > See **[docs/migration/adoption-guide.md](../migration/adoption-guide.md)** and prefer:  
-> `gh plate import-payload --strategy conservative --dry-run` → `--apply`, then  
+> `gh plate import-payload --strategy conservative` (dry-run) → `--apply`, then  
 > `gh plate bootstrap --adopt --apply` for GitHub-side labels/wiki/`.plate`/branches.
 
 ## Fast Path
 
-From the generated repository root, choose the script for your operating system:
+From the repository root (after bootstrap has copied the scaffold), choose the script for your operating system:
 
 **macOS / Linux / WSL (bash):**
 ```bash

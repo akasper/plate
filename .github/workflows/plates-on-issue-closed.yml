@@ -10,7 +10,13 @@ permissions:
 
 jobs:
   capture-usage-report:
-    if: contains(join(github.event.issue.labels.*.name, ','), 'Feature') || contains(join(github.event.issue.labels.*.name, ','), 'Question') || contains(join(github.event.issue.labels.*.name, ','), 'feature') || contains(join(github.event.issue.labels.*.name, ','), 'question')
+    if: |
+      github.event.issue != null && !github.event.issue.pull_request && (
+        contains(join(github.event.issue.labels.*.name, ','), 'Feature') ||
+        contains(join(github.event.issue.labels.*.name, ','), 'Question') ||
+        contains(join(github.event.issue.labels.*.name, ','), 'feature') ||
+        contains(join(github.event.issue.labels.*.name, ','), 'question')
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
