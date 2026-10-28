@@ -269,13 +269,21 @@ def build_wake_summary(
     cur_ci = cur.get("ci_state")
     ci_transition: dict[str, str] | None = None
     if cur_ci != prev_ci and (cur_ci is not None or prev_ci is not None):
-        ci_transition = {"from": str(prev_ci or ""), "to": str(cur_ci or "")}
+        ci_transition = {
+            "from": str(prev_ci or ""),
+            "to": str(cur_ci or ""),
+            "head_sha": str(cur_head or ""),
+        }
 
     prev_merge = prev.get("mergeable_state")
     cur_merge = cur.get("mergeable_state")
     merge_state_change: dict[str, str] | None = None
     if cur_merge != prev_merge and (cur_merge is not None or prev_merge is not None):
-        merge_state_change = {"from": str(prev_merge or ""), "to": str(cur_merge or "")}
+        merge_state_change = {
+            "from": str(prev_merge or ""),
+            "to": str(cur_merge or ""),
+            "head_sha": str(cur_head or ""),
+        }
 
     return {
         "review_comments": review_comments,
