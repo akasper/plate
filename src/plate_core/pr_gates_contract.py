@@ -120,6 +120,39 @@ def validate_merged_pr_gates_workflow(text: str) -> list[str]:
             errors.append(f"missing failure marker for {step}: {marker!r}")
     label_errors = validate_pr_gates_multi_label_event_safety(text)
     errors.extend(label_errors)
+    errors.extend(validate_feature_fragment_gate_on_all_admitted_pr_events(text))
+    return errors
+
+
+_FEATURE_FRAGMENT_GATE_IF = re.compile(
+    r"(?m)^      - name: Gate — Feature release fragment\n"
+    r"        if: \|\n"
+    r"((?:          .+\n)+?)"
+    r"        uses: actions/github-script@v8\n"
+)
+
+
+def validate_feature_fragment_gate_on_all_admitted_pr_events(text: str) -> list[str]:
+    """Feature fragment gate must run on every admitted pull_request when Feature (#1239).
+
+    Non-gating labeled events (e.g. area:*, risk:*) admit the pr-gates job; skipping the
+    fragment step would let the check pass without enforcing unreleased fragments.
+    """
+    errors: list[str] = []
+    match = _FEATURE_FRAGMENT_GATE_IF.search(text)
+    if not match:
+        errors.append("missing Feature release fragment gate step with multiline if")
+        return errors
+    if_block = match.group(1)
+    if "steps.feature_labels.outputs.is_feature == 'true'" not in if_block:
+        errors.append(
+            "Feature release fragment gate if must depend on steps.feature_labels.outputs.is_feature"
+        )
+    if "github.event.action" in if_block or "github.event.label" in if_block:
+        errors.append(
+            "Feature release fragment gate if must not restrict pull_request actions or "
+            "label names (area:* / risk:* labeled events must still enforce fragments)"
+        )
     return errors
 
 

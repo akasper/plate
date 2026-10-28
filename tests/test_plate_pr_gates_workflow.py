@@ -6,6 +6,7 @@ from plate_core.pr_gates_contract import (
     PR_GATE_STEP_CONTRACTS,
     find_stale_required_check_contexts,
     missing_recommended_check_contexts,
+    validate_feature_fragment_gate_on_all_admitted_pr_events,
     validate_merged_pr_gates_workflow,
     validate_pr_gates_multi_label_event_safety,
     workflow_paths,
@@ -38,6 +39,30 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
         repo_path, payload_path = workflow_paths(REPO_ROOT)
         for path in (repo_path, payload_path):
             errors = validate_pr_gates_multi_label_event_safety(
+                path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(errors, [], msg=f"{path}: {errors}")
+
+    def test_feature_fragment_gate_on_area_or_risk_label_events(self):
+        """area:* / risk:* labels admit pr-gates; fragment step must still run (#1239)."""
+        stale_if = """
+      - name: Gate — Feature release fragment
+        if: |
+          github.event_name == 'pull_request' && steps.feature_labels.outputs.is_feature == 'true' && (
+            contains(fromJSON('["opened","synchronize","reopened","edited"]'), github.event.action) ||
+            (github.event.action == 'labeled' && github.event.label.name == 'Feature')
+          )
+        uses: actions/github-script@v8
+          script: |
+            core.setFailed('per-feature change files');
+"""
+        errors = validate_feature_fragment_gate_on_all_admitted_pr_events(stale_if)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("area:*", errors[0])
+
+        repo_path, payload_path = workflow_paths(REPO_ROOT)
+        for path in (repo_path, payload_path):
+            errors = validate_feature_fragment_gate_on_all_admitted_pr_events(
                 path.read_text(encoding="utf-8")
             )
             self.assertEqual(errors, [], msg=f"{path}: {errors}")

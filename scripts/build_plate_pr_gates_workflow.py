@@ -117,11 +117,7 @@ jobs:
 
       - name: Gate — Feature release fragment
         if: |
-          github.event_name == 'pull_request' && steps.feature_labels.outputs.is_feature == 'true' && (
-            contains(fromJSON('["opened","synchronize","reopened","edited"]'), github.event.action) ||
-            (github.event.action == 'labeled' && github.event.label.name == 'Feature') ||
-            (github.event.action == 'unlabeled' && github.event.label.name == 'Feature')
-          )
+          github.event_name == 'pull_request' && steps.feature_labels.outputs.is_feature == 'true'
         uses: actions/github-script@v8
         with:
 @@FEATURE_FRAGMENT_SCRIPT@@
