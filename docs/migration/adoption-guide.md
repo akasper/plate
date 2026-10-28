@@ -162,3 +162,4 @@ Discover payload files with `gh plate payload list --json`.
 - #616 / #620 import-payload + shared planner
 - #633 frictionless onboarding epic
 - #649 self-migrate for adopters
+- #1210 optional self-hosted runners — [self-hosted-runners.md](./self-hosted-runners.md) (private repos only)
