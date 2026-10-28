@@ -12,6 +12,20 @@ from pathlib import Path
 # Job id reported to branch protection / PR checks UI.
 PLATE_PR_GATES_CHECK_NAME = "pr-gates"
 
+# PR type / process labels that should re-run merged gates on labeled/unlabeled events.
+PLATE_PR_GATES_LABELS: frozenset[str] = frozenset(
+    {
+        "Feature",
+        "Bug",
+        "Documentation",
+        "Feedback Response",
+        "no-issue",
+        "Release",
+    }
+)
+
+PLATE_PR_GATES_LABELS_JSON = '["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'
+
 # Status check contexts superseded by PLATE_PR_GATES_CHECK_NAME.
 DEPRECATED_PR_GATE_CHECK_CONTEXTS: frozenset[str] = frozenset(
     {
@@ -104,8 +118,70 @@ def validate_merged_pr_gates_workflow(text: str) -> list[str]:
         marker = gate.get("failure_marker") or ""
         if marker and marker not in text:
             errors.append(f"missing failure marker for {step}: {marker!r}")
-    if "cancel-in-progress: true" not in text:
-        errors.append("missing concurrency cancel-in-progress")
+    label_errors = validate_pr_gates_multi_label_event_safety(text)
+    errors.extend(label_errors)
+    errors.extend(validate_feature_fragment_gate_on_all_admitted_pr_events(text))
+    return errors
+
+
+_FEATURE_FRAGMENT_GATE_IF = re.compile(
+    r"(?m)^      - name: Gate — Feature release fragment\n"
+    r"        if: \|\n"
+    r"((?:          .+\n)+?)"
+    r"        uses: actions/github-script@v8\n"
+)
+
+
+def validate_feature_fragment_gate_on_all_admitted_pr_events(text: str) -> list[str]:
+    """Feature fragment gate must run on every admitted pull_request when Feature (#1239).
+
+    Non-gating labeled events (e.g. area:*, risk:*) admit the pr-gates job; skipping the
+    fragment step would let the check pass without enforcing unreleased fragments.
+    """
+    errors: list[str] = []
+    match = _FEATURE_FRAGMENT_GATE_IF.search(text)
+    if not match:
+        errors.append("missing Feature release fragment gate step with multiline if")
+        return errors
+    if_block = match.group(1)
+    if "steps.feature_labels.outputs.is_feature == 'true'" not in if_block:
+        errors.append(
+            "Feature release fragment gate if must depend on steps.feature_labels.outputs.is_feature"
+        )
+    if "github.event.action" in if_block or "github.event.label" in if_block:
+        errors.append(
+            "Feature release fragment gate if must not restrict pull_request actions or "
+            "label names (area:* / risk:* labeled events must still enforce fragments)"
+        )
+    return errors
+
+
+def validate_pr_gates_multi_label_event_safety(text: str) -> list[str]:
+    """Ensure non-gating label events cannot cancel gate runs or skip the pr-gates job (#1228)."""
+    errors: list[str] = []
+    if "concurrency:" not in text:
+        errors.append("missing concurrency block")
+        return errors
+    if re.search(r"cancel-in-progress:\s*true\s*$", text, re.MULTILINE):
+        errors.append(
+            "concurrency cancel-in-progress must not be unconditionally true "
+            "(non-gating labeled events must not cancel in-progress gate runs)"
+        )
+    if "label-noop" not in text:
+        errors.append("missing label-noop concurrency group suffix for non-gating labels")
+    if "cancel-in-progress: ${{" not in text:
+        errors.append("missing conditional cancel-in-progress expression")
+    skip_job_pattern = (
+        r"contains\(fromJSON\('\[\"labeled\",\"unlabeled\"\]'\), github\.event\.action\)"
+        r"\s*&&\s*contains\(fromJSON\('" + re.escape(PLATE_PR_GATES_LABELS_JSON) + r"'\)"
+    )
+    if re.search(skip_job_pattern, text):
+        errors.append(
+            "pr-gates job must not skip on non-gating labeled/unlabeled events "
+            "(skipped checks satisfy required status)"
+        )
+    if "github.event.action != 'closed'" not in text:
+        errors.append("pr-gates job should run for all pull_request actions except closed")
     return errors
 
 

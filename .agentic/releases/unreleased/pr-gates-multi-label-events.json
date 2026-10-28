@@ -1,0 +1,12 @@
+{
+  "slug": "pr-gates-multi-label-events",
+  "issue": 1228,
+  "surface": ".github/workflows/plate-pr-gates.yml + template_payload",
+  "summary": "Non-gating pull_request labeled events no longer cancel in-progress pr-gates runs or finish with a skipped required check when several labels are applied at PR creation.",
+  "migration_impact": "Adopters should import the updated plate-pr-gates.yml; branch protection check name remains pr-gates.",
+  "verification": [
+    "tests/test_plate_pr_gates_workflow.py validate_pr_gates_multi_label_event_safety",
+    "Multi-label PR create no longer ends with skipped pr-gates on the head SHA"
+  ],
+  "agent_notes": "Isolated concurrency group label-noop for non-gating labels; conditional cancel-in-progress; pr-gates job runs for all pull_request actions except closed. Regenerate with scripts/build_plate_pr_gates_workflow.py."
+}

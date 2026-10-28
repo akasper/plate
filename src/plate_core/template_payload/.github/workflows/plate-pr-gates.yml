@@ -25,8 +25,9 @@ on:
     branches: [release, 'release-*', 'release-v*']
 
 concurrency:
-  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Non-gating label events use an isolated group and must not cancel real gate runs (#1228).
+  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name) && 'label-noop' || 'gate' }}
+  cancel-in-progress: ${{ !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name)) }}
 
 permissions:
   contents: read
@@ -40,14 +41,7 @@ jobs:
     if: |
       github.event_name == 'pull_request_review' ||
       github.event_name == 'pull_request_review_comment' ||
-      (github.event_name == 'pull_request' && (
-        contains(fromJSON('["opened","synchronize","reopened","edited","ready_for_review"]'), github.event.action) ||
-        contains(fromJSON('["milestoned","demilestoned"]'), github.event.action) ||
-        (
-          contains(fromJSON('["labeled","unlabeled"]'), github.event.action) &&
-          contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name)
-        )
-      ))
+      (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +57,7 @@ jobs:
       - name: Gate — PR title
         if: |
           github.event_name == 'pull_request' &&
-          contains(fromJSON('["opened","edited","synchronize","reopened"]'), github.event.action)
+          contains(fromJSON('["opened","edited","synchronize","reopened","labeled","unlabeled","milestoned","demilestoned","ready_for_review"]'), github.event.action)
         uses: actions/github-script@v8
         with:
           script: |
@@ -254,11 +248,7 @@ jobs:
 
       - name: Gate — Feature release fragment
         if: |
-          github.event_name == 'pull_request' && steps.feature_labels.outputs.is_feature == 'true' && (
-            contains(fromJSON('["opened","synchronize","reopened","edited"]'), github.event.action) ||
-            (github.event.action == 'labeled' && github.event.label.name == 'Feature') ||
-            (github.event.action == 'unlabeled' && github.event.label.name == 'Feature')
-          )
+          github.event_name == 'pull_request' && steps.feature_labels.outputs.is_feature == 'true'
         uses: actions/github-script@v8
         with:
           script: |
@@ -302,7 +292,7 @@ jobs:
         if: |
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment' ||
-          (github.event_name == 'pull_request' && contains(fromJSON('["opened","reopened","synchronize","ready_for_review"]'), github.event.action))
+          (github.event_name == 'pull_request' && contains(fromJSON('["opened","reopened","synchronize","ready_for_review","labeled","unlabeled","milestoned","demilestoned","edited"]'), github.event.action))
         uses: actions/github-script@v8
         env:
           PLATE_PR_FEEDBACK_AGENTS: ${{ vars.PLATE_PR_FEEDBACK_AGENTS }}
@@ -413,7 +403,7 @@ jobs:
       - name: Gate — audit checkout
         if: |
           github.event_name == 'pull_request' &&
-          contains(fromJSON('["opened","synchronize","reopened","edited"]'), github.event.action)
+          contains(fromJSON('["opened","synchronize","reopened","edited","labeled","unlabeled","milestoned","demilestoned","ready_for_review"]'), github.event.action)
         run: echo "Audit workflow context loaded (checkout complete)."
 
       - name: Gate — validate release PR
