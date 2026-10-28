@@ -1,0 +1,14 @@
+{
+  "slug": "marker-merge-fence-validation-1252",
+  "change_type": "fix",
+  "issue": 1252,
+  "surface": "plate_core.markers + plate_core.self_migrate marker merge apply path",
+  "summary": "self-migrate marker merge ignores PLATES-CORE markers inside fenced code blocks, uses fence-aware section boundaries when merging, and refuses to write merged files that fail post-merge marker or fence balance validation (#1252).",
+  "migration_impact": "Adopters running `gh plate self-migrate --merge-markers --apply-markers` get safer AGENTS.md sectional merges; corrupted output is reported as merge_conflict instead of being written. No config change required.",
+  "verification": [
+    "tests/test_marker_merge_fences_1252.py",
+    "tests/test_epic89_markers.py",
+    "tests/test_self_migrate.py"
+  ],
+  "agent_notes": "Root cause was merge walks treating fenced example END markers in upstream-template-sync as structural closes."
+}
