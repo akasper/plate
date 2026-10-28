@@ -148,6 +148,43 @@ When the target already has product scripts under `scripts/`, import installs
 PLATE helpers under `scripts/plate/` and rewrites workflow references (#621).
 Discover payload files with `gh plate payload list --json`.
 
+Template payload `.github/workflows/ci.yml` resolves `validate_plate_repo.sh`
+under `scripts/plate/` first, then `scripts/`, so namespaced installs pass the
+`test` check without a manual path edit.
+
+## Providing the `test` required check with your own CI
+
+Branch protection after 0.8.5 expects check contexts **`labels`**, **`test`**, and
+**`pr-gates`** (see [actions-cost-rollout.md](./actions-cost-rollout.md)). Import
+payload `ci.yml` when PLATE should own baseline validation. When you keep a
+product-owned test workflow (pytest, `npm test`, Playwright, and so on), add a
+small aggregate job whose **job id** is `test` so GitHub reports the `test`
+context:
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    needs: [unit, integration]   # your existing jobs
+    if: always()
+    steps:
+      - run: |
+          set -euo pipefail
+          for job in unit integration; do
+            result="${{ needs[job].result }}"
+            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+              echo "$job finished with $result" >&2
+              exit 1
+            fi
+          done
+          echo "Aggregate test gate passed."
+```
+
+Keep PLATE process checks in `plate-ci.yml` / `plate-pr-gates.yml` (or payload
+`ci.yml` jobs `labels` and imported gates) and point required checks at those
+context names exactly—job **display** `name:` values become the context when
+set, so prefer the job id alone for `labels` and `test`.
+
 ## Related issues
 
 - #935 adoption readiness status (`gh plate adopt` / `plate_adoption_status`)

@@ -15,7 +15,6 @@ permissions:
 
 jobs:
   labels:
-    name: Labels
     runs-on: ubuntu-latest
     outputs:
       runs_on: ${{ steps.plate_runs_on.outputs.runs_on }}
@@ -120,4 +119,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Tests
-        run: bash scripts/validate_plate_repo.sh .
+        run: |
+          set -euo pipefail
+          for candidate in scripts/plate/validate_plate_repo.sh scripts/validate_plate_repo.sh; do
+            if [[ -f "$candidate" ]]; then
+              bash "$candidate" .
+              exit 0
+            fi
+          done
+          echo "validate_plate_repo.sh not found under scripts/ or scripts/plate/" >&2
+          exit 1
