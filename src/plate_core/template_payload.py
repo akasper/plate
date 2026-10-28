@@ -253,6 +253,14 @@ def resolve_conflict_plan(
         }
 
     if rule and rule.on_conflict == "overwrite":
+        if strat == "conservative":
+            return {
+                "path": rel,
+                "target_path": rel,
+                "action": "conflict",
+                "detail": "existing differs; conservative never overwrites",
+                "rule": rule.to_dict(),
+            }
         return {
             "path": rel,
             "target_path": rel,

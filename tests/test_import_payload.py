@@ -71,6 +71,46 @@ class TestImportPayload(unittest.TestCase):
             # still has local marker
             self.assertIn("local change", dest.read_text(encoding="utf-8"))
 
+    def test_conservative_taxonomy_templates_conflict_not_overwrite(self):
+        """#1250: customized labels/templates must survive conservative --apply."""
+        from plate_core.import_payload import import_payload
+
+        taxonomy_paths = (
+            ".github/labels.yml",
+            ".github/ISSUE_TEMPLATE/feature.yml",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+        )
+        markers = {
+            ".github/labels.yml": "# adopter area taxonomy\n",
+            ".github/ISSUE_TEMPLATE/feature.yml": "# customized feature template\n",
+            ".github/PULL_REQUEST_TEMPLATE.md": "# customized pr template\n",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import_payload(root, strategy="safe", apply=True)
+            for rel in taxonomy_paths:
+                dest = root / rel
+                self.assertTrue(dest.is_file(), msg=f"missing after seed: {rel}")
+                dest.write_text(
+                    markers[rel] + dest.read_text(encoding="utf-8"),
+                    encoding="utf-8",
+                )
+
+            dry = import_payload(root, strategy="conservative", dry_run=True)
+            self.assertTrue(dry["ok"])
+            for rel in taxonomy_paths:
+                self.assertIn(rel, dry["would_conflict"], msg=dry.get("files"))
+                self.assertNotIn(rel, dry["would_overwrite"])
+            self.assertEqual(dry["counts"]["would_overwrite"], 0)
+
+            applied = import_payload(root, strategy="conservative", apply=True)
+            self.assertTrue(applied["ok"])
+            for rel in taxonomy_paths:
+                self.assertIn(rel, applied["conflicts"])
+                self.assertNotIn(rel, applied.get("overwritten") or [])
+                self.assertIn(markers[rel].strip(), (root / rel).read_text(encoding="utf-8"))
+
     def test_force_overwrites(self):
         from plate_core.import_payload import import_payload
 
