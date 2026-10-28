@@ -60,6 +60,7 @@ docs/
 | **[audits/](./audits/)** | Security reviews, compliance audits, and team health assessments. |
 | **[marketing/](./marketing/)** | Release notes, project announcements, and external messaging. |
 | **[migration/](./migration/)** | Data migration guides, API deprecation notices, and upgrade paths. |
+| **[Self-hosted runners](./migration/self-hosted-runners.md)** | Optional private-repo local runners: isolation, security warnings, idle-only policy, and hosted fallback (#1210). |
 
 ---
 

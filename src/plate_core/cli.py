@@ -246,6 +246,17 @@ def cmd_health(args: argparse.Namespace) -> int:
     if report.missing_labels:
         print(f"Missing labels: {', '.join(report.missing_labels)}")
     print(f"Branch protection: {'ENABLED' if report.branch_protection_enabled else 'DISABLED'}")
+    if report.stale_required_check_contexts:
+        print(
+            "Stale required checks (merged gates #1209): "
+            + ", ".join(report.stale_required_check_contexts)
+            + " — update branch protection to require pr-gates"
+        )
+    if report.missing_recommended_check_contexts:
+        print(
+            "Missing recommended required checks: "
+            + ", ".join(report.missing_recommended_check_contexts)
+        )
     print(f"Open Epics: {report.open_epic_count}")
     bin_count = report.binary_artifacts_tracked
     bin_status = "CLEAN" if bin_count == 0 else f"FOUND {bin_count} (see #90)"
@@ -1371,6 +1382,29 @@ def cmd_release_notes(args: argparse.Namespace) -> int:
         print("=== Aggregated migration steps ===")
         for step in report.migration_steps:
             print(f"  - {step}")
+    return 0
+
+
+RUNNER_ADOPTER_DOC = "docs/migration/self-hosted-runners.md"
+
+
+def cmd_runner(args: argparse.Namespace) -> int:
+    """Surface adopter guidance for self-hosted runners (#1210 / #1215)."""
+    payload = {
+        "ok": True,
+        "doc": RUNNER_ADOPTER_DOC,
+        "security": "private repos only; never fork or outside-contributor PRs on local runners",
+        "subcommands_planned": ["add", "status", "remove", "doctor"],
+        "tracking_issue": "https://github.com/akasper/plate/issues/1212",
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+    print(f"Self-hosted runners (private repos only): {RUNNER_ADOPTER_DOC}")
+    print(
+        "Read the guide before registering runners. "
+        "Subcommands add, status, remove, and doctor are planned (#1212)."
+    )
     return 0
 
 
@@ -4654,6 +4688,17 @@ def build_parser() -> argparse.ArgumentParser:
     rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_notes.add_argument("--json", action="store_true", help="Output JSON")
     rel_notes.set_defaults(func=cmd_release_notes)
+
+    runner = sub.add_parser(
+        "runner",
+        help=f"Self-hosted runner guidance for private repos (see {RUNNER_ADOPTER_DOC})",
+        description=(
+            "Ephemeral self-hosted runners for private PLATE adopters. "
+            f"Isolation and security requirements: {RUNNER_ADOPTER_DOC}"
+        ),
+    )
+    runner.add_argument("--json", action="store_true", help="Output JSON")
+    runner.set_defaults(func=cmd_runner)
 
     costs = sub.add_parser("costs", help="Harvest and aggregate USAGE REPORTs for observability/cost tracking (Epic #265)")
     costs.add_argument("--repo", help="owner/name; defaults to git remote origin")

@@ -1,0 +1,15 @@
+{
+  "slug": "self-hosted-runner-adopter-guide",
+  "change_type": "docs",
+  "surface": "docs/migration/self-hosted-runners.md, template_payload, gh plate runner",
+  "summary": "Adopter guide for isolated ephemeral self-hosted runners on private repos with explicit security warnings.",
+  "migration_impact": "Optional reading before registering local runners; import-payload copies the guide into adopting repos.",
+  "migration_guidance": [
+    "1. Read docs/migration/self-hosted-runners.md before registering any self-hosted runner.",
+    "2. Keep fork and outside-contributor workflows on GitHub-hosted runs-on only.",
+    "3. Run gh plate runner for the doc path and planned CLI subcommands (#1212)."
+  ],
+  "agent_notes": "Never register runners on public repos. Personal GitHub accounts need one runner registration per private repo or a free org for sharing.",
+  "breaking": false,
+  "links": ["#1215", "#1210"]
+}

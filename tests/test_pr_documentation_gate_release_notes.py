@@ -7,7 +7,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 class PrDocumentationGateReleaseNotesTests(unittest.TestCase):
     def test_feature_documentation_gate_requires_release_change_files(self):
-        workflow = (REPO_ROOT / ".github" / "workflows" / "pr-documentation-check.yml").read_text(encoding="utf-8")
+        workflow = (REPO_ROOT / ".github" / "workflows" / "plate-pr-gates.yml").read_text(encoding="utf-8")
 
         self.assertIn(".agentic/releases/", workflow)
         self.assertIn("per-feature change files", workflow)
