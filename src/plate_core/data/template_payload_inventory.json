@@ -104,6 +104,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".github/actions/plate-select-runs-on/action.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".github/workflows/auto-label-feedback-responses.yml",
       "classification": "copy_to_downstream"
     },

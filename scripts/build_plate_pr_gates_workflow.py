@@ -68,6 +68,7 @@ permissions:
   contents: read
   issues: read
   pull-requests: write
+  actions: read
 
 jobs:
   pr-gates:
@@ -85,6 +86,10 @@ jobs:
       ))
     runs-on: ubuntu-latest
     steps:
+      - name: Select runs-on for heavy jobs
+        id: plate_runs_on
+        uses: ./.github/actions/plate-select-runs-on
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

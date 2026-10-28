@@ -11,12 +11,18 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
+  actions: read
 
 jobs:
   labels:
     name: Labels
     runs-on: ubuntu-latest
+    outputs:
+      runs_on: ${{ steps.plate_runs_on.outputs.runs_on }}
     steps:
+      - id: plate_runs_on
+        uses: ./.github/actions/plate-select-runs-on
+
       - name: Validate PR type label
         uses: actions/github-script@v7
         with:
@@ -107,7 +113,7 @@ jobs:
 
   test:
     needs: labels
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.labels.outputs.runs_on) }}
     steps:
       - uses: actions/checkout@v4
       - name: Run Tests

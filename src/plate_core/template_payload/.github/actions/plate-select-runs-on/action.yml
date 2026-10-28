@@ -1,0 +1,108 @@
+name: PLATE select runs-on
+description: >-
+  Choose runs-on labels from PLATE_RUNS_ON with idle-runner probe and hosted fallback (#1214).
+inputs:
+  probe-timeout-seconds:
+    description: Max seconds to wait for an idle matching self-hosted runner
+    required: false
+    default: '30'
+outputs:
+  runs_on:
+    description: JSON array for runs-on (for example ["ubuntu-latest"])
+    value: ${{ steps.select.outputs.runs_on }}
+runs:
+  using: composite
+  steps:
+    - id: select
+      uses: actions/github-script@v8
+      env:
+        PLATE_RUNS_ON: ${{ vars.PLATE_RUNS_ON }}
+        PLATE_RUNNER_PROBE_TIMEOUT_SECONDS: ${{ inputs.probe-timeout-seconds }}
+      with:
+        script: |
+            const DEFAULT_RUNS_ON = ['ubuntu-latest'];
+            const HOSTED = new Set(["macos-13", "macos-14", "macos-latest", "ubuntu-22.04", "ubuntu-24.04", "ubuntu-latest", "windows-2022", "windows-latest"]);
+            
+            function parseConfigured(raw) {
+              if (!raw || !String(raw).trim()) return [...DEFAULT_RUNS_ON];
+              try {
+                const parsed = JSON.parse(raw);
+                if (typeof parsed === 'string') return [parsed];
+                if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string' && x)) {
+                  return parsed;
+                }
+              } catch (e) {
+                core.info(`PLATE_RUNS_ON parse failed: ${e.message}`);
+              }
+              return [...DEFAULT_RUNS_ON];
+            }
+            
+            function isHostedOnly(labels) {
+              return labels.length > 0 && labels.every((l) => HOSTED.has(l));
+            }
+            
+            function runnerMatches(runner, required) {
+              if (runner.status !== 'online' || runner.busy) return false;
+              const names = new Set((runner.labels || []).map((l) => l.name));
+              return required.every((label) => names.has(label));
+            }
+            
+            async function listRunners() {
+              const { data } = await github.rest.actions.listSelfHostedRunnersForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              return data.runners || [];
+            }
+            
+            function isUnsafeForLocal() {
+              const repo = context.payload.repository;
+              if (!repo?.private) {
+                core.info('Public repository: forcing GitHub-hosted runners.');
+                return true;
+              }
+              const pr = context.payload.pull_request;
+              if (pr?.head?.repo?.full_name) {
+                const canonical = `${context.repo.owner}/${context.repo.repo}`;
+                if (pr.head.repo.full_name !== canonical) {
+                  core.info('Fork pull request: forcing GitHub-hosted runners.');
+                  return true;
+                }
+              }
+              return false;
+            }
+            
+            const configured = parseConfigured(process.env.PLATE_RUNS_ON);
+            let chosen = [...configured];
+            
+            if (isUnsafeForLocal()) {
+              chosen = [...DEFAULT_RUNS_ON];
+            } else if (!isHostedOnly(configured)) {
+              const timeoutSec = Math.max(
+                0,
+                parseInt(process.env.PLATE_RUNNER_PROBE_TIMEOUT_SECONDS || '30', 10) || 0,
+              );
+              const deadline = Date.now() + timeoutSec * 1000;
+              let idle = false;
+              while (Date.now() <= deadline) {
+                const runners = await listRunners();
+                idle = runners.some((r) => runnerMatches(r, configured));
+                if (idle) {
+                  core.info(`Idle self-hosted runner available for ${JSON.stringify(configured)}.`);
+                  break;
+                }
+                if (timeoutSec === 0) break;
+                core.info('No idle matching runner; waiting before retry or hosted fallback...');
+                if (Date.now() >= deadline) break;
+                await new Promise((resolve) => setTimeout(resolve, Math.min(5000, deadline - Date.now())));
+              }
+              if (!idle) {
+                core.info(
+                  `Probe timed out after ${timeoutSec}s; falling back to ${JSON.stringify(DEFAULT_RUNS_ON)}.`,
+                );
+                chosen = [...DEFAULT_RUNS_ON];
+              }
+            }
+            
+            core.setOutput('runs_on', JSON.stringify(chosen));
+            core.info(`PLATE runs-on selection: ${JSON.stringify(chosen)}`);

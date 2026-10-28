@@ -49,6 +49,14 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
     def test_recommended_check_name_is_pr_gates(self):
         self.assertEqual(PLATE_PR_GATES_CHECK_NAME, "pr-gates")
 
+    def test_pr_gates_includes_runs_on_selection_step(self):
+        repo_path, payload_path = workflow_paths(REPO_ROOT)
+        for path in (repo_path, payload_path):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("Select runs-on for heavy jobs", text)
+            self.assertIn("./.github/actions/plate-select-runs-on", text)
+            self.assertIn("name: pr-gates", text)
+
     def test_recommended_checks_match_branch_protection_case_insensitively(self):
         self.assertEqual(
             missing_recommended_check_contexts(["Labels", "test", "pr-gates"]),
