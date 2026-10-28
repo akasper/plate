@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from .procutil import run_hidden
-from .pr_watch_guards import apply_ci_guards_to_probe, fetch_required_check_contexts
+from .pr_watch_guards import apply_ci_guards_to_probe, atomic_write_json, fetch_required_check_contexts
 
 _REPO_RE = re.compile(r"^([^/]+)/([^/]+)$")
 
@@ -58,6 +58,7 @@ class ProbeState:
     last_review_comment_id: int = 0
     last_review_id: int = 0
     base_ref: str | None = None
+    base_sha: str | None = None
     required_contexts: list[str] | None = None
     ci_settle_fingerprint: str | None = None
     ci_settle_streak: int = 0
@@ -86,14 +87,15 @@ def load_probe_state(path: Path | str) -> ProbeState | None:
     p = Path(path)
     if not p.is_file():
         return None
-    data = json.loads(p.read_text(encoding="utf-8"))
-    return ProbeState(**data)
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return ProbeState(**data)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
 
 
 def save_probe_state(path: Path | str, state: ProbeState) -> None:
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(asdict(state), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    atomic_write_json(Path(path), asdict(state))
 
 
 def _parse_gh_api_i(raw: str) -> tuple[int, dict[str, str], Any]:
@@ -170,11 +172,13 @@ def probe_pr(
         updated_at = body.get("updated_at")
         mergeable_state = body.get("mergeable_state")
         base_ref = (body.get("base") or {}).get("ref")
+        base_sha = (body.get("base") or {}).get("sha")
     else:
         head_sha = state.head_sha
         updated_at = state.updated_at
         mergeable_state = state.mergeable_state
         base_ref = state.base_ref
+        base_sha = state.base_sha
 
     required_contexts: frozenset[str] = frozenset()
     fetched_required = False
@@ -231,6 +235,7 @@ def probe_pr(
         head_sha != state.head_sha
         or updated_at != state.updated_at
         or mergeable_state != state.mergeable_state
+        or base_sha != state.base_sha
         or ci_state != state.ci_state
     )
 
@@ -245,6 +250,7 @@ def probe_pr(
         last_review_comment_id=state.last_review_comment_id,
         last_review_id=state.last_review_id,
         base_ref=base_ref,
+        base_sha=base_sha,
         required_contexts=sorted(required_contexts) if fetched_required else state.required_contexts,
         ci_settle_fingerprint=ci_fingerprint,
         ci_settle_streak=ci_streak,
@@ -293,11 +299,13 @@ def fetch_delta(
     repo: str,
     pr: int,
     state: ProbeState | None,
+    *,
+    since: str | None = None,
 ) -> dict[str, Any]:
     """Return deltas and updated cursors; callers should persist the returned state."""
     state = state or ProbeState()
     owner, name = _split_repo(repo)
-    since = state.last_checked_at or "1970-01-01T00:00:00Z"
+    since = since or state.last_checked_at or "1970-01-01T00:00:00Z"
 
     issue_comments = _paged_list(
         http, f"/repos/{owner}/{name}/issues/{pr}/comments?since={since}"

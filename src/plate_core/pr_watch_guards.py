@@ -1,4 +1,4 @@
-"""Watcher guards for ``gh plate pr babysit --watch`` (#1233).
+"""Watcher guards for ``gh plate pr babysit --watch`` (#1233, #1246).
 
 Ideas adapted from t3dotgg/tstack ``pr-wait`` (MIT, Theo Browne); implementation
 and wording are PLATE-original. Parent cost model: #1077 (ETag probes, backoff,
@@ -9,10 +9,17 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import json
+import os
 import re
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from .github_client import GhApiError, GhClient
+
+EVENT_MEMORY_MAX_AGE_SECONDS = 6 * 3600
 
 _REPO_RE = re.compile(r"^([^/]+)/([^/]+)$")
 
@@ -459,5 +466,331 @@ def load_pr_data_rest_fallback(client: GhClient, repo: str, pr_number: int) -> d
         "reviewDecision": review_decision,
         "statusCheckRollup": rollup,
         "rest_fallback": True,
+    }
+
+
+def atomic_write_json(path: Path | str, payload: Mapping[str, Any]) -> None:
+    """Write JSON atomically (temp file + ``os.replace``) for Windows-safe persistence."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, target)
+
+
+def _parse_github_ts(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso_z(when: datetime) -> str:
+    return when.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def event_ledger_path(repo: str, pr: int, root: Path | str | None = None) -> Path:
+    owner, name = _split_repo(repo)
+    base = Path(root) if root is not None else Path.cwd()
+    return base / ".agentic" / "babysit" / f"{len(owner)}-{owner}-{len(name)}-{name}-{pr}.events.json"
+
+
+@dataclass
+class EventLedger:
+    """Restart-safe memory of watch events already surfaced to the operator."""
+
+    reported: dict[str, str] = field(default_factory=dict)
+
+    def to_json(self) -> dict[str, Any]:
+        return {"reported": dict(sorted(self.reported.items()))}
+
+    @classmethod
+    def from_json(cls, data: Mapping[str, Any] | None) -> EventLedger:
+        if not isinstance(data, dict):
+            return cls()
+        raw = data.get("reported") or {}
+        if not isinstance(raw, dict):
+            return cls()
+        reported = {str(key): str(value) for key, value in raw.items()}
+        return cls(reported=reported)
+
+
+def load_event_ledger(path: Path | str) -> EventLedger:
+    target = Path(path)
+    if not target.is_file():
+        return EventLedger()
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return EventLedger()
+    return EventLedger.from_json(data)
+
+
+def save_event_ledger(path: Path | str, ledger: EventLedger) -> None:
+    atomic_write_json(Path(path), ledger.to_json())
+
+
+def prune_event_ledger(
+    ledger: EventLedger,
+    *,
+    now: datetime | None = None,
+    max_age_seconds: int = EVENT_MEMORY_MAX_AGE_SECONDS,
+) -> None:
+    """Drop reported-event entries older than ``max_age_seconds`` (#1246 guard 4)."""
+    now = now or _utc_now()
+    cutoff = now - timedelta(seconds=max_age_seconds)
+    kept: dict[str, str] = {}
+    for key, reported_at in ledger.reported.items():
+        ts = _parse_github_ts(reported_at)
+        if ts is None or ts >= cutoff:
+            kept[key] = reported_at
+    ledger.reported = kept
+
+
+def event_memory_catchup_since(last_checked_at: str | None, now: datetime | None = None) -> str:
+    """Widen the REST ``since`` window on watch restart (at most six hours)."""
+    now = now or _utc_now()
+    floor = now - timedelta(seconds=EVENT_MEMORY_MAX_AGE_SECONDS)
+    if not last_checked_at:
+        return _iso_z(floor)
+    last = _parse_github_ts(last_checked_at)
+    if last is None:
+        return _iso_z(floor)
+    effective = max(last, floor)
+    return _iso_z(effective)
+
+
+def _event_key_issue_comment(item: Mapping[str, Any]) -> str:
+    return f"issue_comment:{int(item.get('id') or 0)}"
+
+
+def _event_key_review_comment(item: Mapping[str, Any]) -> str:
+    return f"review_comment:{int(item.get('id') or 0)}"
+
+
+def _event_key_review(item: Mapping[str, Any]) -> str:
+    return f"review:{int(item.get('id') or 0)}"
+
+
+def _event_created_at(item: Mapping[str, Any]) -> datetime | None:
+    return _parse_github_ts(
+        str(item.get("created_at") or item.get("submitted_at") or "")
+    )
+
+
+def _within_event_memory_window(
+    item: Mapping[str, Any],
+    *,
+    now: datetime,
+    max_age_seconds: int = EVENT_MEMORY_MAX_AGE_SECONDS,
+) -> bool:
+    created = _event_created_at(item)
+    if created is None:
+        return True
+    return created >= now - timedelta(seconds=max_age_seconds)
+
+
+def filter_delta_by_event_memory(
+    delta: Mapping[str, Any],
+    ledger: EventLedger,
+    *,
+    now: datetime | None = None,
+    max_age_seconds: int = EVENT_MEMORY_MAX_AGE_SECONDS,
+) -> dict[str, Any]:
+    """Drop delta items already reported or too old to replay (#1246 guard 4)."""
+    now = now or _utc_now()
+    out = dict(delta)
+    filtered_issue: list[dict[str, Any]] = []
+    for item in delta.get("issue_comments") or []:
+        if not isinstance(item, dict):
+            continue
+        key = _event_key_issue_comment(item)
+        if key in ledger.reported:
+            continue
+        if not _within_event_memory_window(item, now=now, max_age_seconds=max_age_seconds):
+            continue
+        filtered_issue.append(item)
+    filtered_review_comments: list[dict[str, Any]] = []
+    for item in delta.get("review_comments") or []:
+        if not isinstance(item, dict):
+            continue
+        key = _event_key_review_comment(item)
+        if key in ledger.reported:
+            continue
+        if not _within_event_memory_window(item, now=now, max_age_seconds=max_age_seconds):
+            continue
+        filtered_review_comments.append(item)
+    filtered_reviews: list[dict[str, Any]] = []
+    for item in delta.get("reviews") or []:
+        if not isinstance(item, dict):
+            continue
+        key = _event_key_review(item)
+        if key in ledger.reported:
+            continue
+        if not _within_event_memory_window(item, now=now, max_age_seconds=max_age_seconds):
+            continue
+        filtered_reviews.append(item)
+    out["issue_comments"] = filtered_issue
+    out["review_comments"] = filtered_review_comments
+    out["reviews"] = filtered_reviews
+    return out
+
+
+def _summary_transition_key(kind: str, block: Mapping[str, Any]) -> str:
+    if kind == "head_commit":
+        return f"head_commit:{block.get('previous_sha', '')}:{block.get('sha', '')}"
+    head = str(block.get("head_sha") or "")
+    return f"{kind}:{head}:{block.get('from', '')}:{block.get('to', '')}"
+
+
+def filter_wake_summary_by_event_memory(
+    summary: Mapping[str, Any],
+    ledger: EventLedger,
+) -> dict[str, Any]:
+    """Remove summary transitions already recorded in the event ledger."""
+    out = dict(summary)
+    for kind in ("ci_transition", "merge_state_change", "head_commit"):
+        block = summary.get(kind)
+        if not isinstance(block, dict):
+            continue
+        key = _summary_transition_key(kind, block)
+        if key in ledger.reported:
+            out[kind] = None
+    overlap = summary.get("base_file_overlap")
+    if isinstance(overlap, dict):
+        key = str(overlap.get("event_key") or "")
+        if key and key in ledger.reported:
+            out["base_file_overlap"] = None
+    return out
+
+
+def mark_wake_summary_reported(
+    ledger: EventLedger,
+    summary: Mapping[str, Any],
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Record non-comment wake-summary events as reported."""
+    now = now or _utc_now()
+    stamp = _iso_z(now)
+    for kind in ("ci_transition", "merge_state_change"):
+        block = summary.get(kind)
+        if isinstance(block, dict):
+            ledger.reported[_summary_transition_key(kind, block)] = stamp
+    head = summary.get("head_commit")
+    if isinstance(head, dict):
+        ledger.reported[_summary_transition_key("head_commit", head)] = stamp
+    overlap = summary.get("base_file_overlap")
+    if isinstance(overlap, dict):
+        key = str(overlap.get("event_key") or "")
+        if key:
+            ledger.reported[key] = stamp
+
+
+def mark_delta_reported(
+    ledger: EventLedger,
+    delta: Mapping[str, Any],
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Record REST delta comment/review events as reported."""
+    now = now or _utc_now()
+    stamp = _iso_z(now)
+    for item in delta.get("issue_comments") or []:
+        if isinstance(item, dict):
+            ledger.reported[_event_key_issue_comment(item)] = stamp
+    for item in delta.get("review_comments") or []:
+        if isinstance(item, dict):
+            ledger.reported[_event_key_review_comment(item)] = stamp
+    for item in delta.get("reviews") or []:
+        if isinstance(item, dict):
+            ledger.reported[_event_key_review(item)] = stamp
+
+
+def _paged_json_list(http: HttpGet, path_prefix: str) -> list[dict[str, Any]]:
+    owner_path = path_prefix
+    items: list[dict[str, Any]] = []
+    page = 1
+    joiner = "&" if "?" in owner_path else "?"
+    while True:
+        body = _safe_json_get(http, f"{owner_path}{joiner}per_page=100&page={page}")
+        if not isinstance(body, list) or not body:
+            break
+        items.extend(item for item in body if isinstance(item, dict))
+        if len(body) < 100:
+            break
+        page += 1
+    return items
+
+
+def _filenames_from_compare(body: Mapping[str, Any] | None) -> set[str]:
+    if not isinstance(body, dict):
+        return set()
+    names: set[str] = set()
+    for item in body.get("files") or []:
+        if isinstance(item, dict):
+            name = item.get("filename")
+            if name:
+                names.add(str(name))
+    return names
+
+
+def detect_base_moved_into_pr_files(
+    http: HttpGet,
+    repo: str,
+    pr_number: int,
+    *,
+    previous_base_sha: str | None,
+    current_base_sha: str | None,
+) -> list[str]:
+    """Return PR file paths also touched by new base-branch commits (#1246 guard 3)."""
+    if not previous_base_sha or not current_base_sha:
+        return []
+    if previous_base_sha == current_base_sha:
+        return []
+    owner, name = _split_repo(repo)
+    compare = _safe_json_get(
+        http,
+        f"/repos/{owner}/{name}/compare/{previous_base_sha}...{current_base_sha}",
+    )
+    base_touched = _filenames_from_compare(compare if isinstance(compare, dict) else None)
+    if not base_touched:
+        return []
+    pr_files = {
+        str(item.get("filename"))
+        for item in _paged_json_list(http, f"/repos/{owner}/{name}/pulls/{pr_number}/files")
+        if item.get("filename")
+    }
+    overlap = sorted(path for path in pr_files if path in base_touched)
+    return overlap
+
+
+def base_file_overlap_summary(
+    overlap_paths: list[str],
+    *,
+    previous_base_sha: str,
+    current_base_sha: str,
+) -> dict[str, Any] | None:
+    if not overlap_paths:
+        return None
+    digest = hashlib.sha256("\n".join(overlap_paths).encode("utf-8")).hexdigest()[:12]
+    event_key = f"base_overlap:{current_base_sha}:{digest}"
+    return {
+        "previous_base_sha": previous_base_sha,
+        "current_base_sha": current_base_sha,
+        "paths": overlap_paths,
+        "event_key": event_key,
     }
 
