@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -23,6 +24,7 @@ from plate_core.release import (
     get_release_status,
     get_release_target_epic_guidance,
     validate_release_workspace,
+    resolve_releases_dir,
     collect_closes_block,
     create_github_release,
     normalize_release_tag,
@@ -1418,6 +1420,102 @@ class ReleaseStandingRepairTests(unittest.TestCase):
         self.assertEqual(out["diagnosis"]["health"], "drifted")
         dedupe = [a for a in out["actions"] if a["action"] == "dedupe-next-release-issues"]
         self.assertEqual(dedupe[0]["state"], "need:human")
+
+
+class ReleaseFinalizeRelativeReleasesDirTests(unittest.TestCase):
+    def test_validate_release_workspace_relative_and_default_releases_dir(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            versioned_release = repo_root / ".agentic" / "releases" / "v0.5.0"
+            versioned_release.mkdir(parents=True)
+            (versioned_release / "release.json").write_text(
+                json.dumps({"version": "0.5.0", "entries": []}),
+                encoding="utf-8",
+            )
+
+            previous = os.getcwd()
+            try:
+                os.chdir(repo_root)
+                default_report = validate_release_workspace(Path("."))
+                relative_report = validate_release_workspace(
+                    repo_root,
+                    releases_dir=Path(".agentic/releases"),
+                )
+            finally:
+                os.chdir(previous)
+
+            self.assertEqual(default_report.errors, [])
+            self.assertEqual(relative_report.errors, [])
+            self.assertEqual(
+                relative_report.release_file,
+                ".agentic/releases/v0.5.0/release.json",
+            )
+
+
+class ReleaseFinalizeAdopterRootDiscoveryTests(unittest.TestCase):
+    """create_github_release / resolve_releases_dir outside plate-core source markers."""
+
+    def _seed_release_tree(self, releases_root: Path, ver: str = "0.7.1") -> None:
+        versioned = releases_root / f"v{ver}"
+        versioned.mkdir(parents=True, exist_ok=True)
+        (versioned / "release.json").write_text(
+            json.dumps({"version": ver, "summary": "Adopter test", "entries": []}),
+            encoding="utf-8",
+        )
+
+    @patch("plate_core.release.GhClient")
+    @patch("plate_core.release.resolve_repo", return_value="owner/adopter")
+    def test_resolve_and_create_with_absolute_releases_dir_outside_plate_core_tree(
+        self, _mock_resolve, mock_client_cls
+    ):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = GhApiError("404 not found")
+        with TemporaryDirectory() as tmp:
+            releases = Path(tmp) / "standalone-releases"
+            self._seed_release_tree(releases)
+            previous = os.getcwd()
+            try:
+                os.chdir("/tmp")
+                resolved = resolve_releases_dir(Path("/tmp"), releases)
+                self.assertEqual(resolved, releases.resolve())
+                info = create_github_release(
+                    "0.7.1",
+                    releases_dir=releases,
+                    repo="owner/adopter",
+                    dry_run=True,
+                    client=mock_client,
+                )
+            finally:
+                os.chdir(previous)
+            self.assertTrue(info["would_create"])
+
+    @patch("plate_core.release.GhClient")
+    @patch("plate_core.release.resolve_repo", return_value="owner/adopter")
+    def test_resolve_and_create_with_relative_releases_dir_adopter_layout(
+        self, _mock_resolve, mock_client_cls
+    ):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = GhApiError("404 not found")
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp) / "adopter"
+            releases = repo_root / ".agentic" / "releases"
+            self._seed_release_tree(releases)
+            previous = os.getcwd()
+            try:
+                os.chdir(repo_root)
+                resolved = resolve_releases_dir(Path("."), Path(".agentic/releases"))
+                self.assertEqual(resolved, releases.resolve())
+                info = create_github_release(
+                    "0.7.1",
+                    releases_dir=Path(".agentic/releases"),
+                    repo="owner/adopter",
+                    dry_run=True,
+                    client=mock_client,
+                )
+            finally:
+                os.chdir(previous)
+            self.assertTrue(info["would_create"])
 
 
 if __name__ == "__main__":

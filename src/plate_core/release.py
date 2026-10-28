@@ -267,12 +267,67 @@ def _load_pending_fragments(releases_dir: Path) -> list[FragmentSummary]:
     return fragments
 
 
+def find_adopter_repo_root(start: Path) -> Path:
+    """Locate a PLATE adopter repository root for release artifact paths.
+
+    Unlike :func:`find_repo_root` (plate-core development tree markers), this
+    accepts typical adopting layouts: git toplevel, or any ancestor with
+    ``.agentic/releases``.
+    """
+    current = start.resolve()
+    if current.is_file():
+        current = current.parent
+    try:
+        proc = run_hidden(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(current),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return Path(proc.stdout.strip()).resolve()
+    except Exception:
+        pass
+    for candidate in [current, *current.parents]:
+        if (candidate / ".agentic" / "releases").is_dir():
+            return candidate
+        if (candidate / ".plate").exists():
+            return candidate
+    raise RuntimeError(f"Could not locate repository root from {start}")
+
+
+def _resolve_repo_root_for_releases(start: Path) -> Path:
+    """Prefer adopter layout discovery; fall back to plate-core dev tree markers."""
+    try:
+        return find_adopter_repo_root(start)
+    except RuntimeError:
+        return find_repo_root(start).resolve()
+
+
+def resolve_releases_dir(repo_root: Path, releases_dir: Path | None = None) -> Path:
+    """Return an absolute releases directory path.
+
+    Absolute ``releases_dir`` values are honored without checkout discovery so
+    finalize and ``create_github_release`` work when ``repo`` is explicit.
+    Relative paths and the default layout anchor to :func:`find_adopter_repo_root`.
+    """
+    if releases_dir is not None:
+        candidate = releases_dir.expanduser()
+        if candidate.is_absolute():
+            return candidate.resolve()
+    root = _resolve_repo_root_for_releases(repo_root)
+    if releases_dir is None:
+        return (root / ".agentic" / "releases").resolve()
+    return (root / candidate).resolve()
+
+
 def validate_release_workspace(
     repo_root: Path,
     releases_dir: Path | None = None,
 ) -> ReleaseWorkspaceValidationReport:
     """Validate that the repository and release artifact agree on a single release version."""
-    root = find_repo_root(repo_root)
+    root = find_repo_root(repo_root).resolve()
     version_files = read_repository_versions(root)
     errors: list[str] = []
 
@@ -286,7 +341,7 @@ def validate_release_workspace(
 
     release_file_path: Path | None = None
     release_file_version: str | None = None
-    effective_releases_dir = releases_dir or root / ".agentic" / "releases"
+    effective_releases_dir = resolve_releases_dir(root, releases_dir)
 
     if release_version is not None:
         parsed_release_version = parse_version(release_version)
@@ -1220,7 +1275,7 @@ def create_github_release(
     """
     gh = client or GhClient()
     target = resolve_repo(repo)
-    effective = releases_dir or Path(".agentic/releases")
+    effective = resolve_releases_dir(Path("."), releases_dir)
     ver = version.lstrip("v")
     tag = f"v{ver}"
     versioned_dir = effective / f"v{ver}"

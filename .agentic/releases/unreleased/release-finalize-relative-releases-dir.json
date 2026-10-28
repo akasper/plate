@@ -1,0 +1,10 @@
+{
+  "slug": "release-finalize-relative-releases-dir",
+  "change_type": "fix",
+  "surface": "plate_core.release validate_release_workspace / gh plate release finalize",
+  "summary": "Resolve --releases-dir to an absolute path before relative_to(repo_root) so finalize and default relative dirs no longer raise subpath errors (#1226).",
+  "migration_impact": "No downstream action. `gh plate release finalize` and tooling that pass a relative --releases-dir now behave the same as an absolute path.",
+  "agent_notes": "Regression covered by test_validation_accepts_relative_and_default_releases_dir in tests/test_release.py.",
+  "breaking": false,
+  "links": ["#1226"]
+}
