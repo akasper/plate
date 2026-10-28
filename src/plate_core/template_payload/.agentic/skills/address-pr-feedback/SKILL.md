@@ -49,6 +49,14 @@ Human judgment (credentials, architecture, security): reply explaining the block
 
 Re-query with `plate_get_unresolved_review_threads` (same contract as step 1). **Not done** until the query returns **zero** unresolved threads, except threads explicitly escalated to a human with `need:human-review` and an in-thread comment.
 
+## Pre-merge recheck (#1234)
+
+Immediately before any merge or auto-merge, fetch fresh PR state again. Do **not** merge when the PR is BEHIND, DIRTY, or CONFLICTING relative to its base. If the base branch moved after the last green CI run and the new base commits touch files this PR modifies, sync the branch, push, and wait for checks to pass again. Never use `--admin` or other bypass flags that skip protection or required checks (especially on permissive bases like `release`). (Guidance adapted from tstack, MIT, Theo Browne; see #1232/#1234.)
+
+## Keep review loops small (#1234)
+
+Fix comments that identify real bugs in the intended use case. Decline scope creep—extra tests, rare edge cases, minor performance tweaks, or broad compatibility not required for this PR—with a clear in-thread reason, resolve the thread, and list each declined item as a follow-up. When choosing between fixes, prefer deleting or narrowing code over adding layers. (Same tstack credit as above.)
+
 ## GraphQL fallback (helpers unavailable)
 
 Use **only** these exact patterns — no jq/mktemp/sed wrappers.
