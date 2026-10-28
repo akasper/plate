@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -1418,6 +1419,37 @@ class ReleaseStandingRepairTests(unittest.TestCase):
         self.assertEqual(out["diagnosis"]["health"], "drifted")
         dedupe = [a for a in out["actions"] if a["action"] == "dedupe-next-release-issues"]
         self.assertEqual(dedupe[0]["state"], "need:human")
+
+
+class ReleaseFinalizeRelativeReleasesDirTests(unittest.TestCase):
+    def test_validate_release_workspace_relative_and_default_releases_dir(self):
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _seed_version_files(repo_root, version="0.5.0")
+            versioned_release = repo_root / ".agentic" / "releases" / "v0.5.0"
+            versioned_release.mkdir(parents=True)
+            (versioned_release / "release.json").write_text(
+                json.dumps({"version": "0.5.0", "entries": []}),
+                encoding="utf-8",
+            )
+
+            previous = os.getcwd()
+            try:
+                os.chdir(repo_root)
+                default_report = validate_release_workspace(Path("."))
+                relative_report = validate_release_workspace(
+                    repo_root,
+                    releases_dir=Path(".agentic/releases"),
+                )
+            finally:
+                os.chdir(previous)
+
+            self.assertEqual(default_report.errors, [])
+            self.assertEqual(relative_report.errors, [])
+            self.assertEqual(
+                relative_report.release_file,
+                ".agentic/releases/v0.5.0/release.json",
+            )
 
 
 if __name__ == "__main__":

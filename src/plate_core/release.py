@@ -267,12 +267,23 @@ def _load_pending_fragments(releases_dir: Path) -> list[FragmentSummary]:
     return fragments
 
 
+def resolve_releases_dir(repo_root: Path, releases_dir: Path | None = None) -> Path:
+    """Return an absolute releases directory path anchored to the repository root."""
+    root = find_repo_root(repo_root).resolve()
+    if releases_dir is None:
+        return (root / ".agentic" / "releases").resolve()
+    candidate = releases_dir.expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    return candidate.resolve()
+
+
 def validate_release_workspace(
     repo_root: Path,
     releases_dir: Path | None = None,
 ) -> ReleaseWorkspaceValidationReport:
     """Validate that the repository and release artifact agree on a single release version."""
-    root = find_repo_root(repo_root)
+    root = find_repo_root(repo_root).resolve()
     version_files = read_repository_versions(root)
     errors: list[str] = []
 
@@ -286,7 +297,7 @@ def validate_release_workspace(
 
     release_file_path: Path | None = None
     release_file_version: str | None = None
-    effective_releases_dir = releases_dir or root / ".agentic" / "releases"
+    effective_releases_dir = resolve_releases_dir(root, releases_dir)
 
     if release_version is not None:
         parsed_release_version = parse_version(release_version)
@@ -1220,7 +1231,8 @@ def create_github_release(
     """
     gh = client or GhClient()
     target = resolve_repo(repo)
-    effective = releases_dir or Path(".agentic/releases")
+    root = find_repo_root(Path(".")).resolve()
+    effective = resolve_releases_dir(root, releases_dir)
     ver = version.lstrip("v")
     tag = f"v{ver}"
     versioned_dir = effective / f"v{ver}"
