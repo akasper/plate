@@ -211,11 +211,20 @@ def prepare_copied_text(rel: str, text: str, platform: str, *, namespaced: bool)
             f"pwsh -File {ps_name} -Root .",
         )
     if rel.endswith("ci.yml"):
-        text = text.replace(
-            "  test:\n    needs: labels\n    runs-on: ubuntu-latest\n",
-            "  test:\n    needs: labels\n    runs-on: windows-latest\n",
-            1,
+        dynamic_test_runs_on = (
+            "  test:\n    needs: labels\n"
+            "    runs-on: ${{ fromJSON(needs.labels.outputs.runs_on) }}\n"
         )
+        legacy_test_runs_on = (
+            "  test:\n    needs: labels\n    runs-on: ubuntu-latest\n"
+        )
+        windows_test_runs_on = (
+            "  test:\n    needs: labels\n    runs-on: windows-latest\n"
+        )
+        if dynamic_test_runs_on in text:
+            text = text.replace(dynamic_test_runs_on, windows_test_runs_on, 1)
+        else:
+            text = text.replace(legacy_test_runs_on, windows_test_runs_on, 1)
     if rel.endswith("test-e2e.yml"):
         text = _rewrite_windows_gif_job(text, namespaced=namespaced)
     if rel.endswith(".md"):

@@ -32,6 +32,7 @@ permissions:
   contents: read
   issues: read
   pull-requests: write
+  actions: read
 
 jobs:
   pr-gates:
@@ -53,10 +54,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Select runs-on for heavy jobs
+        id: plate_runs_on
+        uses: ./.github/actions/plate-select-runs-on
+        with:
+          plate-runs-on: ${{ vars.PLATE_RUNS_ON }}
+
       - name: Gate — PR title
         if: |
           github.event_name == 'pull_request' &&
-          github.event.action != 'closed'
+          contains(fromJSON('["opened","edited","synchronize","reopened"]'), github.event.action)
         uses: actions/github-script@v8
         with:
           script: |
@@ -248,7 +255,9 @@ jobs:
       - name: Gate — Feature release fragment
         if: |
           github.event_name == 'pull_request' && steps.feature_labels.outputs.is_feature == 'true' && (
-            github.event.action != 'closed'
+            contains(fromJSON('["opened","synchronize","reopened","edited"]'), github.event.action) ||
+            (github.event.action == 'labeled' && github.event.label.name == 'Feature') ||
+            (github.event.action == 'unlabeled' && github.event.label.name == 'Feature')
           )
         uses: actions/github-script@v8
         with:
@@ -404,7 +413,7 @@ jobs:
       - name: Gate — audit checkout
         if: |
           github.event_name == 'pull_request' &&
-          github.event.action != 'closed'
+          contains(fromJSON('["opened","synchronize","reopened","edited"]'), github.event.action)
         run: echo "Audit workflow context loaded (checkout complete)."
 
       - name: Gate — validate release PR

@@ -1,0 +1,15 @@
+{
+  "slug": "workflow-runs-on-fallback",
+  "change_type": "feature",
+  "surface": ".github/actions/plate-select-runs-on + payload CI/E2E workflows + plate-pr-gates",
+  "summary": "Heavy payload workflows choose runs-on from PLATE_RUNS_ON with idle-runner probe and hosted fallback; fork and public repos stay on ubuntu-latest (#1214).",
+  "migration_impact": "Optional: set repository variable PLATE_RUNS_ON to a JSON label array for self-hosted runners. Default remains ubuntu-latest. Import payload to receive the composite action and workflow wiring.",
+  "migration_guidance": [
+    "Run gh plate import-payload (or copy .github/actions/plate-select-runs-on and updated ci.yml / test-e2e.yml / plate-pr-gates.yml).",
+    "Set PLATE_RUNS_ON only on private repos with registered self-hosted runners (never on public repos).",
+    "Optional PLATE_RUNNER_PROBE_TIMEOUT_SECONDS repository variable overrides the default 30s probe before hosted fallback."
+  ],
+  "agent_notes": "pr-gates logs the selection in its first step; test/e2e jobs use needs.*.outputs.runs_on. Regenerate action YAML with scripts/build_workflow_runs_on.py.",
+  "breaking": false,
+  "links": ["#1214", "#1210"]
+}

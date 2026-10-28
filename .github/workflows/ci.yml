@@ -11,10 +11,23 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  test:
+  select-runs-on:
     runs-on: ubuntu-latest
+    outputs:
+      runs_on: ${{ steps.plate_runs_on.outputs.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plate_runs_on
+        uses: ./.github/actions/plate-select-runs-on
+        with:
+          plate-runs-on: ${{ vars.PLATE_RUNS_ON }}
+
+  test:
+    needs: select-runs-on
+    runs-on: ${{ fromJSON(needs.select-runs-on.outputs.runs_on) }}
     steps:
       - uses: actions/checkout@v4
       - name: Run unit tests
@@ -88,12 +101,13 @@ jobs:
   # Addresses #569 stabilization CI path.
   heavy-release:
     needs:
+      - select-runs-on
       - test
     if: |
       github.head_ref == 'release' ||
       startsWith(github.head_ref, 'release-') ||
       startsWith(github.base_ref, 'release-')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.select-runs-on.outputs.runs_on) }}
     steps:
       - uses: actions/checkout@v4
       - name: Heavy release context detected
