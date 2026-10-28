@@ -7,7 +7,7 @@ PLATE scaffold ships in **`plate-core`** and the **`gh plate`** extension. Do no
 Pin the same version for Python and the extension (see root `README.md` for the current pin):
 
 ```bash
-pip install -U 'plate-core==0.8.5'
+pip install -U 'plate-core==0.8.6'
 python3 -c "import plate_core; print(plate_core.__version__)"
 
 gh extension install akasper/gh-plate    # or: gh extension upgrade plate

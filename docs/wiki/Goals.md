@@ -37,11 +37,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 ## Current State & Evidence
 
-*(Snapshot after v0.8.5 — update at major cuts and when North Star shifts.)*
+*(Snapshot after v0.8.6 — update at major cuts and when North Star shifts.)*
 
-**Shipped foundations (v0.8.0, public pin v0.8.5):**
+**Shipped foundations (v0.8.0, public pin v0.8.6):**
 
-- Public **PyPI** package `plate-core==0.8.5`, shared library for CLI / MCP / plugins.
+- Public **PyPI** package `plate-core==0.8.6`, shared library for CLI / MCP / plugins.
 - **`gh plate`** thin-shim extension path and release-track / ceremony tooling.
 - Autonomy and adoption foundations: budgeted AutonomyEngine, adopt / import-payload / self-migrate surfaces, quiet ops, baseline persona when PLATE signals are present.
 - Endless feed / Q&A / planning primitives and Information Audit Goals convention (Epic #218 lineage).
@@ -72,6 +72,13 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 - `gh plate runner add|status|remove|doctor` and an adopter guide for ephemeral self-hosted runners on private repos (#1212, #1215).
 - Greenfield bootstrap on empty repos, no more `plate_template` path, label descriptions under GitHub's 100-character limit, and a complete plate-core wheel with PyYAML (#1152, #1151, #1200, #1115).
 - `babysit --watch` uses cheap probes on quiet ticks, skips repeated resolved Copilot comments, and a Copilot `code-review` skill ships in the payload (#1077, #1096, #1092, #1155).
+
+**Shipped in v0.8.6 (was Next Release #1224):**
+
+- Heavy payload workflows choose `runs-on` from `PLATE_RUNS_ON` with an idle-runner probe and hosted fallback. Fork and public repos stay on `ubuntu-latest` (#1214).
+- `pr-gates` survives multi-label PR creation, accepts only explicit closing references, and replays Development sidebar events in order. Payload CI reports the `labels` check context (#1228, #1231, #1229).
+- `babysit --watch` adds guards for required checks, CI settle, REST fallback, base-branch overlap, and restart-safe event memory (#1233, #1246).
+- A `.plate/` directory gets a clear layout error, `release finalize` accepts relative `--releases-dir`, and merge guidance adds a pre-merge recheck (#1227, #1226, #1234).
 
 **Not yet won (do not overclaim):**
 
