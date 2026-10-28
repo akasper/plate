@@ -20,6 +20,8 @@ REGENERATE_COMMAND = "python3 scripts/generate-plugin-skills.py"
 
 PLUGIN_SURFACES = ("plugin", ".plugin")
 TEMPLATE_PAYLOAD_SKILL_ROOT = Path("src/plate_core/template_payload/.agentic/skills")
+# Skills copied into template payload for bootstrap/import-payload (not only plugin surfaces).
+TEMPLATE_PAYLOAD_SKILL_IDS = frozenset({"address-pr-feedback", "modernize-pr"})
 
 
 @dataclass(frozen=True)
@@ -189,8 +191,10 @@ def write_plugin_skills_surfaces(
         written.append(path)
 
     catalog = load_baseline_catalog()
-    for skill in catalog.skills:
-        if skill.id != "address-pr-feedback":
+    skills_by_id = {skill.id: skill for skill in catalog.skills}
+    for skill_id in sorted(TEMPLATE_PAYLOAD_SKILL_IDS):
+        skill = skills_by_id.get(skill_id)
+        if skill is None:
             continue
         template_skill = root / TEMPLATE_PAYLOAD_SKILL_ROOT / skill.id / "SKILL.md"
         skill_md = render_skill_md(skill)
@@ -229,13 +233,19 @@ def plugin_skills_surfaces_in_sync(repo_root: Path) -> tuple[bool, list[str]]:
             if child.is_dir() and child.resolve() not in expected_dirs:
                 errors.append(f"unexpected generated skill directory: {child.relative_to(root).as_posix()}")
 
-    template_skill = root / TEMPLATE_PAYLOAD_SKILL_ROOT / "address-pr-feedback" / "SKILL.md"
-    expected_template = render_skill_md(
-        next(s for s in load_baseline_catalog().skills if s.id == "address-pr-feedback")
-    )
-    if not template_skill.exists():
-        errors.append(f"missing generated file: {template_skill.relative_to(root).as_posix()}")
-    elif template_skill.read_text(encoding="utf-8") != expected_template:
-        errors.append(f"out of date generated file: {template_skill.relative_to(root).as_posix()}")
+    catalog = load_baseline_catalog()
+    skills_by_id = {skill.id: skill for skill in catalog.skills}
+    for skill_id in sorted(TEMPLATE_PAYLOAD_SKILL_IDS):
+        skill = skills_by_id.get(skill_id)
+        if skill is None:
+            errors.append(f"baseline catalog missing template payload skill: {skill_id}")
+            continue
+        template_skill = root / TEMPLATE_PAYLOAD_SKILL_ROOT / skill_id / "SKILL.md"
+        expected_template = render_skill_md(skill)
+        rel = template_skill.relative_to(root).as_posix()
+        if not template_skill.exists():
+            errors.append(f"missing generated file: {rel}")
+        elif template_skill.read_text(encoding="utf-8") != expected_template:
+            errors.append(f"out of date generated file: {rel}")
 
     return (not errors, errors)

@@ -1,0 +1,14 @@
+{
+  "slug": "modernize-pr-skill-1235",
+  "change_type": "feature",
+  "surface": "baseline_catalog modernize-pr skill + plugin/.plugin/template payload copies + plate_core.modernize_pr helpers + AGENTS.md",
+  "summary": "Add the modernize-pr skill for stale PRs: verdict-first (MODERNIZE / REWORK / CLOSE), isolated worktree rebase, git range-diff, and force-with-lease push helpers (#1235).",
+  "migration_impact": "Bootstrapped repos receive `.agentic/skills/modernize-pr/SKILL.md` on import-payload. Agents must not close or merge from this skill; CLOSE is a recommendation only.",
+  "migration_guidance": [
+    "Re-bootstrap or import template payload to pick up `.agentic/skills/modernize-pr/SKILL.md`.",
+    "After baseline_catalog skill procedure edits, run `python3 scripts/generate-plugin-skills.py`."
+  ],
+  "agent_notes": "Workflow ideas adapted from t3dotgg/tstack modernize (MIT, copyright Theo Browne) per #1232; PLATE skill wording and helpers are original.",
+  "breaking": false,
+  "links": ["#1235", "#1232"]
+}
