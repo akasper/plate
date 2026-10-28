@@ -104,10 +104,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": ".github/workflows/audit.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": ".github/workflows/auto-label-feedback-responses.yml",
       "classification": "copy_to_downstream"
     },
@@ -124,15 +120,15 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": ".github/workflows/feedback-resolution-check.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": ".github/workflows/label-check.yml",
       "classification": "copy_to_downstream"
     },
     {
       "path": ".github/workflows/pages.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plate-pr-gates.yml",
       "classification": "copy_to_downstream"
     },
     {
@@ -157,18 +153,6 @@
     },
     {
       "path": ".github/workflows/platform-monitor.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": ".github/workflows/pr-documentation-check.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": ".github/workflows/pr-issue-link-check.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": ".github/workflows/pr-title-check.yml",
       "classification": "copy_to_downstream"
     },
     {

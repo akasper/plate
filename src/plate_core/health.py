@@ -7,6 +7,11 @@ import re
 from dataclasses import asdict, dataclass, field
 
 from .github_client import GhApiError, GhClient
+from .pr_gates_contract import (
+    PLATE_PR_GATES_CHECK_NAME,
+    find_stale_required_check_contexts,
+    missing_recommended_check_contexts as compute_missing_recommended_check_contexts,
+)
 from .procutil import run_hidden
 
 
@@ -78,6 +83,9 @@ class HealthReport:
     self_migrate_ready: bool | None = None
     self_migrate_target: str | None = None
     self_migrate_next_command: str | None = None
+    branch_protection_required_contexts: list[str] = field(default_factory=list)
+    stale_required_check_contexts: list[str] = field(default_factory=list)
+    missing_recommended_check_contexts: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -228,11 +236,29 @@ def get_health(
         label_names = set()
         missing = list(REQUIRED_LABELS)  # assume all missing on failure
 
+    branch_protection_required_contexts: list[str] = []
+    stale_required_check_contexts: list[str] = []
+    missing_recommended_check_contexts: list[str] = []
     try:
         repo_obj = gh.api(f"repos/{target}")
         default_branch = repo_obj["default_branch"]
-        gh.api(f"repos/{target}/branches/{default_branch}/protection")
+        protection = gh.api(f"repos/{target}/branches/{default_branch}/protection")
         protected = True
+        contexts = protection.get("required_status_checks") or {}
+        if isinstance(contexts, dict):
+            branch_protection_required_contexts = list(contexts.get("contexts") or [])
+        stale_required_check_contexts = find_stale_required_check_contexts(
+            branch_protection_required_contexts
+        )
+        missing_recommended_check_contexts = compute_missing_recommended_check_contexts(
+            branch_protection_required_contexts
+        )
+        if stale_required_check_contexts:
+            errors.append(
+                "branch_protection_stale_checks: "
+                + ", ".join(stale_required_check_contexts)
+                + f" (replace with {PLATE_PR_GATES_CHECK_NAME})"
+            )
     except GhApiError as e:
         protected = False
         errors.append(f"branch_protection: {e}")
@@ -480,6 +506,9 @@ def get_health(
         label_coverage_ok=label_ok,
         missing_labels=missing,
         branch_protection_enabled=protected,
+        branch_protection_required_contexts=branch_protection_required_contexts,
+        stale_required_check_contexts=stale_required_check_contexts,
+        missing_recommended_check_contexts=missing_recommended_check_contexts,
         open_epic_count=open_epics,
         binary_artifacts_tracked=binary_artifacts_tracked,
         goals_page_present=goals_page_present,

@@ -5,6 +5,10 @@ on:
   pull_request:
     types: [closed]
 
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 

@@ -2,7 +2,7 @@ name: PLATE Issue Label Check
 
 on:
   issues:
-    types: [opened, edited, labeled, unlabeled, reopened, milestoned, demilestoned]
+    types: [opened, labeled, unlabeled, reopened, milestoned, demilestoned]
 
 permissions:
   contents: read
@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   check-labels:
+    if: github.event.issue != null && !github.event.issue.pull_request
     runs-on: ubuntu-latest
     steps:
       - name: Validate PLATE issue label rules

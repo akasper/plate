@@ -465,6 +465,20 @@ When `--act` is specified and the PR is out of sync, the babysitter posts a merg
 
 **Merge safety gate:** Require `.github/workflows/feedback-resolution-check.yml` (`feedback-resolution`) in branch protection for `main` (and integration branches) so merge/auto-merge waits until all active *agent* (third-party) review threads are resolved. The gate now author-filters to PLATE_PR_FEEDBACK_AGENTS + default patterns (devin, openhands, etc.); human review comments do not block unless CHANGES_REQUESTED or explicit need:human-review. This gate is *not* a substitute for the separate human review/approval requirement for Bug/Feature/Documentation PRs (see above and authority table). Human approval (Approved review or explicit human merge) is required in addition. (Addresses #569 gate filter.)
 
+## GitHub Actions and Copilot cost controls
+
+PLATE template workflows avoid billing a full Actions minute for issue and comment events that do no work. Issue-triggered workflows use narrow `on:` types where safe and **job-level `if:`** guards so irrelevant events skip starting a runner. PR workflows use **concurrency** (`cancel-in-progress: true`) so rapid pushes do not stack redundant runs; **release** and **publish** workflows keep `cancel-in-progress: false` so packaging is not interrupted.
+
+Automatic **Copilot coding-agent** kickoff (`@copilot start` comments, legacy feedback auto-triggers in adopters, platform-monitor assignment) is **opt-in** via repository variable `PLATE_COPILOT_AUTOSTART=true`. When unset or not `true`, kickoff comments are posted without `@copilot` mentions.
+
+Downstream rollout for private adopters: `docs/migration/actions-cost-rollout.md`.
+
+## Copilot code review (human and agent policy)
+
+Nothing in this repository should **auto-request Copilot code review on every push**. Request Copilot review **once per PR when the PR is ready for review** (labels, scope, and gates satisfied). Request **re-review only when a human or process explicitly asks**—not on each `synchronize` event. This pairs with babysit guidance (#496) and triage/wake work tracked in #1136 and #1137 (Epic #1129).
+
+Agents must not loop `request review` / `@copilot` review triggers to chase green CI; work existing review threads first (`gh plate pr babysit`, `plate_resolve_review_thread`).
+
 ## Label Rules
 
 Use labels as stable process metadata. Do not create ad hoc labels unless they change routing, enforcement, reporting, auditing, review burden, or agent behavior. Use GitHub Projects fields for frequently changing planning state such as priority, owner, rank, iteration, target date, or release target. The `status:blocked`, `status:ready-to-work`, and `status:implemented` (auto-set on release-branch merge per #556; means landed in RC but not yet shipped to main+tag) labels are the explicit exception used by PLATES native trigger workflows.

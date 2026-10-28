@@ -38,6 +38,10 @@ on:
         required: false
         default: ''
 
+concurrency:
+  group: publish-gh-plate-extension-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 

@@ -246,6 +246,17 @@ def cmd_health(args: argparse.Namespace) -> int:
     if report.missing_labels:
         print(f"Missing labels: {', '.join(report.missing_labels)}")
     print(f"Branch protection: {'ENABLED' if report.branch_protection_enabled else 'DISABLED'}")
+    if report.stale_required_check_contexts:
+        print(
+            "Stale required checks (merged gates #1209): "
+            + ", ".join(report.stale_required_check_contexts)
+            + " — update branch protection to require pr-gates"
+        )
+    if report.missing_recommended_check_contexts:
+        print(
+            "Missing recommended required checks: "
+            + ", ".join(report.missing_recommended_check_contexts)
+        )
     print(f"Open Epics: {report.open_epic_count}")
     bin_count = report.binary_artifacts_tracked
     bin_status = "CLEAN" if bin_count == 0 else f"FOUND {bin_count} (see #90)"

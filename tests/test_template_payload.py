@@ -217,8 +217,7 @@ class TemplatePayloadAdopterClaimsTests(unittest.TestCase):
         "tests/e2e/README.md",
         "tests/e2e/specs/example.spec.ts",
         ".github/workflows/ci.yml",
-        ".github/workflows/feedback-resolution-check.yml",
-        ".github/workflows/pr-title-check.yml",
+        ".github/workflows/plate-pr-gates.yml",
         ".github/workflows/label-check.yml",
     )
 
