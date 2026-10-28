@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
 from contextlib import ExitStack
@@ -10,7 +11,12 @@ from unittest.mock import patch
 
 from plate_core.cli import main
 from plate_core.pr_babysit import BabysitReport
-from plate_core.pr_watch_probe import ProbeResult, ProbeState, save_probe_state
+from plate_core.pr_watch_probe import (
+    ProbeResult,
+    ProbeState,
+    load_probe_state,
+    save_probe_state,
+)
 
 
 def _open_pr_body() -> dict:
@@ -300,6 +306,93 @@ class BabysitWatchProbeWiringTests(unittest.TestCase):
 
         self.assertEqual(mocks["babysit"].call_count, 2)
         self.assertEqual(mocks["record_wake"].call_count, 2)
+
+    def test_force_full_tick_detects_and_surfaces_base_overlap(self):
+        prev = ProbeState(
+            etag='W/"etag"',
+            head_sha="abc",
+            base_sha="base_old",
+            updated_at="2026-01-01T00:00:00Z",
+            mergeable_state="clean",
+            ci_state="success",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            probe_path = Path(directory) / "probe.json"
+            save_probe_state(probe_path, prev)
+            quiet = _probe_304(prev)
+            quiet.new_state.base_sha = "base_new"
+            overlap_block = {
+                "previous_base_sha": "base_old",
+                "current_base_sha": "base_new",
+                "paths": ["src/a.py"],
+                "event_key": "base_overlap:base_new:deadbeef",
+            }
+            with patch(
+                "plate_core.cli.detect_base_moved_into_pr_files",
+                return_value=["src/a.py"],
+            ) as detect_mock, patch(
+                "plate_core.cli.base_file_overlap_summary",
+                return_value=overlap_block,
+            ), patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                _, mocks = self._run_watch(
+                    directory,
+                    [quiet],
+                    argv=[
+                        "pr",
+                        "babysit",
+                        "99",
+                        "--watch",
+                        "--repo",
+                        "owner/repo",
+                        "--full-every",
+                        "1",
+                    ],
+                    pid_alive=[True, False],
+                )
+            detect_mock.assert_called_once()
+            self.assertIn("Base branch touched PR files", stdout.getvalue())
+            self.assertEqual(mocks["babysit"].call_count, 1)
+
+    def test_cap_pause_after_babysit_persists_event_ledger(self):
+        prev = ProbeState(
+            etag='W/"etag"',
+            head_sha="abc",
+            updated_at="2026-01-01T00:00:00Z",
+            mergeable_state="clean",
+            ci_state="success",
+            last_checked_at="2026-01-01T00:00:00Z",
+        )
+        changed = _probe_200(prev, changed=True)
+        delta_state = changed.new_state
+        delta = {
+            "issue_comments": [
+                {
+                    "id": 5,
+                    "user": {"login": "human"},
+                    "body": "Please fix",
+                    "html_url": "https://example.com/c/5",
+                }
+            ],
+            "review_comments": [],
+            "reviews": [],
+            "new_state": delta_state,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            probe_path = Path(directory) / "probe.json"
+            events_path = Path(directory) / "events.json"
+            save_probe_state(probe_path, prev)
+            with patch("plate_core.cli.check_caps", side_effect=[None, "max_wakes"]), patch(
+                "plate_core.cli._post_watch_cap_pause", return_value=None
+            ):
+                self._run_watch(
+                    directory,
+                    [changed],
+                    fetch_delta_side_effect=[delta],
+                    pid_alive=[True, False],
+                )
+            self.assertTrue(events_path.is_file())
+            self.assertIn("issue_comment:5", events_path.read_text(encoding="utf-8"))
+            self.assertIsNotNone(load_probe_state(probe_path))
 
 
 if __name__ == "__main__":

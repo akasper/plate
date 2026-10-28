@@ -26,6 +26,7 @@ from plate_core.pr_watch_guards import (
     event_memory_catchup_since,
     fetch_required_check_contexts,
     filter_delta_by_event_memory,
+    filter_wake_summary_by_event_memory,
     is_graphql_rate_limited,
     load_event_ledger,
     load_pr_data_rest_fallback,
@@ -601,10 +602,29 @@ class RestartSafeEventMemoryTests(unittest.TestCase):
             path.write_text("{not json", encoding="utf-8")
             self.assertEqual(load_event_ledger(path).reported, {})
 
-    def test_event_memory_catchup_since_widens_on_restart(self):
+    def test_event_memory_catchup_since_clamps_after_long_outage(self):
+        now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        since = event_memory_catchup_since("2026-01-01T05:00:00Z", now=now)
+        self.assertEqual(since, "2026-01-01T06:00:00Z")
+
+    def test_event_memory_catchup_since_keeps_recent_checkpoint(self):
         now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
         since = event_memory_catchup_since("2026-01-01T11:59:00Z", now=now)
-        self.assertEqual(since, "2026-01-01T06:00:00Z")
+        self.assertEqual(since, "2026-01-01T11:59:00Z")
+
+    def test_ci_transition_not_suppressed_for_new_head_same_states(self):
+        ledger = EventLedger(
+            reported={"ci:oldsha:pending:success": "2026-01-01T10:00:00Z"}
+        )
+        summary = {
+            "ci_transition": {
+                "from": "pending",
+                "to": "success",
+                "head_sha": "newsha",
+            }
+        }
+        filtered = filter_wake_summary_by_event_memory(summary, ledger)
+        self.assertIsNotNone(filtered["ci_transition"])
 
     def test_save_event_ledger_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
