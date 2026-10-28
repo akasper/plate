@@ -93,6 +93,8 @@ jobs:
       - name: Select runs-on for heavy jobs
         id: plate_runs_on
         uses: ./.github/actions/plate-select-runs-on
+        with:
+          plate-runs-on: ${{ vars.PLATE_RUNS_ON }}
 
       - name: Gate — PR title
         if: |

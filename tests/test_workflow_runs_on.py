@@ -110,6 +110,8 @@ class WorkflowRunsOnTests(unittest.TestCase):
         self.assertIn("PLATE select runs-on", yaml_text)
         self.assertIn("runs_on:", yaml_text)
         self.assertIn("listSelfHostedRunnersForRepo", yaml_text)
+        self.assertIn("inputs.plate-runs-on", yaml_text)
+        self.assertNotIn("vars.", yaml_text)
 
 
 if __name__ == "__main__":

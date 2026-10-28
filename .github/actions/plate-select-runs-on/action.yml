@@ -6,6 +6,10 @@ inputs:
     description: Max seconds to wait for an idle matching self-hosted runner
     required: false
     default: '30'
+  plate-runs-on:
+    description: Value of repository variable PLATE_RUNS_ON (JSON label array)
+    required: false
+    default: ''
 outputs:
   runs_on:
     description: JSON array for runs-on (for example ["ubuntu-latest"])

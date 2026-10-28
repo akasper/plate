@@ -109,6 +109,10 @@ inputs:
     description: Max seconds to wait for an idle matching self-hosted runner
     required: false
     default: '{DEFAULT_PROBE_TIMEOUT_SECONDS}'
+  plate-runs-on:
+    description: Value of repository variable PLATE_RUNS_ON (JSON label array)
+    required: false
+    default: ''
 outputs:
   runs_on:
     description: JSON array for runs-on (for example ["ubuntu-latest"])
@@ -119,7 +123,7 @@ runs:
     - id: select
       uses: actions/github-script@v8
       env:
-        PLATE_RUNS_ON: ${{{{ vars.PLATE_RUNS_ON }}}}
+        PLATE_RUNS_ON: ${{{{ inputs.plate-runs-on }}}}
         PLATE_RUNNER_PROBE_TIMEOUT_SECONDS: ${{{{ inputs.probe-timeout-seconds }}}}
       with:
         script: |
