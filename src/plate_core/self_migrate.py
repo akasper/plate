@@ -16,7 +16,11 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from . import __version__ as _INSTALLED_VERSION
-from .markers import MarkerParseError, merge_with_diagnostics
+from .markers import (
+    MarkerParseError,
+    merge_with_diagnostics,
+    validate_marker_document,
+)
 
 # Callable returns raw text or mapping with a version field; never required at import time.
 UpstreamFetcher = Callable[[], Any]
@@ -577,6 +581,20 @@ def plan_marker_merge(
             continue
 
         merged = result.text
+        validation = validate_marker_document(merged)
+        if not validation.get("valid"):
+            entry["action"] = "merge_conflict"
+            entry["changed"] = False
+            entry["warnings"] = list(entry["warnings"]) + list(
+                validation.get("errors") or []
+            )
+            errors.append(
+                f"{rel}: merged content failed marker/fence validation: "
+                + "; ".join(validation.get("errors") or [])
+            )
+            files.append(entry)
+            continue
+
         changed = merged != local
         entry["preserved_local_sections"] = list(result.preserved_local_sections)
         entry["warnings"] = list(result.warnings)

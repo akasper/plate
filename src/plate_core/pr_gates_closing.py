@@ -16,6 +16,25 @@ _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _FENCE_OPENER_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
 
 
+def parse_fence_opener(line: str) -> tuple[str, int] | None:
+    """Return (fence_char, fence_len) when ``line`` opens a fenced code block.
+
+    Follows CommonMark: backtick openers are rejected when the info string
+    (remainder after the opening run) contains a backtick. Tilde openers allow
+    backticks in the info string.
+    """
+    bare = line.rstrip("\n\r")
+    m = _FENCE_OPENER_RE.match(bare)
+    if not m:
+        return None
+    run = m.group(2)
+    info = m.group(3) or ""
+    fence_char = run[0]
+    if fence_char == "`" and "`" in info:
+        return None
+    return fence_char, len(run)
+
+
 def _fence_closer_line(line: str, fence_char: str, min_len: int) -> bool:
     stripped = line.rstrip("\n\r")
     if fence_char == "`":
@@ -53,11 +72,9 @@ def strip_closing_scan_text(markdown: str | None) -> str:
                 fence_len = 0
             i += 1
             continue
-        opener = _FENCE_OPENER_RE.match(bare)
+        opener = parse_fence_opener(bare)
         if opener:
-            run = opener.group(2)
-            fence_char = run[0]
-            fence_len = len(run)
+            fence_char, fence_len = opener
             in_fence = True
             i += 1
             continue

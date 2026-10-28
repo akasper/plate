@@ -6,6 +6,7 @@ import unittest
 
 from plate_core.pr_gates_closing import (
     body_has_strict_closing_keyword,
+    parse_fence_opener,
     parse_strict_closing_issue_numbers,
     strip_closing_scan_text,
 )
@@ -47,9 +48,20 @@ class TestStrictClosingKeywords(unittest.TestCase):
         self.assertNotIn("#2", stripped)
         self.assertIn("#3", stripped)
 
-    def test_tilde_fence_ignored(self):
-        body = "Closes #20\n~~~\nCloses #21\n~~~\n"
-        self.assertEqual(parse_strict_closing_issue_numbers(body), [20])
+    def test_tilde_fence_info_may_contain_backticks(self):
+        body = "Closes #60\n~~~ `note` `x`\n~~~\nCloses #61\n"
+        self.assertEqual(parse_strict_closing_issue_numbers(body), [60, 61])
+
+    def test_backtick_fence_rejected_when_info_contains_backtick(self):
+        # CommonMark: not a fence — inline/code-span line; tail must not be dropped.
+        body = "Closes #70\n``` `literal` ```\nCloses #71\n"
+        self.assertEqual(parse_strict_closing_issue_numbers(body), [70, 71])
+
+    def test_parse_fence_opener_rejects_backtick_info_with_inner_ticks(self):
+        self.assertIsNone(parse_fence_opener("```literal```"))
+        self.assertIsNotNone(parse_fence_opener("```md"))
+        opened = parse_fence_opener("~~~ `ticks` ok ~~~")
+        self.assertEqual(opened, ("~", 3))
 
     def test_unclosed_fence_ignores_tail(self):
         body = "Closes #30\n```\nCloses #31\n"
