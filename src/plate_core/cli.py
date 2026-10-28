@@ -256,6 +256,8 @@ def cmd_health(args: argparse.Namespace) -> int:
     )
     if args.json:
         print(json.dumps(report.to_dict()))
+        if report.plate_config_layout_error:
+            return 1
         return 0
 
     print(f"Repo: {report.repo}")
@@ -281,16 +283,20 @@ def cmd_health(args: argparse.Namespace) -> int:
     print(f"Binary artifacts tracked: {bin_count} ({bin_status})")
     print(f"Goals wiki page: {'PRESENT' if report.goals_page_present else 'MISSING'}")
     print(f"Open Questions: {report.open_question_count}")
-    plate_line = f".plate/config: {'PRESENT' if report.plate_config_present else 'MISSING'} (valid: {report.plate_config_valid})"
-    if report.plate_config_present:
-        plate_line += (
-            f" file={report.plate_config_file_version or '(unknown)'}"
-            f" resolved={report.plate_config_resolved_version or '(unknown)'}"
-            f" upgrade={report.plate_config_upgrade_available}"
-        )
-        if report.plate_config_enabled_extensions:
-            plate_line += f" enabled_extensions={','.join(report.plate_config_enabled_extensions)}"
-    print(plate_line)
+    if report.plate_config_layout_error:
+        print(".plate layout: UNRECOGNIZED (expected single JSON file at .plate)")
+        print(report.plate_config_layout_error)
+    else:
+        plate_line = f".plate/config: {'PRESENT' if report.plate_config_present else 'MISSING'} (valid: {report.plate_config_valid})"
+        if report.plate_config_present:
+            plate_line += (
+                f" file={report.plate_config_file_version or '(unknown)'}"
+                f" resolved={report.plate_config_resolved_version or '(unknown)'}"
+                f" upgrade={report.plate_config_upgrade_available}"
+            )
+            if report.plate_config_enabled_extensions:
+                plate_line += f" enabled_extensions={','.join(report.plate_config_enabled_extensions)}"
+        print(plate_line)
     print(f"Curiosity answers index: {'PRESENT' if report.curiosity_answers_present else 'MISSING'}")
     if report.budget_remaining_tokens is not None or report.budget_daily_limit is not None:
         burn = report.budget_burn_rate if report.budget_burn_rate is not None else "?"
@@ -338,6 +344,8 @@ def cmd_health(args: argparse.Namespace) -> int:
         )
         if report.self_migrate_next_command:
             print(f"Self-migrate next: {report.self_migrate_next_command}")
+    if report.plate_config_layout_error:
+        return 1
     return 0 if report.status != "fail" else 1
 
 
@@ -857,7 +865,7 @@ def cmd_config_show(args: argparse.Namespace) -> int:
     report = get_plate_config_report(Path(args.repo_root))
     if args.json:
         print(json.dumps(report.to_dict()))
-        return 0
+        return 0 if report.valid else 1
 
     print(f"Repo root: {report.repo_root}")
     print(f"Path: {report.path}")
