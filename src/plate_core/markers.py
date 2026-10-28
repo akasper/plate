@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-from plate_core.pr_gates_closing import _FENCE_OPENER_RE, _fence_closer_line
+from plate_core.pr_gates_closing import _fence_closer_line, parse_fence_opener
 
 
 # Support both syntax forms used in practice:
@@ -66,11 +66,9 @@ class _FenceTracker:
                 self.fence_char = ""
                 self.fence_len = 0
             return True
-        opener = _FENCE_OPENER_RE.match(bare)
+        opener = parse_fence_opener(bare)
         if opener:
-            run = opener.group(2)
-            self.fence_char = run[0]
-            self.fence_len = len(run)
+            self.fence_char, self.fence_len = opener
             self.in_fence = True
             return True
         return False

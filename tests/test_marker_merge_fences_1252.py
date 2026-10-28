@@ -87,6 +87,28 @@ class MarkerMergeFenceTests1252(unittest.TestCase):
         validation = validate_marker_document(text)
         self.assertTrue(validation["valid"], validation.get("errors"))
 
+    def test_inline_backtick_line_not_unclosed_fence_in_validation(self):
+        """Pseudo-fence lines with backticks in info are not fences (#1253 review)."""
+        doc = """<!-- PLATES-CORE:BEGIN demo -->
+Document `` `literal` `` inline spans and pseudo-fences:
+
+``` `literal` ```
+```literal```
+
+Real fence:
+
+```md
+<!-- PLATES-CORE:BEGIN block-id -->
+x
+<!-- PLATES-CORE:END block-id -->
+```
+<!-- PLATES-CORE:END demo -->
+"""
+        validation = validate_marker_document(doc)
+        self.assertTrue(validation["valid"], validation.get("errors"))
+        result = merge_with_diagnostics(doc, doc, doc.replace("x", "y"))
+        self.assertTrue(validate_marker_document(result.text)["valid"])
+
     def test_validate_marker_document_rejects_corrupted_merge_shape(self):
         corrupted = """<!-- PLATES-CORE:BEGIN upstream-template-sync -->
 Upstream paragraph one.
