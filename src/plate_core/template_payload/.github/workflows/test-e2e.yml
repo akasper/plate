@@ -33,6 +33,7 @@ jobs:
     outputs:
       runs_on: ${{ steps.plate_runs_on.outputs.runs_on }}
     steps:
+      - uses: actions/checkout@v4
       - id: plate_runs_on
         uses: ./.github/actions/plate-select-runs-on
 

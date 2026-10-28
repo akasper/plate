@@ -86,13 +86,13 @@ jobs:
       ))
     runs-on: ubuntu-latest
     steps:
-      - name: Select runs-on for heavy jobs
-        id: plate_runs_on
-        uses: ./.github/actions/plate-select-runs-on
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Select runs-on for heavy jobs
+        id: plate_runs_on
+        uses: ./.github/actions/plate-select-runs-on
 
       - name: Gate — PR title
         if: |

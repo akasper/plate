@@ -57,6 +57,43 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
             self.assertIn("./.github/actions/plate-select-runs-on", text)
             self.assertIn("name: pr-gates", text)
 
+    def test_local_composite_action_requires_checkout_first(self):
+        """Local ./.github/actions/* must run after actions/checkout (#1222)."""
+        workflow_paths_to_check = [
+            REPO_ROOT / ".github" / "workflows" / "ci.yml",
+            REPO_ROOT / ".github" / "workflows" / "plate-pr-gates.yml",
+            REPO_ROOT
+            / "src"
+            / "plate_core"
+            / "template_payload"
+            / ".github"
+            / "workflows"
+            / "ci.yml",
+            REPO_ROOT
+            / "src"
+            / "plate_core"
+            / "template_payload"
+            / ".github"
+            / "workflows"
+            / "plate-pr-gates.yml",
+            REPO_ROOT
+            / "src"
+            / "plate_core"
+            / "template_payload"
+            / ".github"
+            / "workflows"
+            / "test-e2e.yml",
+        ]
+        for path in workflow_paths_to_check:
+            text = path.read_text(encoding="utf-8")
+            action_idx = text.index("./.github/actions/plate-select-runs-on")
+            checkout_idx = text.index("actions/checkout")
+            self.assertLess(
+                checkout_idx,
+                action_idx,
+                f"{path}: actions/checkout must appear before plate-select-runs-on",
+            )
+
     def test_recommended_checks_match_branch_protection_case_insensitively(self):
         self.assertEqual(
             missing_recommended_check_contexts(["Labels", "test", "pr-gates"]),
