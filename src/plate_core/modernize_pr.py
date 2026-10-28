@@ -13,18 +13,24 @@ VALID_VERDICTS = frozenset({VERDICT_MODERNIZE, VERDICT_REWORK, VERDICT_CLOSE})
 
 
 def parse_verdict_line(line: str) -> str | None:
-    """Return a normalized verdict token from a line such as ``Verdict: MODERNIZE``."""
+    """Return a normalized verdict token from a standalone token or ``Verdict: <token>`` line."""
     stripped = line.strip()
     if not stripped:
         return None
     upper = stripped.upper()
-    for token in VALID_VERDICTS:
-        if upper == token or upper.endswith(f": {token}") or upper.endswith(f" {token}"):
-            return token
+    if upper in VALID_VERDICTS:
+        return upper
     if upper.startswith("VERDICT:"):
-        candidate = upper.split(":", 1)[1].strip().split()[0] if ":" in upper else ""
-        if candidate in VALID_VERDICTS:
-            return candidate
+        rest = stripped.split(":", 1)[1].strip()
+        if not rest:
+            return None
+        parts = rest.split()
+        if len(parts) != 1:
+            return None
+        token = parts[0].upper()
+        if token in VALID_VERDICTS:
+            return token
+        return None
     return None
 
 

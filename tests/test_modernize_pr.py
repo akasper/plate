@@ -18,6 +18,13 @@ class ModernizePrHelperTests(unittest.TestCase):
         self.assertIsNone(parse_verdict_line("maybe later"))
         self.assertIsNone(parse_verdict_line(""))
 
+    def test_parse_verdict_line_rejects_ambiguous_or_incomplete_1251(self):
+        """Regression: only standalone token or exact Verdict: <single-token> (#1251)."""
+        self.assertIsNone(parse_verdict_line("Verdict: REWORK, not MODERNIZE"))
+        self.assertIsNone(parse_verdict_line("Verdict:"))
+        self.assertIsNone(parse_verdict_line("Verdict: "))
+        self.assertIsNone(parse_verdict_line("MODERNIZE with extra words"))
+
     def test_git_range_diff_argv(self):
         argv = git_range_diff_argv(
             base="origin/main",
