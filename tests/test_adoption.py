@@ -374,8 +374,14 @@ class AdoptionGuideRegressionTests(unittest.TestCase):
         ):
             self.assertIn(phrase, guide, f"missing guide phrase: {phrase}")
 
-
-class CompoundAdoptionPathTests(unittest.TestCase):
+    def test_aggregate_test_job_example_expands_needs_explicitly(self):
+        root = Path(__file__).resolve().parents[1]
+        guide = (root / "docs" / "migration" / "adoption-guide.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("needs[job]", guide)
+        self.assertIn('unit="${{ needs.unit.result }}"', guide)
+        self.assertIn('integration="${{ needs.integration.result }}"', guide)
     """Offline compound chain for #633 under-30m path (#973). Not live E2E."""
 
     def _seed_core_ready(self, root: Path, *, version: str = "0.7.2") -> None:

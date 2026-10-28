@@ -23,6 +23,13 @@ class TemplatePayloadCiWorkflowTests(unittest.TestCase):
         self.assertIn("scripts/validate_plate_repo.sh", text)
         self.assertNotIn("run: bash scripts/validate_plate_repo.sh .\n", text)
 
+    def test_test_job_validate_step_uses_bash_shell(self):
+        text = PAYLOAD_CI.read_text(encoding="utf-8")
+        run_tests = text.index("- name: Run Tests")
+        snippet = text[run_tests : run_tests + 400]
+        self.assertIn("shell: bash", snippet)
+        self.assertIn("set -euo pipefail", snippet)
+
 
 if __name__ == "__main__":
     unittest.main()

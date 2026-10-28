@@ -168,15 +168,19 @@ jobs:
     needs: [unit, integration]   # your existing jobs
     if: always()
     steps:
-      - run: |
+      - shell: bash
+        run: |
           set -euo pipefail
-          for job in unit integration; do
-            result="${{ needs[job].result }}"
-            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
-              echo "$job finished with $result" >&2
-              exit 1
-            fi
-          done
+          unit="${{ needs.unit.result }}"
+          integration="${{ needs.integration.result }}"
+          if [[ "$unit" != "success" && "$unit" != "skipped" ]]; then
+            echo "unit finished with $unit" >&2
+            exit 1
+          fi
+          if [[ "$integration" != "success" && "$integration" != "skipped" ]]; then
+            echo "integration finished with $integration" >&2
+            exit 1
+          fi
           echo "Aggregate test gate passed."
 ```
 

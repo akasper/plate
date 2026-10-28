@@ -457,7 +457,9 @@ def rewrite_workflow_script_refs(text: str) -> str:
     return out
 
 
-_CI_VALIDATE_BASH_FALLBACK = """          set -euo pipefail
+_CI_VALIDATE_BASH_FALLBACK = """        shell: bash
+        run: |
+          set -euo pipefail
           for candidate in scripts/plate/validate_plate_repo.sh scripts/validate_plate_repo.sh; do
             if [[ -f "$candidate" ]]; then
               bash "$candidate" .
@@ -472,7 +474,9 @@ def _rewrite_ci_validate_fallback_for_windows(text: str) -> str:
     """Replace template bash validate loop with PowerShell path fallback (#1229)."""
     if _CI_VALIDATE_BASH_FALLBACK not in text:
         return text
-    pwsh_block = """          $ErrorActionPreference = 'Stop'
+    pwsh_block = """        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
           foreach ($path in @('scripts/plate/ValidatePlateRepo.ps1', 'scripts/ValidatePlateRepo.ps1')) {
             if (Test-Path -LiteralPath $path) {
               & pwsh -File $path -Root .
