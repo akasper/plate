@@ -91,6 +91,7 @@ jobs:
         # Same v{ver}/assets/ convention. Idempotent. See refined ACs in #593.
         env:
           RELEASE_TAG: ${{ steps.release-version.outputs.release_tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set +e  # best-effort: continue even if this fails (tag is critical)
           export PYTHONPATH="$GITHUB_WORKSPACE/src"
