@@ -145,6 +145,18 @@ class RunnerModuleTests(unittest.TestCase):
             self.assertIn("token_scopes", ids)
             self.assertIn("service", ids)
 
+    def test_cli_runner_guidance_no_subcommand(self):
+        from plate_core.cli import RUNNER_ADOPTER_DOC, main
+
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["runner", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue().strip())
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["doc"], RUNNER_ADOPTER_DOC)
+        self.assertIn("add", payload["subcommands_planned"])
+
     def test_cli_add_json_dry_run(self):
         from plate_core.runner import RunnerAddReport
 

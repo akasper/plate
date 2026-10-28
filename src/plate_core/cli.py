@@ -4643,9 +4643,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     runner = sub.add_parser(
         "runner",
-        help="Self-hosted Actions runner for private repos (register, status, remove, doctor)",
+        help=f"Self-hosted runner for private repos (see {RUNNER_ADOPTER_DOC})",
+        description=(
+            "Ephemeral self-hosted Actions runners for private PLATE adopters. "
+            f"Isolation and security requirements: {RUNNER_ADOPTER_DOC}"
+        ),
     )
-    runner_sub = runner.add_subparsers(dest="runner_command", required=True)
+    runner.add_argument("--json", action="store_true", help="Output JSON")
+    runner.set_defaults(func=cmd_runner)
+    runner_sub = runner.add_subparsers(dest="runner_command", required=False)
     runner_add = runner_sub.add_parser(
         "add",
         help="Register an ephemeral runner with plate-local + OS labels (dry-run by default)",
@@ -4838,17 +4844,6 @@ def build_parser() -> argparse.ArgumentParser:
     rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_notes.add_argument("--json", action="store_true", help="Output JSON")
     rel_notes.set_defaults(func=cmd_release_notes)
-
-    runner = sub.add_parser(
-        "runner",
-        help=f"Self-hosted runner guidance for private repos (see {RUNNER_ADOPTER_DOC})",
-        description=(
-            "Ephemeral self-hosted runners for private PLATE adopters. "
-            f"Isolation and security requirements: {RUNNER_ADOPTER_DOC}"
-        ),
-    )
-    runner.add_argument("--json", action="store_true", help="Output JSON")
-    runner.set_defaults(func=cmd_runner)
 
     costs = sub.add_parser("costs", help="Harvest and aggregate USAGE REPORTs for observability/cost tracking (Epic #265)")
     costs.add_argument("--repo", help="owner/name; defaults to git remote origin")
