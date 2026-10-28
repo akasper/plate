@@ -6,16 +6,22 @@ import unittest
 from unittest.mock import MagicMock
 
 from plate_core.github_client import GhApiError
-from plate_core.pr_babysit import _load_pr_data
+from plate_core.pr_babysit import (
+    _load_pr_data,
+    evaluate_babysit_gates,
+    get_unresolved_review_threads,
+)
 from plate_core.pr_watch_guards import (
     apply_ci_guards_to_probe,
     apply_settle_before_finished,
+    ci_read_fingerprint,
     compute_raw_ci_state,
     fetch_required_check_contexts,
     is_graphql_rate_limited,
     load_pr_data_rest_fallback,
     missing_required_contexts,
     observed_check_contexts,
+    review_decision_from_rest_reviews,
 )
 from plate_core.pr_watch_probe import ProbeState, probe_pr
 
@@ -58,6 +64,10 @@ class RequiredChecksFirstTests(unittest.TestCase):
                     200,
                     {},
                     {
+                        "target": "branch",
+                        "conditions": {
+                            "ref_name": {"include": ["refs/heads/main"], "exclude": []},
+                        },
                         "rules": [
                             {
                                 "type": "required_status_checks",
@@ -65,7 +75,7 @@ class RequiredChecksFirstTests(unittest.TestCase):
                                     "required_status_checks": [{"context": "pr-gates"}],
                                 },
                             }
-                        ]
+                        ],
                     },
                 ),
             }
@@ -243,6 +253,267 @@ class GraphqlRestFallbackTests(unittest.TestCase):
         data = load_pr_data_rest_fallback(client, "o/r", 1)
         self.assertTrue(data["rest_fallback"])
         self.assertEqual(data["mergeStateStatus"], "BEHIND")
+
+
+class CopilotRegressionTests(unittest.TestCase):
+    def test_review_threads_unavailable_blocks_merge_gates(self):
+        blocked = evaluate_babysit_gates(
+            {
+                "merge_state": "CLEAN",
+                "unresolved_review_threads": 0,
+                "review_threads_unavailable": True,
+            }
+        )
+        self.assertTrue(blocked["blocked"])
+        self.assertIn("unavailable", blocked["reason"].lower())
+
+    def test_get_unresolved_raises_when_threads_unavailable(self):
+        client = MagicMock()
+
+        def api_router(endpoint, method="GET", fields=None, **kwargs):
+            if endpoint == "graphql":
+                raise GhApiError("GraphQL rate limit exceeded for api")
+            if endpoint == "repos/o/r/pulls/3":
+                return {"head": {"sha": "s"}, "base": {"ref": "main"}, "mergeable_state": "clean"}
+            if endpoint.endswith("/status"):
+                return {"state": "success", "total_count": 0, "statuses": []}
+            if "check-runs" in endpoint:
+                return {"check_runs": []}
+            if "reviews" in endpoint:
+                return []
+            if "protection" in endpoint or "rulesets" in endpoint:
+                raise GhApiError("404")
+            return {}
+
+        client.api.side_effect = api_router
+        with self.assertRaises(GhApiError):
+            get_unresolved_review_threads(3, repo="o/r", client=client)
+
+    def test_rest_fallback_marks_review_threads_unavailable(self):
+        client = MagicMock()
+
+        def api_router(endpoint, method="GET", fields=None, **kwargs):
+            if endpoint == "repos/o/r/pulls/4":
+                return {"head": {"sha": "s"}, "base": {"ref": "main"}, "mergeable_state": "clean"}
+            if endpoint.endswith("/status"):
+                return {"state": "success", "total_count": 0, "statuses": []}
+            if "check-runs" in endpoint:
+                return {"check_runs": []}
+            if "reviews" in endpoint:
+                return []
+            if "protection" in endpoint or "rulesets" in endpoint:
+                raise GhApiError("404")
+            return {}
+
+        client.api.side_effect = api_router
+        data = load_pr_data_rest_fallback(client, "o/r", 4)
+        self.assertTrue(data.get("review_threads_unavailable"))
+
+    def test_review_decision_keeps_outstanding_changes_requested(self):
+        reviews = [
+            {
+                "id": 1,
+                "state": "CHANGES_REQUESTED",
+                "submitted_at": "2026-01-01T00:00:00Z",
+                "user": {"login": "alice"},
+            },
+            {
+                "id": 2,
+                "state": "APPROVED",
+                "submitted_at": "2026-01-02T00:00:00Z",
+                "user": {"login": "bob"},
+            },
+        ]
+        self.assertEqual(review_decision_from_rest_reviews(reviews), "CHANGES_REQUESTED")
+
+    def test_review_decision_ignores_dismissed_latest(self):
+        reviews = [
+            {
+                "id": 1,
+                "state": "CHANGES_REQUESTED",
+                "submitted_at": "2026-01-01T00:00:00Z",
+                "user": {"login": "alice"},
+            },
+            {
+                "id": 2,
+                "state": "DISMISSED",
+                "submitted_at": "2026-01-02T00:00:00Z",
+                "user": {"login": "alice"},
+            },
+            {
+                "id": 3,
+                "state": "APPROVED",
+                "submitted_at": "2026-01-03T00:00:00Z",
+                "user": {"login": "bob"},
+            },
+        ]
+        self.assertEqual(review_decision_from_rest_reviews(reviews), "APPROVED")
+
+    def test_fingerprint_includes_head_sha(self):
+        runs = [{"name": "test", "status": "completed", "conclusion": "success"}]
+        status = {"state": "success", "total_count": 1}
+        fp_a = ci_read_fingerprint(status, runs, missing_required=[], head_sha="aaa")
+        fp_b = ci_read_fingerprint(status, runs, missing_required=[], head_sha="bbb")
+        self.assertNotEqual(fp_a, fp_b)
+
+    def test_new_head_defers_success_despite_prior_settle(self):
+        runs = [{"name": "test", "status": "completed", "conclusion": "success"}]
+        status = {"state": "success", "total_count": 1}
+        settled = ProbeState(
+            head_sha="oldsha",
+            ci_state="success",
+            ci_settle_fingerprint="ignored",
+            ci_settle_streak=5,
+            required_contexts=[],
+        )
+
+        class _HeadHttp:
+            def get(self, path: str, headers=None):
+                if path.endswith("/pulls/9"):
+                    return (
+                        200,
+                        {"ETag": 'W/"e"'},
+                        {
+                            "head": {"sha": "newsha"},
+                            "base": {"ref": "main"},
+                            "updated_at": "t2",
+                            "mergeable_state": "clean",
+                        },
+                    )
+                if path.endswith("/status"):
+                    return 200, {}, status
+                if "check-runs" in path:
+                    return 200, {}, {"check_runs": runs}
+                if "protection" in path or "rulesets" in path:
+                    return 404, {}, None
+                return 404, {}, None
+
+        result = probe_pr(_HeadHttp(), "o/r", 9, settled)
+        self.assertEqual(result.new_state.ci_state, "pending")
+
+    def test_ruleset_skips_evaluate_and_other_branch(self):
+        http = _RecordingHttp(
+            {
+                "/repos/o/r/branches/main/protection": (404, {}, None),
+                "/repos/o/r/rulesets?per_page=100": (
+                    200,
+                    {},
+                    [
+                        {"id": 1, "enforcement": "evaluate", "target": "branch"},
+                        {"id": 2, "enforcement": "active", "target": "branch"},
+                    ],
+                ),
+                "/repos/o/r/rulesets/2": (
+                    200,
+                    {},
+                    {
+                        "target": "branch",
+                        "conditions": {
+                            "ref_name": {"include": ["refs/heads/release"], "exclude": []},
+                        },
+                        "rules": [
+                            {
+                                "type": "required_status_checks",
+                                "parameters": {
+                                    "required_status_checks": [{"context": "wrong-branch"}],
+                                },
+                            }
+                        ],
+                    },
+                ),
+            }
+        )
+        contexts = fetch_required_check_contexts(http, "o/r", "main")
+        self.assertEqual(contexts, frozenset())
+
+    def test_empty_status_aggregate_uses_check_runs(self):
+        raw = compute_raw_ci_state(
+            {"state": "pending", "total_count": 0, "statuses": []},
+            [{"name": "ci", "status": "completed", "conclusion": "success"}],
+            missing_required=[],
+        )
+        self.assertEqual(raw, "success")
+
+    def test_probe_caches_empty_required_contexts_on_304(self):
+        class _KeyedHttp:
+            def __init__(self):
+                self.calls: list[str] = []
+
+            def get(self, path: str, headers=None):
+                self.calls.append(path)
+                headers = dict(headers or {})
+                if path == "/repos/o/r/pulls/7":
+                    if headers.get("If-None-Match") == 'W/"etag7"':
+                        return 304, {}, None
+                    return (
+                        200,
+                        {"ETag": 'W/"etag7"'},
+                        {
+                            "head": {"sha": "sha"},
+                            "base": {"ref": "main"},
+                            "updated_at": "t1",
+                            "mergeable_state": "clean",
+                        },
+                    )
+                if path == "/repos/o/r/branches/main/protection":
+                    return 404, {}, None
+                if path == "/repos/o/r/rulesets?per_page=100":
+                    return 200, {}, []
+                if path == "/repos/o/r/commits/sha/status":
+                    return 200, {}, {"state": "success", "total_count": 0}
+                if path.startswith("/repos/o/r/commits/sha/check-runs"):
+                    return (
+                        200,
+                        {},
+                        {"check_runs": [{"name": "test", "status": "completed", "conclusion": "success"}]},
+                    )
+                return 404, {}, None
+
+        http = _KeyedHttp()
+        first = probe_pr(http, "o/r", 7, None)
+        self.assertEqual(first.new_state.required_contexts, [])
+        protection_calls = [path for path in http.calls if "protection" in path or "rulesets" in path]
+        self.assertEqual(len(protection_calls), 2)
+
+        http.calls.clear()
+        second = probe_pr(http, "o/r", 7, first.new_state)
+        self.assertTrue(second.not_modified)
+        refetch_calls = [path for path in http.calls if "protection" in path or "rulesets" in path]
+        self.assertEqual(refetch_calls, [])
+
+    def test_probe_persists_empty_required_after_retarget(self):
+        http = _RecordingHttp(
+            {
+                "/repos/o/r/pulls/8": (
+                    200,
+                    {},
+                    {
+                        "head": {"sha": "sha"},
+                        "base": {"ref": "unprotected"},
+                        "updated_at": "t2",
+                        "mergeable_state": "clean",
+                    },
+                ),
+                "/repos/o/r/branches/unprotected/protection": (404, {}, None),
+                "/repos/o/r/rulesets?per_page=100": (200, {}, []),
+                "/repos/o/r/commits/sha/status": (200, {}, {"state": "success", "total_count": 0}),
+                "/repos/o/r/commits/sha/check-runs?per_page=100&page=1": (
+                    200,
+                    {},
+                    {"check_runs": [{"name": "test", "status": "completed", "conclusion": "success"}]},
+                ),
+            }
+        )
+        prior = ProbeState(
+            base_ref="main",
+            required_contexts=["pr-gates"],
+            head_sha="sha",
+            etag='W/"etag"',
+            ci_state="pending",
+        )
+        result = probe_pr(http, "o/r", 8, prior)
+        self.assertEqual(result.new_state.base_ref, "unprotected")
+        self.assertEqual(result.new_state.required_contexts, [])
 
 
 if __name__ == "__main__":

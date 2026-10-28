@@ -7,6 +7,7 @@ delta wakes — no tight polling loops).
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import re
 from typing import Any, Mapping, Protocol
@@ -91,6 +92,48 @@ def _contexts_from_ruleset_detail(body: Mapping[str, Any] | None) -> set[str]:
     return out
 
 
+def _ref_name_matches(base_ref: str, pattern: str) -> bool:
+    """True when ``pattern`` matches branch ``base_ref`` (GitHub ruleset ref_name rules)."""
+    pat = str(pattern).strip()
+    if not pat:
+        return False
+    if pat == "~ALL":
+        return True
+    if pat == "~DEFAULT_BRANCH":
+        return False
+    branch = base_ref.removeprefix("refs/heads/")
+    candidates = {branch, f"refs/heads/{branch}"}
+    if pat.startswith("refs/heads/"):
+        return any(fnmatch.fnmatch(candidate, pat) for candidate in candidates)
+    return fnmatch.fnmatch(branch, pat) or fnmatch.fnmatch(f"refs/heads/{branch}", f"refs/heads/{pat}")
+
+
+def _ruleset_applies_to_base_ref(meta: Mapping[str, Any], detail: Mapping[str, Any] | None, base_ref: str) -> bool:
+    """Only active-enforcement branch rulesets whose ref conditions include ``base_ref``."""
+    enforcement = str(meta.get("enforcement") or "").lower()
+    if enforcement != "active":
+        return False
+    source = detail if isinstance(detail, dict) else meta
+    target = str(source.get("target") or meta.get("target") or "").lower()
+    if target and target != "branch":
+        return False
+    conditions = source.get("conditions") if isinstance(source, dict) else None
+    if not isinstance(conditions, dict):
+        return False
+    ref_name = conditions.get("ref_name")
+    if not isinstance(ref_name, dict):
+        return False
+    includes = ref_name.get("include") or []
+    if not isinstance(includes, list) or not includes:
+        return False
+    excludes = ref_name.get("exclude") or []
+    if isinstance(excludes, list):
+        for pattern in excludes:
+            if _ref_name_matches(base_ref, str(pattern)):
+                return False
+    return any(_ref_name_matches(base_ref, str(pattern)) for pattern in includes)
+
+
 def fetch_required_check_contexts(
     http: HttpGet,
     repo: str,
@@ -109,12 +152,14 @@ def fetch_required_check_contexts(
         for meta in rulesets:
             if not isinstance(meta, dict):
                 continue
-            if str(meta.get("enforcement") or "").lower() == "disabled":
+            if str(meta.get("enforcement") or "").lower() != "active":
                 continue
             ruleset_id = meta.get("id")
             if ruleset_id is None:
                 continue
             detail = _safe_json_get(http, f"/repos/{owner}/{name}/rulesets/{ruleset_id}")
+            if not _ruleset_applies_to_base_ref(meta, detail if isinstance(detail, dict) else None, base_ref):
+                continue
             contexts |= _contexts_from_ruleset_detail(detail if isinstance(detail, dict) else None)
     return frozenset(contexts)
 
@@ -157,7 +202,11 @@ def compute_raw_ci_state(
     """Aggregate CI state before settle/required guards."""
     if missing_required:
         return "pending"
-    status_state = status_json.get("state") if isinstance(status_json, dict) else None
+    status_state = None
+    if isinstance(status_json, dict):
+        total_count = status_json.get("total_count")
+        if total_count != 0:
+            status_state = status_json.get("state")
     check_states = [
         "pending"
         if str(run.get("status") or "").lower() != "completed"
@@ -184,13 +233,18 @@ def ci_read_fingerprint(
     check_runs: list[dict[str, Any]],
     *,
     missing_required: list[str],
+    head_sha: str | None = None,
 ) -> str:
     """Stable fingerprint of the current CI observation (for settle guard)."""
     parts: list[str] = []
+    if head_sha:
+        parts.append(f"head:{head_sha}")
     if missing_required:
         parts.append("missing:" + ",".join(missing_required))
     if isinstance(status_json, dict):
-        parts.append(f"status:{status_json.get('state')}")
+        total_count = status_json.get("total_count")
+        if total_count != 0:
+            parts.append(f"status:{status_json.get('state')}")
         for item in status_json.get("statuses") or []:
             if isinstance(item, dict):
                 parts.append(
@@ -249,6 +303,7 @@ def apply_ci_guards_to_probe(
     prior_fingerprint: str | None,
     prior_streak: int,
     prior_ci_state: str | None = None,
+    head_sha: str | None = None,
 ) -> tuple[str | None, str | None, int]:
     """Combine required-check and settle guards for one probe tick."""
     missing = missing_required_contexts(
@@ -256,7 +311,9 @@ def apply_ci_guards_to_probe(
         observed_check_contexts(status_json, check_runs),
     )
     raw = compute_raw_ci_state(status_json, check_runs, missing_required=missing)
-    fingerprint = ci_read_fingerprint(status_json, check_runs, missing_required=missing)
+    fingerprint = ci_read_fingerprint(
+        status_json, check_runs, missing_required=missing, head_sha=head_sha
+    )
     return apply_settle_before_finished(
         raw,
         fingerprint,
@@ -310,6 +367,30 @@ def _rollup_from_rest(
     return {"state": state, "contexts": {"nodes": nodes}}
 
 
+def review_decision_from_rest_reviews(reviews: list[dict[str, Any]]) -> str | None:
+    """Aggregate review decision from paginated REST reviews (per-reviewer latest state)."""
+    by_user: dict[str, str] = {}
+    ordered = sorted(
+        (item for item in reviews if isinstance(item, dict)),
+        key=lambda item: (str(item.get("submitted_at") or ""), int(item.get("id") or 0)),
+    )
+    for review in ordered:
+        user = (review.get("user") or {}).get("login")
+        if not user:
+            continue
+        state = str(review.get("state") or "").upper()
+        if state == "DISMISSED":
+            by_user.pop(str(user), None)
+            continue
+        if state in ("APPROVED", "CHANGES_REQUESTED", "COMMENTED", "PENDING"):
+            by_user[str(user)] = state
+    if any(value == "CHANGES_REQUESTED" for value in by_user.values()):
+        return "CHANGES_REQUESTED"
+    if any(value == "APPROVED" for value in by_user.values()):
+        return "APPROVED"
+    return None
+
+
 def load_pr_data_rest_fallback(client: GhClient, repo: str, pr_number: int) -> dict[str, Any]:
     """GraphQL fallback: load PR merge/check snapshot via REST (#1233 guard 5)."""
     owner, name = _split_repo(repo)
@@ -349,20 +430,29 @@ def load_pr_data_rest_fallback(client: GhClient, repo: str, pr_number: int) -> d
 
     review_decision = None
     try:
-        reviews = client.api(f"repos/{owner}/{name}/pulls/{pr_number}/reviews?per_page=100") or []
-        if isinstance(reviews, list):
-            for review in reversed(reviews):
-                if not isinstance(review, dict):
-                    continue
-                state = str(review.get("state") or "").upper()
-                if state in ("CHANGES_REQUESTED", "APPROVED"):
-                    review_decision = state
-                    break
+        reviews: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            batch = (
+                client.api(
+                    f"repos/{owner}/{name}/pulls/{pr_number}/reviews",
+                    fields={"per_page": 100, "page": page},
+                )
+                or []
+            )
+            if not isinstance(batch, list) or not batch:
+                break
+            reviews.extend(item for item in batch if isinstance(item, dict))
+            if len(batch) < 100:
+                break
+            page += 1
+        review_decision = review_decision_from_rest_reviews(reviews)
     except GhApiError:
         review_decision = None
 
     return {
         "reviewThreads": [],
+        "review_threads_unavailable": True,
         "mergeStateStatus": _mergeable_to_graphql(mergeable_state),
         "baseRefName": base_ref or "",
         "headRefName": (pull.get("head") or {}).get("ref") or "",

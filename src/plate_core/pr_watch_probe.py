@@ -176,13 +176,16 @@ def probe_pr(
         mergeable_state = state.mergeable_state
         base_ref = state.base_ref
 
-    required_contexts = frozenset(state.required_contexts or [])
-    if base_ref and (status == 200 or not state.required_contexts):
+    required_contexts: frozenset[str] = frozenset()
+    fetched_required = False
+    if base_ref:
         if status == 200 and base_ref != state.base_ref:
             required_contexts = fetch_required_check_contexts(http, repo, base_ref)
-        elif not state.required_contexts and base_ref:
+            fetched_required = True
+        elif state.required_contexts is None:
             required_contexts = fetch_required_check_contexts(http, repo, base_ref)
-        elif state.required_contexts:
+            fetched_required = True
+        else:
             required_contexts = frozenset(state.required_contexts)
 
     ci_state = state.ci_state
@@ -207,13 +210,21 @@ def probe_pr(
             if len(page_runs) < 100:
                 break
             page += 1
+        prior_fingerprint = state.ci_settle_fingerprint
+        prior_streak = state.ci_settle_streak
+        prior_ci_state = state.ci_state
+        if state.head_sha and head_sha != state.head_sha:
+            prior_fingerprint = None
+            prior_streak = 0
+            prior_ci_state = None
         ci_state, ci_fingerprint, ci_streak = apply_ci_guards_to_probe(
             status_json=status_json,
             check_runs=check_runs,
             required_contexts=required_contexts,
-            prior_fingerprint=state.ci_settle_fingerprint,
-            prior_streak=state.ci_settle_streak,
-            prior_ci_state=state.ci_state,
+            prior_fingerprint=prior_fingerprint,
+            prior_streak=prior_streak,
+            prior_ci_state=prior_ci_state,
+            head_sha=head_sha,
         )
 
     changed = (
@@ -234,7 +245,7 @@ def probe_pr(
         last_review_comment_id=state.last_review_comment_id,
         last_review_id=state.last_review_id,
         base_ref=base_ref,
-        required_contexts=sorted(required_contexts) if required_contexts else state.required_contexts,
+        required_contexts=sorted(required_contexts) if fetched_required else state.required_contexts,
         ci_settle_fingerprint=ci_fingerprint,
         ci_settle_streak=ci_streak,
     )
