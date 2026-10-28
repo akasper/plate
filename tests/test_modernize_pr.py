@@ -36,10 +36,19 @@ class ModernizePrHelperTests(unittest.TestCase):
             [
                 "git",
                 "range-diff",
-                "origin/main...abc1234",
-                "origin/main...def5678",
+                "origin/main..abc1234",
+                "origin/main..def5678",
             ],
         )
+
+    def test_git_range_diff_argv_uses_two_dot_pr_series_1251(self):
+        """Regression: two-dot ranges compare PR commits only, not merge-base triple-dot (#1251)."""
+        argv = git_range_diff_argv(
+            base="origin/release",
+            pre_rebase_head="aaa",
+            post_rebase_head="bbb",
+        )
+        self.assertTrue(all(".." in arg and "..." not in arg for arg in argv[2:]))
 
     def test_git_range_diff_argv_requires_refs(self):
         with self.assertRaises(ValueError):

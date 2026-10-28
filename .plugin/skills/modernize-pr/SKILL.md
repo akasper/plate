@@ -76,10 +76,10 @@ Skip this section for REWORK or CLOSE.
 4. **Compare history** — after a successful rebase, run range-diff against the pre-rebase tip:
 
    ```bash
-   git range-diff <base>...<PRE_HEAD> <base>...HEAD
+   git range-diff <base>..<PRE_HEAD> <base>..HEAD
    ```
 
-   Use `plate_core.modernize_pr.git_range_diff_argv(base=..., pre_rebase_head=PRE_HEAD, post_rebase_head=HEAD)` when building argv in automation. Investigate unexpected commit reordering or dropped commits before pushing.
+   Use two-dot ranges so only the PR's commit series is compared (three-dot `...` can show false drops from upstream-only commits). Use `plate_core.modernize_pr.git_range_diff_argv(base=..., pre_rebase_head=PRE_HEAD, post_rebase_head=HEAD)` when building argv in automation. Investigate unexpected commit reordering or dropped commits before pushing.
 
 5. **Push with lease on the old tip** — only after range-diff review:
 
