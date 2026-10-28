@@ -7,6 +7,7 @@ from plate_core.pr_gates_contract import (
     find_stale_required_check_contexts,
     missing_recommended_check_contexts,
     validate_merged_pr_gates_workflow,
+    validate_pr_gates_multi_label_event_safety,
     workflow_paths,
 )
 
@@ -28,9 +29,18 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
                 self.assertIn(marker, payload_text)
 
     def test_contract_validation_passes_on_committed_workflows(self):
-        repo_path, _ = workflow_paths(REPO_ROOT)
-        errors = validate_merged_pr_gates_workflow(repo_path.read_text(encoding="utf-8"))
-        self.assertEqual(errors, [])
+        repo_path, payload_path = workflow_paths(REPO_ROOT)
+        for path in (repo_path, payload_path):
+            errors = validate_merged_pr_gates_workflow(path.read_text(encoding="utf-8"))
+            self.assertEqual(errors, [], msg=f"{path}: {errors}")
+
+    def test_multi_label_event_safety_on_committed_workflows(self):
+        repo_path, payload_path = workflow_paths(REPO_ROOT)
+        for path in (repo_path, payload_path):
+            errors = validate_pr_gates_multi_label_event_safety(
+                path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(errors, [], msg=f"{path}: {errors}")
 
     def test_each_gate_failure_message_is_distinct(self):
         markers = [
