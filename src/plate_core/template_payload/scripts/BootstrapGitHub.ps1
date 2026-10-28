@@ -105,11 +105,22 @@ function ConvertFrom-LabelsYml {
     return $labels
 }
 
+function Clamp-LabelDescription {
+    param([string]$Description)
+    $max = 100
+    if ($Description.Length -gt $max) {
+        Write-Warning "Label description is $($Description.Length) chars (GitHub max $max); truncating for API."
+        return $Description.Substring(0, $max)
+    }
+    return $Description
+}
+
 # Sync canonical labels ----------------------------------------------------------
 
 Write-Host "Syncing canonical labels..."
 $labels = ConvertFrom-LabelsYml -Path $LabelsPath
-$labelCount = 0
+$labelSyncOk = 0
+$labelSyncFailed = 0
 
 # Fetch all existing labels once as a list of objects with actual and lower names.
 $existingRaw = & gh label list --repo $Repo --limit 200 --json name | ConvertFrom-Json
@@ -123,24 +134,31 @@ foreach ($label in $labels) {
     $canonicalNames.Add($label.name)
     $labelLower = $label.name.ToLower()
     $existing = $existingLabels | Where-Object { $_.lower -eq $labelLower } | Select-Object -First 1
+    $description = Clamp-LabelDescription $label.description
 
     if ($existing) {
         & gh label edit $existing.actual `
             --repo $Repo `
             --name $label.name `
             --color $label.color `
-            --description $label.description
+            --description $description
     }
     else {
         & gh label create $label.name `
             --repo $Repo `
             --color $label.color `
-            --description $label.description
+            --description $description
     }
-    $labelCount++
+    if ($LASTEXITCODE -eq 0) {
+        $labelSyncOk++
+    }
+    else {
+        Write-Error "Failed to sync label '$($label.name)' (see gh output above)."
+        $labelSyncFailed++
+    }
 }
 
-Write-Host "Synced $labelCount canonical labels."
+Write-Host "Synced $labelSyncOk canonical labels ($labelSyncFailed failed)."
 
 # Remove default GitHub labels ---------------------------------------------------
 

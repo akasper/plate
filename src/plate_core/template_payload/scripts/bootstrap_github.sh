@@ -110,10 +110,24 @@ parse_labels() {
     ' "$LABELS_PATH"
 }
 
+# GitHub label descriptions are limited to 100 characters.
+GITHUB_LABEL_DESC_MAX=100
+
+clamp_label_description() {
+    local desc="$1"
+    local len=${#desc}
+    if (( len > GITHUB_LABEL_DESC_MAX )); then
+        echo "Warning: label description is ${len} chars (GitHub max ${GITHUB_LABEL_DESC_MAX}); truncating for API." >&2
+        desc="${desc:0:GITHUB_LABEL_DESC_MAX}"
+    fi
+    printf '%s' "$desc"
+}
+
 # Sync canonical labels ----------------------------------------------------------
 
 echo "Syncing canonical labels..."
-LABEL_COUNT=0
+LABEL_SYNC_OK=0
+LABEL_SYNC_FAILED=0
 CANONICAL_NAMES=()
 
 # Fetch all existing labels once as "lowercase|actualname" pairs.
@@ -129,26 +143,36 @@ gh label list --repo "$REPO" --limit 200 --json name \
 while IFS='|' read -r label_name label_color label_desc; do
     CANONICAL_NAMES+=("$label_name")
     label_lower=$(echo "$label_name" | tr '[:upper:]' '[:lower:]')
+    label_desc=$(clamp_label_description "$label_desc")
 
     # Find the actual existing name (case-insensitive lookup).
     actual_name=$(awk -F'|' -v target="$label_lower" '$1 == target {print substr($0, index($0, "|")+1); exit}' "$EXISTING_LABELS_FILE")
 
     if [[ -n "$actual_name" ]]; then
-        gh label edit "$actual_name" \
+        if gh label edit "$actual_name" \
             --repo "$REPO" \
             --name "$label_name" \
             --color "$label_color" \
-            --description "$label_desc"
+            --description "$label_desc"; then
+            LABEL_SYNC_OK=$((LABEL_SYNC_OK + 1))
+        else
+            echo "Error: failed to update label '${label_name}' (see gh output above)." >&2
+            LABEL_SYNC_FAILED=$((LABEL_SYNC_FAILED + 1))
+        fi
     else
-        gh label create "$label_name" \
+        if gh label create "$label_name" \
             --repo "$REPO" \
             --color "$label_color" \
-            --description "$label_desc"
+            --description "$label_desc"; then
+            LABEL_SYNC_OK=$((LABEL_SYNC_OK + 1))
+        else
+            echo "Error: failed to create label '${label_name}' (see gh output above)." >&2
+            LABEL_SYNC_FAILED=$((LABEL_SYNC_FAILED + 1))
+        fi
     fi
-    LABEL_COUNT=$((LABEL_COUNT + 1))
 done < <(parse_labels)
 
-echo "Synced $LABEL_COUNT canonical labels."
+echo "Synced $LABEL_SYNC_OK canonical labels (${LABEL_SYNC_FAILED} failed)."
 
 # Remove default GitHub labels ---------------------------------------------------
 

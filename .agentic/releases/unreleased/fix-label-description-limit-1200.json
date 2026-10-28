@@ -1,0 +1,15 @@
+{
+  "slug": "fix-label-description-limit-1200",
+  "change_type": "fix",
+  "surface": ".github/labels.yml, scripts/bootstrap_github.sh, gh plate bootstrap",
+  "summary": "Keep shipped label descriptions within GitHub's 100-character limit and make label sync continue after per-label failures (#1200).",
+  "migration_impact": "Pull updated `.github/labels.yml` (or run import-payload) so bootstrap label sync succeeds. Bootstrap scripts truncate over-long descriptions with a warning and report failed labels without skipping later steps.",
+  "migration_guidance": [
+    "1. Sync `.github/labels.yml` from plate-core or shorten any local label descriptions to 100 characters or fewer.",
+    "2. Re-run `scripts/bootstrap_github.sh` or `gh plate bootstrap --apply` if a prior run stopped during label sync."
+  ],
+  "agent_notes": "Use `plate_core.github_labels.GITHUB_LABEL_DESCRIPTION_MAX_LENGTH` and the shipped-labels unittest when editing labels.yml. Do not rely on GitHub to accept descriptions over 100 characters.",
+  "breaking": false,
+  "links": ["#1200"],
+  "requires": []
+}
