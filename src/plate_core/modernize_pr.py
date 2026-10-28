@@ -35,7 +35,7 @@ def parse_verdict_line(line: str) -> str | None:
 
 
 def git_range_diff_argv(*, base: str, pre_rebase_head: str, post_rebase_head: str) -> list[str]:
-    """Build ``git range-diff`` argv comparing pre- and post-rebase commit ranges onto ``base``."""
+    """Build ``git range-diff`` argv comparing PR commit series before and after rebase."""
     base = base.strip()
     pre = pre_rebase_head.strip()
     post = post_rebase_head.strip()
@@ -44,8 +44,8 @@ def git_range_diff_argv(*, base: str, pre_rebase_head: str, post_rebase_head: st
     return [
         "git",
         "range-diff",
-        f"{base}...{pre}",
-        f"{base}...{post}",
+        f"{base}..{pre}",
+        f"{base}..{post}",
     ]
 
 
@@ -66,6 +66,6 @@ def git_push_force_with_lease_argv(
         "git",
         "push",
         remote,
-        branch,
+        f"HEAD:{ref}",
         f"--force-with-lease={ref}:{pre}",
     ]

@@ -57,10 +57,19 @@ class ModernizePrHelperTests(unittest.TestCase):
                 "git",
                 "push",
                 "origin",
-                "feature/foo",
+                "HEAD:refs/heads/feature/foo",
                 "--force-with-lease=refs/heads/feature/foo:deadbeef",
             ],
         )
+
+    def test_git_push_force_with_lease_uses_head_refspec_detached_worktree_1251(self):
+        """Regression: push HEAD to branch ref in detached worktree (#1251)."""
+        argv = git_push_force_with_lease_argv(
+            remote="origin",
+            branch="feature/foo",
+            pre_rebase_head="deadbeef",
+        )
+        self.assertEqual(argv[3], "HEAD:refs/heads/feature/foo")
 
     def test_git_push_force_with_lease_argv_requires_refs(self):
         with self.assertRaises(ValueError):

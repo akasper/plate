@@ -566,7 +566,7 @@ skills:
     5. **Push with lease on the old tip** — only after range-diff review:
 
        ```bash
-       git push <remote> <branch> --force-with-lease=refs/heads/<branch>:<PRE_HEAD>
+       git push <remote> HEAD:refs/heads/<branch> --force-with-lease=refs/heads/<branch>:<PRE_HEAD>
        ```
 
        Use `plate_core.modernize_pr.git_push_force_with_lease_argv(...)` for the exact argv. Never `--force` without lease; never push from the main checkout.
