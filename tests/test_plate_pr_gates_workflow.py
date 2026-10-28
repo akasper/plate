@@ -84,19 +84,30 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
     def test_recommended_check_name_is_pr_gates(self):
         self.assertEqual(PLATE_PR_GATES_CHECK_NAME, "pr-gates")
 
-    def test_pr_gates_includes_runs_on_selection_step(self):
+    def test_pr_gates_does_not_run_unused_runs_on_probe(self):
         repo_path, payload_path = workflow_paths(REPO_ROOT)
         for path in (repo_path, payload_path):
             text = path.read_text(encoding="utf-8")
-            self.assertIn("Select runs-on for heavy jobs", text)
-            self.assertIn("./.github/actions/plate-select-runs-on", text)
-            self.assertIn("name: pr-gates", text)
+            self.assertNotIn(
+                "Select runs-on for heavy jobs",
+                text,
+                msg=f"{path}: pr-gates should not probe runners without using output",
+            )
+
+    def test_review_event_safety_on_committed_workflows(self):
+        from plate_core.pr_gates_contract import validate_pr_gates_review_event_safety
+
+        repo_path, payload_path = workflow_paths(REPO_ROOT)
+        for path in (repo_path, payload_path):
+            errors = validate_pr_gates_review_event_safety(
+                path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(errors, [], msg=f"{path}: {errors}")
 
     def test_local_composite_action_requires_checkout_first(self):
         """Local ./.github/actions/* must run after actions/checkout (#1222)."""
         workflow_paths_to_check = [
             REPO_ROOT / ".github" / "workflows" / "ci.yml",
-            REPO_ROOT / ".github" / "workflows" / "plate-pr-gates.yml",
             REPO_ROOT
             / "src"
             / "plate_core"
@@ -104,13 +115,6 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
             / ".github"
             / "workflows"
             / "ci.yml",
-            REPO_ROOT
-            / "src"
-            / "plate_core"
-            / "template_payload"
-            / ".github"
-            / "workflows"
-            / "plate-pr-gates.yml",
             REPO_ROOT
             / "src"
             / "plate_core"

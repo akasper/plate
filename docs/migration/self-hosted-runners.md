@@ -78,7 +78,11 @@ No machine needs to be dedicated full-time; local runners are for **spare capaci
 
 When **no** local runner is free, GitHub **queues** the job rather than automatically moving it to hosted runners.
 
-PLATE’s planned workflow integration ([#1214](https://github.com/akasper/plate/issues/1214)) adds an early step (inside the merged `pr-gates` job where possible) that checks for an online, idle runner with your label and sets `runs-on` for heavier jobs to either your label or `ubuntu-latest` (and equivalents). A repository variable remains the manual override switch.
+PLATE’s workflow integration ([#1214](https://github.com/akasper/plate/issues/1214)) adds a **`select-runs-on` job** in heavy workflows (`ci.yml`, `test-e2e.yml`) that probes for an online, idle runner with your label and passes `runs-on` to downstream jobs. The composite action calls GitHub’s **List self-hosted runners for a repository** API; that endpoint requires **repository administration read** on the token (for example `actions: read` alone is not enough). When the probe returns 403, 404, or a network error, the action logs a warning and falls back to `ubuntu-latest` instead of failing the workflow.
+
+<!-- PLATES-CORE:BEGIN self-hosted-runner-probe-permissions -->
+The idle-runner probe in `.github/actions/plate-select-runs-on/action.yml` needs permission to list repository self-hosted runners. Grant the workflow job enough scope (typically **Administration: read** on the repository for `GITHUB_TOKEN`, or use a PAT with equivalent access). Without it, PLATE treats the probe as unavailable and uses GitHub-hosted `ubuntu-latest` for heavy jobs.
+<!-- PLATES-CORE:END self-hosted-runner-probe-permissions -->
 
 Set a **job timeout** so a queued job eventually runs on GitHub-hosted runners instead of waiting up to GitHub’s default queue horizon (on the order of a day).
 

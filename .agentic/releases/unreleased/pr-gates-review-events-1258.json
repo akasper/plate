@@ -1,0 +1,14 @@
+{
+  "slug": "pr-gates-review-events-1258",
+  "change_type": "fix",
+  "surface": "template_payload plate-pr-gates.yml, plate-select-runs-on composite action, pr_gates_contract validation",
+  "summary": "Review events use an isolated concurrency group and run all pr-gates steps against freshly fetched PR state so they cannot cancel a full pull_request run or publish green pr-gates after evaluating only feedback (#1258, #1231 item 1). plate-select-runs-on probe errors fall back to ubuntu-latest (#1259).",
+  "migration_impact": "Adopters importing payload workflows get review/full-gate behavior automatically. Self-hosted adopters should grant repository administration read if they want the runner probe to succeed; otherwise hosted fallback applies with a workflow warning.",
+  "migration_guidance": [
+    "Run `gh plate import-payload --dry-run --strategy conservative` and merge `plate-pr-gates.yml` / `plate-select-runs-on` updates.",
+    "If `PLATE_RUNS_ON` uses self-hosted labels, ensure workflow `permissions` or token scope includes repository administration read for the runner list API, or rely on hosted fallback documented in docs/migration/self-hosted-runners.md."
+  ],
+  "agent_notes": "Removed unused plate-select-runs-on step from pr-gates; heavy workflows still use select-runs-on job pattern from ci.yml.",
+  "breaking": false,
+  "links": ["#1258", "#1259", "#1231"]
+}

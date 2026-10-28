@@ -62,8 +62,9 @@ on:
 
 concurrency:
   # Non-gating label events use an isolated group and must not cancel real gate runs (#1228).
-  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name) && 'label-noop' || 'gate' }}
-  cancel-in-progress: ${{ !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name)) }}
+  # Review events use a separate group so they never cancel in-flight pull_request gate runs (#1258).
+  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') && 'review' || github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name) && 'label-noop' || 'gate' }}
+  cancel-in-progress: ${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') || !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name)) }}
 
 permissions:
   contents: read
@@ -83,12 +84,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Select runs-on for heavy jobs
-        id: plate_runs_on
-        uses: ./.github/actions/plate-select-runs-on
-        with:
-          plate-runs-on: ${{ vars.PLATE_RUNS_ON }}
 
       - name: Gate — PR title
         if: |

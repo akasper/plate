@@ -120,6 +120,7 @@ def validate_merged_pr_gates_workflow(text: str) -> list[str]:
             errors.append(f"missing failure marker for {step}: {marker!r}")
     label_errors = validate_pr_gates_multi_label_event_safety(text)
     errors.extend(label_errors)
+    errors.extend(validate_pr_gates_review_event_safety(text))
     errors.extend(validate_feature_fragment_gate_on_all_admitted_pr_events(text))
     errors.extend(validate_closing_keyword_parsing_contract(text))
     errors.extend(validate_sidebar_link_replay_contract(text))
@@ -185,6 +186,54 @@ def validate_pr_gates_multi_label_event_safety(text: str) -> list[str]:
         )
     if "github.event.action != 'closed'" not in text:
         errors.append("pr-gates job should run for all pull_request actions except closed")
+    return errors
+
+
+def validate_pr_gates_review_event_safety(text: str) -> list[str]:
+    """Review events must not cancel full gate runs or skip non-feedback gates (#1258)."""
+    errors: list[str] = []
+    if "concurrency:" not in text:
+        errors.append("missing concurrency block for review-event safety")
+        return errors
+    if "'review'" not in text and '"review"' not in text:
+        errors.append(
+            "concurrency group must include a review suffix for pull_request_review events"
+        )
+    if "pull_request_review_comment" not in text.split("concurrency:")[1].split("jobs:")[0]:
+        errors.append(
+            "concurrency block must treat pull_request_review_comment like review events"
+        )
+    if "loadPullRequest" not in text:
+        errors.append(
+            "review-event gate runs must fetch fresh PR state via loadPullRequest helper"
+        )
+    title_idx = text.find("Gate — PR title")
+    if title_idx >= 0:
+        title_block = text[title_idx : title_idx + 800]
+        if (
+            "pull_request_review" not in title_block.split("uses:")[0]
+            and "pull_request_review_comment" not in title_block.split("uses:")[0]
+        ):
+            errors.append(
+                "Gate — PR title must run on pull_request_review and "
+                "pull_request_review_comment events (full gate evaluation)"
+            )
+    issue_idx = text.find("Gate — issue links")
+    if issue_idx >= 0:
+        issue_if = text[issue_idx : issue_idx + 500]
+        if (
+            "pull_request_review" not in issue_if.split("uses:")[0]
+            and "pull_request_review_comment" not in issue_if.split("uses:")[0]
+        ):
+            errors.append(
+                "Gate — issue links must run on pull_request_review and "
+                "pull_request_review_comment events (full gate evaluation)"
+            )
+    if "Select runs-on for heavy jobs" in text:
+        errors.append(
+            "pr-gates job must not run plate-select-runs-on without using its output "
+            "(remove the step or wire runs-on from a probe job)"
+        )
     return errors
 
 
