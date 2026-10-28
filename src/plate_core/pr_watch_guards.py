@@ -568,7 +568,7 @@ def event_memory_catchup_since(last_checked_at: str | None, now: datetime | None
     last = _parse_github_ts(last_checked_at)
     if last is None:
         return _iso_z(floor)
-    effective = min(last, floor)
+    effective = max(last, floor)
     return _iso_z(effective)
 
 
@@ -648,8 +648,11 @@ def filter_delta_by_event_memory(
     return out
 
 
-def _summary_transition_key(kind: str, payload: Mapping[str, Any]) -> str:
-    return f"{kind}:{payload.get('from', '')}:{payload.get('to', '')}"
+def _summary_transition_key(kind: str, block: Mapping[str, Any]) -> str:
+    if kind == "head_commit":
+        return f"head_commit:{block.get('previous_sha', '')}:{block.get('sha', '')}"
+    head = str(block.get("head_sha") or "")
+    return f"{kind}:{head}:{block.get('from', '')}:{block.get('to', '')}"
 
 
 def filter_wake_summary_by_event_memory(
@@ -662,13 +665,7 @@ def filter_wake_summary_by_event_memory(
         block = summary.get(kind)
         if not isinstance(block, dict):
             continue
-        key = _summary_transition_key(
-            kind,
-            block if kind != "head_commit" else {
-                "from": block.get("previous_sha"),
-                "to": block.get("sha"),
-            },
-        )
+        key = _summary_transition_key(kind, block)
         if key in ledger.reported:
             out[kind] = None
     overlap = summary.get("base_file_overlap")
@@ -694,12 +691,7 @@ def mark_wake_summary_reported(
             ledger.reported[_summary_transition_key(kind, block)] = stamp
     head = summary.get("head_commit")
     if isinstance(head, dict):
-        ledger.reported[
-            _summary_transition_key(
-                "head_commit",
-                {"from": head.get("previous_sha"), "to": head.get("sha")},
-            )
-        ] = stamp
+        ledger.reported[_summary_transition_key("head_commit", head)] = stamp
     overlap = summary.get("base_file_overlap")
     if isinstance(overlap, dict):
         key = str(overlap.get("event_key") or "")
