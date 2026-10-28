@@ -1,0 +1,14 @@
+{
+  "slug": "pr-watch-guards-1233",
+  "change_type": "feature",
+  "surface": "plate_core pr_watch_guards + pr_watch_probe + pr_babysit --watch",
+  "summary": "Add babysit --watch guards for required checks before green, two-read CI settle, and REST fallback when GraphQL is rate-limited (#1233).",
+  "migration_impact": "No config changes. Watch loops may report CI as pending slightly longer while checks settle; babysit uses REST when GraphQL primary rate limit is exhausted.",
+  "migration_guidance": [
+    "Upgrade plate-core when this release ships.",
+    "No action required unless you rely on immediate single-tick CI success signaling in custom watch automation."
+  ],
+  "agent_notes": "Watcher guard ideas adapted from t3dotgg/tstack pr-wait (MIT, copyright Theo Browne); PLATE implementation is original. Guards 3 (base moved into PR files) and 4 (restart-safe events) remain for a follow-up slice.",
+  "breaking": false,
+  "links": ["#1233", "#1232", "#1077"]
+}

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from .procutil import run_hidden
+from .pr_watch_guards import apply_ci_guards_to_probe, fetch_required_check_contexts
 
 _REPO_RE = re.compile(r"^([^/]+)/([^/]+)$")
 
@@ -56,6 +57,10 @@ class ProbeState:
     last_issue_comment_id: int = 0
     last_review_comment_id: int = 0
     last_review_id: int = 0
+    base_ref: str | None = None
+    required_contexts: list[str] | None = None
+    ci_settle_fingerprint: str | None = None
+    ci_settle_streak: int = 0
 
 
 @dataclass
@@ -164,16 +169,31 @@ def probe_pr(
         head_sha = (body.get("head") or {}).get("sha")
         updated_at = body.get("updated_at")
         mergeable_state = body.get("mergeable_state")
+        base_ref = (body.get("base") or {}).get("ref")
     else:
         head_sha = state.head_sha
         updated_at = state.updated_at
         mergeable_state = state.mergeable_state
+        base_ref = state.base_ref
+
+    required_contexts = frozenset(state.required_contexts or [])
+    if base_ref and (status == 200 or not state.required_contexts):
+        if status == 200 and base_ref != state.base_ref:
+            required_contexts = fetch_required_check_contexts(http, repo, base_ref)
+        elif not state.required_contexts and base_ref:
+            required_contexts = fetch_required_check_contexts(http, repo, base_ref)
+        elif state.required_contexts:
+            required_contexts = frozenset(state.required_contexts)
 
     ci_state = state.ci_state
+    ci_fingerprint = state.ci_settle_fingerprint
+    ci_streak = state.ci_settle_streak
+    status_json: dict[str, Any] = {}
+    check_runs: list[dict[str, Any]] = []
     if head_sha:
         _, _, status_json = http.get(f"/repos/{owner}/{name}/commits/{head_sha}/status", None)
-        status_state = status_json.get("state") if isinstance(status_json, dict) else None
-        check_runs: list[dict[str, Any]] = []
+        if not isinstance(status_json, dict):
+            status_json = {}
         page = 1
         while True:
             _, _, checks_json = http.get(
@@ -187,20 +207,13 @@ def probe_pr(
             if len(page_runs) < 100:
                 break
             page += 1
-        check_states = [
-            "pending"
-            if str(run.get("status") or "").lower() != "completed"
-            else str(run.get("conclusion") or "").lower()
-            for run in check_runs
-        ]
-        if "pending" in check_states or str(status_state or "").lower() in ("pending", "expected"):
-            ci_state = "pending"
-        elif any(value in ("failure", "timed_out", "cancelled", "action_required", "startup_failure") for value in check_states):
-            ci_state = "failure"
-        elif str(status_state or "").lower() in ("failure", "error"):
-            ci_state = str(status_state).lower()
-        elif status_state or check_states:
-            ci_state = "success"
+        ci_state, ci_fingerprint, ci_streak = apply_ci_guards_to_probe(
+            status_json=status_json,
+            check_runs=check_runs,
+            required_contexts=required_contexts,
+            prior_fingerprint=state.ci_settle_fingerprint,
+            prior_streak=state.ci_settle_streak,
+        )
 
     changed = (
         head_sha != state.head_sha
@@ -219,6 +232,10 @@ def probe_pr(
         last_issue_comment_id=state.last_issue_comment_id,
         last_review_comment_id=state.last_review_comment_id,
         last_review_id=state.last_review_id,
+        base_ref=base_ref,
+        required_contexts=sorted(required_contexts) if required_contexts else state.required_contexts,
+        ci_settle_fingerprint=ci_fingerprint,
+        ci_settle_streak=ci_streak,
     )
     return ProbeResult(changed=changed, not_modified=status == 304, pr=body if status == 200 else None, new_state=new_state)
 
