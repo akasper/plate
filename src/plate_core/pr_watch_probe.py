@@ -213,6 +213,7 @@ def probe_pr(
             required_contexts=required_contexts,
             prior_fingerprint=state.ci_settle_fingerprint,
             prior_streak=state.ci_settle_streak,
+            prior_ci_state=state.ci_state,
         )
 
     changed = (

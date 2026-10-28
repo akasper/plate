@@ -117,7 +117,13 @@ class SettleBeforeFinishedTests(unittest.TestCase):
         fp = "abc123"
         first = apply_settle_before_finished("success", fp, prior_fingerprint=None, prior_streak=0)
         self.assertEqual(first[0], "pending")
-        second = apply_settle_before_finished("success", fp, prior_fingerprint=fp, prior_streak=first[2])
+        second = apply_settle_before_finished(
+            "success",
+            fp,
+            prior_fingerprint=fp,
+            prior_streak=first[2],
+            prior_ci_state="pending",
+        )
         self.assertEqual(second[0], "success")
 
     def test_probe_defers_success_until_second_identical_read(self):
@@ -156,6 +162,7 @@ class SettleBeforeFinishedTests(unittest.TestCase):
             required_contexts=frozenset(),
             prior_fingerprint=None,
             prior_streak=0,
+            prior_ci_state=None,
         )
         self.assertEqual(reported, "pending")
         reported2, _, _ = apply_ci_guards_to_probe(
@@ -164,6 +171,7 @@ class SettleBeforeFinishedTests(unittest.TestCase):
             required_contexts=frozenset(),
             prior_fingerprint=fingerprint,
             prior_streak=streak,
+            prior_ci_state="pending",
         )
         self.assertEqual(reported2, "success")
 
@@ -192,9 +200,9 @@ class GraphqlRestFallbackTests(unittest.TestCase):
                 return {"check_runs": [{"name": "test", "status": "completed", "conclusion": "success"}]}
             if endpoint == "repos/o/r/branches/main/protection":
                 raise GhApiError("404")
-            if endpoint == "repos/o/r/rulesets":
+            if "rulesets" in endpoint:
                 return []
-            if endpoint == "repos/o/r/pulls/5/reviews":
+            if endpoint.startswith("repos/o/r/pulls/5/reviews"):
                 return [{"state": "APPROVED", "user": {"login": "human"}}]
             raise AssertionError(f"unexpected endpoint {endpoint}")
 

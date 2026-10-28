@@ -212,8 +212,15 @@ def apply_settle_before_finished(
     *,
     prior_fingerprint: str | None,
     prior_streak: int,
+    prior_ci_state: str | None = None,
 ) -> tuple[str | None, str | None, int]:
-    """Report CI success only after two consecutive identical reads (#1233 guard 2)."""
+    """Report CI success only after two consecutive identical reads (#1233 guard 2).
+
+    Preserves legacy probe behavior: an already-reported ``success`` stays success on
+    unchanged reads (304), and transitions from ``pending``/``failure`` report success
+    immediately. The settle deferral applies only on the first CI observation when
+    there was no prior ``ci_state`` (fresh probe / first tick).
+    """
     streak = prior_streak
     if fingerprint != prior_fingerprint:
         streak = 1
@@ -221,6 +228,12 @@ def apply_settle_before_finished(
         streak = prior_streak + 1
 
     if raw_ci_state == "success":
+        if prior_ci_state == "success":
+            return "success", fingerprint, streak
+        if prior_ci_state in ("pending", "failure"):
+            return "success", fingerprint, streak
+        if prior_ci_state is None:
+            return "pending", fingerprint, streak
         if streak >= 2:
             return "success", fingerprint, streak
         return "pending", fingerprint, streak
@@ -235,6 +248,7 @@ def apply_ci_guards_to_probe(
     required_contexts: frozenset[str],
     prior_fingerprint: str | None,
     prior_streak: int,
+    prior_ci_state: str | None = None,
 ) -> tuple[str | None, str | None, int]:
     """Combine required-check and settle guards for one probe tick."""
     missing = missing_required_contexts(
@@ -248,6 +262,7 @@ def apply_ci_guards_to_probe(
         fingerprint,
         prior_fingerprint=prior_fingerprint,
         prior_streak=prior_streak,
+        prior_ci_state=prior_ci_state,
     )
 
 
