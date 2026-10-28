@@ -1,4 +1,5 @@
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -102,6 +103,43 @@ class PlateDirectoryLayoutTests(unittest.TestCase):
             self.assertIn(plate_directory_layout_error_message(), text)
             self.assertNotIn(".plate/config: MISSING", text)
             self.assertNotIn("Traceback", text + err.getvalue())
+
+    def test_health_json_exits_nonzero_for_directory_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").mkdir()
+            out = io.StringIO()
+            with patch("plate_core.cli.get_health") as mock_health:
+                from plate_core.health import HealthReport
+
+                mock_health.return_value = HealthReport(
+                    repo="owner/repo",
+                    label_coverage_ok=True,
+                    missing_labels=[],
+                    branch_protection_enabled=True,
+                    open_epic_count=0,
+                    binary_artifacts_tracked=0,
+                    status="pass",
+                    goals_page_present=False,
+                    plate_config_layout_error=plate_directory_layout_error_message(),
+                )
+                with redirect_stdout(out):
+                    code = main(
+                        [
+                            "health",
+                            "--repo",
+                            "owner/repo",
+                            "--repo-root",
+                            str(root),
+                            "--json",
+                        ]
+                    )
+            self.assertEqual(code, 1)
+            payload = json.loads(out.getvalue().strip())
+            self.assertEqual(
+                payload.get("plate_config_layout_error"),
+                plate_directory_layout_error_message(),
+            )
 
     def test_get_health_local_directory_layout(self):
         class RemoteFilePlateClient:

@@ -256,6 +256,8 @@ def cmd_health(args: argparse.Namespace) -> int:
     )
     if args.json:
         print(json.dumps(report.to_dict()))
+        if report.plate_config_layout_error:
+            return 1
         return 0
 
     print(f"Repo: {report.repo}")
