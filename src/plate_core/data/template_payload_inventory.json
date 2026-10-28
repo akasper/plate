@@ -108,6 +108,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".github/skills/code-review/SKILL.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".github/workflows/auto-label-feedback-responses.yml",
       "classification": "copy_to_downstream"
     },
@@ -285,6 +289,10 @@
     },
     {
       "path": "docs/migration/namespace-docs-migration.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/self-hosted-runners.md",
       "classification": "copy_to_downstream"
     },
     {

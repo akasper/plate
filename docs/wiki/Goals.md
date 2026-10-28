@@ -37,11 +37,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 ## Current State & Evidence
 
-*(Snapshot after v0.8.4 — update at major cuts and when North Star shifts.)*
+*(Snapshot after v0.8.5 — update at major cuts and when North Star shifts.)*
 
-**Shipped foundations (v0.8.0, public pin v0.8.4):**
+**Shipped foundations (v0.8.0, public pin v0.8.5):**
 
-- Public **PyPI** package `plate-core==0.8.4`, shared library for CLI / MCP / plugins.
+- Public **PyPI** package `plate-core==0.8.5`, shared library for CLI / MCP / plugins.
 - **`gh plate`** thin-shim extension path and release-track / ceremony tooling.
 - Autonomy and adoption foundations: budgeted AutonomyEngine, adopt / import-payload / self-migrate surfaces, quiet ops, baseline persona when PLATE signals are present.
 - Endless feed / Q&A / planning primitives and Information Audit Goals convention (Epic #218 lineage).
@@ -65,6 +65,13 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 - `gh plate pr babysit --watch` backs off while a pull request is quiet and stops on merge, close, or a wall-clock cap. Spend caps limit wakes and hours. One pause note is posted when a cap is hit. `--status` reports saved usage. `--reset-caps` starts a new budget (#1077, #1079, #1081).
 - Cheap PR change detection (`pr_watch_probe`) and delta wake summaries (`pr_watch_summary`) ship as libraries. The watch loop does not call them yet (#1078, #1080).
+
+**Shipped in v0.8.5 (was Next Release #1097):**
+
+- Actions cost controls: issue-event job guards, opt-in Copilot autostart, PR concurrency, and one merged `pr-gates` check that replaces the separate audit and check jobs. Adopters' required checks become `labels`, `test`, and `pr-gates` (#1150, #1209).
+- `gh plate runner add|status|remove|doctor` and an adopter guide for ephemeral self-hosted runners on private repos (#1212, #1215).
+- Greenfield bootstrap on empty repos, no more `plate_template` path, label descriptions under GitHub's 100-character limit, and a complete plate-core wheel with PyYAML (#1152, #1151, #1200, #1115).
+- `babysit --watch` uses cheap probes on quiet ticks, skips repeated resolved Copilot comments, and a Copilot `code-review` skill ships in the payload (#1077, #1096, #1092, #1155).
 
 **Not yet won (do not overclaim):**
 

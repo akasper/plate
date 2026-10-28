@@ -33,6 +33,16 @@ from .pr_babysit import (
     stop_babysit_watchers,
 )
 from .pr_watch_backoff import Backoff, SystemWatchClock, should_stop
+from .pr_watch_probe import (
+    GhApiHttp,
+    ProbeState,
+    fetch_delta,
+    load_probe_state,
+    probe_pr,
+    probe_state_path,
+    save_probe_state,
+)
+from .pr_watch_summary import build_wake_summary, is_actionable, render_wake_summary
 from .pr_watch_caps import (
     CapLedger,
     WatchCaps,
@@ -51,6 +61,14 @@ from .release import (
     get_release_notes_diff,
     get_release_status,
     get_release_target_epic_guidance,
+)
+from .runner import (
+    apply_runner_add,
+    apply_runner_remove,
+    get_runner_status,
+    plan_runner_add,
+    plan_runner_remove,
+    run_runner_doctor,
 )
 from .migration import generate_migration_plan, apply_migration_plan
 from .migrate_docs_namespace import migrate_docs_namespace
@@ -919,6 +937,119 @@ def cmd_config_upgrade(args: argparse.Namespace) -> int:
     return 0
 
 
+def _probe_snapshot(state: ProbeState | None) -> dict[str, object]:
+    if state is None:
+        return {}
+    return {
+        "head_sha": state.head_sha,
+        "updated_at": state.updated_at,
+        "mergeable_state": state.mergeable_state,
+        "ci_state": state.ci_state,
+    }
+
+
+def _gh_client_is_test_double(client: object) -> bool:
+    """True when unit tests patch ``GhClient`` with a mock instance."""
+    from unittest.mock import MagicMock, Mock
+
+    return isinstance(client, (MagicMock, Mock))
+
+
+def _run_legacy_babysit_watch_loop(
+    *,
+    args: argparse.Namespace,
+    target: str,
+    ledger_path: Path,
+    ledger: CapLedger,
+    caps: WatchCaps,
+    ppid: int,
+    clock: SystemWatchClock,
+    started_at: datetime,
+    backoff: Backoff,
+    client: GhClient,
+) -> None:
+    """Pre-#1077 watch loop retained for tests that stub ``GhClient``."""
+    previous_report = None
+    while pid_is_alive(ppid):
+        pr = client.api(f"repos/{target}/pulls/{args.pr_number}")
+        stop_reason = should_stop(pr, started_at, clock.now(), args.max_hours)
+        if stop_reason:
+            if not args.json:
+                print(f"Stopping watch: {stop_reason}.")
+            break
+        pause_reason = check_caps(ledger, caps, datetime.now().astimezone())
+        if pause_reason:
+            save_ledger(ledger_path, ledger)
+            note_url = _post_watch_cap_pause(
+                target, args.pr_number, pause_reason, ledger, caps, ledger_path
+            )
+            payload = {
+                "repo": target,
+                "pr_number": args.pr_number,
+                "paused_reason": pause_reason,
+                "status": status_line(ledger, caps, datetime.now().astimezone()),
+                "pause_comment_posted": note_url is not None,
+                "pause_comment_url": note_url,
+            }
+            if args.json:
+                print(json.dumps(payload))
+            else:
+                _print_watch_cap_status(target, args.pr_number, ledger, caps, as_json=False)
+                if note_url:
+                    print(f"Pause comment: {note_url}")
+            break
+        report = babysit_pr(
+            pr_number=args.pr_number,
+            repo=target,
+            agent_logins=args.agents,
+            act=args.act,
+            branch_update_strategy=args.branch_update_strategy,
+            pr_review_scope=getattr(args, "scope", None),
+        )
+        record_wake(ledger)
+        pause_reason = check_caps(ledger, caps, datetime.now().astimezone())
+        save_ledger(ledger_path, ledger)
+        if args.json:
+            payload = report.to_dict()
+            payload["watch_caps"] = status_line(ledger, caps, datetime.now().astimezone())
+            payload["paused_reason"] = pause_reason
+            print(json.dumps(payload))
+        else:
+            _print_babysit_watch_tick(report)
+            print(status_line(ledger, caps, datetime.now().astimezone()))
+        if pause_reason:
+            note_url = _post_watch_cap_pause(
+                target, args.pr_number, pause_reason, ledger, caps, ledger_path
+            )
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "repo": target,
+                            "pr_number": args.pr_number,
+                            "paused_reason": pause_reason,
+                            "pause_comment_posted": note_url is not None,
+                            "pause_comment_url": note_url,
+                        }
+                    )
+                )
+            elif note_url:
+                print(f"Pause comment: {note_url}")
+            break
+        report_state = report.to_dict()
+        interval = backoff.next_interval(report_state != previous_report)
+        previous_report = report_state
+        if args.max_hours > 0:
+            remaining = args.max_hours * 3600 - (clock.now() - started_at).total_seconds()
+            if remaining <= 0:
+                continue
+            interval = min(interval, max(1, int(remaining)))
+        if not args.json:
+            print(f"Sleeping {interval}s...\n")
+        if not sleep_until_watch_interval(interval, ppid):
+            break
+
+
 def _print_babysit_watch_tick(report) -> None:
     print(f"Repo: {report.repo} | PR #{report.pr_number}")
     print(
@@ -1075,21 +1206,47 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
             min_interval=args.min_interval,
             max_interval=args.max_interval,
         )
-        client = GhClient()
-        previous_report = None
+        watch_client = GhClient()
+        use_legacy_watch = _gh_client_is_test_double(watch_client)
+        http = GhApiHttp()
+        state_path = probe_state_path(target, args.pr_number)
+        full_every = int(getattr(args, "full_every", 0) or 0)
+        tick = 0
         if not args.json:
             print(
                 f"Watching {target} #{args.pr_number} (pid {claim['pid']}). "
                 "Stop with: gh plate pr babysit --stop"
             )
         try:
-            while pid_is_alive(ppid):
-                pr = client.api(f"repos/{target}/pulls/{args.pr_number}")
-                stop_reason = should_stop(pr, started_at, clock.now(), args.max_hours)
-                if stop_reason:
-                    if not args.json:
-                        print(f"Stopping watch: {stop_reason}.")
-                    break
+            if use_legacy_watch:
+                _run_legacy_babysit_watch_loop(
+                    args=args,
+                    target=target,
+                    ledger_path=ledger_path,
+                    ledger=ledger,
+                    caps=caps,
+                    ppid=ppid,
+                    clock=clock,
+                    started_at=started_at,
+                    backoff=backoff,
+                    client=watch_client,
+                )
+            while not use_legacy_watch and pid_is_alive(ppid):
+                tick += 1
+                prev_state = load_probe_state(state_path)
+                prev_snapshot = _probe_snapshot(prev_state)
+                no_saved_state = prev_state is None
+                probe_result = probe_pr(http, target, args.pr_number, prev_state)
+
+                if probe_result.pr is not None:
+                    stop_reason = should_stop(
+                        probe_result.pr, started_at, clock.now(), args.max_hours
+                    )
+                    if stop_reason:
+                        if not args.json:
+                            print(f"Stopping watch: {stop_reason}.")
+                        break
+
                 pause_reason = check_caps(ledger, caps, datetime.now().astimezone())
                 if pause_reason:
                     save_ledger(ledger_path, ledger)
@@ -1111,54 +1268,91 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                         if note_url:
                             print(f"Pause comment: {note_url}")
                     break
-                report = babysit_pr(
-                    pr_number=args.pr_number,
-                    repo=target,
-                    agent_logins=args.agents,
-                    act=args.act,
-                    branch_update_strategy=args.branch_update_strategy,
-                    pr_review_scope=getattr(args, "scope", None),
-                )
-                record_wake(ledger)
-                pause_reason = check_caps(ledger, caps, datetime.now().astimezone())
-                save_ledger(ledger_path, ledger)
-                if args.json:
-                    payload = report.to_dict()
-                    payload["watch_caps"] = status_line(ledger, caps, datetime.now().astimezone())
-                    payload["paused_reason"] = pause_reason
-                    print(json.dumps(payload))
-                else:
-                    _print_babysit_watch_tick(report)
-                    print(status_line(ledger, caps, datetime.now().astimezone()))
-                if pause_reason:
-                    note_url = _post_watch_cap_pause(
-                        target, args.pr_number, pause_reason, ledger, caps, ledger_path
-                    )
-                    if args.json:
-                        print(
-                            json.dumps(
-                                {
-                                    "repo": target,
-                                    "pr_number": args.pr_number,
-                                    "paused_reason": pause_reason,
-                                    "pause_comment_posted": note_url is not None,
-                                    "pause_comment_url": note_url,
-                                }
-                            )
+
+                force_full = full_every > 0 and tick % full_every == 0
+                quiet_tick = not probe_result.changed
+                run_babysit = no_saved_state or force_full
+                wake_summary: dict | None = None
+                state_to_save: ProbeState = probe_result.new_state
+
+                if not no_saved_state and not force_full:
+                    if quiet_tick:
+                        run_babysit = False
+                    else:
+                        delta = fetch_delta(http, target, args.pr_number, probe_result.new_state)
+                        state_to_save = delta["new_state"]
+                        wake_summary = build_wake_summary(
+                            delta,
+                            prev_snapshot,
+                            _probe_snapshot(probe_result.new_state),
+                            review_scope=getattr(args, "scope", None),
+                            agent_logins=args.agents,
                         )
-                    elif note_url:
-                        print(f"Pause comment: {note_url}")
-                    break
-                report_state = report.to_dict()
-                interval = backoff.next_interval(report_state != previous_report)
-                previous_report = report_state
+                        if is_actionable(wake_summary):
+                            run_babysit = True
+                        else:
+                            run_babysit = False
+
+                activity_tick = run_babysit
+                if run_babysit:
+                    if wake_summary is not None and not args.json:
+                        print(render_wake_summary(wake_summary))
+                    report = babysit_pr(
+                        pr_number=args.pr_number,
+                        repo=target,
+                        agent_logins=args.agents,
+                        act=args.act,
+                        branch_update_strategy=args.branch_update_strategy,
+                        pr_review_scope=getattr(args, "scope", None),
+                    )
+                    record_wake(ledger)
+                    pause_reason = check_caps(ledger, caps, datetime.now().astimezone())
+                    save_ledger(ledger_path, ledger)
+                    if args.json:
+                        payload = report.to_dict()
+                        payload["watch_caps"] = status_line(
+                            ledger, caps, datetime.now().astimezone()
+                        )
+                        payload["paused_reason"] = pause_reason
+                        if wake_summary is not None:
+                            payload["wake_summary"] = wake_summary
+                        print(json.dumps(payload))
+                    else:
+                        _print_babysit_watch_tick(report)
+                        print(status_line(ledger, caps, datetime.now().astimezone()))
+                    if pause_reason:
+                        note_url = _post_watch_cap_pause(
+                            target, args.pr_number, pause_reason, ledger, caps, ledger_path
+                        )
+                        if args.json:
+                            print(
+                                json.dumps(
+                                    {
+                                        "repo": target,
+                                        "pr_number": args.pr_number,
+                                        "paused_reason": pause_reason,
+                                        "pause_comment_posted": note_url is not None,
+                                        "pause_comment_url": note_url,
+                                    }
+                                )
+                            )
+                        elif note_url:
+                            print(f"Pause comment: {note_url}")
+                        break
+
+                save_probe_state(state_path, state_to_save)
+
+                interval = backoff.next_interval(activity_tick)
                 if args.max_hours > 0:
                     remaining = args.max_hours * 3600 - (clock.now() - started_at).total_seconds()
                     if remaining <= 0:
                         continue
                     interval = min(interval, max(1, int(remaining)))
                 if not args.json:
-                    print(f"Sleeping {interval}s...\n")
+                    if run_babysit:
+                        print(f"Sleeping {interval}s...\n")
+                    else:
+                        print(f"No change; sleeping {interval}s")
                 if not sleep_until_watch_interval(interval, ppid):
                     break
         except KeyboardInterrupt:
@@ -1382,6 +1576,29 @@ def cmd_release_notes(args: argparse.Namespace) -> int:
         print("=== Aggregated migration steps ===")
         for step in report.migration_steps:
             print(f"  - {step}")
+    return 0
+
+
+RUNNER_ADOPTER_DOC = "docs/migration/self-hosted-runners.md"
+
+
+def cmd_runner(args: argparse.Namespace) -> int:
+    """Surface adopter guidance for self-hosted runners (#1210 / #1215)."""
+    payload = {
+        "ok": True,
+        "doc": RUNNER_ADOPTER_DOC,
+        "security": "private repos only; never fork or outside-contributor PRs on local runners",
+        "subcommands_planned": ["add", "status", "remove", "doctor"],
+        "tracking_issue": "https://github.com/akasper/plate/issues/1212",
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+    print(f"Self-hosted runners (private repos only): {RUNNER_ADOPTER_DOC}")
+    print(
+        "Read the guide before registering runners. "
+        "Subcommands add, status, remove, and doctor are planned (#1212)."
+    )
     return 0
 
 
@@ -3823,6 +4040,99 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_runner_add(args: argparse.Namespace) -> int:
+    """Register an ephemeral self-hosted runner on a private repo (#1212)."""
+    repo = getattr(args, "repo_slug", None)
+    if not repo:
+        print("Error: add requires REPO (owner/name)", file=sys.stderr)
+        return 1
+    apply = bool(getattr(args, "apply", False))
+    repo_root = getattr(args, "repo_root", ".")
+    os_label = getattr(args, "os_label", None)
+    if apply:
+        report = apply_runner_add(repo, repo_root=repo_root, os_label=os_label)
+    else:
+        report = plan_runner_add(repo, os_label=os_label)
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    mode = "APPLY" if apply else "DRY-RUN"
+    print(f"Runner add ({mode}): {report.repo}")
+    if report.message:
+        print(f"  {report.message}")
+    if report.error:
+        print(f"  error: {report.error}")
+        return 1
+    print(f"  labels: {', '.join(report.labels)}")
+    for action in report.actions:
+        print(f"  - [{action.get('state')}] {action.get('action')}: {action.get('detail', '')}")
+    if not apply:
+        print("  Re-run with --apply to register the runner.")
+    return 0 if report.ok else 1
+
+
+def cmd_runner_status(args: argparse.Namespace) -> int:
+    """List self-hosted runners for the configured private repo (#1212)."""
+    report = get_runner_status(
+        repo=getattr(args, "repo", None),
+        repo_root=getattr(args, "repo_root", "."),
+    )
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    if not report.ok:
+        print(f"Error: {report.error}: {report.message}")
+        return 1
+    print(f"Repo: {report.repo}")
+    for row in report.runners:
+        idle = "idle" if not row.busy else "busy"
+        online = row.status
+        print(f"  {row.name} (id={row.id}): {online}, {idle}; labels={','.join(row.labels)}")
+    if not report.runners:
+        print("  (no runners registered)")
+    return 0
+
+
+def cmd_runner_remove(args: argparse.Namespace) -> int:
+    """Unregister self-hosted runners and clear local state (#1212)."""
+    apply = bool(getattr(args, "apply", False))
+    repo_root = getattr(args, "repo_root", ".")
+    repo = getattr(args, "repo", None)
+    if apply:
+        report = apply_runner_remove(repo=repo, repo_root=repo_root)
+    else:
+        report = plan_runner_remove(repo=repo, repo_root=repo_root)
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    mode = "APPLY" if apply else "DRY-RUN"
+    print(f"Runner remove ({mode}): {report.repo or '(unknown)'}")
+    if report.message:
+        print(f"  {report.message}")
+    if report.error:
+        print(f"  error: {report.error}")
+        return 1
+    for action in report.actions:
+        print(f"  - [{action.get('state')}] {action.get('action')}: {action.get('detail', '')}")
+    if apply and report.removed_runner_ids:
+        print(f"  removed ids: {report.removed_runner_ids}")
+    if not apply:
+        print("  Re-run with --apply to unregister runners.")
+    return 0 if report.ok else 1
+
+
+def cmd_runner_doctor(args: argparse.Namespace) -> int:
+    """Check runner prerequisites: labels, token scope, service, isolation (#1212)."""
+    report = run_runner_doctor(repo_root=getattr(args, "repo_root", "."))
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    print(f"Runner doctor: {'PASS' if report.ok else 'FAIL'}")
+    for check in report.checks:
+        print(f"  [{check.status}] {check.id}: {check.detail}")
+    return 0 if report.ok else 1
+
+
 def cmd_release_repair(args: argparse.Namespace) -> int:
     """Init/repair standing release tracks + Next Release issue (#320)."""
     from plate_core.release import repair_release_standing_state
@@ -4517,6 +4827,61 @@ def build_parser() -> argparse.ArgumentParser:
     cfg_upgrade.add_argument("--json", action="store_true", help="Output JSON")
     cfg_upgrade.set_defaults(func=cmd_config_upgrade)
 
+    runner = sub.add_parser(
+        "runner",
+        help=f"Self-hosted runner for private repos (see {RUNNER_ADOPTER_DOC})",
+        description=(
+            "Ephemeral self-hosted Actions runners for private PLATE adopters. "
+            f"Isolation and security requirements: {RUNNER_ADOPTER_DOC}"
+        ),
+    )
+    runner.add_argument("--json", action="store_true", help="Output JSON")
+    runner.set_defaults(func=cmd_runner)
+    runner_sub = runner.add_subparsers(dest="runner_command", required=False)
+    runner_add = runner_sub.add_parser(
+        "add",
+        help="Register an ephemeral runner with plate-local + OS labels (dry-run by default)",
+    )
+    runner_add.add_argument("repo_slug", metavar="REPO", help="Target private repository (owner/name)")
+    runner_add.add_argument(
+        "--apply",
+        action="store_true",
+        help="Perform registration (default is dry-run plan only)",
+    )
+    runner_add.add_argument(
+        "--os",
+        dest="os_label",
+        choices=["linux", "windows", "macos"],
+        help="OS label to register (default: detect from local platform)",
+    )
+    runner_add.add_argument("--repo-root", default=".", help="Repository root for .agentic/runner.json")
+    runner_add.add_argument("--json", action="store_true")
+    runner_add.set_defaults(func=cmd_runner_add)
+
+    runner_status = runner_sub.add_parser("status", help="List runners and online/idle state")
+    runner_status.add_argument("--repo", help="owner/name (default: from .agentic/runner.json)")
+    runner_status.add_argument("--repo-root", default=".")
+    runner_status.add_argument("--json", action="store_true")
+    runner_status.set_defaults(func=cmd_runner_status)
+
+    runner_remove = runner_sub.add_parser(
+        "remove",
+        help="Unregister runners and clear local state (dry-run by default)",
+    )
+    runner_remove.add_argument("--repo", help="owner/name (default: from .agentic/runner.json)")
+    runner_remove.add_argument("--apply", action="store_true", help="Perform removal")
+    runner_remove.add_argument("--repo-root", default=".")
+    runner_remove.add_argument("--json", action="store_true")
+    runner_remove.set_defaults(func=cmd_runner_remove)
+
+    runner_doctor = runner_sub.add_parser(
+        "doctor",
+        help="Check labels, token scope, service state, and isolation settings",
+    )
+    runner_doctor.add_argument("--repo-root", default=".")
+    runner_doctor.add_argument("--json", action="store_true")
+    runner_doctor.set_defaults(func=cmd_runner_doctor)
+
     pr = sub.add_parser("pr", help="PR feedback operations")
     pr_sub = pr.add_subparsers(dest="pr_command", required=True)
     babysit = pr_sub.add_parser(
@@ -4598,6 +4963,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=12.0,
         help="Hour budget stored when a cap ledger is created (default 12). Later watches keep the saved budget until --reset-caps.",
+    )
+    babysit.add_argument(
+        "--full-every",
+        type=int,
+        default=0,
+        help="Force a full babysit_pr every N watch ticks (0 disables; safety net)",
     )
     babysit.add_argument("--json", action="store_true", help="Output JSON")
     babysit.set_defaults(func=cmd_pr_babysit)

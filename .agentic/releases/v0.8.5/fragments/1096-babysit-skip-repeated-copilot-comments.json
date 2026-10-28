@@ -1,0 +1,15 @@
+{
+  "slug": "1096-babysit-skip-repeated-copilot-comments",
+  "change_type": "feature",
+  "surface": "plate_core.pr_watch_summary",
+  "summary": "Skip wake summaries for Copilot review comments whose fingerprint was already resolved (#1096).",
+  "migration_impact": "No downstream repo migration. Watch CLI wiring to persist the resolved ledger lands in a follow-up PR.",
+  "migration_guidance": [
+    "1. Upgrade plate-core when the release containing #1096 ships.",
+    "2. When integrating PR watch wake, pass resolved fingerprints into build_wake_summary and call mark_resolved when threads are resolved."
+  ],
+  "agent_notes": "Repeated Copilot re-review comments matching a resolved fingerprint are suppressed (suppressed_repeats count only; not actionable alone). Persist fingerprints via ResolvedLedger under .agentic/babysit/<owner>-<repo>-<pr>.resolved.json.",
+  "breaking": false,
+  "links": ["#1096"],
+  "requires": []
+}
