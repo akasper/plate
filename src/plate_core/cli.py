@@ -1385,6 +1385,29 @@ def cmd_release_notes(args: argparse.Namespace) -> int:
     return 0
 
 
+RUNNER_ADOPTER_DOC = "docs/migration/self-hosted-runners.md"
+
+
+def cmd_runner(args: argparse.Namespace) -> int:
+    """Surface adopter guidance for self-hosted runners (#1210 / #1215)."""
+    payload = {
+        "ok": True,
+        "doc": RUNNER_ADOPTER_DOC,
+        "security": "private repos only; never fork or outside-contributor PRs on local runners",
+        "subcommands_planned": ["add", "status", "remove", "doctor"],
+        "tracking_issue": "https://github.com/akasper/plate/issues/1212",
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+    print(f"Self-hosted runners (private repos only): {RUNNER_ADOPTER_DOC}")
+    print(
+        "Read the guide before registering runners. "
+        "Subcommands add, status, remove, and doctor are planned (#1212)."
+    )
+    return 0
+
+
 def cmd_costs(args: argparse.Namespace) -> int:
     from .costs import format_cost_markdown, get_cost_dashboard, get_cost_report
 
@@ -4665,6 +4688,17 @@ def build_parser() -> argparse.ArgumentParser:
     rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_notes.add_argument("--json", action="store_true", help="Output JSON")
     rel_notes.set_defaults(func=cmd_release_notes)
+
+    runner = sub.add_parser(
+        "runner",
+        help=f"Self-hosted runner guidance for private repos (see {RUNNER_ADOPTER_DOC})",
+        description=(
+            "Ephemeral self-hosted runners for private PLATE adopters. "
+            f"Isolation and security requirements: {RUNNER_ADOPTER_DOC}"
+        ),
+    )
+    runner.add_argument("--json", action="store_true", help="Output JSON")
+    runner.set_defaults(func=cmd_runner)
 
     costs = sub.add_parser("costs", help="Harvest and aggregate USAGE REPORTs for observability/cost tracking (Epic #265)")
     costs.add_argument("--repo", help="owner/name; defaults to git remote origin")

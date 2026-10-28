@@ -284,6 +284,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/migration/self-hosted-runners.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/playwright-e2e-guide.md",
       "classification": "copy_to_downstream"
     },
