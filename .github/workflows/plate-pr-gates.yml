@@ -107,8 +107,77 @@ jobs:
         with:
           script: |
             const pullRequest = context.payload.pull_request;
-            const body = pullRequest?.body || '';
+            const rawBody = pullRequest?.body || '';
             const labels = (pullRequest?.labels || []).map((l) => l.name);
+            
+            function isFenceCloser(bare, fenceChar, fenceLen) {
+              let re;
+              if (fenceChar === '`') {
+                re = new RegExp(`^( {0,3})\`{${fenceLen},}[ \\t]*$`);
+              } else {
+                re = new RegExp(`^( {0,3})~{${fenceLen},}[ \\t]*$`);
+              }
+              return re.test(bare);
+            }
+            
+            function stripClosingScanText(markdown) {
+              const text = markdown || '';
+              if (!text) {
+                return '';
+              }
+              const fenceOpener = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+              const out = [];
+              let inFence = false;
+              let fenceChar = '';
+              let fenceLen = 0;
+              let pos = 0;
+              while (pos < text.length) {
+                let lineEnd = text.indexOf('\n', pos);
+                if (lineEnd === -1) {
+                  lineEnd = text.length;
+                }
+                const line = text.slice(pos, lineEnd);
+                const bare = line.replace(/\r$/, '');
+                if (inFence) {
+                  if (isFenceCloser(bare, fenceChar, fenceLen)) {
+                    inFence = false;
+                    fenceChar = '';
+                    fenceLen = 0;
+                  }
+                } else {
+                  const opener = bare.match(fenceOpener);
+                  if (opener) {
+                    fenceChar = opener[2][0];
+                    fenceLen = opener[2].length;
+                    inFence = true;
+                  } else {
+                    out.push(line + (lineEnd < text.length ? '\n' : ''));
+                  }
+                }
+                pos = lineEnd < text.length ? lineEnd + 1 : text.length;
+              }
+              return out.join('').replace(/<!--[\s\S]*?-->/g, '');
+            }
+            
+            function bodyHasStrictClosingKeyword(body, owner, repo) {
+              const cleaned = stripClosingScanText(body);
+              const re =
+                /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)|#(\d+))\b/gi;
+              const ownerL = owner.toLowerCase();
+              const repoL = repo.toLowerCase();
+              let m;
+              while ((m = re.exec(cleaned)) !== null) {
+                const urlOwner = m[2];
+                const urlRepo = m[3];
+                if (urlOwner && urlRepo) {
+                  if (urlOwner.toLowerCase() !== ownerL || urlRepo.toLowerCase() !== repoL) {
+                    continue;
+                  }
+                }
+                return true;
+              }
+              return false;
+            }
             
             if (!pullRequest) {
               core.info('No pull request payload found.');
@@ -121,9 +190,12 @@ jobs:
               return;
             }
             
-            // GitHub's native closing keywords (case-insensitive), optionally followed by a URL or #number
-            const closingPattern = /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(#\d+|https?:\/\/github\.com\/[^\s]+\/issues\/\d+)/i;
-            const hasClosingKeyword = closingPattern.test(body);
+            const body = stripClosingScanText(rawBody);
+            const hasClosingKeyword = bodyHasStrictClosingKeyword(
+              rawBody,
+              context.repo.owner,
+              context.repo.repo
+            );
             const requiresIssue = labels.some((l) => ['Feature', 'Bug', 'Documentation'].includes(l));
             
             if (!requiresIssue) {
@@ -140,76 +212,102 @@ jobs:
               core.info(`PR milestone present: ${pullRequest.milestone.title}`);
             }
             
-            let data;
-            try {
-              data = await github.graphql(
-                `
-                  query($owner: String!, $repo: String!, $number: Int!) {
-                    repository(owner: $owner, name: $repo) {
-                      pullRequest(number: $number) {
-                        closingIssuesReferences(first: 20) {
-                          nodes {
-                            number
-                          }
-                        }
-                        timelineItems(first: 50, itemTypes: [CONNECTED_EVENT]) {
-                          nodes {
-                            ... on ConnectedEvent {
-                              subject {
+            async function replaySidebarLinkedIssues() {
+              const linkedById = new Map();
+              let after = null;
+              const events = [];
+              for (;;) {
+                let page;
+                try {
+                  const result = await github.graphql(
+                    `
+                      query($owner: String!, $repo: String!, $number: Int!, $after: String) {
+                        repository(owner: $owner, name: $repo) {
+                          pullRequest(number: $number) {
+                            timelineItems(first: 100, after: $after, itemTypes: [CONNECTED_EVENT, DISCONNECTED_EVENT]) {
+                              pageInfo { hasNextPage endCursor }
+                              nodes {
                                 __typename
-                                ... on Issue {
-                                  number
+                                ... on ConnectedEvent {
+                                  createdAt
+                                  subject {
+                                    __typename
+                                    ... on Issue { id number }
+                                  }
                                 }
-                              }
-                            }
-                          }
-                        }
-                        disconnectedItems: timelineItems(first: 50, itemTypes: [DISCONNECTED_EVENT]) {
-                          nodes {
-                            ... on DisconnectedEvent {
-                              subject {
-                                __typename
-                                ... on Issue {
-                                  number
+                                ... on DisconnectedEvent {
+                                  createdAt
+                                  subject {
+                                    __typename
+                                    ... on Issue { id number }
+                                  }
                                 }
                               }
                             }
                           }
                         }
                       }
+                    `,
+                    {
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      number: pullRequest.number,
+                      after,
                     }
-                  }
-                `,
-                {
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  number: pullRequest.number,
+                  );
+                  page = result.repository.pullRequest.timelineItems;
+                } catch (error) {
+                  core.setFailed(
+                    `Unable to verify linked issues from the GitHub API (${error.message}). Check repository permissions or GitHub API status, then re-run this check.`
+                  );
+                  return null;
                 }
-              );
-            } catch (error) {
-              core.setFailed(
-                `Unable to verify linked issues from the GitHub API (${error.message}). Check repository permissions or GitHub API status, then re-run this check.`
-              );
+                events.push(...(page.nodes || []));
+                if (!page.pageInfo.hasNextPage) {
+                  break;
+                }
+                after = page.pageInfo.endCursor;
+              }
+              events.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+              for (const node of events) {
+                if (node.subject?.__typename !== 'Issue') {
+                  continue;
+                }
+                const issueId = node.subject.id;
+                const num = node.subject.number;
+                if (node.__typename === 'ConnectedEvent') {
+                  linkedById.set(issueId, num);
+                } else if (node.__typename === 'DisconnectedEvent') {
+                  linkedById.delete(issueId);
+                }
+              }
+              return new Set(linkedById.values());
+            }
+            
+            const sidebarLinked = await replaySidebarLinkedIssues();
+            if (sidebarLinked === null) {
               return;
             }
             
-            const linkedIssueNumbers = new Set(
-              (data.repository.pullRequest.closingIssuesReferences?.nodes || []).map((issue) => issue.number)
-            );
-            
-            for (const node of data.repository.pullRequest.timelineItems?.nodes || []) {
-              if (node.subject?.__typename === 'Issue') {
-                linkedIssueNumbers.add(node.subject.number);
+            const bodyLinked = new Set();
+            const bodyParseRe =
+              /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)|#(\d+))\b/gi;
+            const repoOwner = context.repo.owner.toLowerCase();
+            const repoName = context.repo.repo.toLowerCase();
+            let m;
+            while ((m = bodyParseRe.exec(body)) !== null) {
+              const urlOwner = m[2];
+              const urlRepo = m[3];
+              const issueNum = parseInt(m[4] || m[5], 10);
+              if (urlOwner && urlRepo) {
+                if (urlOwner.toLowerCase() !== repoOwner || urlRepo.toLowerCase() !== repoName) {
+                  continue;
+                }
               }
+              bodyLinked.add(issueNum);
             }
             
-            // Subtract DISCONNECTED_EVENTs so that sidebar unlinks are correctly detected as unlinked.
-            // Re-connects work because a later CONNECTED_EVENT will re-add the number (timeline order is chronological).
-            for (const node of data.repository.pullRequest.disconnectedItems?.nodes || []) {
-              if (node.subject?.__typename === 'Issue') {
-                linkedIssueNumbers.delete(node.subject.number);
-              }
-            }
+            const linkedIssueNumbers = new Set([...sidebarLinked, ...bodyLinked]);
             
             if (hasClosingKeyword || linkedIssueNumbers.size > 0) {
               if (linkedIssueNumbers.size > 0) {
@@ -258,7 +356,9 @@ jobs:
               pull_number: context.payload.pull_request.number,
               per_page: 100,
             });
-            const changed = files.map((file) => file.filename);
+            const changed = files
+              .filter((file) => file.status !== 'removed')
+              .map((file) => file.filename);
             core.info(`Changed files:\n${changed.join('\n')}`);
             // Fragment-first: require a fragment in .agentic/releases/unreleased/
             const hasFragment = changed.some(
@@ -478,19 +578,68 @@ jobs:
               return;
             }
             
+            function isFenceCloser(bare, fenceChar, fenceLen) {
+              let re;
+              if (fenceChar === '`') {
+                re = new RegExp(`^( {0,3})\`{${fenceLen},}[ \\t]*$`);
+              } else {
+                re = new RegExp(`^( {0,3})~{${fenceLen},}[ \\t]*$`);
+              }
+              return re.test(bare);
+            }
+            
+            function stripClosingScanText(markdown) {
+              const text = markdown || '';
+              if (!text) {
+                return '';
+              }
+              const fenceOpener = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+              const out = [];
+              let inFence = false;
+              let fenceChar = '';
+              let fenceLen = 0;
+              let pos = 0;
+              while (pos < text.length) {
+                let lineEnd = text.indexOf('\n', pos);
+                if (lineEnd === -1) {
+                  lineEnd = text.length;
+                }
+                const line = text.slice(pos, lineEnd);
+                const bare = line.replace(/\r$/, '');
+                if (inFence) {
+                  if (isFenceCloser(bare, fenceChar, fenceLen)) {
+                    inFence = false;
+                    fenceChar = '';
+                    fenceLen = 0;
+                  }
+                } else {
+                  const opener = bare.match(fenceOpener);
+                  if (opener) {
+                    fenceChar = opener[2][0];
+                    fenceLen = opener[2].length;
+                    inFence = true;
+                  } else {
+                    out.push(line + (lineEnd < text.length ? '\n' : ''));
+                  }
+                }
+                pos = lineEnd < text.length ? lineEnd + 1 : text.length;
+              }
+              return out.join('').replace(/<!--[\s\S]*?-->/g, '');
+            }
+            
             // Parse Closes/Fixes/Resolves (body only; title must not carry keywords)
             const linked = new Set();
             if (isPR) {
-              const body = pr.body || '';
+              const body = stripClosingScanText(pr.body || '');
               const closingPattern =
-                /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/)?#?(\d+)\b/gi;
+                /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)|#(\d+))\b/gi;
               const repoOwner = context.repo.owner.toLowerCase();
               const repoName = context.repo.repo.toLowerCase();
               let m;
               while ((m = closingPattern.exec(body)) !== null) {
                 const urlOwner = m[2];
                 const urlRepo = m[3];
-                const issueNum = parseInt(m[4], 10);
+                const issueNum = parseInt(m[4] || m[5], 10);
                 if (urlOwner && urlRepo) {
                   if (
                     urlOwner.toLowerCase() !== repoOwner ||

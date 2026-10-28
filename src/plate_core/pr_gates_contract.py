@@ -121,6 +121,9 @@ def validate_merged_pr_gates_workflow(text: str) -> list[str]:
     label_errors = validate_pr_gates_multi_label_event_safety(text)
     errors.extend(label_errors)
     errors.extend(validate_feature_fragment_gate_on_all_admitted_pr_events(text))
+    errors.extend(validate_closing_keyword_parsing_contract(text))
+    errors.extend(validate_sidebar_link_replay_contract(text))
+    errors.extend(validate_feature_fragment_ignores_removed_files(text))
     return errors
 
 
@@ -182,6 +185,82 @@ def validate_pr_gates_multi_label_event_safety(text: str) -> list[str]:
         )
     if "github.event.action != 'closed'" not in text:
         errors.append("pr-gates job should run for all pull_request actions except closed")
+    return errors
+
+
+_LOOSE_MARK_CLOSING = re.compile(r"#\?\(\\d\+\)")
+
+
+def validate_closing_keyword_parsing_contract(text: str) -> list[str]:
+    """Closing-keyword scans must ignore code/comments and require explicit #N or URL (#1231)."""
+    errors: list[str] = []
+    if "stripClosingScanText" not in text:
+        errors.append("missing stripClosingScanText helper for closing-keyword scans")
+    if "bodyHasStrictClosingKeyword" not in text:
+        errors.append(
+            "issue-link gate must validate closing keywords with bodyHasStrictClosingKeyword "
+            "(owner/repo URLs, not loose github.com/.../issues/ pattern)"
+        )
+    if _LOOSE_MARK_CLOSING.search(text):
+        errors.append(
+            "mark-implemented closing parser must not use optional # before issue number (#?)"
+        )
+    mark_idx = text.find("mark-implemented-on-release-merge")
+    if mark_idx < 0:
+        mark_idx = text.find("Mark implemented")
+    if mark_idx >= 0:
+        mark_block = text[mark_idx : mark_idx + 4000]
+        if "#?(\\d+)" in mark_block or "#?(\\d" in mark_block:
+            errors.append("mark-implemented uses loose optional-hash closing pattern")
+    issue_idx = text.find("Gate — issue links")
+    if issue_idx >= 0:
+        issue_block = text[issue_idx : issue_idx + 8000]
+        if "closingIssuesReferences" in issue_block:
+            errors.append(
+                "issue-link gate should not rely on closingIssuesReferences (GitHub loose parse)"
+            )
+    return errors
+
+
+def validate_sidebar_link_replay_contract(text: str) -> list[str]:
+    """Sidebar links must replay CONNECTED/DISCONNECTED timeline in order (#1231)."""
+    errors: list[str] = []
+    issue_idx = text.find("Gate — issue links")
+    if issue_idx < 0:
+        errors.append("missing Gate — issue links step for sidebar replay contract")
+        return errors
+    block = text[issue_idx : issue_idx + 12000]
+    if "CONNECTED_EVENT, DISCONNECTED_EVENT" not in block:
+        errors.append(
+            "issue-link gate must paginate CONNECTED_EVENT and DISCONNECTED_EVENT together"
+        )
+    if "createdAt" not in block:
+        errors.append("issue-link sidebar replay must sort timeline events by createdAt")
+    if "Issue { id" not in block:
+        errors.append(
+            "issue-link sidebar replay must track issues by global node id, not number alone"
+        )
+    if "disconnectedItems:" in block:
+        errors.append(
+            "issue-link gate must not use separate disconnectedItems subtract pass"
+        )
+    return errors
+
+
+def validate_feature_fragment_ignores_removed_files(text: str) -> list[str]:
+    """Feature fragment gate must ignore pulls.listFiles entries with status removed (#1231)."""
+    errors: list[str] = []
+    frag_idx = text.find("Gate — Feature release fragment\n        if:")
+    if frag_idx < 0:
+        frag_idx = text.find("Gate — Feature release fragment")
+    if frag_idx < 0:
+        errors.append("missing Feature release fragment gate for removed-file contract")
+        return errors
+    block = text[frag_idx : frag_idx + 2500]
+    if 'status !== "removed"' not in block and "status !== 'removed'" not in block:
+        errors.append(
+            'Feature fragment gate must filter listFiles with status !== "removed"'
+        )
     return errors
 
 

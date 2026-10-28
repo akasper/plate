@@ -16,12 +16,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
-# Closing keywords (GitHub-compatible, case-insensitive)
-_CLOSING_RE = re.compile(
-    r"\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+"
-    r"(?:https?://github\.com/[^/\s]+/[^/\s]+/issues/)?#?(\d+)\b",
-    re.IGNORECASE,
-)
+from plate_core.pr_gates_closing import parse_strict_closing_issue_numbers
 
 # Issue type labels that must never be auto-closed by integration merge
 _SKIP_CLOSE_TYPES = frozenset({"Epic", "Task", "Release"})
@@ -60,17 +55,8 @@ def is_integration_branch(ref: str | None) -> bool:
 
 
 def parse_closing_issue_numbers(body: str | None) -> list[int]:
-    """Extract unique issue numbers from closing keywords in PR body order."""
-    if not body:
-        return []
-    seen: set[int] = set()
-    out: list[int] = []
-    for m in _CLOSING_RE.finditer(body):
-        num = int(m.group(2))
-        if num not in seen:
-            seen.add(num)
-            out.append(num)
-    return out
+    """Extract unique issue numbers from closing keywords in PR body order (#1231 strict)."""
+    return parse_strict_closing_issue_numbers(body)
 
 
 def should_auto_close_issue(
