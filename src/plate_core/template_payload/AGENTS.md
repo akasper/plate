@@ -449,9 +449,11 @@ When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that i
 4. After addressing each comment (via code change, applied suggestion, or explanatory reply), **reply in-thread** (commit SHA or reason), then resolve that thread with `plate_resolve_review_thread` (or the skill's `resolveReviewThread` mutation) **only after its reply** — not via `gh plate pr babysit --act` (bulk outdated auto-resolve). When plate helpers are unavailable, use only the exact `gh api graphql` fallback in `.agentic/skills/address-pr-feedback/SKILL.md` (`reviewThreads` with `isResolved: false` including outdated, pagination, `addPullRequestReviewThreadReply`, `resolveReviewThread`). **"Address feedback" is done only when the skill's re-query returns zero unresolved threads** (except threads escalated with `need:human-review` and an in-thread comment).
 5. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
 6. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
+<!-- PLATES-CORE:BEGIN pre-merge-recheck-review-scope-1234 -->
 7. **Keep review loops small (#1234)** — fix real bugs in the intended case; decline extra tests, rare edges, minor perf, or broad compat asks with an in-thread reason, resolve, and list follow-ups; prefer fixes that delete or narrow code (full detail in the **`address-pr-feedback` skill**)
 
 **Pre-merge recheck (#1234).** Before merging, fetch the PR again. Do not merge when it is BEHIND, DIRTY, or CONFLICTING. If base commits landed after the last green run and touch this PR's files, sync the branch, push, and wait for green again. Never use merge bypass flags such as `--admin`. Especially important on integration branches like `release`. (Ideas adapted from [tstack](https://github.com/t3dotgg/tstack), MIT, Theo Browne; see #1232/#1234.)
+<!-- PLATES-CORE:END pre-merge-recheck-review-scope-1234 -->
 
 **Lifecycle contract for `Feedback Response` items:**
 

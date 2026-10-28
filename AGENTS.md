@@ -440,9 +440,11 @@ Use this loop:
 
 The **`address-pr-feedback` skill** (reply + resolve + zero-unresolved re-query gate) and `gh plate pr babysit` should be used by default for these flows and ideally support a " --until-green" / comprehensive make-mergeable mode that implements the loop above with appropriate quiet output and escalation. See the updated skill docstring and guidance for details (addresses #528, #1155, and the cluster of related PR-green / gates Bugs).
 
+<!-- PLATES-CORE:BEGIN pre-merge-recheck-review-scope-1234 -->
 **Pre-merge recheck (#1234).** Treat "green a moment ago" as stale the instant you merge. Immediately before any merge or `gh pr merge --auto`, fetch fresh PR state (`gh pr view`, `plate_get_pr_merge_gates`, or `gh plate pr babysit`). Do **not** merge when `mergeStateStatus` is BEHIND, DIRTY, or CONFLICTING. If the base branch gained commits after the last green CI run and those commits touch files this PR changes, update the branch (rebase or merge per babysit strategy), push, and wait for checks to pass again. Never use `gh pr merge --admin` or other flags that bypass branch protection or required checks. This matters most on permissive integration branches such as `release`. (Ideas adapted from [tstack](https://github.com/t3dotgg/tstack), MIT, Theo Browne; see #1232/#1234.)
 
 **Keep review loops small (#1234).** During the PR-green and feedback loops, fix review comments that identify real bugs in the intended use case. Decline the rest—extra tests outside the change, rare edge cases, small speedups, or broad compatibility requests not required for this PR—with a written in-thread reason, then resolve the thread and list each declined item as a follow-up (issue stub or PR comment backlog). When several fixes are possible, prefer the one that deletes or narrows code instead of adding layers. (Same tstack credit as above.)
+<!-- PLATES-CORE:END pre-merge-recheck-review-scope-1234 -->
 
 **Base Branch Sync Handling:**
 
