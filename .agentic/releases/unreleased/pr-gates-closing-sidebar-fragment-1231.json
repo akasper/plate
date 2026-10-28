@@ -1,0 +1,13 @@
+{
+  "title": "Tighten PR gate closing-keyword parsing, sidebar replay, and fragment file filter",
+  "type": "Bug",
+  "issue": 1231,
+  "summary": "Issue-link and mark-implemented gates require explicit #N or issue URLs, ignore fenced code and HTML comments, replay Development sidebar connect/disconnect events in chronological order, and ignore removed files in the Feature fragment gate.",
+  "verification": [
+    "tests/test_pr_gates_closing.py",
+    "tests/test_integration_close.py",
+    "tests/test_plate_pr_gates_workflow.py validate_merged_pr_gates_workflow",
+    "python scripts/build_plate_pr_gates_workflow.py"
+  ],
+  "agent_notes": "Refs #1231 items 2–4. Regenerate plate-pr-gates.yml via scripts/build_plate_pr_gates_workflow.py after editing gate scripts."
+}

@@ -32,6 +32,10 @@ class TestParseAndBranch(unittest.TestCase):
             parse_closing_issue_numbers("Closes https://github.com/a/b/issues/12"),
             [12],
         )
+        self.assertEqual(
+            parse_closing_issue_numbers("This PR fixes 3 race conditions."),
+            [],
+        )
 
 
 class TestShouldClose(unittest.TestCase):
