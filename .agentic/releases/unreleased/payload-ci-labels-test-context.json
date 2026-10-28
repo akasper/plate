@@ -1,0 +1,15 @@
+{
+  "slug": "payload-ci-labels-test-context",
+  "change_type": "fix",
+  "surface": "template_payload/.github/workflows/ci.yml + docs/migration/adoption-guide.md",
+  "summary": "Payload CI reports required check context `labels` (not `Labels`) and resolves validate_plate_repo.sh under scripts/plate/ when namespaced (#1229).",
+  "migration_impact": "Adopters on payload ci.yml should import the updated workflow or drop `name: Labels` and add validate-script path fallback. Docs describe an aggregate `test` job when product CI owns test execution.",
+  "migration_guidance": [
+    "Re-import template_payload ci.yml or merge: remove labels job display name `Labels`; use the validate script loop under scripts/plate/ then scripts/.",
+    "If branch protection requires `test` but product CI runs suites elsewhere, add a job id `test` aggregate per docs/migration/adoption-guide.md.",
+    "Required checks remain labels, test, and pr-gates; match job ids/context names exactly."
+  ],
+  "agent_notes": "Regression: tests/test_template_payload_ci_yml.py. gh plate health stale-context detection for Labels vs labels is follow-up (not in this fix).",
+  "breaking": false,
+  "links": ["#1229"]
+}

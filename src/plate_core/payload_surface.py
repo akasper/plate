@@ -174,6 +174,8 @@ def prepare_copied_text(rel: str, text: str, platform: str, *, namespaced: bool)
     """
     newline = "\r\n" if "\r\n" in text else "\n"
     text = text.replace("\r\n", "\n")
+    if platform == PLATFORM_WINDOWS and rel.endswith("ci.yml"):
+        text = _rewrite_ci_validate_fallback_for_windows(text)
     if namespaced and _copies_plate_script_refs(rel):
         text = rewrite_workflow_script_refs(text)
     if platform == PLATFORM_WINDOWS and Path(rel).name == "package.json":
@@ -453,6 +455,37 @@ def rewrite_workflow_script_refs(text: str) -> str:
         out = out.replace(f"scripts\\{name}", f"scripts\\plate\\{name}")
         out = out.replace(f".\\scripts\\{name}", f".\\scripts\\plate\\{name}")
     return out
+
+
+_CI_VALIDATE_BASH_FALLBACK = """        shell: bash
+        run: |
+          set -euo pipefail
+          for candidate in scripts/plate/validate_plate_repo.sh scripts/validate_plate_repo.sh; do
+            if [[ -f "$candidate" ]]; then
+              bash "$candidate" .
+              exit 0
+            fi
+          done
+          echo "validate_plate_repo.sh not found under scripts/ or scripts/plate/" >&2
+          exit 1"""
+
+
+def _rewrite_ci_validate_fallback_for_windows(text: str) -> str:
+    """Replace template bash validate loop with PowerShell path fallback (#1229)."""
+    if _CI_VALIDATE_BASH_FALLBACK not in text:
+        return text
+    pwsh_block = """        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($path in @('scripts/plate/ValidatePlateRepo.ps1', 'scripts/ValidatePlateRepo.ps1')) {
+            if (Test-Path -LiteralPath $path) {
+              & pwsh -File $path -Root .
+              exit $LASTEXITCODE
+            }
+          }
+          Write-Error 'ValidatePlateRepo.ps1 not found under scripts/ or scripts/plate/'
+          exit 1"""
+    return text.replace(_CI_VALIDATE_BASH_FALLBACK, pwsh_block, 1)
 
 
 def namespace_docs_path(rel: str) -> str:

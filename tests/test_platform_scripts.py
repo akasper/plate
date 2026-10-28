@@ -98,6 +98,23 @@ class PlatformFilterTests(unittest.TestCase):
         self.assertEqual(omitted, [])
         self.assertEqual(len(kept), 3)
 
+    def test_windows_ci_validate_fallback_uses_pwsh_shell(self):
+        source = _lf(
+            (payload_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        )
+        rewritten = _lf(
+            prepare_copied_text(
+                ".github/workflows/ci.yml",
+                source,
+                "windows",
+                namespaced=False,
+            )
+        )
+        self.assertIn("shell: pwsh", rewritten)
+        self.assertNotIn("shell: bash", rewritten)
+        self.assertIn("$ErrorActionPreference", rewritten)
+        self.assertNotIn("set -euo pipefail", rewritten)
+
     def test_windows_ci_rewrite_is_limited_to_the_test_job(self):
         source = (
             "  labels:\n    runs-on: ubuntu-latest\n"
@@ -366,10 +383,14 @@ class ImportPlatformTests(unittest.TestCase):
             ci = _lf((target / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
             self.assertIn(CI_WINDOWS_JOB, ci)
             self.assertNotIn(CI_TEST_JOB, ci)
-            self.assertIn(PWSH_VALIDATE_NAMESPACED, ci)
+            self.assertIn("scripts/plate/ValidatePlateRepo.ps1", ci)
+            self.assertIn("$ErrorActionPreference", ci)
+            self.assertIn("shell: pwsh", ci)
+            self.assertNotIn("shell: bash", ci)
             source = _lf((payload_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
             self.assertIn(CI_TEST_JOB, source)
-            self.assertIn(BASH_VALIDATE, source)
+            self.assertIn("scripts/plate/validate_plate_repo.sh", source)
+            self.assertIn("scripts/validate_plate_repo.sh", source)
             seeded = json.loads((target / ".plate").read_text(encoding="utf-8"))
             self.assertEqual(seeded["platform"], "windows")
 
