@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import quote
 
 from .github_client import GhApiError, GhClient
+from .github_labels import prepare_label_description
 from .health import REQUIRED_LABELS, get_health, resolve_repo
 from .import_payload import list_payload_relative_paths
 from .payload_surface import filter_plate_scripts, prepare_copied_text, resolve_local_goals_wiki
@@ -583,16 +584,27 @@ def run_bootstrap(
     actions.append(BootstrapAction(name="copy-template-payload", state=state, detail=detail))
 
     for label in health.missing_labels:
+        description, _desc_warning = prepare_label_description(f"PLATE label: {label}")
         if apply_mode:
-            gh.api(
-                f"repos/{target}/labels",
-                method="POST",
-                fields={"name": label, "color": DEFAULT_LABEL_COLOR, "description": f"PLATE label: {label}"},
-            )
-            state = "applied"
+            try:
+                gh.api(
+                    f"repos/{target}/labels",
+                    method="POST",
+                    fields={
+                        "name": label,
+                        "color": DEFAULT_LABEL_COLOR,
+                        "description": description,
+                    },
+                )
+                state = "applied"
+                detail = label
+            except GhApiError as exc:
+                state = "failed"
+                detail = f"{label}: {exc}"
         else:
             state = "planned"
-        actions.append(BootstrapAction(name="create-label", state=state, detail=label))
+            detail = label
+        actions.append(BootstrapAction(name="create-label", state=state, detail=detail))
 
     if not repo_obj.get("has_wiki", False):
         if apply_mode:

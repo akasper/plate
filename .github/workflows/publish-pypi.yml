@@ -52,6 +52,10 @@ on:
         required: false
         default: ''
 
+concurrency:
+  group: publish-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   # Required for trusted publishing via GitHub OIDC (no PYPI_TOKEN secret).

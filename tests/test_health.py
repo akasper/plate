@@ -32,7 +32,11 @@ class FakeClient:
         if endpoint == "repos/akasper/plate_core":
             return {"default_branch": "main"}
         if endpoint == "repos/akasper/plate_core/branches/main/protection":
-            return {"enabled": True}
+            return {
+                "required_status_checks": {
+                    "contexts": ["labels", "test", "pr-gates"],
+                }
+            }
         if endpoint.startswith("search/issues"):
             if "label:Question" in endpoint:
                 return {"total_count": 2}
