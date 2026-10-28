@@ -5,7 +5,7 @@
   "summary": "Heavy payload workflows choose runs-on from PLATE_RUNS_ON with idle-runner probe and hosted fallback; fork and public repos stay on ubuntu-latest (#1214).",
   "migration_impact": "Optional: set repository variable PLATE_RUNS_ON to a JSON label array for self-hosted runners. Default remains ubuntu-latest. Import payload to receive the composite action and workflow wiring.",
   "migration_guidance": [
-    "Run gh plate import-payload (or copy .github/actions/plate-select-runs-on and updated ci.yml / test-e2e.yml / plate-pr-gates.yml).",
+    "Run gh plate import-payload --strategy conservative (dry-run, then --apply) to add the missing .github/actions/plate-select-runs-on action; merge reported conflicts in ci.yml / test-e2e.yml / plate-pr-gates.yml in a reviewed PR (use --escape-hatch-on-conflict for a merge plan). Do not hand-copy payload files.",
     "Set PLATE_RUNS_ON only on private repos with registered self-hosted runners (never on public repos).",
     "Optional PLATE_RUNNER_PROBE_TIMEOUT_SECONDS repository variable overrides the default 30s probe before hosted fallback."
   ],
