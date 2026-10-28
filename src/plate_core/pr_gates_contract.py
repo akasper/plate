@@ -196,10 +196,18 @@ def validate_closing_keyword_parsing_contract(text: str) -> list[str]:
     errors: list[str] = []
     if "stripClosingScanText" not in text:
         errors.append("missing stripClosingScanText helper for closing-keyword scans")
+    if "bodyHasStrictClosingKeyword" not in text:
+        errors.append(
+            "issue-link gate must validate closing keywords with bodyHasStrictClosingKeyword "
+            "(owner/repo URLs, not loose github.com/.../issues/ pattern)"
+        )
     if _LOOSE_MARK_CLOSING.search(text):
         errors.append(
             "mark-implemented closing parser must not use optional # before issue number (#?)"
         )
+    mark_idx = text.find("mark-implemented-on-release-merge")
+    if mark_idx < 0:
+        mark_idx = text.find("Mark implemented")
     if mark_idx >= 0:
         mark_block = text[mark_idx : mark_idx + 4000]
         if "#?(\\d+)" in mark_block or "#?(\\d" in mark_block:
@@ -228,6 +236,10 @@ def validate_sidebar_link_replay_contract(text: str) -> list[str]:
         )
     if "createdAt" not in block:
         errors.append("issue-link sidebar replay must sort timeline events by createdAt")
+    if "Issue { id" not in block:
+        errors.append(
+            "issue-link sidebar replay must track issues by global node id, not number alone"
+        )
     if "disconnectedItems:" in block:
         errors.append(
             "issue-link gate must not use separate disconnectedItems subtract pass"

@@ -47,6 +47,37 @@ class TestStrictClosingKeywords(unittest.TestCase):
         self.assertNotIn("#2", stripped)
         self.assertIn("#3", stripped)
 
+    def test_tilde_fence_ignored(self):
+        body = "Closes #20\n~~~\nCloses #21\n~~~\n"
+        self.assertEqual(parse_strict_closing_issue_numbers(body), [20])
+
+    def test_unclosed_fence_ignores_tail(self):
+        body = "Closes #30\n```\nCloses #31\n"
+        self.assertEqual(parse_strict_closing_issue_numbers(body), [30])
+
+    def test_four_backtick_fence_may_contain_triple_ticks(self):
+        body = "Closes #40\n````\n```\nCloses #41\n```\n````\nCloses #42\n"
+        self.assertEqual(parse_strict_closing_issue_numbers(body), [40, 42])
+
+    def test_comment_inside_fence_is_literal(self):
+        body = "Closes #50\n```\n<!-- Closes #51 -->\n```\n"
+        self.assertEqual(parse_strict_closing_issue_numbers(body), [50])
+
+    def test_url_without_owner_repo_segments_rejected(self):
+        body = "Closes https://github.com/example/issues/42"
+        self.assertFalse(body_has_strict_closing_keyword(body))
+        self.assertEqual(parse_strict_closing_issue_numbers(body), [])
+
+    def test_url_wrong_repo_rejected_with_owner_filter(self):
+        body = "Closes https://github.com/other/repo/issues/7"
+        self.assertFalse(
+            body_has_strict_closing_keyword(body, owner="akasper", repo="plate")
+        )
+        self.assertEqual(
+            parse_strict_closing_issue_numbers(body, owner="akasper", repo="plate"),
+            [],
+        )
+
 
 class TestWorkflowContracts1231(unittest.TestCase):
     def test_committed_workflows_satisfy_1231_contracts(self):

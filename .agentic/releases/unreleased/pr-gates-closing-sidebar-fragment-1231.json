@@ -1,8 +1,10 @@
 {
-  "title": "Tighten PR gate closing-keyword parsing, sidebar replay, and fragment file filter",
-  "type": "Bug",
+  "slug": "pr-gates-closing-sidebar-fragment-1231",
+  "change_type": "fix",
   "issue": 1231,
-  "summary": "Issue-link and mark-implemented gates require explicit #N or issue URLs, ignore fenced code and HTML comments, replay Development sidebar connect/disconnect events in chronological order, and ignore removed files in the Feature fragment gate.",
+  "surface": ".github/workflows/plate-pr-gates.yml + template_payload",
+  "summary": "Issue-link and mark-implemented gates require explicit #N or owner/repo issue URLs, ignore fenced code and HTML comments (including tilde fences and unclosed blocks), replay Development sidebar connect/disconnect events by global issue id in chronological order, and ignore removed files in the Feature fragment gate.",
+  "migration_impact": "Adopters should import the updated plate-pr-gates.yml (regenerate from plate-core or run scripts/build_plate_pr_gates_workflow.py after merge). Required check name remains pr-gates; closing-keyword scans no longer treat prose digits or example URLs without owner/repo as links.",
   "verification": [
     "tests/test_pr_gates_closing.py",
     "tests/test_integration_close.py",

@@ -13,15 +13,59 @@ CLOSING_KEYWORD_STRICT_RE = re.compile(
 )
 
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
-_FENCED_CODE_RE = re.compile(r"```[^\n]*\n.*?```", re.DOTALL)
+_FENCE_OPENER_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
+
+
+def _fence_closer_line(line: str, fence_char: str, min_len: int) -> bool:
+    stripped = line.rstrip("\n\r")
+    if fence_char == "`":
+        pat = rf"^( {{0,3}})`{{{min_len},}}[ \t]*$"
+    else:
+        pat = rf"^( {{0,3}})~{{{min_len},}}[ \t]*$"
+    return bool(re.match(pat, stripped))
 
 
 def strip_closing_scan_text(markdown: str | None) -> str:
-    """Remove HTML comments and fenced code blocks before scanning for closing keywords."""
+    """Remove HTML comments and fenced code blocks before scanning for closing keywords.
+
+    Fence handling follows CommonMark: matching opener/closer delimiter character and
+    run length (so four-backtick fences may contain triple-backtick lines). Content
+    inside fences is dropped verbatim (including ``<!--`` markers). Unclosed fences
+    drop the remainder of the document.
+    """
     text = markdown or ""
-    text = _HTML_COMMENT_RE.sub("", text)
-    text = _FENCED_CODE_RE.sub("", text)
-    return text
+    if not text:
+        return ""
+
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    in_fence = False
+    fence_char = ""
+    fence_len = 0
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        bare = line.rstrip("\n\r")
+        if in_fence:
+            if _fence_closer_line(bare, fence_char, fence_len):
+                in_fence = False
+                fence_char = ""
+                fence_len = 0
+            i += 1
+            continue
+        opener = _FENCE_OPENER_RE.match(bare)
+        if opener:
+            run = opener.group(2)
+            fence_char = run[0]
+            fence_len = len(run)
+            in_fence = True
+            i += 1
+            continue
+        out.append(line)
+        i += 1
+
+    joined = "".join(out)
+    return _HTML_COMMENT_RE.sub("", joined)
 
 
 def parse_strict_closing_issue_numbers(
@@ -52,7 +96,21 @@ def parse_strict_closing_issue_numbers(
     return out
 
 
-def body_has_strict_closing_keyword(body: str | None) -> bool:
+def body_has_strict_closing_keyword(
+    body: str | None,
+    *,
+    owner: str | None = None,
+    repo: str | None = None,
+) -> bool:
     """True when stripped body contains an explicit Closes/Fixes/Resolves reference."""
     cleaned = strip_closing_scan_text(body)
-    return bool(CLOSING_KEYWORD_STRICT_RE.search(cleaned))
+    owner_l = (owner or "").lower()
+    repo_l = (repo or "").lower()
+    for match in CLOSING_KEYWORD_STRICT_RE.finditer(cleaned):
+        url_owner = match.group("url_owner")
+        url_repo = match.group("url_repo")
+        if url_owner and url_repo and owner and repo:
+            if url_owner.lower() != owner_l or url_repo.lower() != repo_l:
+                continue
+        return True
+    return False

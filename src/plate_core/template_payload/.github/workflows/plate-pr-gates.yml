@@ -110,15 +110,74 @@ jobs:
             const rawBody = pullRequest?.body || '';
             const labels = (pullRequest?.labels || []).map((l) => l.name);
             
-            function stripClosingScanText(markdown) {
-              let text = markdown || '';
-              text = text.replace(/<!--[\s\S]*?-->/g, '');
-              text = text.replace(/```[^\n]*\n[\s\S]*?```/g, '');
-              return text;
+            function isFenceCloser(bare, fenceChar, fenceLen) {
+              let re;
+              if (fenceChar === '`') {
+                re = new RegExp(`^( {0,3})\`{${fenceLen},}[ \\t]*$`);
+              } else {
+                re = new RegExp(`^( {0,3})~{${fenceLen},}[ \\t]*$`);
+              }
+              return re.test(bare);
             }
             
-            const closingPatternForScan =
-              /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/[^\s]+\/issues\/\d+|#\d+)\b/i;
+            function stripClosingScanText(markdown) {
+              const text = markdown || '';
+              if (!text) {
+                return '';
+              }
+              const fenceOpener = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+              const out = [];
+              let inFence = false;
+              let fenceChar = '';
+              let fenceLen = 0;
+              let pos = 0;
+              while (pos < text.length) {
+                let lineEnd = text.indexOf('\n', pos);
+                if (lineEnd === -1) {
+                  lineEnd = text.length;
+                }
+                const line = text.slice(pos, lineEnd);
+                const bare = line.replace(/\r$/, '');
+                if (inFence) {
+                  if (isFenceCloser(bare, fenceChar, fenceLen)) {
+                    inFence = false;
+                    fenceChar = '';
+                    fenceLen = 0;
+                  }
+                } else {
+                  const opener = bare.match(fenceOpener);
+                  if (opener) {
+                    fenceChar = opener[2][0];
+                    fenceLen = opener[2].length;
+                    inFence = true;
+                  } else {
+                    out.push(line + (lineEnd < text.length ? '\n' : ''));
+                  }
+                }
+                pos = lineEnd < text.length ? lineEnd + 1 : text.length;
+              }
+              return out.join('').replace(/<!--[\s\S]*?-->/g, '');
+            }
+            
+            function bodyHasStrictClosingKeyword(body, owner, repo) {
+              const cleaned = stripClosingScanText(body);
+              const re =
+                /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)|#(\d+))\b/gi;
+              const ownerL = owner.toLowerCase();
+              const repoL = repo.toLowerCase();
+              let m;
+              while ((m = re.exec(cleaned)) !== null) {
+                const urlOwner = m[2];
+                const urlRepo = m[3];
+                if (urlOwner && urlRepo) {
+                  if (urlOwner.toLowerCase() !== ownerL || urlRepo.toLowerCase() !== repoL) {
+                    continue;
+                  }
+                }
+                return true;
+              }
+              return false;
+            }
             
             if (!pullRequest) {
               core.info('No pull request payload found.');
@@ -132,7 +191,11 @@ jobs:
             }
             
             const body = stripClosingScanText(rawBody);
-            const hasClosingKeyword = closingPatternForScan.test(body);
+            const hasClosingKeyword = bodyHasStrictClosingKeyword(
+              rawBody,
+              context.repo.owner,
+              context.repo.repo
+            );
             const requiresIssue = labels.some((l) => ['Feature', 'Bug', 'Documentation'].includes(l));
             
             if (!requiresIssue) {
@@ -150,7 +213,7 @@ jobs:
             }
             
             async function replaySidebarLinkedIssues() {
-              const linked = new Set();
+              const linkedById = new Map();
               let after = null;
               const events = [];
               for (;;) {
@@ -169,14 +232,14 @@ jobs:
                                   createdAt
                                   subject {
                                     __typename
-                                    ... on Issue { number }
+                                    ... on Issue { id number }
                                   }
                                 }
                                 ... on DisconnectedEvent {
                                   createdAt
                                   subject {
                                     __typename
-                                    ... on Issue { number }
+                                    ... on Issue { id number }
                                   }
                                 }
                               }
@@ -210,14 +273,15 @@ jobs:
                 if (node.subject?.__typename !== 'Issue') {
                   continue;
                 }
+                const issueId = node.subject.id;
                 const num = node.subject.number;
                 if (node.__typename === 'ConnectedEvent') {
-                  linked.add(num);
+                  linkedById.set(issueId, num);
                 } else if (node.__typename === 'DisconnectedEvent') {
-                  linked.delete(num);
+                  linkedById.delete(issueId);
                 }
               }
-              return linked;
+              return new Set(linkedById.values());
             }
             
             const sidebarLinked = await replaySidebarLinkedIssues();
@@ -514,11 +578,53 @@ jobs:
               return;
             }
             
+            function isFenceCloser(bare, fenceChar, fenceLen) {
+              let re;
+              if (fenceChar === '`') {
+                re = new RegExp(`^( {0,3})\`{${fenceLen},}[ \\t]*$`);
+              } else {
+                re = new RegExp(`^( {0,3})~{${fenceLen},}[ \\t]*$`);
+              }
+              return re.test(bare);
+            }
+            
             function stripClosingScanText(markdown) {
-              let text = markdown || '';
-              text = text.replace(/<!--[\s\S]*?-->/g, '');
-              text = text.replace(/```[^\n]*\n[\s\S]*?```/g, '');
-              return text;
+              const text = markdown || '';
+              if (!text) {
+                return '';
+              }
+              const fenceOpener = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+              const out = [];
+              let inFence = false;
+              let fenceChar = '';
+              let fenceLen = 0;
+              let pos = 0;
+              while (pos < text.length) {
+                let lineEnd = text.indexOf('\n', pos);
+                if (lineEnd === -1) {
+                  lineEnd = text.length;
+                }
+                const line = text.slice(pos, lineEnd);
+                const bare = line.replace(/\r$/, '');
+                if (inFence) {
+                  if (isFenceCloser(bare, fenceChar, fenceLen)) {
+                    inFence = false;
+                    fenceChar = '';
+                    fenceLen = 0;
+                  }
+                } else {
+                  const opener = bare.match(fenceOpener);
+                  if (opener) {
+                    fenceChar = opener[2][0];
+                    fenceLen = opener[2].length;
+                    inFence = true;
+                  } else {
+                    out.push(line + (lineEnd < text.length ? '\n' : ''));
+                  }
+                }
+                pos = lineEnd < text.length ? lineEnd + 1 : text.length;
+              }
+              return out.join('').replace(/<!--[\s\S]*?-->/g, '');
             }
             
             // Parse Closes/Fixes/Resolves (body only; title must not carry keywords)
