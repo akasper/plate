@@ -1,6 +1,6 @@
 {
   "slug": "conservative-import-taxonomy-1250",
-  "change_type": "bugfix",
+  "change_type": "fix",
   "surface": "template_payload.resolve_conflict_plan, template_payload_manifest path_rules, import-payload conservative apply",
   "summary": "Conservative `gh plate import-payload` no longer overwrites customized `.github/labels.yml`, issue templates, or `PULL_REQUEST_TEMPLATE.md`; differing files are reported as conflicts and left untouched (#1250).",
   "migration_impact": "Adopters upgrading with `--strategy conservative` keep local label taxonomy and GitHub templates when content differs from the payload. Use `--strategy safe` when intentionally refreshing PLATE taxonomy/templates, or `--strategy force` for a deliberate full overwrite.",
