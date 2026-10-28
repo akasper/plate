@@ -1,0 +1,14 @@
+{
+  "slug": "tstack-pre-merge-recheck-review-scope-1234",
+  "change_type": "process",
+  "surface": "AGENTS.md + address-pr-feedback skill (plugin, .plugin, template payload)",
+  "summary": "Document pre-merge recheck and small review-loop scope rules in merge/PR-green guidance (#1234).",
+  "migration_impact": "No runtime or config changes. Adopters pick up updated AGENTS.md and address-pr-feedback skill via gh plate import-payload or sectional merge.",
+  "migration_guidance": [
+    "Import or merge updated AGENTS.md merge/feedback guidance and .agentic/skills/address-pr-feedback/SKILL.md.",
+    "If you forked the skill locally, reconcile the Pre-merge recheck and Keep review loops small sections."
+  ],
+  "agent_notes": "Ideas adapted from t3dotgg/tstack (MIT, copyright Theo Browne) per #1232; PLATE wording is original. After editing baseline_catalog address-pr-feedback procedure, run python3 scripts/generate-plugin-skills.py.",
+  "breaking": false,
+  "links": ["#1234", "#1232"]
+}
