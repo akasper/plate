@@ -93,6 +93,10 @@
             "description": "Produce lightweight UI mockups or interaction sketches for a feature."
           },
           {
+            "name": "Modernize PR",
+            "description": "Decide whether a stale pull request still belongs, then rebase safely in an isolated worktree when modernization is war…"
+          },
+          {
             "name": "Profile and Benchmark",
             "description": "Instrument, measure, and report on performance bottlenecks with actionable optimizations."
           },

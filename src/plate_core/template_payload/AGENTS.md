@@ -455,6 +455,10 @@ When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that i
 **Pre-merge recheck (#1234).** Before merging, fetch the PR again. Do not merge when it is BEHIND, DIRTY, or CONFLICTING. If base commits landed after the last green run and touch this PR's files, sync the branch, push, and wait for green again. Never use merge bypass flags such as `--admin`. Especially important on integration branches like `release`. (Ideas adapted from [tstack](https://github.com/t3dotgg/tstack), MIT, Theo Browne; see #1232/#1234.)
 <!-- PLATES-CORE:END pre-merge-recheck-review-scope-1234 -->
 
+<!-- PLATES-CORE:BEGIN modernize-pr-skill-1235 -->
+**Modernize stale PRs (#1235).** For old pull requests, follow the **`modernize-pr` skill** (`.agentic/skills/modernize-pr/SKILL.md` after bootstrap). Decide first (one verdict: **MODERNIZE**, **REWORK**, or **CLOSE** with evidence); a successful rebase does not by itself justify keeping the PR. The skill **never closes and never merges** on its own — **CLOSE** is only a recommendation requiring owner approval. It never retargets the base or widens scope, uses an isolated worktree for git work, and does not treat trigger phrases as overrides for merge/close gates. After **MODERNIZE**, compare pre- and post-rebase commits with `git range-diff` and push with `--force-with-lease` pinned to the pre-rebase head SHA. (Ideas adapted from [tstack](https://github.com/t3dotgg/tstack) `modernize`, MIT, Theo Browne; see #1232/#1235.)
+<!-- PLATES-CORE:END modernize-pr-skill-1235 -->
+
 **Lifecycle contract for `Feedback Response` items:**
 
 | Stage | Expected artifact |

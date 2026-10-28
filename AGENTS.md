@@ -446,6 +446,10 @@ The **`address-pr-feedback` skill** (reply + resolve + zero-unresolved re-query 
 **Keep review loops small (#1234).** During the PR-green and feedback loops, fix review comments that identify real bugs in the intended use case. Decline the rest—extra tests outside the change, rare edge cases, small speedups, or broad compatibility requests not required for this PR—with a written in-thread reason, then resolve the thread and list each declined item as a follow-up (issue stub or PR comment backlog). When several fixes are possible, prefer the one that deletes or narrows code instead of adding layers. (Same tstack credit as above.)
 <!-- PLATES-CORE:END pre-merge-recheck-review-scope-1234 -->
 
+<!-- PLATES-CORE:BEGIN modernize-pr-skill-1235 -->
+**Modernize stale PRs (#1235).** For old pull requests, follow the **`modernize-pr` skill** (`plugin/skills/modernize-pr/SKILL.md`; `.agentic/skills/modernize-pr/SKILL.md` after bootstrap). Decide first (one verdict: **MODERNIZE**, **REWORK**, or **CLOSE** with evidence); a successful rebase does not by itself justify keeping the PR. The skill **never closes and never merges** on its own — **CLOSE** is only a recommendation requiring owner approval. It never retargets the base or widens scope, uses an isolated worktree for git work, and does not treat trigger phrases as overrides for merge/close gates. After **MODERNIZE**, compare pre- and post-rebase commits with `git range-diff` and push with `--force-with-lease` pinned to the pre-rebase head SHA. (Ideas adapted from [tstack](https://github.com/t3dotgg/tstack) `modernize`, MIT, Theo Browne; see #1232/#1235.)
+<!-- PLATES-CORE:END modernize-pr-skill-1235 -->
+
 **Base Branch Sync Handling:**
 
 The babysitter detects when a PR branch is out of sync with its base branch (via `mergeStateStatus`: BEHIND, CONFLICTING, or DIRTY). The default behavior is controlled by `--branch-update-strategy`:

@@ -10,7 +10,7 @@
 
 Canonical source: `src/plate_core/data/baseline_catalog.yml`
 
-This catalog defines **28** baseline skills used by PLATE agents.
+This catalog defines **29** baseline skills used by PLATE agents.
 Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same directory.
 
 ## Index
@@ -36,6 +36,7 @@ Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same director
 | `groom-backlog` | Groom Backlog | `project-manager` |
 | `identify-market-gaps-and-opportunities` | Identify Market Gaps and Opportunities | `market-researcher`, `research-agent` |
 | `mockup-ui` | Mockup UI | `user-experience-engineer`, `user-interface-designer` |
+| `modernize-pr` | Modernize PR | `software-engineer`, `ci-engineer` |
 | `profile-and-benchmark` | Profile and Benchmark | `performance-engineer` |
 | `research-synthesis` | Research Synthesis | `market-researcher`, `research-agent` |
 | `resume-from-answered-question` | Resume from Answered (Blocking) Question | `research-agent`, `project-manager` |
@@ -491,6 +492,29 @@ Produce lightweight UI mockups or interaction sketches for a feature.
 - Sketch the UI for a terminal list view of the baseline agents.
 
 **Plugin skill file:** `skills/mockup-ui/SKILL.md`
+
+### `modernize-pr` — Modernize PR
+
+Decide whether a stale pull request still belongs, then rebase safely in an isolated worktree when modernization is warranted.
+
+**Owning agents:** `software-engineer`, `ci-engineer`
+
+**Inputs**
+
+- PR number
+- PR goal, diff, reviews, linked issues, and base-branch changes since the branch diverged
+
+**Outputs**
+
+- One verdict (MODERNIZE, REWORK, or CLOSE) with evidence
+- For MODERNIZE only — rebase result, range-diff summary, and push plan (no merge/close by the agent)
+
+**Examples**
+
+- An months-old feature PR on release still matches the linked issue; verdict MODERNIZE, rebase onto current base, range-diff, force-with-lease push.
+- A fix duplicated on main; verdict CLOSE with links; stop without closing the PR yourself.
+
+**Plugin skill file:** `skills/modernize-pr/SKILL.md`
 
 ### `profile-and-benchmark` — Profile and Benchmark
 

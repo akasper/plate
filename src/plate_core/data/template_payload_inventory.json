@@ -36,6 +36,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".agentic/skills/modernize-pr/SKILL.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".agentic/traceability.yml",
       "classification": "copy_to_downstream"
     },
