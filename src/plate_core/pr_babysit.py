@@ -40,8 +40,9 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .github_client import GhClient
+from .github_client import GhApiError, GhClient
 from .health import resolve_repo
+from .pr_watch_guards import is_graphql_rate_limited, load_pr_data_rest_fallback
 from .procutil import check_call_hidden, check_output_hidden, run_hidden
 
 
@@ -416,6 +417,18 @@ def evaluate_babysit_gates(
     review_decision = str(
         gates.get("review_decision") or gates.get("reviewDecision") or ""
     ).upper()
+
+    if gates.get("review_threads_unavailable"):
+        return {
+            "blocked": True,
+            "reason": "Review thread data unavailable; cannot verify feedback resolution",
+            "checks": {
+                "merge_state": merge_state or None,
+                "unresolved_review_threads": unresolved,
+                "review_decision": review_decision or None,
+                "review_threads_unavailable": True,
+            },
+        }
     ci_failing = bool(gates.get("ci_failing"))
     ci_pending = bool(gates.get("ci_pending"))
     failing_checks = int(gates.get("failing_checks") or 0)
@@ -488,17 +501,17 @@ def evaluate_babysit_gates(
 
 
 def _load_pr_data(client: GhClient, repo: str, pr_number: int) -> dict:
-    """Load PR data including review threads, merge state, review decision, CI rollup.
+    """Load PR data; use REST when GraphQL primary rate limit is exhausted (#1233)."""
+    try:
+        return _load_pr_data_graphql(client, repo, pr_number)
+    except GhApiError as exc:
+        if is_graphql_rate_limited(exc):
+            return load_pr_data_rest_fallback(client, repo, pr_number)
+        raise
 
-    Returns:
-        dict with keys:
-            - reviewThreads (list): List of review thread nodes
-            - mergeStateStatus (str): Merge state (CLEAN, BEHIND, CONFLICTING, DIRTY, etc)
-            - baseRefName (str): Base branch name
-            - headRefName (str): Head branch name
-            - reviewDecision (str|None): APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED / None
-            - statusCheckRollup (dict|None): GitHub rollup for head commit checks
-    """
+
+def _load_pr_data_graphql(client: GhClient, repo: str, pr_number: int) -> dict:
+    """Load PR data including review threads, merge state, review decision, CI rollup."""
     owner, name = repo.split("/", 1)
     query = """
 query($owner: String!, $repo: String!, $number: Int!) {
@@ -544,11 +557,17 @@ query($owner: String!, $repo: String!, $number: Int!) {
             "number": pr_number,
         },
     )
+    if payload and payload.get("errors"):
+        message = json.dumps(payload.get("errors"))
+        if "rate limit" in message.lower():
+            raise GhApiError(message)
     pr = (
         ((payload or {}).get("data") or {})
         .get("repository", {})
         .get("pullRequest", {})
     )
+    if not pr:
+        raise GhApiError("graphql pullRequest missing")
     return {
         "reviewThreads": (pr.get("reviewThreads", {}) or {}).get("nodes", []),
         "mergeStateStatus": pr.get("mergeStateStatus", "UNKNOWN"),
@@ -1185,6 +1204,11 @@ def get_actionable_review_threads(
     target = resolve_repo(repo)
     gh = client or GhClient()
     pr_data = _load_pr_data(gh, target, pr_number)
+    if pr_data.get("review_threads_unavailable"):
+        raise GhApiError(
+            "Review thread data unavailable (GraphQL rate limit REST fallback); "
+            "feedback resolution cannot be verified"
+        )
     threads = pr_data.get("reviewThreads", [])
     scope = resolve_pr_review_scope(pr_review_scope)
     return _extract_actionable_threads(threads, agent_logins, scope=scope)
@@ -1204,6 +1228,11 @@ def get_unresolved_review_threads(
     target = resolve_repo(repo)
     gh = client or GhClient()
     pr_data = _load_pr_data(gh, target, pr_number)
+    if pr_data.get("review_threads_unavailable"):
+        raise GhApiError(
+            "Review thread data unavailable (GraphQL rate limit REST fallback); "
+            "feedback resolution cannot be verified"
+        )
     return _extract_unresolved_threads(pr_data.get("reviewThreads", []))
 
 
@@ -1235,6 +1264,7 @@ def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhCli
     gh = client or GhClient()
     pr_data = _load_pr_data(gh, target, pr_number)
     sync_info = _detect_base_branch_out_of_sync(pr_data)
+    threads_unavailable = bool(pr_data.get("review_threads_unavailable"))
     threads = pr_data.get("reviewThreads", [])
     scope = resolve_pr_review_scope(None)
     actionable = _extract_actionable_threads(threads, None, scope=scope)
@@ -1247,6 +1277,7 @@ def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhCli
             "unresolved_review_threads": len(unresolved_all),
             "actionable_agent_threads": len(actionable),
             "review_decision": review_decision,
+            "review_threads_unavailable": threads_unavailable,
             **ci,
         }
     )
@@ -1258,6 +1289,7 @@ def get_pr_merge_gates(pr_number: int, repo: str | None = None, *, client: GhCli
         "out_of_sync": sync_info.get("out_of_sync"),
         "unresolved_review_threads": len(unresolved_all),
         "actionable_agent_threads": len(actionable),
+        "review_threads_unavailable": threads_unavailable,
         "pr_review_scope": scope,
         "threads_with_suggestions": sum(1 for a in actionable if a.get("has_suggestion")),
         "review_decision": review_decision,

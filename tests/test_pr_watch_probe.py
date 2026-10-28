@@ -137,6 +137,7 @@ class PrWatchProbeTests(unittest.TestCase):
                         "mergeable_state": "clean",
                     },
                 ),
+                ("/repos/o/r/pulls/2", frozenset({("If-None-Match", 'W/"new"')})): (304, {}, None),
                 ("/repos/o/r/commits/newsha/status", frozenset()): (
                     200,
                     {},
@@ -152,7 +153,9 @@ class PrWatchProbeTests(unittest.TestCase):
         self.assertFalse(result.not_modified)
         self.assertTrue(result.changed)
         self.assertEqual(result.new_state.head_sha, "newsha")
-        self.assertEqual(result.new_state.ci_state, "success")
+        self.assertEqual(result.new_state.ci_state, "pending")
+        second = probe_pr(http, "o/r", 2, result.new_state)
+        self.assertEqual(second.new_state.ci_state, "success")
         paths = [c[0] for c in http.calls]
         self.assertEqual(paths[0], "/repos/o/r/pulls/2")
         self.assertIn("/repos/o/r/commits/newsha/status", paths)
