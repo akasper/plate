@@ -21,6 +21,7 @@ class PlateDirectoryLayoutTests(unittest.TestCase):
     def test_error_message_names_json_file_and_migration(self):
         msg = plate_directory_layout_error_message()
         self.assertIn("single JSON file", msg)
+        self.assertIn("gh plate config validate", msg)
         self.assertIn("gh plate bootstrap --adopt --apply", msg)
         self.assertIn("docs/migration/adoption-guide.md", msg)
 
@@ -66,6 +67,20 @@ class PlateDirectoryLayoutTests(unittest.TestCase):
             combined = out.getvalue() + err.getvalue()
             self.assertIn(plate_directory_layout_error_message(), combined)
             self.assertNotIn("Traceback", combined)
+
+    def test_config_show_json_exits_nonzero_for_directory_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").mkdir()
+            out = io.StringIO()
+            err = io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = main(["config", "show", "--repo-root", str(root), "--json"])
+            self.assertEqual(code, 1)
+            payload = json.loads(out.getvalue().strip())
+            self.assertFalse(payload.get("valid"))
+            self.assertEqual(payload.get("errors"), [plate_directory_layout_error_message()])
+            self.assertNotIn("Traceback", out.getvalue() + err.getvalue())
 
     def test_health_cli_exits_nonzero_without_traceback(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -177,6 +192,54 @@ class PlateDirectoryLayoutTests(unittest.TestCase):
             )
             self.assertEqual(report.plate_config_layout_error, plate_directory_layout_error_message())
             self.assertFalse(report.plate_config_present)
+            self.assertIn(".plate/ directory (unrecognized layout)", report.plate_repo_signals)
+
+    def test_get_health_remote_file_local_directory_preserves_remote_flags(self):
+        import base64
+
+        plate_json = json.dumps({"version": "1.3", "platform": "posix"})
+        encoded = base64.b64encode(plate_json.encode("utf-8")).decode("ascii")
+
+        class RemoteFilePlateClient:
+            def api(self, endpoint, **kwargs):
+                if endpoint.startswith("repos/owner/repo/labels"):
+                    return [{"name": "Bug"}, {"name": "Feature"}, {"name": "Epic"}]
+                if endpoint == "repos/owner/repo":
+                    return {"default_branch": "main"}
+                if endpoint == "repos/owner/repo/branches/main/protection":
+                    raise GhApiError("404")
+                if endpoint.startswith("search/issues"):
+                    return {"total_count": 0}
+                if endpoint.endswith("contents/.plate"):
+                    return {
+                        "type": "file",
+                        "encoding": "base64",
+                        "content": encoded,
+                    }
+                if "contents/docs/wiki/Goals.md" in endpoint:
+                    raise GhApiError("404")
+                if "contents/docs/plate/wiki/Goals.md" in endpoint:
+                    raise GhApiError("404")
+                if "contents/docs/curiosity" in endpoint:
+                    raise GhApiError("404")
+                if "contents/AGENTS.md" in endpoint:
+                    raise GhApiError("404")
+                if "contents/.agentic" in endpoint:
+                    raise GhApiError("404")
+                raise AssertionError(endpoint)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").mkdir()
+            report = get_health(
+                repo="owner/repo",
+                client=RemoteFilePlateClient(),
+                repo_root=str(root),
+                include_spec_audit=False,
+            )
+            self.assertEqual(report.plate_config_layout_error, plate_directory_layout_error_message())
+            self.assertTrue(report.plate_config_present)
+            self.assertTrue(report.plate_config_valid)
             self.assertIn(".plate/ directory (unrecognized layout)", report.plate_repo_signals)
 
 

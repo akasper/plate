@@ -338,8 +338,10 @@ def get_health(
         local_plate = _plate_path(Path(repo_root) if repo_root is not None else Path("."))
         if local_plate.is_dir():
             plate_config_layout_error = plate_directory_layout_error_message()
-            plate_config_present = False
-            plate_config_valid = False
+            # Preserve remote GitHub presence/validity when the remote has a root `.plate` file.
+            if not plate_config_present:
+                plate_config_present = False
+                plate_config_valid = False
     except Exception as e:
         errors.append(f"plate_config_local: {e}")
 

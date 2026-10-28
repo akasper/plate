@@ -865,7 +865,7 @@ def cmd_config_show(args: argparse.Namespace) -> int:
     report = get_plate_config_report(Path(args.repo_root))
     if args.json:
         print(json.dumps(report.to_dict()))
-        return 0
+        return 0 if report.valid else 1
 
     print(f"Repo root: {report.repo_root}")
     print(f"Path: {report.path}")

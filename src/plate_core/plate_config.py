@@ -185,9 +185,12 @@ def plate_directory_layout_error_message() -> str:
 
     return (
         ".plate is a directory; plate-core expects a single JSON file at .plate "
-        "(not a .plate/ folder). Back up any files under .plate/, remove or rename "
-        "that directory, then run `gh plate bootstrap --adopt --apply` to recreate "
-        "the JSON config (see docs/migration/adoption-guide.md)."
+        "(not a .plate/ folder). Back up files under .plate/, remove or rename that "
+        "directory, create a local root `.plate` JSON file (port supported settings from "
+        "any legacy `.plate/config` YAML), run `gh plate config validate`, commit the "
+        "directory-to-file migration, then run `gh plate bootstrap --adopt --apply` only "
+        "if the remote repo still lacks a root `.plate` file "
+        "(see docs/migration/adoption-guide.md)."
     )
 
 
