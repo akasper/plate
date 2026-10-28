@@ -35,7 +35,10 @@ from plate_core.template_payload import payload_root
 
 PS1_TWINS = sorted(name for name in PLATE_SCRIPT_BASENAMES if name.endswith(".ps1"))
 SH_TWINS = sorted(name for name in PLATE_SCRIPT_BASENAMES if name.endswith(".sh"))
-CI_TEST_JOB = "  test:\n    needs: labels\n    runs-on: ubuntu-latest\n"
+CI_TEST_JOB = (
+    "  test:\n    needs: labels\n"
+    "    runs-on: ${{ fromJSON(needs.labels.outputs.runs_on) }}\n"
+)
 CI_WINDOWS_JOB = "  test:\n    needs: labels\n    runs-on: windows-latest\n"
 BASH_VALIDATE = "bash scripts/validate_plate_repo.sh ."
 PWSH_VALIDATE = "pwsh -File scripts/ValidatePlateRepo.ps1 -Root ."
