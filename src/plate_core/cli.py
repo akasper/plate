@@ -62,6 +62,14 @@ from .release import (
     get_release_status,
     get_release_target_epic_guidance,
 )
+from .runner import (
+    apply_runner_add,
+    apply_runner_remove,
+    get_runner_status,
+    plan_runner_add,
+    plan_runner_remove,
+    run_runner_doctor,
+)
 from .migration import generate_migration_plan, apply_migration_plan
 from .migrate_docs_namespace import migrate_docs_namespace
 from .costs import get_cost_report
@@ -4032,6 +4040,99 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_runner_add(args: argparse.Namespace) -> int:
+    """Register an ephemeral self-hosted runner on a private repo (#1212)."""
+    repo = getattr(args, "repo_slug", None)
+    if not repo:
+        print("Error: add requires REPO (owner/name)", file=sys.stderr)
+        return 1
+    apply = bool(getattr(args, "apply", False))
+    repo_root = getattr(args, "repo_root", ".")
+    os_label = getattr(args, "os_label", None)
+    if apply:
+        report = apply_runner_add(repo, repo_root=repo_root, os_label=os_label)
+    else:
+        report = plan_runner_add(repo, os_label=os_label)
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    mode = "APPLY" if apply else "DRY-RUN"
+    print(f"Runner add ({mode}): {report.repo}")
+    if report.message:
+        print(f"  {report.message}")
+    if report.error:
+        print(f"  error: {report.error}")
+        return 1
+    print(f"  labels: {', '.join(report.labels)}")
+    for action in report.actions:
+        print(f"  - [{action.get('state')}] {action.get('action')}: {action.get('detail', '')}")
+    if not apply:
+        print("  Re-run with --apply to register the runner.")
+    return 0 if report.ok else 1
+
+
+def cmd_runner_status(args: argparse.Namespace) -> int:
+    """List self-hosted runners for the configured private repo (#1212)."""
+    report = get_runner_status(
+        repo=getattr(args, "repo", None),
+        repo_root=getattr(args, "repo_root", "."),
+    )
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    if not report.ok:
+        print(f"Error: {report.error}: {report.message}")
+        return 1
+    print(f"Repo: {report.repo}")
+    for row in report.runners:
+        idle = "idle" if not row.busy else "busy"
+        online = row.status
+        print(f"  {row.name} (id={row.id}): {online}, {idle}; labels={','.join(row.labels)}")
+    if not report.runners:
+        print("  (no runners registered)")
+    return 0
+
+
+def cmd_runner_remove(args: argparse.Namespace) -> int:
+    """Unregister self-hosted runners and clear local state (#1212)."""
+    apply = bool(getattr(args, "apply", False))
+    repo_root = getattr(args, "repo_root", ".")
+    repo = getattr(args, "repo", None)
+    if apply:
+        report = apply_runner_remove(repo=repo, repo_root=repo_root)
+    else:
+        report = plan_runner_remove(repo=repo, repo_root=repo_root)
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    mode = "APPLY" if apply else "DRY-RUN"
+    print(f"Runner remove ({mode}): {report.repo or '(unknown)'}")
+    if report.message:
+        print(f"  {report.message}")
+    if report.error:
+        print(f"  error: {report.error}")
+        return 1
+    for action in report.actions:
+        print(f"  - [{action.get('state')}] {action.get('action')}: {action.get('detail', '')}")
+    if apply and report.removed_runner_ids:
+        print(f"  removed ids: {report.removed_runner_ids}")
+    if not apply:
+        print("  Re-run with --apply to unregister runners.")
+    return 0 if report.ok else 1
+
+
+def cmd_runner_doctor(args: argparse.Namespace) -> int:
+    """Check runner prerequisites: labels, token scope, service, isolation (#1212)."""
+    report = run_runner_doctor(repo_root=getattr(args, "repo_root", "."))
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    print(f"Runner doctor: {'PASS' if report.ok else 'FAIL'}")
+    for check in report.checks:
+        print(f"  [{check.status}] {check.id}: {check.detail}")
+    return 0 if report.ok else 1
+
+
 def cmd_release_repair(args: argparse.Namespace) -> int:
     """Init/repair standing release tracks + Next Release issue (#320)."""
     from plate_core.release import repair_release_standing_state
@@ -4726,6 +4827,61 @@ def build_parser() -> argparse.ArgumentParser:
     cfg_upgrade.add_argument("--json", action="store_true", help="Output JSON")
     cfg_upgrade.set_defaults(func=cmd_config_upgrade)
 
+    runner = sub.add_parser(
+        "runner",
+        help=f"Self-hosted runner for private repos (see {RUNNER_ADOPTER_DOC})",
+        description=(
+            "Ephemeral self-hosted Actions runners for private PLATE adopters. "
+            f"Isolation and security requirements: {RUNNER_ADOPTER_DOC}"
+        ),
+    )
+    runner.add_argument("--json", action="store_true", help="Output JSON")
+    runner.set_defaults(func=cmd_runner)
+    runner_sub = runner.add_subparsers(dest="runner_command", required=False)
+    runner_add = runner_sub.add_parser(
+        "add",
+        help="Register an ephemeral runner with plate-local + OS labels (dry-run by default)",
+    )
+    runner_add.add_argument("repo_slug", metavar="REPO", help="Target private repository (owner/name)")
+    runner_add.add_argument(
+        "--apply",
+        action="store_true",
+        help="Perform registration (default is dry-run plan only)",
+    )
+    runner_add.add_argument(
+        "--os",
+        dest="os_label",
+        choices=["linux", "windows", "macos"],
+        help="OS label to register (default: detect from local platform)",
+    )
+    runner_add.add_argument("--repo-root", default=".", help="Repository root for .agentic/runner.json")
+    runner_add.add_argument("--json", action="store_true")
+    runner_add.set_defaults(func=cmd_runner_add)
+
+    runner_status = runner_sub.add_parser("status", help="List runners and online/idle state")
+    runner_status.add_argument("--repo", help="owner/name (default: from .agentic/runner.json)")
+    runner_status.add_argument("--repo-root", default=".")
+    runner_status.add_argument("--json", action="store_true")
+    runner_status.set_defaults(func=cmd_runner_status)
+
+    runner_remove = runner_sub.add_parser(
+        "remove",
+        help="Unregister runners and clear local state (dry-run by default)",
+    )
+    runner_remove.add_argument("--repo", help="owner/name (default: from .agentic/runner.json)")
+    runner_remove.add_argument("--apply", action="store_true", help="Perform removal")
+    runner_remove.add_argument("--repo-root", default=".")
+    runner_remove.add_argument("--json", action="store_true")
+    runner_remove.set_defaults(func=cmd_runner_remove)
+
+    runner_doctor = runner_sub.add_parser(
+        "doctor",
+        help="Check labels, token scope, service state, and isolation settings",
+    )
+    runner_doctor.add_argument("--repo-root", default=".")
+    runner_doctor.add_argument("--json", action="store_true")
+    runner_doctor.set_defaults(func=cmd_runner_doctor)
+
     pr = sub.add_parser("pr", help="PR feedback operations")
     pr_sub = pr.add_subparsers(dest="pr_command", required=True)
     babysit = pr_sub.add_parser(
@@ -4880,17 +5036,6 @@ def build_parser() -> argparse.ArgumentParser:
     rel_notes.add_argument("--releases-dir", dest="releases_dir", help="Path to releases directory (default: .agentic/releases)")
     rel_notes.add_argument("--json", action="store_true", help="Output JSON")
     rel_notes.set_defaults(func=cmd_release_notes)
-
-    runner = sub.add_parser(
-        "runner",
-        help=f"Self-hosted runner guidance for private repos (see {RUNNER_ADOPTER_DOC})",
-        description=(
-            "Ephemeral self-hosted runners for private PLATE adopters. "
-            f"Isolation and security requirements: {RUNNER_ADOPTER_DOC}"
-        ),
-    )
-    runner.add_argument("--json", action="store_true", help="Output JSON")
-    runner.set_defaults(func=cmd_runner)
 
     costs = sub.add_parser("costs", help="Harvest and aggregate USAGE REPORTs for observability/cost tracking (Epic #265)")
     costs.add_argument("--repo", help="owner/name; defaults to git remote origin")

@@ -1,0 +1,17 @@
+{
+  "slug": "1212-gh-plate-runner",
+  "change_type": "feature",
+  "surface": "gh plate runner CLI",
+  "summary": "Add gh plate runner add|status|remove|doctor for ephemeral self-hosted runners on private repos with plate-local + OS labels (#1212).",
+  "migration_impact": "Optional: adopters with a private repo can plan and register a local runner via gh plate runner; settings are stored in .agentic/runner.json.",
+  "migration_guidance": [
+    "1. Ensure the target repository is private; public repos are refused.",
+    "2. Run gh plate runner add OWNER/REPO (dry-run) then gh plate runner add OWNER/REPO --apply after review.",
+    "3. Use gh plate runner doctor to verify labels, token scopes, and isolation declarations.",
+    "4. Place actions-runner config.sh under .agentic/runner/ if automated configure should run on apply."
+  ],
+  "agent_notes": "Never register runners on public repositories. add and remove default to dry-run; pass --apply for live changes. Mock gh API and subprocess in tests.",
+  "breaking": false,
+  "links": ["#1212", "#1210"],
+  "requires": []
+}
