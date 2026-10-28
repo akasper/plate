@@ -969,6 +969,47 @@ def _probe_snapshot(state: ProbeState | None) -> dict[str, object]:
     }
 
 
+def _compute_base_overlap_block(
+    http: GhApiHttp,
+    repo: str,
+    pr_number: int,
+    prev_state: ProbeState | None,
+    new_state: ProbeState,
+) -> dict | None:
+    if (
+        not prev_state
+        or not prev_state.base_sha
+        or not new_state.base_sha
+        or prev_state.base_sha == new_state.base_sha
+    ):
+        return None
+    overlap_paths = detect_base_moved_into_pr_files(
+        http,
+        repo,
+        pr_number,
+        previous_base_sha=prev_state.base_sha,
+        current_base_sha=new_state.base_sha,
+    )
+    return base_file_overlap_summary(
+        overlap_paths,
+        previous_base_sha=prev_state.base_sha,
+        current_base_sha=new_state.base_sha,
+    )
+
+
+def _overlap_only_wake_summary(overlap_block: dict) -> dict:
+    return {
+        "review_comments": [],
+        "issue_comments": [],
+        "reviews": [],
+        "ci_transition": None,
+        "merge_state_change": None,
+        "head_commit": None,
+        "base_file_overlap": overlap_block,
+        "suppressed_repeats": 0,
+    }
+
+
 def _gh_client_is_test_double(client: object) -> bool:
     """True when unit tests patch ``GhClient`` with a mock instance."""
     from unittest.mock import MagicMock, Mock
@@ -1299,6 +1340,13 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                 wake_summary: dict | None = None
                 delta: dict | None = None
                 state_to_save: ProbeState = probe_result.new_state
+                overlap_block = _compute_base_overlap_block(
+                    http,
+                    target,
+                    args.pr_number,
+                    prev_state,
+                    probe_result.new_state,
+                )
 
                 if not no_saved_state and not force_full:
                     if quiet_tick:
@@ -1308,25 +1356,6 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                         if tick == 1 and prev_state is not None:
                             catchup_since = event_memory_catchup_since(
                                 prev_state.last_checked_at, clock.now()
-                            )
-                        overlap_block = None
-                        if (
-                            prev_state
-                            and prev_state.base_sha
-                            and probe_result.new_state.base_sha
-                            and prev_state.base_sha != probe_result.new_state.base_sha
-                        ):
-                            overlap_paths = detect_base_moved_into_pr_files(
-                                http,
-                                target,
-                                args.pr_number,
-                                previous_base_sha=prev_state.base_sha,
-                                current_base_sha=probe_result.new_state.base_sha,
-                            )
-                            overlap_block = base_file_overlap_summary(
-                                overlap_paths,
-                                previous_base_sha=prev_state.base_sha,
-                                current_base_sha=probe_result.new_state.base_sha,
                             )
                         delta = fetch_delta(
                             http,
@@ -1357,6 +1386,17 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
 
                 activity_tick = run_babysit
                 if run_babysit:
+                    if wake_summary is None and overlap_block is not None:
+                        overlap_wake = filter_wake_summary_by_event_memory(
+                            _overlap_only_wake_summary(overlap_block),
+                            event_ledger,
+                        )
+                        if is_actionable(overlap_wake):
+                            if not args.json:
+                                print(render_wake_summary(overlap_wake))
+                            mark_wake_summary_reported(
+                                event_ledger, overlap_wake, now=clock.now()
+                            )
                     if wake_summary is not None and not args.json:
                         print(render_wake_summary(wake_summary))
                     report = babysit_pr(
@@ -1404,6 +1444,9 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                             )
                         elif note_url:
                             print(f"Pause comment: {note_url}")
+                        save_probe_state(state_path, state_to_save)
+                        prune_event_ledger(event_ledger, now=clock.now())
+                        save_event_ledger(events_path, event_ledger)
                         break
 
                 save_probe_state(state_path, state_to_save)
