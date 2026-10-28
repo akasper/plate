@@ -1,0 +1,228 @@
+{
+  "version": "0.8.5",
+  "summary": "PLATE 0.8.5 -- Actions cost controls with one merged `pr-gates` check (breaking for adopters' required checks), `gh plate runner` and an adopter guide for self-hosted runners on private repos, empty-repo greenfield bootstrap, label sync under GitHub's 100-character limit, a complete plate-core wheel, and quieter babysit watching with a Copilot code-review skill.\n\n## Breaking for adopters: `pr-gates` replaces the separate audit and check jobs\n\n- The separate PR title, issue-link, documentation, feedback-resolution, audit and release-validation jobs merge into one `pr-gates` job (#1209, via #1177). This breaks any required-check list that names the old jobs. The new list is `labels`, `test` and `pr-gates`. Adopters must import `plate-pr-gates.yml`, delete the old `pr-title-check`, `pr-issue-link-check`, `pr-documentation-check`, `feedback-resolution-check` and `audit` workflows, and set required checks to `labels`, `test` and `pr-gates`. Remove the old contexts `check-pr-title`, `check-issue-links`, `feature-change-files`, `feedback-resolution`, `audit` and `validate-release-pr`. `gh plate health` reports stale names. See `docs/migration/actions-cost-rollout.md`.\n\n## Actions and Copilot cost controls\n\n- Issue-triggered workflows use narrow event types and job-level `if:` guards, so events that do no work don't start a runner. PR workflows cancel stacked runs. Push deploys run only on `main`. Copilot autostart is opt-in through `PLATE_COPILOT_AUTOSTART=true` (#1150, via #1177).\n- The heavy release job in `ci.yml` depends only on `test`. `validate-release-pr` moves into `pr-gates`.\n\n## Self-hosted runners (private repos only)\n\n- New `gh plate runner add|status|remove|doctor` plans and registers ephemeral self-hosted runners with `plate-local` plus OS labels. Settings live in `.agentic/runner.json` (#1212, via #1219).\n- An adopter guide covers isolated, ephemeral runners on private repos, with explicit security warnings. `import-payload` copies it into adopting repos (#1215, via #1220). Public repos should not use self-hosted runners.\n\n## Bootstrap and payload\n\n- `gh plate bootstrap --greenfield --apply` works on an empty GitHub repository with no manual README commit. It avoids argv overflow on large payload uploads, leaves test media out of the payload, and adds a generic `.agentic/COSTS.md` only when one is missing. Re-running after a partial failure is safe (#1152, via #1179).\n- Agents no longer get pointed at `akasper/plate_template`. New repos use `gh plate bootstrap --greenfield`, and upgrades use `import-payload` or `self-migrate` (#1151, via #1178).\n- Shipped label descriptions fit GitHub's 100-character limit. Label sync truncates with a warning and keeps going after a single label fails (#1200, via #1221).\n- The plate-core wheel ships the full `template_payload` tree and declares PyYAML as a runtime dependency. This fixes the incomplete 0.8.4 wheel (#1115, via #1117).\n\n## PR babysitting and code review\n\n- `gh plate pr babysit --watch` uses cheap REST probes (a conditional PR GET plus commit status and check runs) on quiet ticks, instead of a full GraphQL reload. Unchanged PRs no longer wake the full babysit path (#1077, via #1100).\n- Wake summaries skip Copilot comments whose fingerprint was already resolved (#1096, via #1099).\n- A Copilot `code-review` skill ships at `.github/skills/code-review/SKILL.md` with the PLATE PR checklist (#1092, Epic #1091, via #1106).\n- The `address-pr-feedback` skill ships in the payload. It uses `plate_get_unresolved_review_threads` (outdated threads included) for the zero-unresolved gate and resolves one thread at a time after replying (#1155, via #1180).\n\n## Documentation\n\n- PLATE expands to \"Product Lifecycle Automation Toolkit and Engine\" across shipped surfaces (#1157, via #1181).\n\n## Adopter upgrade checklist\n\n1. `pip install -U plate-core==0.8.5` and `gh extension upgrade gh-plate`.\n2. Re-import template workflows (`gh plate import-payload`) and pull the updated `.github/labels.yml`.\n3. Update required checks to `labels`, `test` and `pr-gates`, then run `gh plate health`.\n4. Optional: set `PLATE_COPILOT_AUTOSTART=true` to keep Copilot autostart.\n\nThe runner fallback and `runs-on` selection (#1214, #1222) ships in 0.8.6.",
+  "cut_at": "2026-10-28T08:55:31Z",
+  "fragment_count": 13,
+  "fragment_slugs": [
+    "1151-stop-plate-template-bootstrap",
+    "1155-address-pr-feedback-skill",
+    "1212-gh-plate-runner",
+    "actions-cost-controls",
+    "actions-pr-gates-merge",
+    "bootstrap-greenfield-empty-repo-1152",
+    "fix-label-description-limit-1200",
+    "plate-acronym-expansion",
+    "self-hosted-runner-adopter-guide",
+    "wheel-payload-pyyaml-fix",
+    "1077-babysit-watch-probe-wiring",
+    "1092-code-review-skill",
+    "1096-babysit-skip-repeated-copilot-comments"
+  ],
+  "entries": [
+    {
+      "change_type": "process",
+      "surface": "AGENTS.md, template payload, template_payload.py, process.yml, docs/bootstrap/starting-a-new-repository.md",
+      "migration_impact": "Downstream repos should remove plate_template upstream remotes from agent docs and onboarding. Legacy plate_template forks upgrade via gh plate tooling only.",
+      "agent_notes": "Closes #1151. plate_template mentions in migration/cutover research docs remain intentional legacy history.",
+      "migration_guidance": [
+        "1. Do not create, clone, fork, or gh repo create --template from akasper/plate_template; start new repos per docs/bootstrap/starting-a-new-repository.md.",
+        "2. Replace git-fetch upstream template sync instructions with gh plate self-migrate and gh plate import-payload.",
+        "3. Remove template_repository: akasper/plate_template from .agentic/process.yml if present; use methodology_repository: akasper/plate.",
+        "4. PLATE_ALLOW_LEGACY_TEMPLATE_SIBLING=1 enables deprecated sibling plate_template resolution only for exceptional local dev."
+      ],
+      "links": [
+        "#1151"
+      ],
+      "requires": [
+        "0.8.4"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plugin skills, template payload, AGENTS.md, pr_babysit helpers",
+      "migration_impact": "Bootstrapped repos receive `.agentic/skills/address-pr-feedback/SKILL.md`. Agents must use plate_get_unresolved_review_threads (or skill GraphQL fallback) for the zero-unresolved gate and plate_resolve_review_thread per thread after reply.",
+      "agent_notes": "Done gate counts all isResolved:false threads including outdated. Babysit --act remains a separate bulk outdated auto-resolve (#605), not a substitute for the reply+resolve loop.",
+      "migration_guidance": [
+        "1. Re-bootstrap or re-import template payload to pick up `.agentic/skills/address-pr-feedback/SKILL.md`.",
+        "2. Follow the address-pr-feedback skill: fetch/re-query with plate_get_unresolved_review_threads; resolve each thread with plate_resolve_review_thread after its in-thread reply.",
+        "3. Do not use gh plate pr babysit --act as a per-thread resolver."
+      ],
+      "links": [
+        "#1155"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "gh plate runner CLI",
+      "migration_impact": "Optional: adopters with a private repo can plan and register a local runner via gh plate runner; settings are stored in .agentic/runner.json.",
+      "agent_notes": "Never register runners on public repositories. add and remove default to dry-run; pass --apply for live changes. Mock gh API and subprocess in tests.",
+      "migration_guidance": [
+        "1. Ensure the target repository is private; public repos are refused.",
+        "2. Run gh plate runner add OWNER/REPO (dry-run) then gh plate runner add OWNER/REPO --apply after review.",
+        "3. Use gh plate runner doctor to verify labels, token scopes, and isolation declarations.",
+        "4. Place actions-runner config.sh under .agentic/runner/ if automated configure should run on apply."
+      ],
+      "links": [
+        "#1212",
+        "#1210"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": ".github/workflows/ + template_payload workflows",
+      "migration_impact": "Adopter repos should re-import template workflows; Copilot autostart is off until PLATE_COPILOT_AUTOSTART=true.",
+      "agent_notes": "Issue workflows use job-level if: to skip runners on irrelevant events. plates-start-feature and plates-unblock-features omit @copilot unless PLATE_COPILOT_AUTOSTART=true. PR workflows use concurrency with cancel-in-progress except release/publish.",
+      "migration_guidance": [
+        "Run gh plate import-payload (or upgrade) and merge the .github/workflows diff.",
+        "Leave PLATE_COPILOT_AUTOSTART unset (or false) unless automatic @copilot kickoff is desired.",
+        "After #1209 lands, require pr-gates (merged gates), labels, and test; use gh plate health to find stale per-gate contexts.",
+        "Follow docs/migration/actions-cost-rollout.md for private adopter rollout order."
+      ],
+      "links": [
+        "#1136",
+        "#1137"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": ".github/workflows/plate-pr-gates.yml + template_payload + gh plate health",
+      "migration_impact": "Branch protection must require pr-gates instead of legacy per-gate job contexts; run gh plate health to detect stale names.",
+      "agent_notes": "validate-release-pr moved from ci.yml into pr-gates; heavy-release in ci.yml depends on test only. Builder: scripts/build_plate_pr_gates_workflow.py regenerates YAML from step anchors.",
+      "migration_guidance": [
+        "Import plate-pr-gates.yml and delete pr-title-check, pr-issue-link-check, pr-documentation-check, feedback-resolution-check, and audit workflows.",
+        "Update required checks to labels, test, and pr-gates (see docs/migration/actions-cost-rollout.md).",
+        "Remove deprecated contexts: check-pr-title, check-issue-links, feature-change-files, feedback-resolution, audit, validate-release-pr."
+      ],
+      "breaking": true,
+      "links": [
+        "#1209",
+        "#1177",
+        "#1150"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "gh plate bootstrap --greenfield --apply",
+      "migration_impact": "Downstream adopters on plate-core with this fix can run `gh plate bootstrap --greenfield --apply` on an empty GitHub repository without a manual README commit. Re-running apply after a partial failure is safe: identical files are skipped and remaining bootstrap steps still run. Bootstrap adds `.agentic/COSTS.md` only when missing; existing cost logs are preserved.",
+      "agent_notes": "GitHub contents PUT bodies use `gh api --input` JSON (never argv). Template payload excludes tests/spike-videos and large e2e GIF fixtures. Bootstrap seeds README.md when the default branch ref is missing. Payload includes a generic `.agentic/COSTS.md` header (no harvested rows); manifest `preserve_existing` skips overwrite when a cost log already exists.",
+      "migration_guidance": [
+        "1. Upgrade plate-core / gh-plate to a build that includes this fix.",
+        "2. On empty repositories, run `gh plate bootstrap --repo OWNER/REPO --greenfield --apply` without seeding an initial commit manually.",
+        "3. If a prior apply stopped mid-way, rerun the same command; it will skip files that already match the template and complete labels, `.plate`, starter questions, and release branches."
+      ],
+      "links": [
+        "#1152"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": ".github/labels.yml, scripts/bootstrap_github.sh, gh plate bootstrap",
+      "migration_impact": "Pull updated `.github/labels.yml` (or run import-payload) so bootstrap label sync succeeds. Bootstrap scripts truncate over-long descriptions with a warning and report failed labels without skipping later steps.",
+      "agent_notes": "Use `plate_core.github_labels.GITHUB_LABEL_DESCRIPTION_MAX_LENGTH` and the shipped-labels unittest when editing labels.yml. Do not rely on GitHub to accept descriptions over 100 characters.",
+      "migration_guidance": [
+        "1. Sync `.github/labels.yml` from plate-core or shorten any local label descriptions to 100 characters or fewer.",
+        "2. Re-run `scripts/bootstrap_github.sh` or `gh plate bootstrap --apply` if a prior run stopped during label sync."
+      ],
+      "links": [
+        "#1200"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "README, AGENTS.md, SPEC.md, docs/wiki/Goals.md, .agentic/process.yml, template_payload, pyproject.toml, CLI/MCP help",
+      "migration_impact": "Downstream repos that spelled out the old PLATE acronym should refresh copy from template_payload or adopt Product Lifecycle Automation Toolkit and Engine in local README/AGENTS.md/process.yml when syncing.",
+      "agent_notes": "Use Product Lifecycle Automation Toolkit and Engine when spelling out PLATE. The acronym PLATE, package plate-core, import plate_core, and gh plate are unchanged. Historical release fragments under .agentic/releases/v* are intentionally not rewritten.",
+      "links": [
+        "#1157"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/migration/self-hosted-runners.md, template_payload, gh plate runner",
+      "migration_impact": "Optional reading before registering local runners; import-payload copies the guide into adopting repos.",
+      "agent_notes": "Never register runners on public repos. Personal GitHub accounts need one runner registration per private repo or a free org for sharing.",
+      "migration_guidance": [
+        "1. Read docs/migration/self-hosted-runners.md before registering any self-hosted runner.",
+        "2. Keep fork and outside-contributor workflows on GitHub-hosted runs-on only.",
+        "3. Run gh plate runner for the doc path and planned CLI subcommands (#1212)."
+      ],
+      "links": [
+        "#1215",
+        "#1210"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "pyproject.toml / MANIFEST.in / plate-core wheel",
+      "migration_impact": "Upgrade plate-core on the patch track; pip install plate-core pulls PyYAML and import-payload plans the full template file set.",
+      "agent_notes": "Wheel packaging now grafts template_payload (including .github and .agentic) via MANIFEST.in; label descriptions are capped at 100 characters for GitHub label sync.",
+      "migration_guidance": [
+        "1. Upgrade plate-core to the release that includes this fix.",
+        "2. Re-run gh plate bootstrap --apply or import-payload if a prior incomplete wheel left partial template files."
+      ],
+      "links": [
+        "#1115"
+      ],
+      "requires": [
+        "0.8.4"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core.cli (gh plate pr babysit --watch), docs/wiki/PR-Babysit-Wake-Summary.md",
+      "migration_impact": "No downstream repo migration. Watch mode behavior changes: unchanged PRs no longer wake the full babysit path every poll.",
+      "agent_notes": "gh plate pr babysit --watch probes with If-None-Match each tick, runs full babysit only on first tick, actionable wake summaries, or --full-every N. Quiet ticks print 'No change; sleeping Ns' and exponential backoff without record_wake.",
+      "migration_guidance": [
+        "1. Upgrade plate-core when the release containing #1077 ships.",
+        "2. Rely on wake summaries on changed ticks; use --full-every N as an optional safety net for periodic full babysit.",
+        "3. Read docs/wiki/PR-Babysit-Wake-Summary.md for watcher loop semantics."
+      ],
+      "links": [
+        "#1077",
+        "#1078",
+        "#1080"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/skills/code-review/SKILL.md, template_payload adopt path",
+      "migration_impact": "Downstream repos that adopt or refresh template payload receive `.github/skills/code-review/SKILL.md` for GitHub Copilot code review on PLATE pull requests.",
+      "agent_notes": "Copilot code review loads skills from `.github/skills/` on the PR head branch; the `code-review` directory name improves discovery. Use the checklist for Feature/Bug/Documentation PRs: issue link, fragment location, labels, procutil subprocesses, unittest not pytest, and accurate claims.",
+      "migration_guidance": [
+        "1. Upgrade plate-core or re-run `gh plate import-payload` / bootstrap adopt when this release ships.",
+        "2. Ensure `.github/skills/code-review/SKILL.md` exists on integration branches so Copilot review on PRs can load it from the head branch.",
+        "3. No `.plate` changes are required for this skill alone."
+      ],
+      "links": [
+        "#1092",
+        "#1091"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core.pr_watch_summary",
+      "migration_impact": "No downstream repo migration. Watch CLI wiring to persist the resolved ledger lands in a follow-up PR.",
+      "agent_notes": "Repeated Copilot re-review comments matching a resolved fingerprint are suppressed (suppressed_repeats count only; not actionable alone). Persist fingerprints via ResolvedLedger under .agentic/babysit/<owner>-<repo>-<pr>.resolved.json.",
+      "migration_guidance": [
+        "1. Upgrade plate-core when the release containing #1096 ships.",
+        "2. When integrating PR watch wake, pass resolved fingerprints into build_wake_summary and call mark_resolved when threads are resolved."
+      ],
+      "links": [
+        "#1096"
+      ]
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": "",
+  "closes_block": "Closes #1097"
+}

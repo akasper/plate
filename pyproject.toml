@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plate-core"
-version = "0.8.4"
+version = "0.8.5"
 description = "Product Lifecycle Automation Toolkit and Engine (PLATE): core library, gh extension, and MCP server for GitHub-native methodology automation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ authors = [
   {name = "Andrew Kasper"}
 ]
 license = {text = "MIT with Commons Clause"}
-dependencies = []
+dependencies = ["pyyaml>=6"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
@@ -31,8 +31,17 @@ Homepage = "https://github.com/akasper/plate"
 Repository = "https://github.com/akasper/plate"
 Documentation = "https://github.com/akasper/plate/blob/main/README.md"
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"plate_core" = ["data/*.yml", "data/*.json", "template_payload/**/*"]
+"plate_core" = [
+  "data/*.yml",
+  "data/*.json",
+  "template_payload/**/*",
+  "template_payload/.github/**/*",
+  "template_payload/.agentic/**/*",
+]
