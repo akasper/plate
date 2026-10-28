@@ -1,0 +1,141 @@
+{
+  "version": "0.8.6",
+  "summary": "PLATE 0.8.6 -- `PLATE_RUNS_ON` runner selection with hosted fallback, safer `pr-gates` (multi-label events, explicit closing keywords, sidebar replay), five new `babysit --watch` guards, payload CI check-context fixes, a clear error for a `.plate/` directory, a `release finalize` relative-path fix, and pre-merge recheck guidance.\n\n## Runners\n\n- Heavy payload workflows pick `runs-on` from `PLATE_RUNS_ON`. They probe for an idle self-hosted runner and fall back to GitHub-hosted runners. Fork and public repos stay on `ubuntu-latest` (#1214, via #1222).\n\n## PR gates\n\n- Non-gating `labeled` events no longer cancel an in-progress `pr-gates` run or leave a skipped required check when several labels land at PR creation (#1228, via #1239).\n- The issue-link and mark-implemented gates accept only explicit `#N` or `owner/repo` issue URLs. They ignore fenced code and HTML comments, replay Development sidebar connect and disconnect events in order, and the Feature fragment gate ignores removed files (#1231, via #1243).\n- Payload CI reports the required check context as `labels` (not `Labels`) and finds `validate_plate_repo.sh` under `scripts/plate/` in namespaced repos (#1229, via #1240).\n\n## PR babysitting\n\n- `gh plate pr babysit --watch` waits for required checks before reporting green, reads CI twice before settling, and falls back to REST when GraphQL is rate-limited (#1233, via #1245).\n- It also flags base-branch file overlap and keeps restart-safe event memory for six hours (#1246, via #1247).\n\n## Fixes\n\n- A `.plate/` directory is reported as an unrecognized layout with a clear `PlateConfigError`. The CLI exits non-zero without a traceback, and `health` no longer reports MISSING when GitHub has a root `.plate` file (#1227, #1230, via #1241).\n- `gh plate release finalize` resolves `--releases-dir` to an absolute path, so relative directories no longer raise subpath errors (#1226, via #1242).\n\n## Guidance\n\n- Merge and PR-green guidance adds a pre-merge recheck and keeps review loops small. Adapted in our own words from tstack by Theo Browne (MIT) (#1234, via #1244).\n\n## Adopter upgrade checklist\n\n1. `pip install -U plate-core==0.8.6` and `gh extension upgrade gh-plate`.\n2. Re-import template workflows (`gh plate import-payload`) to pick up the updated `plate-pr-gates.yml` and the `runs-on` selection.\n3. Optional, private repos only: set the `PLATE_RUNS_ON` repository variable to use an idle self-hosted runner.\n4. Run `gh plate health`. Required checks stay `labels`, `test` and `pr-gates`.",
+  "cut_at": "2026-10-28T14:01:38Z",
+  "fragment_count": 9,
+  "fragment_slugs": [
+    "payload-ci-labels-test-context",
+    "plate-directory-layout-error",
+    "pr-gates-closing-sidebar-fragment-1231",
+    "pr-gates-multi-label-events",
+    "pr-watch-guards-1233",
+    "pr-watch-guards-3-4-1246",
+    "release-finalize-relative-releases-dir",
+    "tstack-pre-merge-recheck-review-scope-1234",
+    "workflow-runs-on-fallback"
+  ],
+  "entries": [
+    {
+      "change_type": "fix",
+      "surface": "template_payload/.github/workflows/ci.yml + docs/migration/adoption-guide.md",
+      "migration_impact": "Adopters on payload ci.yml should import the updated workflow or drop `name: Labels` and add validate-script path fallback. Docs describe an aggregate `test` job when product CI owns test execution.",
+      "agent_notes": "Regression: tests/test_template_payload_ci_yml.py. gh plate health stale-context detection for Labels vs labels is follow-up (not in this fix).",
+      "migration_guidance": [
+        "Re-import template_payload ci.yml or merge: remove labels job display name `Labels`; use the validate script loop under scripts/plate/ then scripts/.",
+        "If branch protection requires `test` but product CI runs suites elsewhere, add a job id `test` aggregate per docs/migration/adoption-guide.md.",
+        "Required checks remain labels, test, and pr-gates; match job ids/context names exactly."
+      ],
+      "links": [
+        "#1229"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/plate_config.py, src/plate_core/health.py, gh plate config validate/show, gh plate health",
+      "migration_impact": "Repos with a legacy .plate/ folder see actionable errors for local directory-to-file migration instead of IsADirectoryError, MISSING remote config, or bootstrap attempting to replace an existing remote .plate without its SHA.",
+      "agent_notes": "plate-core expects a single JSON file at .plate; use get_plate_config_report or plate_directory_layout_error_message() for the canonical text.",
+      "migration_guidance": [
+        "1. Back up files under .plate/, remove or rename the directory.",
+        "2. Create a local root `.plate` JSON file; port supported settings from any legacy `.plate/config` YAML.",
+        "3. Run `gh plate config validate`, commit the migration, then run `gh plate bootstrap --adopt --apply` only if the remote repo still lacks a root `.plate` file (see docs/migration/adoption-guide.md)."
+      ],
+      "links": [
+        "#1227",
+        "#1230"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": ".github/workflows/plate-pr-gates.yml + template_payload",
+      "migration_impact": "Adopters should import the updated plate-pr-gates.yml (regenerate from plate-core or run scripts/build_plate_pr_gates_workflow.py after merge). Required check name remains pr-gates; closing-keyword scans no longer treat prose digits or example URLs without owner/repo as links.",
+      "agent_notes": "Refs #1231 items 2\u20134. Regenerate plate-pr-gates.yml via scripts/build_plate_pr_gates_workflow.py after editing gate scripts."
+    },
+    {
+      "change_type": "docs",
+      "surface": ".github/workflows/plate-pr-gates.yml + template_payload",
+      "migration_impact": "Adopters should import the updated plate-pr-gates.yml; branch protection check name remains pr-gates.",
+      "agent_notes": "Isolated concurrency group label-noop for non-gating labels; conditional cancel-in-progress; pr-gates job runs for all pull_request actions except closed. Regenerate with scripts/build_plate_pr_gates_workflow.py."
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core pr_watch_guards + pr_watch_probe + pr_babysit --watch",
+      "migration_impact": "No config changes. Watch loops may report CI as pending slightly longer while checks settle; babysit uses REST when GraphQL primary rate limit is exhausted.",
+      "agent_notes": "Watcher guard ideas adapted from t3dotgg/tstack pr-wait (MIT, copyright Theo Browne); PLATE implementation is original. Guards 3 (base moved into PR files) and 4 (restart-safe events) remain for a follow-up slice.",
+      "migration_guidance": [
+        "Upgrade plate-core when this release ships.",
+        "No action required unless you rely on immediate single-tick CI success signaling in custom watch automation."
+      ],
+      "links": [
+        "#1233",
+        "#1232",
+        "#1077"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core pr_watch_guards + pr_watch_probe + pr_babysit --watch",
+      "migration_impact": "No config changes. Watch loops may surface base-branch overlap warnings and will not replay comment events older than about six hours after a restart.",
+      "agent_notes": "Watcher guard ideas adapted from t3dotgg/tstack pr-wait (MIT, copyright Theo Browne); PLATE implementation is original. Event ledger persists under .agentic/babysit/*.events.json with atomic JSON writes.",
+      "migration_guidance": [
+        "Upgrade plate-core when this release ships.",
+        "No action required unless custom automation parses wake summaries; optional base_file_overlap block may appear when the integration branch moves into PR-touched paths."
+      ],
+      "links": [
+        "#1246",
+        "#1232",
+        "#1077"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plate_core.release validate_release_workspace / gh plate release finalize",
+      "migration_impact": "No downstream action. `gh plate release finalize` and tooling that pass a relative --releases-dir now behave the same as an absolute path.",
+      "agent_notes": "Regression covered by test_validation_accepts_relative_and_default_releases_dir in tests/test_release.py.",
+      "links": [
+        "#1226"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "AGENTS.md + address-pr-feedback skill (plugin, .plugin, template payload)",
+      "migration_impact": "No runtime or config changes. Adopters pick up updated AGENTS.md and address-pr-feedback skill via gh plate import-payload or sectional merge.",
+      "agent_notes": "Ideas adapted from t3dotgg/tstack (MIT, copyright Theo Browne) per #1232; PLATE wording is original. After editing baseline_catalog address-pr-feedback procedure, run python3 scripts/generate-plugin-skills.py.",
+      "migration_guidance": [
+        "Import or merge updated AGENTS.md merge/feedback guidance and .agentic/skills/address-pr-feedback/SKILL.md.",
+        "If you forked the skill locally, reconcile the Pre-merge recheck and Keep review loops small sections."
+      ],
+      "links": [
+        "#1234",
+        "#1232"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/actions/plate-select-runs-on + payload CI/E2E workflows + plate-pr-gates",
+      "migration_impact": "Optional: set repository variable PLATE_RUNS_ON to a JSON label array for self-hosted runners. Default remains ubuntu-latest. Import payload to receive the composite action and workflow wiring.",
+      "agent_notes": "pr-gates logs the selection in its first step; test/e2e jobs use needs.*.outputs.runs_on. Regenerate action YAML with scripts/build_workflow_runs_on.py.",
+      "migration_guidance": [
+        "Run gh plate import-payload (or copy .github/actions/plate-select-runs-on and updated ci.yml / test-e2e.yml / plate-pr-gates.yml).",
+        "Set PLATE_RUNS_ON only on private repos with registered self-hosted runners (never on public repos).",
+        "Optional PLATE_RUNNER_PROBE_TIMEOUT_SECONDS repository variable overrides the default 30s probe before hosted fallback."
+      ],
+      "links": [
+        "#1214",
+        "#1210"
+      ]
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": "",
+  "closes_block": "Closes #1224"
+}
