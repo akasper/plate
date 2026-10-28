@@ -20,7 +20,7 @@ runs:
     - id: select
       uses: actions/github-script@v8
       env:
-        PLATE_RUNS_ON: ${{ vars.PLATE_RUNS_ON }}
+        PLATE_RUNS_ON: ${{ inputs.plate-runs-on }}
         PLATE_RUNNER_PROBE_TIMEOUT_SECONDS: ${{ inputs.probe-timeout-seconds }}
       with:
         script: |
