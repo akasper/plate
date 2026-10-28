@@ -132,7 +132,7 @@ Import decisions are driven by `template_payload_manifest.yml` `path_rules` (#61
 
 - Existing `.github/workflows/ci.yml` → install PLATE process as `.github/workflows/plate-ci.yml` (product CI preserved).
 - Root `package.json` / `SPEC.md` / `README.md` → **conflict** (human merge).
-- `.github/labels.yml` and issue templates → **overwrite** (PLATE taxonomy).
+- `.github/labels.yml`, issue templates, and `PULL_REQUEST_TEMPLATE.md` → **overwrite** with `--strategy safe` (refresh PLATE taxonomy); **conflict** with `--strategy conservative` when content differs.
 
 Dry-run shows `create_as` / `conflict` / `skip` per file. Customize rules only in a deliberate fork.
 

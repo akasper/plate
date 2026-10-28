@@ -142,6 +142,41 @@ class TemplatePayloadManifestTests(unittest.TestCase):
         )
         self.assertEqual(plan["action"], "conflict")
 
+    def test_path_rules_taxonomy_overwrite_safe_conservative(self):
+        """#1250: manifest overwrite rules honor global strategy."""
+        from plate_core.template_payload import resolve_conflict_plan
+
+        manifest = load_template_payload_manifest()
+        for path in (
+            ".github/labels.yml",
+            ".github/ISSUE_TEMPLATE/feature.yml",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+        ):
+            safe = resolve_conflict_plan(
+                path,
+                dest_exists=True,
+                identical=False,
+                strategy="safe",
+                manifest=manifest,
+            )
+            self.assertEqual(safe["action"], "overwrite", msg=path)
+            conservative = resolve_conflict_plan(
+                path,
+                dest_exists=True,
+                identical=False,
+                strategy="conservative",
+                manifest=manifest,
+            )
+            self.assertEqual(conservative["action"], "conflict", msg=path)
+            identical = resolve_conflict_plan(
+                path,
+                dest_exists=True,
+                identical=True,
+                strategy="conservative",
+                manifest=manifest,
+            )
+            self.assertEqual(identical["action"], "skip", msg=path)
+
 
 class TemplatePayloadSizeGuardTests(unittest.TestCase):
     """Downstream payload must not ship large test media (#1152)."""

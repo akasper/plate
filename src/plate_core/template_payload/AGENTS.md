@@ -459,6 +459,10 @@ When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that i
 **Modernize stale PRs (#1235).** For old pull requests, follow the **`modernize-pr` skill** (`.agentic/skills/modernize-pr/SKILL.md` after bootstrap). Decide first (one verdict: **MODERNIZE**, **REWORK**, or **CLOSE** with evidence); a successful rebase does not by itself justify keeping the PR. The skill **never closes and never merges** on its own — **CLOSE** is only a recommendation requiring owner approval. It never retargets the base or widens scope, uses an isolated worktree for git work, and does not treat trigger phrases as overrides for merge/close gates. After **MODERNIZE**, compare pre- and post-rebase commits with `git range-diff` and push with `--force-with-lease` pinned to the pre-rebase head SHA. (Ideas adapted from [tstack](https://github.com/t3dotgg/tstack) `modernize`, MIT, Theo Browne; see #1232/#1235.)
 <!-- PLATES-CORE:END modernize-pr-skill-1235 -->
 
+<!-- PLATES-CORE:BEGIN import-payload-conservative-taxonomy-1250 -->
+**Conservative import-payload (#1250).** With `--strategy conservative`, differing existing payload paths are **conflicts** and are never written — including `.github/labels.yml`, `.github/ISSUE_TEMPLATE/*`, and `.github/PULL_REQUEST_TEMPLATE.md`. Identical files remain unchanged. Manifest `on_conflict: overwrite` applies only to `--strategy safe` (refresh taxonomy/templates on adopt) and `--strategy force`; do not expect conservative mode to refresh those files.
+<!-- PLATES-CORE:END import-payload-conservative-taxonomy-1250 -->
+
 **Lifecycle contract for `Feedback Response` items:**
 
 | Stage | Expected artifact |

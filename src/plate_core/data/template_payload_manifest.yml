@@ -52,7 +52,7 @@ path_rules:
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/PULL_REQUEST_TEMPLATE.md"
     on_conflict: overwrite
-    reason: "PLATE taxonomy/templates are safe to refresh on adopt"
+    reason: "With --strategy safe, refresh PLATE taxonomy/templates on adopt; conservative reports conflicts"
   - globs:
       - "AGENTS.md"
       - ".github/CODEOWNERS"
