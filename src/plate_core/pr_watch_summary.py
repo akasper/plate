@@ -240,6 +240,7 @@ def build_wake_summary(
     review_scope: str | None = None,
     agent_logins: str | None = None,
     resolved: frozenset[str] = frozenset(),
+    base_file_overlap: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a structured wake summary from REST deltas and lightweight PR snapshots."""
     effective_review_scope = resolve_pr_review_scope(review_scope)
@@ -283,6 +284,7 @@ def build_wake_summary(
         "ci_transition": ci_transition,
         "merge_state_change": merge_state_change,
         "head_commit": head_commit,
+        "base_file_overlap": base_file_overlap,
         "suppressed_repeats": suppressed_repeats,
     }
 
@@ -292,6 +294,9 @@ def is_actionable(summary: Mapping[str, Any]) -> bool:
     if summary.get("review_comments") or summary.get("issue_comments") or summary.get("reviews"):
         return True
     if summary.get("ci_transition") or summary.get("merge_state_change") or summary.get("head_commit"):
+        return True
+    overlap = summary.get("base_file_overlap")
+    if isinstance(overlap, dict) and overlap.get("paths"):
         return True
     return False
 
@@ -348,6 +353,16 @@ def render_wake_summary(summary: Mapping[str, Any]) -> str:
             f"Head commit: {_truncate_utf8(str(prev_sha), 128)}"
             f" -> {_truncate_utf8(str(head.get('sha') or ''), 128)}"
         )
+
+    overlap = summary.get("base_file_overlap")
+    if isinstance(overlap, dict) and overlap.get("paths"):
+        paths = overlap.get("paths") or []
+        preview = ", ".join(_truncate_utf8(str(path), 80) for path in paths[:4])
+        extra = max(0, len(paths) - 4)
+        line = f"Base branch touched PR files: {preview}"
+        if extra:
+            line += f" (+{extra} more)"
+        parts.append(line)
 
     review_comments = summary.get("review_comments") or []
     reviews = summary.get("reviews") or []

@@ -78,6 +78,7 @@ class BabysitWatchProbeWiringTests(unittest.TestCase):
         argv = argv or ["pr", "babysit", "99", "--watch", "--repo", "owner/repo"]
         ledger_path = Path(directory) / "watch.caps.json"
         probe_path = Path(directory) / "probe.json"
+        events_path = Path(directory) / "events.json"
         claim = {
             "claimed": True,
             "pidfile": str(Path(directory) / "watch.pid"),
@@ -92,6 +93,9 @@ class BabysitWatchProbeWiringTests(unittest.TestCase):
             "resolve_repo": patch("plate_core.cli.resolve_repo", return_value="owner/repo"),
             "caps_path": patch("plate_core.cli.caps_path", return_value=ledger_path),
             "probe_state_path": patch("plate_core.cli.probe_state_path", return_value=probe_path),
+            "event_ledger_path": patch(
+                "plate_core.cli.event_ledger_path", return_value=events_path
+            ),
             "claim": patch("plate_core.cli.claim_babysit_watch", return_value=claim),
             "pid": patch("plate_core.cli.pid_is_alive", side_effect=pid_alive),
             "probe": patch("plate_core.cli.probe_pr", side_effect=probe_side_effect),
@@ -155,6 +159,7 @@ class BabysitWatchProbeWiringTests(unittest.TestCase):
             "review_comments": [
                 {
                     "id": 42,
+                    "created_at": "2026-01-02T00:00:00Z",
                     "user": {"login": "Copilot"},
                     "body": "Consider this fix",
                     "path": "src/a.py",

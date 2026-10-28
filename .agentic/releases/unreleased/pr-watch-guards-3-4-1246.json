@@ -1,0 +1,14 @@
+{
+  "slug": "pr-watch-guards-3-4-1246",
+  "change_type": "feature",
+  "surface": "plate_core pr_watch_guards + pr_watch_probe + pr_babysit --watch",
+  "summary": "Add babysit --watch guards for base-branch file overlap and restart-safe event memory with six-hour retention (#1246).",
+  "migration_impact": "No config changes. Watch loops may surface base-branch overlap warnings and will not replay comment events older than about six hours after a restart.",
+  "migration_guidance": [
+    "Upgrade plate-core when this release ships.",
+    "No action required unless custom automation parses wake summaries; optional base_file_overlap block may appear when the integration branch moves into PR-touched paths."
+  ],
+  "agent_notes": "Watcher guard ideas adapted from t3dotgg/tstack pr-wait (MIT, copyright Theo Browne); PLATE implementation is original. Event ledger persists under .agentic/babysit/*.events.json with atomic JSON writes.",
+  "breaking": false,
+  "links": ["#1246", "#1232", "#1077"]
+}

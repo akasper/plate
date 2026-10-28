@@ -42,6 +42,19 @@ from .pr_watch_probe import (
     probe_state_path,
     save_probe_state,
 )
+from .pr_watch_guards import (
+    base_file_overlap_summary,
+    detect_base_moved_into_pr_files,
+    event_ledger_path,
+    event_memory_catchup_since,
+    filter_delta_by_event_memory,
+    filter_wake_summary_by_event_memory,
+    load_event_ledger,
+    mark_delta_reported,
+    mark_wake_summary_reported,
+    prune_event_ledger,
+    save_event_ledger,
+)
 from .pr_watch_summary import build_wake_summary, is_actionable, render_wake_summary
 from .pr_watch_caps import (
     CapLedger,
@@ -1218,6 +1231,9 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
         use_legacy_watch = _gh_client_is_test_double(watch_client)
         http = GhApiHttp()
         state_path = probe_state_path(target, args.pr_number)
+        events_path = event_ledger_path(target, args.pr_number)
+        event_ledger = load_event_ledger(events_path)
+        prune_event_ledger(event_ledger, now=clock.now())
         full_every = int(getattr(args, "full_every", 0) or 0)
         tick = 0
         if not args.json:
@@ -1281,13 +1297,47 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                 quiet_tick = not probe_result.changed
                 run_babysit = no_saved_state or force_full
                 wake_summary: dict | None = None
+                delta: dict | None = None
                 state_to_save: ProbeState = probe_result.new_state
 
                 if not no_saved_state and not force_full:
                     if quiet_tick:
                         run_babysit = False
                     else:
-                        delta = fetch_delta(http, target, args.pr_number, probe_result.new_state)
+                        catchup_since = None
+                        if tick == 1 and prev_state is not None:
+                            catchup_since = event_memory_catchup_since(
+                                prev_state.last_checked_at, clock.now()
+                            )
+                        overlap_block = None
+                        if (
+                            prev_state
+                            and prev_state.base_sha
+                            and probe_result.new_state.base_sha
+                            and prev_state.base_sha != probe_result.new_state.base_sha
+                        ):
+                            overlap_paths = detect_base_moved_into_pr_files(
+                                http,
+                                target,
+                                args.pr_number,
+                                previous_base_sha=prev_state.base_sha,
+                                current_base_sha=probe_result.new_state.base_sha,
+                            )
+                            overlap_block = base_file_overlap_summary(
+                                overlap_paths,
+                                previous_base_sha=prev_state.base_sha,
+                                current_base_sha=probe_result.new_state.base_sha,
+                            )
+                        delta = fetch_delta(
+                            http,
+                            target,
+                            args.pr_number,
+                            probe_result.new_state,
+                            since=catchup_since,
+                        )
+                        delta = filter_delta_by_event_memory(
+                            delta, event_ledger, now=clock.now()
+                        )
                         state_to_save = delta["new_state"]
                         wake_summary = build_wake_summary(
                             delta,
@@ -1295,6 +1345,10 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                             _probe_snapshot(probe_result.new_state),
                             review_scope=getattr(args, "scope", None),
                             agent_logins=args.agents,
+                            base_file_overlap=overlap_block,
+                        )
+                        wake_summary = filter_wake_summary_by_event_memory(
+                            wake_summary, event_ledger
                         )
                         if is_actionable(wake_summary):
                             run_babysit = True
@@ -1313,6 +1367,10 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                         branch_update_strategy=args.branch_update_strategy,
                         pr_review_scope=getattr(args, "scope", None),
                     )
+                    if wake_summary is not None:
+                        if delta is not None:
+                            mark_delta_reported(event_ledger, delta, now=clock.now())
+                        mark_wake_summary_reported(event_ledger, wake_summary, now=clock.now())
                     record_wake(ledger)
                     pause_reason = check_caps(ledger, caps, datetime.now().astimezone())
                     save_ledger(ledger_path, ledger)
@@ -1349,6 +1407,8 @@ def cmd_pr_babysit(args: argparse.Namespace) -> int:
                         break
 
                 save_probe_state(state_path, state_to_save)
+                prune_event_ledger(event_ledger, now=clock.now())
+                save_event_ledger(events_path, event_ledger)
 
                 interval = backoff.next_interval(activity_tick)
                 if args.max_hours > 0:

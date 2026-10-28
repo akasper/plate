@@ -1,9 +1,13 @@
-"""Tests for PR babysit --watch guards (#1233)."""
+"""Tests for PR babysit --watch guards (#1233, #1246)."""
 
 from __future__ import annotations
 
 import unittest
 from unittest.mock import MagicMock
+
+from datetime import datetime, timezone
+from pathlib import Path
+import tempfile
 
 from plate_core.github_client import GhApiError
 from plate_core.pr_babysit import (
@@ -12,16 +16,24 @@ from plate_core.pr_babysit import (
     get_unresolved_review_threads,
 )
 from plate_core.pr_watch_guards import (
+    EventLedger,
     apply_ci_guards_to_probe,
     apply_settle_before_finished,
+    base_file_overlap_summary,
     ci_read_fingerprint,
     compute_raw_ci_state,
+    detect_base_moved_into_pr_files,
+    event_memory_catchup_since,
     fetch_required_check_contexts,
+    filter_delta_by_event_memory,
     is_graphql_rate_limited,
+    load_event_ledger,
     load_pr_data_rest_fallback,
     missing_required_contexts,
     observed_check_contexts,
+    prune_event_ledger,
     review_decision_from_rest_reviews,
+    save_event_ledger,
 )
 from plate_core.pr_watch_probe import ProbeState, probe_pr
 
@@ -514,6 +526,93 @@ class CopilotRegressionTests(unittest.TestCase):
         result = probe_pr(http, "o/r", 8, prior)
         self.assertEqual(result.new_state.base_ref, "unprotected")
         self.assertEqual(result.new_state.required_contexts, [])
+
+
+class BaseMovedIntoPrFilesTests(unittest.TestCase):
+    def test_detect_overlap_between_base_commits(self):
+        http = _RecordingHttp(
+            {
+                "/repos/o/r/compare/base_old...base_new": (
+                    200,
+                    {},
+                    {"files": [{"filename": "src/a.py"}, {"filename": "other.py"}]},
+                ),
+                "/repos/o/r/pulls/3/files?per_page=100&page=1": (
+                    200,
+                    {},
+                    [{"filename": "src/a.py"}, {"filename": "docs/readme.md"}],
+                ),
+            }
+        )
+        overlap = detect_base_moved_into_pr_files(
+            http,
+            "o/r",
+            3,
+            previous_base_sha="base_old",
+            current_base_sha="base_new",
+        )
+        self.assertEqual(overlap, ["src/a.py"])
+
+    def test_base_overlap_summary_includes_event_key(self):
+        block = base_file_overlap_summary(
+            ["src/a.py"],
+            previous_base_sha="old",
+            current_base_sha="new",
+        )
+        self.assertIsNotNone(block)
+        assert block is not None
+        self.assertTrue(str(block["event_key"]).startswith("base_overlap:new:"))
+
+
+class RestartSafeEventMemoryTests(unittest.TestCase):
+    def test_filter_delta_skips_reported_and_stale_comments(self):
+        now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        ledger = EventLedger(reported={"issue_comment:1": "2026-01-01T11:00:00Z"})
+        delta = {
+            "issue_comments": [
+                {"id": 1, "created_at": "2026-01-01T11:30:00Z", "body": "already"},
+                {"id": 2, "created_at": "2026-01-01T11:30:00Z", "body": "fresh"},
+                {
+                    "id": 3,
+                    "created_at": "2026-01-01T05:00:00Z",
+                    "body": "too old to replay",
+                },
+            ],
+            "review_comments": [],
+            "reviews": [],
+        }
+        filtered = filter_delta_by_event_memory(delta, ledger, now=now)
+        self.assertEqual([item["id"] for item in filtered["issue_comments"]], [2])
+
+    def test_prune_event_ledger_drops_entries_older_than_six_hours(self):
+        now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        ledger = EventLedger(
+            reported={
+                "issue_comment:1": "2026-01-01T04:00:00Z",
+                "issue_comment:2": "2026-01-01T11:00:00Z",
+            }
+        )
+        prune_event_ledger(ledger, now=now)
+        self.assertEqual(set(ledger.reported.keys()), {"issue_comment:2"})
+
+    def test_load_event_ledger_treats_corrupt_file_as_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "events.json"
+            path.write_text("{not json", encoding="utf-8")
+            self.assertEqual(load_event_ledger(path).reported, {})
+
+    def test_event_memory_catchup_since_widens_on_restart(self):
+        now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        since = event_memory_catchup_since("2026-01-01T11:59:00Z", now=now)
+        self.assertEqual(since, "2026-01-01T06:00:00Z")
+
+    def test_save_event_ledger_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "events.json"
+            ledger = EventLedger(reported={"review:9": "2026-01-01T10:00:00Z"})
+            save_event_ledger(path, ledger)
+            loaded = load_event_ledger(path)
+            self.assertEqual(loaded.reported, ledger.reported)
 
 
 if __name__ == "__main__":
