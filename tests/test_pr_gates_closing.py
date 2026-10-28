@@ -49,7 +49,7 @@ class TestStrictClosingKeywords(unittest.TestCase):
         self.assertIn("#3", stripped)
 
     def test_tilde_fence_info_may_contain_backticks(self):
-        body = "Closes #60\n~~~ `note` `x`\nCloses #61\n~~~\n"
+        body = "Closes #60\n~~~ `note` `x`\n~~~\nCloses #61\n"
         self.assertEqual(parse_strict_closing_issue_numbers(body), [60, 61])
 
     def test_backtick_fence_rejected_when_info_contains_backtick(self):
