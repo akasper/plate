@@ -55,6 +55,7 @@ class HealthReport:
     plate_config_resolved_version: str | None = None
     plate_config_upgrade_available: bool = False
     plate_config_enabled_extensions: list[str] = field(default_factory=list)
+    plate_config_layout_error: str | None = None
     curiosity_answers_present: bool = False
     plate_repo_signals: list[str] = field(default_factory=list)
     # #634 budget observability (durable spend + .plate autonomy limits)
@@ -289,9 +290,18 @@ def get_health(
     plate_config_resolved_version = None
     plate_config_upgrade_available = False
     plate_config_enabled_extensions: list[str] = []
+    plate_config_layout_error: str | None = None
     try:
+        from .plate_config import plate_directory_layout_error_message
+
         plate_content = gh.api(f"repos/{target}/contents/.plate")
-        if isinstance(plate_content, dict) and plate_content.get("type") == "file":
+        if isinstance(plate_content, list) or (
+            isinstance(plate_content, dict) and plate_content.get("type") == "dir"
+        ):
+            plate_config_layout_error = plate_directory_layout_error_message()
+            plate_config_present = False
+            plate_config_valid = False
+        elif isinstance(plate_content, dict) and plate_content.get("type") == "file":
             plate_config_present = True
             try:
                 import base64
@@ -320,6 +330,22 @@ def get_health(
         plate_config_present = False
         plate_config_valid = False
 
+    try:
+        from pathlib import Path
+
+        from .plate_config import _plate_path, plate_directory_layout_error_message
+
+        local_plate = _plate_path(Path(repo_root) if repo_root is not None else Path("."))
+        if local_plate.is_dir():
+            plate_config_layout_error = plate_directory_layout_error_message()
+            plate_config_present = False
+            plate_config_valid = False
+    except Exception as e:
+        errors.append(f"plate_config_local: {e}")
+
+    if plate_config_layout_error:
+        errors.append(f"plate_config_layout: {plate_config_layout_error}")
+
     # Curiosity adoption signal (for #262: Curiosity adoption signals, answers index)
     curiosity_answers_present = False
     try:
@@ -335,7 +361,9 @@ def get_health(
     # PLATE repo detection signals (for #459 / #464 default persona activation)
     # Strong local signal: .plate/config (already computed); supplement with other common signals.
     plate_repo_signals: list[str] = []
-    if plate_config_present:
+    if plate_config_layout_error:
+        plate_repo_signals.append(".plate/ directory (unrecognized layout)")
+    elif plate_config_present:
         plate_repo_signals.append(".plate/config present")
     try:
         gh.api(f"repos/{target}/contents/AGENTS.md")
@@ -521,6 +549,7 @@ def get_health(
         plate_config_resolved_version=plate_config_resolved_version,
         plate_config_upgrade_available=plate_config_upgrade_available,
         plate_config_enabled_extensions=plate_config_enabled_extensions,
+        plate_config_layout_error=plate_config_layout_error,
         curiosity_answers_present=curiosity_answers_present,
         plate_repo_signals=plate_repo_signals,
         budget_enabled=budget_enabled,

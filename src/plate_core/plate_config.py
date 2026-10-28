@@ -180,6 +180,17 @@ def _plate_path(repo_root: Path | None = None) -> Path:
     return root / ".plate"
 
 
+def plate_directory_layout_error_message() -> str:
+    """Human-readable error when `.plate` is a directory instead of a JSON file."""
+
+    return (
+        ".plate is a directory; plate-core expects a single JSON file at .plate "
+        "(not a .plate/ folder). Back up any files under .plate/, remove or rename "
+        "that directory, then run `gh plate bootstrap --adopt --apply` to recreate "
+        "the JSON config (see docs/migration/adoption-guide.md)."
+    )
+
+
 def _extension_manifest_path() -> Path:
     return Path(__file__).resolve().parent / "data" / "plate_extensions.yml"
 
@@ -485,6 +496,8 @@ def _read_local_plate_config(repo_root: Path | None = None) -> tuple[Path, dict[
     path = _plate_path(repo_root)
     if not path.exists():
         return path, {}
+    if path.is_dir():
+        raise PlateConfigError(plate_directory_layout_error_message())
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:

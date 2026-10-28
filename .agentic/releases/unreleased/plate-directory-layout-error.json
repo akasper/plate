@@ -1,0 +1,14 @@
+{
+  "slug": "plate-directory-layout-error",
+  "change_type": "fix",
+  "surface": "src/plate_core/plate_config.py, src/plate_core/health.py, gh plate config validate/show, gh plate health",
+  "summary": "Treat a .plate/ directory as an unrecognized layout: clear PlateConfigError, non-zero CLI exits without traceback, and health no longer reports MISSING.",
+  "migration_impact": "Repos with a legacy .plate/ folder see actionable errors pointing at gh plate bootstrap --adopt --apply and docs/migration/adoption-guide.md instead of IsADirectoryError or MISSING.",
+  "migration_guidance": [
+    "1. Back up files under .plate/, remove or rename the directory.",
+    "2. Run gh plate bootstrap --adopt --apply (see docs/migration/adoption-guide.md)."
+  ],
+  "agent_notes": "plate-core expects a single JSON file at .plate; use get_plate_config_report or plate_directory_layout_error_message() for the canonical text.",
+  "breaking": false,
+  "links": ["#1227", "#1230"]
+}
