@@ -189,6 +189,26 @@ def validate_pr_gates_multi_label_event_safety(text: str) -> list[str]:
     return errors
 
 
+_REVIEW_EVENT_EQ = re.compile(
+    r"github\.event_name\s*==\s*['\"]pull_request_review['\"]"
+)
+_REVIEW_COMMENT_EVENT_EQ = re.compile(
+    r"github\.event_name\s*==\s*['\"]pull_request_review_comment['\"]"
+)
+
+
+def _step_if_requires_both_review_events(if_block: str) -> list[str]:
+    """Both review event equalities must appear; substring checks are insufficient (#1258)."""
+    errors: list[str] = []
+    if not _REVIEW_EVENT_EQ.search(if_block):
+        errors.append("missing exact github.event_name == 'pull_request_review' comparison")
+    if not _REVIEW_COMMENT_EVENT_EQ.search(if_block):
+        errors.append(
+            "missing exact github.event_name == 'pull_request_review_comment' comparison"
+        )
+    return errors
+
+
 def validate_pr_gates_review_event_safety(text: str) -> list[str]:
     """Review events must not cancel full gate runs or skip non-feedback gates (#1258)."""
     errors: list[str] = []
@@ -210,24 +230,20 @@ def validate_pr_gates_review_event_safety(text: str) -> list[str]:
     title_idx = text.find("Gate — PR title")
     if title_idx >= 0:
         title_block = text[title_idx : title_idx + 800]
-        if (
-            "pull_request_review" not in title_block.split("uses:")[0]
-            and "pull_request_review_comment" not in title_block.split("uses:")[0]
-        ):
-            errors.append(
-                "Gate — PR title must run on pull_request_review and "
-                "pull_request_review_comment events (full gate evaluation)"
-            )
+        title_if = title_block.split("uses:")[0]
+        for msg in _step_if_requires_both_review_events(title_if):
+            errors.append(f"Gate — PR title if: {msg}")
     issue_idx = text.find("Gate — issue links")
     if issue_idx >= 0:
-        issue_if = text[issue_idx : issue_idx + 500]
-        if (
-            "pull_request_review" not in issue_if.split("uses:")[0]
-            and "pull_request_review_comment" not in issue_if.split("uses:")[0]
-        ):
+        issue_if = text[issue_idx : issue_idx + 500].split("uses:")[0]
+        for msg in _step_if_requires_both_review_events(issue_if):
+            errors.append(f"Gate — issue links if: {msg}")
+    labels_idx = text.find("Gate — Feature release fragment (labels)")
+    if labels_idx >= 0:
+        labels_block = text[labels_idx : labels_idx + 1200]
+        if "loadPullRequest" not in labels_block:
             errors.append(
-                "Gate — issue links must run on pull_request_review and "
-                "pull_request_review_comment events (full gate evaluation)"
+                "Feature release fragment (labels) must fetch current labels via loadPullRequest"
             )
     if "Select runs-on for heavy jobs" in text:
         errors.append(

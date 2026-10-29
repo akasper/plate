@@ -104,6 +104,52 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
             )
             self.assertEqual(errors, [], msg=f"{path}: {errors}")
 
+    def test_review_event_if_requires_both_event_equalities(self):
+        from plate_core.pr_gates_contract import (
+            _step_if_requires_both_review_events,
+        )
+
+        comment_only = """
+      - name: Gate — PR title
+        if: |
+          github.event_name == 'pull_request_review_comment'
+        uses: actions/github-script@v8
+"""
+        comment_only_if = comment_only.split("uses:")[0]
+        self.assertEqual(
+            _step_if_requires_both_review_events(comment_only_if),
+            ["missing exact github.event_name == 'pull_request_review' comparison"],
+        )
+        review_only = """
+      - name: Gate — issue links
+        if: |
+          github.event_name == 'pull_request_review'
+        uses: actions/github-script@v8
+"""
+        self.assertIn(
+            "pull_request_review_comment",
+            _step_if_requires_both_review_events(review_only.split("uses:")[0])[0],
+        )
+
+    def test_build_plate_pr_gates_workflow_regenerates_without_diff(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "build_plate_pr_gates_workflow",
+            REPO_ROOT / "scripts" / "build_plate_pr_gates_workflow.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        repo_path, payload_path = workflow_paths(REPO_ROOT)
+        self.assertEqual(
+            mod.build("plate"),
+            repo_path.read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            mod.build("template"),
+            payload_path.read_text(encoding="utf-8"),
+        )
+
     def test_local_composite_action_requires_checkout_first(self):
         """Local ./.github/actions/* must run after actions/checkout (#1222)."""
         workflow_paths_to_check = [

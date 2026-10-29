@@ -87,39 +87,49 @@ jobs:
 
       - name: Gate — PR title
         if: |
-          github.event_name == 'pull_request' &&
-          contains(fromJSON('["opened","edited","synchronize","reopened","labeled","unlabeled","milestoned","demilestoned","ready_for_review"]'), github.event.action)
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment' ||
+          (github.event_name == 'pull_request' &&
+          contains(fromJSON('["opened","edited","synchronize","reopened","labeled","unlabeled","milestoned","demilestoned","ready_for_review"]'), github.event.action))
         uses: actions/github-script@v8
         with:
 @@TITLE_SCRIPT@@
 
       - name: Gate — issue links
-        if: github.event_name == 'pull_request'
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
         uses: actions/github-script@v8
         with:
 @@ISSUE_LINK_SCRIPT@@
 
       - name: Gate — Feature release fragment (labels)
-        if: github.event_name == 'pull_request'
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
         id: feature_labels
         uses: actions/github-script@v8
         with:
-          script: |
-            const labels = (context.payload.pull_request?.labels || []).map((l) => l.name);
-            const isFeature = labels.includes('Feature');
-            core.setOutput('is_feature', String(isFeature));
-            core.info(`Feature PR: ${isFeature}`);
+@@FEATURE_LABELS_SCRIPT@@
 
       - name: Gate — Feature release fragment
         if: |
-          github.event_name == 'pull_request' && steps.feature_labels.outputs.is_feature == 'true'
+          (github.event_name == 'pull_request' ||
+           github.event_name == 'pull_request_review' ||
+           github.event_name == 'pull_request_review_comment') &&
+          steps.feature_labels.outputs.is_feature == 'true'
         uses: actions/github-script@v8
         with:
 @@FEATURE_FRAGMENT_SCRIPT@@
 
       - name: Gate — Feature release fragment (skip notice)
         if: |
-          github.event_name == 'pull_request' && steps.feature_labels.outputs.is_feature != 'true'
+          (github.event_name == 'pull_request' ||
+           github.event_name == 'pull_request_review' ||
+           github.event_name == 'pull_request_review_comment') &&
+          steps.feature_labels.outputs.is_feature != 'true'
         run: echo "Not a Feature PR; release fragment in .agentic/releases/unreleased/ is not required by this check."
 
       - name: Gate — feedback resolution
@@ -135,21 +145,28 @@ jobs:
 
       - name: Gate — audit checkout
         if: |
-          github.event_name == 'pull_request' &&
-          contains(fromJSON('["opened","synchronize","reopened","edited","labeled","unlabeled","milestoned","demilestoned","ready_for_review"]'), github.event.action)
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment' ||
+          (github.event_name == 'pull_request' &&
+          contains(fromJSON('["opened","synchronize","reopened","edited","labeled","unlabeled","milestoned","demilestoned","ready_for_review"]'), github.event.action))
         run: echo "Audit workflow context loaded (checkout complete)."
 
-@@VALIDATE_RELEASE_STEP@@
+      - name: Gate — validate release PR (detect)
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        id: release_gate_detect
+        uses: actions/github-script@v8
+        with:
+@@RELEASE_DETECT_SCRIPT@@
+
+@@VALIDATE_RELEASE_RUN@@
 """
 
 VALIDATE_PLATE = """
       - name: Gate — validate release PR
-        if: |
-          github.event_name == 'pull_request' && (
-            contains(github.event.pull_request.labels.*.name, 'Release') ||
-            github.head_ref == 'release' ||
-            startsWith(github.head_ref, 'release-v')
-          )
+        if: steps.release_gate_detect.outputs.run == 'true'
         run: |
           set -euo pipefail
           export PYTHONPATH="$GITHUB_WORKSPACE/src"
@@ -182,15 +199,10 @@ VALIDATE_PLATE = """
 
 VALIDATE_TEMPLATE = """
       - name: Gate — validate release PR
-        if: |
-          github.event_name == 'pull_request' && (
-            contains(github.event.pull_request.labels.*.name, 'Release') ||
-            github.head_ref == 'release' ||
-            startsWith(github.head_ref, 'release-v')
-          )
+        if: steps.release_gate_detect.outputs.run == 'true'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.sha }}
+          BASE_SHA: ${{ steps.release_gate_detect.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.release_gate_detect.outputs.head_sha }}
         run: |
           set -euo pipefail
           release_files="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" | grep -E '^\\.agentic/releases/v[0-9]+\\.[0-9]+\\.[0-9]+/release\\.json$' || true)"
@@ -250,11 +262,17 @@ def build(variant: str) -> str:
     issue_link_script = _yaml_script(
         _extract_script_block(gates_src, "Gate — issue links")
     )
+    feature_labels_script = _yaml_script(
+        _extract_script_block(gates_src, "Gate — Feature release fragment (labels)")
+    )
     feature_fragment_script = _yaml_script(
         _extract_script_block(
             gates_src,
-            "Gate — Feature release fragment\n        if: |\n          github.event_name == 'pull_request' && steps.feature_labels",
+            "Gate — Feature release fragment\n        if: |\n          (github.event_name == 'pull_request' ||\n           github.event_name == 'pull_request_review' ||\n           github.event_name == 'pull_request_review_comment') &&\n          steps.feature_labels.outputs.is_feature == 'true'",
         )
+    )
+    release_detect_script = _yaml_script(
+        _extract_script_block(gates_src, "Gate — validate release PR (detect)")
     )
     feedback_script = _yaml_script(
         _extract_script_block(gates_src, "Gate — feedback resolution")
@@ -262,12 +280,16 @@ def build(variant: str) -> str:
     mark_script = _yaml_script(
         _extract_script_block(gates_src, "Mark implemented")
     )
-    validate = VALIDATE_PLATE if variant == "plate" else VALIDATE_TEMPLATE
+    validate_run = VALIDATE_PLATE if variant == "plate" else VALIDATE_TEMPLATE
     body = HEADER.replace("@@TITLE_SCRIPT@@", title_script)
     body = body.replace("@@ISSUE_LINK_SCRIPT@@", issue_link_script)
+    body = body.replace("@@FEATURE_LABELS_SCRIPT@@", feature_labels_script)
     body = body.replace("@@FEATURE_FRAGMENT_SCRIPT@@", feature_fragment_script)
+    body = body.replace("@@RELEASE_DETECT_SCRIPT@@", release_detect_script)
     body = body.replace("@@FEEDBACK_SCRIPT@@", feedback_script)
-    body = body.replace("@@VALIDATE_RELEASE_STEP@@", validate.lstrip("\n").rstrip() + "\n")
+    body = body.replace(
+        "@@VALIDATE_RELEASE_RUN@@", validate_run.lstrip("\n").rstrip() + "\n"
+    )
     body += MARK_IMPLEMENTED.replace("@@MARK_SCRIPT@@", mark_script)
     return body
 

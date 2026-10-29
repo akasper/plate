@@ -374,10 +374,28 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const labels = (context.payload.pull_request?.labels || []).map((l) => l.name);
+            async function loadPullRequest() {
+              const prNumber = context.payload.pull_request?.number;
+              if (!prNumber) {
+                return null;
+              }
+              if (context.eventName === 'pull_request') {
+                return context.payload.pull_request;
+              }
+              const { data } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+              return data;
+            }
+            
+            const pullRequest = await loadPullRequest();
+            const labels = (pullRequest?.labels || []).map((l) => l.name);
             const isFeature = labels.includes('Feature');
             core.setOutput('is_feature', String(isFeature));
             core.info(`Feature PR: ${isFeature}`);
+
 
       - name: Gate — Feature release fragment
         if: |
@@ -591,6 +609,7 @@ jobs:
             if (!isReleaseContext) {
               core.info('Not a Release PR context; skipping validate release gate.');
             }
+
 
       - name: Gate — validate release PR
         if: steps.release_gate_detect.outputs.run == 'true'
