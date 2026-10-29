@@ -113,6 +113,12 @@ class WorkflowRunsOnTests(unittest.TestCase):
         self.assertIn("inputs.plate-runs-on", yaml_text)
         self.assertNotIn("vars.", yaml_text)
 
+    def test_composite_action_probe_falls_back_on_api_errors(self):
+        yaml_text = composite_action_yaml()
+        self.assertIn("catch (err)", yaml_text)
+        self.assertIn("core.warning", yaml_text)
+        self.assertIn("return null", yaml_text)
+
 
 if __name__ == "__main__":
     unittest.main()
