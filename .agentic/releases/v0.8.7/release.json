@@ -1,0 +1,139 @@
+{
+  "version": "0.8.7",
+  "summary": "PLATE 0.8.7 -- bootstrap that syncs the full label registry and reports stale skipped files, `health` checks for label coverage and remote-only `SPEC.md`, a conservative `import-payload` that keeps customized taxonomy and existing CI, `label-check` support for `Spike` and allowed `status:*` labels, isolated `pr-gates` review events, fence-safe marker merges, and a new modernize-pr skill.\n\n## Bootstrap\n\n- `gh plate bootstrap` syncs the full template `labels.yml` registry, renaming GitHub's default-case collisions instead of skipping `Bug`, `Documentation` and `Question`. Seeded starter issues get their `Epic` and `Question` labels, the seeded Epic gets a milestone, and the `.plate` init commit message is generic (#1255, #1256, #1266, via #1273).\n- The seeded Epic title follows `.plate` `epic_naming_pattern` (default `Epic: initial-plate-epic`), and apply output names the skipped template paths in a capped list (#1267, via #1276).\n- Re-runs separate skipped files that are identical from skipped files that are stale, list the stale paths, and point to `gh plate self-migrate --plan` then `gh plate import-payload --strategy conservative`. Nothing is overwritten remotely (#1257, via #1278).\n\n## Health and label checks\n\n- `gh plate health` compares the checkout's `.github/labels.yml` to live GitHub labels (case-insensitive), reports a missing count with a `gh plate bootstrap --apply` fix, and reports unreadable registries as a failed check instead of crashing (#1260, via #1275).\n- `health` audits `SPEC.md` from the remote default branch when it is missing locally (#1267, via #1276).\n- Issue `label-check.yml` accepts the shipped `Spike` type and the `status:stub`, `status:blocked`, `status:ready-to-work` and `status:implemented` exceptions. Other `status:*` and all `priority:*` labels are still rejected (#1262, via #1275).\n\n## Migration and payload import\n\n- Conservative `import-payload` no longer overwrites a customized `.github/labels.yml`, issue templates or `PULL_REQUEST_TEMPLATE.md`. Differing files are reported as conflicts (#1250, via #1254).\n- Conservative `import-payload` no longer adds `plate-ci.yml` when a product `ci.yml` exists, and `self-migrate --verify` fails on a `.plate/` directory the same way `config validate` does (#1263, #1264, via #1274).\n- `self-migrate` marker merges ignore `PLATES-CORE` markers inside fenced code and refuse to write merged files that fail marker or fence validation (#1252, via #1253).\n\n## PR gates\n\n- Review events run in their own concurrency group against freshly fetched PR state, so they can't cancel a full `pull_request` run or publish a green `pr-gates` from a feedback-only pass. Runner probe errors fall back to `ubuntu-latest` (#1258, #1259, #1231, via #1265).\n\n## Skills\n\n- A new modernize-pr skill for stale PRs gives a verdict first (MODERNIZE, REWORK or CLOSE), then rebases in an isolated worktree with `git range-diff` and force-with-lease helpers. CLOSE is a recommendation only (#1235, via #1251).\n\n## Adopter upgrade checklist\n\n1. `pip install -U plate-core==0.8.7` and `gh extension upgrade gh-plate`.\n2. Plan with `gh plate self-migrate --plan`, then run `gh plate import-payload --strategy conservative` (dry-run) to list conflicts. Merge updated workflows (`label-check.yml`, `plate-pr-gates.yml`) in a reviewed PR that keeps local customizations. Don't hand-copy payload files.\n3. If starter Epic or Question issues exist without labels, add those labels before re-running `gh plate bootstrap --apply`, so bootstrap doesn't seed duplicates.\n4. Run `gh plate health` and create any missing labels it reports. Required checks stay `labels`, `test` and `pr-gates`.",
+  "cut_at": "2026-10-30T14:56:41Z",
+  "fragment_count": 10,
+  "fragment_slugs": [
+    "bootstrap-health-spec-skipped-1267",
+    "bootstrap-label-sync-1255-1256-1266",
+    "bootstrap-stale-skipped-report-1257",
+    "conservative-import-taxonomy-1250",
+    "health-label-coverage-1260",
+    "label-check-spike-status-1262",
+    "marker-merge-fence-validation-1252",
+    "migration-verify-ci-conservative-1263-1264",
+    "modernize-pr-skill-1235",
+    "pr-gates-review-events-1258"
+  ],
+  "entries": [
+    {
+      "change_type": "fix",
+      "surface": "plate_core.bootstrap + plate_core.health + plate_core.plate_config",
+      "migration_impact": "No config migration. Re-run bootstrap is unchanged aside from clearer copy output; existing repos keep their Epic titles. Health may report SPEC audit status instead of false missing when SPEC.md exists only on GitHub.",
+      "agent_notes": "Item 1 (squash commits) and item 3 (Epic milestone) are out of scope here; milestone landed in #1273."
+    },
+    {
+      "change_type": "fix",
+      "surface": "plate_core.bootstrap + plate_core.github_labels",
+      "migration_impact": "Re-run `gh plate bootstrap --apply` on repos that still have lowercase default labels or unlabeled bootstrap Epics/Questions; no config change required. If starter Epic/Question issues already exist without labels, apply the Epic and Question labels manually (creating those labels first if needed) before re-running bootstrap, or bootstrap may seed duplicate unlabeled issues because label-filtered lookups will not find them.",
+      "agent_notes": "Label sync mirrors scripts/bootstrap_github.sh rename behavior; never deletes non-PLATE labels."
+    },
+    {
+      "change_type": "fix",
+      "surface": "plate_core.bootstrap + docs/wiki/Troubleshooting.md",
+      "migration_impact": "No config or behavior change beyond clearer bootstrap output; stale files are still not overwritten on re-run. Operators refresh scaffold via import-payload in a reviewed PR.",
+      "agent_notes": "Troubleshooting wiki adds PEP 668 / extension-version checks only; no automatic bootstrap overwrite."
+    },
+    {
+      "change_type": "fix",
+      "surface": "template_payload.resolve_conflict_plan, template_payload_manifest path_rules, import-payload conservative apply",
+      "migration_impact": "Adopters upgrading with `--strategy conservative` keep local label taxonomy and GitHub templates when content differs from the payload. Use `--strategy safe` when intentionally refreshing PLATE taxonomy/templates, or `--strategy force` for a deliberate full overwrite.",
+      "agent_notes": "Manifest `on_conflict: overwrite` applies to safe/force only; conservative always maps differing existing files to conflict.",
+      "migration_guidance": [
+        "After pinning plate-core, run `gh plate import-payload --dry-run --strategy conservative --json` and resolve any new conflicts before `--apply`.",
+        "To refresh labels/templates from upstream, use `--strategy safe` (path_rules overwrite) or merge manually — not conservative."
+      ],
+      "links": [
+        "#1250"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/health.py + gh plate health CLI output",
+      "migration_impact": "Health may report MISSING where only the legacy eight type labels were checked before; run `gh plate bootstrap --apply` (or sync from `.github/labels.yml`) to create missing labels.",
+      "agent_notes": "Reuses github_labels.fetch_repository_labels for pagination; bootstrap --apply already syncs the full registry.",
+      "migration_guidance": [
+        "When health lists missing labels, run `gh plate bootstrap --apply` from the repo checkout with an up-to-date `.github/labels.yml`.",
+        "Adopters on conservative import should refresh labels.yml manually before bootstrap if taxonomy drifted."
+      ],
+      "links": [
+        "#1260"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "template_payload and repo `.github/workflows/label-check.yml`",
+      "migration_impact": "Import or merge updated `label-check.yml` from plate-core; Spike and status stub issues stop failing the workflow.",
+      "agent_notes": "Repo and template_payload copies stay identical; contract test in test_native_github_pr_integration.py.",
+      "migration_guidance": [
+        "Manually merge the label-check.yml changes from plate-core into your repo: add `Spike` to `issueTypeLabels` and replace the blanket `status:|priority:` filter with `allowedStatusLabels` plus a `priority:*` check (see upstream `.github/workflows/label-check.yml`).",
+        "Ensure `.github/labels.yml` includes Spike before creating Spike issues."
+      ],
+      "links": [
+        "#1262"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plate_core.markers + plate_core.self_migrate marker merge apply path",
+      "migration_impact": "Adopters running `gh plate self-migrate --merge-markers --apply-markers` get safer AGENTS.md sectional merges; corrupted output is reported as merge_conflict instead of being written. No config change required.",
+      "agent_notes": "Root cause was merge walks treating fenced example END markers in upstream-template-sync as structural closes."
+    },
+    {
+      "change_type": "fix",
+      "surface": "gh plate self-migrate --verify, gh plate import-payload --strategy conservative",
+      "migration_impact": "Verify and health-adjacent flows align on directory layout errors. Conservative payload imports on repos with existing product CI report a conflict on `ci.yml` instead of adding a second workflow; use `--strategy safe` when intentionally installing PLATE CI as `plate-ci.yml`.",
+      "agent_notes": "Conservative install_as sidecars (notably ci.yml) are conflicts; safe/force retain create_as behavior from #617.",
+      "migration_guidance": [
+        "If verify still passes but validate fails, migrate `.plate/` to a root `.plate` JSON file per `gh plate config validate` / adoption-guide.",
+        "To add PLATE process CI beside product `ci.yml`, run `gh plate import-payload --strategy safe` (dry-run first) rather than conservative."
+      ],
+      "links": [
+        "#1263",
+        "#1264"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "baseline_catalog modernize-pr skill + plugin/.plugin/template payload copies + plate_core.modernize_pr helpers + AGENTS.md",
+      "migration_impact": "Bootstrapped repos receive `.agentic/skills/modernize-pr/SKILL.md` on import-payload. Agents must not close or merge from this skill; CLOSE is a recommendation only.",
+      "agent_notes": "Workflow ideas adapted from t3dotgg/tstack modernize (MIT, copyright Theo Browne) per #1232; PLATE skill wording and helpers are original.",
+      "migration_guidance": [
+        "Re-bootstrap or import template payload to pick up `.agentic/skills/modernize-pr/SKILL.md`.",
+        "After baseline_catalog skill procedure edits, run `python3 scripts/generate-plugin-skills.py`."
+      ],
+      "links": [
+        "#1235",
+        "#1232"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "template_payload plate-pr-gates.yml, plate-select-runs-on composite action, pr_gates_contract validation",
+      "migration_impact": "Adopters importing payload workflows get review/full-gate behavior automatically. Self-hosted adopters should grant repository administration read if they want the runner probe to succeed; otherwise hosted fallback applies with a workflow warning.",
+      "agent_notes": "Removed unused plate-select-runs-on step from pr-gates; heavy workflows still use select-runs-on job pattern from ci.yml.",
+      "migration_guidance": [
+        "Run `gh plate import-payload --dry-run --strategy conservative` and merge `plate-pr-gates.yml` / `plate-select-runs-on` updates.",
+        "If `PLATE_RUNS_ON` uses self-hosted labels, ensure workflow `permissions` or token scope includes repository administration read for the runner list API, or rely on hosted fallback documented in docs/migration/self-hosted-runners.md."
+      ],
+      "links": [
+        "#1258",
+        "#1259",
+        "#1231"
+      ]
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": "",
+  "closes_block": "Closes #1248"
+}

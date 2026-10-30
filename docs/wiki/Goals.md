@@ -37,11 +37,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 ## Current State & Evidence
 
-*(Snapshot after v0.8.6 — update at major cuts and when North Star shifts.)*
+*(Snapshot after v0.8.7 — update at major cuts and when North Star shifts.)*
 
-**Shipped foundations (v0.8.0, public pin v0.8.6):**
+**Shipped foundations (v0.8.0, public pin v0.8.7):**
 
-- Public **PyPI** package `plate-core==0.8.6`, shared library for CLI / MCP / plugins.
+- Public **PyPI** package `plate-core==0.8.7`, shared library for CLI / MCP / plugins.
 - **`gh plate`** thin-shim extension path and release-track / ceremony tooling.
 - Autonomy and adoption foundations: budgeted AutonomyEngine, adopt / import-payload / self-migrate surfaces, quiet ops, baseline persona when PLATE signals are present.
 - Endless feed / Q&A / planning primitives and Information Audit Goals convention (Epic #218 lineage).
@@ -79,6 +79,13 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 - `pr-gates` survives multi-label PR creation, accepts only explicit closing references, and replays Development sidebar events in order. Payload CI reports the `labels` check context (#1228, #1231, #1229).
 - `babysit --watch` adds guards for required checks, CI settle, REST fallback, base-branch overlap, and restart-safe event memory (#1233, #1246).
 - A `.plate/` directory gets a clear layout error, `release finalize` accepts relative `--releases-dir`, and merge guidance adds a pre-merge recheck (#1227, #1226, #1234).
+
+**Shipped in v0.8.7 (was Next Release #1248):**
+
+- Bootstrap syncs the full label registry, labels seeded starter issues, names skipped paths, and reports stale skipped files with an upgrade pointer (#1255, #1256, #1266, #1267, #1257).
+- `health` checks label coverage against `.github/labels.yml` and audits a remote-only `SPEC.md`. `label-check` accepts `Spike` and the allowed `status:*` labels (#1260, #1262).
+- Conservative `import-payload` keeps customized taxonomy and existing product CI, `self-migrate --verify` rejects a `.plate/` directory, and marker merges are fence-safe (#1250, #1263, #1264, #1252).
+- `pr-gates` review events are isolated from full runs, runner probe errors fall back to hosted, and a modernize-pr skill ships (#1258, #1259, #1235).
 
 **Not yet won (do not overclaim):**
 
