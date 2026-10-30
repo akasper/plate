@@ -120,6 +120,7 @@ def validate_merged_pr_gates_workflow(text: str) -> list[str]:
             errors.append(f"missing failure marker for {step}: {marker!r}")
     label_errors = validate_pr_gates_multi_label_event_safety(text)
     errors.extend(label_errors)
+    errors.extend(validate_pr_gates_review_event_safety(text))
     errors.extend(validate_feature_fragment_gate_on_all_admitted_pr_events(text))
     errors.extend(validate_closing_keyword_parsing_contract(text))
     errors.extend(validate_sidebar_link_replay_contract(text))
@@ -185,6 +186,70 @@ def validate_pr_gates_multi_label_event_safety(text: str) -> list[str]:
         )
     if "github.event.action != 'closed'" not in text:
         errors.append("pr-gates job should run for all pull_request actions except closed")
+    return errors
+
+
+_REVIEW_EVENT_EQ = re.compile(
+    r"github\.event_name\s*==\s*['\"]pull_request_review['\"]"
+)
+_REVIEW_COMMENT_EVENT_EQ = re.compile(
+    r"github\.event_name\s*==\s*['\"]pull_request_review_comment['\"]"
+)
+
+
+def _step_if_requires_both_review_events(if_block: str) -> list[str]:
+    """Both review event equalities must appear; substring checks are insufficient (#1258)."""
+    errors: list[str] = []
+    if not _REVIEW_EVENT_EQ.search(if_block):
+        errors.append("missing exact github.event_name == 'pull_request_review' comparison")
+    if not _REVIEW_COMMENT_EVENT_EQ.search(if_block):
+        errors.append(
+            "missing exact github.event_name == 'pull_request_review_comment' comparison"
+        )
+    return errors
+
+
+def validate_pr_gates_review_event_safety(text: str) -> list[str]:
+    """Review events must not cancel full gate runs or skip non-feedback gates (#1258)."""
+    errors: list[str] = []
+    if "concurrency:" not in text:
+        errors.append("missing concurrency block for review-event safety")
+        return errors
+    if "'review'" not in text and '"review"' not in text:
+        errors.append(
+            "concurrency group must include a review suffix for pull_request_review events"
+        )
+    if "pull_request_review_comment" not in text.split("concurrency:")[1].split("jobs:")[0]:
+        errors.append(
+            "concurrency block must treat pull_request_review_comment like review events"
+        )
+    if "loadPullRequest" not in text:
+        errors.append(
+            "review-event gate runs must fetch fresh PR state via loadPullRequest helper"
+        )
+    title_idx = text.find("Gate — PR title")
+    if title_idx >= 0:
+        title_block = text[title_idx : title_idx + 800]
+        title_if = title_block.split("uses:")[0]
+        for msg in _step_if_requires_both_review_events(title_if):
+            errors.append(f"Gate — PR title if: {msg}")
+    issue_idx = text.find("Gate — issue links")
+    if issue_idx >= 0:
+        issue_if = text[issue_idx : issue_idx + 500].split("uses:")[0]
+        for msg in _step_if_requires_both_review_events(issue_if):
+            errors.append(f"Gate — issue links if: {msg}")
+    labels_idx = text.find("Gate — Feature release fragment (labels)")
+    if labels_idx >= 0:
+        labels_block = text[labels_idx : labels_idx + 1200]
+        if "loadPullRequest" not in labels_block:
+            errors.append(
+                "Feature release fragment (labels) must fetch current labels via loadPullRequest"
+            )
+    if "Select runs-on for heavy jobs" in text:
+        errors.append(
+            "pr-gates job must not run plate-select-runs-on without using its output "
+            "(remove the step or wire runs-on from a probe job)"
+        )
     return errors
 
 

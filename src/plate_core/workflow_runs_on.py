@@ -162,11 +162,20 @@ function runnerMatches(runner, required) {
 }
 
 async function listRunners() {
-  const { data } = await github.rest.actions.listSelfHostedRunnersForRepo({
-    owner: context.repo.owner,
-    repo: context.repo.repo,
-  });
-  return data.runners || [];
+  try {
+    const { data } = await github.rest.actions.listSelfHostedRunnersForRepo({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+    });
+    return data.runners || [];
+  } catch (err) {
+    const status = err.status || err.response?.status;
+    core.warning(
+      `Self-hosted runner probe failed (${status || 'network'}: ${err.message || err}); ` +
+        `treating as no idle runner and falling back to hosted.`,
+    );
+    return null;
+  }
 }
 
 function isUnsafeForLocal() {
@@ -200,6 +209,10 @@ if (isUnsafeForLocal()) {
   let idle = false;
   while (Date.now() <= deadline) {
     const runners = await listRunners();
+    if (runners === null) {
+      idle = false;
+      break;
+    }
     idle = runners.some((r) => runnerMatches(r, configured));
     if (idle) {
       core.info(`Idle self-hosted runner available for ${JSON.stringify(configured)}.`);
