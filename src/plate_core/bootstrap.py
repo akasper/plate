@@ -16,12 +16,19 @@ from .github_labels import prepare_label_description, sync_repository_labels_fro
 from .health import get_health, resolve_repo
 from .import_payload import list_payload_relative_paths
 from .payload_surface import filter_plate_scripts, prepare_copied_text, resolve_local_goals_wiki
-from .plate_config import ALLOWED_PLATFORMS, DEFAULT_CONFIG, PLATFORM_POSIX, PlateConfigError
+from .plate_config import (
+    ALLOWED_PLATFORMS,
+    DEFAULT_CONFIG,
+    PLATFORM_POSIX,
+    PlateConfigError,
+    format_epic_title,
+)
 from .template_payload import resolve_template_source
 
 
 DEFAULT_LABEL_COLOR = "5319e7"
 BOOTSTRAP_EPIC_MILESTONE_TITLE = "Initial milestone"
+BOOTSTRAP_SEED_EPIC_NAME = "initial-plate-epic"
 
 
 def _resolve_bootstrap_epic_milestone_number(
@@ -423,6 +430,36 @@ def _platform_copy_suffix(platform: str, omitted: list[str]) -> str:
     return suffix
 
 
+def _format_skipped_files_phrase(skipped_paths: list[str]) -> str:
+    """Human-readable skipped-file summary for bootstrap apply output (#1267)."""
+    if not skipped_paths:
+        return ""
+    count = len(skipped_paths)
+    noun = "file" if count == 1 else "files"
+    cap = 20
+    shown = skipped_paths[:cap]
+    listing = ", ".join(shown)
+    if count > cap:
+        listing += f", and {count - cap} more"
+    return f"skipped {count} existing {noun} ({listing})"
+
+
+def _resolve_bootstrap_epic_title(
+    gh: GhClient,
+    target: str,
+    *,
+    plate_config_present: bool,
+) -> str:
+    """Title for the seeded Epic using ``.plate`` ``epic_naming_pattern`` when readable."""
+    config: dict[str, Any] | None
+    if plate_config_present:
+        loaded = _load_existing_remote_plate(target, gh)
+        config = loaded[0] if loaded else None
+    else:
+        config = copy.deepcopy(DEFAULT_CONFIG)
+    return format_epic_title(BOOTSTRAP_SEED_EPIC_NAME, config=config)
+
+
 def _copy_template_payload(
     repo: str,
     default_branch: str,
@@ -430,9 +467,10 @@ def _copy_template_payload(
     template_root: Path,
     *,
     platform: str,
-) -> tuple[int, int]:
+) -> tuple[int, int, list[str]]:
     copied = 0
     skipped = 0
+    skipped_paths: list[str] = []
     rel_paths, _omitted = filter_plate_scripts(_template_payload_relative_paths(template_root), platform)
     if not rel_paths:
         raise RuntimeError(f"No template payload files found under {template_root}")
@@ -454,8 +492,10 @@ def _copy_template_payload(
             remote_digest = _remote_file_digest(remote_payload)
             if remote_digest is None or remote_digest == local_digest:
                 skipped += 1
+                skipped_paths.append(rel)
                 continue
             skipped += 1
+            skipped_paths.append(rel)
             continue
 
         encoded = _local_template_file_bytes(rel, source, platform)
@@ -487,7 +527,7 @@ def _copy_template_payload(
             raise
         copied += 1
 
-    return copied, skipped
+    return copied, skipped, skipped_paths
 
 
 def _validate_bootstrap_preconditions(repo: str, repo_obj: dict, default_branch: str, gh: GhClient) -> None:
@@ -575,26 +615,27 @@ def run_bootstrap(
                 plate_sha,
                 resolved_platform,
             )
-        copied_count, skipped_count = _copy_template_payload(
+        copied_count, skipped_count, skipped_paths = _copy_template_payload(
             target,
             default_branch,
             gh,
             template_root,
             platform=resolved_platform,
         )
+        skipped_phrase = _format_skipped_files_phrase(skipped_paths)
         if copied_count:
             state = "applied"
             detail = (
                 f"Copied {copied_count} template payload files into the repository from {template_source}"
                 f"{platform_suffix}"
             )
-            if skipped_count:
-                detail += f" and skipped {skipped_count} existing file{'s' if skipped_count != 1 else ''}"
+            if skipped_phrase:
+                detail += f" and {skipped_phrase}"
         else:
             state = "already-configured"
             detail = (
                 f"Template payload already present from {template_source} "
-                f"({skipped_count} existing file{'s' if skipped_count != 1 else ''})"
+                f"({skipped_phrase or 'no files copied'})"
                 f"{platform_suffix}"
             )
     else:
@@ -710,7 +751,11 @@ def run_bootstrap(
         if apply_mode:
             milestone_number = _resolve_bootstrap_epic_milestone_number(gh, target, apply=True)
             epic_fields: dict[str, Any] = {
-                "title": "[Epic] Initial PLATE epic",
+                "title": _resolve_bootstrap_epic_title(
+                    gh,
+                    target,
+                    plate_config_present=health.plate_config_present,
+                ),
                 "body": "Bootstrap-created initial Epic for project setup.",
                 "labels": ["Epic"],
             }

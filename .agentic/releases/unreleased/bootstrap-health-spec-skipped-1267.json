@@ -1,0 +1,15 @@
+{
+  "slug": "bootstrap-health-spec-skipped-1267",
+  "change_type": "fix",
+  "issue": 1267,
+  "surface": "plate_core.bootstrap + plate_core.health + plate_core.plate_config",
+  "summary": "Bootstrap seeds the initial Epic title via `.plate` `epic_naming_pattern` (default `Epic: initial-plate-epic`), names skipped template paths in apply output (capped list), and `gh plate health` audits SPEC from the remote default branch when local SPEC.md is absent (#1267 items 2, 4, 5).",
+  "migration_impact": "No config migration. Re-run bootstrap is unchanged aside from clearer copy output; existing repos keep their Epic titles. Health may report SPEC audit status instead of false missing when SPEC.md exists only on GitHub.",
+  "verification": [
+    "tests/test_bootstrap.py",
+    "tests/test_bootstrap_label_sync_1255_1266.py",
+    "tests/test_epic89_plate_config.py",
+    "tests/test_health.py"
+  ],
+  "agent_notes": "Item 1 (squash commits) and item 3 (Epic milestone) are out of scope here; milestone landed in #1273."
+}

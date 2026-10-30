@@ -242,6 +242,8 @@ from plate_core.plate_config import (
     get_plate_config_report,
     init_plate_config,
     upgrade_plate_config_dict,
+    format_epic_title,
+    resolve_epic_naming_pattern,
 )
 
 
@@ -278,6 +280,23 @@ class PlateConfigRuntimeTests(unittest.TestCase):
     def test_module_exports_defaults(self):
         self.assertIn("version", DEFAULT_CONFIG)
         self.assertIn("marker_prefix", DEFAULT_CONFIG["methodology"])
+
+    def test_format_epic_title_uses_pattern_from_config(self):
+        title = format_epic_title(
+            "my-area",
+            config={"methodology": {"epic_naming_pattern": "EPIC: {name}"}},
+        )
+        self.assertEqual(title, "EPIC: my-area")
+
+    def test_resolve_epic_naming_pattern_falls_back_when_unreadable(self):
+        self.assertEqual(
+            resolve_epic_naming_pattern({"methodology": {"epic_naming_pattern": "no-placeholder"}}),
+            DEFAULT_CONFIG["methodology"]["epic_naming_pattern"],
+        )
+        self.assertEqual(
+            format_epic_title("slug", config={"methodology": {"epic_naming_pattern": ""}}),
+            "Epic: slug",
+        )
 
     def test_get_plate_config_report_returns_defaults_when_missing(self):
         with tempfile.TemporaryDirectory() as tmp:

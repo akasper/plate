@@ -545,6 +545,29 @@ def _resolve_plate_config(repo_root: Path | None = None) -> tuple[dict[str, Any]
     }
 
 
+def resolve_epic_naming_pattern(config: dict[str, Any] | None) -> str:
+    """Return a usable epic title pattern, falling back to the default when unreadable."""
+    default = DEFAULT_CONFIG["methodology"]["epic_naming_pattern"]
+    if not isinstance(config, dict):
+        return default
+    methodology = config.get("methodology")
+    if not isinstance(methodology, dict):
+        return default
+    pattern = methodology.get("epic_naming_pattern")
+    if not isinstance(pattern, str):
+        return default
+    trimmed = pattern.strip()
+    if not trimmed or "{name}" not in trimmed:
+        return default
+    return trimmed
+
+
+def format_epic_title(name: str, *, config: dict[str, Any] | None = None) -> str:
+    """Format an Epic issue title using ``methodology.epic_naming_pattern``."""
+    pattern = resolve_epic_naming_pattern(config)
+    return pattern.replace("{name}", name)
+
+
 def load_plate_config(repo_root: Path | None = None) -> PlateConfig:
     """Load and resolve .plate config with precedence defaults < extensions < local."""
 

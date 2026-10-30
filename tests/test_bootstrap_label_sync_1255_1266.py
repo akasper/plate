@@ -219,6 +219,10 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
         ]
         self.assertEqual(len(epic_posts), 1)
         self.assertEqual(epic_posts[0].kwargs["fields"].get("milestone"), 7)
+        self.assertEqual(
+            epic_posts[0].kwargs["fields"].get("title"),
+            "Epic: initial-plate-epic",
+        )
         self.assertEqual(len(question_posts), 3)
 
     def test_apply_reuses_existing_initial_milestone_for_epic(self):
