@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 from .github_client import GhApiError, GhClient
+from .github_labels import fetch_repository_labels, load_labels_from_yaml
 from .pr_gates_contract import (
     PLATE_PR_GATES_CHECK_NAME,
     find_stale_required_check_contexts,
@@ -16,6 +18,33 @@ from .procutil import run_hidden
 
 
 REQUIRED_LABELS = ["Bug", "Feature", "Epic", "Documentation", "Research", "Design", "Question", "Task"]
+
+LABEL_COVERAGE_FIX_COMMAND = "gh plate bootstrap --apply"
+
+
+def expected_labels_from_registry(repo_root: str | Path = ".") -> list[str]:
+    """Label names declared in ``.github/labels.yml`` (fallback: ``REQUIRED_LABELS``)."""
+    registry_path = Path(repo_root) / ".github" / "labels.yml"
+    if not registry_path.is_file():
+        return list(REQUIRED_LABELS)
+    names: list[str] = []
+    for entry in load_labels_from_yaml(registry_path):
+        name = str(entry.get("name") or "").strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def missing_registry_labels(
+    expected: list[str],
+    remote_label_names_lower: set[str],
+) -> list[str]:
+    """Return registry label names absent from the repo (case-insensitive)."""
+    return [name for name in expected if name.lower() not in remote_label_names_lower]
+
+
+def label_coverage_fix_command() -> str:
+    return LABEL_COVERAGE_FIX_COMMAND
 
 
 def _remote_goals_page_present(gh: GhClient, target: str) -> bool:
@@ -227,15 +256,16 @@ def get_health(
     # Propagate directly so original error (with its guidance about --repo) is surfaced.
     target = resolve_repo(repo)
     errors: list[str] = []
+    root = Path(repo_root or ".")
+    expected_labels = expected_labels_from_registry(root)
 
     try:
-        labels = gh.api(f"repos/{target}/labels?per_page=100")
-        label_names = {l["name"].lower() for l in labels}
-        missing = [x for x in REQUIRED_LABELS if x.lower() not in label_names]
+        remote_labels = fetch_repository_labels(gh, target)
+        label_names = {item["name"].lower() for item in remote_labels}
+        missing = missing_registry_labels(expected_labels, label_names)
     except GhApiError as e:
         errors.append(f"labels: {e}")
-        label_names = set()
-        missing = list(REQUIRED_LABELS)  # assume all missing on failure
+        missing = list(expected_labels)
 
     branch_protection_required_contexts: list[str] = []
     stale_required_check_contexts: list[str] = []
@@ -331,8 +361,6 @@ def get_health(
         plate_config_valid = False
 
     try:
-        from pathlib import Path
-
         from .plate_config import _plate_path, plate_directory_layout_error_message
 
         local_plate = _plate_path(Path(repo_root) if repo_root is not None else Path("."))

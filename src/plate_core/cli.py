@@ -22,7 +22,7 @@ from .context_map import ContextMapError, get_context_route, list_context_routes
 from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .github_client import GhApiError, GhClient
-from .health import get_health, resolve_repo
+from .health import get_health, label_coverage_fix_command, resolve_repo
 from .pr_babysit import (
     babysit_pr,
     claim_babysit_watch,
@@ -277,7 +277,9 @@ def cmd_health(args: argparse.Namespace) -> int:
     print(f"Status: {report.status.upper()}")
     print(f"Label coverage: {'OK' if report.label_coverage_ok else 'MISSING'}")
     if report.missing_labels:
-        print(f"Missing labels: {', '.join(report.missing_labels)}")
+        count = len(report.missing_labels)
+        print(f"Missing labels ({count}): {', '.join(report.missing_labels)}")
+        print(f"Fix: {label_coverage_fix_command()}")
     print(f"Branch protection: {'ENABLED' if report.branch_protection_enabled else 'DISABLED'}")
     if report.stale_required_check_contexts:
         print(

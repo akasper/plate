@@ -1,15 +1,26 @@
 import json
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from plate_core.github_client import GhApiError
+from plate_core.github_labels import load_labels_from_yaml
 from plate_core.health import (
     HealthReport,
     _repo_from_git_remote,
+    expected_labels_from_registry,
     get_health,
+    label_coverage_fix_command,
     resolve_repo,
     summarize_spec_audit_for_health,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _registry_label_api_objects() -> list[dict[str, str]]:
+    path = REPO_ROOT / ".github" / "labels.yml"
+    return [{"name": str(entry["name"])} for entry in load_labels_from_yaml(path)]
 
 
 class FakeClient:
@@ -18,17 +29,8 @@ class FakeClient:
 
     def api(self, endpoint, **kwargs):  # tolerate retries= etc from resilient client
         self.calls.append(endpoint)
-        if endpoint.startswith("repos/akasper/plate_core/labels"):
-            return [
-                {"name": "Bug"},
-                {"name": "Feature"},
-                {"name": "Epic"},
-                {"name": "Documentation"},
-                {"name": "Research"},
-                {"name": "Design"},
-                {"name": "Question"},
-                {"name": "Task"},
-            ]
+        if "repos/akasper/plate_core/labels" in endpoint:
+            return _registry_label_api_objects()
         if endpoint == "repos/akasper/plate_core":
             return {"default_branch": "main"}
         if endpoint == "repos/akasper/plate_core/branches/main/protection":
@@ -92,6 +94,7 @@ class HealthTests(unittest.TestCase):
             repo="akasper/plate_core",
             client=FakeClient(),
             include_spec_audit=False,
+            repo_root=str(REPO_ROOT),
         )
         self.assertIsInstance(report, HealthReport)
         self.assertEqual(report.repo, "akasper/plate_core")
@@ -204,6 +207,7 @@ class HealthTests(unittest.TestCase):
             repo="akasper/plate_core",
             client=FakeClient(),
             include_spec_audit=False,
+            repo_root=str(REPO_ROOT),
         )
         self.assertEqual(report.spec_audit_status, "skipped")
         self.assertEqual(report.spec_audit_actionable_count, 0)
@@ -326,24 +330,26 @@ class HealthTests(unittest.TestCase):
         self.assertTrue(d["errors"])
 
     def test_health_label_coverage_case_insensitive(self):
-        """Health tolerates GH canonical casing (e.g. 'question' vs 'Question' in REQUIRED)."""
+        """Health tolerates GH canonical casing (e.g. 'question' vs 'Question' in labels.yml)."""
         class LowerQuestionClient(FakeClient):
             def api(self, endpoint, **kwargs):
-                self.calls.append(endpoint)
-                if endpoint.startswith("repos/akasper/plate_core/labels"):
+                if "repos/akasper/plate_core/labels" in endpoint:
                     return [
-                        {"name": "Bug"},
-                        {"name": "Feature"},
-                        {"name": "Epic"},
-                        {"name": "Documentation"},
-                        {"name": "Research"},
-                        {"name": "Design"},
-                        {"name": "question"},  # GH often returns lowercase
-                        {"name": "Task"},
+                        {
+                            "name": "question"
+                            if entry["name"] == "Question"
+                            else entry["name"]
+                        }
+                        for entry in _registry_label_api_objects()
                     ]
                 return FakeClient.api(self, endpoint, **kwargs)
 
-        report = get_health(repo="akasper/plate_core", client=LowerQuestionClient())
+        report = get_health(
+            repo="akasper/plate_core",
+            client=LowerQuestionClient(),
+            include_spec_audit=False,
+            repo_root=str(REPO_ROOT),
+        )
         self.assertTrue(report.label_coverage_ok)
         self.assertEqual(report.missing_labels, [])
         self.assertEqual(report.status, "pass")
@@ -355,6 +361,28 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.plate_config_resolved_version, "1.3")
         self.assertTrue(report.plate_config_upgrade_available)
         self.assertTrue(report.curiosity_answers_present)
+
+    def test_health_label_coverage_compares_labels_yml_to_github(self):
+        """#1260: missing registry labels fail coverage; report lists canonical names."""
+        class PartialRemoteClient(FakeClient):
+            def api(self, endpoint, **kwargs):
+                if "repos/akasper/plate_core/labels" in endpoint:
+                    return [{"name": "Bug"}, {"name": "Feature"}]
+                return super().api(endpoint, **kwargs)
+
+        expected = expected_labels_from_registry(REPO_ROOT)
+        report = get_health(
+            repo="akasper/plate_core",
+            client=PartialRemoteClient(),
+            include_spec_audit=False,
+            repo_root=str(REPO_ROOT),
+        )
+        self.assertFalse(report.label_coverage_ok)
+        self.assertEqual(len(report.missing_labels), len(expected) - 2)
+        self.assertNotIn("Bug", report.missing_labels)
+        self.assertNotIn("Feature", report.missing_labels)
+        self.assertIn("Epic", report.missing_labels)
+        self.assertIn("bootstrap", label_coverage_fix_command())
 
     def test_repo_from_git_remote_parses_dotted_names(self):
         """Regression test for #608 (PR #609): _repo_from_git_remote / resolve_repo regex

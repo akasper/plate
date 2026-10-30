@@ -1,0 +1,14 @@
+{
+  "slug": "health-label-coverage-1260",
+  "change_type": "fix",
+  "surface": "src/plate_core/health.py + gh plate health CLI output",
+  "summary": "`gh plate health` compares the checkout's `.github/labels.yml` registry to live GitHub labels (case-insensitive), reports a missing count and `gh plate bootstrap --apply` fix command, and never prints Label coverage OK when registry labels are absent (#1260).",
+  "migration_impact": "Health may report MISSING where only the legacy eight type labels were checked before; run `gh plate bootstrap --apply` (or sync from `.github/labels.yml`) to create missing labels.",
+  "migration_guidance": [
+    "When health lists missing labels, run `gh plate bootstrap --apply` from the repo checkout with an up-to-date `.github/labels.yml`.",
+    "Adopters on conservative import should refresh labels.yml manually before bootstrap if taxonomy drifted."
+  ],
+  "agent_notes": "Reuses github_labels.fetch_repository_labels for pagination; bootstrap --apply already syncs the full registry.",
+  "breaking": false,
+  "links": ["#1260"]
+}

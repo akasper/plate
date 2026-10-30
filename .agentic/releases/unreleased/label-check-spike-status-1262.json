@@ -1,0 +1,14 @@
+{
+  "slug": "label-check-spike-status-1262",
+  "change_type": "fix",
+  "surface": "template_payload and repo `.github/workflows/label-check.yml`",
+  "summary": "Issue label-check accepts the `Spike` type label shipped in labels.yml and allows AGENTS.md status:* exceptions (`status:stub`, `status:blocked`, `status:ready-to-work`, `status:implemented`) while still rejecting `priority:*` and other status labels (#1262 items 1–2).",
+  "migration_impact": "Import or merge updated `label-check.yml` from plate-core; Spike and status stub issues stop failing the workflow.",
+  "migration_guidance": [
+    "Run `gh plate import-payload --strategy safe` for workflow refresh, or merge the label-check.yml hunk manually.",
+    "Ensure `.github/labels.yml` includes Spike before creating Spike issues."
+  ],
+  "agent_notes": "Repo and template_payload copies stay identical; contract test in test_native_github_pr_integration.py.",
+  "breaking": false,
+  "links": ["#1262"]
+}
