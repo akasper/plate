@@ -1059,7 +1059,7 @@ def verify_self_migrate(
 
     plate_cfg: dict[str, Any] = {}
     plate_path = root / ".plate"
-    if plate_path.is_file():
+    if plate_path.exists():
         try:
             from .plate_config import get_plate_config_report
 
@@ -1075,6 +1075,7 @@ def verify_self_migrate(
                         "valid": valid,
                         "source": plate_cfg.get("source"),
                         "file_version": plate_cfg.get("file_version"),
+                        "errors": plate_cfg.get("errors"),
                     },
                 }
             )

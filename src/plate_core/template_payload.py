@@ -232,6 +232,17 @@ def resolve_conflict_plan(
 
     # Differing existing content
     if rule and rule.on_conflict == "install_as" and rule.install_as:
+        if strat == "conservative":
+            return {
+                "path": rel,
+                "target_path": rel,
+                "action": "conflict",
+                "detail": (
+                    rule.reason
+                    or f"existing differs; conservative does not add {rule.install_as}"
+                ),
+                "rule": rule.to_dict(),
+            }
         return {
             "path": rel,
             "target_path": rule.install_as,
