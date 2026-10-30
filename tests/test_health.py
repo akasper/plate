@@ -1,4 +1,5 @@
 import json
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -383,6 +384,22 @@ class HealthTests(unittest.TestCase):
         self.assertNotIn("Feature", report.missing_labels)
         self.assertIn("Epic", report.missing_labels)
         self.assertIn("bootstrap", label_coverage_fix_command())
+
+    def test_health_label_coverage_fails_on_malformed_labels_yml(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            labels_dir = Path(tmp) / ".github"
+            labels_dir.mkdir(parents=True)
+            (labels_dir / "labels.yml").write_text("not: a: valid: list\n- broken\n", encoding="utf-8")
+
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+                repo_root=tmp,
+            )
+        self.assertFalse(report.label_coverage_ok)
+        self.assertEqual(report.missing_labels, [])
+        self.assertTrue(any("labels_registry" in err for err in report.errors))
 
     def test_repo_from_git_remote_parses_dotted_names(self):
         """Regression test for #608 (PR #609): _repo_from_git_remote / resolve_repo regex
