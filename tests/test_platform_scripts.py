@@ -599,7 +599,8 @@ class BootstrapPlatformTests(unittest.TestCase):
                         local_root=empty,
                     )
         copy_action = next(action for action in planned.actions if action.name == "copy-template-payload")
-        self.assertIn("Copy 3 template payload files", copy_action.detail)
+        self.assertIn("Would copy", copy_action.detail)
+        self.assertIn("missing template payload", copy_action.detail)
         self.assertIn("for platform posix", copy_action.detail)
         self.assertEqual(planned.platform, "posix")
 
