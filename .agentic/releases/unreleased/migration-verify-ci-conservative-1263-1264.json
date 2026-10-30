@@ -1,0 +1,14 @@
+{
+  "slug": "migration-verify-ci-conservative-1263-1264",
+  "change_type": "fix",
+  "surface": "gh plate self-migrate --verify, gh plate import-payload --strategy conservative",
+  "summary": "`self-migrate --verify` now fails `plate_config_valid` when `.plate` is a directory (same as `gh plate config validate`). Conservative `import-payload` no longer dry-runs or applies `ci.yml -> plate-ci.yml` when product `ci.yml` already exists (#1263, #1264).",
+  "migration_impact": "Verify and health-adjacent flows align on directory layout errors. Conservative payload imports on repos with existing product CI report a conflict on `ci.yml` instead of adding a second workflow; use `--strategy safe` when intentionally installing PLATE CI as `plate-ci.yml`.",
+  "migration_guidance": [
+    "If verify still passes but validate fails, migrate `.plate/` to a root `.plate` JSON file per `gh plate config validate` / adoption-guide.",
+    "To add PLATE process CI beside product `ci.yml`, run `gh plate import-payload --strategy safe` (dry-run first) rather than conservative."
+  ],
+  "agent_notes": "Conservative install_as sidecars (notably ci.yml) are conflicts; safe/force retain create_as behavior from #617.",
+  "breaking": false,
+  "links": ["#1263", "#1264"]
+}

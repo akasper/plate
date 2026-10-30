@@ -545,6 +545,21 @@ class VerifySelfMigrateTests(unittest.TestCase):
         self.assertFalse(report["ready"])
         self.assertIn("adoption_not_core_ready", report["failures"])
 
+    def test_verify_fails_for_plate_directory_layout(self):
+        """#1263: .plate/ directory must fail plate_config_valid like config validate."""
+        from plate_core.plate_config import plate_directory_layout_error_message
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").mkdir()
+            report = verify_self_migrate(root, target_version="0.7.2")
+        cfg_check = next(c for c in report["checks"] if c["id"] == "plate_config_valid")
+        self.assertFalse(cfg_check["ok"])
+        self.assertFalse(report["ready"])
+        self.assertIn("plate_config_invalid", report["failures"])
+        errors = (cfg_check.get("detail") or {}).get("errors") or []
+        self.assertEqual(errors, [plate_directory_layout_error_message()])
+
     def test_plan_step_six_points_at_verify(self):
         """Proves: plan step 6_verify references self-migrate --verify (#965)."""
         with TemporaryDirectory() as tmp:

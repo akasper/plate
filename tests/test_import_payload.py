@@ -289,6 +289,30 @@ class TestImportPayload(unittest.TestCase):
                     decisions[0]["target_path"], ".github/workflows/plate-ci.yml"
                 )
 
+    def test_conservative_ci_yml_conflict_not_second_workflow(self):
+        """#1264: conservative import must not plan plate-ci.yml when ci.yml exists."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ci = Path(tmp) / ".github" / "workflows" / "ci.yml"
+            ci.parent.mkdir(parents=True, exist_ok=True)
+            ci.write_text("# product CI\n", encoding="utf-8")
+
+            dry = import_payload(tmp, strategy="conservative", dry_run=True)
+            self.assertTrue(dry["ok"])
+            ci_create = [
+                x
+                for x in dry["would_create"]
+                if "plate-ci.yml" in x or x.endswith("workflows/ci.yml")
+            ]
+            self.assertEqual(ci_create, [], msg=dry["would_create"][:20])
+            self.assertIn(".github/workflows/ci.yml", dry["would_conflict"])
+
+            applied = import_payload(tmp, strategy="conservative", apply=True)
+            plate_ci = Path(tmp) / ".github" / "workflows" / "plate-ci.yml"
+            self.assertFalse(plate_ci.exists())
+            self.assertIn(".github/workflows/ci.yml", applied["conflicts"])
+
     def test_seeds_current_md_when_missing(self):
         """#618: import seeds CURRENT.md when absent; skips when present."""
         from plate_core.import_payload import import_payload
