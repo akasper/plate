@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from urllib.parse import quote
 
 import yaml
 
@@ -85,6 +87,28 @@ def _remote_goals_page_present(gh: GhClient, target: str) -> bool:
     return False
 
 
+def _decode_github_file_content(payload: dict) -> str | None:
+    content = payload.get("content", "")
+    if payload.get("encoding") == "base64" and isinstance(content, str):
+        return base64.b64decode(content).decode("utf-8")
+    if isinstance(content, str):
+        return content
+    return None
+
+
+def _remote_spec_text(gh: GhClient, target: str, ref: str) -> str | None:
+    """Return SPEC.md body from the default branch when present on GitHub."""
+    try:
+        payload = gh.api(f"repos/{target}/contents/SPEC.md?ref={quote(ref, safe='')}")
+    except GhApiError:
+        return None
+    except Exception:
+        return None
+    if not isinstance(payload, dict) or payload.get("type") != "file":
+        return None
+    return _decode_github_file_content(payload)
+
+
 @dataclass
 class HealthReport:
     repo: str
@@ -150,11 +174,16 @@ def summarize_spec_audit_for_health(
     repo_root: str | None = None,
     *,
     enabled: bool = True,
+    gh: GhClient | None = None,
+    repo: str | None = None,
+    default_branch: str | None = None,
 ) -> dict:
     """Local SPEC audit summary for health/drift surfaces (#340).
 
     Never raises; returns status=skipped|missing|error|actionable|advisory|ok.
     Does not auto-edit SPEC.md.
+    When SPEC.md is absent locally but present on the remote default branch, health
+    reports remote presence only (no local filesystem drift audit; #1267).
     """
     empty_counts: dict[str, int] = {}
     if not enabled:
@@ -168,6 +197,26 @@ def summarize_spec_audit_for_health(
         from .spec_audit import audit_spec
 
         report = audit_spec(repo_root or ".")
+        if (
+            (report.error or not report.ok)
+            and "not found" in str(report.error or "").lower()
+            and gh is not None
+            and repo
+            and default_branch
+        ):
+            remote_text = _remote_spec_text(gh, repo, default_branch)
+            if remote_text is not None:
+                # Remote-only SPEC: do not run filesystem drift against an empty/non-checkout root.
+                return {
+                    "spec_audit_status": "ok",
+                    "spec_audit_counts": empty_counts,
+                    "spec_audit_actionable_count": 0,
+                    "spec_audit_next_step": (
+                        "SPEC.md is present on the remote default branch; check out the "
+                        "repository locally to run full SPEC filesystem drift audit "
+                        "(gh plate spec-audit)."
+                    ),
+                }
     except Exception as exc:
         return {
             "spec_audit_status": "error",
@@ -293,6 +342,7 @@ def get_health(
     branch_protection_required_contexts: list[str] = []
     stale_required_check_contexts: list[str] = []
     missing_recommended_check_contexts: list[str] = []
+    default_branch = "main"
     try:
         repo_obj = gh.api(f"repos/{target}")
         default_branch = repo_obj["default_branch"]
@@ -521,6 +571,9 @@ def get_health(
         sa = summarize_spec_audit_for_health(
             repo_root if repo_root is not None else ".",
             enabled=include_spec_audit,
+            gh=gh,
+            repo=target,
+            default_branch=default_branch,
         )
         spec_audit_status = sa.get("spec_audit_status")
         spec_audit_counts = dict(sa.get("spec_audit_counts") or {})

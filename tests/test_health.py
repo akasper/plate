@@ -182,6 +182,61 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(sa["spec_audit_actionable_count"], 1)
         self.assertIn("spec-audit", sa["spec_audit_next_step"])
 
+    def test_summarize_spec_audit_uses_remote_spec_when_local_missing(self):
+        """#1267: health must not report SPEC missing when SPEC.md exists on default branch."""
+        import base64
+        from unittest.mock import Mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = Mock()
+
+            def api_side(endpoint, *a, **k):
+                if str(endpoint).endswith("/contents/SPEC.md?ref=main"):
+                    body = base64.b64encode(b"# Product\n\n## Goals\n").decode("ascii")
+                    return {"type": "file", "encoding": "base64", "content": body}
+                raise AssertionError(f"unexpected api: {endpoint}")
+
+            client.api.side_effect = api_side
+
+            sa = summarize_spec_audit_for_health(
+                str(root),
+                gh=client,
+                repo="owner/repo",
+                default_branch="main",
+            )
+        self.assertNotEqual(sa["spec_audit_status"], "missing")
+        self.assertEqual(sa["spec_audit_status"], "ok")
+        self.assertEqual(sa["spec_audit_actionable_count"], 0)
+        self.assertIn("remote default branch", sa["spec_audit_next_step"] or "")
+
+    def test_summarize_spec_audit_remote_only_skips_local_stale_evidence(self):
+        """Remote SPEC must not be audited against an empty local checkout (#1276)."""
+        import base64
+        from unittest.mock import Mock
+
+        spec_body = b"# Product\n\nEvidence: `src/app.py`\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = Mock()
+
+            def api_side(endpoint, *a, **k):
+                if str(endpoint).endswith("/contents/SPEC.md?ref=main"):
+                    body = base64.b64encode(spec_body).decode("ascii")
+                    return {"type": "file", "encoding": "base64", "content": body}
+                raise AssertionError(f"unexpected api: {endpoint}")
+
+            client.api.side_effect = api_side
+            sa = summarize_spec_audit_for_health(
+                str(root),
+                gh=client,
+                repo="owner/repo",
+                default_branch="main",
+            )
+        self.assertEqual(sa["spec_audit_status"], "ok")
+        self.assertEqual(sa["spec_audit_actionable_count"], 0)
+        self.assertEqual(sa["spec_audit_counts"].get("stale_evidence", 0), 0)
+
     def test_health_includes_spec_audit_fields(self):
         """#340: get_health merges SPEC audit summary into report JSON."""
         fake_sa = {

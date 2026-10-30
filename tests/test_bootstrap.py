@@ -644,6 +644,18 @@ class BootstrapTests(unittest.TestCase):
         copy_action = next(a for a in report.actions if a.name == "copy-template-payload")
         self.assertEqual(copy_action.state, "applied")
         self.assertIn("skipped", copy_action.detail.lower())
+        self.assertIn("AGENTS.md", copy_action.detail)
+
+    def test_format_skipped_files_phrase_caps_list(self):
+        from plate_core.bootstrap import _format_skipped_files_phrase
+
+        paths = [f"path{i}.md" for i in range(25)]
+        phrase = _format_skipped_files_phrase(paths)
+        self.assertIn("skipped 25 existing files", phrase)
+        self.assertIn("path0.md", phrase)
+        self.assertIn("path19.md", phrase)
+        self.assertNotIn("path20.md", phrase)
+        self.assertIn("and 5 more", phrase)
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_wraps_contents_404_with_repo_branch_path_context(self, mock_get_health):
