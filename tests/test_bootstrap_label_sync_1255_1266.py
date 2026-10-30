@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,11 +13,24 @@ from plate_core.bootstrap import run_bootstrap
 from plate_core.github_client import GhApiError
 from plate_core.github_labels import sync_repository_labels_from_registry
 from plate_core.health import HealthReport
+from plate_core.plate_config import DEFAULT_CONFIG
 
 _TEMPLATE_LABELS = (
     Path(__file__).resolve().parent.parent
     / "src/plate_core/template_payload/.github/labels.yml"
 )
+
+
+def _github_plate_contents_payload(config: dict | None = None) -> dict:
+    """GitHub contents API body for remote ``.plate`` (Epic title lookup in bootstrap)."""
+    data = config if config is not None else DEFAULT_CONFIG
+    encoded = base64.b64encode((json.dumps(data) + "\n").encode()).decode("ascii")
+    return {
+        "type": "file",
+        "sha": "bootstrapplateconfigsha01",
+        "encoding": "base64",
+        "content": encoded,
+    }
 
 
 def _write_template_tree(root: Path, *, include_labels: bool) -> None:
@@ -174,6 +189,8 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
                 return []
             if endpoint == "repos/akasper/greenfield/issues" and method == "POST":
                 return {"number": 1}
+            if endpoint == "repos/akasper/greenfield/contents/.plate":
+                return _github_plate_contents_payload()
             if endpoint.startswith("repos/akasper/greenfield/contents/"):
                 return {"type": "file"}
             if endpoint.startswith("repos/akasper/greenfield/branches/"):
@@ -253,6 +270,8 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
                 return []
             if endpoint == "repos/akasper/greenfield/issues" and method == "POST":
                 return {"number": 1}
+            if endpoint == "repos/akasper/greenfield/contents/.plate":
+                return _github_plate_contents_payload()
             if endpoint.startswith("repos/akasper/greenfield/contents/"):
                 return {"type": "file"}
             if endpoint.startswith("repos/akasper/greenfield/branches/"):

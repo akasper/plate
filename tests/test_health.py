@@ -185,10 +185,7 @@ class HealthTests(unittest.TestCase):
     def test_summarize_spec_audit_uses_remote_spec_when_local_missing(self):
         """#1267: health must not report SPEC missing when SPEC.md exists on default branch."""
         import base64
-        import tempfile
         from unittest.mock import Mock
-
-        from plate_core.spec_audit import SpecAuditReport
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -202,27 +199,43 @@ class HealthTests(unittest.TestCase):
 
             client.api.side_effect = api_side
 
-            missing = SpecAuditReport(
-                ok=False,
-                repo_root=str(root),
-                spec_path=str(root / "SPEC.md"),
-                error=f"SPEC.md not found at {root / 'SPEC.md'}",
+            sa = summarize_spec_audit_for_health(
+                str(root),
+                gh=client,
+                repo="owner/repo",
+                default_branch="main",
             )
-            ok_report = SpecAuditReport(
-                ok=True,
-                repo_root=str(root),
-                spec_path=str(root / "SPEC.md"),
-                counts={"aligned": 0, "undocumented": 0, "stale_evidence": 0, "future_ok": 0, "conflict": 0},
-            )
-            with patch("plate_core.spec_audit.audit_spec", side_effect=[missing, ok_report]):
-                sa = summarize_spec_audit_for_health(
-                    str(root),
-                    gh=client,
-                    repo="owner/repo",
-                    default_branch="main",
-                )
         self.assertNotEqual(sa["spec_audit_status"], "missing")
         self.assertEqual(sa["spec_audit_status"], "ok")
+        self.assertEqual(sa["spec_audit_actionable_count"], 0)
+        self.assertIn("remote default branch", sa["spec_audit_next_step"] or "")
+
+    def test_summarize_spec_audit_remote_only_skips_local_stale_evidence(self):
+        """Remote SPEC must not be audited against an empty local checkout (#1276)."""
+        import base64
+        from unittest.mock import Mock
+
+        spec_body = b"# Product\n\nEvidence: `src/app.py`\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = Mock()
+
+            def api_side(endpoint, *a, **k):
+                if str(endpoint).endswith("/contents/SPEC.md?ref=main"):
+                    body = base64.b64encode(spec_body).decode("ascii")
+                    return {"type": "file", "encoding": "base64", "content": body}
+                raise AssertionError(f"unexpected api: {endpoint}")
+
+            client.api.side_effect = api_side
+            sa = summarize_spec_audit_for_health(
+                str(root),
+                gh=client,
+                repo="owner/repo",
+                default_branch="main",
+            )
+        self.assertEqual(sa["spec_audit_status"], "ok")
+        self.assertEqual(sa["spec_audit_actionable_count"], 0)
+        self.assertEqual(sa["spec_audit_counts"].get("stale_evidence", 0), 0)
 
     def test_health_includes_spec_audit_fields(self):
         """#340: get_health merges SPEC audit summary into report JSON."""

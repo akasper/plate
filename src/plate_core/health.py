@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import json
 import re
-import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from urllib.parse import quote
@@ -183,8 +182,8 @@ def summarize_spec_audit_for_health(
 
     Never raises; returns status=skipped|missing|error|actionable|advisory|ok.
     Does not auto-edit SPEC.md.
-    When SPEC.md is absent locally but present on the remote default branch, audit
-    uses the remote file so health does not false-report missing (#1267).
+    When SPEC.md is absent locally but present on the remote default branch, health
+    reports remote presence only (no local filesystem drift audit; #1267).
     """
     empty_counts: dict[str, int] = {}
     if not enabled:
@@ -207,18 +206,17 @@ def summarize_spec_audit_for_health(
         ):
             remote_text = _remote_spec_text(gh, repo, default_branch)
             if remote_text is not None:
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    suffix=".md",
-                    delete=False,
-                    encoding="utf-8",
-                ) as handle:
-                    handle.write(remote_text)
-                    temp_path = handle.name
-                try:
-                    report = audit_spec(repo_root or ".", spec_path=temp_path)
-                finally:
-                    Path(temp_path).unlink(missing_ok=True)
+                # Remote-only SPEC: do not run filesystem drift against an empty/non-checkout root.
+                return {
+                    "spec_audit_status": "ok",
+                    "spec_audit_counts": empty_counts,
+                    "spec_audit_actionable_count": 0,
+                    "spec_audit_next_step": (
+                        "SPEC.md is present on the remote default branch; check out the "
+                        "repository locally to run full SPEC filesystem drift audit "
+                        "(gh plate spec-audit)."
+                    ),
+                }
     except Exception as exc:
         return {
             "spec_audit_status": "error",
