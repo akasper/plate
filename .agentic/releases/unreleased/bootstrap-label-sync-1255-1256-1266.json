@@ -4,7 +4,7 @@
   "issue": 1255,
   "surface": "plate_core.bootstrap + plate_core.github_labels",
   "summary": "gh plate bootstrap syncs the full template labels.yml registry (rename GitHub default case collisions instead of skipping Bug/Documentation/Question), applies Epic and Question labels when seeding starter issues, and uses a generic .plate init commit message without PLATE-repo issue numbers (#1255, #1256, #1266).",
-  "migration_impact": "Re-run `gh plate bootstrap --apply` on repos that still have lowercase default labels or unlabeled bootstrap Epics/Questions; no config change required.",
+  "migration_impact": "Re-run `gh plate bootstrap --apply` on repos that still have lowercase default labels or unlabeled bootstrap Epics/Questions; no config change required. If starter Epic/Question issues already exist without labels, apply the Epic and Question labels manually (creating those labels first if needed) before re-running bootstrap, or bootstrap may seed duplicate unlabeled issues because label-filtered lookups will not find them.",
   "verification": [
     "tests/test_bootstrap_label_sync_1255_1266.py",
     "tests/test_bootstrap.py"

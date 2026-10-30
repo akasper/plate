@@ -21,6 +21,34 @@ from .template_payload import resolve_template_source
 
 
 DEFAULT_LABEL_COLOR = "5319e7"
+BOOTSTRAP_EPIC_MILESTONE_TITLE = "Initial milestone"
+
+
+def _resolve_bootstrap_epic_milestone_number(
+    gh: GhClient,
+    repo: str,
+    *,
+    apply: bool,
+) -> int | None:
+    """Return milestone number for the bootstrap Epic (create if missing when applying)."""
+    try:
+        milestones = gh.api(f"repos/{repo}/milestones?state=open&per_page=100") or []
+    except GhApiError:
+        milestones = []
+    if isinstance(milestones, list):
+        for item in milestones:
+            if isinstance(item, dict) and item.get("title") == BOOTSTRAP_EPIC_MILESTONE_TITLE:
+                return int(item["number"])
+    if not apply:
+        return None
+    created = gh.api(
+        f"repos/{repo}/milestones",
+        method="POST",
+        fields={"title": BOOTSTRAP_EPIC_MILESTONE_TITLE},
+    )
+    if isinstance(created, dict) and created.get("number") is not None:
+        return int(created["number"])
+    return None
 
 
 @dataclass
@@ -671,14 +699,18 @@ def run_bootstrap(
 
     if health.open_epic_count == 0:
         if apply_mode:
+            milestone_number = _resolve_bootstrap_epic_milestone_number(gh, target, apply=True)
+            epic_fields: dict[str, Any] = {
+                "title": "[Epic] Initial PLATE epic",
+                "body": "Bootstrap-created initial Epic for project setup.",
+                "labels": ["Epic"],
+            }
+            if milestone_number is not None:
+                epic_fields["milestone"] = milestone_number
             gh.api(
                 f"repos/{target}/issues",
                 method="POST",
-                fields={
-                    "title": "[Epic] Initial PLATE epic",
-                    "body": "Bootstrap-created initial Epic for project setup.",
-                    "labels": ["Epic"],
-                },
+                fields=epic_fields,
             )
             state = "applied"
         else:

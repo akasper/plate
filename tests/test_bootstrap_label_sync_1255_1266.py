@@ -38,10 +38,10 @@ class GithubLabelSyncTests(unittest.TestCase):
             """
 - name: Bug
   color: d73a4a
-  description: Issue or PR type: defect.
+  description: "Issue or PR type: defect."
 - name: Feature
   color: 0e8a16
-  description: Issue or PR type: feature.
+  description: "Issue or PR type: feature."
 """.strip()
             + "\n",
             encoding="utf-8",
@@ -72,13 +72,13 @@ class GithubLabelSyncTests(unittest.TestCase):
             """
 - name: Bug
   color: d73a4a
-  description: Issue or PR type: defect.
+  description: "Issue or PR type: defect."
 - name: Documentation
   color: "0075ca"
-  description: PR type: documentation-only change.
+  description: "PR type: documentation-only change."
 - name: Question
   color: d4c5f9
-  description: Issue type: information goal.
+  description: "Issue type: information goal."
 """.strip()
             + "\n",
             encoding="utf-8",
@@ -113,7 +113,7 @@ class GithubLabelSyncTests(unittest.TestCase):
             """
 - name: Epic
   color: "5319e7"
-  description: Issue type: epic.
+  description: "Issue type: epic."
 """.strip()
             + "\n",
             encoding="utf-8",
@@ -166,6 +166,10 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
                 return []
             if endpoint.endswith("/labels") and method == "POST":
                 return {}
+            if endpoint == "repos/akasper/greenfield/milestones?state=open&per_page=100":
+                return []
+            if endpoint == "repos/akasper/greenfield/milestones" and method == "POST":
+                return {"number": 7, "title": "Initial milestone"}
             if "/issues?" in endpoint and "labels=Question" in endpoint:
                 return []
             if endpoint == "repos/akasper/greenfield/issues" and method == "POST":
@@ -214,7 +218,84 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
             if c.kwargs["fields"].get("labels") == ["Question"]
         ]
         self.assertEqual(len(epic_posts), 1)
+        self.assertEqual(epic_posts[0].kwargs["fields"].get("milestone"), 7)
         self.assertEqual(len(question_posts), 3)
+
+    def test_apply_reuses_existing_initial_milestone_for_epic(self):
+        health = HealthReport(
+            repo="akasper/greenfield",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=0,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/greenfield":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if endpoint == "repos/akasper/greenfield/milestones?state=open&per_page=100":
+                return [{"number": 3, "title": "Initial milestone"}]
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint == "repos/akasper/greenfield/issues" and method == "POST":
+                return {"number": 1}
+            if endpoint.startswith("repos/akasper/greenfield/contents/"):
+                return {"type": "file"}
+            if endpoint.startswith("repos/akasper/greenfield/branches/"):
+                if endpoint.endswith("/main"):
+                    return {"commit": {"sha": "abc123"}}
+                raise GhApiError("HTTP 404")
+            if endpoint == "repos/akasper/greenfield/git/refs" and method == "POST":
+                return {}
+            if endpoint == "repos/akasper/greenfield/git/ref/heads/main":
+                return {"ref": "refs/heads/main"}
+            return {}
+
+        client.api.side_effect = api_side
+        with tempfile.TemporaryDirectory() as tmp:
+            template_root = Path(tmp) / "tpl"
+            _write_template_tree(template_root, include_labels=False)
+            with patch(
+                "plate_core.bootstrap.get_health",
+                return_value=health,
+            ), patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "test"),
+            ):
+                run_bootstrap(
+                    "akasper/greenfield",
+                    apply_mode=True,
+                    client=client,
+                    local_root=Path(tempfile.mkdtemp()),
+                )
+
+        milestone_posts = [
+            c
+            for c in client.api.call_args_list
+            if c.args and c.args[0] == "repos/akasper/greenfield/milestones"
+            and c.kwargs.get("method") == "POST"
+        ]
+        self.assertEqual(milestone_posts, [])
+        epic_posts = [
+            c
+            for c in client.api.call_args_list
+            if c.args
+            and c.args[0] == "repos/akasper/greenfield/issues"
+            and c.kwargs.get("method") == "POST"
+            and c.kwargs["fields"].get("labels") == ["Epic"]
+        ]
+        self.assertEqual(len(epic_posts), 1)
+        self.assertEqual(epic_posts[0].kwargs["fields"].get("milestone"), 3)
 
     def test_plate_init_commit_message_omits_plate_repo_issue_numbers(self):
         health = HealthReport(
