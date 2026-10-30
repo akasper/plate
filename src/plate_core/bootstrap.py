@@ -516,7 +516,8 @@ def run_bootstrap(
     """
     gh = client or GhClient()
     target = resolve_repo(repo)
-    health = get_health(target, gh)
+    local_checkout = Path(local_root) if local_root is not None else Path.cwd()
+    health = get_health(target, gh, repo_root=str(local_checkout))
     repo_obj = gh.api(f"repos/{target}")
     default_branch = repo_obj.get("default_branch", "main")
     actions: list[BootstrapAction] = []
@@ -524,7 +525,7 @@ def run_bootstrap(
     adoption_mode, adoption_signals = detect_adoption_mode(
         health=health,
         repo_obj=repo_obj if isinstance(repo_obj, dict) else {},
-        local_root=Path(local_root) if local_root is not None else Path.cwd(),
+        local_root=local_checkout,
         force_adopt=adopt,
     )
     actions.append(
@@ -611,8 +612,16 @@ def run_bootstrap(
             )
     actions.append(BootstrapAction(name="copy-template-payload", state=state, detail=detail))
 
-    labels_registry = template_root / ".github" / "labels.yml"
-    if labels_registry.is_file():
+    checkout_registry = local_checkout / ".github" / "labels.yml"
+    bundled_registry = template_root / ".github" / "labels.yml"
+    if checkout_registry.is_file():
+        labels_registry = checkout_registry
+    elif bundled_registry.is_file():
+        labels_registry = bundled_registry
+    else:
+        labels_registry = None
+
+    if labels_registry is not None:
         label_outcomes = sync_repository_labels_from_registry(
             gh,
             target,

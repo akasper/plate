@@ -17,8 +17,9 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Release', 'Research', 'Design', 'Question', 'Task', 'Audit', 'Migration', 'Feedback Response'];
+            const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Release', 'Research', 'Design', 'Question', 'Task', 'Audit', 'Migration', 'Feedback Response', 'Spike'];
             const requiresMilestone = ['Feature', 'Epic', 'Release'];
+            const allowedStatusLabels = ['status:stub', 'status:blocked', 'status:ready-to-work', 'status:implemented'];
             const issue = context.payload.issue;
 
             if (!issue) {
@@ -27,7 +28,15 @@ jobs:
             }
 
             const labels = (issue.labels || []).map((label) => typeof label === 'string' ? label : label.name);
-            const forbiddenPlanningLabels = labels.filter((label) => /^status:|^priority:/.test(label));
+            const forbiddenPlanningLabels = labels.filter((label) => {
+              if (/^priority:/.test(label)) {
+                return true;
+              }
+              if (/^status:/.test(label)) {
+                return !allowedStatusLabels.includes(label);
+              }
+              return false;
+            });
             const milestoneTitle = issue.milestone?.title || '(none)';
             core.info(`Labels: ${labels.join(', ') || '(none)'}`);
             core.info(`Milestone: ${milestoneTitle}`);

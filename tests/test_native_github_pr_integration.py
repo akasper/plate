@@ -28,6 +28,25 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         # Release ceremony refinement: Release issues now also require a milestone
         self.assertIn("'Release'", workflow)  # or the array now includes Release in requiresMilestone
 
+    def test_issue_label_check_accepts_spike_and_allowed_status_labels(self):
+        """#1262 items 1–2: Spike type + AGENTS.md status:* exceptions."""
+        repo_workflow = read_text(".github/workflows/label-check.yml")
+        payload_workflow = read_text(
+            "src/plate_core/template_payload/.github/workflows/label-check.yml"
+        )
+        self.assertEqual(repo_workflow, payload_workflow)
+        for workflow in (repo_workflow, payload_workflow):
+            self.assertIn("'Spike'", workflow)
+            self.assertIn("allowedStatusLabels", workflow)
+            self.assertIn("'status:stub'", workflow)
+            self.assertIn("'status:blocked'", workflow)
+            self.assertIn("'status:ready-to-work'", workflow)
+            self.assertIn("'status:implemented'", workflow)
+            self.assertNotIn(
+                "labels.filter((label) => /^status:|^priority:/.test(label))",
+                workflow.replace(" ", ""),
+            )
+
     def test_pr_issue_link_check_accepts_development_links(self):
         workflow = read_text(".github/workflows/plate-pr-gates.yml")
 

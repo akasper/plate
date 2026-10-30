@@ -551,6 +551,8 @@ class BootstrapTests(unittest.TestCase):
                 return {"has_wiki": False, "default_branch": "main", "permissions": {"push": True}}
             if endpoint == "repos/akasper/partial-repo/git/ref/heads/main":
                 return {"ref": "refs/heads/main"}
+            if "/labels?" in endpoint:
+                return []
             if endpoint == "repos/akasper/partial-repo/contents/AGENTS.md" and method == "GET":
                 return {"content": agents_b64, "encoding": "base64"}
             if endpoint.startswith("repos/akasper/partial-repo/contents/"):
@@ -574,11 +576,30 @@ class BootstrapTests(unittest.TestCase):
         client.api.side_effect = api_side
         with _make_template_root() as tmpdir:
             template_root = Path(tmpdir)
-            with patch(
-                "plate_core.bootstrap.resolve_template_source",
-                return_value=(template_root, "explicit_path"),
-            ):
-                report = run_bootstrap("akasper/partial-repo", apply_mode=True, client=client)
+            _write_template_file(
+                template_root,
+                ".github/labels.yml",
+                """
+- name: Feature
+  color: "0e8a16"
+  description: "Issue type: feature."
+- name: Epic
+  color: "5319e7"
+  description: "Issue type: epic."
+""".strip()
+                + "\n",
+            )
+            with tempfile.TemporaryDirectory() as empty_checkout:
+                with patch(
+                    "plate_core.bootstrap.resolve_template_source",
+                    return_value=(template_root, "explicit_path"),
+                ):
+                    report = run_bootstrap(
+                        "akasper/partial-repo",
+                        apply_mode=True,
+                        client=client,
+                        local_root=empty_checkout,
+                    )
 
         template_puts = [
             c
@@ -592,7 +613,11 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(any("docs/wiki/Goals.md" in p for p in put_paths), "Missing files should still upload")
 
         label_posts = [
-            c for c in client.api.call_args_list if c.args and c.args[0] == "repos/akasper/partial-repo/labels"
+            c
+            for c in client.api.call_args_list
+            if c.args
+            and c.args[0] == "repos/akasper/partial-repo/labels"
+            and c.kwargs.get("method") == "POST"
         ]
         self.assertEqual(len(label_posts), 2)
 

@@ -297,6 +297,99 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
         self.assertEqual(len(epic_posts), 1)
         self.assertEqual(epic_posts[0].kwargs["fields"].get("milestone"), 3)
 
+    def test_apply_syncs_checkout_labels_yml_over_bundled_template(self):
+        """Checkout-only registry entries are synced when .github/labels.yml exists locally."""
+        health = HealthReport(
+            repo="akasper/adopter",
+            label_coverage_ok=False,
+            missing_labels=["CheckoutOnly"],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="warn",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        created: list[str] = []
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/adopter":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if endpoint.endswith("/labels?per_page=100&page=1"):
+                return []
+            if endpoint.endswith("/labels") and method == "POST":
+                created.append(k["fields"]["name"])
+                return {}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return [{"title": "[Question]: existing"}]
+            if endpoint.startswith("repos/akasper/adopter/contents/"):
+                if method == "PUT":
+                    return {}
+                return {"type": "file"}
+            if endpoint.startswith("repos/akasper/adopter/branches/"):
+                if endpoint.endswith("/main"):
+                    return {"commit": {"sha": "abc123"}}
+                raise GhApiError("HTTP 404")
+            if endpoint == "repos/akasper/adopter/git/refs" and method == "POST":
+                return {}
+            if endpoint == "repos/akasper/adopter/git/ref/heads/main":
+                return {"ref": "refs/heads/main"}
+            return {}
+
+        client.api.side_effect = api_side
+        with tempfile.TemporaryDirectory() as tmp:
+            template_root = Path(tmp) / "tpl"
+            _write_template_tree(template_root, include_labels=True)
+            bundled = template_root / ".github" / "labels.yml"
+            bundled.write_text(
+                """
+- name: Bug
+  color: d73a4a
+  description: bundled only
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            checkout = Path(tmp) / "checkout"
+            checkout.mkdir()
+            checkout_labels = checkout / ".github"
+            checkout_labels.mkdir(parents=True)
+            (checkout_labels / "labels.yml").write_text(
+                """
+- name: Bug
+  color: d73a4a
+  description: checkout registry
+- name: CheckoutOnly
+  color: "000000"
+  description: present only in checkout labels.yml
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            with patch(
+                "plate_core.bootstrap.get_health",
+                return_value=health,
+            ), patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "test"),
+            ):
+                run_bootstrap(
+                    "akasper/adopter",
+                    apply_mode=True,
+                    client=client,
+                    local_root=checkout,
+                )
+
+        self.assertIn("CheckoutOnly", created)
+        self.assertIn("Bug", created)
+        self.assertEqual(len(created), 2)
+
     def test_plate_init_commit_message_omits_plate_repo_issue_numbers(self):
         health = HealthReport(
             repo="akasper/new",
