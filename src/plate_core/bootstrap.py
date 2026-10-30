@@ -430,8 +430,14 @@ def _platform_copy_suffix(platform: str, omitted: list[str]) -> str:
     return suffix
 
 
-def _format_skipped_files_phrase(skipped_paths: list[str]) -> str:
-    """Human-readable skipped-file summary for bootstrap apply output (#1267)."""
+BOOTSTRAP_STALE_UPGRADE_POINTER = (
+    "Stale template files: run `gh plate self-migrate --plan`, then "
+    "`gh plate import-payload --strategy conservative` (review changes in a PR before `--apply`)."
+)
+
+
+def _format_skipped_files_phrase(skipped_paths: list[str], *, stale: bool = False) -> str:
+    """Human-readable skipped-file summary for bootstrap output (#1267, #1257)."""
     if not skipped_paths:
         return ""
     count = len(skipped_paths)
@@ -441,7 +447,24 @@ def _format_skipped_files_phrase(skipped_paths: list[str]) -> str:
     listing = ", ".join(shown)
     if count > cap:
         listing += f", and {count - cap} more"
-    return f"skipped {count} existing {noun} ({listing})"
+    verb = "skipped but stale" if stale else "skipped"
+    return f"{verb} {count} existing {noun} ({listing})"
+
+
+def _append_skip_phrases_to_detail(detail: str, *, identical: list[str], stale: list[str]) -> str:
+    phrases = [
+        _format_skipped_files_phrase(identical),
+        _format_skipped_files_phrase(stale, stale=True),
+    ]
+    extras = [p for p in phrases if p]
+    if not extras:
+        return detail
+    joined = "; ".join(extras)
+    if stale:
+        joined += f". {BOOTSTRAP_STALE_UPGRADE_POINTER}"
+    if detail.endswith("."):
+        return f"{detail} {joined}"
+    return f"{detail}; {joined}"
 
 
 def _resolve_bootstrap_epic_title(
@@ -460,17 +483,22 @@ def _resolve_bootstrap_epic_title(
     return format_epic_title(BOOTSTRAP_SEED_EPIC_NAME, config=config)
 
 
-def _copy_template_payload(
+def _process_template_payload(
     repo: str,
     default_branch: str,
     gh: GhClient,
     template_root: Path,
     *,
     platform: str,
-) -> tuple[int, int, list[str]]:
-    copied = 0
-    skipped = 0
-    skipped_paths: list[str] = []
+    write_missing: bool,
+) -> tuple[int, list[str], list[str]]:
+    """Classify remote template paths; optionally create missing files (#1257).
+
+    Returns ``(copied_or_would_copy, skipped_identical_paths, skipped_stale_paths)``.
+    """
+    copied_or_would = 0
+    skipped_identical: list[str] = []
+    skipped_stale: list[str] = []
     rel_paths, _omitted = filter_plate_scripts(_template_payload_relative_paths(template_root), platform)
     if not rel_paths:
         raise RuntimeError(f"No template payload files found under {template_root}")
@@ -491,11 +519,13 @@ def _copy_template_payload(
             local_digest = hashlib.sha256(_local_template_file_bytes(rel, source, platform)).hexdigest()
             remote_digest = _remote_file_digest(remote_payload)
             if remote_digest is None or remote_digest == local_digest:
-                skipped += 1
-                skipped_paths.append(rel)
+                skipped_identical.append(rel)
                 continue
-            skipped += 1
-            skipped_paths.append(rel)
+            skipped_stale.append(rel)
+            continue
+
+        if not write_missing:
+            copied_or_would += 1
             continue
 
         encoded = _local_template_file_bytes(rel, source, platform)
@@ -525,9 +555,9 @@ def _copy_template_payload(
                     f"Original error: {error}"
                 ) from error
             raise
-        copied += 1
+        copied_or_would += 1
 
-    return copied, skipped, skipped_paths
+    return copied_or_would, skipped_identical, skipped_stale
 
 
 def _validate_bootstrap_preconditions(repo: str, repo_obj: dict, default_branch: str, gh: GhClient) -> None:
@@ -603,6 +633,8 @@ def run_bootstrap(
             detail=f"{template_source} ({template_root})",
         )
     )
+    skipped_identical_paths: list[str] = []
+    skipped_stale_paths: list[str] = []
     if apply_mode:
         _validate_bootstrap_preconditions(target, repo_obj, default_branch, gh)
         if pending_plate is not None:
@@ -615,42 +647,57 @@ def run_bootstrap(
                 plate_sha,
                 resolved_platform,
             )
-        copied_count, skipped_count, skipped_paths = _copy_template_payload(
+        copied_count, skipped_identical_paths, skipped_stale_paths = _process_template_payload(
             target,
             default_branch,
             gh,
             template_root,
             platform=resolved_platform,
+            write_missing=True,
         )
-        skipped_phrase = _format_skipped_files_phrase(skipped_paths)
         if copied_count:
             state = "applied"
             detail = (
                 f"Copied {copied_count} template payload files into the repository from {template_source}"
                 f"{platform_suffix}"
             )
-            if skipped_phrase:
-                detail += f" and {skipped_phrase}"
         else:
             state = "already-configured"
             detail = (
                 f"Template payload already present from {template_source} "
-                f"({skipped_phrase or 'no files copied'})"
-                f"{platform_suffix}"
+                f"(no new files copied){platform_suffix}"
             )
+        detail = _append_skip_phrases_to_detail(
+            detail,
+            identical=skipped_identical_paths,
+            stale=skipped_stale_paths,
+        )
     else:
+        would_copy, skipped_identical_paths, skipped_stale_paths = _process_template_payload(
+            target,
+            default_branch,
+            gh,
+            template_root,
+            platform=resolved_platform,
+            write_missing=False,
+        )
         state = "planned"
         if adoption_mode:
             detail = (
                 f"Prefer local `gh plate import-payload --strategy conservative` for checkout files; "
-                f"remote would copy {len(template_paths)} template payload files from {template_source}"
+                f"remote would copy {would_copy} missing template payload file(s) from {template_source}"
                 f"{platform_suffix} (skips existing paths)"
             )
         else:
             detail = (
-                f"Copy {len(template_paths)} template payload files into the repository from {template_source}"
-                f"{platform_suffix}"
+                f"Would copy {would_copy} missing template payload file(s) into the repository from "
+                f"{template_source}{platform_suffix}"
             )
+        detail = _append_skip_phrases_to_detail(
+            detail,
+            identical=skipped_identical_paths,
+            stale=skipped_stale_paths,
+        )
     actions.append(BootstrapAction(name="copy-template-payload", state=state, detail=detail))
 
     checkout_registry = local_checkout / ".github" / "labels.yml"
@@ -905,6 +952,8 @@ def run_bootstrap(
             actions.append(BootstrapAction(name=f"create-{branch_name}-branch", state=state, detail=detail))
 
     next_steps = _adoption_next_steps(adoption_mode=adoption_mode, health=health)
+    if skipped_stale_paths:
+        next_steps = list(next_steps) + [BOOTSTRAP_STALE_UPGRADE_POINTER]
     return BootstrapReport(
         repo=target,
         apply_mode=apply_mode,

@@ -78,7 +78,8 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(states["branch-protection"], "manual-required")
         copy_action = next((a for a in report.actions if a.name == "copy-template-payload"), None)
         self.assertIsNotNone(copy_action, "copy-template-payload action must be present")
-        self.assertIn("Copy 3 template payload files", copy_action.detail)
+        self.assertIn("Would copy", copy_action.detail)
+        self.assertIn("missing template payload", copy_action.detail)
         plate_action = next((a for a in report.actions if a.name == "init-plate-config"), None)
         self.assertIsNotNone(plate_action, "init-plate-config action must be present for #259")
         self.assertEqual(plate_action.state, "planned")
@@ -656,6 +657,84 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("path19.md", phrase)
         self.assertNotIn("path20.md", phrase)
         self.assertIn("and 5 more", phrase)
+
+        stale_phrase = _format_skipped_files_phrase(["AGENTS.md"], stale=True)
+        self.assertIn("skipped but stale", stale_phrase)
+        self.assertIn("AGENTS.md", stale_phrase)
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_reports_stale_and_identical_skips_separately(self, mock_get_health):
+        """#1257: differing remote payload files are skipped-but-stale, not plain skipped."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/stale-repo",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        agents_text = prepare_copied_text("AGENTS.md", "# AGENTS\n", "posix", namespaced=False)
+        readme_text = prepare_copied_text("README.md", "# README\n", "posix", namespaced=False)
+        stale_b64 = base64.b64encode(b"# OLD AGENTS\n").decode("ascii")
+        readme_b64 = base64.b64encode(readme_text.encode("utf-8")).decode("ascii")
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/stale-repo":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if endpoint == "repos/akasper/stale-repo/git/ref/heads/main":
+                return {"ref": "refs/heads/main"}
+            if endpoint == "repos/akasper/stale-repo/contents/AGENTS.md" and method == "GET":
+                return {"content": stale_b64, "encoding": "base64"}
+            if endpoint == "repos/akasper/stale-repo/contents/README.md" and method == "GET":
+                return {"content": readme_b64, "encoding": "base64"}
+            if endpoint.startswith("repos/akasper/stale-repo/contents/"):
+                if method == "GET":
+                    raise GhApiError("gh: Not Found (HTTP 404)")
+                return {}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if "/issues?" in endpoint and "labels=Epic" in endpoint:
+                return [{"number": 1}]
+            if endpoint.startswith("repos/akasper/stale-repo/branches/"):
+                return {"commit": {"sha": "abc"}}
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                report = run_bootstrap("akasper/stale-repo", apply_mode=True, client=client)
+
+        copy_action = next(a for a in report.actions if a.name == "copy-template-payload")
+        self.assertIn("skipped but stale", copy_action.detail)
+        self.assertIn("AGENTS.md", copy_action.detail)
+        self.assertIn("skipped 1 existing file (README.md)", copy_action.detail)
+        self.assertNotIn("README.md)", copy_action.detail.split("skipped but stale")[1])
+        self.assertIn("self-migrate --plan", copy_action.detail)
+        self.assertTrue(any("self-migrate --plan" in s for s in report.next_steps))
+
+        template_puts = [
+            c
+            for c in client.api.call_args_list
+            if c.args
+            and "repos/akasper/stale-repo/contents/" in str(c.args[0])
+            and c.kwargs.get("method") == "PUT"
+        ]
+        put_paths = [str(c.args[0]) for c in template_puts]
+        self.assertFalse(any("AGENTS.md" in p for p in put_paths))
+        self.assertFalse(any("README.md" in p for p in put_paths))
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_wraps_contents_404_with_repo_branch_path_context(self, mock_get_health):

@@ -1,0 +1,12 @@
+{
+  "slug": "bootstrap-stale-skipped-report-1257",
+  "change_type": "fix",
+  "issue": 1257,
+  "surface": "plate_core.bootstrap + docs/wiki/Troubleshooting.md",
+  "summary": "Bootstrap apply and dry-run classify existing remote template payload files as plain skipped (identical digest) vs skipped-but-stale (content differs), list stale paths with the capped skipped-path formatter (#1276), and point operators to `gh plate self-migrate --plan` then `gh plate import-payload --strategy conservative` without overwriting remotely (#1257).",
+  "migration_impact": "No config or behavior change beyond clearer bootstrap output; stale files are still not overwritten on re-run. Operators refresh scaffold via import-payload in a reviewed PR.",
+  "verification": [
+    "tests/test_bootstrap.py"
+  ],
+  "agent_notes": "Troubleshooting wiki adds PEP 668 / extension-version checks only; no automatic bootstrap overwrite."
+}

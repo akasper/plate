@@ -2,6 +2,28 @@
 
 Symptom notes for PLATE operators. The fuller guide is tracked by #1063.
 
+## `gh extension upgrade plate` does not change behavior
+
+The GitHub CLI extension only wraps the pinned `plate-core` version bundled with that extension build. If upgrade appears to do nothing, compare what is installed:
+
+```text
+gh plate --version
+gh extension list
+```
+
+When the reported `plate-core` version is still older than you expect, reinstall or upgrade the extension from the current release (`gh extension install akasper/gh-plate` or `gh extension upgrade plate`), then run `gh plate --version` again. If versions still disagree, check which `gh plate` executable your shell resolves (`type gh plate` or `where gh plate`) and that you are not mixing a pip-installed `plate_core.cli` entry point with the extension shim.
+
+## Pip install fails on “externally managed environment” (PEP 668)
+
+On many Linux distributions, system Python is marked **externally managed**, so `pip install plate-core` (including when invoked by the `gh-plate` launcher) may refuse to write into the system site-packages.
+
+Use an isolated install instead:
+
+- **venv:** `python3 -m venv ~/.local/plate-venv && ~/.local/plate-venv/bin/pip install 'plate-core==…'`
+- **pipx:** `pipx install 'plate-core==…'`
+
+Then ensure `gh plate` uses that environment, or run the CLI via the venv/pipx `plate` / `python -m plate_core.cli` entry point. Confirm with `gh plate --version` after changing install layout.
+
 ## Windows console windows flash while babysitting a PR
 
 On Windows, `gh` and `git` are console programs. A windowless parent that starts them without `CREATE_NO_WINDOW` allocates a console for each child. That console takes focus and then closes. A `gh plate pr babysit --watch` loop does this about once per poll interval (the default is 60 seconds).
