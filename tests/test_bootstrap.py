@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -661,6 +662,68 @@ class BootstrapTests(unittest.TestCase):
         stale_phrase = _format_skipped_files_phrase(["AGENTS.md"], stale=True)
         self.assertIn("skipped but stale", stale_phrase)
         self.assertIn("AGENTS.md", stale_phrase)
+
+    def test_remote_file_digest_empty_content(self):
+        from plate_core.bootstrap import _remote_file_digest
+
+        empty_hash = hashlib.sha256(b"").hexdigest()
+        self.assertEqual(_remote_file_digest({"content": "", "encoding": "base64"}), empty_hash)
+        self.assertIsNone(_remote_file_digest({"type": "file"}))
+        self.assertIsNone(_remote_file_digest(None))
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_empty_remote_agents_is_stale_when_template_nonempty(self, mock_get_health):
+        """#1257: zero-byte remote file must not count as identical to bundled AGENTS.md."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/empty-agents",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/empty-agents":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if endpoint == "repos/akasper/empty-agents/git/ref/heads/main":
+                return {"ref": "refs/heads/main"}
+            if endpoint == "repos/akasper/empty-agents/contents/AGENTS.md" and method == "GET":
+                return {"content": "", "encoding": "base64"}
+            if endpoint.startswith("repos/akasper/empty-agents/contents/"):
+                if method == "GET":
+                    raise GhApiError("gh: Not Found (HTTP 404)")
+                return {}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if "/issues?" in endpoint and "labels=Epic" in endpoint:
+                return [{"number": 1}]
+            if endpoint.startswith("repos/akasper/empty-agents/branches/"):
+                return {"commit": {"sha": "abc"}}
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                report = run_bootstrap("akasper/empty-agents", apply_mode=True, client=client)
+
+        copy_action = next(a for a in report.actions if a.name == "copy-template-payload")
+        self.assertIn("skipped but stale", copy_action.detail)
+        self.assertIn("AGENTS.md", copy_action.detail)
+        self.assertIn("self-migrate --plan", copy_action.detail)
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_reports_stale_and_identical_skips_separately(self, mock_get_health):

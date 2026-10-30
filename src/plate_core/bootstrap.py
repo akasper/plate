@@ -242,10 +242,11 @@ def _local_template_file_bytes(rel: str, source: Path, platform: str) -> bytes:
 
 
 def _remote_file_digest(payload: Any) -> str | None:
+    """Return SHA-256 hex digest of remote file bytes, or None if unavailable (#1257)."""
     if not isinstance(payload, dict):
         return None
     content = payload.get("content")
-    if not isinstance(content, str) or not content.strip():
+    if not isinstance(content, str):
         return None
     try:
         raw = base64.b64decode(content, validate=False)
@@ -518,7 +519,10 @@ def _process_template_payload(
         else:
             local_digest = hashlib.sha256(_local_template_file_bytes(rel, source, platform)).hexdigest()
             remote_digest = _remote_file_digest(remote_payload)
-            if remote_digest is None or remote_digest == local_digest:
+            if remote_digest is None:
+                skipped_stale.append(rel)
+                continue
+            if remote_digest == local_digest:
                 skipped_identical.append(rel)
                 continue
             skipped_stale.append(rel)

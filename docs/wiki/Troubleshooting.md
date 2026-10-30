@@ -7,22 +7,32 @@ Symptom notes for PLATE operators. The fuller guide is tracked by #1063.
 The GitHub CLI extension only wraps the pinned `plate-core` version bundled with that extension build. If upgrade appears to do nothing, compare what is installed:
 
 ```text
-gh plate --version
 gh extension list
+gh plate self-migrate --plan
 ```
 
-When the reported `plate-core` version is still older than you expect, reinstall or upgrade the extension from the current release (`gh extension install akasper/gh-plate` or `gh extension upgrade plate`), then run `gh plate --version` again. If versions still disagree, check which `gh plate` executable your shell resolves (`type gh plate` or `where gh plate`) and that you are not mixing a pip-installed `plate_core.cli` entry point with the extension shim.
+The `self-migrate --plan` output includes an `Installed:` line with the `plate-core` version importable from the same `python3` the `gh-plate` launcher uses (`#!/usr/bin/env python3`). There is no root `gh plate --version` flag—the CLI requires a subcommand. To query the version directly with that interpreter:
+
+```text
+python3 -c "import plate_core; print(plate_core.__version__)"
+```
+
+When the installed version is still older than you expect, reinstall or upgrade the extension from the current release (`gh extension install akasper/gh-plate` or `gh extension upgrade plate`), then run `gh plate self-migrate --plan` again. If versions still disagree, check which `python3` your shell resolves (`type python3` or `which python3`) while running `gh plate`; the launcher does not read a separate interpreter environment variable.
 
 ## Pip install fails on “externally managed environment” (PEP 668)
 
-On many Linux distributions, system Python is marked **externally managed**, so `pip install plate-core` (including when invoked by the `gh-plate` launcher) may refuse to write into the system site-packages.
+On many Linux distributions, system Python is marked **externally managed**, so `pip install plate-core` (including when invoked by the `gh-plate` launcher via `python3 -m pip install --user`) may refuse to write into the system site-packages. The `plate-core` wheel exposes only the `plate-mcp` console script, not a standalone `plate` CLI—`gh plate` always goes through the extension launcher.
 
-Use an isolated install instead:
+Use a dedicated venv and put its `python3` first on `PATH` so the launcher’s `env python3` shebang and pip installs target that environment:
 
-- **venv:** `python3 -m venv ~/.local/plate-venv && ~/.local/plate-venv/bin/pip install 'plate-core==…'`
-- **pipx:** `pipx install 'plate-core==…'`
+```text
+python3 -m venv ~/.local/plate-venv
+~/.local/plate-venv/bin/pip install 'plate-core==X.Y.Z'
+export PATH="$HOME/.local/plate-venv/bin:$PATH"
+gh plate self-migrate --plan
+```
 
-Then ensure `gh plate` uses that environment, or run the CLI via the venv/pipx `plate` / `python -m plate_core.cli` entry point. Confirm with `gh plate --version` after changing install layout.
+Confirm the `Installed:` line matches the pin in the extension’s `PLATE_CORE_VERSION` / `VERSION` file after upgrading the extension.
 
 ## Windows console windows flash while babysitting a PR
 
