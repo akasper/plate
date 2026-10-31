@@ -740,7 +740,7 @@ class BootstrapTests(unittest.TestCase):
         pinned_gets = [
             c
             for c in client.api.call_args_list
-            if c.kwargs.get("method", "GET") == "GET" and "contents/" in str(c.args[0]) and "ref=deadbeef" in str(c.args[0])
+            if c.kwargs.get("method", "GET") == "GET" and "contents/" in str(c.args[0]) and "ref=abc123" in str(c.args[0])
         ]
         self.assertTrue(pinned_gets, "Template path checks must pin the parent commit ref (#1288)")
 
