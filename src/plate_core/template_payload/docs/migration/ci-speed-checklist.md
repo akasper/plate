@@ -7,7 +7,7 @@ Use this page when CI is the bottleneck at agent pace: slow feedback burns Actio
 Related PLATE docs:
 
 - [Self-hosted runners](./self-hosted-runners.md) — optional faster compute on private repos ([#1210](https://github.com/akasper/plate/issues/1210), workflow probe [#1214](https://github.com/akasper/plate/issues/1214)).
-- [Actions cost rollout](./actions-cost-rollout.md) — guards and merged `pr-gates` before you spend on speed.
+- [Actions cost rollout](https://github.com/akasper/plate/blob/main/docs/migration/actions-cost-rollout.md) — guards and merged `pr-gates` before you spend on speed (PLATE core repo; not copied in the bootstrap payload).
 - Epic [#1269](https://github.com/akasper/plate/issues/1269) — CI/CD split guidance for heavy jobs (separate page).
 - [#1282](https://github.com/akasper/plate/issues/1282) — `gh plate ci audit` (waiting vs setup vs run; cache visibility).
 - [#1272](https://github.com/akasper/plate/issues/1272) — periodic minutes report to rank expensive workflows.

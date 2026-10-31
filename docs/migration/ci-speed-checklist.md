@@ -7,7 +7,7 @@ Use this page when CI is the bottleneck at agent pace: slow feedback burns Actio
 Related PLATE docs:
 
 - [Self-hosted runners](./self-hosted-runners.md) — optional faster compute on private repos ([#1210](https://github.com/akasper/plate/issues/1210), workflow probe [#1214](https://github.com/akasper/plate/issues/1214)).
-- [Actions cost rollout](./actions-cost-rollout.md) — guards and merged `pr-gates` before you spend on speed.
+- [Actions cost rollout](https://github.com/akasper/plate/blob/main/docs/migration/actions-cost-rollout.md) — guards and merged `pr-gates` before you spend on speed (PLATE core repo; not copied in the bootstrap payload).
 - Epic [#1269](https://github.com/akasper/plate/issues/1269) — CI/CD split guidance for heavy jobs (separate page).
 - [#1282](https://github.com/akasper/plate/issues/1282) — `gh plate ci audit` (waiting vs setup vs run; cache visibility).
 - [#1272](https://github.com/akasper/plate/issues/1272) — periodic minutes report to rank expensive workflows.
@@ -35,10 +35,16 @@ Pull-request cache scopes are usually **branch-scoped**. Most PRs then start col
 
 ### 3. Prefer blobless checkout over shallow clone
 
-Use a **blobless** partial clone (for example Git `filter: blob:none` or the equivalent in your CI checkout action) when jobs need history or tags but not every blob upfront.
+Match checkout settings to what later steps read from Git:
 
-- **Shallow** clones (`fetch-depth: 1`) break steps that read full history, merge bases, or release tags.
-- Blobless keeps clone time down while remaining compatible with common versioning and diff tools.
+| Approach | Typical settings | When it fits |
+|---|---|---|
+| **Shallow** | `fetch-depth: 1` (default on many CI checkout actions) | Jobs that only need the latest tree at one commit |
+| **Blobless full history** | `filter: blob:none` **and** `fetch-depth: 0` on the same checkout step (or `git clone --filter=blob:none` with **no** depth limit) | Jobs that need merge bases, tags, or full commit history but should not download every blob up front |
+
+- **Shallow** clones hide older commits. They break steps that compute merge bases, read release tags, generate changelogs from history, or run similar history-aware tools—even if the job “only needs a little history.”
+- **Blobless** keeps all commits reachable while omitting blob contents until a step touches them. Pair **`filter: blob:none` with `fetch-depth: 0`** when your checkout action defaults to shallow fetch; adding the filter alone still leaves `fetch-depth: 1` behavior on common hosted checkout actions.
+- For a direct `git clone` in a script, use blobless (`--filter=blob:none`) and omit `--depth`; do not substitute a shallow depth when history readers run in that job.
 
 ### 4. Parallelize independent gates; trim the slowest job
 
