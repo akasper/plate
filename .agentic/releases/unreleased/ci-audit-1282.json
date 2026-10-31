@@ -1,0 +1,15 @@
+{
+  "slug": "ci-audit-1282",
+  "change_type": "feature",
+  "surface": "gh plate ci audit + plate_core.ci_audit + docs/design/ci-audit-command.md",
+  "summary": "Add `gh plate ci audit` to split recent Actions jobs into waiting, setup, and running minutes with optional cache hints (#1282).",
+  "migration_impact": "Additive CLI only. Adopters run `gh plate ci audit [--limit N] [--json]` against their repo; no workflow or branch-protection changes.",
+  "migration_guidance": [
+    "Ensure `gh` is authenticated with Actions read access for the target repository.",
+    "Run `gh plate ci audit --json` locally or from a scheduled procedure when baselining CI minutes.",
+    "Read docs/design/ci-audit-command.md for setup/test step heuristics before acting on numbers."
+  ],
+  "agent_notes": "Workflow motivation credited in docs to Owen Gretzinger's Oct 2026 X post on Boardy CI analysis (see issue #1282); PLATE heuristics and output are original. Complements research #1271 and feeds future nightly audit procedures under #1268.",
+  "breaking": false,
+  "links": ["#1282", "#1268", "#1271"]
+}

@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .bootstrap import run_bootstrap
+from .ci_audit import format_ci_audit_text, run_ci_audit
 from .baseline_catalog import (
     BaselineCatalogError,
     DelegationResult,
@@ -362,6 +363,19 @@ def cmd_health(args: argparse.Namespace) -> int:
     if report.plate_config_layout_error:
         return 1
     return 0 if report.status != "fail" else 1
+
+
+def cmd_ci_audit(args: argparse.Namespace) -> int:
+    """Summarize recent Actions job time: waiting, setup, running (#1282)."""
+    report = run_ci_audit(
+        getattr(args, "repo", None),
+        limit=int(getattr(args, "limit", 30) or 30),
+    )
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    print(format_ci_audit_text(report))
+    return 0 if report.ok else 1
 
 
 def cmd_what_next(args: argparse.Namespace) -> int:
@@ -4676,6 +4690,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     health.add_argument("--json", action="store_true", help="Output JSON")
     health.set_defaults(func=cmd_health)
+
+    ci = sub.add_parser("ci", help="GitHub Actions CI analysis")
+    ci_sub = ci.add_subparsers(dest="ci_command", required=True)
+    ci_audit = ci_sub.add_parser(
+        "audit",
+        help="Split recent workflow jobs into waiting, setup, and running time (#1282)",
+    )
+    ci_audit.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    ci_audit.add_argument(
+        "--limit",
+        type=int,
+        default=30,
+        help="Number of recent workflow runs to inspect (default: 30)",
+    )
+    ci_audit.add_argument("--json", action="store_true", help="Output JSON")
+    ci_audit.set_defaults(func=cmd_ci_audit)
 
     what_next = sub.add_parser(
         "what-next",
