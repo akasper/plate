@@ -199,8 +199,10 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
                 raise GhApiError("HTTP 404")
             if endpoint == "repos/akasper/greenfield/git/refs" and method == "POST":
                 return {}
-            if endpoint == "repos/akasper/greenfield/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+            if "/git/ref/heads/" in endpoint and method == "GET":
+                return {"object": {"sha": "abc123"}}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
             return {}
 
         client.api.side_effect = api_side
@@ -280,8 +282,10 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
                 raise GhApiError("HTTP 404")
             if endpoint == "repos/akasper/greenfield/git/refs" and method == "POST":
                 return {}
-            if endpoint == "repos/akasper/greenfield/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+            if "/git/ref/heads/" in endpoint and method == "GET":
+                return {"object": {"sha": "abc123"}}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
             return {}
 
         client.api.side_effect = api_side
@@ -361,8 +365,10 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
                 raise GhApiError("HTTP 404")
             if endpoint == "repos/akasper/adopter/git/refs" and method == "POST":
                 return {}
-            if endpoint == "repos/akasper/adopter/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+            if "/git/ref/heads/" in endpoint and method == "GET":
+                return {"object": {"sha": "abc123"}}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
             return {}
 
         client.api.side_effect = api_side
@@ -429,6 +435,7 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
             curiosity_answers_present=False,
         )
         client = Mock()
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
@@ -438,11 +445,24 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
             if "/issues?" in endpoint and "labels=Question" in endpoint:
                 return [{"title": "[Question]: existing"}]
             if endpoint.startswith("repos/akasper/new/contents/"):
-                if ".plate" in endpoint and method == "PUT":
-                    return {}
+                if ".plate" in endpoint and method == "GET":
+                    raise GhApiError("HTTP 404 Not Found")
                 return {"type": "file"}
             if endpoint.startswith("repos/akasper/new/branches/"):
-                return {"name": "release"}
+                return {"name": "release", "commit": {"sha": "abc123"}}
+            if "/git/ref/heads/" in endpoint and method == "GET":
+                return {"object": {"sha": "abc123"}}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
+            if method == "POST" and endpoint.endswith("/git/blobs"):
+                git_store["blob_count"] = git_store.get("blob_count", 0) + 1
+                return {"sha": f"blob{git_store['blob_count']:04d}"}
+            if method == "POST" and endpoint.endswith("/git/trees"):
+                return {"sha": "newtree_sha"}
+            if method == "POST" and endpoint.endswith("/git/commits"):
+                return {"sha": "commit0001"}
+            if method == "PATCH" and "/git/refs/heads/" in endpoint:
+                return {}
             return {}
 
         client.api.side_effect = api_side
@@ -458,13 +478,13 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
             ):
                 run_bootstrap("akasper/new", apply_mode=True, client=client)
 
-        plate_puts = [
+        commit_posts = [
             c
             for c in client.api.call_args_list
-            if c.args and ".plate" in str(c.args[0]) and c.kwargs.get("method") == "PUT"
+            if c.args and str(c.args[0]).endswith("/git/commits") and c.kwargs.get("method") == "POST"
         ]
-        self.assertTrue(plate_puts)
-        message = plate_puts[0].kwargs.get("fields", {}).get("message", "")
+        self.assertTrue(commit_posts)
+        message = commit_posts[0].kwargs.get("fields", {}).get("message", "")
         self.assertNotIn("#259", message)
         self.assertNotIn("Epic #", message)
 

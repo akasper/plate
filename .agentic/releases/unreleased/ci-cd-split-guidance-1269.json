@@ -1,0 +1,16 @@
+{
+  "slug": "ci-cd-split-guidance-1269",
+  "change_type": "docs",
+  "surface": "docs/migration/ci-cd-split-guidance.md + template_payload copy",
+  "summary": "Adopter guide for moving heavy CI jobs off the PR path without weakening required checks.",
+  "migration_impact": "Optional read for adopters reshaping CI; no workflow import required. Sync the doc via gh plate import-payload when upgrading plate-core.",
+  "migration_guidance": [
+    "Read docs/migration/ci-cd-split-guidance.md before removing OS matrices or installer jobs from PR workflows.",
+    "Keep branch protection on labels, test, and pr-gates; do not require check names from workflows that do not run on every pull_request (pending checks block merges).",
+    "Job-level if: skips satisfy required checks; workflow-level filters that skip the whole workflow do not.",
+    "Run post-merge or release pipelines after integration merges to catch platform-specific regressions."
+  ],
+  "agent_notes": "PLATES-CORE block id ci-cd-split-heavy-jobs holds sync-safe bullet guidance. actions-cost-rollout link points at akasper/plate main (not in default payload). Do not edit the separate CI speed checklist page for #1283.",
+  "breaking": false,
+  "links": ["#1269", "#1268"]
+}

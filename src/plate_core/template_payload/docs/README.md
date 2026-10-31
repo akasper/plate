@@ -61,6 +61,8 @@ docs/
 | **[marketing/](./marketing/)** | Release notes, project announcements, and external messaging. |
 | **[migration/](./migration/)** | Data migration guides, API deprecation notices, and upgrade paths. |
 | **[Self-hosted runners](./migration/self-hosted-runners.md)** | Optional private-repo local runners: isolation, security warnings, idle-only policy, and hosted fallback (#1210). |
+| **[CI/CD split for heavy jobs](./migration/ci-cd-split-guidance.md)** | Move matrices and installers to post-merge or pre-release without weakening required PR checks (#1269). |
+| **[CI speed checklist](./migration/ci-speed-checklist.md)** | Adopter checklist: runners, cache seeding, checkout, parallelism, lint strictness, and cost tradeoffs (#1283). |
 
 ---
 

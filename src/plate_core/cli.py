@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .bootstrap import run_bootstrap
+from .ci_audit import format_ci_audit_text, run_ci_audit
 from .baseline_catalog import (
     BaselineCatalogError,
     DelegationResult,
@@ -362,6 +363,19 @@ def cmd_health(args: argparse.Namespace) -> int:
     if report.plate_config_layout_error:
         return 1
     return 0 if report.status != "fail" else 1
+
+
+def cmd_ci_audit(args: argparse.Namespace) -> int:
+    """Summarize recent Actions job time: waiting, setup, running (#1282)."""
+    report = run_ci_audit(
+        getattr(args, "repo", None),
+        limit=int(getattr(args, "limit", 30) or 30),
+    )
+    if args.json:
+        print(json.dumps(report.to_dict()))
+        return 0 if report.ok else 1
+    print(format_ci_audit_text(report))
+    return 0 if report.ok else 1
 
 
 def cmd_what_next(args: argparse.Namespace) -> int:
@@ -1712,6 +1726,47 @@ def cmd_runner(args: argparse.Namespace) -> int:
         "Read the guide before registering runners. "
         "Subcommands add, status, remove, and doctor are planned (#1212)."
     )
+    return 0
+
+
+def cmd_hooks(args: argparse.Namespace) -> int:
+    from .git_hooks import install_pre_push_hook, pre_push_status, run_pre_push
+
+    repo_root = getattr(args, "repo_root", None)
+
+    if getattr(args, "hooks_command", None) == "install":
+        try:
+            report = install_pre_push_hook(repo_root, force=bool(getattr(args, "force", False)))
+        except (FileNotFoundError, RuntimeError) as exc:
+            if args.json:
+                print(json.dumps({"ok": False, "error": str(exc)}))
+            else:
+                print(str(exc), file=sys.stderr)
+            return 1
+        payload = {"ok": True, **report.to_dict()}
+        if args.json:
+            print(json.dumps(payload, indent=2))
+            return 0
+        print(f"Installed {report.hook} hook at {report.installed_path}")
+        return 0
+
+    if getattr(args, "hooks_command", None) == "run":
+        hook_name = str(getattr(args, "hook_name", "") or "")
+        if hook_name != "pre-push":
+            print(f"unsupported hook: {hook_name!r} (only pre-push is implemented)", file=sys.stderr)
+            return 1
+        code = run_pre_push(repo_root)
+        return code
+
+    # status (default)
+    report = pre_push_status(repo_root)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0
+    print(f"hook_installed={report.hook_installed} plate_managed={report.hook_is_plate}")
+    print(f"configured_commands={report.configured_commands or '(none — hook passes silently)'}")
+    if report.hook_path:
+        print(f"path={report.hook_path}")
     return 0
 
 
@@ -4677,6 +4732,22 @@ def build_parser() -> argparse.ArgumentParser:
     health.add_argument("--json", action="store_true", help="Output JSON")
     health.set_defaults(func=cmd_health)
 
+    ci = sub.add_parser("ci", help="GitHub Actions CI analysis")
+    ci_sub = ci.add_subparsers(dest="ci_command", required=True)
+    ci_audit = ci_sub.add_parser(
+        "audit",
+        help="Split recent workflow jobs into waiting, setup, and running time (#1282)",
+    )
+    ci_audit.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    ci_audit.add_argument(
+        "--limit",
+        type=int,
+        default=30,
+        help="Number of recent workflow runs to inspect (default: 30)",
+    )
+    ci_audit.add_argument("--json", action="store_true", help="Output JSON")
+    ci_audit.set_defaults(func=cmd_ci_audit)
+
     what_next = sub.add_parser(
         "what-next",
         help="Recommend next PLATE process step (budget → open PRs → epics) (#789/#791)",
@@ -4994,6 +5065,24 @@ def build_parser() -> argparse.ArgumentParser:
     runner_doctor.add_argument("--repo-root", default=".")
     runner_doctor.add_argument("--json", action="store_true")
     runner_doctor.set_defaults(func=cmd_runner_doctor)
+
+    hooks = sub.add_parser("hooks", help="Install and run local git hooks (#1281)")
+    hooks.add_argument("--repo-root", default=".", help="Repository root (default: .)")
+    hooks.add_argument("--json", action="store_true")
+    hooks_sub = hooks.add_subparsers(dest="hooks_command", required=True)
+    hooks_install = hooks_sub.add_parser("install", help="Install the pre-push hook template")
+    hooks_install.add_argument("--force", action="store_true", help="Replace an existing non-PLATE hook")
+    hooks_install.add_argument("--json", action="store_true")
+    hooks_install.add_argument("--repo-root", default=".", help="Repository root (default: .)")
+    hooks_install.set_defaults(func=cmd_hooks, hooks_command="install")
+    hooks_run = hooks_sub.add_parser("run", help="Run hook logic (called from .git/hooks/pre-push)")
+    hooks_run.add_argument("hook_name", help="Hook name (pre-push)")
+    hooks_run.add_argument("--repo-root", default=".", help="Repository root (default: .)")
+    hooks_run.set_defaults(func=cmd_hooks, hooks_command="run")
+    hooks_status = hooks_sub.add_parser("status", help="Show hook install state and configured commands")
+    hooks_status.add_argument("--json", action="store_true")
+    hooks_status.add_argument("--repo-root", default=".", help="Repository root (default: .)")
+    hooks_status.set_defaults(func=cmd_hooks, hooks_command="status")
 
     pr = sub.add_parser("pr", help="PR feedback operations")
     pr_sub = pr.add_subparsers(dest="pr_command", required=True)
