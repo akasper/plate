@@ -199,8 +199,10 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
                 raise GhApiError("HTTP 404")
             if endpoint == "repos/akasper/greenfield/git/refs" and method == "POST":
                 return {}
-            if endpoint == "repos/akasper/greenfield/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+            if "/git/ref/heads/" in endpoint and method == "GET":
+                return {"object": {"sha": "abc123"}}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
             return {}
 
         client.api.side_effect = api_side
@@ -280,8 +282,10 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
                 raise GhApiError("HTTP 404")
             if endpoint == "repos/akasper/greenfield/git/refs" and method == "POST":
                 return {}
-            if endpoint == "repos/akasper/greenfield/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+            if "/git/ref/heads/" in endpoint and method == "GET":
+                return {"object": {"sha": "abc123"}}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
             return {}
 
         client.api.side_effect = api_side
@@ -361,8 +365,10 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
                 raise GhApiError("HTTP 404")
             if endpoint == "repos/akasper/adopter/git/refs" and method == "POST":
                 return {}
-            if endpoint == "repos/akasper/adopter/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+            if "/git/ref/heads/" in endpoint and method == "GET":
+                return {"object": {"sha": "abc123"}}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
             return {}
 
         client.api.side_effect = api_side
@@ -439,6 +445,8 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
             if "/issues?" in endpoint and "labels=Question" in endpoint:
                 return [{"title": "[Question]: existing"}]
             if endpoint.startswith("repos/akasper/new/contents/"):
+                if ".plate" in endpoint and method == "GET":
+                    raise GhApiError("HTTP 404 Not Found")
                 return {"type": "file"}
             if endpoint.startswith("repos/akasper/new/branches/"):
                 return {"name": "release", "commit": {"sha": "abc123"}}

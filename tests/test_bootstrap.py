@@ -135,17 +135,22 @@ class BootstrapTests(unittest.TestCase):
             curiosity_answers_present=False,
         )
         client = Mock()
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
+            method = k.get("method", "GET")
             if endpoint == "repos/akasper/new-repo":
-                return {"has_wiki": True, "default_branch": "main"}
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
             if "/issues?" in endpoint and "labels=Question" in endpoint:
                 return []
             if endpoint == "repos/akasper/new-repo/issues" and k.get("method") == "POST":
                 return {"number": 1}
             if endpoint.startswith("repos/akasper/new-repo/contents/"):
                 return {"type": "file"}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
             return {}
 
         client.api.side_effect = api_side
@@ -190,11 +195,13 @@ class BootstrapTests(unittest.TestCase):
             curiosity_answers_present=False,
         )
         client = Mock()
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
+            method = k.get("method", "GET")
             if endpoint == "repos/akasper/mature":
-                return {"has_wiki": True, "default_branch": "main", "size": 9000}
+                return {"has_wiki": True, "default_branch": "main", "size": 9000, "permissions": {"push": True}}
             if "/issues?" in endpoint and "labels=Question" in endpoint:
                 return [
                     {"title": "[Question]: What is the primary purpose or value proposition of this software?"},
@@ -205,6 +212,9 @@ class BootstrapTests(unittest.TestCase):
                 return {"type": "file"}
             if "/issues?" in endpoint and "labels=Epic" in endpoint:
                 return [{"number": 1}]
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
             return {}
 
         client.api.side_effect = api_side
@@ -512,7 +522,7 @@ class BootstrapTests(unittest.TestCase):
             if c.args and "contents/README.md" in str(c.args[0]) and c.kwargs.get("method") == "PUT"
         ]
         self.assertTrue(readme_puts, "Expected initial README commit on empty repo")
-        self.assertEqual(ref_seen["count"], 3, "Should verify default branch ref after seeding and grouped commit")
+        self.assertEqual(ref_seen["count"], 4, "Should verify default branch ref after seeding and grouped commit")
         plate_action = next(a for a in report.actions if a.name == "init-plate-config")
         self.assertEqual(plate_action.state, "applied")
 
@@ -585,7 +595,7 @@ class BootstrapTests(unittest.TestCase):
             if c.args and "contents/README.md" in str(c.args[0]) and c.kwargs.get("method") == "PUT"
         ]
         self.assertTrue(readme_puts, "Expected initial README commit when ref lookup returns 409 empty repo")
-        self.assertEqual(ref_seen["count"], 3)
+        self.assertEqual(ref_seen["count"], 4)
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_rerun_after_partial_run_skips_identical_and_finishes_steps(self, mock_get_health):
@@ -618,7 +628,7 @@ class BootstrapTests(unittest.TestCase):
                 return {"object": {"sha": "abc123"}}
             if "/labels?" in endpoint:
                 return []
-            if endpoint == "repos/akasper/partial-repo/contents/AGENTS.md" and method == "GET":
+            if "contents/AGENTS.md" in endpoint and method == "GET":
                 return {"content": agents_b64, "encoding": "base64"}
             if endpoint.startswith("repos/akasper/partial-repo/contents/"):
                 if method == "GET":
@@ -727,6 +737,12 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(copy_action.state, "applied")
         self.assertIn("skipped", copy_action.detail.lower())
         self.assertIn("AGENTS.md", copy_action.detail)
+        pinned_gets = [
+            c
+            for c in client.api.call_args_list
+            if c.kwargs.get("method", "GET") == "GET" and "contents/" in str(c.args[0]) and "ref=deadbeef" in str(c.args[0])
+        ]
+        self.assertTrue(pinned_gets, "Template path checks must pin the parent commit ref (#1288)")
 
     def test_format_skipped_files_phrase_caps_list(self):
         from plate_core.bootstrap import _format_skipped_files_phrase
@@ -778,7 +794,7 @@ class BootstrapTests(unittest.TestCase):
                 return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
             if endpoint == "repos/akasper/empty-agents/git/ref/heads/main":
                 return {"object": {"sha": "abc123"}}
-            if endpoint == "repos/akasper/empty-agents/contents/AGENTS.md" and method == "GET":
+            if "contents/AGENTS.md" in endpoint and method == "GET":
                 return {"content": "", "encoding": "base64"}
             if endpoint.startswith("repos/akasper/empty-agents/contents/"):
                 if method == "GET":
@@ -842,7 +858,11 @@ class BootstrapTests(unittest.TestCase):
                 return {"object": {"sha": "abc123"}}
             if endpoint == "repos/akasper/stale-repo/contents/AGENTS.md" and method == "GET":
                 return {"content": stale_b64, "encoding": "base64"}
+            if "contents/AGENTS.md" in endpoint and method == "GET":
+                return {"content": stale_b64, "encoding": "base64"}
             if endpoint == "repos/akasper/stale-repo/contents/README.md" and method == "GET":
+                return {"content": readme_b64, "encoding": "base64"}
+            if "contents/README.md" in endpoint and method == "GET":
                 return {"content": readme_b64, "encoding": "base64"}
             if endpoint.startswith("repos/akasper/stale-repo/contents/"):
                 if method == "GET":
@@ -1012,6 +1032,128 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(commit_posts[0].kwargs.get("fields", {}).get("message"), "Bootstrap: initialize PLATE template payload")
         self.assertEqual(len(commit_posts), 1)
         self.assertGreaterEqual(git_store.get("blob_count", 0), 2)
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_aborts_grouped_commit_when_branch_tip_moves(self, mock_get_health):
+        """#1288: concurrent commits on the base branch must not be silently overwritten."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/racy-repo",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+        git_store: dict = {}
+        commit_posted = {"done": False}
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/racy-repo":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint.startswith("repos/akasper/racy-repo/contents/"):
+                if method == "GET":
+                    raise GhApiError("HTTP 404 Not Found")
+                return {}
+            if method == "POST" and endpoint.endswith("/git/commits"):
+                commit_posted["done"] = True
+                return {"sha": "newcommit"}
+            if endpoint == "repos/akasper/racy-repo/git/ref/heads/main" and method == "GET":
+                sha = "def456" if commit_posted["done"] else "abc123"
+                return {"object": {"sha": sha}}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
+            if endpoint.startswith("repos/akasper/racy-repo/branches/"):
+                return {"commit": {"sha": "abc123"}}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                with self.assertRaises(RuntimeError) as ctx:
+                    run_bootstrap("akasper/racy-repo", apply_mode=True, client=client)
+        self.assertIn("advanced from", str(ctx.exception).lower())
+        patch_calls = [
+            c
+            for c in client.api.call_args_list
+            if c.args and c.args[0] == "repos/akasper/racy-repo/git/refs/heads/main"
+            and c.kwargs.get("method") == "PATCH"
+        ]
+        self.assertFalse(patch_calls, "Must not update branch ref when tip moved during apply")
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_fails_closed_when_remote_plate_is_directory(self, mock_get_health):
+        """#1288: do not replace a remote `.plate` directory with a blob in grouped commit."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/plate-dir",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+        git_store: dict = {}
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/plate-dir":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if ".plate" in endpoint and method == "GET":
+                return {"type": "dir", "name": ".plate"}
+            if endpoint.startswith("repos/akasper/plate-dir/contents/"):
+                if method == "GET":
+                    raise GhApiError("HTTP 404 Not Found")
+                return {}
+            if endpoint.startswith("repos/akasper/plate-dir/branches/"):
+                return {"commit": {"sha": "abc123"}}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                with self.assertRaises(RuntimeError) as ctx:
+                    run_bootstrap("akasper/plate-dir", apply_mode=True, client=client)
+        self.assertIn("directory", str(ctx.exception).lower())
+        commit_posts = [
+            c
+            for c in client.api.call_args_list
+            if c.args and str(c.args[0]).endswith("/git/commits") and c.kwargs.get("method") == "POST"
+        ]
+        self.assertFalse(commit_posts)
 
 
 if __name__ == "__main__":

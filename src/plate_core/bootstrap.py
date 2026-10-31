@@ -461,6 +461,13 @@ def _bootstrap_payload_write_error(
     )
 
 
+def _contents_endpoint_at_ref(repo: str, rel_path: str, ref: str | None) -> str:
+    endpoint = f"repos/{repo}/contents/{quote(rel_path, safe='/')}"
+    if ref:
+        endpoint = f"{endpoint}?ref={quote(ref, safe='')}"
+    return endpoint
+
+
 def _resolve_branch_parent_commit(
     repo: str,
     branch: str,
@@ -484,6 +491,45 @@ def _resolve_branch_parent_commit(
     return parent_sha, base_tree
 
 
+def _bootstrap_plate_bytes_for_grouped_commit(
+    repo: str,
+    gh: GhClient,
+    parent_ref: str,
+    resolved_platform: str,
+) -> tuple[str, bytes]:
+    """Return ``(.plate``, bytes)`` for a grouped bootstrap commit or fail closed (#1288)."""
+    endpoint = _contents_endpoint_at_ref(repo, ".plate", parent_ref)
+    try:
+        payload = gh.api(endpoint)
+    except GhApiError as error:
+        if _is_missing_content_error(error):
+            seeded = copy.deepcopy(DEFAULT_CONFIG)
+            seeded["platform"] = resolved_platform
+            return (
+                ".plate",
+                (json.dumps(seeded, indent=2) + "\n").encode("utf-8"),
+            )
+        raise RuntimeError(
+            "Cannot initialize .plate during bootstrap: remote lookup failed before the grouped commit. "
+            f"repo={repo} ref={parent_ref}. Original error: {error}"
+        ) from error
+    if isinstance(payload, list) or (
+        isinstance(payload, dict) and payload.get("type") == "dir"
+    ):
+        raise RuntimeError(
+            "Cannot initialize .plate during bootstrap: remote path exists as a directory. "
+            "Remove or rename it before `gh plate bootstrap --apply`."
+        )
+    if isinstance(payload, dict) and payload.get("type") == "file":
+        raise RuntimeError(
+            "Cannot initialize .plate during bootstrap: a remote .plate file already exists. "
+            "Fix or migrate the existing file before `gh plate bootstrap --apply`."
+        )
+    raise RuntimeError(
+        "Cannot initialize .plate during bootstrap: unexpected GitHub contents response for `.plate`."
+    )
+
+
 def _commit_repository_files(
     gh: GhClient,
     repo: str,
@@ -491,15 +537,13 @@ def _commit_repository_files(
     files: list[tuple[str, bytes]],
     *,
     message: str,
+    expected_parent_sha: str,
+    base_tree: str | None,
 ) -> None:
     """Create one commit on ``branch`` containing all ``files`` (#1277)."""
     if not files:
         return
-    try:
-        parent_sha, base_tree = _resolve_branch_parent_commit(repo, branch, gh)
-    except GhApiError as error:
-        first_path = files[0][0]
-        raise _bootstrap_payload_write_error(repo, branch, first_path, error) from error
+    parent_sha = expected_parent_sha
 
     tree_entries: list[dict[str, str]] = []
     for rel_path, encoded_bytes in files:
@@ -555,6 +599,16 @@ def _commit_repository_files(
                 "Failed to write template payload file via GitHub Git Data API. "
                 f"repo={repo} branch={branch} path={first_path}. "
                 "GitHub commit response did not include a sha."
+            )
+        try:
+            current_parent_sha, _ = _resolve_branch_parent_commit(repo, branch, gh)
+        except GhApiError as error:
+            raise _bootstrap_payload_write_error(repo, branch, first_path, error) from error
+        if current_parent_sha != expected_parent_sha:
+            raise RuntimeError(
+                f"Bootstrap grouped commit aborted: {branch} advanced from "
+                f"{expected_parent_sha[:7]} to {current_parent_sha[:7]} while preparing files. "
+                "Re-run `gh plate bootstrap --apply` so paths are re-checked at the current tip."
             )
         gh.api(
             f"repos/{repo}/git/refs/heads/{quote(branch, safe='')}",
@@ -620,6 +674,7 @@ def _process_template_payload(
     *,
     platform: str,
     write_missing: bool,
+    parent_ref: str | None = None,
 ) -> tuple[int, list[str], list[str], list[tuple[str, bytes]]]:
     """Classify remote template paths; optionally queue missing files for one commit (#1257).
 
@@ -639,7 +694,7 @@ def _process_template_payload(
         if not source.is_file():
             raise RuntimeError(f"Template payload file missing: {source}")
 
-        endpoint = f"repos/{repo}/contents/{quote(rel, safe='/')}"
+        endpoint = _contents_endpoint_at_ref(repo, rel, parent_ref)
         remote_payload: Any | None = None
         try:
             remote_payload = gh.api(endpoint)
@@ -756,6 +811,13 @@ def run_bootstrap(
                 plate_sha,
                 resolved_platform,
             )
+        try:
+            parent_sha, base_tree = _resolve_branch_parent_commit(target, default_branch, gh)
+        except GhApiError as error:
+            raise RuntimeError(
+                f"Bootstrap could not resolve {default_branch} tip before copying template payload. "
+                f"Original error: {error}"
+            ) from error
         copied_count, skipped_identical_paths, skipped_stale_paths, payload_writes = _process_template_payload(
             target,
             default_branch,
@@ -763,15 +825,16 @@ def run_bootstrap(
             template_root,
             platform=resolved_platform,
             write_missing=True,
+            parent_ref=parent_sha,
         )
         bootstrap_writes = list(payload_writes)
         if not health.plate_config_present:
-            seeded = copy.deepcopy(DEFAULT_CONFIG)
-            seeded["platform"] = resolved_platform
             bootstrap_writes.append(
-                (
-                    ".plate",
-                    (json.dumps(seeded, indent=2) + "\n").encode("utf-8"),
+                _bootstrap_plate_bytes_for_grouped_commit(
+                    target,
+                    gh,
+                    parent_sha,
+                    resolved_platform,
                 )
             )
         if bootstrap_writes:
@@ -781,6 +844,8 @@ def run_bootstrap(
                 default_branch,
                 bootstrap_writes,
                 message=BOOTSTRAP_TEMPLATE_COMMIT_MESSAGE,
+                expected_parent_sha=parent_sha,
+                base_tree=base_tree,
             )
         if copied_count:
             state = "applied"
