@@ -1,0 +1,15 @@
+{
+  "slug": "ci-speed-checklist-1283",
+  "change_type": "docs",
+  "surface": "docs/migration/ci-speed-checklist.md + template_payload copy + PLATES-CORE block ci-speed-checklist-1283",
+  "summary": "Add an adopter CI speed checklist (runners, cache seeding, blobless checkout, parallelism, test worker reset, strict lint, cost tradeoffs) with payload mirror and syncable PLATES-CORE block (#1283).",
+  "migration_impact": "New optional doc at docs/migration/ci-speed-checklist.md. Adopters on import-payload receive the same file under template paths; merge the PLATES-CORE block if they customized a fork of the page.",
+  "migration_guidance": [
+    "1. Pull or run gh plate import-payload to copy docs/migration/ci-speed-checklist.md.",
+    "2. Link the page from your operator index if you maintain a local docs README.",
+    "3. Apply checklist items in your own workflows; PLATE required gates (labels, test, pr-gates) stay unchanged."
+  ],
+  "agent_notes": "When improving CI speed, follow docs/migration/ci-speed-checklist.md; measure with gh plate ci audit (#1282) and track minutes (#1272). Idea themes credited to Owen Gretzinger's Oct 2026 X post, summarized in the doc.",
+  "breaking": false,
+  "links": ["#1283", "#1268", "#1210", "#1214", "#1272", "#1282"]
+}
