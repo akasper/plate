@@ -12,7 +12,19 @@ By submitting a contribution (for example, a pull request or patch), you agree t
 
 See the full text in the LICENSE file, including the Commons Clause.
 
-(If a formal CLA or additional contribution agreement is adopted in the future, it will be referenced here.)
+### Developer Certificate of Origin (DCO)
+
+PLATE does not use a Contributor License Agreement (CLA). Instead, every commit must be signed off under the [Developer Certificate of Origin 1.1](https://developercert.org/). The sign-off certifies that you wrote the change, or otherwise have the right to submit it under the project's license.
+
+Add the sign-off with `git commit -s` (or `--signoff`). It appends a trailer that uses your real name and the email on the commit:
+
+```
+Signed-off-by: Jane Developer <jane@example.com>
+```
+
+To fix commits that are missing it, run `git commit --amend -s` for the last commit, or `git rebase --signoff <base>` for a branch. Pull requests with unsigned commits will not be merged.
+
+(Decision recorded in #1071, 2026-10-31: keep MIT + Commons Clause for 1.0; no CLA; DCO sign-off required.)
 
 ## Issue Rules
 
