@@ -4,7 +4,7 @@ description: >-
   Fails when selection would hide changes; set full-suite for scheduled main runs.
 inputs:
   base-ref:
-    description: Git base ref for diff (for example github.base_ref or origin/main)
+    description: Git base ref for diff (for example origin/main or github.event.pull_request.base.sha)
     required: false
     default: ''
   head-ref:
@@ -44,6 +44,11 @@ runs:
       env:
         PYTHONPATH: ${{ github.workspace }}/src
         PLATE_CI_FULL_SUITE: ${{ inputs.full-suite == 'true' && '1' || '' }}
+        PLATE_CI_CONFIG_PATH: ${{ inputs.config-path }}
+        PLATE_CI_PATHS: ${{ inputs.paths }}
+        PLATE_CI_BASE_REF: ${{ inputs.base-ref }}
+        PLATE_CI_HEAD_REF: ${{ inputs.head-ref }}
+        PLATE_CI_FULL_SUITE_INPUT: ${{ inputs.full-suite }}
       run: |
         set -euo pipefail
         script=""
@@ -58,15 +63,15 @@ runs:
           exit 1
         fi
         cmd=(python3 "$script" --github-output "$GITHUB_OUTPUT")
-        if [[ -n "${{ inputs.config-path }}" ]]; then
-          cmd+=(--config "${{ inputs.config-path }}")
+        if [[ -n "${PLATE_CI_CONFIG_PATH}" ]]; then
+          cmd+=(--config "${PLATE_CI_CONFIG_PATH}")
         fi
-        if [[ -n "${{ inputs.paths }}" ]]; then
-          cmd+=(--paths "${{ inputs.paths }}")
-        elif [[ -n "${{ inputs.base-ref }}" ]]; then
-          cmd+=(--base "${{ inputs.base-ref }}" --head "${{ inputs.head-ref }}")
+        if [[ -n "${PLATE_CI_PATHS}" ]]; then
+          cmd+=(--paths "${PLATE_CI_PATHS}")
+        elif [[ -n "${PLATE_CI_BASE_REF}" ]]; then
+          cmd+=(--base "${PLATE_CI_BASE_REF}" --head "${PLATE_CI_HEAD_REF}")
         fi
-        if [[ "${{ inputs.full-suite }}" == "true" ]]; then
+        if [[ "${PLATE_CI_FULL_SUITE_INPUT}" == "true" ]]; then
           cmd+=(--full-suite)
         fi
         "${cmd[@]}"

@@ -56,26 +56,45 @@ def _normalize_path(path: str) -> str:
     return p
 
 
+def _split_path_segments(path: str) -> list[str]:
+    normalized = _normalize_path(path)
+    if not normalized:
+        return []
+    return [segment for segment in normalized.split("/") if segment]
+
+
+def _match_glob_segments(
+    pattern_segments: list[str],
+    path_segments: list[str],
+    pattern_index: int = 0,
+    path_index: int = 0,
+) -> bool:
+    if pattern_index == len(pattern_segments):
+        return path_index == len(path_segments)
+    segment = pattern_segments[pattern_index]
+    if segment == "**":
+        if pattern_index == len(pattern_segments) - 1:
+            return True
+        for end in range(path_index, len(path_segments) + 1):
+            if _match_glob_segments(pattern_segments, path_segments, pattern_index + 1, end):
+                return True
+        return False
+    if path_index >= len(path_segments):
+        return False
+    if not fnmatch.fnmatch(path_segments[path_index], segment):
+        return False
+    return _match_glob_segments(pattern_segments, path_segments, pattern_index + 1, path_index + 1)
+
+
 def _path_matches_pattern(pattern: str, path: str) -> bool:
     pattern = _normalize_path(pattern)
     path = _normalize_path(path)
     if not pattern:
         return False
-    if pattern.endswith("/**"):
-        base = pattern[:-3].rstrip("/")
-        return path == base or path.startswith(base + "/")
-    if pattern.endswith("/**/"):
-        base = pattern[:-4].rstrip("/")
-        return path == base or path.startswith(base + "/")
-    if pattern.endswith("/"):
-        base = pattern.rstrip("/")
-        return path == base or path.startswith(base + "/")
-    if fnmatch.fnmatch(path, pattern):
-        return True
-    # Allow directory-style patterns without trailing slash
-    if "/" not in pattern and fnmatch.fnmatch(Path(path).name, pattern):
-        return True
-    return False
+    if "/" not in pattern:
+        name = Path(path).name
+        return fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(path, pattern)
+    return _match_glob_segments(_split_path_segments(pattern), _split_path_segments(path))
 
 
 def _read_yaml_file(path: Path) -> dict[str, Any]:
@@ -202,6 +221,45 @@ def validate_ci_path_jobs_config(config: dict[str, Any]) -> None:
             if dep not in modules:
                 raise CiPathJobsError(f"module {module_id!r} depends_on unknown module {dep!r}")
 
+    _validate_all_jobs_cover_modules(config)
+
+
+def _module_job_ids(config: dict[str, Any]) -> list[str]:
+    modules = config.get("modules") or {}
+    jobs: list[str] = []
+    seen: set[str] = set()
+    for spec in modules.values():
+        for job in spec.get("jobs") or []:
+            if job not in seen:
+                seen.add(job)
+                jobs.append(job)
+    return jobs
+
+
+def _effective_all_jobs(config: dict[str, Any]) -> list[str]:
+    """Union configured all_jobs with every module job id (stable order)."""
+
+    configured = list(config.get("all_jobs") or [])
+    seen = set(configured)
+    merged = list(configured)
+    for job in _module_job_ids(config):
+        if job not in seen:
+            seen.add(job)
+            merged.append(job)
+    return merged
+
+
+def _validate_all_jobs_cover_modules(config: dict[str, Any]) -> None:
+    configured = config.get("all_jobs") or []
+    if not configured:
+        return
+    module_jobs = set(_module_job_ids(config))
+    missing = sorted(module_jobs - set(configured))
+    if missing:
+        raise CiPathJobsError(
+            "all_jobs must list every module job id; missing: " + ", ".join(missing)
+        )
+
 
 def _modules_triggered_by_paths(
     changed_paths: list[str],
@@ -250,18 +308,7 @@ def select_ci_jobs(
     normalized = [_normalize_path(p) for p in changed_paths if p and str(p).strip()]
     enabled = bool(config.get("enabled", True))
 
-    all_jobs: list[str] = list(config.get("all_jobs") or [])
-    if not all_jobs:
-        # Derive union of module jobs when all_jobs omitted
-        modules_cfg = config.get("modules") or {}
-        derived: list[str] = []
-        seen: set[str] = set()
-        for spec in modules_cfg.values():
-            for j in spec.get("jobs") or []:
-                if j not in seen:
-                    seen.add(j)
-                    derived.append(j)
-        all_jobs = derived
+    all_jobs = _effective_all_jobs(config)
 
     if not enabled or full_suite or _env_truthy("PLATE_CI_FULL_SUITE"):
         return CiJobSelection(
@@ -386,19 +433,43 @@ def _env_truthy(name: str) -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _paths_from_name_status_output(text: str) -> list[str]:
+    paths: list[str] = []
+    seen: set[str] = set()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        parts = line.split("\t")
+        status = parts[0]
+        if status.startswith("R") and len(parts) >= 3:
+            candidates = (parts[1], parts[2])
+        elif len(parts) >= 2:
+            candidates = (parts[1],)
+        else:
+            continue
+        for candidate in candidates:
+            normalized = _normalize_path(candidate)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                paths.append(normalized)
+    return paths
+
+
 def git_changed_paths(
     repo_root: Path | str,
     *,
     base_ref: str,
     head_ref: str = "HEAD",
 ) -> list[str]:
-    """Return paths changed between base and head using git (stdlib subprocess)."""
+    """Return paths changed between base and head (includes both sides of renames)."""
 
     root = Path(repo_root).resolve()
     cmd = [
         "git",
         "diff",
-        "--name-only",
+        "--name-status",
+        "-M",
         f"{base_ref}...{head_ref}",
     ]
     proc = subprocess.run(
@@ -412,8 +483,7 @@ def git_changed_paths(
         raise CiPathJobsError(
             f"git diff failed ({proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}"
         )
-    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
-    return lines
+    return _paths_from_name_status_output(proc.stdout)
 
 
 def selection_for_repo(
@@ -427,9 +497,27 @@ def selection_for_repo(
 ) -> CiJobSelection:
     root = Path(repo_root).resolve()
     config, _src = load_ci_path_jobs_config(root, config_path=config_path)
-    paths = list(changed_paths or [])
-    if not paths and base_ref:
+    enabled = bool(config.get("enabled", True))
+
+    if changed_paths is not None:
+        paths = list(changed_paths)
+    elif base_ref:
         paths = git_changed_paths(root, base_ref=base_ref, head_ref=head_ref)
+    elif enabled:
+        return CiJobSelection(
+            enabled=True,
+            run_all=False,
+            jobs_to_run=[],
+            jobs_to_skip=_effective_all_jobs(config),
+            matched_modules=[],
+            changed_paths=[],
+            unmatched_paths=[],
+            safety="fail",
+            reason="no change source: provide changed_paths or base_ref",
+        )
+    else:
+        paths = []
+
     return select_ci_jobs(paths, config, full_suite=full_suite)
 
 
@@ -451,6 +539,11 @@ def assert_selection_safe_for_merge(selection: CiJobSelection) -> None:
 
     if selection.safety == "fail":
         raise CiPathJobsError(selection.reason or "unsafe CI job selection")
+    if (
+        selection.enabled
+        and selection.reason == "no change source: provide changed_paths or base_ref"
+    ):
+        raise CiPathJobsError(selection.reason)
     if selection.changed_paths and not selection.run_all and not selection.jobs_to_run:
         raise CiPathJobsError(
             "selection would skip every job while paths changed; use run_all fallback or fail policy"

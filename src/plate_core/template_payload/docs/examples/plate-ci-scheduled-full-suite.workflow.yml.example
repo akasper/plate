@@ -1,5 +1,5 @@
-# Example: nightly full CI on main when PRs use path selection (#1270).
-# Copy to .github/workflows/ and adjust cron / job needs.
+# Copy to .github/workflows/plate-ci-scheduled-full-suite.yml after wiring your optional jobs.
+# Not registered automatically — lives outside .github/workflows/ until you copy it.
 name: PLATE scheduled full CI suite
 on:
   schedule:
@@ -21,10 +21,8 @@ jobs:
       - id: pick
         uses: ./.github/actions/plate-select-ci-jobs
         with:
-          base-ref: ${{ github.sha }}
+          base-ref: HEAD
           full-suite: "true"
-  # Wire optional jobs with if: contains(fromJSON(needs.select.outputs.jobs_json), 'job-id')
-  # Keep a job id `test` aggregate so branch protection still sees the test context.
   test:
     needs: [select]
     if: always()
@@ -32,7 +30,12 @@ jobs:
     steps:
       - run: |
           set -euo pipefail
-          if [[ "${{ needs.select.outputs.safety }}" == "fail" ]]; then
+          if [[ "${{ needs.select.result }}" != "success" ]]; then
+            echo "select job failed" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.select.outputs.safety }}" != "ok" ]]; then
+            echo "CI job selection unsafe" >&2
             exit 1
           fi
           echo "Scheduled full suite selection: run_all=${{ needs.select.outputs.run_all }}"

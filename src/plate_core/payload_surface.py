@@ -292,6 +292,7 @@ PLATE_DOCS_SUBDIRS: frozenset[str] = frozenset(
         "audits",
         "bootstrap",
         "design",
+        "examples",
         "marketing",
         "migration",
         "research",

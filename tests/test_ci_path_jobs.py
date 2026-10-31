@@ -9,9 +9,12 @@ from pathlib import Path
 
 from plate_core.ci_path_jobs import (
     CiPathJobsError,
+    _path_matches_pattern,
+    _paths_from_name_status_output,
     assert_selection_safe_for_merge,
     load_ci_path_jobs_config,
     select_ci_jobs,
+    selection_for_repo,
     validate_ci_path_jobs_config,
 )
 
@@ -61,6 +64,90 @@ class ValidateCiPathJobsConfigTests(unittest.TestCase):
         cfg["modules"]["cli"]["depends_on"] = ["missing"]
         with self.assertRaises(CiPathJobsError):
             validate_ci_path_jobs_config(cfg)
+
+    def test_rejects_incomplete_all_jobs(self):
+        cfg = _sample_config(all_jobs=["core-unit"])
+        with self.assertRaises(CiPathJobsError):
+            validate_ci_path_jobs_config(cfg)
+
+
+class PathPatternTests(unittest.TestCase):
+    def test_double_star_matches_zero_directories(self):
+        self.assertTrue(_path_matches_pattern("src/**/api.py", "src/api.py"))
+        self.assertTrue(_path_matches_pattern("src/**/api.py", "src/pkg/api.py"))
+
+    def test_wildcard_segment_prefix(self):
+        self.assertTrue(_path_matches_pattern("src/*/**", "src/foo/bar.py"))
+
+    def test_directory_glob_suffix(self):
+        self.assertTrue(_path_matches_pattern("src/plate_core/**", "src/plate_core/x.py"))
+
+
+class RenameAndDiffTests(unittest.TestCase):
+    def test_name_status_includes_both_rename_paths(self):
+        output = "R100\told/path.py\tnew/path.py\n"
+        self.assertEqual(
+            _paths_from_name_status_output(output),
+            ["old/path.py", "new/path.py"],
+        )
+
+    def test_rename_selects_both_modules(self):
+        cfg = _sample_config(
+            modules={
+                "old_mod": {"paths": ["legacy/**"], "jobs": ["core-unit"]},
+                "new_mod": {"paths": ["modern/**"], "jobs": ["web-unit"]},
+            },
+            all_jobs=["core-unit", "web-unit"],
+        )
+        sel = select_ci_jobs(["legacy/a.py", "modern/b.py"], cfg)
+        self.assertEqual(set(sel.jobs_to_run), {"core-unit", "web-unit"})
+
+
+class ExampleConfigGlobTests(unittest.TestCase):
+    def test_root_api_triggers_interface_dependent(self):
+        cfg = {
+            "version": "1",
+            "enabled": True,
+            "unmatched_paths": "fail",
+            "empty_selection": "run_all",
+            "all_jobs": ["product-unit", "product-e2e"],
+            "modules": {
+                "product_code": {
+                    "paths": ["src/**"],
+                    "jobs": ["product-unit"],
+                },
+                "public_contract": {
+                    "interface": True,
+                    "paths": ["src/**/api.py"],
+                    "jobs": ["product-unit"],
+                },
+                "product_ui": {
+                    "paths": ["tests/e2e/**"],
+                    "depends_on": ["public_contract"],
+                    "jobs": ["product-e2e"],
+                },
+            },
+        }
+        validate_ci_path_jobs_config(cfg)
+        sel = select_ci_jobs(["src/api.py"], cfg)
+        self.assertIn("product-e2e", sel.jobs_to_run)
+
+
+class SelectionForRepoTests(unittest.TestCase):
+    def test_missing_change_source_fails_when_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agentic = root / ".agentic"
+            agentic.mkdir()
+            (agentic / "ci-path-jobs.yml").write_text(
+                "version: '1'\nenabled: true\nall_jobs: [j]\n"
+                "modules:\n  m:\n    paths: ['src/**']\n    jobs: [j]\n",
+                encoding="utf-8",
+            )
+            sel = selection_for_repo(root)
+            self.assertEqual(sel.safety, "fail")
+            with self.assertRaises(CiPathJobsError):
+                assert_selection_safe_for_merge(sel)
 
 
 class SelectCiJobsTests(unittest.TestCase):

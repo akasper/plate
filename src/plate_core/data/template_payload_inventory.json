@@ -148,10 +148,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": ".github/workflows/plate-ci-scheduled-full-suite.example.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": ".github/workflows/plate-pr-gates.yml",
       "classification": "copy_to_downstream"
     },
@@ -265,6 +261,10 @@
     },
     {
       "path": "docs/design/playwright-ci-design.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/examples/plate-ci-scheduled-full-suite.workflow.yml.example",
       "classification": "copy_to_downstream"
     },
     {
