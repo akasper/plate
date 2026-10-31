@@ -1,0 +1,41 @@
+# Copy to .github/workflows/plate-ci-scheduled-full-suite.yml after wiring your optional jobs.
+# Not registered automatically — lives outside .github/workflows/ until you copy it.
+name: PLATE scheduled full CI suite
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      run_all: ${{ steps.pick.outputs.run_all }}
+      jobs_json: ${{ steps.pick.outputs.jobs_json }}
+      safety: ${{ steps.pick.outputs.safety }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: pick
+        uses: ./.github/actions/plate-select-ci-jobs
+        with:
+          base-ref: HEAD
+          full-suite: "true"
+  test:
+    needs: [select]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set -euo pipefail
+          if [[ "${{ needs.select.result }}" != "success" ]]; then
+            echo "select job failed" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.select.outputs.safety }}" != "ok" ]]; then
+            echo "CI job selection unsafe" >&2
+            exit 1
+          fi
+          echo "Scheduled full suite selection: run_all=${{ needs.select.outputs.run_all }}"

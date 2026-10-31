@@ -1,0 +1,36 @@
+# Example only — copy to .agentic/ci-path-jobs.yml and edit for your repo.
+version: "1"
+enabled: false
+unmatched_paths: fail
+empty_selection: run_all
+all_jobs:
+  - validate-process
+  - product-unit
+  - product-e2e
+modules:
+  plate_process:
+    paths:
+      - ".github/**"
+      - "scripts/**"
+      - ".agentic/**"
+      - "AGENTS.md"
+    jobs:
+      - validate-process
+  product_code:
+    paths:
+      - "src/**"
+    jobs:
+      - product-unit
+  public_contract:
+    interface: true
+    paths:
+      - "src/**/api.py"
+    jobs:
+      - product-unit
+  product_ui:
+    paths:
+      - "tests/e2e/**"
+    depends_on:
+      - public_contract
+    jobs:
+      - product-e2e
