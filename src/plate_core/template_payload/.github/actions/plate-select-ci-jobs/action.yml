@@ -1,0 +1,72 @@
+name: PLATE select CI jobs
+description: >-
+  Select optional CI jobs from .agentic/ci-path-jobs.yml for changed paths (#1270).
+  Fails when selection would hide changes; set full-suite for scheduled main runs.
+inputs:
+  base-ref:
+    description: Git base ref for diff (for example github.base_ref or origin/main)
+    required: false
+    default: ''
+  head-ref:
+    description: Git head ref
+    required: false
+    default: HEAD
+  config-path:
+    description: Optional path to ci-path-jobs.yml
+    required: false
+    default: ''
+  full-suite:
+    description: When true, select every job in all_jobs (nightly / schedule on main)
+    required: false
+    default: 'false'
+  paths:
+    description: Comma-separated changed paths (skips git diff when set)
+    required: false
+    default: ''
+outputs:
+  run_all:
+    description: Whether every optional job should run
+    value: ${{ steps.select.outputs.run_all }}
+  jobs_json:
+    description: JSON array of job ids to run
+    value: ${{ steps.select.outputs.jobs_json }}
+  jobs_csv:
+    description: Comma-separated job ids to run
+    value: ${{ steps.select.outputs.jobs_csv }}
+  safety:
+    description: ok or fail
+    value: ${{ steps.select.outputs.safety }}
+runs:
+  using: composite
+  steps:
+    - id: select
+      shell: bash
+      env:
+        PYTHONPATH: ${{ github.workspace }}/src
+        PLATE_CI_FULL_SUITE: ${{ inputs.full-suite == 'true' && '1' || '' }}
+      run: |
+        set -euo pipefail
+        script=""
+        for candidate in scripts/plate/select_ci_jobs.py; do
+          if [[ -f "$candidate" ]]; then
+            script="$candidate"
+            break
+          fi
+        done
+        if [[ -z "$script" ]]; then
+          echo "select_ci_jobs.py not found under scripts/plate/" >&2
+          exit 1
+        fi
+        cmd=(python3 "$script" --github-output "$GITHUB_OUTPUT")
+        if [[ -n "${{ inputs.config-path }}" ]]; then
+          cmd+=(--config "${{ inputs.config-path }}")
+        fi
+        if [[ -n "${{ inputs.paths }}" ]]; then
+          cmd+=(--paths "${{ inputs.paths }}")
+        elif [[ -n "${{ inputs.base-ref }}" ]]; then
+          cmd+=(--base "${{ inputs.base-ref }}" --head "${{ inputs.head-ref }}")
+        fi
+        if [[ "${{ inputs.full-suite }}" == "true" ]]; then
+          cmd+=(--full-suite)
+        fi
+        "${cmd[@]}"

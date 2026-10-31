@@ -1,0 +1,16 @@
+{
+  "slug": "ci-path-job-map-1270",
+  "change_type": "feature",
+  "surface": "plate_core/ci_path_jobs.py, scripts/plate/select_ci_jobs.py, .github/actions/plate-select-ci-jobs, docs/migration/ci-path-job-selection.md",
+  "summary": "Path-to-jobs map in .agentic/ci-path-jobs.yml (or .plate ci.path_jobs) plus select_ci_jobs helper and composite action with fail-closed selection and scheduled full-suite guidance.",
+  "migration_impact": "Optional: adopters enable path selection by adding config and wiring plate-select-ci-jobs; required checks labels, test, and pr-gates stay unchanged with an aggregate test job pattern.",
+  "migration_guidance": [
+    "1. Copy .agentic/ci-path-jobs.example.yml to .agentic/ci-path-jobs.yml and set enabled: true with your modules and all_jobs list.",
+    "2. Add a select job using .github/actions/plate-select-ci-jobs; gate optional jobs with jobs_json / run_all outputs.",
+    "3. Keep job ids labels, test (aggregate), and pr-gates for branch protection; optional jobs may skip but aggregate test must pass.",
+    "4. Add plate-ci-scheduled-full-suite.example.yml (or equivalent) on main with full-suite: true for nightly coverage."
+  ],
+  "agent_notes": "Regression: tests/test_ci_path_jobs.py. Helper exits 1 on safety fail. PLATE_CI_FULL_SUITE or --full-suite selects all jobs. Credits in docs/migration/ci-path-job-selection.md.",
+  "breaking": false,
+  "links": ["#1270", "#1268"]
+}
