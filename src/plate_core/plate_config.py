@@ -87,6 +87,7 @@ class PlateConfig:
     release: dict[str, Any] = field(default_factory=dict)
     autonomy: dict[str, Any] = field(default_factory=dict)
     platform: str = PLATFORM_POSIX
+    hooks: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -97,6 +98,11 @@ class PlateConfig:
         stored_platform = data.get("platform", PLATFORM_POSIX)
         if stored_platform is None:
             stored_platform = PLATFORM_POSIX
+        hooks = data.get("hooks")
+        if hooks is None:
+            hooks = copy.deepcopy(DEFAULT_CONFIG.get("hooks", {}))
+        elif not isinstance(hooks, dict):
+            hooks = {}
         return cls(
             version=data.get("version", CURRENT_CONFIG_VERSION),
             methodology=data.get("methodology", {}),
@@ -105,6 +111,7 @@ class PlateConfig:
             release=data.get("release", {}),
             autonomy=data.get("autonomy", {}),
             platform=stored_platform,
+            hooks=hooks,
         )
 
 

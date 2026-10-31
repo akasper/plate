@@ -5,7 +5,7 @@ PLATE can install a **pre-push** git hook that runs your repo's format, lint, an
 <!-- PLATES-CORE:BEGIN pre-push-hook-template-1281 -->
 ## Configure commands in `.plate`
 
-Add non-empty shell command templates under `hooks.pre_push`. Use `{files}` where the changed paths should be inserted (each path is shell-quoted). When a key is empty or omitted, that step is skipped. When **all three** are empty, the hook exits successfully without running anything.
+Add non-empty command templates under `hooks.pre_push`. Use `{files}` where the changed paths should be inserted (each path is passed as a separate argument; templates are split with POSIX shell rules, not run through `cmd.exe` or `/bin/sh -c`). When a key is empty or omitted, that step is skipped. When **all three** are empty, the hook exits successfully without running anything.
 
 Example:
 
