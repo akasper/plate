@@ -1,0 +1,16 @@
+{
+  "slug": "ci-cd-split-guidance-1269",
+  "change_type": "docs",
+  "surface": "docs/migration/ci-cd-split-guidance.md + template_payload copy",
+  "summary": "Adopter guide for moving heavy CI jobs off the PR path without weakening required checks.",
+  "migration_impact": "Optional read for adopters reshaping CI; no workflow import required. Sync the doc via gh plate import-payload when upgrading plate-core.",
+  "migration_guidance": [
+    "Read docs/migration/ci-cd-split-guidance.md before removing OS matrices or installer jobs from PR workflows.",
+    "Keep branch protection on labels, test, and pr-gates; do not require contexts that skip on pull_request.",
+    "When one workflow serves PR and post-merge, add a PR success step before deferring heavy work.",
+    "Run post-merge or release pipelines after integration merges to catch platform-specific regressions."
+  ],
+  "agent_notes": "PLATES-CORE block id ci-cd-split-heavy-jobs holds sync-safe bullet guidance. Pair with actions-cost-rollout.md; do not edit the separate CI speed checklist page for #1283.",
+  "breaking": false,
+  "links": ["#1269", "#1268"]
+}
