@@ -189,6 +189,19 @@ Examples:
 See AGENTS.md (new Task Management section + work loop examples), the host system prompt, and the `todo_write` tool contract. (Addresses #515.)
 """
 
+
+LOCAL_HOOK_ENFORCEMENT_GUIDANCE = """
+## Prefer hooks over prose for must-always-run checks (#1281)
+
+When a step must happen on every push (format, lint, typecheck, or similar fast gates), **do not rely on AGENTS.md prose alone** — agents skip written rules in long sessions.
+
+- Configure command templates under `.plate` → `hooks.pre_push` (`format`, `lint`, `typecheck`; use `{files}` for changed paths).
+- Install the git hook: `gh plate hooks install` (see `docs/bootstrap/pre-push-hook.md`).
+- With no commands configured, the hook exits successfully and does not block pushes.
+- Hooks are local enforcement; they do not replace required GitHub checks (`labels`, `test`, `pr-gates`).
+"""
+
+
 def get_agent_guidance_sections() -> dict[str, str]:
     """Return guidance sections for agents."""
     return {
@@ -198,6 +211,7 @@ def get_agent_guidance_sections() -> dict[str, str]:
         "information_audit": INFORMATION_AUDIT_GUIDANCE,
         "quiet_operations": QUIET_OPERATIONS_GUIDANCE,
         "task_management": TASK_MANAGEMENT_GUIDANCE,
+        "local_hook_enforcement": LOCAL_HOOK_ENFORCEMENT_GUIDANCE,
         "autonomy_loops": AUTONOMY_LOOPS_GUIDANCE,
     }
 

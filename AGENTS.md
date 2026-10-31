@@ -454,6 +454,10 @@ The **`address-pr-feedback` skill** (reply + resolve + zero-unresolved re-query 
 **Conservative import-payload (#1250).** With `--strategy conservative`, differing existing payload paths are **conflicts** and are never written — including `.github/labels.yml`, `.github/ISSUE_TEMPLATE/*`, and `.github/PULL_REQUEST_TEMPLATE.md`. Identical files remain unchanged. Manifest `on_conflict: overwrite` applies only to `--strategy safe` (refresh taxonomy/templates on adopt) and `--strategy force`; do not expect conservative mode to refresh those files.
 <!-- PLATES-CORE:END import-payload-conservative-taxonomy-1250 -->
 
+<!-- PLATES-CORE:BEGIN pre-push-hook-template-1281 -->
+**Pre-push hook (#1281).** For checks that must run before every push (format, lint, typecheck on changed files), prefer `gh plate hooks install` plus `hooks.pre_push` commands in `.plate` over prose rules agents can skip. The hook passes silently when no commands are configured. See `docs/bootstrap/pre-push-hook.md`.
+<!-- PLATES-CORE:END pre-push-hook-template-1281 -->
+
 **Base Branch Sync Handling:**
 
 The babysitter detects when a PR branch is out of sync with its base branch (via `mergeStateStatus`: BEHIND, CONFLICTING, or DIRTY). The default behavior is controlled by `--branch-update-strategy`:
