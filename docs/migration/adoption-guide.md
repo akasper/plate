@@ -204,3 +204,4 @@ set, so prefer the job id alone for `labels` and `test`.
 - #633 frictionless onboarding epic
 - #649 self-migrate for adopters
 - #1210 optional self-hosted runners — [self-hosted-runners.md](./self-hosted-runners.md) (private repos only)
+- #1283 CI speed checklist — [ci-speed-checklist.md](./ci-speed-checklist.md)
