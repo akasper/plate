@@ -1,3 +1,75 @@
+'1087':
+  answers:
+  - agent_actions: []
+    answer_text: '## Answers (Andrew, 2026-10-31)
+
+
+      **Q4 card: scope and deciding metric**
+
+      > Q: For the Simplified Technical English evaluation, what text is in scope
+      and what metric decides?
+
+      > A (verbatim): PLATE #1087: scope AGENTS.md, skills and MCP tool descriptions;
+      decide on input tokens per task with success rate as a guardrail
+
+
+      **Q5 card: test arms and adoption threshold**
+
+      > Q: Which test arms, and what saving is enough to adopt?
+
+      > A (verbatim): PLATE #1087: STE-lite only, adopt at 15%+ fewer input tokens
+      with no drop in success rate
+
+
+      **Mapped to the questions in this issue**
+
+      1. **Scope:** AGENTS.md, skills, and MCP tool descriptions. Out of scope for
+      v1: CLI `--help`, issue/PR templates, wiki, agent output.
+
+      2. **Metrics:** input tokens per task decides; task success rate is a guardrail.
+
+      3. **Threshold:** adopt at 15% or more fewer input tokens per task with no drop
+      in success rate.
+
+      4. **Models:** not asked on this card; default stays the included coding model
+      at standard speed (per cost rules).
+
+      5. **Arms:** STE-lite only (the style prompt in #1086). No strict-STE arm.
+
+      6. **Licensing:** the ASD-STE100 terms-of-use check still happens regardless,
+      before anything from the spec or dictionary goes into the repo or a linter.
+
+
+      Recorded in the Epic body (#1086). `need:decision` removed. This Question still
+      needs its `Closes #1087` research PR (`docs/research/`), which has not been
+      opened.
+
+
+      **Provenance / session notes**
+
+      Andrew picked these on a multiple-choice card that the PM bot showed him in
+      chat on 2026-10-31. The PM bot recorded them here.'
+    answered_by: akasper
+    full_comment_url: https://github.com/akasper/plate/issues/1087#issuecomment-6543576450
+    id: '6543576450'
+    provenance:
+      backfilled_by: pm-closing-pr
+      comment_format: plate-answer-provenance
+      comment_id: 6543576450
+      raw_meta:
+        author: '@akasper'
+        question_id: 1087
+        revision_of: null
+        session_id: pm-bot-mc-card-2026-10-31
+        source: Andrew via PM bot multiple-choice card 2026-10-31
+        timestamp: '2026-10-31T12:50:01Z'
+    question_number: 1087
+    revision_of: null
+    session: pm-bot-mc-card-2026-10-31
+    source: Andrew via PM bot multiple-choice card 2026-10-31
+    timestamp: '2026-10-31T12:50:02Z'
+  file_path: docs/curiosity/answers/ste-evaluation-scope-metrics-success-threshold-and-licensing.md
+  title: 'STE evaluation: scope, metrics, success threshold and licensing'
 '275':
   answers:
   - agent_actions: []
