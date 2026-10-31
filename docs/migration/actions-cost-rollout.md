@@ -67,4 +67,5 @@ On a typical PR synchronize event, GitHub previously scheduled **six** billable 
 - Merged gates fragment: `.agentic/releases/unreleased/actions-pr-gates-merge.json`
 - Operator guidance: `AGENTS.md` (Copilot review and Actions cost sections)
 - **Self-hosted runners (optional):** [self-hosted-runners.md](./self-hosted-runners.md) — private repos only, isolation, idle policy, and fallback to hosted runners (#1210 / #1215).
+- **Heavy job split (optional):** [ci-cd-split-guidance.md](./ci-cd-split-guidance.md) — post-merge or pre-release stages without weakening required checks (#1269).
 - Epic context: Copilot triage and wake gating (#1136, #1137 under Epic #1129)

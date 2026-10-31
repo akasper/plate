@@ -437,6 +437,188 @@ BOOTSTRAP_STALE_UPGRADE_POINTER = (
     "`gh plate import-payload --strategy conservative` (review changes in a PR before `--apply`)."
 )
 
+BOOTSTRAP_TEMPLATE_COMMIT_MESSAGE = "Bootstrap: initialize PLATE template payload"
+
+
+def _bootstrap_payload_write_error(
+    repo: str,
+    branch: str,
+    rel_path: str,
+    error: GhApiError,
+) -> RuntimeError:
+    workflow_scope_hint = ""
+    if rel_path.startswith(".github/workflows/"):
+        workflow_scope_hint = (
+            " This path is under .github/workflows/, so classic PATs must include "
+            "`workflow` scope in addition to `repo`."
+        )
+    return RuntimeError(
+        "Failed to write template payload file via GitHub Git Data API. "
+        f"repo={repo} branch={branch} path={rel_path}. "
+        "GitHub returned an error, which usually means the target branch ref does not exist yet, "
+        "the authenticated user/token cannot write contents, or the repository identifier is incorrect."
+        f"{workflow_scope_hint} "
+        f"Original error: {error}"
+    )
+
+
+def _contents_endpoint_at_ref(repo: str, rel_path: str, ref: str | None) -> str:
+    endpoint = f"repos/{repo}/contents/{quote(rel_path, safe='/')}"
+    if ref:
+        endpoint = f"{endpoint}?ref={quote(ref, safe='')}"
+    return endpoint
+
+
+def _resolve_branch_parent_commit(
+    repo: str,
+    branch: str,
+    gh: GhClient,
+) -> tuple[str, str | None]:
+    """Return ``(parent_commit_sha, base_tree_sha)`` for the branch tip."""
+    ref_endpoint = f"repos/{repo}/git/ref/heads/{quote(branch, safe='')}"
+    ref_payload = gh.api(ref_endpoint)
+    if not isinstance(ref_payload, dict):
+        raise RuntimeError(f"Unexpected ref payload for {repo}@{branch}")
+    obj = ref_payload.get("object")
+    if not isinstance(obj, dict) or not isinstance(obj.get("sha"), str):
+        raise RuntimeError(f"Git ref for {repo}@{branch} has no commit sha")
+    parent_sha = obj["sha"]
+    commit_payload = gh.api(f"repos/{repo}/git/commits/{parent_sha}")
+    base_tree: str | None = None
+    if isinstance(commit_payload, dict):
+        tree = commit_payload.get("tree")
+        if isinstance(tree, dict) and isinstance(tree.get("sha"), str):
+            base_tree = tree["sha"]
+    return parent_sha, base_tree
+
+
+def _bootstrap_plate_bytes_for_grouped_commit(
+    repo: str,
+    gh: GhClient,
+    parent_ref: str,
+    resolved_platform: str,
+) -> tuple[str, bytes]:
+    """Return ``(.plate``, bytes)`` for a grouped bootstrap commit or fail closed (#1288)."""
+    endpoint = _contents_endpoint_at_ref(repo, ".plate", parent_ref)
+    try:
+        payload = gh.api(endpoint)
+    except GhApiError as error:
+        if _is_missing_content_error(error):
+            seeded = copy.deepcopy(DEFAULT_CONFIG)
+            seeded["platform"] = resolved_platform
+            return (
+                ".plate",
+                (json.dumps(seeded, indent=2) + "\n").encode("utf-8"),
+            )
+        raise RuntimeError(
+            "Cannot initialize .plate during bootstrap: remote lookup failed before the grouped commit. "
+            f"repo={repo} ref={parent_ref}. Original error: {error}"
+        ) from error
+    if isinstance(payload, list) or (
+        isinstance(payload, dict) and payload.get("type") == "dir"
+    ):
+        raise RuntimeError(
+            "Cannot initialize .plate during bootstrap: remote path exists as a directory. "
+            "Remove or rename it before `gh plate bootstrap --apply`."
+        )
+    if isinstance(payload, dict) and payload.get("type") == "file":
+        raise RuntimeError(
+            "Cannot initialize .plate during bootstrap: a remote .plate file already exists. "
+            "Fix or migrate the existing file before `gh plate bootstrap --apply`."
+        )
+    raise RuntimeError(
+        "Cannot initialize .plate during bootstrap: unexpected GitHub contents response for `.plate`."
+    )
+
+
+def _commit_repository_files(
+    gh: GhClient,
+    repo: str,
+    branch: str,
+    files: list[tuple[str, bytes]],
+    *,
+    message: str,
+    expected_parent_sha: str,
+    base_tree: str | None,
+) -> None:
+    """Create one commit on ``branch`` containing all ``files`` (#1277)."""
+    if not files:
+        return
+    parent_sha = expected_parent_sha
+
+    tree_entries: list[dict[str, str]] = []
+    for rel_path, encoded_bytes in files:
+        try:
+            blob_payload = gh.api(
+                f"repos/{repo}/git/blobs",
+                method="POST",
+                fields={
+                    "content": base64.b64encode(encoded_bytes).decode("ascii"),
+                    "encoding": "base64",
+                },
+            )
+        except GhApiError as error:
+            raise _bootstrap_payload_write_error(repo, branch, rel_path, error) from error
+        if not isinstance(blob_payload, dict) or not isinstance(blob_payload.get("sha"), str):
+            raise RuntimeError(
+                "Failed to write template payload file via GitHub Git Data API. "
+                f"repo={repo} branch={branch} path={rel_path}. "
+                "GitHub blob response did not include a sha."
+            )
+        tree_entries.append(
+            {
+                "path": rel_path,
+                "mode": "100644",
+                "type": "blob",
+                "sha": blob_payload["sha"],
+            }
+        )
+
+    tree_fields: dict[str, Any] = {"tree": tree_entries}
+    if base_tree:
+        tree_fields["base_tree"] = base_tree
+    first_path = files[0][0]
+    try:
+        tree_payload = gh.api(f"repos/{repo}/git/trees", method="POST", fields=tree_fields)
+        if not isinstance(tree_payload, dict) or not isinstance(tree_payload.get("sha"), str):
+            raise RuntimeError(
+                "Failed to write template payload file via GitHub Git Data API. "
+                f"repo={repo} branch={branch} path={first_path}. "
+                "GitHub tree response did not include a sha."
+            )
+        commit_payload = gh.api(
+            f"repos/{repo}/git/commits",
+            method="POST",
+            fields={
+                "message": message,
+                "tree": tree_payload["sha"],
+                "parents": [parent_sha],
+            },
+        )
+        if not isinstance(commit_payload, dict) or not isinstance(commit_payload.get("sha"), str):
+            raise RuntimeError(
+                "Failed to write template payload file via GitHub Git Data API. "
+                f"repo={repo} branch={branch} path={first_path}. "
+                "GitHub commit response did not include a sha."
+            )
+        try:
+            current_parent_sha, _ = _resolve_branch_parent_commit(repo, branch, gh)
+        except GhApiError as error:
+            raise _bootstrap_payload_write_error(repo, branch, first_path, error) from error
+        if current_parent_sha != expected_parent_sha:
+            raise RuntimeError(
+                f"Bootstrap grouped commit aborted: {branch} advanced from "
+                f"{expected_parent_sha[:7]} to {current_parent_sha[:7]} while preparing files. "
+                "Re-run `gh plate bootstrap --apply` so paths are re-checked at the current tip."
+            )
+        gh.api(
+            f"repos/{repo}/git/refs/heads/{quote(branch, safe='')}",
+            method="PATCH",
+            fields={"sha": commit_payload["sha"], "force": False},
+        )
+    except GhApiError as error:
+        raise _bootstrap_payload_write_error(repo, branch, first_path, error) from error
+
 
 def _format_skipped_files_phrase(skipped_paths: list[str], *, stale: bool = False) -> str:
     """Human-readable skipped-file summary for bootstrap output (#1267, #1257)."""
@@ -493,14 +675,17 @@ def _process_template_payload(
     *,
     platform: str,
     write_missing: bool,
-) -> tuple[int, list[str], list[str]]:
-    """Classify remote template paths; optionally create missing files (#1257).
+    parent_ref: str | None = None,
+) -> tuple[int, list[str], list[str], list[tuple[str, bytes]]]:
+    """Classify remote template paths; optionally queue missing files for one commit (#1257).
 
-    Returns ``(copied_or_would_copy, skipped_identical_paths, skipped_stale_paths)``.
+    Returns ``(copied_or_would_copy, skipped_identical_paths, skipped_stale_paths, pending_writes)``.
+    When ``write_missing`` is true, bytes are queued in ``pending_writes`` for the caller to commit.
     """
     copied_or_would = 0
     skipped_identical: list[str] = []
     skipped_stale: list[str] = []
+    pending_writes: list[tuple[str, bytes]] = []
     rel_paths, _omitted = filter_plate_scripts(_template_payload_relative_paths(template_root), platform)
     if not rel_paths:
         raise RuntimeError(f"No template payload files found under {template_root}")
@@ -510,7 +695,7 @@ def _process_template_payload(
         if not source.is_file():
             raise RuntimeError(f"Template payload file missing: {source}")
 
-        endpoint = f"repos/{repo}/contents/{quote(rel, safe='/')}"
+        endpoint = _contents_endpoint_at_ref(repo, rel, parent_ref)
         remote_payload: Any | None = None
         try:
             remote_payload = gh.api(endpoint)
@@ -534,35 +719,10 @@ def _process_template_payload(
             continue
 
         encoded = _local_template_file_bytes(rel, source, platform)
-        try:
-            _put_repository_file(
-                gh,
-                repo,
-                rel,
-                message=f"Bootstrap: initialize {rel} from PLATE template payload",
-                encoded_bytes=encoded,
-                branch=default_branch,
-            )
-        except GhApiError as error:
-            if _is_missing_content_error(error):
-                workflow_scope_hint = ""
-                if rel.startswith(".github/workflows/"):
-                    workflow_scope_hint = (
-                        " This path is under .github/workflows/, so classic PATs must include "
-                        "`workflow` scope in addition to `repo`."
-                    )
-                raise RuntimeError(
-                    "Failed to write template payload file via GitHub contents API. "
-                    f"repo={repo} branch={default_branch} path={rel}. "
-                    "GitHub returned 404, which usually means the target branch ref does not exist yet, "
-                    "the authenticated user/token cannot write contents, or the repository identifier is incorrect."
-                    f"{workflow_scope_hint} "
-                    f"Original error: {error}"
-                ) from error
-            raise
+        pending_writes.append((rel, encoded))
         copied_or_would += 1
 
-    return copied_or_would, skipped_identical, skipped_stale
+    return copied_or_would, skipped_identical, skipped_stale, pending_writes
 
 
 def _validate_bootstrap_preconditions(repo: str, repo_obj: dict, default_branch: str, gh: GhClient) -> None:
@@ -652,14 +812,42 @@ def run_bootstrap(
                 plate_sha,
                 resolved_platform,
             )
-        copied_count, skipped_identical_paths, skipped_stale_paths = _process_template_payload(
+        try:
+            parent_sha, base_tree = _resolve_branch_parent_commit(target, default_branch, gh)
+        except GhApiError as error:
+            raise RuntimeError(
+                f"Bootstrap could not resolve {default_branch} tip before copying template payload. "
+                f"Original error: {error}"
+            ) from error
+        copied_count, skipped_identical_paths, skipped_stale_paths, payload_writes = _process_template_payload(
             target,
             default_branch,
             gh,
             template_root,
             platform=resolved_platform,
             write_missing=True,
+            parent_ref=parent_sha,
         )
+        bootstrap_writes = list(payload_writes)
+        if not health.plate_config_present:
+            bootstrap_writes.append(
+                _bootstrap_plate_bytes_for_grouped_commit(
+                    target,
+                    gh,
+                    parent_sha,
+                    resolved_platform,
+                )
+            )
+        if bootstrap_writes:
+            _commit_repository_files(
+                gh,
+                target,
+                default_branch,
+                bootstrap_writes,
+                message=BOOTSTRAP_TEMPLATE_COMMIT_MESSAGE,
+                expected_parent_sha=parent_sha,
+                base_tree=base_tree,
+            )
         if copied_count:
             state = "applied"
             detail = (
@@ -678,7 +866,7 @@ def run_bootstrap(
             stale=skipped_stale_paths,
         )
     else:
-        would_copy, skipped_identical_paths, skipped_stale_paths = _process_template_payload(
+        would_copy, skipped_identical_paths, skipped_stale_paths, _pending = _process_template_payload(
             target,
             default_branch,
             gh,
@@ -765,16 +953,6 @@ def run_bootstrap(
 
     if not health.plate_config_present:
         if apply_mode:
-            seeded = copy.deepcopy(DEFAULT_CONFIG)
-            seeded["platform"] = resolved_platform
-            _put_repository_file(
-                gh,
-                target,
-                ".plate",
-                message="Bootstrap: initialize .plate baseline config",
-                encoded_bytes=(json.dumps(seeded, indent=2) + "\n").encode("utf-8"),
-                branch=default_branch,
-            )
             state = "applied"
             detail = f"Initialized root .plate baseline config (platform {resolved_platform})"
         else:
