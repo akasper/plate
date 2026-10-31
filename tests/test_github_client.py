@@ -98,6 +98,31 @@ class GhClientJsonInputTests(unittest.TestCase):
             self.assertNotIn("-f", cmd)
 
 
+class GhClientGitTreeSerializationTests(unittest.TestCase):
+    """Git Data API tree entries must be JSON objects, not stringified dicts (#1288)."""
+
+    def test_git_tree_post_uses_json_input_with_object_entries(self):
+        tree_entries = [
+            {"path": "AGENTS.md", "mode": "100644", "type": "blob", "sha": "blobsha1"},
+            {"path": ".plate", "mode": "100644", "type": "blob", "sha": "blobsha2"},
+        ]
+        with patch("plate_core.github_client.run_hidden") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout='{"sha":"treesha"}', stderr="")
+            GhClient().api(
+                "repos/owner/repo/git/trees",
+                method="POST",
+                fields={"base_tree": "basetree", "tree": tree_entries},
+            )
+            cmd = mock_run.call_args[0][0]
+            self.assertIn("--input", cmd)
+            body = json.loads(mock_run.call_args[1]["input"])
+            self.assertIsInstance(body["tree"], list)
+            self.assertEqual(body["tree"][0]["path"], "AGENTS.md")
+            self.assertEqual(body["tree"][0]["sha"], "blobsha1")
+            joined = " ".join(cmd)
+            self.assertNotIn("tree[]={'path'", joined)
+
+
 class GhClientResilienceTests(unittest.TestCase):
     """Retry/backoff, rate limit tolerance, secret redaction (#270)."""
 

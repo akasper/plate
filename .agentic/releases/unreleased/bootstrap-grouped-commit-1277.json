@@ -1,0 +1,10 @@
+{
+  "slug": "bootstrap-grouped-commit-1277",
+  "change_type": "feature",
+  "surface": "src/plate_core/bootstrap.py",
+  "summary": "Greenfield `gh plate bootstrap --apply` writes the template payload and initial `.plate` in one Git commit instead of one commit per file.",
+  "migration_impact": "New repositories bootstrapped with plate-core after this change show a single grouped scaffold commit on the default branch (plus the existing optional initial README commit on empty repos). Stale-skip reporting and label sync behavior are unchanged.",
+  "agent_notes": "When reviewing bootstrap history on a repo, expect one commit titled \"Bootstrap: initialize PLATE template payload\" for scaffold files rather than dozens of per-path commits. Re-run bootstrap still skips identical and stale remote paths per #1257.",
+  "breaking": false,
+  "links": ["#1277", "#1267"]
+}

@@ -19,12 +19,23 @@ class GhApiError(RuntimeError):
 LARGE_STRING_ARGV_LIMIT = 4096
 
 
+def _value_requires_json_body(value: object) -> bool:
+    """True when a field value cannot be encoded correctly via ``gh api -f``."""
+    if isinstance(value, dict):
+        return True
+    if isinstance(value, (list, tuple)):
+        return any(isinstance(item, dict) for item in value)
+    return False
+
+
 def _fields_require_json_input(fields: dict) -> bool:
     """True when ``fields`` must be sent as a JSON body (stdin), not ``-f`` argv."""
     for key, value in fields.items():
         if key == "content" and isinstance(value, str):
             return True
         if isinstance(value, str) and len(value) > LARGE_STRING_ARGV_LIMIT:
+            return True
+        if _value_requires_json_body(value):
             return True
     return False
 
