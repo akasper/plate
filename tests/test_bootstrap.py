@@ -17,6 +17,31 @@ def _write_template_file(root: Path, rel: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _bootstrap_git_data_side_effect(
+    endpoint: str,
+    method: str,
+    store: dict,
+    *,
+    parent_commit: str = "abc123",
+) -> object | None:
+    """Mock GitHub Git Data API calls used for grouped bootstrap commits (#1277)."""
+    if "/git/ref/heads/" in endpoint and method == "GET":
+        return {"object": {"sha": parent_commit}}
+    if "/git/commits/" in endpoint and method == "GET":
+        return {"tree": {"sha": "basetree_sha"}}
+    if method == "POST" and endpoint.endswith("/git/blobs"):
+        store["blob_count"] = store.get("blob_count", 0) + 1
+        return {"sha": f"blob{store['blob_count']:04d}"}
+    if method == "POST" and endpoint.endswith("/git/trees"):
+        return {"sha": "newtree_sha"}
+    if method == "POST" and endpoint.endswith("/git/commits"):
+        store["commit_count"] = store.get("commit_count", 0) + 1
+        return {"sha": f"commit{store['commit_count']:04d}"}
+    if method == "PATCH" and "/git/refs/heads/" in endpoint:
+        return {}
+    return None
+
+
 def _make_template_root() -> tempfile.TemporaryDirectory:
     tempdir = tempfile.TemporaryDirectory()
     root = Path(tempdir.name)
@@ -313,6 +338,7 @@ class BootstrapTests(unittest.TestCase):
             curiosity_answers_present=False,
         )
         client = Mock()
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
@@ -337,6 +363,9 @@ class BootstrapTests(unittest.TestCase):
                 raise GhApiError("HTTP 404 Not Found")
             if endpoint == "repos/akasper/test-repo/git/refs":
                 return {}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
             return {}
 
         client.api.side_effect = api_side
@@ -352,7 +381,7 @@ class BootstrapTests(unittest.TestCase):
         # Find the PATCH call for has_wiki
         patch_calls = [
             call for call in client.api.call_args_list
-            if call.args and "repos/akasper/test-repo" in str(call.args[0])
+            if call.args and call.args[0] == "repos/akasper/test-repo"
             and call.kwargs.get("method") == "PATCH"
         ]
         self.assertTrue(patch_calls, "Expected a PATCH call for has_wiki")
@@ -363,16 +392,28 @@ class BootstrapTests(unittest.TestCase):
         self.assertIsNotNone(copy_action)
         self.assertEqual(copy_action.state, "applied")
 
-        # Verify copied template files were uploaded, but existing files were preserved.
+        # Verify copied template files were uploaded in one grouped commit (#1277).
         template_puts = [
             call for call in client.api.call_args_list
             if call.args and "repos/akasper/test-repo/contents/" in str(call.args[0])
             and call.kwargs.get("method") == "PUT"
         ]
-        endpoints = [str(call.args[0]) for call in template_puts]
-        self.assertTrue(any("AGENTS.md" in endpoint for endpoint in endpoints))
-        self.assertTrue(any("docs/wiki/Goals.md" in endpoint for endpoint in endpoints))
-        self.assertFalse(any("README.md" in endpoint for endpoint in endpoints))
+        self.assertFalse(template_puts, "Template payload should use Git Data API, not per-file contents PUT")
+
+        commit_posts = [
+            call for call in client.api.call_args_list
+            if call.args
+            and str(call.args[0]).endswith("/git/commits")
+            and call.kwargs.get("method") == "POST"
+        ]
+        self.assertEqual(len(commit_posts), 1, "Expected one grouped bootstrap commit for template payload")
+        commit_message = commit_posts[0].kwargs.get("fields", {}).get("message", "")
+        self.assertIn("template payload", commit_message.lower())
+        blob_posts = [
+            call for call in client.api.call_args_list
+            if call.args and str(call.args[0]).endswith("/git/blobs") and call.kwargs.get("method") == "POST"
+        ]
+        self.assertGreaterEqual(len(blob_posts), 2)
 
         # Verify 3 starter Question POSTs were issued (new Feature #153 behavior)
         question_posts = [
@@ -383,12 +424,25 @@ class BootstrapTests(unittest.TestCase):
         ]
         self.assertEqual(len(question_posts), 3, "Expected exactly 3 POSTs to seed starter Questions on apply when none exist")
 
+        commit_tree = [
+            call
+            for call in client.api.call_args_list
+            if call.args and str(call.args[0]).endswith("/git/trees") and call.kwargs.get("method") == "POST"
+        ]
+        self.assertTrue(commit_tree, "Expected tree creation for grouped bootstrap commit")
+        tree_entries = commit_tree[0].kwargs.get("fields", {}).get("tree", [])
+        tree_paths = {entry.get("path") for entry in tree_entries if isinstance(entry, dict)}
+        self.assertIn("AGENTS.md", tree_paths)
+        self.assertIn("docs/wiki/Goals.md", tree_paths)
+        self.assertIn(".plate", tree_paths)
+        self.assertNotIn("README.md", tree_paths)
+
         plate_puts = [
             call for call in client.api.call_args_list
             if call.args and "contents/.plate" in str(call.args[0])
             and call.kwargs.get("method") == "PUT"
         ]
-        self.assertTrue(plate_puts, "Expected PUT to create .plate on apply when missing")
+        self.assertFalse(plate_puts, ".plate should be included in the grouped bootstrap commit")
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_creates_initial_commit_on_empty_repository(self, mock_get_health):
@@ -408,6 +462,7 @@ class BootstrapTests(unittest.TestCase):
         )
         client = Mock()
         ref_seen = {"count": 0}
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
@@ -418,7 +473,7 @@ class BootstrapTests(unittest.TestCase):
                 ref_seen["count"] += 1
                 if ref_seen["count"] < 2:
                     raise GhApiError("gh: Not Found (HTTP 404)")
-                return {"ref": "refs/heads/main"}
+                return {"object": {"sha": "abc123"}}
             if endpoint == "repos/akasper/empty-repo/contents/README.md" and method == "PUT":
                 return {"content": {"sha": "readme"}}
             if "/issues?" in endpoint and "labels=Question" in endpoint:
@@ -437,6 +492,9 @@ class BootstrapTests(unittest.TestCase):
                 raise GhApiError("HTTP 404")
             if endpoint == "repos/akasper/empty-repo/git/refs" and method == "POST":
                 return {}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
             return {}
 
         client.api.side_effect = api_side
@@ -454,7 +512,7 @@ class BootstrapTests(unittest.TestCase):
             if c.args and "contents/README.md" in str(c.args[0]) and c.kwargs.get("method") == "PUT"
         ]
         self.assertTrue(readme_puts, "Expected initial README commit on empty repo")
-        self.assertEqual(ref_seen["count"], 2, "Should re-check default branch ref after seeding")
+        self.assertEqual(ref_seen["count"], 3, "Should verify default branch ref after seeding and grouped commit")
         plate_action = next(a for a in report.actions if a.name == "init-plate-config")
         self.assertEqual(plate_action.state, "applied")
 
@@ -477,6 +535,7 @@ class BootstrapTests(unittest.TestCase):
         )
         client = Mock()
         ref_seen = {"count": 0}
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
@@ -487,7 +546,7 @@ class BootstrapTests(unittest.TestCase):
                 ref_seen["count"] += 1
                 if ref_seen["count"] < 2:
                     raise GhApiError("gh: Git Repository is empty. (HTTP 409)")
-                return {"ref": "refs/heads/main"}
+                return {"object": {"sha": "abc123"}}
             if endpoint == "repos/akasper/empty-repo/contents/README.md" and method == "PUT":
                 return {"content": {"sha": "readme"}}
             if "/issues?" in endpoint and "labels=Question" in endpoint:
@@ -506,6 +565,9 @@ class BootstrapTests(unittest.TestCase):
                 raise GhApiError("HTTP 404")
             if endpoint == "repos/akasper/empty-repo/git/refs" and method == "POST":
                 return {}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
             return {}
 
         client.api.side_effect = api_side
@@ -523,7 +585,7 @@ class BootstrapTests(unittest.TestCase):
             if c.args and "contents/README.md" in str(c.args[0]) and c.kwargs.get("method") == "PUT"
         ]
         self.assertTrue(readme_puts, "Expected initial README commit when ref lookup returns 409 empty repo")
-        self.assertEqual(ref_seen["count"], 2)
+        self.assertEqual(ref_seen["count"], 3)
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_rerun_after_partial_run_skips_identical_and_finishes_steps(self, mock_get_health):
@@ -545,6 +607,7 @@ class BootstrapTests(unittest.TestCase):
         agents_text = prepare_copied_text("AGENTS.md", "# AGENTS\n", "posix", namespaced=False)
         agents_b64 = base64.b64encode(agents_text.encode("utf-8")).decode("ascii")
         client = Mock()
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
@@ -552,7 +615,7 @@ class BootstrapTests(unittest.TestCase):
             if endpoint == "repos/akasper/partial-repo":
                 return {"has_wiki": False, "default_branch": "main", "permissions": {"push": True}}
             if endpoint == "repos/akasper/partial-repo/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+                return {"object": {"sha": "abc123"}}
             if "/labels?" in endpoint:
                 return []
             if endpoint == "repos/akasper/partial-repo/contents/AGENTS.md" and method == "GET":
@@ -573,6 +636,9 @@ class BootstrapTests(unittest.TestCase):
                 raise GhApiError("HTTP 404")
             if endpoint == "repos/akasper/partial-repo/git/refs" and method == "POST":
                 return {}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store, parent_commit="deadbeef")
+            if git_resp is not None:
+                return git_resp
             return {}
 
         client.api.side_effect = api_side
@@ -611,8 +677,22 @@ class BootstrapTests(unittest.TestCase):
             and c.kwargs.get("method") == "PUT"
         ]
         put_paths = [str(c.args[0]) for c in template_puts]
-        self.assertFalse(any("AGENTS.md" in p for p in put_paths), "Identical AGENTS.md must not be re-uploaded")
-        self.assertTrue(any("docs/wiki/Goals.md" in p for p in put_paths), "Missing files should still upload")
+        self.assertFalse(put_paths, "Grouped commit should not use per-file contents PUT")
+
+        tree_posts = [
+            c
+            for c in client.api.call_args_list
+            if c.args and str(c.args[0]).endswith("/git/trees") and c.kwargs.get("method") == "POST"
+        ]
+        self.assertTrue(tree_posts, "Expected grouped bootstrap tree write")
+        tree_paths = {
+            entry.get("path")
+            for entry in tree_posts[0].kwargs.get("fields", {}).get("tree", [])
+            if isinstance(entry, dict)
+        }
+        self.assertNotIn("AGENTS.md", tree_paths, "Identical AGENTS.md must not be re-uploaded")
+        self.assertIn("docs/wiki/Goals.md", tree_paths, "Missing files should still upload")
+        self.assertIn(".plate", tree_paths)
 
         label_posts = [
             c
@@ -634,7 +714,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(len(question_posts), 3)
 
         plate_puts = [c for c in template_puts if ".plate" in str(c.args[0])]
-        self.assertTrue(plate_puts, "Expected .plate initialization on partial rerun")
+        self.assertFalse(plate_puts, ".plate should be in grouped bootstrap commit, not contents PUT")
 
         branch_posts = [
             c
@@ -689,6 +769,7 @@ class BootstrapTests(unittest.TestCase):
             curiosity_answers_present=False,
         )
         client = Mock()
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
@@ -696,7 +777,7 @@ class BootstrapTests(unittest.TestCase):
             if endpoint == "repos/akasper/empty-agents":
                 return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
             if endpoint == "repos/akasper/empty-agents/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+                return {"object": {"sha": "abc123"}}
             if endpoint == "repos/akasper/empty-agents/contents/AGENTS.md" and method == "GET":
                 return {"content": "", "encoding": "base64"}
             if endpoint.startswith("repos/akasper/empty-agents/contents/"):
@@ -709,6 +790,9 @@ class BootstrapTests(unittest.TestCase):
                 return [{"number": 1}]
             if endpoint.startswith("repos/akasper/empty-agents/branches/"):
                 return {"commit": {"sha": "abc"}}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
             return {}
 
         client.api.side_effect = api_side
@@ -747,6 +831,7 @@ class BootstrapTests(unittest.TestCase):
         stale_b64 = base64.b64encode(b"# OLD AGENTS\n").decode("ascii")
         readme_b64 = base64.b64encode(readme_text.encode("utf-8")).decode("ascii")
         client = Mock()
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
@@ -754,7 +839,7 @@ class BootstrapTests(unittest.TestCase):
             if endpoint == "repos/akasper/stale-repo":
                 return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
             if endpoint == "repos/akasper/stale-repo/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+                return {"object": {"sha": "abc123"}}
             if endpoint == "repos/akasper/stale-repo/contents/AGENTS.md" and method == "GET":
                 return {"content": stale_b64, "encoding": "base64"}
             if endpoint == "repos/akasper/stale-repo/contents/README.md" and method == "GET":
@@ -769,6 +854,9 @@ class BootstrapTests(unittest.TestCase):
                 return [{"number": 1}]
             if endpoint.startswith("repos/akasper/stale-repo/branches/"):
                 return {"commit": {"sha": "abc"}}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
             return {}
 
         client.api.side_effect = api_side
@@ -816,6 +904,7 @@ class BootstrapTests(unittest.TestCase):
             curiosity_answers_present=False,
         )
         client = Mock()
+        git_store: dict = {}
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)
@@ -823,13 +912,18 @@ class BootstrapTests(unittest.TestCase):
             if endpoint == "repos/akasper/test-repo":
                 return {"has_wiki": False, "default_branch": "main", "permissions": {"push": True}}
             if endpoint == "repos/akasper/test-repo/git/ref/heads/main":
-                return {"ref": "refs/heads/main"}
+                return {"object": {"sha": "abc123"}}
             if "/issues?" in endpoint and "labels=Question" in endpoint:
                 return []
             if endpoint.startswith("repos/akasper/test-repo/contents/"):
                 if method == "GET":
                     raise GhApiError("gh: Not Found (HTTP 404)")
                 raise GhApiError("gh: Not Found (HTTP 404)")
+            if method == "POST" and endpoint.endswith("/git/blobs"):
+                raise GhApiError("gh: Not Found (HTTP 404)")
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
             return {}
 
         client.api.side_effect = api_side
@@ -845,7 +939,79 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("repo=akasper/test-repo", msg)
         self.assertIn("branch=main", msg)
         self.assertIn("path=AGENTS.md", msg)
-        self.assertIn("returned 404", msg.lower())
+        self.assertIn("404", msg.lower())
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_groups_template_payload_into_one_git_commit(self, mock_get_health):
+        """#1277: greenfield apply should not create one contents API commit per template file."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/grouped-repo",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+        git_store: dict = {}
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/grouped-repo":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint.startswith("repos/akasper/grouped-repo/contents/"):
+                if "README.md" in endpoint and method == "GET":
+                    return {"type": "file"}
+                if method == "GET":
+                    raise GhApiError("HTTP 404 Not Found")
+                return {}
+            if endpoint.startswith("repos/akasper/grouped-repo/branches/main"):
+                return {"commit": {"sha": "abc123"}}
+            if endpoint.startswith("repos/akasper/grouped-repo/branches/"):
+                raise GhApiError("HTTP 404 Not Found")
+            if endpoint == "repos/akasper/grouped-repo/git/refs" and method == "POST":
+                return {}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                run_bootstrap("akasper/grouped-repo", apply_mode=True, client=client)
+
+        contents_puts = [
+            c
+            for c in client.api.call_args_list
+            if c.args
+            and "repos/akasper/grouped-repo/contents/" in str(c.args[0])
+            and c.kwargs.get("method") == "PUT"
+        ]
+        self.assertFalse(contents_puts)
+        commit_posts = [
+            c
+            for c in client.api.call_args_list
+            if c.args
+            and str(c.args[0]).endswith("/git/commits")
+            and c.kwargs.get("method") == "POST"
+        ]
+        self.assertEqual(commit_posts[0].kwargs.get("fields", {}).get("message"), "Bootstrap: initialize PLATE template payload")
+        self.assertEqual(len(commit_posts), 1)
+        self.assertGreaterEqual(git_store.get("blob_count", 0), 2)
 
 
 if __name__ == "__main__":

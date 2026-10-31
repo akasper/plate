@@ -509,6 +509,8 @@ class BootstrapPlatformTests(unittest.TestCase):
 
     def test_remote_platform_filters_and_rewrites_without_deleting_plan_phrase(self):
         puts: list[dict] = []
+        blobs: list[dict] = []
+        git_store: dict = {}
         plate = {
             "type": "file",
             "sha": "sha-1",
@@ -523,8 +525,6 @@ class BootstrapPlatformTests(unittest.TestCase):
             method = kwargs.get("method", "GET")
             if endpoint == "repos/akasper/plat":
                 return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
-            if endpoint.endswith("/git/ref/heads/main"):
-                return {"ref": "refs/heads/main"}
             if "/issues?" in endpoint:
                 return [{"title": "[Question]: existing"}]
             if endpoint.endswith("/contents/.plate") and method == "GET":
@@ -534,6 +534,24 @@ class BootstrapPlatformTests(unittest.TestCase):
             if "/contents/" in endpoint and method == "PUT":
                 puts.append({"endpoint": endpoint, "fields": kwargs.get("fields")})
                 return {}
+            if method == "POST" and endpoint.endswith("/git/blobs"):
+                fields = kwargs.get("fields") or {}
+                blobs.append(fields)
+                git_store["blob_count"] = git_store.get("blob_count", 0) + 1
+                return {"sha": f"blob{git_store['blob_count']:04d}"}
+            if method == "POST" and endpoint.endswith("/git/trees"):
+                git_store.setdefault("tree_entries", []).extend(
+                    (kwargs.get("fields") or {}).get("tree", [])
+                )
+                return {"sha": "newtree_sha"}
+            if method == "POST" and endpoint.endswith("/git/commits"):
+                return {"sha": "commit0001"}
+            if method == "PATCH" and "/git/refs/heads/" in endpoint:
+                return {}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
+            if "/git/ref/heads/" in endpoint and method == "GET":
+                return {"object": {"sha": "abc123"}}
             if "/branches/" in endpoint:
                 return {"name": "main", "commit": {"sha": "abc123"}}
             return {}
@@ -547,11 +565,15 @@ class BootstrapPlatformTests(unittest.TestCase):
                 with patch("plate_core.bootstrap.get_health", return_value=self._health(present=True)):
                     report = run_bootstrap("akasper/plat", apply_mode=True, client=client)
         self.assertEqual(report.platform, "windows")
-        endpoints = [item["endpoint"] for item in puts]
-        self.assertTrue(any(item.endswith("gif-from-video.ps1") for item in endpoints))
-        self.assertFalse(any(item.endswith("gif-from-video.sh") for item in endpoints))
-        ci_put = next(item for item in puts if item["endpoint"].endswith("ci.yml"))
-        body = _lf(base64.b64decode(ci_put["fields"]["content"]).decode("utf-8"))
+        tree_paths = {entry.get("path") for entry in git_store.get("tree_entries", []) if isinstance(entry, dict)}
+        self.assertIn("scripts/gif-from-video.ps1", tree_paths)
+        self.assertNotIn("scripts/gif-from-video.sh", tree_paths)
+        ci_blob = next(
+            base64.b64decode(item["content"]).decode("utf-8")
+            for item in blobs
+            if "runs-on: windows-latest" in base64.b64decode(item["content"]).decode("utf-8")
+        )
+        body = _lf(ci_blob)
         self.assertIn(CI_WINDOWS_JOB, body)
         self.assertIn(PWSH_VALIDATE, body)
         self.assertFalse(any(item["endpoint"].endswith("/contents/.plate") for item in puts))
@@ -609,8 +631,6 @@ class BootstrapPlatformTests(unittest.TestCase):
             method = kwargs.get("method", "GET")
             if endpoint == "repos/akasper/plat":
                 return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
-            if endpoint.endswith("/git/ref/heads/main"):
-                return {"ref": "refs/heads/main"}
             if "/issues?" in endpoint:
                 return [{"title": "[Question]: existing"}]
             if endpoint.endswith("/contents/.plate") and method == "GET":
@@ -620,10 +640,27 @@ class BootstrapPlatformTests(unittest.TestCase):
             if method == "PUT":
                 puts.append({"endpoint": endpoint, "fields": kwargs.get("fields")})
                 return {}
+            if method == "POST" and endpoint.endswith("/git/blobs"):
+                git_store["blob_count"] = git_store.get("blob_count", 0) + 1
+                return {"sha": f"blob{git_store['blob_count']:04d}"}
+            if method == "POST" and endpoint.endswith("/git/trees"):
+                git_store.setdefault("tree_entries", []).extend(
+                    (kwargs.get("fields") or {}).get("tree", [])
+                )
+                return {"sha": "newtree_sha"}
+            if method == "POST" and endpoint.endswith("/git/commits"):
+                return {"sha": "commit0001"}
+            if method == "PATCH" and "/git/refs/heads/" in endpoint:
+                return {}
+            if "/git/commits/" in endpoint and method == "GET":
+                return {"tree": {"sha": "basetree_sha"}}
+            if "/git/ref/heads/" in endpoint and method == "GET":
+                return {"object": {"sha": "abc123"}}
             if "/branches/" in endpoint:
                 return {"name": "main", "commit": {"sha": "abc123"}}
             return {}
 
+        git_store: dict = {}
         client.api.side_effect = apply_side
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -643,10 +680,9 @@ class BootstrapPlatformTests(unittest.TestCase):
         self.assertEqual(stored["version"], "1.2")
         self.assertFalse(stored["autonomy"]["enabled"])
         self.assertEqual(plate_put["fields"]["sha"], "sha-9")
-        endpoints = [item["endpoint"] for item in puts]
-        self.assertTrue(endpoints[0].endswith("/contents/.plate"))
-        self.assertTrue(any(item.endswith("gif-from-video.sh") for item in endpoints))
-        self.assertFalse(any(item.endswith("gif-from-video.ps1") for item in endpoints))
+        tree_paths = {entry.get("path") for entry in git_store.get("tree_entries", []) if isinstance(entry, dict)}
+        self.assertIn("scripts/gif-from-video.sh", tree_paths)
+        self.assertNotIn("scripts/gif-from-video.ps1", tree_paths)
 
     def test_unreadable_remote_plate_falls_back_to_posix(self):
         def api_side(endpoint, *args, **kwargs):
