@@ -1,0 +1,38 @@
+# Example: nightly full CI on main when PRs use path selection (#1270).
+# Copy to .github/workflows/ and adjust cron / job needs.
+name: PLATE scheduled full CI suite
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      run_all: ${{ steps.pick.outputs.run_all }}
+      jobs_json: ${{ steps.pick.outputs.jobs_json }}
+      safety: ${{ steps.pick.outputs.safety }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: pick
+        uses: ./.github/actions/plate-select-ci-jobs
+        with:
+          base-ref: ${{ github.sha }}
+          full-suite: "true"
+  # Wire optional jobs with if: contains(fromJSON(needs.select.outputs.jobs_json), 'job-id')
+  # Keep a job id `test` aggregate so branch protection still sees the test context.
+  test:
+    needs: [select]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set -euo pipefail
+          if [[ "${{ needs.select.outputs.safety }}" == "fail" ]]; then
+            exit 1
+          fi
+          echo "Scheduled full suite selection: run_all=${{ needs.select.outputs.run_all }}"
