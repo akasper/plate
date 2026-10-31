@@ -27,6 +27,7 @@ ALLOWED_CONFIG_TOP_LEVEL_KEYS = {
     "release",
     "autonomy",
     "platform",
+    "hooks",
 }
 ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release", "autonomy"}
 
@@ -67,6 +68,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     # Absent key resolves to posix. PLATE's own repo sets posix-and-windows explicitly.
     "platform": PLATFORM_POSIX,
+    "hooks": {
+        "pre_push": {
+            "format": "",
+            "lint": "",
+            "typecheck": "",
+        }
+    },
 }
 
 
@@ -304,9 +312,13 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
         if unknown:
             raise PlateConfigError(f"unknown top-level keys: {', '.join(unknown)}")
 
-    for key in ("methodology", "extensions", "overrides", "release", "autonomy"):
+    for key in ("methodology", "extensions", "overrides", "release", "autonomy", "hooks"):
         if key in config and not isinstance(config[key], dict):
             raise PlateConfigError(f"'{key}' must be an object if present")
+
+    from .git_hooks import validate_hooks_config
+
+    validate_hooks_config(config.get("hooks"))
 
     # Autonomy-specific validation (v1.2 schema; rejects invalid risk, non-numeric budget, unknown keys per test and reviews)
     auto = config.get("autonomy", {})

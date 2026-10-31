@@ -180,6 +180,7 @@ def _adoption_next_steps(*, adoption_mode: bool, health: Any) -> list[str]:
         return [
             "For brand-new repos: complete docs/bootstrap/new-repository-checklist.md human steps (CODEOWNERS, protection).",
             "Run `gh plate health` after apply and seed Goals.md content.",
+            "Optional: set hooks.pre_push commands in .plate and run `gh plate hooks install` (docs/bootstrap/pre-push-hook.md).",
         ]
     steps = [
         "Adoption mode: prefer local `gh plate import-payload --strategy conservative --dry-run` then `--apply` before remote bootstrap file copy when working in a checkout.",
@@ -898,6 +899,18 @@ def run_bootstrap(
                 detail=detail,
             )
         )
+
+    actions.append(
+        BootstrapAction(
+            name="pre-push-hook",
+            state="manual-required",
+            detail=(
+                "Optional local checks: configure hooks.pre_push format/lint/typecheck in .plate, "
+                "then run `gh plate hooks install` (docs/bootstrap/pre-push-hook.md). "
+                "Passes silently when no commands are set (#1281)."
+            ),
+        )
+    )
 
     if health.branch_protection_enabled:
         actions.append(
