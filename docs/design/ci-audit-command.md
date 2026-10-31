@@ -32,9 +32,11 @@ The first step whose name matches any of these patterns ends the setup phase:
 
 Document any false positives/negatives in your repo’s workflow step names when interpreting reports.
 
-## Cache hit / miss
+## Cache hints (not verified outcomes)
 
-GitHub’s job API exposes step names and timestamps, not full logs. When a step name contains `cache` and also suggests an outcome (`cache hit`, `cache restored`, `cache miss`, `cache not found`, and similar substrings documented in `plate_core.ci_audit`), the report records a hint. Steps that mention cache without an outcome are counted as `cache_step`. Absence of hints does not prove caches were unused.
+GitHub’s job API exposes step **names** and timestamps, not log lines. The audit may attach **hints** when a step name contains `cache` plus explicit outcome wording (for example `cache hit`, `cache miss`, `cache not found`, `no cache`). Operation-only titles such as “Cache restore” or “Cache save” are recorded as `hint_cache_step`, not as hits or misses, because the name alone does not prove an outcome.
+
+All reported values use the `hint_*` prefix in text and JSON (`hint_hit`, `hint_miss`, `hint_cache_step`). Treat them as guesses to prioritize follow-up (log review or workflow changes), not as facts. Absence of hints does not prove caches were unused.
 
 ## Output
 

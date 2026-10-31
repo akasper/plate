@@ -9,6 +9,7 @@ from contextlib import redirect_stdout
 from unittest.mock import MagicMock
 
 from plate_core.ci_audit import (
+    _list_jobs_for_run,
     cache_visibility_from_steps,
     format_ci_audit_text,
     is_setup_step_name,
@@ -17,6 +18,7 @@ from plate_core.ci_audit import (
     run_ci_audit,
     split_step_seconds,
 )
+from plate_core.github_client import GhApiError
 from plate_core.cli import main
 
 
@@ -70,7 +72,17 @@ class CiAuditHeuristicTests(unittest.TestCase):
                 {"name": "Restore cache miss fallback"},
             ]
         )
-        self.assertEqual(hints, ["hit", "miss"])
+        self.assertEqual(hints, ["hint_hit", "hint_miss"])
+
+    def test_cache_operation_names_are_not_hit_or_miss_hints(self):
+        hints = cache_visibility_from_steps(
+            [
+                {"name": "Cache restore"},
+                {"name": "Cache save"},
+                {"name": "Cache pip dependencies"},
+            ]
+        )
+        self.assertEqual(hints, ["hint_cache_step", "hint_cache_step", "hint_cache_step"])
 
 
 class CiAuditReportTests(unittest.TestCase):
@@ -121,11 +133,74 @@ class CiAuditReportTests(unittest.TestCase):
         self.assertEqual(row.waiting_seconds, 60.0)
         self.assertEqual(row.setup_seconds, 120.0)
         self.assertEqual(row.running_seconds, 420.0)
-        self.assertIn("hit", row.cache_hints)
-        self.assertEqual(len(report.costliest_jobs), 1)
+        self.assertIn("hint_hit", row.cache_hints)
+        self.assertEqual(report.costliest_jobs[0].cache_hits, 1)
         payload = report.to_dict()
         self.assertIn("costliest_jobs", payload)
+        self.assertIn("cache_hints_disclaimer", payload)
         self.assertEqual(payload["job_instances"][0]["total_minutes"], 10.0)
+        self.assertEqual(len(report.costliest_jobs), 1)
+
+    def test_job_list_pagination_collects_all_pages(self):
+        client = MagicMock()
+        calls: list[dict] = []
+
+        def api(endpoint, method="GET", fields=None, **kwargs):
+            if endpoint.endswith("/actions/runs/9001/jobs"):
+                page = (fields or {}).get("page", 1)
+                calls.append(page)
+                if page == 1:
+                    jobs = [{"id": i, "name": f"job-{i}", "steps": []} for i in range(100)]
+                    return {"jobs": jobs}
+                if page == 2:
+                    return {"jobs": [{"id": 100, "name": "job-100", "steps": []}]}
+                return {"jobs": []}
+            raise AssertionError(endpoint)
+
+        client.api.side_effect = api
+        jobs = _list_jobs_for_run(client, "acme", "app", 9001)
+        self.assertEqual(len(jobs), 101)
+        self.assertEqual(calls, [1, 2])
+
+    def test_job_fetch_failure_is_not_ok(self):
+        runs = [{"id": 9001, "name": "ci", "run_number": 1}]
+
+        def api(endpoint, method="GET", fields=None, **kwargs):
+            if endpoint.endswith("/actions/runs") and "/jobs" not in endpoint:
+                return {"workflow_runs": runs}
+            if endpoint.endswith("/actions/runs/9001/jobs"):
+                raise GhApiError("rate limited")
+            raise AssertionError(endpoint)
+
+        client = MagicMock()
+        client.api.side_effect = api
+        report = run_ci_audit("acme/app", limit=1, client=client)
+        self.assertFalse(report.ok)
+        self.assertEqual(report.error, "job_fetch_failed")
+        self.assertEqual(report.failed_run_id, 9001)
+        self.assertIn("9001", report.message or "")
+
+    def test_cli_exits_nonzero_on_job_fetch_failure(self):
+        runs = [{"id": 9001, "name": "ci", "run_number": 1}]
+
+        def api(endpoint, method="GET", fields=None, **kwargs):
+            if endpoint.endswith("/actions/runs") and "/jobs" not in endpoint:
+                return {"workflow_runs": runs}
+            if endpoint.endswith("/actions/runs/9001/jobs"):
+                raise GhApiError("forbidden")
+            raise AssertionError(endpoint)
+
+        client = MagicMock()
+        client.api.side_effect = api
+        with unittest.mock.patch("plate_core.ci_audit.resolve_repo", return_value="acme/app"):
+            with unittest.mock.patch("plate_core.ci_audit.GhClient", return_value=client):
+                out = io.StringIO()
+                with redirect_stdout(out):
+                    code = main(["ci", "audit", "--repo", "acme/app", "--limit", "1", "--json"])
+        self.assertEqual(code, 1)
+        payload = json.loads(out.getvalue().strip())
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["failed_run_id"], 9001)
 
     def test_format_text_mentions_repo(self):
         report = run_ci_audit("acme/app", limit=1, client=self._mock_client())

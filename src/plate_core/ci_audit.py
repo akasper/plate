@@ -31,8 +31,8 @@ TEST_STEP_PATTERNS = (
     re.compile(r"\bjest\b", re.I),
 )
 
-CACHE_HIT_SUBSTRINGS = ("cache hit", "cache restored", "restored cache", "cache restore")
-CACHE_MISS_SUBSTRINGS = ("cache miss", "cache not found", "no cache", "cache save")
+CACHE_HIT_SUBSTRINGS = ("cache hit",)
+CACHE_MISS_SUBSTRINGS = ("cache miss", "cache not found", "no cache")
 
 
 def _parse_ts(value: str | None) -> datetime | None:
@@ -90,18 +90,18 @@ def split_step_seconds(steps: list[dict[str, Any]]) -> tuple[float, float]:
 
 
 def cache_visibility_from_steps(steps: list[dict[str, Any]]) -> list[str]:
-    """Best-effort cache hit/miss hints from step names (logs are not fetched)."""
+    """Name-only cache hints from step titles (not verified against logs)."""
     hints: list[str] = []
     for step in steps:
         name = (step.get("name") or "").lower()
         if "cache" not in name:
             continue
         if any(token in name for token in CACHE_HIT_SUBSTRINGS):
-            hints.append("hit")
+            hints.append("hint_hit")
         elif any(token in name for token in CACHE_MISS_SUBSTRINGS):
-            hints.append("miss")
+            hints.append("hint_miss")
         else:
-            hints.append("cache_step")
+            hints.append("hint_cache_step")
     return hints
 
 
@@ -165,9 +165,9 @@ class CostliestJobRow:
             "setup_minutes": round(self.setup_seconds / 60.0, 2),
             "running_minutes": round(self.running_seconds / 60.0, 2),
             "total_minutes": round(self.total_seconds / 60.0, 2),
-            "cache_hits": self.cache_hits,
-            "cache_misses": self.cache_misses,
-            "cache_unknown": self.cache_unknown,
+            "cache_hint_hits": self.cache_hits,
+            "cache_hint_misses": self.cache_misses,
+            "cache_hint_steps": self.cache_unknown,
         }
 
 
@@ -181,6 +181,7 @@ class CiAuditReport:
     costliest_jobs: list[CostliestJobRow] = field(default_factory=list)
     error: str | None = None
     message: str | None = None
+    failed_run_id: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -190,10 +191,15 @@ class CiAuditReport:
             "workflow_runs_fetched": self.workflow_runs_fetched,
             "heuristic_doc": CI_AUDIT_DOC,
             "setup_step_substrings": list(SETUP_STEP_SUBSTRINGS),
+            "cache_hints_disclaimer": (
+                "Cache hint_* values are inferred from step names only; they are not verified "
+                "cache outcomes."
+            ),
             "job_instances": [row.to_dict() for row in self.job_instances],
             "costliest_jobs": [row.to_dict() for row in self.costliest_jobs],
             "error": self.error,
             "message": self.message,
+            "failed_run_id": self.failed_run_id,
         }
 
 
@@ -221,11 +227,20 @@ def _list_workflow_runs(
 def _list_jobs_for_run(
     client: GhClient, owner: str, repo: str, run_id: int
 ) -> list[dict[str, Any]]:
-    payload = client.api(
-        f"repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
-        fields={"per_page": 100},
-    )
-    return list((payload or {}).get("jobs") or [])
+    jobs: list[dict[str, Any]] = []
+    page = 1
+    per_page = 100
+    while True:
+        payload = client.api(
+            f"repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+            fields={"per_page": per_page, "page": page},
+        )
+        batch = list((payload or {}).get("jobs") or [])
+        jobs.extend(batch)
+        if len(batch) < per_page:
+            break
+        page += 1
+    return jobs
 
 
 def _aggregate_costliest(rows: list[JobTimingRow], top_n: int = 15) -> list[CostliestJobRow]:
@@ -250,9 +265,9 @@ def _aggregate_costliest(rows: list[JobTimingRow], top_n: int = 15) -> list[Cost
         bucket.setup_seconds += row.setup_seconds
         bucket.running_seconds += row.running_seconds
         for hint in row.cache_hints:
-            if hint == "hit":
+            if hint == "hint_hit":
                 bucket.cache_hits += 1
-            elif hint == "miss":
+            elif hint == "hint_miss":
                 bucket.cache_misses += 1
             else:
                 bucket.cache_unknown += 1
@@ -311,8 +326,16 @@ def run_ci_audit(
         run_number = int(run.get("run_number") or 0)
         try:
             jobs = _list_jobs_for_run(gh, owner, name, run_id)
-        except GhApiError:
-            continue
+        except GhApiError as exc:
+            return CiAuditReport(
+                ok=False,
+                repo=slug,
+                limit=limit,
+                workflow_runs_fetched=len(runs),
+                error="job_fetch_failed",
+                message=f"Failed to list jobs for workflow run {run_id}: {exc}",
+                failed_run_id=run_id,
+            )
         for job in jobs:
             steps = list(job.get("steps") or [])
             setup_secs, running_secs = split_step_seconds(steps)
@@ -346,6 +369,8 @@ def format_ci_audit_text(report: CiAuditReport) -> str:
     lines: list[str] = []
     if not report.ok:
         lines.append(f"CI audit failed: {report.error or 'unknown'}")
+        if report.failed_run_id is not None:
+            lines.append(f"  workflow run id: {report.failed_run_id}")
         if report.message:
             lines.append(f"  {report.message}")
         return "\n".join(lines)
@@ -355,6 +380,9 @@ def format_ci_audit_text(report: CiAuditReport) -> str:
         f"Workflow runs fetched: {report.workflow_runs_fetched} (limit={report.limit})"
     )
     lines.append(f"Heuristic: {CI_AUDIT_DOC}")
+    lines.append(
+        "Cache: hint_* values below are inferred from step names only (not log-verified)."
+    )
     lines.append("")
     lines.append("Costliest jobs (aggregated total minutes across fetched runs):")
     if not report.costliest_jobs:
@@ -362,12 +390,12 @@ def format_ci_audit_text(report: CiAuditReport) -> str:
     for row in report.costliest_jobs:
         cache_bits = []
         if row.cache_hits:
-            cache_bits.append(f"hit={row.cache_hits}")
+            cache_bits.append(f"hint_hit={row.cache_hits}")
         if row.cache_misses:
-            cache_bits.append(f"miss={row.cache_misses}")
+            cache_bits.append(f"hint_miss={row.cache_misses}")
         if row.cache_unknown:
-            cache_bits.append(f"cache_steps={row.cache_unknown}")
-        cache_txt = f" cache [{', '.join(cache_bits)}]" if cache_bits else ""
+            cache_bits.append(f"hint_cache_step={row.cache_unknown}")
+        cache_txt = f" cache_hints [{', '.join(cache_bits)}]" if cache_bits else ""
         lines.append(
             f"  {row.workflow_name} / {row.job_name} (n={row.instances}): "
             f"total={row.total_seconds / 60.0:.1f}m "
@@ -383,7 +411,7 @@ def format_ci_audit_text(report: CiAuditReport) -> str:
             f"  run #{row.run_number} {row.workflow_name}/{row.job_name}: "
             f"wait={row.waiting_seconds / 60.0:.1f}m "
             f"setup={row.setup_seconds / 60.0:.1f}m "
-            f"run={row.running_seconds / 60.0:.1f}m cache={hints}"
+            f"run={row.running_seconds / 60.0:.1f}m cache_hints={hints}"
         )
     if len(report.job_instances) > 20:
         lines.append(f"  ... and {len(report.job_instances) - 20} more (use --json for full list)")
