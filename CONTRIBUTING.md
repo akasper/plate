@@ -22,7 +22,7 @@ Add the sign-off with `git commit -s` (or `--signoff`). It appends a trailer tha
 Signed-off-by: Jane Developer <jane@example.com>
 ```
 
-To fix commits that are missing it, run `git commit --amend -s` for the last commit, or `git rebase --signoff <base>` for a branch. Pull requests with unsigned commits will not be merged.
+To fix commits that are missing it, run `git commit --amend -s` for the last commit, or `git rebase --signoff <base>` for a branch. Sign-off is expected on every commit now. Once outside contributors begin contributing, a check will enforce it.
 
 (Decision recorded in #1071, 2026-10-31: keep MIT + Commons Clause for 1.0; no CLA; DCO sign-off required.)
 
