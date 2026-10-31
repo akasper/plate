@@ -41,6 +41,7 @@ where = ["src"]
 "plate_core" = [
   "data/*.yml",
   "data/*.json",
+  "data/git-hooks/*",
   "template_payload/**/*",
   "template_payload/.github/**/*",
   "template_payload/.agentic/**/*",

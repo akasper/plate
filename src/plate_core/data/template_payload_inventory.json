@@ -220,6 +220,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/bootstrap/pre-push-hook.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/bootstrap/starting-a-new-repository.md",
       "classification": "copy_to_downstream"
     },
@@ -421,6 +425,10 @@
     },
     {
       "path": "scripts/plate/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/plate/pre-push-hook.sh",
       "classification": "copy_to_downstream"
     },
     {

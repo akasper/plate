@@ -1,0 +1,15 @@
+{
+  "slug": "pre-push-hook-template-1281",
+  "change_type": "feature",
+  "surface": "plate_core.git_hooks + gh plate hooks + scripts/plate/pre-push-hook.sh + docs/bootstrap/pre-push-hook.md + AGENTS.md PLATES-CORE block",
+  "summary": "Ship a configurable pre-push hook template and `gh plate hooks install` to run format, lint, and typecheck on changed files only; exits cleanly when no commands are configured (#1281).",
+  "migration_impact": "Adopters opt in: set hooks.pre_push commands in .plate and run `gh plate hooks install`. Bootstrap surfaces the optional step. No CI or branch-protection changes.",
+  "migration_guidance": [
+    "Import payload or bootstrap to receive scripts/plate/pre-push-hook.sh and docs/bootstrap/pre-push-hook.md.",
+    "Add hooks.pre_push format/lint/typecheck command templates to .plate (use {files} for changed paths).",
+    "Run `gh plate hooks install` from the repo root on each developer machine."
+  ],
+  "agent_notes": "Prefer installed hooks over AGENTS.md prose for must-always-run local checks. Idea credit: Owen Gretzinger X post on Boardy CI (Oct 2026); PLATE wording and tooling are original.",
+  "breaking": false,
+  "links": ["#1281", "#1268"]
+}
