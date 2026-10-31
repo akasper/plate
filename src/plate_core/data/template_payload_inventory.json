@@ -296,6 +296,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/migration/ci-speed-checklist.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/migration/self-hosted-runners.md",
       "classification": "copy_to_downstream"
     },
