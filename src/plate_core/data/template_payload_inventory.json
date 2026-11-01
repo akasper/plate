@@ -44,6 +44,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".agentic/skills/ci-audit/SKILL.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".agentic/traceability.yml",
       "classification": "copy_to_downstream"
     },
