@@ -354,7 +354,7 @@ From one "get this PR green" prompt, inspect and fix **all** agent-actionable ga
 1. **CI diagnosis first** — `gh pr checks` + `gh run view … --log-failed` on the specific failing job.
 2. **Merge gates bundle** — `plate_get_pr_merge_gates` / `plate_pr_babysit` (mergeStateStatus, threads, note).
 3. **Labels** — required PR type + area:* + risk:* (and Feature fragment when applicable).
-4. **Base sync** — BEHIND/CONFLICTING/DIRTY → local-rebase or copilot-request (isolated worktree).
+4. **Base sync** — BEHIND/CONFLICTING/DIRTY → default local-rebase (isolated worktree); use copilot-request only when a human opts in.
 5. **Feedback-resolution** — actionable threads via plate_get_actionable_review_threads + plate_resolve_review_thread; outdated via babysit `--act` (#605).
 6. **Tests / title / issue-link / feature-change-files** — fix what failed; re-push to the *same* branch.
 7. **Stop only when** remaining items are human-only; then one-sentence summary.
