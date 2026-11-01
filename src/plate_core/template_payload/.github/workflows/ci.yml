@@ -30,6 +30,9 @@ jobs:
         with:
           script: |
             const prTypeLabels = ['Bug', 'Feature', 'Documentation', 'Feedback Response'];
+            const prTypeByLower = Object.fromEntries(
+              prTypeLabels.map((name) => [name.toLowerCase(), name])
+            );
             const target = context.payload.pull_request;
 
             if (!target) {
@@ -38,7 +41,7 @@ jobs:
             }
 
             const labels = (target.labels || []).map((label) => typeof label === 'string' ? label : label.name);
-            const matches = labels.filter((label) => prTypeLabels.includes(label));
+            const matches = labels.filter((label) => prTypeByLower[label.toLowerCase()]);
             const forbidden = labels.filter((label) => /^status:|^priority:/.test(label));
             core.info(`Labels: ${labels.join(', ') || '(none)'}`);
 

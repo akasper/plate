@@ -12,7 +12,11 @@ from urllib.parse import quote
 import yaml
 
 from .github_client import GhApiError, GhClient
-from .github_labels import fetch_repository_labels, load_labels_from_yaml
+from .github_labels import (
+    fetch_repository_labels,
+    load_labels_from_yaml,
+    registry_label_case_mismatches,
+)
 from .pr_gates_contract import (
     PLATE_PR_GATES_CHECK_NAME,
     find_stale_required_check_contexts,
@@ -159,6 +163,7 @@ class HealthReport:
     branch_protection_required_contexts: list[str] = field(default_factory=list)
     stale_required_check_contexts: list[str] = field(default_factory=list)
     missing_recommended_check_contexts: list[str] = field(default_factory=list)
+    label_case_mismatches: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -330,14 +335,17 @@ def get_health(
     if registry_error:
         errors.append(registry_error)
         missing: list[str] = []
+        case_mismatches: list[str] = []
     else:
         try:
             remote_labels = fetch_repository_labels(gh, target)
             label_names = {item["name"].lower() for item in remote_labels}
             missing = missing_registry_labels(expected_labels, label_names)
+            case_mismatches = registry_label_case_mismatches(expected_labels, remote_labels)
         except GhApiError as e:
             errors.append(f"labels: {e}")
             missing = list(expected_labels)
+            case_mismatches = []
 
     branch_protection_required_contexts: list[str] = []
     stale_required_check_contexts: list[str] = []
@@ -508,7 +516,11 @@ def get_health(
     # Accept docs/wiki/Goals.md and docs/plate/wiki/Goals.md (#1022).
     goals_page_present = _remote_goals_page_present(gh, target)
 
-    label_ok = label_registry_ok and len(missing) == 0
+    label_ok = (
+        label_registry_ok
+        and len(missing) == 0
+        and len(case_mismatches) == 0
+    )
     hygiene_ok = binary_artifacts_tracked == 0
     if label_ok and protected and hygiene_ok:
         status = "pass"
@@ -639,6 +651,7 @@ def get_health(
         repo=target,
         label_coverage_ok=label_ok,
         missing_labels=missing,
+        label_case_mismatches=case_mismatches,
         branch_protection_enabled=protected,
         branch_protection_required_contexts=branch_protection_required_contexts,
         stale_required_check_contexts=stale_required_check_contexts,
