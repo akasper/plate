@@ -14,22 +14,21 @@ permissions:
   actions: read
 
 jobs:
-  select-runs-on:
-    runs-on: ubuntu-latest
-    outputs:
-      runs_on: ${{ steps.plate_runs_on.outputs.runs_on }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: plate_runs_on
-        uses: ./.github/actions/plate-select-runs-on
-        with:
-          plate-runs-on: ${{ vars.PLATE_RUNS_ON }}
-
+  # Public akasper/plate: no self-hosted runners (#1284). Skipping select-runs-on removes an
+  # extra hosted job (checkout + probe) before test starts; adopters keep plate-select-runs-on
+  # in the template payload for private repos and PLATE_RUNS_ON.
   test:
-    needs: select-runs-on
-    runs-on: ${{ fromJSON(needs.select-runs-on.outputs.runs_on) }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
       - name: Run unit tests
         run: |
           set -euo pipefail
@@ -74,6 +73,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: tests/e2e/package.json
 
       - name: Install Playwright and dependencies
         run: npm install
@@ -101,13 +102,12 @@ jobs:
   # Addresses #569 stabilization CI path.
   heavy-release:
     needs:
-      - select-runs-on
       - test
     if: |
       github.head_ref == 'release' ||
       startsWith(github.head_ref, 'release-') ||
       startsWith(github.base_ref, 'release-')
-    runs-on: ${{ fromJSON(needs.select-runs-on.outputs.runs_on) }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Heavy release context detected
