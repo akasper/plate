@@ -1,4 +1,4 @@
-"""Git hook templates and local pre-push enforcement (#1281)."""
+"""Git hook templates and local pre-push / pre-commit enforcement (#1281, #1302)."""
 
 from __future__ import annotations
 
@@ -13,9 +13,11 @@ from typing import Any, Iterator, TextIO
 
 from .plate_config import PlateConfigError, _resolve_plate_config
 
-PRE_PUSH_COMMAND_KEYS = ("format", "lint", "typecheck")
+PRE_HOOK_COMMAND_KEYS = ("format", "lint", "typecheck")
 HOOK_MARKER = "# PLATE pre-push hook"
+HOOK_MARKER_PRE_COMMIT = "# PLATE pre-commit hook"
 GIT_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+SUPPORTED_HOOKS = frozenset({"pre-push", "pre-commit"})
 
 
 class GitHookError(Exception):
@@ -30,15 +32,39 @@ def repo_pre_push_template_path(repo_root: Path) -> Path:
     return repo_root / "scripts" / "plate" / "pre-push-hook.sh"
 
 
+def bundled_pre_commit_template_path() -> Path:
+    return Path(__file__).resolve().parent / "data" / "git-hooks" / "pre-commit"
+
+
+def repo_pre_commit_template_path(repo_root: Path) -> Path:
+    return repo_root / "scripts" / "plate" / "pre-commit-hook.sh"
+
+
 def resolve_pre_push_template(repo_root: Path | None = None) -> Path:
+    return _resolve_hook_template("pre-push", repo_root)
+
+
+def resolve_pre_commit_template(repo_root: Path | None = None) -> Path:
+    return _resolve_hook_template("pre-commit", repo_root)
+
+
+def _resolve_hook_template(hook: str, repo_root: Path | None = None) -> Path:
     root = Path(repo_root or ".").resolve()
-    local = repo_pre_push_template_path(root)
+    if hook == "pre-push":
+        local = repo_pre_push_template_path(root)
+        bundled = bundled_pre_push_template_path()
+        label = "pre-push hook template not found (expected bundled data or scripts/plate/pre-push-hook.sh)"
+    elif hook == "pre-commit":
+        local = repo_pre_commit_template_path(root)
+        bundled = bundled_pre_commit_template_path()
+        label = "pre-commit hook template not found (expected bundled data or scripts/plate/pre-commit-hook.sh)"
+    else:
+        raise ValueError(f"unsupported hook: {hook!r}")
     if local.is_file():
         return local
-    bundled = bundled_pre_push_template_path()
     if bundled.is_file():
         return bundled
-    raise FileNotFoundError("pre-push hook template not found (expected bundled data or scripts/plate/pre-push-hook.sh)")
+    raise FileNotFoundError(label)
 
 
 def pre_push_template_text() -> str:
@@ -50,24 +76,33 @@ def _effective_config(repo_root: Path | None) -> dict[str, Any]:
     return merged
 
 
-def get_pre_push_commands(repo_root: Path | None = None) -> list[tuple[str, str]]:
-    """Return configured (name, command_template) pairs; empty when none configured."""
+def _commands_for_config_key(repo_root: Path | None, config_key: str) -> list[tuple[str, str]]:
     config = _effective_config(repo_root)
     hooks = config.get("hooks") or {}
     if not isinstance(hooks, dict):
         return []
-    pre_push = hooks.get("pre_push") or {}
-    if not isinstance(pre_push, dict):
+    section = hooks.get(config_key) or {}
+    if not isinstance(section, dict):
         return []
     out: list[tuple[str, str]] = []
-    for key in PRE_PUSH_COMMAND_KEYS:
-        raw = pre_push.get(key)
+    for key in PRE_HOOK_COMMAND_KEYS:
+        raw = section.get(key)
         if not isinstance(raw, str):
             continue
         cmd = raw.strip()
         if cmd:
             out.append((key, cmd))
     return out
+
+
+def get_pre_push_commands(repo_root: Path | None = None) -> list[tuple[str, str]]:
+    """Return configured (name, command_template) pairs; empty when none configured."""
+    return _commands_for_config_key(repo_root, "pre_push")
+
+
+def get_pre_commit_commands(repo_root: Path | None = None) -> list[tuple[str, str]]:
+    """Return configured pre-commit (name, command_template) pairs; empty when none configured."""
+    return _commands_for_config_key(repo_root, "pre_commit")
 
 
 def parse_pre_push_stdin(stdin: TextIO | None = None) -> list[tuple[str, str, str, str]]:
@@ -181,6 +216,16 @@ def _worktree_porcelain(worktree: Path) -> str:
     return proc.stdout if proc.returncode == 0 else ""
 
 
+def _worktree_unstaged_diff_names(worktree: Path) -> str:
+    proc = subprocess.run(
+        ["git", "-C", str(worktree), "diff", "--name-only"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.stdout if proc.returncode == 0 else ""
+
+
 @contextmanager
 def detached_worktree(repo_root: Path, commit: str) -> Iterator[Path]:
     wt_dir = Path(tempfile.mkdtemp(prefix="plate-pre-push-"))
@@ -208,18 +253,27 @@ def run_check_argv(
     *,
     worktree: Path,
     check_name: str,
+    mutation_mode: str = "worktree",
 ) -> int:
     proc = subprocess.run(argv, cwd=str(worktree), check=False)
     if proc.returncode != 0:
-        print(f"pre-push: {check_name} failed (exit {proc.returncode})", file=sys.stderr)
+        print(f"hook: {check_name} failed (exit {proc.returncode})", file=sys.stderr)
         return int(proc.returncode)
-    if _worktree_porcelain(worktree).strip():
-        print(
-            f"pre-push: {check_name} modified files in the pushed commit snapshot; "
-            "commit the fixes and push again",
-            file=sys.stderr,
-        )
-        return 1
+    if mutation_mode == "unstaged":
+        dirty = _worktree_unstaged_diff_names(worktree).strip()
+        if dirty:
+            print(
+                f"hook: {check_name} modified working tree files; stage the fixes and retry",
+                file=sys.stderr,
+            )
+            return 1
+    elif mutation_mode == "worktree":
+        if _worktree_porcelain(worktree).strip():
+            print(
+                f"hook: {check_name} modified files; stage the fixes and retry",
+                file=sys.stderr,
+            )
+            return 1
     return 0
 
 
@@ -237,7 +291,7 @@ def run_pre_push_checks_on_commit(
             return 0
         for name, template in commands:
             argv = build_command_argv(template, present)
-            code = run_check_argv(argv, worktree=wt, check_name=name)
+            code = run_check_argv(argv, worktree=wt, check_name=name, mutation_mode="worktree")
             if code != 0:
                 return code
     return 0
@@ -269,8 +323,63 @@ def run_pre_push(
     return 0
 
 
-def run_pre_push_from_stdin(repo_root: Path | None = None) -> int:
-    return run_pre_push(repo_root, stdin=sys.stdin)
+def collect_staged_files(repo_root: Path) -> list[str]:
+    """Return sorted staged paths for the index (pre-commit)."""
+    proc = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z",
+            "--diff-filter=ACMRTUXB",
+        ],
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        err = proc.stderr.decode("utf-8", errors="replace").strip() or proc.stdout.decode(
+            "utf-8", errors="replace"
+        ).strip()
+        raise GitHookError(f"pre-commit: git diff --cached failed: {err or 'unknown error'}")
+    return sorted(_parse_name_only_z_output(proc.stdout))
+
+
+def run_pre_commit_checks(
+    repo_root: Path,
+    files: list[str],
+    commands: list[tuple[str, str]],
+) -> int:
+    if not files:
+        return 0
+    present = [rel for rel in files if (repo_root / rel).exists()]
+    if not present:
+        return 0
+    for name, template in commands:
+        argv = build_command_argv(template, present)
+        code = run_check_argv(argv, worktree=repo_root, check_name=name, mutation_mode="unstaged")
+        if code != 0:
+            return code
+    return 0
+
+
+def run_pre_commit(repo_root: Path | None = None) -> int:
+    root = Path(repo_root or ".").resolve()
+    commands = get_pre_commit_commands(root)
+    if not commands:
+        return 0
+    try:
+        files = collect_staged_files(root)
+    except GitHookError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return run_pre_commit_checks(root, files, commands)
+
+
+def run_pre_commit_hook(repo_root: Path | None = None) -> int:
+    return run_pre_commit(repo_root)
 
 
 def git_hooks_dir(repo_root: Path) -> Path:
@@ -306,33 +415,70 @@ class HookInstallReport:
         return asdict(self)
 
 
+def run_pre_push_from_stdin(repo_root: Path | None = None) -> int:
+    return run_pre_push(repo_root, stdin=sys.stdin)
+
+
+def _hook_marker(hook: str) -> str:
+    if hook == "pre-commit":
+        return HOOK_MARKER_PRE_COMMIT
+    return HOOK_MARKER
+
+
+def _git_hook_filename(hook: str) -> str:
+    if hook not in SUPPORTED_HOOKS:
+        raise ValueError(f"unsupported hook: {hook!r}")
+    return hook
+
+
+def install_git_hook(
+    hook: str,
+    repo_root: Path | None = None,
+    *,
+    force: bool = False,
+) -> HookInstallReport:
+    if hook not in SUPPORTED_HOOKS:
+        raise ValueError(f"unsupported hook: {hook!r}")
+    root = Path(repo_root or ".").resolve()
+    hooks_dir = git_hooks_dir(root)
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    git_name = _git_hook_filename(hook)
+    dest = hooks_dir / git_name
+    replaced = dest.exists()
+    marker = _hook_marker(hook)
+    if dest.exists() and not force:
+        existing = dest.read_text(encoding="utf-8", errors="replace")
+        if marker not in existing:
+            raise RuntimeError(
+                f"{git_name} hook already exists and is not managed by PLATE; "
+                "re-run with --force to replace it"
+            )
+    template_path = _resolve_hook_template(hook, root)
+    content = template_path.read_text(encoding="utf-8")
+    dest.write_text(content, encoding="utf-8")
+    dest.chmod(dest.stat().st_mode | 0o111)
+    return HookInstallReport(
+        hook=git_name,
+        installed_path=str(dest),
+        template_source=str(template_path),
+        replaced_existing=replaced,
+    )
+
+
 def install_pre_push_hook(
     repo_root: Path | None = None,
     *,
     force: bool = False,
 ) -> HookInstallReport:
-    root = Path(repo_root or ".").resolve()
-    hooks_dir = git_hooks_dir(root)
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-    dest = hooks_dir / "pre-push"
-    replaced = dest.exists()
-    if dest.exists() and not force:
-        existing = dest.read_text(encoding="utf-8", errors="replace")
-        if HOOK_MARKER not in existing:
-            raise RuntimeError(
-                "pre-push hook already exists and is not managed by PLATE; "
-                "re-run with --force to replace it"
-            )
-    template_path = resolve_pre_push_template(root)
-    content = template_path.read_text(encoding="utf-8")
-    dest.write_text(content, encoding="utf-8")
-    dest.chmod(dest.stat().st_mode | 0o111)
-    return HookInstallReport(
-        hook="pre-push",
-        installed_path=str(dest),
-        template_source=str(template_path),
-        replaced_existing=replaced,
-    )
+    return install_git_hook("pre-push", repo_root, force=force)
+
+
+def install_pre_commit_hook(
+    repo_root: Path | None = None,
+    *,
+    force: bool = False,
+) -> HookInstallReport:
+    return install_git_hook("pre-commit", repo_root, force=force)
 
 
 @dataclass
@@ -347,30 +493,71 @@ class HookStatusReport:
         return asdict(self)
 
 
-def pre_push_status(repo_root: Path | None = None) -> HookStatusReport:
-    root = Path(repo_root or ".").resolve()
+def _single_hook_status(
+    root: Path,
+    hook: str,
+    *,
+    command_names: list[str],
+) -> HookStatusReport:
+    git_name = _git_hook_filename(hook)
+    marker = _hook_marker(hook)
     try:
         hooks_dir = git_hooks_dir(root)
-        hook_path = hooks_dir / "pre-push"
+        hook_path = hooks_dir / git_name
     except RuntimeError:
         return HookStatusReport(
             repo_root=str(root),
             hook_path=None,
             hook_installed=False,
             hook_is_plate=False,
-            configured_commands=[name for name, _ in get_pre_push_commands(root)],
+            configured_commands=command_names,
         )
     installed = hook_path.is_file()
     is_plate = False
     if installed:
         text = hook_path.read_text(encoding="utf-8", errors="replace")
-        is_plate = HOOK_MARKER in text
+        is_plate = marker in text
     return HookStatusReport(
         repo_root=str(root),
         hook_path=str(hook_path) if installed else None,
         hook_installed=installed,
         hook_is_plate=is_plate,
-        configured_commands=[name for name, _ in get_pre_push_commands(root)],
+        configured_commands=command_names,
+    )
+
+
+def pre_push_status(repo_root: Path | None = None) -> HookStatusReport:
+    root = Path(repo_root or ".").resolve()
+    names = [name for name, _ in get_pre_push_commands(root)]
+    return _single_hook_status(root, "pre-push", command_names=names)
+
+
+def pre_commit_status(repo_root: Path | None = None) -> HookStatusReport:
+    root = Path(repo_root or ".").resolve()
+    names = [name for name, _ in get_pre_commit_commands(root)]
+    return _single_hook_status(root, "pre-commit", command_names=names)
+
+
+@dataclass
+class GitHooksStatusReport:
+    repo_root: str
+    pre_push: HookStatusReport
+    pre_commit: HookStatusReport
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "repo_root": self.repo_root,
+            "pre_push": self.pre_push.to_dict(),
+            "pre_commit": self.pre_commit.to_dict(),
+        }
+
+
+def git_hooks_status(repo_root: Path | None = None) -> GitHooksStatusReport:
+    root = Path(repo_root or ".").resolve()
+    return GitHooksStatusReport(
+        repo_root=str(root),
+        pre_push=pre_push_status(root),
+        pre_commit=pre_commit_status(root),
     )
 
 
@@ -379,22 +566,23 @@ def validate_hooks_config(hooks: Any) -> None:
         return
     if not isinstance(hooks, dict):
         raise PlateConfigError("'hooks' must be an object if present")
-    allowed_hook_names = {"pre_push"}
+    allowed_hook_names = {"pre_push", "pre_commit"}
     unknown_hooks = sorted(set(hooks) - allowed_hook_names)
     if unknown_hooks:
         raise PlateConfigError(f"unknown hooks keys: {', '.join(unknown_hooks)}")
-    pre_push = hooks.get("pre_push")
-    if pre_push is None:
-        return
-    if not isinstance(pre_push, dict):
-        raise PlateConfigError("'hooks.pre_push' must be an object if present")
-    unknown_cmds = sorted(set(pre_push) - set(PRE_PUSH_COMMAND_KEYS))
-    if unknown_cmds:
-        raise PlateConfigError(
-            f"unknown hooks.pre_push keys: {', '.join(unknown_cmds)} "
-            f"(allowed: {', '.join(PRE_PUSH_COMMAND_KEYS)})"
-        )
-    for key in PRE_PUSH_COMMAND_KEYS:
-        val = pre_push.get(key)
-        if val is not None and not isinstance(val, str):
-            raise PlateConfigError(f"hooks.pre_push.{key} must be a string if present")
+    for section_key in allowed_hook_names:
+        section = hooks.get(section_key)
+        if section is None:
+            continue
+        if not isinstance(section, dict):
+            raise PlateConfigError(f"'hooks.{section_key}' must be an object if present")
+        unknown_cmds = sorted(set(section) - set(PRE_HOOK_COMMAND_KEYS))
+        if unknown_cmds:
+            raise PlateConfigError(
+                f"unknown hooks.{section_key} keys: {', '.join(unknown_cmds)} "
+                f"(allowed: {', '.join(PRE_HOOK_COMMAND_KEYS)})"
+            )
+        for key in PRE_HOOK_COMMAND_KEYS:
+            val = section.get(key)
+            if val is not None and not isinstance(val, str):
+                raise PlateConfigError(f"hooks.{section_key}.{key} must be a string if present")

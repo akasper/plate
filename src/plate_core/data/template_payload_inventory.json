@@ -452,6 +452,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "scripts/plate/pre-commit-hook.sh",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "scripts/plate/select_ci_jobs.py",
       "classification": "copy_to_downstream"
     },

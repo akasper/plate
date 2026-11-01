@@ -1,5 +1,6 @@
 import json
 import io
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -163,6 +164,30 @@ class McpTests(unittest.TestCase):
             self.assertEqual(payload["source"], "defaults")
 
     @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_hooks_status(self, mock_write):
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
+            _handle_tools_call(903, {"name": "plate_hooks_status", "arguments": {"repo_root": tmp}})
+            payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+            self.assertIn("pre_push", payload)
+            self.assertIn("pre_commit", payload)
+
+    @patch("plate_core.mcp_server._write")
+    def test_tools_call_plate_hooks_install_pre_commit(self, mock_write):
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
+            _handle_tools_call(
+                904,
+                {
+                    "name": "plate_hooks_install",
+                    "arguments": {"repo_root": tmp, "hook": "pre-commit"},
+                },
+            )
+            payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
+            self.assertTrue(payload.get("ok"))
+            self.assertEqual(payload.get("hook"), "pre-commit")
+
+    @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_config_init(self, mock_write):
         with tempfile.TemporaryDirectory() as tmp:
             _handle_tools_call(13, {"name": "plate_config_init", "arguments": {"repo_root": tmp}})
@@ -299,6 +324,8 @@ class McpTests(unittest.TestCase):
         self.assertIn("plate_features", names)
         self.assertIn("plate_bootstrap", names)
         self.assertIn("plate_config_get", names)
+        self.assertIn("plate_hooks_install", names)
+        self.assertIn("plate_hooks_status", names)
         self.assertIn("plate_config_validate", names)
         self.assertIn("plate_config_init", names)
         self.assertIn("plate_config_upgrade", names)

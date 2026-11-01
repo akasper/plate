@@ -73,7 +73,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "format": "",
             "lint": "",
             "typecheck": "",
-        }
+        },
+        "pre_commit": {
+            "format": "",
+            "lint": "",
+            "typecheck": "",
+        },
     },
 }
 

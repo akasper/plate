@@ -1,0 +1,15 @@
+{
+  "slug": "pre-commit-hook-mcp-1302",
+  "change_type": "feature",
+  "surface": "plate_core.git_hooks + gh plate hooks + MCP plate_hooks_install/plate_hooks_status + scripts/plate/pre-commit-hook.sh + docs/bootstrap/pre-push-hook.md",
+  "summary": "Add a pre-commit hook variant (staged-file checks via hooks.pre_commit) and MCP install/status tools so agents need not shell out (#1302).",
+  "migration_impact": "Optional: configure hooks.pre_commit in .plate, run `gh plate hooks install --hook pre-commit`, or call plate_hooks_install. Pre-push behavior unchanged.",
+  "migration_guidance": [
+    "Import payload or bootstrap to receive scripts/plate/pre-commit-hook.sh.",
+    "Add hooks.pre_commit command templates to .plate when commit-time checks are preferred.",
+    "Run `gh plate hooks install --hook pre-commit` or MCP plate_hooks_install with hook pre-commit."
+  ],
+  "agent_notes": "Use plate_hooks_status to inspect both hooks; plate_hooks_install with hook pre-push or pre-commit. See docs/bootstrap/pre-push-hook.md.",
+  "breaking": false,
+  "links": ["#1302", "#1281", "#1290"]
+}

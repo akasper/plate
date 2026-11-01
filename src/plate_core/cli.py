@@ -1734,14 +1734,24 @@ def cmd_runner(args: argparse.Namespace) -> int:
 
 
 def cmd_hooks(args: argparse.Namespace) -> int:
-    from .git_hooks import install_pre_push_hook, pre_push_status, run_pre_push
+    from .git_hooks import (
+        git_hooks_status,
+        install_git_hook,
+        install_pre_push_hook,
+        run_pre_commit,
+        run_pre_push,
+    )
 
     repo_root = getattr(args, "repo_root", None)
+    hook_kind = str(getattr(args, "hook", None) or "pre-push")
 
     if getattr(args, "hooks_command", None) == "install":
         try:
-            report = install_pre_push_hook(repo_root, force=bool(getattr(args, "force", False)))
-        except (FileNotFoundError, RuntimeError) as exc:
+            if hook_kind == "pre-push":
+                report = install_pre_push_hook(repo_root, force=bool(getattr(args, "force", False)))
+            else:
+                report = install_git_hook(hook_kind, repo_root, force=bool(getattr(args, "force", False)))
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
             if args.json:
                 print(json.dumps({"ok": False, "error": str(exc)}))
             else:
@@ -1756,21 +1766,27 @@ def cmd_hooks(args: argparse.Namespace) -> int:
 
     if getattr(args, "hooks_command", None) == "run":
         hook_name = str(getattr(args, "hook_name", "") or "")
-        if hook_name != "pre-push":
-            print(f"unsupported hook: {hook_name!r} (only pre-push is implemented)", file=sys.stderr)
-            return 1
-        code = run_pre_push(repo_root)
-        return code
+        if hook_name == "pre-push":
+            code = run_pre_push(repo_root)
+            return code
+        if hook_name == "pre-commit":
+            return run_pre_commit(repo_root)
+        print(
+            f"unsupported hook: {hook_name!r} (supported: pre-push, pre-commit)",
+            file=sys.stderr,
+        )
+        return 1
 
     # status (default)
-    report = pre_push_status(repo_root)
+    report = git_hooks_status(repo_root)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
         return 0
-    print(f"hook_installed={report.hook_installed} plate_managed={report.hook_is_plate}")
-    print(f"configured_commands={report.configured_commands or '(none — hook passes silently)'}")
-    if report.hook_path:
-        print(f"path={report.hook_path}")
+    for label, section in (("pre-push", report.pre_push), ("pre-commit", report.pre_commit)):
+        print(f"[{label}] hook_installed={section.hook_installed} plate_managed={section.hook_is_plate}")
+        print(f"[{label}] configured_commands={section.configured_commands or '(none — hook passes silently)'}")
+        if section.hook_path:
+            print(f"[{label}] path={section.hook_path}")
     return 0
 
 
@@ -5074,13 +5090,19 @@ def build_parser() -> argparse.ArgumentParser:
     hooks.add_argument("--repo-root", default=".", help="Repository root (default: .)")
     hooks.add_argument("--json", action="store_true")
     hooks_sub = hooks.add_subparsers(dest="hooks_command", required=True)
-    hooks_install = hooks_sub.add_parser("install", help="Install the pre-push hook template")
+    hooks_install = hooks_sub.add_parser("install", help="Install a PLATE git hook template")
+    hooks_install.add_argument(
+        "--hook",
+        choices=("pre-push", "pre-commit"),
+        default="pre-push",
+        help="Hook to install (default: pre-push)",
+    )
     hooks_install.add_argument("--force", action="store_true", help="Replace an existing non-PLATE hook")
     hooks_install.add_argument("--json", action="store_true")
     hooks_install.add_argument("--repo-root", default=".", help="Repository root (default: .)")
     hooks_install.set_defaults(func=cmd_hooks, hooks_command="install")
-    hooks_run = hooks_sub.add_parser("run", help="Run hook logic (called from .git/hooks/pre-push)")
-    hooks_run.add_argument("hook_name", help="Hook name (pre-push)")
+    hooks_run = hooks_sub.add_parser("run", help="Run hook logic (called from .git/hooks/*)")
+    hooks_run.add_argument("hook_name", help="Hook name (pre-push or pre-commit)")
     hooks_run.add_argument("--repo-root", default=".", help="Repository root (default: .)")
     hooks_run.set_defaults(func=cmd_hooks, hooks_command="run")
     hooks_status = hooks_sub.add_parser("status", help="Show hook install state and configured commands")
