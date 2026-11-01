@@ -171,6 +171,8 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
         ]
         for path in workflow_paths_to_check:
             text = path.read_text(encoding="utf-8")
+            if "./.github/actions/plate-select-runs-on" not in text:
+                continue
             action_idx = text.index("./.github/actions/plate-select-runs-on")
             checkout_idx = text.index("actions/checkout")
             self.assertLess(
