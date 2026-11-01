@@ -66,6 +66,21 @@ class AssessAdoptionReadinessTests(unittest.TestCase):
         self.assertIn("first-qa-plan", report["next_command"])
         self.assertIn("--apply-first-qa", report["next_command"])
 
+    def test_bootstrap_next_command_resolves_explicit_github_repo(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text("{}\n", encoding="utf-8")
+            report = assess_adoption_readiness(
+                root,
+                include_optional=False,
+                github_repo="akasper/coacharino",
+            )
+        self.assertFalse(report["core_ready"])
+        self.assertIn(
+            "gh plate bootstrap --repo akasper/coacharino --adopt --apply",
+            report["next_command"],
+        )
+
     def _core_files(self, root: Path) -> None:
         (root / ".plate").write_text("{}\n", encoding="utf-8")
         (root / "AGENTS.md").write_text("# agents\n", encoding="utf-8")

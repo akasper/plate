@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .payload_surface import resolve_local_goals_wiki
+from .health import bootstrap_adopt_apply_command
 
 # Shared catalog with bootstrap seed-initial-questions (#153 / #949).
 STARTER_QUESTIONS: list[dict[str, str]] = [
@@ -84,6 +85,7 @@ def assess_adoption_readiness(
     repo_root: str | Path | None = None,
     *,
     include_optional: bool = True,
+    github_repo: str | None = None,
 ) -> dict[str, Any]:
     """Assess local checkout against #633 adoption criteria (status only).
 
@@ -203,7 +205,7 @@ def assess_adoption_readiness(
     if not plate_ok:
         next_cmd = "gh plate import-payload --dry-run --strategy conservative --json"
     elif core_failed:
-        next_cmd = "gh plate bootstrap --repo OWNER/REPO --adopt --apply"
+        next_cmd = bootstrap_adopt_apply_command(github_repo, repo_root=root)
     elif core_ready and not first_qa.get("seeded"):
         next_cmd = first_qa_apply_cmd
     else:

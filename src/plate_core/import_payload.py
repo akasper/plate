@@ -28,6 +28,7 @@ from .template_payload import (
     resolve_template_source,
     should_include_template_file,
 )
+from .health import bootstrap_adopt_apply_command
 
 Strategy = Literal["safe", "conservative", "force"]
 VALID_STRATEGIES: tuple[str, ...] = ("safe", "conservative", "force")
@@ -243,7 +244,11 @@ def _strategy_flag(strategy: str) -> str:
     return f"--strategy {strat}"
 
 
-def _next_command(report: ImportPayloadReport | dict[str, Any]) -> str:
+def _next_command(
+    report: ImportPayloadReport | dict[str, Any],
+    *,
+    repo_root: str | Path | None = None,
+) -> str:
     """Single actionable next CLI for agents/adopters (parity with adopt/self-migrate).
 
     Priority:
@@ -299,7 +304,7 @@ def _next_command(report: ImportPayloadReport | dict[str, Any]) -> str:
             "--escape-hatch .agentic/import-escape-hatch --json"
         )
     if created or overwritten:
-        return "gh plate bootstrap --repo OWNER/REPO --adopt --apply"
+        return bootstrap_adopt_apply_command(repo_root=repo_root)
     if conflicts:
         return (
             f"gh plate import-payload --dry-run {strat} "
@@ -673,7 +678,7 @@ def plan_import_payload(
         platform=resolved_platform,
     )
 
-    report.next_command = _next_command(report)
+    report.next_command = _next_command(report, repo_root=target)
     report.next_steps = _next_steps(report)
     if ns:
         report.next_steps.insert(

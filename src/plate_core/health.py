@@ -282,9 +282,68 @@ def summarize_spec_audit_for_health(
     }
 
 
-def _repo_from_git_remote() -> str:
+def _slug_from_github_remote_url(remote: str) -> str | None:
+    """Parse owner/name from a github.com remote URL, or return None."""
+    remote = (remote or "").strip()
+    if not remote:
+        return None
+    # Supports both git@github.com:owner/repo.git and https://github.com/owner/repo(.git)
+    # Note: repo name may contain dots (e.g. "u.ai"), so capture allows [^/]+ (non-greedy before optional .git)
+    # .git ambiguity note (per review of #609/#608): the optional (?:\.git)?$ trailer means repo names
+    # legitimately ending in ".git" (e.g. "myrepo.git" remote) will have the suffix stripped from capture
+    # (treated as remote trailer). "foo.git.git" parses as "foo.git" (non-greedy prefers trailer match).
+    # This is a known limitation for the rare case of .git-suffixed repo names; common dotted names
+    # (u.ai etc) now work. Parametrized regression test added.
+    m = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$", remote)
+    if not m:
+        return None
+    owner, name = m.group("owner"), m.group("repo")
+    if not owner or not name:
+        return None
+    return f"{owner}/{name}"
+
+
+def _normalize_owner_repo_slug(value: str | None) -> str | None:
+    slug = (value or "").strip()
+    if slug.count("/") != 1:
+        return None
+    owner, name = slug.split("/", 1)
+    if not owner or not name:
+        return None
+    if slug.upper() == "OWNER/REPO":
+        return None
+    return slug
+
+
+def _try_repo_from_plate_config(repo_root: str | Path | None = None) -> str | None:
+    root = Path(repo_root or ".").resolve()
+    path = root / ".plate"
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    direct = _normalize_owner_repo_slug(raw.get("repo") if isinstance(raw.get("repo"), str) else None)
+    if direct:
+        return direct
+    github = raw.get("github")
+    if isinstance(github, dict):
+        for key in ("repo", "repository", "slug"):
+            val = github.get(key)
+            if isinstance(val, str):
+                normalized = _normalize_owner_repo_slug(val)
+                if normalized:
+                    return normalized
+    return None
+
+
+def _repo_from_git_remote(repo_root: str | Path | None = None) -> str:
+    root = Path(repo_root or ".").resolve()
     proc = run_hidden(
-        ["git", "config", "--get", "remote.origin.url"],
+        ["git", "-C", str(root), "config", "--get", "remote.origin.url"],
         capture_output=True,
         text=True,
         check=False,
@@ -295,25 +354,73 @@ def _repo_from_git_remote() -> str:
             "Run from inside the target project's checkout, or pass --repo owner/name."
         )
     remote = proc.stdout.strip()
-    # Supports both git@github.com:owner/repo.git and https://github.com/owner/repo(.git)
-    # Note: repo name may contain dots (e.g. "u.ai"), so capture allows [^/]+ (non-greedy before optional .git)
-    # .git ambiguity note (per review of #609/#608): the optional (?:\.git)?$ trailer means repo names
-    # legitimately ending in ".git" (e.g. "myrepo.git" remote) will have the suffix stripped from capture
-    # (treated as remote trailer). "foo.git.git" parses as "foo.git" (non-greedy prefers trailer match).
-    # This is a known limitation for the rare case of .git-suffixed repo names; common dotted names
-    # (u.ai etc) now work. Parametrized regression test added.
-    m = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$", remote)
-    if not m:
-        raise RuntimeError(
-            f"Remote origin is not a GitHub repository URL: {remote!r}\n"
-            "Run from inside the target project's checkout (with a github.com origin remote), "
-            "or pass --repo owner/name explicitly."
+    slug = _slug_from_github_remote_url(remote)
+    if slug:
+        return slug
+    raise RuntimeError(
+        f"Remote origin is not a GitHub repository URL: {remote!r}\n"
+        "Run from inside the target project's checkout (with a github.com origin remote), "
+        "or pass --repo owner/name explicitly."
+    )
+
+
+def _try_repo_from_git_remote(repo_root: str | Path | None = None) -> str | None:
+    root = Path(repo_root or ".").resolve()
+    proc = run_hidden(
+        ["git", "-C", str(root), "config", "--get", "remote.origin.url"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    return _slug_from_github_remote_url(proc.stdout)
+
+
+def resolve_repo(repo: str | None, *, repo_root: str | Path | None = None) -> str:
+    if repo:
+        return repo
+    return _repo_from_git_remote(repo_root)
+
+
+_ADOPTION_BOOTSTRAP_PLACEHOLDER = "OWNER/REPO"
+
+
+def resolve_adoption_bootstrap_repo(
+    explicit_repo: str | None = None,
+    *,
+    repo_root: str | Path | None = None,
+) -> tuple[str, bool]:
+    """Resolve owner/name for adoption bootstrap hints (#1190).
+
+    Priority: explicit ``--repo``, local ``.plate``, then ``git`` ``origin``.
+    Returns ``(slug, used_placeholder)``.
+    """
+    for candidate in (
+        _normalize_owner_repo_slug(explicit_repo),
+        _try_repo_from_plate_config(repo_root),
+        _try_repo_from_git_remote(repo_root),
+    ):
+        if candidate:
+            return candidate, False
+    return _ADOPTION_BOOTSTRAP_PLACEHOLDER, True
+
+
+def bootstrap_adopt_apply_command(
+    explicit_repo: str | None = None,
+    *,
+    repo_root: str | Path | None = None,
+) -> str:
+    slug, used_placeholder = resolve_adoption_bootstrap_repo(
+        explicit_repo, repo_root=repo_root
+    )
+    cmd = f"gh plate bootstrap --repo {slug} --adopt --apply"
+    if used_placeholder:
+        cmd += (
+            "  # could not resolve owner/name from --repo, .plate, or git origin; "
+            "substitute OWNER/REPO"
         )
-    return f"{m.group('owner')}/{m.group('repo')}"
-
-
-def resolve_repo(repo: str | None) -> str:
-    return repo if repo else _repo_from_git_remote()
+    return cmd
 
 
 def get_health(
@@ -327,9 +434,9 @@ def get_health(
     # resolve_repo (and _repo_from_git_remote) raise RuntimeError with clear messages on failure;
     # the previous try/except wrapper added no value (unnecessary per review of #609).
     # Propagate directly so original error (with its guidance about --repo) is surfaced.
-    target = resolve_repo(repo)
-    errors: list[str] = []
     root = Path(repo_root or ".")
+    target = resolve_repo(repo, repo_root=root)
+    errors: list[str] = []
     expected_labels, registry_error = read_expected_labels_from_registry(root)
     label_registry_ok = registry_error is None
     if registry_error:
@@ -608,6 +715,7 @@ def get_health(
         adopt = assess_adoption_readiness(
             repo_root if repo_root is not None else ".",
             include_optional=False,
+            github_repo=target,
         )
         if adopt.get("ok"):
             adoption_core_ready = bool(adopt.get("core_ready"))

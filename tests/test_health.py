@@ -9,9 +9,11 @@ from plate_core.github_labels import load_labels_from_yaml
 from plate_core.health import (
     HealthReport,
     _repo_from_git_remote,
+    bootstrap_adopt_apply_command,
     expected_labels_from_registry,
     get_health,
     label_coverage_fix_command,
+    resolve_adoption_bootstrap_repo,
     resolve_repo,
     summarize_spec_audit_for_health,
 )
@@ -501,6 +503,36 @@ class HealthTests(unittest.TestCase):
                 self.assertEqual(resolve_repo(None), expected)
                 # also ensure resolve_repo passthrough still works
                 self.assertEqual(resolve_repo("explicit/owner"), "explicit/owner")
+
+
+class AdoptionBootstrapRepoResolutionTests(unittest.TestCase):
+    """#1190: adoption bootstrap next_command uses a resolved owner/name when possible."""
+
+    def test_resolve_prefers_explicit_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text('{"github": {"repo": "from/plate"}}\n', encoding="utf-8")
+            slug, placeholder = resolve_adoption_bootstrap_repo(
+                "explicit/adopter", repo_root=root
+            )
+        self.assertEqual(slug, "explicit/adopter")
+        self.assertFalse(placeholder)
+
+    def test_resolve_reads_plate_github_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(
+                '{"github": {"repo": "coacharino/app"}}\n', encoding="utf-8"
+            )
+            slug, placeholder = resolve_adoption_bootstrap_repo(repo_root=root)
+        self.assertEqual(slug, "coacharino/app")
+        self.assertFalse(placeholder)
+
+    def test_resolve_falls_back_to_placeholder_with_note(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cmd = bootstrap_adopt_apply_command(repo_root=tmp)
+        self.assertIn("--repo OWNER/REPO", cmd)
+        self.assertIn("could not resolve owner/name", cmd)
 
 
 if __name__ == "__main__":
