@@ -471,6 +471,23 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 args.get("repo_root"),
                 apply=bool(args.get("apply", False)),
             ).to_dict()
+        elif name == "plate_hooks_install":
+            from .git_hooks import install_git_hook
+
+            hook = str(args.get("hook") or "pre-push")
+            try:
+                report = install_git_hook(
+                    hook,
+                    args.get("repo_root"),
+                    force=bool(args.get("force", False)),
+                )
+                payload = {"ok": True, **report.to_dict()}
+            except (FileNotFoundError, RuntimeError, ValueError) as exc:
+                payload = {"ok": False, "error": str(exc)}
+        elif name == "plate_hooks_status":
+            from .git_hooks import git_hooks_status
+
+            payload = git_hooks_status(args.get("repo_root")).to_dict()
         elif name == "plate_plan_epic":
             payload = _plan_epic_stub(args).to_dict()
         elif name == "plate_planning_start":
@@ -2540,6 +2557,41 @@ def run() -> None:
                                         "apply": {
                                             "type": "boolean",
                                             "description": "When true, write the upgraded .plate file back to disk.",
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_hooks_install",
+                                "description": "Install the PLATE pre-push or pre-commit git hook template (#1281/#1302). Prefer this over shelling out to gh plate hooks install.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
+                                        },
+                                        "hook": {
+                                            "type": "string",
+                                            "enum": ["pre-push", "pre-commit"],
+                                            "description": "Hook to install (default pre-push).",
+                                        },
+                                        "force": {
+                                            "type": "boolean",
+                                            "description": "Replace an existing non-PLATE hook when true.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_hooks_status",
+                                "description": "Report install state and configured commands for PLATE pre-push and pre-commit hooks (#1302).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root path. Defaults to current directory.",
                                         }
                                     },
                                 },

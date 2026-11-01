@@ -1,4 +1,4 @@
-"""Tests for pre-push hook template and runner (#1281)."""
+"""Tests for pre-push / pre-commit hook templates and runners (#1281, #1302)."""
 
 from __future__ import annotations
 
@@ -17,10 +17,15 @@ from plate_core.git_hooks import (
     build_command_argv,
     collect_changed_files_by_commit,
     collect_changed_files_for_push,
+    collect_staged_files,
+    get_pre_commit_commands,
     get_pre_push_commands,
+    install_pre_commit_hook,
     install_pre_push_hook,
     parse_pre_push_stdin,
+    pre_commit_status,
     pre_push_status,
+    run_pre_commit,
     run_pre_push,
     validate_hooks_config,
 )
@@ -39,12 +44,17 @@ class TestPrePushHookConfig(unittest.TestCase):
             validate_hooks_config({"pre_push": {"format": "x"}, "other": {}})
         with self.assertRaises(PlateConfigError):
             validate_hooks_config({"pre_push": {"format": "x", "extra": "y"}})
+        with self.assertRaises(PlateConfigError):
+            validate_hooks_config({"pre_commit": {"lint": "x", "bad": "y"}})
 
     def test_strict_top_level_allows_hooks(self):
         validate_plate_config(
             {
                 "version": "1.3",
-                "hooks": {"pre_push": {"format": "", "lint": "", "typecheck": ""}},
+                "hooks": {
+                    "pre_push": {"format": "", "lint": "", "typecheck": ""},
+                    "pre_commit": {"format": "", "lint": "", "typecheck": ""},
+                },
             },
             strict=True,
         )
@@ -67,7 +77,7 @@ class TestPrePushHookConfig(unittest.TestCase):
             self.assertEqual(loaded.hooks["pre_push"]["format"], "fmt {files}")
             save_plate_config(loaded, root, overwrite=True)
             saved = json.loads((root / ".plate").read_text(encoding="utf-8"))
-            self.assertEqual(saved["hooks"], hooks)
+            self.assertEqual(saved["hooks"]["pre_push"], hooks["pre_push"])
 
     def test_plate_config_from_dict_includes_hooks(self):
         cfg = PlateConfig.from_dict(
@@ -229,6 +239,51 @@ class TestPrePushHookRunner(unittest.TestCase):
             self.assertEqual(run_pre_push(root, stdin=io.StringIO(stdin)), 1)
 
 
+class TestPreCommitHookRunner(unittest.TestCase):
+    def test_run_pre_commit_silent_without_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / ".plate").write_text(json.dumps({"version": "1.3"}), encoding="utf-8")
+            self.assertEqual(run_pre_commit(root), 0)
+
+    def test_run_pre_commit_on_staged_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
+            (root / "f.txt").write_text("x", encoding="utf-8")
+            subprocess.run(["git", "add", "f.txt"], cwd=root, check=True)
+            (root / ".plate").write_text(
+                json.dumps(
+                    {
+                        "version": "1.3",
+                        "hooks": {"pre_commit": {"lint": "test -f {files}"}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(run_pre_commit(root), 0)
+
+    def test_collect_staged_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / "a.txt").write_text("1", encoding="utf-8")
+            subprocess.run(["git", "add", "a.txt"], cwd=root, check=True)
+            self.assertIn("a.txt", collect_staged_files(root))
+
+    def test_get_pre_commit_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(
+                json.dumps({"version": "1.3", "hooks": {"pre_commit": {"lint": "true"}}}),
+                encoding="utf-8",
+            )
+            self.assertEqual(get_pre_commit_commands(root), [("lint", "true")])
+
+
 class TestPrePushHookInstall(unittest.TestCase):
     def test_install_writes_hook(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -243,6 +298,20 @@ class TestPrePushHookInstall(unittest.TestCase):
             self.assertTrue(status.hook_is_plate)
 
 
+class TestPreCommitHookInstall(unittest.TestCase):
+    def test_install_writes_hook(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            report = install_pre_commit_hook(root)
+            hook_path = Path(report.installed_path)
+            self.assertTrue(hook_path.is_file())
+            self.assertIn("PLATE pre-commit hook", hook_path.read_text(encoding="utf-8"))
+            status = pre_commit_status(root)
+            self.assertTrue(status.hook_installed)
+            self.assertTrue(status.hook_is_plate)
+
+
 class TestPrePushHookCli(unittest.TestCase):
     def test_hooks_status_json_after_subcommand(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -253,7 +322,9 @@ class TestPrePushHookCli(unittest.TestCase):
                 code = cli_main(["hooks", "status", "--repo-root", str(root), "--json"])
             self.assertEqual(code, 0)
             payload = json.loads(buf.getvalue())
-            self.assertIn("hook_installed", payload)
+            self.assertIn("pre_push", payload)
+            self.assertIn("pre_commit", payload)
+            self.assertFalse(payload["pre_push"]["hook_installed"])
 
 
 if __name__ == "__main__":

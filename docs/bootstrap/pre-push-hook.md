@@ -23,6 +23,8 @@ Example:
 
 Pick commands that match your stack. Keep them fast (target under ~10 seconds on typical agent edits).
 
+Use the same shape under `hooks.pre_commit` when you prefer checks at **commit** time (staged files only) instead of at push time.
+
 ## Install the hook
 
 From the repository root:
@@ -31,13 +33,21 @@ From the repository root:
 gh plate hooks install
 ```
 
-This writes `.git/hooks/pre-push` from the PLATE template (`scripts/plate/pre-push-hook.sh` after bootstrap, or the bundled template in `plate-core`). Re-run after upgrading `plate-core` when the template changes. Use `--force` to replace a non-PLATE hook.
+For the pre-commit variant:
+
+```bash
+gh plate hooks install --hook pre-commit
+```
+
+This writes `.git/hooks/pre-push` or `.git/hooks/pre-commit` from the PLATE template (`scripts/plate/pre-push-hook.sh` or `scripts/plate/pre-commit-hook.sh` after bootstrap, or the bundled template in `plate-core`). Re-run after upgrading `plate-core` when the template changes. Use `--force` to replace a non-PLATE hook.
 
 Check status:
 
 ```bash
 gh plate hooks status --json
 ```
+
+Agents can use MCP `plate_hooks_install` and `plate_hooks_status` instead of shelling out to the CLI.
 
 ## Bootstrap
 
