@@ -4324,7 +4324,7 @@ def cmd_runner_doctor(args: argparse.Namespace) -> int:
 
 def cmd_release_repair(args: argparse.Namespace) -> int:
     """Init/repair standing release tracks + Next Release issue (#320)."""
-    from plate_core.release import repair_release_standing_state
+    from plate_core.release import format_release_repair_next_release_lines, repair_release_standing_state
 
     apply = bool(getattr(args, "apply", False))
     dry_run = not apply
@@ -4341,6 +4341,8 @@ def cmd_release_repair(args: argparse.Namespace) -> int:
     print(f"  next_release_count={out.get('diagnosis', {}).get('next_release_count')}")
     for a in out.get("actions") or []:
         print(f"  - [{a.get('state')}] {a.get('action')}: {a.get('detail')}")
+        for line in format_release_repair_next_release_lines(a):
+            print(line)
     if out.get("diagnosis", {}).get("needs_dedupe_next"):
         print("  HUMAN: multiple Next Release issues — keep exactly one.")
     if not apply:
