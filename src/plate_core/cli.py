@@ -533,6 +533,7 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
             adopt=adopt,
             local_root=getattr(args, "local_root", None),
             platform=getattr(args, "platform", None),
+            public=bool(getattr(args, "public", False)),
         )
     except (RuntimeError, GhApiError, PlateConfigError) as exc:
         if args.json:
@@ -4323,7 +4324,7 @@ def cmd_runner_doctor(args: argparse.Namespace) -> int:
 
 def cmd_release_repair(args: argparse.Namespace) -> int:
     """Init/repair standing release tracks + Next Release issue (#320)."""
-    from plate_core.release import repair_release_standing_state
+    from plate_core.release import format_release_repair_next_release_lines, repair_release_standing_state
 
     apply = bool(getattr(args, "apply", False))
     dry_run = not apply
@@ -4340,6 +4341,8 @@ def cmd_release_repair(args: argparse.Namespace) -> int:
     print(f"  next_release_count={out.get('diagnosis', {}).get('next_release_count')}")
     for a in out.get("actions") or []:
         print(f"  - [{a.get('state')}] {a.get('action')}: {a.get('detail')}")
+        for line in format_release_repair_next_release_lines(a):
+            print(line)
     if out.get("diagnosis", {}).get("needs_dedupe_next"):
         print("  HUMAN: multiple Next Release issues — keep exactly one.")
     if not apply:
@@ -4859,6 +4862,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Script platform for this run. Overrides remote .plate and is written on --apply. "
             "Default: remote .plate platform, or posix when absent."
         ),
+    )
+    bootstrap.add_argument(
+        "--public",
+        action="store_true",
+        help="When creating a missing GitHub repository during --apply, create it public (default: private).",
     )
     bootstrap.add_argument("--json", action="store_true", help="Output JSON")
     bootstrap.set_defaults(func=cmd_bootstrap)
