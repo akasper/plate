@@ -49,6 +49,7 @@ Link to versioned per-feature change files under `.agentic/releases/` and any ge
 ## Feature Documentation
 
 - [Agent Context Map](Agent-Context-Map.md) — the canonical discovery index for "where should I look first?"
+- [Skills Hub](Skills-Hub.md) — curated outside resources (linked references with attribution; not installable packs)
 - List major feature pages and their traceability links.
 
 ## Operations and Maintenance

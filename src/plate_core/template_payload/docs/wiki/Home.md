@@ -8,6 +8,8 @@ Link to versioned per-feature change files under `.agentic/releases/` and any ge
 
 ## Feature Documentation
 
+- [Skills Hub](Skills-Hub.md) — curated outside resources with attribution (linked references, not installable packs)
+
 List major feature pages and their traceability links.
 
 ## Operations and Maintenance

@@ -388,6 +388,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/wiki/Skills-Hub.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "package.json",
       "classification": "copy_to_downstream"
     },
