@@ -173,6 +173,10 @@ while IFS='|' read -r label_name label_color label_desc; do
 done < <(parse_labels)
 
 echo "Synced $LABEL_SYNC_OK canonical labels (${LABEL_SYNC_FAILED} failed)."
+if [[ "$LABEL_SYNC_FAILED" -gt 0 ]]; then
+    echo "Error: label sync failed for ${LABEL_SYNC_FAILED} label(s)." >&2
+    exit 1
+fi
 
 # Remove default GitHub labels ---------------------------------------------------
 
