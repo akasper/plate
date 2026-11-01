@@ -276,6 +276,18 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/marketing/ai-discoverability/baseline-log.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/marketing/ai-discoverability/brief.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/marketing/ai-discoverability/prompt-set.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/marketing/experiments.md",
       "classification": "copy_to_downstream"
     },
