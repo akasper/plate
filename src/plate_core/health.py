@@ -378,9 +378,8 @@ def _try_repo_from_git_remote(repo_root: str | Path | None = None) -> str | None
 
 
 def resolve_repo(repo: str | None, *, repo_root: str | Path | None = None) -> str:
-    explicit = _normalize_owner_repo_slug(repo)
-    if explicit:
-        return explicit
+    if repo:
+        return repo
     return _repo_from_git_remote(repo_root)
 
 
