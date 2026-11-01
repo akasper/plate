@@ -65,6 +65,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "default_sleep_seconds": 300,
             "max_cycles": None,
         },
+        # #1236: one-line header on agent-posted PR/review comments (not PR bodies/commits)
+        "comment_attribution": {
+            "enabled": True,
+            "format": "🤖 {agent} on behalf of {on_behalf_of}",
+        },
     },
     # Absent key resolves to posix. PLATE's own repo sets posix-and-windows explicitly.
     "platform": PLATFORM_POSIX,
@@ -343,6 +348,23 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
             raise PlateConfigError(
                 f"invalid autonomy.pr_review_scope: {prs!r} (allowed: all/bot-only/human-only)"
             )
+        ca = auto.get("comment_attribution")
+        if ca is not None:
+            if not isinstance(ca, dict):
+                raise PlateConfigError("'autonomy.comment_attribution' must be an object if present")
+            ca_enabled = ca.get("enabled")
+            if ca_enabled is not None and not isinstance(ca_enabled, bool):
+                raise PlateConfigError("autonomy.comment_attribution.enabled must be a boolean")
+            ca_format = ca.get("format")
+            if ca_format is not None and (not isinstance(ca_format, str) or not ca_format.strip()):
+                raise PlateConfigError(
+                    "autonomy.comment_attribution.format must be a non-empty string if present"
+                )
+            unk_ca = set(ca) - {"enabled", "format"}
+            if unk_ca:
+                raise PlateConfigError(
+                    f"unknown autonomy.comment_attribution keys: {', '.join(sorted(unk_ca))}"
+                )
         tb = auto.get("token_budget", {})
         if isinstance(tb, dict):
             for k in ("daily", "per_cycle", "per_action"):
@@ -358,6 +380,7 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
             "enabled",
             "risk_tolerance",
             "pr_review_scope",
+            "comment_attribution",
             "token_budget",
             "cost_ceiling_usd",
             "schedules_enabled",
