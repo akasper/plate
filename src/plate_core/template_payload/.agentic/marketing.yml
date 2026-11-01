@@ -7,7 +7,7 @@ marketing:
   publishing_mode: "disabled_until_configured"
 
 claim_review_policy:
-  source_of_product_truth: "CURRENT.md"
+  source_of_product_truth: "SPEC.md"
   planned_claims_must_link_to:
     - "SPEC.md"
     - "issue"
@@ -17,6 +17,15 @@ claim_review_policy:
     - "security claims"
     - "legal or compliance claims"
     - "roadmap commitments"
+
+ai_discoverability:
+  enabled: false
+  engines:
+    - "TBD"
+  prompt_set: "docs/marketing/ai-discoverability/prompt-set.md"
+  run_cap:
+    max_runs_per_month: 0
+    max_cost_usd: "TBD"
 
 analytics_policy:
   enabled: false

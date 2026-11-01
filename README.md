@@ -58,14 +58,17 @@ python -c "import plate_core; print(plate_core.__version__)"   # expect 0.8.7
 # gh extension: install or upgrade so the thin shim pin matches
 gh extension install akasper/gh-plate        # first time
 gh extension upgrade plate                   # later (or: gh extension upgrade gh-plate)
-# If upgrade leaves an old pin, reinstall:
-#   gh extension remove plate && gh extension install akasper/gh-plate
+# If upgrade leaves an old pin, or fails non-fast-forward after the 2026-10-23
+# gh-plate history rewrite (2e0b9b6 → cf0630c), reinstall:
+gh extension remove plate && gh extension install akasper/gh-plate
 
 # Optional: confirm the extension pin file (path varies by gh install layout)
 #   cat "$(dirname "$(which gh-plate 2>/dev/null || true)")/PLATE_CORE_VERSION"
 ```
 
 **Pin mismatch symptom:** `gh plate` prints `plate-core version lock active ... ensuring plate-core==0.7.2` (or another older pin) while docs assume 0.8.7. Fix with extension upgrade/reinstall + `pip install -U 'plate-core==0.8.7'`. Self-migrate with an **explicit** target should not report false drift when pin already equals that target (`gh plate self-migrate --plan --json` / `--verify`).
+
+**History rewrite (2026-10-23):** If `gh extension upgrade plate` cannot fast-forward, your local extension clone predates the scrub of `akasper/gh-plate` `main`. Use the reinstall command above; details in [docs/wiki/Troubleshooting.md](docs/wiki/Troubleshooting.md) (#1187).
 
 ### As a Python package (`plate-core` on PyPI + MCP)
 

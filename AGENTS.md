@@ -31,6 +31,8 @@ This makes the human dependencies first-class, visible, auditable, and part of t
 
 Planners must treat this as a required part of Epic scoping, not an afterthought in a PR description checklist. The guidance also applies to new-project templates (see template_payload/AGENTS.md) and the release ceremony packaging phase.
 
+**gh-plate extension repo:** Do not force-push `akasper/gh-plate` `main`; if a history rewrite is unavoidable, announce it in release notes and document the reinstall command (`gh extension remove plate && gh extension install akasper/gh-plate`) for adopters (#1187).
+
 ## Default PLATE Persona (Epic #459)
 
 When operating in a repository that has adopted PLATE (signaled locally by `.plate/` or `.plate/config` + `AGENTS.md` / `.agentic/`, or on GitHub by Epic labels, release artifacts, etc.), agents **must default to the `plate` persona** ( `plugin/agents/plate.agent.md` + `src/plate_core/agent_guidance.py` sections + baseline catalog).

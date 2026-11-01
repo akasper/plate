@@ -19,6 +19,18 @@ python3 -c "import plate_core; print(plate_core.__version__)"
 
 When the installed version is still older than you expect, reinstall or upgrade the extension from the current release (`gh extension install akasper/gh-plate` or `gh extension upgrade plate`), then run `gh plate self-migrate --plan` again. If versions still disagree, check which `python3` your shell resolves (`type python3` or `which python3`) while running `gh plate`; the launcher does not read a separate interpreter environment variable.
 
+## `gh extension upgrade plate` fails after a gh-plate history rewrite
+
+On **2026-10-23**, upstream `akasper/gh-plate` rewrote `main` (scrubbed email from history). The old extension clone head was `2e0b9b6`; current `main` is `cf0630c`. GitHub CLI keeps a local clone of the extension repo, so `gh extension upgrade plate` may fail with a non-fast-forward error when your clone still points at the pre-rewrite history.
+
+Reinstall the extension (same fix as a stuck pin):
+
+```bash
+gh extension remove plate && gh extension install akasper/gh-plate
+```
+
+Then confirm with `gh extension list` and `gh plate self-migrate --plan`. Full upgrade sequencing for adopters lives in [adoption-guide.md](../migration/adoption-guide.md) (stub upgrade guide: #1069).
+
 ## Pip install fails on “externally managed environment” (PEP 668)
 
 On many Linux distributions, system Python is marked **externally managed**, so `pip install plate-core` (including when invoked by the `gh-plate` launcher via `python3 -m pip install --user`) may refuse to write into the system site-packages. The `plate-core` wheel exposes only the `plate-mcp` console script, not a standalone `plate` CLI—`gh plate` always goes through the extension launcher.
