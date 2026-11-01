@@ -1,0 +1,15 @@
+{
+  "slug": "1161-ai-discoverability-templates",
+  "change_type": "feature",
+  "surface": "src/plate_core/template_payload/docs/marketing/ai-discoverability/ + template_payload_inventory.json",
+  "summary": "Ship AI discoverability review templates (brief, prompt set with control questions, baseline log) for downstream bootstrap/import (#1161).",
+  "migration_impact": "New adopters receive `docs/marketing/ai-discoverability/` scaffolding on import-payload or bootstrap. Existing repos are unchanged until they import or copy the directory.",
+  "migration_guidance": [
+    "Run `gh plate import-payload` with an appropriate strategy to add `docs/marketing/ai-discoverability/` if missing.",
+    "Fill control sources in `prompt-set.md`, run baseline prompts, and record results in `baseline-log.md` before launch.",
+    "Do not add hidden text or prompt injection; keep claims traceable to SPEC.md or issues per Epic #1159."
+  ],
+  "agent_notes": "Templates only—skill (#1167), marketing.yml ai_discoverability (#1164), and automation (#1168) are separate. Use honest tactics; every control answer must cite SPEC.md or an issue.",
+  "breaking": false,
+  "links": ["#1161", "#1159", "#1111"]
+}
