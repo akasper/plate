@@ -78,10 +78,21 @@ No machine needs to be dedicated full-time; local runners are for **spare capaci
 
 When **no** local runner is free, GitHub **queues** the job rather than automatically moving it to hosted runners.
 
-PLATE’s workflow integration ([#1214](https://github.com/akasper/plate/issues/1214)) adds a **`select-runs-on` job** in heavy workflows (`ci.yml`, `test-e2e.yml`) that probes for an online, idle runner with your label and passes `runs-on` to downstream jobs. The composite action calls GitHub’s **List self-hosted runners for a repository** API; that endpoint requires **repository administration read** on the token (for example `actions: read` alone is not enough). When the probe returns 403, 404, or a network error, the action logs a warning and falls back to `ubuntu-latest` instead of failing the workflow.
+PLATE’s workflow integration ([#1214](https://github.com/akasper/plate/issues/1214)) adds a **`select-runs-on` job** in heavy workflows (`ci.yml`, `test-e2e.yml`) that probes for an online, idle runner with your label and passes `runs-on` to downstream jobs. The composite action calls GitHub’s **List self-hosted runners for a repository** API. That endpoint is **not available to `GITHUB_TOKEN`**; when the probe cannot authenticate (403, 404, or network error), the action logs a warning and falls back to `ubuntu-latest` instead of failing the workflow.
 
 <!-- PLATES-CORE:BEGIN self-hosted-runner-probe-permissions -->
-The idle-runner probe in `.github/actions/plate-select-runs-on/action.yml` needs permission to list repository self-hosted runners. Grant the workflow job enough scope (typically **Administration: read** on the repository for `GITHUB_TOKEN`, or use a PAT with equivalent access). Without it, PLATE treats the probe as unavailable and uses GitHub-hosted `ubuntu-latest` for heavy jobs.
+The idle-runner probe calls GitHub’s **List self-hosted runners for a repository** API. **`GITHUB_TOKEN` cannot access that endpoint** — workflow `permissions` do not include repository Administration read, so the default token always fails the probe and PLATE falls back to `ubuntu-latest`.
+
+To enable local runner selection, store a **classic PAT with `repo` scope** or a **fine-grained PAT with Administration read** on the repository as a secret (for example `PLATE_RUNNER_PROBE_PAT`), and pass it to the composite action:
+
+```yaml
+- uses: ./.github/actions/plate-select-runs-on
+  with:
+    plate-runs-on: ${{ vars.PLATE_RUNS_ON }}
+    github-token: ${{ secrets.PLATE_RUNNER_PROBE_PAT || github.token }}
+```
+
+Template `ci.yml` and `test-e2e.yml` wire this secret when present. Without a suitable PAT, self-hosted labels in `PLATE_RUNS_ON` still queue jobs on GitHub-hosted fallback runners.
 <!-- PLATES-CORE:END self-hosted-runner-probe-permissions -->
 
 Set a **job timeout** so a queued job eventually runs on GitHub-hosted runners instead of waiting up to GitHub’s default queue horizon (on the order of a day).
