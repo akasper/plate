@@ -10,7 +10,7 @@
 
 Canonical source: `src/plate_core/data/baseline_catalog.yml`
 
-This catalog defines **29** baseline skills used by PLATE agents.
+This catalog defines **30** baseline skills used by PLATE agents.
 Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same directory.
 
 ## Index
@@ -40,6 +40,7 @@ Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same director
 | `profile-and-benchmark` | Profile and Benchmark | `performance-engineer` |
 | `research-synthesis` | Research Synthesis | `market-researcher`, `research-agent` |
 | `resume-from-answered-question` | Resume from Answered (Blocking) Question | `research-agent`, `project-manager` |
+| `review-ai-discoverability` | Review AI Discoverability | `dev-relations-expert`, `research-agent` |
 | `review-discussions` | Review Discussions | `market-researcher`, `dev-relations-expert`, `research-agent` |
 | `review-test-coverage` | Review Test Coverage | `software-engineer`, `ci-engineer` |
 | `run-autonomy-cycle` | Run Autonomy Cycle / Loop | `project-manager` |
@@ -582,6 +583,30 @@ After a blocking Question is answered, retrieve the full answer + provenance, me
 - The blocking Question on user personas was answered. Merge the findings and resume the onboarding Feature.
 
 **Plugin skill file:** `skills/resume-from-answered-question/SKILL.md`
+
+### `review-ai-discoverability` — Review AI Discoverability
+
+Audit agent-readable surfaces and public claims so AI assistants and answer engines can read, verify, and cite the product honestly.
+
+**Owning agents:** `dev-relations-expert`, `research-agent`
+
+**Inputs**
+
+- Public repo surfaces (README, AGENTS.md, docs, site, llms.txt when present)
+- SPEC.md, CURRENT.md, and .agentic/marketing.yml claim policy
+- Marketing or launch copy under review
+
+**Outputs**
+
+- Completed checklist rows with evidence links
+- Gap issues (surfaces and claims) with risk labels
+- Summary of honest-tactics violations or escalations
+
+**Examples**
+
+- Before launch, walk docs/marketing/ai-discoverability-review-checklist.md and file issues for untraceable README claims.
+
+**Plugin skill file:** `skills/review-ai-discoverability/SKILL.md`
 
 ### `review-discussions` — Review Discussions
 

@@ -1,0 +1,15 @@
+{
+  "slug": "1167-ai-discoverability-review-skill",
+  "change_type": "feature",
+  "surface": "baseline_catalog.yml (review-ai-discoverability) + docs/marketing/ai-discoverability-review-checklist.md + template payload skill/checklist",
+  "summary": "Add catalog skill review-ai-discoverability (dev-relations-expert) and a reviewable checklist auditing agent-readable surfaces and traceable public claims (#1167).",
+  "migration_impact": "Downstream repos receive the checklist and `.agentic/skills/review-ai-discoverability/SKILL.md` on import-payload; baseline catalog and plugin SKILLS surfaces gain the new skill. `.agentic/marketing.yml` references the checklist artifact.",
+  "migration_guidance": [
+    "Run `gh plate import-payload` (or bootstrap) to copy the checklist and skill.",
+    "Add `review-ai-discoverability` to local agent workflows or run via dev-relations-expert delegation before launch.",
+    "Complete docs/marketing/ai-discoverability-review-checklist.md; file gaps as issues per honest-tactics rules in Epic #1159."
+  ],
+  "agent_notes": "Lazy-load the review-ai-discoverability skill for discoverability or launch reviews—not ordinary implementation loops. Every claim must trace to SPEC.md or an issue; no hidden text or fake endorsements.",
+  "breaking": false,
+  "links": ["#1167", "#1159", "#1118", "#1120"]
+}
