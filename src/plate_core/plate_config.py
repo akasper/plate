@@ -200,6 +200,21 @@ def _plate_path(repo_root: Path | None = None) -> Path:
     return root / ".plate"
 
 
+def local_root_plate_present(repo_root: Path | str | None = None) -> bool:
+    """True when the checkout has a root ``.plate`` file (or non-empty ``.plate/`` dir)."""
+
+    root = Path(repo_root or ".").resolve()
+    plate = root / ".plate"
+    if plate.is_file():
+        return True
+    if plate.is_dir():
+        try:
+            return any(plate.iterdir())
+        except OSError:
+            return False
+    return False
+
+
 def plate_directory_layout_error_message() -> str:
     """Human-readable error when `.plate` is a directory instead of a JSON file."""
 

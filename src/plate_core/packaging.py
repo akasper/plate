@@ -34,11 +34,15 @@ ONBOARDING_STEPS = [
     "Install: `pip install plate-core=={version}` (or pin via gh-plate VERSION).",
     "Extension: ensure `gh plate` resolves (monorepo checkout or published gh-plate tag).",
     "Bootstrap (optional): `gh plate bootstrap --apply` in the target repo.",
-    "Config: `gh plate config init` if `.plate` is missing.",
     "First Q&A: open or create a Question; run `gh plate feed` or `plate_feed`.",
     "Plan: `gh plate plan --start` or `plate_planning_start` for product/feature intent.",
     "What next: `gh plate` / `plate_what_next` for the next process step.",
 ]
+
+CONFIG_INIT_ONBOARDING_STEP = (
+    "Config: run `gh plate config init --apply` only when root `.plate` is still missing "
+    "(import-payload --apply seeds it when absent)."
+)
 
 
 @dataclass
@@ -162,10 +166,13 @@ def build_onboarding_proof(
     *,
     include_feed: bool = True,
     include_planning: bool = True,
+    include_config_init_step: bool = True,
 ) -> dict[str, Any]:
     """Simple install → first Q&A proof checklist for marketplace/adoption."""
     ver = version.lstrip("v") or "0.0.0"
     steps = [s.format(version=ver) for s in ONBOARDING_STEPS]
+    if include_config_init_step:
+        steps.insert(3, CONFIG_INIT_ONBOARDING_STEP)
     if not include_feed:
         steps = [s for s in steps if "feed" not in s.lower()]
     if not include_planning:
