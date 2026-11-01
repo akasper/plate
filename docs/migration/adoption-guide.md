@@ -15,8 +15,10 @@ pip install -U 'plate-core==0.8.7'
 python -c "import plate_core; print(plate_core.__version__)"   # expect 0.8.7
 
 gh extension install akasper/gh-plate    # or: gh extension upgrade plate
-# If gh plate still locks an older plate-core (e.g. 0.7.2), reinstall the extension:
-#   gh extension remove plate && gh extension install akasper/gh-plate
+# If gh plate still locks an older plate-core (e.g. 0.7.2), or upgrade fails with
+# a non-fast-forward error after the 2026-10-23 gh-plate history rewrite
+# (old clone head 2e0b9b6 → current main cf0630c), reinstall:
+gh extension remove plate && gh extension install akasper/gh-plate
 ```
 
 | Check | Healthy signal |
