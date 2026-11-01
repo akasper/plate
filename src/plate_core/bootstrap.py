@@ -222,6 +222,136 @@ def _is_empty_repository_error(error: GhApiError) -> bool:
     return "409" in message and "empty" in message
 
 
+def _parse_repo_owner_name(target: str) -> tuple[str, str]:
+    cleaned = (target or "").strip()
+    if cleaned.count("/") != 1:
+        raise RuntimeError(
+            f"Bootstrap requires owner/name repository slug; got {target!r}. "
+            "Pass --repo owner/name or run inside a git clone with origin configured."
+        )
+    owner, name = cleaned.split("/", 1)
+    if not owner or not name:
+        raise RuntimeError(
+            f"Bootstrap requires owner/name repository slug; got {target!r}. "
+            "Pass --repo owner/name or run inside a git clone with origin configured."
+        )
+    return owner, name
+
+
+def _github_repo_create_hint(repo: str, *, public: bool) -> str:
+    visibility_flag = "--public" if public else "--private"
+    return f"gh repo create {repo} {visibility_flag}"
+
+
+def _bootstrap_planning_repo_stub(*, public: bool) -> dict[str, Any]:
+    """Synthetic repo metadata for dry-run when the GitHub repository does not exist yet (#1185)."""
+    return {
+        "default_branch": "main",
+        "has_wiki": False,
+        "has_issues": True,
+        "private": not public,
+        "permissions": {"push": True},
+        "size": 0,
+        "open_issues_count": 0,
+    }
+
+
+def _fetch_repository_metadata(target: str, gh: GhClient) -> dict[str, Any] | None:
+    try:
+        payload = gh.api(f"repos/{target}")
+    except GhApiError as error:
+        if _is_missing_content_error(error):
+            return None
+        raise
+    return payload if isinstance(payload, dict) else None
+
+
+def _create_github_repository(gh: GhClient, target: str, *, public: bool) -> dict[str, Any]:
+    """Create a missing GitHub repository (private by default; ``public=True`` opts in) (#1185)."""
+    owner, name = _parse_repo_owner_name(target)
+    fields: dict[str, Any] = {
+        "name": name,
+        "private": not public,
+        "auto_init": False,
+        "has_issues": True,
+        "has_wiki": True,
+    }
+    hint = _github_repo_create_hint(target, public=public)
+    org_error: GhApiError | None = None
+    try:
+        created = gh.api(f"orgs/{owner}/repos", method="POST", fields=fields)
+        if isinstance(created, dict):
+            return created
+    except GhApiError as error:
+        org_error = error
+
+    auth_login: str | None = None
+    try:
+        auth = gh.api("user")
+        if isinstance(auth, dict):
+            auth_login = str(auth.get("login") or "") or None
+    except GhApiError:
+        auth_login = None
+
+    if auth_login and auth_login.lower() != owner.lower():
+        org_detail = f" ({org_error})" if org_error else ""
+        raise RuntimeError(
+            f"Bootstrap cannot create {target}: GitHub organization create failed{org_detail} "
+            f"and owner {owner!r} is not the authenticated user ({auth_login!r}). "
+            f"Create the repository manually: {hint}."
+        ) from org_error
+
+    try:
+        created = gh.api("user/repos", method="POST", fields=fields)
+        if isinstance(created, dict):
+            return created
+    except GhApiError as user_error:
+        details = "; ".join(
+            part for part in (str(org_error) if org_error else None, str(user_error)) if part
+        )
+        raise RuntimeError(
+            f"Bootstrap could not create GitHub repository {target}. "
+            f"Create it manually: {hint}. Details: {details}"
+        ) from user_error
+
+    raise RuntimeError(
+        f"Bootstrap could not create GitHub repository {target}. Create it manually: {hint}."
+    )
+
+
+def _resolve_bootstrap_repository(
+    target: str,
+    gh: GhClient,
+    *,
+    apply_mode: bool,
+    public: bool,
+) -> tuple[dict[str, Any], BootstrapAction | None]:
+    """Return repository metadata and an optional create-repo bootstrap action (#1185)."""
+    repo_obj = _fetch_repository_metadata(target, gh)
+    if repo_obj is not None:
+        return repo_obj, None
+
+    visibility = "public" if public else "private"
+    if apply_mode:
+        repo_obj = _create_github_repository(gh, target, public=public)
+        action = BootstrapAction(
+            name="create-github-repo",
+            state="applied",
+            detail=f"Created {visibility} repository {target} via GitHub API",
+        )
+        return repo_obj, action
+
+    action = BootstrapAction(
+        name="create-github-repo",
+        state="planned",
+        detail=(
+            f"Create missing {visibility} repository {target}; "
+            "re-run with --apply to create via GitHub API"
+        ),
+    )
+    return _bootstrap_planning_repo_stub(public=public), action
+
+
 def _put_repository_file(
     gh: GhClient,
     repo: str,
@@ -757,6 +887,7 @@ def run_bootstrap(
     adopt: bool | None = None,
     local_root: str | Path | None = None,
     platform: str | None = None,
+    public: bool = False,
 ) -> BootstrapReport:
     """Plan/apply baseline PLATE bootstrap.
 
@@ -766,9 +897,16 @@ def run_bootstrap(
     target = resolve_repo(repo)
     local_checkout = Path(local_root) if local_root is not None else Path.cwd()
     health = get_health(target, gh, repo_root=str(local_checkout))
-    repo_obj = gh.api(f"repos/{target}")
+    repo_obj, create_repo_action = _resolve_bootstrap_repository(
+        target,
+        gh,
+        apply_mode=apply_mode,
+        public=public,
+    )
     default_branch = repo_obj.get("default_branch", "main")
     actions: list[BootstrapAction] = []
+    if create_repo_action is not None:
+        actions.append(create_repo_action)
 
     adoption_mode, adoption_signals = detect_adoption_mode(
         health=health,

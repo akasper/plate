@@ -1,0 +1,10 @@
+{
+  "slug": "release-repair-output-1194",
+  "change_type": "cli",
+  "surface": "gh plate release repair",
+  "summary": "release repair now says the Next Release starter issue is required, links the reason and doc, and names the canonical issue when duplicates exist.",
+  "migration_impact": "None. Output and JSON gain extra fields; no behavior change and no payload change.",
+  "agent_notes": "Read the required, reason, doc and canonical_next_release_issue fields from release repair JSON instead of inferring them.",
+  "breaking": false,
+  "links": ["#1194", "#1193"]
+}

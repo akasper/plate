@@ -33,6 +33,10 @@ from plate_core.release import (
     ensure_next_release_issue,
     diagnose_release_standing_state,
     repair_release_standing_state,
+    pick_canonical_next_release_issue,
+    NEXT_RELEASE_CEREMONY_DOC,
+    NEXT_RELEASE_MANDATORY_ADOPTION_ISSUE_URL,
+    NEXT_RELEASE_STARTER_ISSUE_REASON,
 )
 from plate_core.github_client import GhApiError
 
@@ -1396,6 +1400,20 @@ class ReleaseStandingRepairTests(unittest.TestCase):
         self.assertTrue(out["dry_run"])
         states = {a["action"]: a["state"] for a in out["actions"]}
         self.assertIn("planned", states.values())
+        ensure = [a for a in out["actions"] if a["action"] == "ensure-next-release-issue"][0]
+        self.assertTrue(ensure.get("required"))
+        self.assertEqual(ensure.get("reason"), NEXT_RELEASE_STARTER_ISSUE_REASON)
+        self.assertEqual(ensure.get("doc"), NEXT_RELEASE_CEREMONY_DOC)
+        self.assertEqual(ensure.get("mandatory_adoption_issue"), NEXT_RELEASE_MANDATORY_ADOPTION_ISSUE_URL)
+        self.assertIn("required starter issue", str(ensure.get("detail")))
+
+    def test_pick_canonical_next_release_issue(self):
+        issues = [
+            {"number": 10, "title": "Next Release"},
+            {"number": 5, "title": "Next Release"},
+        ]
+        canonical = pick_canonical_next_release_issue(issues)
+        self.assertEqual(canonical["number"], 5)
 
     def test_repair_dedupe_need_human(self):
         client = Mock()
@@ -1420,6 +1438,37 @@ class ReleaseStandingRepairTests(unittest.TestCase):
         self.assertEqual(out["diagnosis"]["health"], "drifted")
         dedupe = [a for a in out["actions"] if a["action"] == "dedupe-next-release-issues"]
         self.assertEqual(dedupe[0]["state"], "need:human")
+        self.assertTrue(dedupe[0].get("required"))
+        self.assertEqual(dedupe[0]["canonical_next_release_issue"]["number"], 1)
+        self.assertEqual(dedupe[0]["detail"]["canonical_issue_number"], 1)
+
+    def test_repair_already_configured_next_release_marks_required(self):
+        client = Mock()
+
+        def api(endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+            if "/branches/" in endpoint:
+                return {"name": "ok"}
+            if endpoint.startswith("search/issues"):
+                return {
+                    "items": [
+                        {
+                            "number": 42,
+                            "title": "Next Release",
+                            "html_url": "https://x/42",
+                        }
+                    ]
+                }
+            raise AssertionError(endpoint)
+
+        client.api.side_effect = api
+        with patch("plate_core.release.resolve_repo", return_value="owner/repo"):
+            out = repair_release_standing_state(
+                repo="owner/repo", client=client, dry_run=True, apply=False
+            )
+        ensure = [a for a in out["actions"] if a["action"] == "ensure-next-release-issue"][0]
+        self.assertEqual(ensure["state"], "already-configured")
+        self.assertTrue(ensure.get("required"))
+        self.assertEqual(ensure.get("reason"), NEXT_RELEASE_STARTER_ISSUE_REASON)
 
 
 class ReleaseFinalizeRelativeReleasesDirTests(unittest.TestCase):
