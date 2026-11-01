@@ -1155,6 +1155,186 @@ class BootstrapTests(unittest.TestCase):
         ]
         self.assertFalse(commit_posts)
 
+    @patch("plate_core.bootstrap.get_health")
+    def test_dry_run_plans_create_github_repo_when_repository_missing(self, mock_get_health):
+        """#1185: dry-run surfaces a create-repo step instead of failing on repos/ 404."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/missing-slug",
+            label_coverage_ok=False,
+            missing_labels=["Feature"],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=False,
+            open_epic_count=0,
+            status="warn",
+            goals_page_present=False,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            if endpoint == "repos/akasper/missing-slug":
+                raise GhApiError("HTTP 404 Not Found")
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint.startswith("repos/akasper/missing-slug/contents/"):
+                raise GhApiError("HTTP 404 Not Found")
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                report = run_bootstrap(
+                    "akasper/missing-slug",
+                    apply_mode=False,
+                    client=client,
+                    adopt=False,
+                )
+
+        create_action = next(a for a in report.actions if a.name == "create-github-repo")
+        self.assertEqual(create_action.state, "planned")
+        self.assertIn("missing-slug", create_action.detail)
+        self.assertIn("private", create_action.detail.lower())
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_creates_missing_repository_then_bootstraps(self, mock_get_health):
+        """#1185: apply creates the GitHub repo when repos/ returns 404."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/fresh-repo",
+            label_coverage_ok=False,
+            missing_labels=["Feature"],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=False,
+            open_epic_count=0,
+            status="warn",
+            goals_page_present=False,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+        repo_exists = {"value": False}
+        ref_seen = {"count": 0}
+        git_store: dict = {}
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/fresh-repo":
+                if not repo_exists["value"]:
+                    raise GhApiError("HTTP 404 Not Found")
+                return {"has_wiki": False, "default_branch": "main", "permissions": {"push": True}}
+            if endpoint == "orgs/akasper/repos" and method == "POST":
+                repo_exists["value"] = True
+                return {
+                    "full_name": "akasper/fresh-repo",
+                    "default_branch": "main",
+                    "has_wiki": False,
+                    "permissions": {"push": True},
+                }
+            if endpoint == "repos/akasper/fresh-repo/git/ref/heads/main":
+                ref_seen["count"] += 1
+                if ref_seen["count"] < 2:
+                    raise GhApiError("gh: Not Found (HTTP 404)")
+                return {"object": {"sha": "abc123"}}
+            if endpoint == "repos/akasper/fresh-repo/contents/README.md" and method == "PUT":
+                return {"content": {"sha": "readme"}}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint.startswith("repos/akasper/fresh-repo/contents/"):
+                if method == "GET":
+                    raise GhApiError("gh: Not Found (HTTP 404)")
+                return {}
+            if endpoint == "repos/akasper/fresh-repo/issues" and method == "POST":
+                return {"number": 1}
+            if endpoint == "repos/akasper/fresh-repo/branches/main":
+                return {"commit": {"sha": "abc123"}}
+            if endpoint.startswith("repos/akasper/fresh-repo/branches/"):
+                raise GhApiError("HTTP 404")
+            if endpoint == "repos/akasper/fresh-repo/git/refs" and method == "POST":
+                return {}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                report = run_bootstrap(
+                    "akasper/fresh-repo",
+                    apply_mode=True,
+                    client=client,
+                    adopt=False,
+                )
+
+        org_create = [
+            c
+            for c in client.api.call_args_list
+            if c.args and c.args[0] == "orgs/akasper/repos" and c.kwargs.get("method") == "POST"
+        ]
+        self.assertTrue(org_create, "Expected org repo create when repository is missing")
+        create_fields = org_create[0].kwargs.get("fields") or {}
+        self.assertTrue(create_fields.get("private"))
+        create_action = next(a for a in report.actions if a.name == "create-github-repo")
+        self.assertEqual(create_action.state, "applied")
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_missing_repo_creation_failure_includes_gh_repo_create_hint(self, mock_get_health):
+        """#1185: when auto-create fails, surface the manual gh repo create command."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/denied-repo",
+            label_coverage_ok=False,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=False,
+            open_epic_count=0,
+            status="warn",
+            goals_page_present=False,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/denied-repo":
+                raise GhApiError("HTTP 404 Not Found")
+            if endpoint == "orgs/akasper/repos" and method == "POST":
+                raise GhApiError("HTTP 403 Forbidden")
+            if endpoint == "user":
+                return {"login": "other-user"}
+            if endpoint == "user/repos" and method == "POST":
+                raise GhApiError("HTTP 403 Forbidden")
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                with self.assertRaises(RuntimeError) as ctx:
+                    run_bootstrap("akasper/denied-repo", apply_mode=True, client=client)
+        msg = str(ctx.exception)
+        self.assertIn("gh repo create akasper/denied-repo --private", msg)
+
 
 if __name__ == "__main__":
     unittest.main()
