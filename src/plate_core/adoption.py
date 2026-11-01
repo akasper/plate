@@ -100,7 +100,10 @@ def assess_adoption_readiness(
             title=".plate config present",
             ok=plate_ok,
             minutes=5,
-            fix_command="gh plate config init --repo-root . &&/or gh plate bootstrap --adopt --apply",
+            fix_command=(
+                "gh plate import-payload --apply --strategy conservative  # seeds .plate; "
+                "or gh plate config init --apply"
+            ),
             detail=str(plate.relative_to(root)) if plate_ok else "missing",
         )
     )

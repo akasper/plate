@@ -517,6 +517,23 @@ class TestImportPayload(unittest.TestCase):
             self.assertIn("conservative", report["next_command"])
             self.assertIn("--dry-run", report["next_command"])
 
+    def test_post_import_next_steps_never_suggest_config_init_when_plate_exists(self):
+        """#1189: after apply seeds .plate, printed next steps must not mention config init."""
+        from plate_core.import_payload import format_import_payload_report, import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = import_payload(tmp, strategy="conservative", apply=True)
+            self.assertTrue((Path(tmp) / ".plate").is_file(), msg="expected seeded .plate")
+            steps = report["next_steps"]
+            joined = " ".join(steps) + " " + report.get("next_command", "")
+            self.assertNotIn(
+                "config init",
+                joined.lower(),
+                msg=f"unexpected config init in next_steps: {steps}",
+            )
+            formatted = format_import_payload_report(report)
+            self.assertNotIn("config init", formatted.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

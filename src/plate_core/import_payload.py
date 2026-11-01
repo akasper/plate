@@ -308,15 +308,59 @@ def _next_command(report: ImportPayloadReport | dict[str, Any]) -> str:
     return "gh plate adopt --json"
 
 
+def _report_plates_plate_seed(report: ImportPayloadReport) -> bool:
+    """True when this import plan creates or already has local ``.plate`` (seed/skip)."""
+
+    for attr in ("would_create", "created", "would_skip", "skipped"):
+        for item in getattr(report, attr, []):
+            label = str(item)
+            if label == ".plate" or label.startswith(".plate "):
+                return True
+    for decision in report.files:
+        if decision.path == ".plate" and decision.action in ("create", "skip"):
+            return True
+    return False
+
+
+def _should_suggest_config_init(report: ImportPayloadReport) -> bool:
+    from .plate_config import local_root_plate_present
+
+    target = Path(report.target_dir)
+    if local_root_plate_present(target):
+        return False
+    if _report_plates_plate_seed(report):
+        return False
+    return True
+
+
 def _next_steps(report: ImportPayloadReport) -> list[str]:
+    from .plate_config import local_root_plate_present
+
     next_cmd = _next_command(report)
+    target = Path(report.target_dir)
+    has_plate = local_root_plate_present(target)
+    if has_plate:
+        bootstrap_hint = (
+            "After local apply: commit scaffolding, run `gh plate bootstrap --repo OWNER/REPO "
+            "--adopt --apply` for labels/wiki and other GitHub-side baseline (local `.plate` is present)."
+        )
+    else:
+        bootstrap_hint = (
+            "After local apply: commit scaffolding, run `gh plate bootstrap --repo OWNER/REPO "
+            "--adopt --apply` for labels/wiki and other GitHub-side baseline."
+        )
     steps = [
         f"Next command: `{next_cmd}`",
         "Review would_create / would_conflict lists before --apply on real repos.",
-        "After local apply: commit scaffolding, run `gh plate bootstrap --apply` (or `--adopt`) for labels/wiki/.plate GitHub-side setup.",
+        bootstrap_hint,
         "Run `gh plate health` and open the first Curiosity Q&A session when healthy.",
         "Prefer `.agentic/releases/unreleased/` fragments for durable implemented-state; keep CURRENT.md as a short index (#618).",
     ]
+    if _should_suggest_config_init(report):
+        steps.insert(
+            2,
+            "Create root `.plate`: run `gh plate config init --apply` (or `import-payload --apply` to seed DEFAULT_CONFIG).",
+        )
     if report.would_conflict or report.conflicts:
         steps.insert(
             1,

@@ -175,7 +175,12 @@ def detect_adoption_mode(
     return False, signals
 
 
-def _adoption_next_steps(*, adoption_mode: bool, health: Any) -> list[str]:
+def _adoption_next_steps(
+    *,
+    adoption_mode: bool,
+    health: Any,
+    local_root: Path | None = None,
+) -> list[str]:
     if not adoption_mode:
         return [
             "For brand-new repos: complete docs/bootstrap/new-repository-checklist.md human steps (CODEOWNERS, protection).",
@@ -194,8 +199,16 @@ def _adoption_next_steps(*, adoption_mode: bool, health: Any) -> list[str]:
             1,
             "Seed or write the Goals wiki page (docs/wiki/Goals.md, or docs/plate/wiki/Goals.md when PLATE docs are namespaced) for Information Audits.",
         )
-    if health is not None and not getattr(health, "plate_config_present", True):
-        steps.insert(1, "Ensure root `.plate` exists (`gh plate config init` or bootstrap init-plate-config).")
+    from .plate_config import local_root_plate_present
+
+    root = local_root or Path.cwd()
+    remote_plate = bool(getattr(health, "plate_config_present", False)) if health is not None else False
+    if not remote_plate and not local_root_plate_present(root):
+        steps.insert(
+            1,
+            "Ensure root `.plate` exists (`gh plate config init --apply` or re-run "
+            "`import-payload --apply` to seed locally).",
+        )
     return steps
 
 
@@ -1284,7 +1297,11 @@ def run_bootstrap(
                     )
             actions.append(BootstrapAction(name=f"create-{branch_name}-branch", state=state, detail=detail))
 
-    next_steps = _adoption_next_steps(adoption_mode=adoption_mode, health=health)
+    next_steps = _adoption_next_steps(
+        adoption_mode=adoption_mode,
+        health=health,
+        local_root=local_checkout,
+    )
     if skipped_stale_paths:
         next_steps = list(next_steps) + [BOOTSTRAP_STALE_UPGRADE_POINTER]
     return BootstrapReport(
