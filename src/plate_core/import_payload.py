@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import quote
 
 from .template_payload import (
     classify_template_file,
@@ -29,6 +31,9 @@ from .template_payload import (
 
 Strategy = Literal["safe", "conservative", "force"]
 VALID_STRATEGIES: tuple[str, ...] = ("safe", "conservative", "force")
+
+# Root template README is PLATE scaffolding prose, not adopter product docs (#1188).
+ROOT_PAYLOAD_README = "README.md"
 
 # Minimal CURRENT.md for adoption/import when absent (#618).
 # Not in payload include_globs (repo-specific); seeded by importer.
@@ -512,6 +517,22 @@ def plan_import_payload(
             return report
 
     for rel in rel_paths:
+        if rel == ROOT_PAYLOAD_README:
+            report.files.append(
+                PayloadFileDecision(
+                    path=rel,
+                    action="skip",
+                    classification="adoption_seed",
+                    detail=(
+                        "template root README not copied; project stub seeded when absent (#1188)"
+                    ),
+                    target_path=rel,
+                )
+            )
+            report.would_skip.append(rel)
+            if apply:
+                report.skipped.append(rel)
+            continue
         source = template_root / rel
         # Prefer namespaced install path for plate scripts/docs when adopting (#621, #1015)
         preferred_rel = rel
@@ -593,6 +614,8 @@ def plan_import_payload(
     # #618: CURRENT.md is repo-specific (not in payload globs) but required by
     # validate_plate_repo + feature detection — seed when missing.
     _seed_current_md_if_missing(target, report, apply=bool(apply))
+    # #1188: never copy template root README; seed a short project stub when absent.
+    _seed_readme_if_missing(target, report, apply=bool(apply))
     # Adopter core_ready requires .agentic/releases[/unreleased] (#996 follow-on /
     # under-30m path). Template payload ships .agentic/*.yml only — seed layout.
     _seed_releases_layout_if_missing(target, report, apply=bool(apply))
@@ -625,6 +648,84 @@ def plan_import_payload(
             "Adopter-owned scripts are not removed.",
         )
     return report
+
+
+def _repo_slug_from_target(target: Path) -> str | None:
+    """Return owner/name from ``git remote.origin.url`` when target is a GitHub clone."""
+    import subprocess
+
+    from .procutil import run_hidden
+
+    try:
+        cp = run_hidden(
+            ["git", "-C", str(target), "config", "--get", "remote.origin.url"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    remote = (cp.stdout or "").strip()
+    if not remote:
+        return None
+    match = re.search(
+        r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$",
+        remote,
+    )
+    if not match:
+        return None
+    return f"{match.group('owner')}/{match.group('repo')}"
+
+
+def resolve_project_readme_context(
+    target: Path,
+    *,
+    gh: Any | None = None,
+    fetch_github: bool = True,
+) -> tuple[str, str | None]:
+    """Resolve display name and optional description for a project README stub (#1188)."""
+    fallback_name = (target.name or "repository").strip() or "repository"
+    slug = _repo_slug_from_target(target)
+    if not slug:
+        return fallback_name, None
+    repo_segment = slug.split("/", 1)[-1]
+    if not fetch_github:
+        return repo_segment, None
+    try:
+        from .github_client import GhClient
+
+        client = gh if gh is not None else GhClient()
+        payload = client.api(f"repos/{quote(slug, safe='')}")
+        if isinstance(payload, dict):
+            name = str(payload.get("name") or repo_segment).strip() or repo_segment
+            description = payload.get("description")
+            if isinstance(description, str) and description.strip():
+                return name, description.strip()
+            return name, None
+    except Exception:
+        pass
+    return repo_segment, None
+
+
+def build_project_readme_stub(*, repo_name: str, description: str | None = None) -> str:
+    """Return a short adopter README stub (never the template payload README) (#1188)."""
+    title = (repo_name or "repository").strip() or "repository"
+    lines = [f"# {title}", ""]
+    if description:
+        lines.append(description.strip())
+        lines.append("")
+    lines.extend(
+        [
+            "Built with [PLATE](https://github.com/akasper/plate) — Product Lifecycle "
+            "Automation Toolkit and Engine.",
+            "",
+            "Process scaffolding (`AGENTS.md`, workflows, release fragments) comes from "
+            "`gh plate import-payload` / bootstrap. Replace this stub with product-specific "
+            "documentation as the project matures.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def build_minimal_current_md(*, has_playwright: bool = False) -> str:
@@ -687,6 +788,49 @@ def _seed_current_md_if_missing(
     if apply:
         dest.write_text(content, encoding="utf-8")
         report.created.append("CURRENT.md")
+
+
+def _seed_readme_if_missing(
+    target: Path,
+    report: ImportPayloadReport,
+    *,
+    apply: bool,
+    gh: Any | None = None,
+) -> None:
+    """Seed root README.md when absent; never overwrite an existing file (#1188)."""
+    dest = target / ROOT_PAYLOAD_README
+    decision_base = {
+        "path": ROOT_PAYLOAD_README,
+        "classification": "adoption_seed",
+        "target_path": ROOT_PAYLOAD_README,
+        "rule": None,
+    }
+    if dest.exists():
+        report.files.append(
+            PayloadFileDecision(
+                action="skip",
+                detail="README.md already present",
+                **decision_base,  # type: ignore[arg-type]
+            )
+        )
+        report.would_skip.append(ROOT_PAYLOAD_README)
+        if apply:
+            report.skipped.append(ROOT_PAYLOAD_README)
+        return
+
+    repo_name, description = resolve_project_readme_context(target, gh=gh)
+    content = build_project_readme_stub(repo_name=repo_name, description=description)
+    report.files.append(
+        PayloadFileDecision(
+            action="create",
+            detail="seed project-specific README stub (#1188)",
+            **decision_base,  # type: ignore[arg-type]
+        )
+    )
+    report.would_create.append(ROOT_PAYLOAD_README)
+    if apply:
+        dest.write_text(content, encoding="utf-8")
+        report.created.append(ROOT_PAYLOAD_README)
 
 
 # Minimal unreleased README so adoption readiness sees releases layout without
