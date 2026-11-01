@@ -67,7 +67,7 @@ _MERGE_TRIGGER_MARKER = "<!-- plate-pr-merge-trigger -->"
 
 # Valid branch update strategies
 _VALID_STRATEGIES = ["copilot-request", "local-rebase", "none"]
-_DEFAULT_STRATEGY = "copilot-request"
+_DEFAULT_STRATEGY = "local-rebase"
 
 # #496: who counts as actionable review feedback
 PR_REVIEW_SCOPES = ("all", "bot-only", "human-only")
@@ -1032,7 +1032,7 @@ def babysit_pr(
         agent_logins: Optional comma-separated allowlist of logins (overrides scope)
         act: If True, post trigger comments when issues detected and auto-resolve outdated threads
         branch_update_strategy: How to handle out-of-sync base branch.
-            Options: "copilot-request" (default), "local-rebase", "none"
+            Options: "local-rebase" (default), "copilot-request" (opt-in), "none"
         pr_review_scope: ``all`` | ``bot-only`` | ``human-only`` (default from .plate or ``all``) (#496)
         client: Optional GitHub client
 

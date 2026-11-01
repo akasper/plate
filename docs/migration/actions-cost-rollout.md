@@ -18,6 +18,7 @@ Account-level **Copilot auto-review** is a separate control: check [github.com/s
 | Issue workflows still enforce labels/milestones | `label-check.yml` behavior must remain intact |
 | Feature kickoff still works | `status:ready-to-work` on a `Feature` issue should comment or dispatch orchestrator |
 | Copilot is off by default | Do **not** set `PLATE_COPILOT_AUTOSTART` until you intend to pay for agent wakes |
+| PR babysit base sync | Default `--branch-update-strategy` is **`local-rebase`**; pass **`copilot-request`** only when you explicitly want `@copilot` merge-assist comments (#1300) |
 | PR gates (merged #1209) | Replace separate gate contexts with **`pr-gates`** plus existing **`labels`** and **`test`**. Remove deprecated contexts: `check-pr-title`, `check-issue-links`, `feature-change-files`, `feedback-resolution`, `audit`, `validate-release-pr`. Run `gh plate health` to flag stale names. |
 | Release/publish not cancelled mid-flight | `release.yml` and publish workflows use `cancel-in-progress: false` |
 

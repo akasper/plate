@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.pr_babysit import (
+    _DEFAULT_STRATEGY,
     _default_agent_match,
     _extract_actionable_threads,
     _extract_outdated_unresolved_threads,
@@ -546,6 +547,10 @@ class PrBabysitTests(unittest.TestCase):
         self.assertFalse(result["out_of_sync"])
         self.assertEqual(result["state"], "CLEAN")
 
+    def test_default_branch_update_strategy_is_local_rebase(self):
+        """Regression for #1300: fresh babysit calls must not default to paid Copilot merge triggers."""
+        self.assertEqual(_DEFAULT_STRATEGY, "local-rebase")
+
     def test_babysit_pr_detects_out_of_sync_and_posts_copilot_trigger(self):
         """Test that babysit_pr detects out-of-sync state and posts Copilot merge-request trigger."""
         repo = "akasper/plate"
@@ -682,6 +687,51 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIsNone(report.local_rebase_error)
         # no copilot trigger for local-rebase
         self.assertFalse(report.merge_trigger_posted)
+
+    @patch("plate_core.pr_babysit.check_output_hidden")
+    @patch("plate_core.pr_babysit.check_call_hidden")
+    @patch("plate_core.pr_babysit.run_hidden")
+    @patch("plate_core.pr_babysit.tempfile.mkdtemp")
+    @patch("plate_core.pr_babysit.shutil.rmtree")
+    def test_babysit_pr_default_strategy_uses_local_rebase_not_copilot(
+        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output
+    ):
+        """When branch_update_strategy is omitted, out-of-sync PRs use local-rebase (#1300)."""
+        repo = "akasper/plate"
+        pr = 112
+        graphql_endpoint = "graphql"
+
+        pr_data_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "mergeStateStatus": "BEHIND",
+                        "baseRefName": "main",
+                        "headRefName": "feature-branch",
+                        "reviewThreads": {"nodes": []},
+                    }
+                }
+            }
+        }
+
+        fake = _FakeClient(
+            responses={
+                (graphql_endpoint, "POST"): pr_data_payload,
+                (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+            }
+        )
+
+        mock_mkdtemp.return_value = "/tmp/fake-worktree"
+        mock_check_output.return_value = "/tmp/repo\n"
+        mock_check_call.return_value = 0
+        mock_run.return_value = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        report = babysit_pr(repo=repo, pr_number=pr, act=True, client=fake)
+
+        self.assertTrue(report.local_rebase_performed)
+        self.assertFalse(report.merge_trigger_posted)
+        post_calls = [c for c in fake.calls if c[1] == "POST" and "/comments" in c[0] and "graphql" not in c[0]]
+        self.assertEqual(len(post_calls), 0)
 
     @patch("plate_core.pr_babysit.check_output_hidden")
     @patch("plate_core.pr_babysit.check_call_hidden")

@@ -5111,8 +5111,8 @@ def build_parser() -> argparse.ArgumentParser:
     babysit.add_argument(
         "--branch-update-strategy",
         choices=["copilot-request", "local-rebase", "none"],
-        default="copilot-request",
-        help="How to handle out-of-sync base branch: copilot-request (default), local-rebase, or none",
+        default="local-rebase",
+        help="How to handle out-of-sync base branch: local-rebase (default), copilot-request (opt-in), or none",
     )
     babysit.add_argument(
         "--watch",
