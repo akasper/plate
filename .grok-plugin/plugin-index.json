@@ -109,6 +109,10 @@
             "description": "After a blocking Question is answered, retrieve the full answer + provenance, merge into the original Issue via unblock…"
           },
           {
+            "name": "Review AI Discoverability",
+            "description": "Audit agent-readable surfaces and public claims so AI assistants and answer engines can read, verify, and cite the prod…"
+          },
+          {
             "name": "Review Discussions",
             "description": "Read issue and PR discussions to extract actionable signals and concerns."
           },

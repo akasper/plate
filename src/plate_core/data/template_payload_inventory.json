@@ -40,11 +40,15 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".agentic/skills/ci-audit/SKILL.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".agentic/skills/modernize-pr/SKILL.md",
       "classification": "copy_to_downstream"
     },
     {
-      "path": ".agentic/skills/ci-audit/SKILL.md",
+      "path": ".agentic/skills/review-ai-discoverability/SKILL.md",
       "classification": "copy_to_downstream"
     },
     {
@@ -276,6 +280,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/marketing/ai-discoverability-review-checklist.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/marketing/ai-discoverability/baseline-log.md",
       "classification": "copy_to_downstream"
     },
@@ -308,7 +316,15 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/migration/ci-cd-split-guidance.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/migration/ci-path-job-selection.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/ci-speed-checklist.md",
       "classification": "copy_to_downstream"
     },
     {
@@ -332,15 +348,7 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": "docs/migration/ci-speed-checklist.md",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": "docs/migration/self-hosted-runners.md",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": "docs/migration/ci-cd-split-guidance.md",
       "classification": "copy_to_downstream"
     },
     {
@@ -464,11 +472,11 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": "scripts/plate/pre-push-hook.sh",
+      "path": "scripts/plate/pre-commit-hook.sh",
       "classification": "copy_to_downstream"
     },
     {
-      "path": "scripts/plate/pre-commit-hook.sh",
+      "path": "scripts/plate/pre-push-hook.sh",
       "classification": "copy_to_downstream"
     },
     {

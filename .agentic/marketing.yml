@@ -35,5 +35,6 @@ analytics_policy:
 artifacts:
   brief: "docs/marketing/marketing-site-brief.md"
   launch_checklist: "docs/marketing/launch-checklist.md"
+  ai_discoverability_review_checklist: "docs/marketing/ai-discoverability-review-checklist.md"
   experiments: "docs/marketing/experiments.md"
   site_root: "site"

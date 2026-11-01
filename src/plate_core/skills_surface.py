@@ -21,7 +21,7 @@ REGENERATE_COMMAND = "python3 scripts/generate-plugin-skills.py"
 PLUGIN_SURFACES = ("plugin", ".plugin")
 TEMPLATE_PAYLOAD_SKILL_ROOT = Path("src/plate_core/template_payload/.agentic/skills")
 # Skills copied into template payload for bootstrap/import-payload (not only plugin surfaces).
-TEMPLATE_PAYLOAD_SKILL_IDS = frozenset({"address-pr-feedback", "modernize-pr"})
+TEMPLATE_PAYLOAD_SKILL_IDS = frozenset({"address-pr-feedback", "modernize-pr", "review-ai-discoverability"})
 
 
 @dataclass(frozen=True)
