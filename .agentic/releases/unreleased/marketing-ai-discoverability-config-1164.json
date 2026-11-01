@@ -1,0 +1,15 @@
+{
+  "slug": "marketing-ai-discoverability-config-1164",
+  "change_type": "feature",
+  "surface": ".agentic/marketing.yml (repo + template_payload)",
+  "summary": "Extend marketing config with optional ai_discoverability (engines, prompt_set path, run_cap) and point claim_review_policy.source_of_product_truth at SPEC.md (#1164).",
+  "migration_impact": "Adopters who customized marketing.yml should merge the new ai_discoverability block and update source_of_product_truth from CURRENT.md to SPEC.md when refreshing from payload.",
+  "migration_guidance": [
+    "Set claim_review_policy.source_of_product_truth to SPEC.md (CURRENT.md is deprecated for product truth).",
+    "Add the ai_discoverability block under claim_review_policy when enabling Epic #1159 visibility checks; keep enabled: false until engines and caps are chosen.",
+    "Point prompt_set at your prompt-set file (template default: docs/marketing/ai-discoverability/prompt-set.md once #1161 lands)."
+  ],
+  "agent_notes": "Honest tactics only: visibility prompts and public claims must trace to SPEC.md or an issue. Do not add a separate ai_discoverability config file — everything lives in .agentic/marketing.yml.",
+  "breaking": false,
+  "links": ["#1164", "#1159"]
+}
