@@ -175,7 +175,7 @@ The agent populates the following fields exactly as specified. Cells marked `{va
 | **title** | `[Epic] {epic_name}` | `Research: {topic}` | `Design: {area}` | `Feature: {capability}` | `Spike: {question}` |
 | **body** | See §4.1 | See §4.2 | See §4.3 | See §4.4 | See §4.5 |
 | **labels** | `Epic`, `Epic: {slug}` | `Research`, `Epic: {slug}` | `Design`, `Epic: {slug}` | `Feature`, `Epic: {slug}`, `need:refinement` | `Spike`, `Epic: {slug}`, `need:refinement` |
-| **closing keyword** | n/a (Epic is the root) | `Closes #{epic_number}` | `Closes #{epic_number}` | `Closes #{epic_number}` | `Closes #{epic_number}` |
+| **closing keyword** | n/a (Epic is the root) | `<!-- PLATES-EPIC: #{epic_number} -->` in issue body; implementing PR uses `Closes #{child_issue_number}` | same | same | same |
 | **milestone** | Set if session includes target release | Inherit from Epic | Inherit from Epic | Inherit from Epic | Inherit from Epic |
 
 The `{slug}` for the `Epic: {slug}` label is derived from `epic_name`: lower-cased, spaces replaced with hyphens, special characters stripped, truncated at 40 characters. Example: `"User Onboarding Flow"` → `Epic: user-onboarding-flow`.
@@ -227,7 +227,7 @@ Part of epic: #{epic_number} — {epic_name}
 
 A findings document committed to `docs/research/` that answers the question above.
 
-Closes #{epic_number}
+<!-- Child PR template: Closes #{child_issue_number} -->
 ```
 
 #### 4.3 Design stub body template
@@ -251,7 +251,7 @@ Part of epic: #{epic_number} — {epic_name}
 
 A design artifact committed to `docs/design/` or `docs/adr/` that resolves the design question above.
 
-Closes #{epic_number}
+<!-- Child PR template: Closes #{child_issue_number} -->
 ```
 
 #### 4.4 Feature stub body template
@@ -271,7 +271,7 @@ Part of epic: #{epic_number} — {epic_name}
 
 <!-- PLATES-EPIC: #{epic_number} -->
 
-Closes #{epic_number}
+<!-- Child PR template: Closes #{child_issue_number} -->
 ```
 
 #### 4.5 Spike stub body template
@@ -295,7 +295,7 @@ Part of epic: #{epic_number} — {epic_name}
 
 <!-- PLATES-EPIC: #{epic_number} -->
 
-Closes #{epic_number}
+<!-- Child PR template: Closes #{child_issue_number} -->
 ```
 
 ---
@@ -322,7 +322,7 @@ Research and Design stubs are created before Feature and Spike stubs because Fea
 | Research | `title`, `body` (question + context), `Research` label, `Epic: {slug}` label, `Closes #epic` | Detailed scope, methodology, assigned researcher |
 | Design | `title`, `body` (scope + context), `Design` label, `Epic: {slug}` label, `Closes #epic` | Constraints, artifact format, assigned designer |
 | Feature | `title`, `body` (summary + context), `Feature` label, `Epic: {slug}` label, `need:refinement`, `Closes #epic` | Full AC, test plan, CURRENT.md update |
-| Spike | `title`, `body` (question + timebox placeholder + context), `Spike` label, `Epic: {slug}` label, `need:refinement`, `Closes #epic` | Timebox confirmation, success condition, assignee |
+| Spike | `title`, `body` (question + timebox placeholder + context), `Spike` label, `Epic: {slug}` label, `need:refinement`, `<!-- PLATES-EPIC: #{epic_number} -->` | Timebox confirmation, success condition, assignee |
 
 #### `need:refinement` semantics
 
@@ -336,7 +336,7 @@ The following PLATE requirements are **always enforced** even on `need:refinemen
 
 - Exactly one issue type label (`Feature`, `Spike`, etc.).
 - Exactly one `Epic: {slug}` label.
-- `Closes #{epic_number}` closing keyword in the body.
+- `<!-- PLATES-EPIC: #{epic_number} -->` traceability marker in the issue body (child PRs close the child issue, not the Epic — see §6).
 
 The `need:refinement` label is removed by a **human** after they have reviewed and completed the stub. Agents do not self-remove `need:refinement`; they may add it and may check for its presence but must not unilaterally strip it.
 
@@ -346,19 +346,16 @@ The `need:refinement` label is removed by a **human** after they have reviewed a
 
 #### Closing keyword requirement
 
-Every child issue body MUST contain either:
+Every child issue body MUST contain `<!-- PLATES-EPIC: #{epic_number} -->` for Epic traceability.
 
-- `Closes #{epic_number}` (preferred) — creates a native cross-reference in the Epic timeline. **Note:** GitHub only processes closing keywords in PR bodies and commit messages, not in issue bodies. When placed in a child issue body, this keyword serves as (1) a navigation cross-reference and (2) a template hint — agents and humans implementing the child issue should copy this keyword into the implementing PR body, where GitHub will then automatically close the issue when the PR merges to the default branch. **OR**
-- `<!-- PLATES-EPIC: #{epic_number} -->` — used only when the issue does not directly close the Epic (e.g. a Research stub whose findings feed a Design issue that closes the Epic). The HTML comment preserves machine-readable traceability even if GitHub's cross-reference is absent.
-
-Both forms may coexist. The preferred pattern for most stubs is the `Closes` keyword.
+Implementing pull requests for a child issue MUST include `Closes #{child_issue_number}` in the PR body (never `Closes #{epic_number}`, which would close the parent Epic when the PR merges). GitHub only processes closing keywords in PR bodies and commit messages, not in issue bodies. Stub templates include an HTML comment `<!-- Child PR template: Closes #{child_issue_number} -->` as the hint agents copy into the PR body.
 
 #### Agent verification before marking a stub complete
 
 Before recording an issue number in `child_issues[]`, the agent MUST:
 
 1. Read the issue body from the GitHub API response.
-2. Confirm that either `Closes #{epic_number}` or `<!-- PLATES-EPIC: #{epic_number} -->` appears in the body.
+2. Confirm that `<!-- PLATES-EPIC: #{epic_number} -->` appears in the body.
 3. Confirm that the issue carries exactly one PLATE type label and exactly one `Epic: {slug}` label.
 4. If either check fails, update the issue before recording it.
 
@@ -414,7 +411,7 @@ The term originates from Extreme Programming, where a spike is a throwaway exper
 | Timebox estimate | MUST appear in the issue body. If unknown at stub creation, use placeholder `"2–4 hours — to be confirmed during refinement"`. |
 | Exploration question | MUST state what specific question the spike answers. |
 | Success condition | MUST state what answer or output ends the spike. May be placeholder at stub creation; must be filled before work starts. |
-| `Closes` keyword | MUST reference the parent Epic: `Closes #{epic_number}`. |
+| `Closes` keyword | Issue body uses `<!-- PLATES-EPIC: #{epic_number} -->`; implementing PR body MUST include `Closes #{spike_issue_number}`. |
 
 #### Required label changes
 
@@ -499,5 +496,5 @@ This design is considered implemented when:
 1. An agent session can produce a `planning_session` document from a ≤ 8-turn Q&A exchange and create a PLATE-compliant issue graph (Epic + child stubs) that passes `label-check.yml` on every created issue.
 2. The `Spike` label exists in `labels.yml`, is registered in `label-check.yml`, and a Spike issue created by the agent passes the label check.
 3. Re-running the issue-creation phase on an already-complete session produces no new GitHub issues (idempotency verified by the duplicate-detection search).
-4. Every child issue body contains either `Closes #{epic_number}` or `<!-- PLATES-EPIC: #{epic_number} -->`.
+4. Every child issue body contains `<!-- PLATES-EPIC: #{epic_number} -->`, and child implementation PRs use `Closes #{child_issue_number}`.
 5. The Epic issue body's `## Child Issues` section is accurate and complete after session completion.

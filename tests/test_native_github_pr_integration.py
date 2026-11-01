@@ -47,6 +47,46 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
                 workflow.replace(" ", ""),
             )
 
+    def test_auto_merge_requires_marker_and_risk_low(self):
+        """#1262 item 7: auto-merge stays on AUTONOMOUS_MODE + risk:low only."""
+        repo_workflow = read_text(".github/workflows/auto-merge.yml")
+        payload_workflow = read_text(
+            "src/plate_core/template_payload/.github/workflows/auto-merge.yml"
+        )
+        self.assertEqual(repo_workflow, payload_workflow)
+        for workflow in (repo_workflow, payload_workflow):
+            self.assertIn(".github/AUTONOMOUS_MODE", workflow)
+            self.assertIn("'risk:low'", workflow)
+            self.assertNotIn("risk_tolerance", workflow)
+
+    def test_bootstrap_exits_when_label_sync_failed(self):
+        """#1262 item 8: bootstrap must fail when label sync errors occur."""
+        for rel in (
+            "scripts/bootstrap_github.sh",
+            "src/plate_core/template_payload/scripts/bootstrap_github.sh",
+        ):
+            script = read_text(rel)
+            self.assertIn("LABEL_SYNC_FAILED", script)
+            self.assertIn('if [[ "$LABEL_SYNC_FAILED" -gt 0 ]]; then', script)
+            self.assertIn("exit 1", script)
+
+    def test_payload_agents_merge_gate_documents_pr_gates(self):
+        """#1262: payload AGENTS.md references plate-pr-gates, not legacy feedback-resolution."""
+        agents = read_text("src/plate_core/template_payload/AGENTS.md")
+        self.assertIn("plate-pr-gates.yml", agents)
+        self.assertIn("pr-gates", agents)
+        self.assertNotIn("feedback-resolution-check.yml", agents)
+
+    def test_conversation_graph_child_pr_closes_child_not_epic(self):
+        """#1262 item 9: child PR template closes the child issue."""
+        doc = read_text(
+            "src/plate_core/template_payload/docs/design/conversation-to-issue-graph.md"
+        )
+        self.assertIn("Closes #{child_issue_number}", doc)
+        self.assertIn("Child PR template", doc)
+        self.assertNotIn("copy this keyword into the implementing PR body, where GitHub will then automatically close the issue when the PR merges to the default branch. **OR**", doc)
+        self.assertNotIn("Closes #{epic_number}` (preferred)", doc)
+
     def test_pr_issue_link_check_accepts_development_links(self):
         workflow = read_text(".github/workflows/plate-pr-gates.yml")
 
