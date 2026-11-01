@@ -533,6 +533,7 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
             adopt=adopt,
             local_root=getattr(args, "local_root", None),
             platform=getattr(args, "platform", None),
+            public=bool(getattr(args, "public", False)),
         )
     except (RuntimeError, GhApiError, PlateConfigError) as exc:
         if args.json:
@@ -4859,6 +4860,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Script platform for this run. Overrides remote .plate and is written on --apply. "
             "Default: remote .plate platform, or posix when absent."
         ),
+    )
+    bootstrap.add_argument(
+        "--public",
+        action="store_true",
+        help="When creating a missing GitHub repository during --apply, create it public (default: private).",
     )
     bootstrap.add_argument("--json", action="store_true", help="Output JSON")
     bootstrap.set_defaults(func=cmd_bootstrap)
