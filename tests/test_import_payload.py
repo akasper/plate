@@ -422,9 +422,25 @@ class TestImportPayload(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             report = import_payload(tmp, strategy="safe", apply=True)
             self.assertGreater(report["counts"]["created"], 0)
+            self.assertIn("--repo OWNER/REPO", report["next_command"])
+            self.assertIn("could not resolve owner/name", report["next_command"])
+
+    def test_next_command_after_apply_resolves_git_origin(self):
+        from plate_core.import_payload import import_payload
+        from plate_core.procutil import run_hidden
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_hidden(["git", "init"], cwd=str(root), check=True)
+            run_hidden(
+                ["git", "remote", "add", "origin", "https://github.com/coacharino/adopted.git"],
+                cwd=str(root),
+                check=True,
+            )
+            report = import_payload(root, strategy="safe", apply=True)
             self.assertEqual(
                 report["next_command"],
-                "gh plate bootstrap --repo OWNER/REPO --adopt --apply",
+                "gh plate bootstrap --repo coacharino/adopted --adopt --apply",
             )
 
     def test_next_command_noop_points_at_adopt(self):
