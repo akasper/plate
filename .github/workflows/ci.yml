@@ -24,6 +24,7 @@ jobs:
         uses: ./.github/actions/plate-select-runs-on
         with:
           plate-runs-on: ${{ vars.PLATE_RUNS_ON }}
+          github-token: ${{ secrets.PLATE_RUNNER_PROBE_PAT || github.token }}
 
   test:
     needs: select-runs-on
