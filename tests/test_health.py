@@ -385,9 +385,9 @@ class HealthTests(unittest.TestCase):
         self.assertIn("errors", d)
         self.assertTrue(d["errors"])
 
-    def test_health_label_coverage_case_insensitive(self):
-        """Health tolerates GH canonical casing (e.g. 'question' vs 'Question' in labels.yml)."""
-        class LowerQuestionClient(FakeClient):
+    def test_health_flags_label_case_mismatch_as_incomplete(self):
+        """#1196: lowercase GitHub defaults fail coverage until bootstrap renames them."""
+        class LowerDefaultClient(FakeClient):
             def api(self, endpoint, **kwargs):
                 if "repos/akasper/plate_core/labels" in endpoint:
                     return [
@@ -402,21 +402,39 @@ class HealthTests(unittest.TestCase):
 
         report = get_health(
             repo="akasper/plate_core",
-            client=LowerQuestionClient(),
+            client=LowerDefaultClient(),
             include_spec_audit=False,
             repo_root=str(REPO_ROOT),
         )
-        self.assertTrue(report.label_coverage_ok)
+        self.assertFalse(report.label_coverage_ok)
         self.assertEqual(report.missing_labels, [])
-        self.assertEqual(report.status, "pass")
-        self.assertTrue(report.goals_page_present)
-        self.assertEqual(report.open_question_count, 2)
-        self.assertTrue(report.plate_config_present)
-        self.assertTrue(report.plate_config_valid)
-        self.assertEqual(report.plate_config_file_version, "1.0")
-        self.assertEqual(report.plate_config_resolved_version, "1.3")
-        self.assertTrue(report.plate_config_upgrade_available)
-        self.assertTrue(report.curiosity_answers_present)
+        self.assertTrue(any("`question` should be `Question`" in m for m in report.label_case_mismatches))
+        self.assertIn("bootstrap", label_coverage_fix_command())
+
+    def test_health_reports_documentation_case_mismatch_1196(self):
+        """Adopter repro: only `documentation` present should fail until bootstrap rename."""
+        class DocumentationLowerClient(FakeClient):
+            def api(self, endpoint, **kwargs):
+                if "repos/akasper/plate_core/labels" in endpoint:
+                    return [
+                        {
+                            "name": "documentation"
+                            if entry["name"] == "Documentation"
+                            else entry["name"]
+                        }
+                        for entry in _registry_label_api_objects()
+                    ]
+                return FakeClient.api(self, endpoint, **kwargs)
+
+        report = get_health(
+            repo="akasper/plate_core",
+            client=DocumentationLowerClient(),
+            include_spec_audit=False,
+            repo_root=str(REPO_ROOT),
+        )
+        self.assertFalse(report.label_coverage_ok)
+        self.assertIn("`documentation` should be `Documentation`", report.label_case_mismatches)
+        self.assertNotIn("Documentation", report.missing_labels)
 
     def test_health_label_coverage_compares_labels_yml_to_github(self):
         """#1260: missing registry labels fail coverage; report lists canonical names."""

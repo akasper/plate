@@ -281,6 +281,10 @@ def cmd_health(args: argparse.Namespace) -> int:
         count = len(report.missing_labels)
         print(f"Missing labels ({count}): {', '.join(report.missing_labels)}")
         print(f"Fix: {label_coverage_fix_command()}")
+    if report.label_case_mismatches:
+        count = len(report.label_case_mismatches)
+        print(f"Label case mismatches ({count}): {', '.join(report.label_case_mismatches)}")
+        print(f"Fix: {label_coverage_fix_command()}")
     print(f"Branch protection: {'ENABLED' if report.branch_protection_enabled else 'DISABLED'}")
     if report.stale_required_check_contexts:
         print(
