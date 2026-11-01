@@ -139,7 +139,13 @@ jobs:
             if command -v xmllint &> /dev/null; then
               TOTAL=$(xmllint --xpath "count(//testcase)" test-results/junit.xml 2>/dev/null || echo "?")
               FAILURES=$(xmllint --xpath "count(//testcase/failure)" test-results/junit.xml 2>/dev/null || echo "?")
-              echo "**Results:** $TOTAL total, $FAILURES failures" >> $GITHUB_STEP_SUMMARY
+              SKIPPED=$(xmllint --xpath "count(//testcase/skipped)" test-results/junit.xml 2>/dev/null || echo "0")
+              if [ "$TOTAL" != "?" ] && [ "$FAILURES" != "?" ]; then
+                PASSED=$((TOTAL - FAILURES - SKIPPED))
+                echo "**Results:** $PASSED passed, $FAILURES failed, $SKIPPED skipped ($TOTAL total)" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "**Results:** unavailable (could not parse junit.xml)" >> $GITHUB_STEP_SUMMARY
+              fi
             fi
           fi
 
@@ -153,26 +159,33 @@ jobs:
             const fs = require('fs');
             const path = require('path');
             
-            // Try to read test results JSON for statistics
             let testStats = { passed: '?', failed: '?', skipped: '?' };
             const resultsPath = 'test-results/junit.xml';
             
             if (fs.existsSync(resultsPath)) {
               try {
-                // Parse junit.xml to extract test counts
                 const content = fs.readFileSync(resultsPath, 'utf8');
-                // Simple regex extraction (can be enhanced with XML parser)
                 const testsMatch = content.match(/tests="(\d+)"/);
                 const failuresMatch = content.match(/failures="(\d+)"/);
+                const skippedMatch = content.match(/skipped="(\d+)"/);
                 
-                if (testsMatch) testStats.passed = parseInt(testsMatch[1]);
-                if (failuresMatch) testStats.failed = parseInt(failuresMatch[1]);
+                if (testsMatch && failuresMatch) {
+                  const total = parseInt(testsMatch[1], 10);
+                  const failed = parseInt(failuresMatch[1], 10);
+                  const skipped = skippedMatch ? parseInt(skippedMatch[1], 10) : 0;
+                  testStats.failed = failed;
+                  testStats.skipped = skipped;
+                  testStats.passed = total - failed - skipped;
+                }
               } catch (e) {
                 console.log('Could not parse test results:', e.message);
               }
             }
             
-            const status = testStats.failed === 0 || testStats.failed === '?' ? '✅' : '❌';
+            const resultsUnavailable = testStats.passed === '?' || testStats.failed === '?';
+            const status = resultsUnavailable
+              ? '⚠️ **E2E results unavailable**'
+              : (testStats.failed === 0 ? '✅' : '❌');
             const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
             const reportUrl = `${runUrl}#artifacts`;
             
@@ -182,6 +195,7 @@ jobs:
             |--------|-------|
             | Passed | ${testStats.passed} |
             | Failed | ${testStats.failed} |
+            | Skipped | ${testStats.skipped} |
             
             📊 **View Results:**
             - [GitHub Action Run](${runUrl})

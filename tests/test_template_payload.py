@@ -324,5 +324,26 @@ class InitPlaywrightPayloadTests(unittest.TestCase):
             self.assertTrue((repo / "scripts" / "e2e-record.ps1").exists())
 
 
+class TemplatePayloadE2eJunitReportTests(unittest.TestCase):
+    """#1197: E2E workflow and Playwright config must agree on JUnit output path."""
+
+    JUNIT_REPORT = "test-results/junit.xml"
+
+    def test_playwright_config_and_e2e_workflow_share_junit_output_path(self):
+        root = payload_root()
+        workflow = (root / ".github/workflows/test-e2e.yml").read_text(encoding="utf-8")
+        config = (root / "playwright.config.ts").read_text(encoding="utf-8")
+        self.assertIn(self.JUNIT_REPORT, workflow)
+        self.assertIn(f"PLAYWRIGHT_JUNIT_OUTPUT_FILE: {self.JUNIT_REPORT}", workflow)
+        self.assertIn(self.JUNIT_REPORT, config)
+        self.assertIn(
+            f"['junit', {{ outputFile: '{self.JUNIT_REPORT}' }}]",
+            config,
+        )
+        comment_block = workflow.split("Comment PR with test results", 1)[1]
+        self.assertIn("resultsUnavailable", comment_block)
+        self.assertIn("total - failed - skipped", comment_block)
+
+
 if __name__ == "__main__":
     unittest.main()
