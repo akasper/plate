@@ -1,0 +1,15 @@
+{
+  "slug": "pr-handoff-comment-attribution-1236",
+  "change_type": "process",
+  "surface": "AGENTS.md + address-pr-feedback skill + plate_core.comment_attribution",
+  "summary": "Document PR handoff credit rules and default-on agent comment attribution with .plate config (#1236).",
+  "migration_impact": "Adopters get updated AGENTS.md PLATES-CORE block and address-pr-feedback skill text. Optional `.plate` autonomy.comment_attribution overrides default-on behavior.",
+  "migration_guidance": [
+    "Merge or import the pr-handoff-comment-attribution-1236 PLATES-CORE block into AGENTS.md.",
+    "Refresh .agentic/skills/address-pr-feedback/SKILL.md from bootstrap/import-payload or regenerate from plate-core.",
+    "To disable attribution headers, set autonomy.comment_attribution.enabled to false in .plate."
+  ],
+  "agent_notes": "Ideas adapted from t3dotgg/tstack takeover and leaving-pr-comments skills (MIT, copyright Theo Browne) per #1232; PLATE wording and apply_comment_attribution helper are original. After editing baseline_catalog address-pr-feedback procedure, run python3 scripts/generate-plugin-skills.py.",
+  "breaking": false,
+  "links": ["#1236", "#1232"]
+}

@@ -335,6 +335,76 @@ class TestImportPayload(unittest.TestCase):
             again = import_payload(tmp, strategy="safe", dry_run=True)
             self.assertIn("CURRENT.md", again["would_skip"])
 
+    def test_seeds_project_readme_stub_not_template_readme(self):
+        """#1188: import seeds a project README stub; never copies template README."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory(prefix="coacharino-") as tmp:
+            dry = import_payload(tmp, strategy="conservative", dry_run=True)
+            self.assertIn("README.md", dry["would_create"])
+            self.assertNotIn("README.md", dry.get("would_conflict") or [])
+
+            applied = import_payload(tmp, strategy="conservative", apply=True)
+            self.assertIn("README.md", applied["created"])
+            text = (Path(tmp) / "README.md").read_text(encoding="utf-8")
+            self.assertIn("Built with [PLATE]", text)
+            self.assertNotIn("# PLATE Template", text)
+            self.assertNotIn("plate_template", text.lower())
+            self.assertIn("# coacharino-", text.splitlines()[0])
+
+    def test_preserves_existing_root_readme(self):
+        """#1188: an existing README is left unchanged."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            custom = "# My product\n\nShip the thing.\n"
+            (Path(tmp) / "README.md").write_text(custom, encoding="utf-8")
+            applied = import_payload(tmp, strategy="safe", apply=True)
+            self.assertIn("README.md", applied.get("skipped") or applied.get("would_skip"))
+            self.assertEqual((Path(tmp) / "README.md").read_text(encoding="utf-8"), custom)
+
+    def test_readme_stub_uses_github_description_when_available(self):
+        """#1188: gh repo metadata enriches the seeded README when reachable."""
+        from unittest.mock import MagicMock, patch
+
+        from plate_core.import_payload import (
+            build_project_readme_stub,
+            import_payload,
+            resolve_project_readme_context,
+        )
+
+        gh = MagicMock()
+        gh.api.return_value = {
+            "name": "coacharino",
+            "description": "Coaching platform for teams.",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch(
+                "plate_core.import_payload._repo_slug_from_target",
+                return_value="akasper/coacharino",
+            ):
+                name, desc = resolve_project_readme_context(
+                    root,
+                    gh=gh,
+                    fetch_github=True,
+                )
+            self.assertEqual(name, "coacharino")
+            self.assertEqual(desc, "Coaching platform for teams.")
+            stub = build_project_readme_stub(repo_name=name, description=desc)
+            self.assertIn("Coaching platform for teams.", stub)
+
+            with patch(
+                "plate_core.import_payload.resolve_project_readme_context",
+                return_value=("coacharino", "Coaching platform for teams."),
+            ):
+                applied = import_payload(root, strategy="safe", apply=True)
+            self.assertIn("README.md", applied["created"])
+            self.assertIn(
+                "Coaching platform for teams.",
+                (root / "README.md").read_text(encoding="utf-8"),
+            )
+
     def test_seeds_releases_and_plate_for_core_ready(self):
         """Import seeds releases layout + .plate so offline core_ready is reachable."""
         from plate_core.import_payload import import_payload
@@ -462,6 +532,23 @@ class TestImportPayload(unittest.TestCase):
             self.assertFalse(report["ok"])
             self.assertIn("conservative", report["next_command"])
             self.assertIn("--dry-run", report["next_command"])
+
+    def test_post_import_next_steps_never_suggest_config_init_when_plate_exists(self):
+        """#1189: after apply seeds .plate, printed next steps must not mention config init."""
+        from plate_core.import_payload import format_import_payload_report, import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = import_payload(tmp, strategy="conservative", apply=True)
+            self.assertTrue((Path(tmp) / ".plate").is_file(), msg="expected seeded .plate")
+            steps = report["next_steps"]
+            joined = " ".join(steps) + " " + report.get("next_command", "")
+            self.assertNotIn(
+                "config init",
+                joined.lower(),
+                msg=f"unexpected config init in next_steps: {steps}",
+            )
+            formatted = format_import_payload_report(report)
+            self.assertNotIn("config init", formatted.lower())
 
 
 if __name__ == "__main__":
