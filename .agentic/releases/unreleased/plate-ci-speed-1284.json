@@ -1,0 +1,10 @@
+{
+  "slug": "plate-ci-speed-1284",
+  "change_type": "process",
+  "surface": ".github/workflows/ci.yml (plate repository only)",
+  "summary": "Trim plate's own CI: drop the select-runs-on job on this public repo, add pip and npm caching. Required checks labels, test and pr-gates keep their names and strictness.",
+  "migration_impact": "None for downstream repos. The plate-select-runs-on action stays in the template payload for private adopters.",
+  "agent_notes": "Only plate's own workflow changed. Adopters apply the same ideas through docs/plate/migration/ci-speed-checklist.md.",
+  "breaking": false,
+  "links": ["#1284", "#1268"]
+}

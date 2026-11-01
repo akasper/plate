@@ -281,6 +281,10 @@ def cmd_health(args: argparse.Namespace) -> int:
         count = len(report.missing_labels)
         print(f"Missing labels ({count}): {', '.join(report.missing_labels)}")
         print(f"Fix: {label_coverage_fix_command()}")
+    if report.label_case_mismatches:
+        count = len(report.label_case_mismatches)
+        print(f"Label case mismatches ({count}): {', '.join(report.label_case_mismatches)}")
+        print(f"Fix: {label_coverage_fix_command()}")
     print(f"Branch protection: {'ENABLED' if report.branch_protection_enabled else 'DISABLED'}")
     if report.stale_required_check_contexts:
         print(
@@ -5133,8 +5137,8 @@ def build_parser() -> argparse.ArgumentParser:
     babysit.add_argument(
         "--branch-update-strategy",
         choices=["copilot-request", "local-rebase", "none"],
-        default="copilot-request",
-        help="How to handle out-of-sync base branch: copilot-request (default), local-rebase, or none",
+        default="local-rebase",
+        help="How to handle out-of-sync base branch: local-rebase (default), copilot-request (opt-in), or none",
     )
     babysit.add_argument(
         "--watch",

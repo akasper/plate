@@ -113,6 +113,13 @@ inputs:
     description: Value of repository variable PLATE_RUNS_ON (JSON label array)
     required: false
     default: ''
+  github-token:
+    description: >-
+      Token for the self-hosted runner list API. GITHUB_TOKEN cannot call this
+      endpoint; use a classic PAT with repo scope or a fine-grained PAT with
+      Administration read on the repository. Defaults to the job GITHUB_TOKEN.
+    required: false
+    default: ''
 outputs:
   runs_on:
     description: JSON array for runs-on (for example ["ubuntu-latest"])
@@ -126,6 +133,7 @@ runs:
         PLATE_RUNS_ON: ${{{{ inputs.plate-runs-on }}}}
         PLATE_RUNNER_PROBE_TIMEOUT_SECONDS: ${{{{ inputs.probe-timeout-seconds }}}}
       with:
+        github-token: ${{{{ inputs.github-token || github.token }}}}
         script: |
 {indented}
 """

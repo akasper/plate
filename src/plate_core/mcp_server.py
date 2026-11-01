@@ -2949,8 +2949,8 @@ def run() -> None:
                                             "type": "string",
                                             "enum": ["copilot-request", "local-rebase", "none"],
                                             "description": (
-                                                "How to handle out-of-sync base branch: copilot-request (default, triggers Copilot merge assist), "
-                                                "local-rebase (local worktree rebase+push), or none (detect only)."
+                                                "How to handle out-of-sync base branch: local-rebase (default, local worktree rebase+push), "
+                                                "copilot-request (opt-in, triggers Copilot merge assist), or none (detect only)."
                                             ),
                                         },
                                     },

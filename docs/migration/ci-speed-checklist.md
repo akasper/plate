@@ -9,7 +9,7 @@ Related PLATE docs:
 - [Self-hosted runners](./self-hosted-runners.md) — optional faster compute on private repos ([#1210](https://github.com/akasper/plate/issues/1210), workflow probe [#1214](https://github.com/akasper/plate/issues/1214)).
 - [Actions cost rollout](https://github.com/akasper/plate/blob/main/docs/migration/actions-cost-rollout.md) — guards and merged `pr-gates` before you spend on speed (PLATE core repo; not copied in the bootstrap payload).
 - Epic [#1269](https://github.com/akasper/plate/issues/1269) — CI/CD split guidance for heavy jobs (separate page).
-- [#1282](https://github.com/akasper/plate/issues/1282) — `gh plate ci audit` (waiting vs setup vs run; cache visibility).
+- [#1282](https://github.com/akasper/plate/issues/1282) — `gh plate ci audit` (waiting vs setup vs run; cache visibility). Agent procedure: [`.agentic/skills/ci-audit/SKILL.md`](../../.agentic/skills/ci-audit/SKILL.md) (lazy-load; copied on bootstrap/import-payload).
 - [#1272](https://github.com/akasper/plate/issues/1272) — periodic minutes report to rank expensive workflows.
 
 <!-- PLATES-CORE:BEGIN ci-speed-checklist-1283 -->
@@ -78,10 +78,10 @@ Turn on stricter lint and type rules in CI; automated contributors tolerate nois
 
 Larger runners, always-on agents, and extra parallel jobs reduce **latency** but often raise **spend**. Track both.
 
-- Use [#1272](https://github.com/akasper/plate/issues/1272) style minutes reporting and [#1282](https://github.com/akasper/plate/issues/1282) job timing splits before and after changes.
+- Use [#1272](https://github.com/akasper/plate/issues/1272) style minutes reporting and [#1282](https://github.com/akasper/plate/issues/1282) job timing splits before and after changes (follow [`.agentic/skills/ci-audit/SKILL.md`](../../.agentic/skills/ci-audit/SKILL.md) when running the audit).
 - Revisit monthly: if minutes drop but invoice rises, adjust runner size or parallelism.
 <!-- PLATES-CORE:END ci-speed-checklist-1283 -->
 
 ## Agents
 
-When asked to “speed up CI,” walk this checklist against the adopter’s workflows. Propose minimal diffs; do not remove required checks or bypass branch protection. Escalate with `need:human-review` when speed changes affect security boundaries (runner labels on public repos, fork PRs, or secret access).
+When asked to “speed up CI,” walk this checklist against the adopter’s workflows. Before baselining or comparing minutes, read [`.agentic/skills/ci-audit/SKILL.md`](../../.agentic/skills/ci-audit/SKILL.md) (lazy-load; do not preload in unrelated tasks). Propose minimal diffs; do not remove required checks or bypass branch protection. Escalate with `need:human-review` when speed changes affect security boundaries (runner labels on public repos, fork PRs, or secret access).

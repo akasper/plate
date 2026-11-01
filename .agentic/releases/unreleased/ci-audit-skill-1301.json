@@ -1,0 +1,15 @@
+{
+  "slug": "ci-audit-skill-1301",
+  "change_type": "feature",
+  "surface": ".agentic/skills/ci-audit/SKILL.md + docs/migration/ci-speed-checklist.md (payload mirror)",
+  "summary": "Add a lazy-loaded agent skill describing when and how to run `gh plate ci audit` and read waiting, setup, and running minutes (#1301).",
+  "migration_impact": "Bootstrapped repos receive `.agentic/skills/ci-audit/SKILL.md` on import-payload. The CI speed checklist links to the skill; no baseline catalog or workflow changes.",
+  "migration_guidance": [
+    "Run `gh plate import-payload` (or bootstrap) to copy `.agentic/skills/ci-audit/SKILL.md`.",
+    "When improving CI speed, read the skill from docs/migration/ci-speed-checklist.md before baselining minutes.",
+    "Requires `gh plate` with the ci audit command (#1282); see docs/design/ci-audit-command.md in plate-core for heuristics."
+  ],
+  "agent_notes": "Lazy-load `.agentic/skills/ci-audit/SKILL.md` only for CI speed or minutes baselining work—not for ordinary feature loops. Measure with `gh plate ci audit [--json]`; treat cache hint_* fields as name-based guesses.",
+  "breaking": false,
+  "links": ["#1301", "#1282", "#1283", "#1268"]
+}

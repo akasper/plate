@@ -71,6 +71,23 @@ def fetch_repository_labels(gh: GhClient, repo: str) -> list[dict[str, str]]:
     return collected
 
 
+def registry_label_case_mismatches(
+    expected: list[str],
+    remote_labels: list[dict[str, str]],
+) -> list[str]:
+    """Return messages when a registry label exists on GitHub with non-canonical casing."""
+    by_lower: dict[str, str] = {}
+    for item in remote_labels:
+        by_lower[item["name"].lower()] = item["name"]
+    messages: list[str] = []
+    for canonical in expected:
+        lower = canonical.lower()
+        actual = by_lower.get(lower)
+        if actual is not None and actual != canonical:
+            messages.append(f"`{actual}` should be `{canonical}`")
+    return messages
+
+
 @dataclass
 class LabelSyncOutcome:
     name: str

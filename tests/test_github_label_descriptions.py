@@ -5,6 +5,7 @@ from plate_core.github_labels import (
     GITHUB_LABEL_DESCRIPTION_MAX_LENGTH,
     find_overlong_shipped_label_descriptions,
     prepare_label_description,
+    registry_label_case_mismatches,
 )
 
 
@@ -33,6 +34,26 @@ class GitHubLabelDescriptionTests(unittest.TestCase):
         prepared, warning = prepare_label_description(short)
         self.assertEqual(short, prepared)
         self.assertIsNone(warning)
+
+    def test_registry_label_case_mismatches_detects_github_defaults(self):
+        messages = registry_label_case_mismatches(
+            ["Bug", "Documentation"],
+            [
+                {"name": "bug", "color": "d73a4a", "description": ""},
+                {"name": "documentation", "color": "0075ca", "description": ""},
+            ],
+        )
+        self.assertEqual(
+            messages,
+            ["`bug` should be `Bug`", "`documentation` should be `Documentation`"],
+        )
+        self.assertEqual(
+            registry_label_case_mismatches(
+                ["Bug"],
+                [{"name": "Bug", "color": "d73a4a", "description": ""}],
+            ),
+            [],
+        )
 
 
 if __name__ == "__main__":
