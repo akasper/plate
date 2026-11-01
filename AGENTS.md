@@ -462,11 +462,11 @@ The **`address-pr-feedback` skill** (reply + resolve + zero-unresolved re-query 
 
 The babysitter detects when a PR branch is out of sync with its base branch (via `mergeStateStatus`: BEHIND, CONFLICTING, or DIRTY). The default behavior is controlled by `--branch-update-strategy`:
 
-- **copilot-request** (default): Post a `@copilot` trigger comment requesting native GitHub/Copilot branch update assistance. This is safe, auditable, and reversible.
-- **local-rebase**: Local worktree rebase and push (implemented using isolated git worktree via pr-babysit helpers; reports success/conflict/error via BabysitReport fields; raises only on non-git env or fatal error). **Before any worktree/rebase/push: call cleanup_git_locks() + verify_worktree_is_isolated() (or raw `git rev-parse --show-toplevel` + rm -f .git/index.lock). Use isolated worktree for *all* PR changes during babysit/fixes (never main checkout). Cleanup: git worktree remove --force + rm -rf the temp dir. Subagent and main agent must not collide on same repo dir. (Addresses #514.)**
+- **local-rebase** (default): Local worktree rebase and push (implemented using isolated git worktree via pr-babysit helpers; reports success/conflict/error via BabysitReport fields; raises only on non-git env or fatal error). **Before any worktree/rebase/push: call cleanup_git_locks() + verify_worktree_is_isolated() (or raw `git rev-parse --show-toplevel` + rm -f .git/index.lock). Use isolated worktree for *all* PR changes during babysit/fixes (never main checkout). Cleanup: git worktree remove --force + rm -rf the temp dir. Subagent and main agent must not collide on same repo dir. (Addresses #514.)**
+- **copilot-request** (opt-in): Post a `@copilot` trigger comment requesting native GitHub/Copilot branch update assistance. Use only when a human explicitly wants paid Copilot merge assistance.
 - **none**: Detect and report only, take no action
 
-When `--act` is specified and the PR is out of sync, the babysitter posts a merge trigger comment (deduplicated by marker) to prompt resolution. This ensures the babysitting loop can continue without manual branch update intervention.
+When `--act` is specified and the PR is out of sync, the babysitter resolves base drift with the chosen strategy (local rebase by default, or a Copilot merge trigger when `copilot-request` is set). This keeps the babysitting loop moving without silent `@copilot` spend.
 
 **Lifecycle contract:**
 
@@ -495,9 +495,9 @@ Downstream rollout for private adopters: `docs/migration/actions-cost-rollout.md
 
 ## Copilot code review (human and agent policy)
 
-Nothing in this repository should **auto-request Copilot code review on every push**. Request Copilot review **once per PR when the PR is ready for review** (labels, scope, and gates satisfied). Request **re-review only when a human or process explicitly asks**—not on each `synchronize` event. This pairs with babysit guidance (#496) and triage/wake work tracked in #1136 and #1137 (Epic #1129).
+Nothing in this repository should **auto-request Copilot code review on every push**. Do **not** request Copilot review by default; use a local model or other first-pass review for routine PR work. Request Copilot review **once per PR when a human explicitly asks** (or when labels, scope, and gates are satisfied and a human has chosen Copilot for that PR). Request **re-review only when a human or process explicitly asks**—not on each `synchronize` event. This pairs with babysit guidance (#496), default `local-rebase` branch sync (#1300), and triage/wake work tracked in #1136 and #1137 (Epic #1129).
 
-Agents must not loop `request review` / `@copilot` review triggers to chase green CI; work existing review threads first (`gh plate pr babysit`, `plate_resolve_review_thread`).
+Agents must not loop `request review` / `@copilot` review triggers to chase green CI; work existing review threads first (`gh plate pr babysit`, `plate_resolve_review_thread`). Use `--branch-update-strategy copilot-request` only when a human opts into paid Copilot merge assistance.
 
 ## Label Rules
 
