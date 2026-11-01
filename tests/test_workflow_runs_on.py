@@ -111,6 +111,8 @@ class WorkflowRunsOnTests(unittest.TestCase):
         self.assertIn("runs_on:", yaml_text)
         self.assertIn("listSelfHostedRunnersForRepo", yaml_text)
         self.assertIn("inputs.plate-runs-on", yaml_text)
+        self.assertIn("github-token:", yaml_text)
+        self.assertIn("inputs.github-token || github.token", yaml_text)
         self.assertNotIn("vars.", yaml_text)
 
     def test_composite_action_probe_falls_back_on_api_errors(self):
