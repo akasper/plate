@@ -57,6 +57,14 @@ Immediately before any merge or auto-merge, fetch fresh PR state again. Do **not
 
 Fix comments that identify real bugs in the intended use case. Decline scope creep—extra tests, rare edge cases, minor performance tweaks, or broad compatibility not required for this PR—with a clear in-thread reason, resolve the thread, and list each declined item as a follow-up. When choosing between fixes, prefer deleting or narrowing code over adding layers. (Same tstack credit as above.)
 
+## Credit when finishing someone else's PR (#1236)
+
+When you take over another agent's or a human's open PR, keep working on the **same branch and PR**. Preserve existing commit authorship; add new commits as yourself (or the active agent identity). Use `Co-authored-by` trailers only with **verified** identities (for example from `gh api user` or the repo owner's known GitHub noreply address)—never invent emails. On squash merge, keep legitimate human co-author credit in the squash commit message when it applies. Link the PR you took over in your first status comment so history stays traceable. (Ideas adapted from tstack `takeover`, MIT, Theo Browne; see #1232/#1236. Wording here is PLATE-original.)
+
+## Agent comment attribution (#1236)
+
+Comments you post under a person's GitHub account (PR comments, review-thread replies, decline reasons) **must identify the agent** unless disabled in config. **On by default:** one short first line, for example `🤖 Grok Bot on behalf of Andrew`. Configure via `.plate` `autonomy.comment_attribution` (`enabled`: boolean, default `true`; `format`: string with `{agent}` and `{on_behalf_of}`, default `🤖 {agent} on behalf of {on_behalf_of}`). Use the harness or agent name you actually have—do not guess model names. Does **not** apply to PR descriptions or commit messages. When using PLATE Python helpers, run bodies through `plate_core.comment_attribution.apply_comment_attribution` before posting. (Ideas adapted from tstack `leaving-pr-comments`, MIT, Theo Browne; see #1232/#1236.)
+
 ## GraphQL fallback (helpers unavailable)
 
 Use **only** these exact patterns — no jq/mktemp/sed wrappers.

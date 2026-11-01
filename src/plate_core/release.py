@@ -1545,6 +1545,57 @@ def ensure_next_release_issue(
 
 STANDING_TRACK_BRANCHES = ("release-major", "release-minor", "release-patch", "release")
 
+# Standing Next Release starter issue messaging (#1194; mandatory adoption #1193).
+NEXT_RELEASE_CEREMONY_DOC = "docs/design/release-ceremony-refinement.md"
+NEXT_RELEASE_MANDATORY_ADOPTION_ISSUE_URL = "https://github.com/akasper/plate/issues/1193"
+NEXT_RELEASE_STARTER_ISSUE_REASON = (
+    "Mandatory standing release-ceremony issue: Epics target it via the Development sidebar; "
+    "release status, what-next, and semver track branches depend on exactly one open "
+    "Release issue titled Next Release."
+)
+
+
+def pick_canonical_next_release_issue(issues: list[dict]) -> dict | None:
+    """Pick the canonical standing Next Release issue when duplicates exist."""
+    if not issues:
+        return None
+    exact = [
+        item
+        for item in issues
+        if (item.get("title") or "").strip().lower() == "next release"
+    ]
+    pool = exact if exact else list(issues)
+    return min(pool, key=lambda item: int(item.get("number") or 0))
+
+
+def _next_release_starter_action_fields() -> dict:
+    return {
+        "required": True,
+        "reason": NEXT_RELEASE_STARTER_ISSUE_REASON,
+        "doc": NEXT_RELEASE_CEREMONY_DOC,
+        "mandatory_adoption_issue": NEXT_RELEASE_MANDATORY_ADOPTION_ISSUE_URL,
+    }
+
+
+def format_release_repair_next_release_lines(action: dict) -> list[str]:
+    """Extra human-readable lines for required Next Release repair actions (#1194)."""
+    if action.get("action") not in ("ensure-next-release-issue", "dedupe-next-release-issues"):
+        return []
+    lines: list[str] = []
+    if action.get("required"):
+        lines.append(f"    REQUIRED starter issue — {action.get('reason', '')}")
+        doc = action.get("doc")
+        policy = action.get("mandatory_adoption_issue")
+        refs = [part for part in (doc, policy) if part]
+        if refs:
+            lines.append(f"    See {' and '.join(refs)}")
+    canonical = action.get("canonical_next_release_issue")
+    if isinstance(canonical, dict) and canonical.get("number"):
+        url = canonical.get("url") or canonical.get("html_url") or ""
+        suffix = f" ({url})" if url else ""
+        lines.append(f"    Canonical Next Release: #{canonical['number']}{suffix}")
+    return lines
+
 
 def diagnose_release_standing_state(
     repo: str | None = None,
@@ -1716,13 +1767,19 @@ def repair_release_standing_state(
 
     # Next Release issue
     n_next = diag["next_release_count"]
+    starter_fields = _next_release_starter_action_fields()
     if n_next == 0:
+        planned_detail = (
+            "Would create open Release issue titled 'Next Release' "
+            "(required starter issue; not optional)"
+        )
         if do_apply:
             created = ensure_next_release_issue(repo=target, client=gh)
             actions.append(
                 {
                     "action": "ensure-next-release-issue",
                     "state": "applied" if created.get("created") or created.get("exists") else "error",
+                    **starter_fields,
                     "detail": created,
                 }
             )
@@ -1731,7 +1788,8 @@ def repair_release_standing_state(
                 {
                     "action": "ensure-next-release-issue",
                     "state": "planned",
-                    "detail": "Would create open Release issue titled 'Next Release'",
+                    **starter_fields,
+                    "detail": planned_detail,
                 }
             )
     elif n_next == 1:
@@ -1739,17 +1797,30 @@ def repair_release_standing_state(
             {
                 "action": "ensure-next-release-issue",
                 "state": "already-configured",
+                **starter_fields,
                 "detail": diag["next_release_issues"][0],
             }
         )
     else:
+        canonical = pick_canonical_next_release_issue(diag["next_release_issues"])
         actions.append(
             {
                 "action": "dedupe-next-release-issues",
                 "state": "need:human",
+                **starter_fields,
+                "canonical_next_release_issue": canonical,
                 "detail": {
-                    "message": "Multiple open 'Next Release' issues; keep exactly one and close or rename the rest.",
+                    "message": (
+                        "Multiple open 'Next Release' issues; keep exactly one and close or rename the rest."
+                    ),
                     "issues": diag["next_release_issues"],
+                    "canonical_issue_number": (canonical or {}).get("number"),
+                    "canonical_note": (
+                        f"Issue #{(canonical or {}).get('number')} is canonical "
+                        "(lowest-number exact 'Next Release' title when present)."
+                        if canonical
+                        else None
+                    ),
                 },
             }
         )
