@@ -488,7 +488,7 @@ When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that i
 
 **Configuration:** Set the `PLATE_PR_FEEDBACK_AGENTS` repository variable to a comma-separated list of GitHub logins whose feedback should be auto-addressed (e.g., `devin-ai-integration[bot],openhands-agent`). Set `COPILOT_TRIGGER_PAT` (classic PAT with `repo` scope) for reliable `@copilot` routing from Actions. When the variable is absent, the workflow matches common agent login patterns automatically.
 
-**Merge safety gate:** Require the `pr-gates` check from `.github/workflows/plate-pr-gates.yml` in branch protection for `main` so merge and auto-merge wait until agent feedback threads are resolved (the merged workflow supersedes the legacy `feedback-resolution-check.yml` workflow, which the payload no longer ships).
+**Merge safety gate:** Require the `pr-gates` check from `.github/workflows/plate-pr-gates.yml` in branch protection for `main` so merge and auto-merge wait until agent feedback threads are resolved (this workflow supersedes the older standalone feedback-resolution workflow, which the payload no longer ships).
 
 <!-- PLATES-CORE:BEGIN interactive-epic-planning -->
 ## Interactive Epic Planning
