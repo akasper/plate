@@ -118,7 +118,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 - **Budgeted autonomy:** operator sets `.plate` `autonomy.risk_tolerance` + budgets; agent or scheduler runs `gh plate autonomy --status` then `run` / `--loop` (or MCP `plate_autonomy_run_cycle`). Risk `off` disables engine autopilot only — ordinary Feature/Bug/Doc implementation still proceeds under human review rules.
 - **Safety path:** high-impact actions use `plate_autonomy_simulate` / shadow reports; open checkpoints pause cycles until decide/approve; ledger records decisions for audit.
 - **Feed + planning:** `plate_feed` ranks open Questions/Tasks; Q&A planning builds Feature/Epic/Release stubs with approval prompts.
-- **PR green loop:** `gh plate pr babysit N --act` (scope default `all`) with local-rebase or copilot-request for base sync; feedback-resolution gate for agent threads; human approval still required for Bug/Feature/Documentation merges unless autonomous eligibility is met.
+- **PR green loop:** `gh plate pr babysit N --act` (scope default `all`) with **local-rebase** as the default branch-update strategy; use `copilot-request` only when explicitly opted in; feedback-resolution gate for agent threads; human approval still required for Bug/Feature/Documentation merges unless autonomous eligibility is met.
 - Agents self-correct low-risk issues; escalate via Issues / `need:human-review` for human judgment. Long-running runs stay quiet (terse bullets; GitHub comments only on real progress or exempt markers).
 
 ---
@@ -199,7 +199,7 @@ Priority order for remaining work (agents: prefer finishing open PRs, then Phase
 - **Epic: .plate Root Config Lifecycle — CLI/MCP Surfaces + Extension Support + Health Integration**  
   Complete config surfaces (`gh plate config` init/configure/validate/upgrade + MCP), extension deep merge, schema evolution, health/bootstrap/CI wiring. Design: `docs/design/plate-root-config-schema-lifecycle.md` (Epic #89 / #108 / #129). Autonomy section is already first-class; lifecycle polish continues.
 
-- **Feature: local-rebase Branch-Update Strategy in PR Babysit** — **delivered** (isolated worktree rebase + push; AGENTS.md + pr_babysit helpers; #514 isolation hardening). Default remains `copilot-request`; `none` for detect-only.
+- **Feature: local-rebase Branch-Update Strategy in PR Babysit** — **delivered** (isolated worktree rebase + push; AGENTS.md + pr_babysit helpers; #514 isolation hardening). Default is `local-rebase`; `copilot-request` is opt-in; `none` for detect-only.
 
 - **Epic: First-Class Release Tooling (gh plate release cut + Ceremony Automation)**  
   Native `gh plate release cut` / finalize, multi-track and legacy single-`release` modes, fragment aggregation, standing Next Release issue, heavy Release PR CI. Align with `docs/design/release-ceremony-refinement.md`.
