@@ -1,0 +1,16 @@
+{
+  "slug": "tiered-ci-policy-1332",
+  "change_type": "feature",
+  "surface": "plate_core/ci_tiered_policy.py, scripts/plate/select_tiered_ci_jobs.py, docs/migration/tiered-ci-policy.md, .agentic/ci-policy.example.yml",
+  "summary": "Tiered CI policy config (small/medium/large cost classes), validator, and selection helper combining path map, PR kind caps, and force-run rules for workflow/map/test changes. Does not wire plate workflows yet.",
+  "migration_impact": "Optional: adopters copy ci-policy.example.yml, classify job_sizes from gh plate ci audit, and call select_tiered_ci_jobs before gating optional jobs. Required checks labels, test, and pr-gates unchanged until a follow-up PR wires workflows.",
+  "migration_guidance": [
+    "1. Keep ci-path-jobs.yml enabled with all optional job ids.",
+    "2. Copy .agentic/ci-policy.example.yml to .agentic/ci-policy.yml; set enabled: true and job_sizes from measured runs.",
+    "3. Pass --pr-kind ordinary or release_patch|release_minor|release_major from Release metadata; use nightly for scheduled full suite.",
+    "4. Wire select_tiered_ci_jobs in CI only after owner approval; keep aggregate test job pattern from ci-path-job-selection.md."
+  ],
+  "agent_notes": "Regression: tests/test_ci_tiered_policy.py. Policy doc notes out-of-scope workflow changes (#1332 scope split).",
+  "breaking": false,
+  "links": ["#1332", "#1268", "#1270", "#1269"]
+}
