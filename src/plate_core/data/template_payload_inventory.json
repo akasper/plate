@@ -16,6 +16,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".agentic/ci-policy.example.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".agentic/extensions.yml",
       "classification": "copy_to_downstream"
     },
@@ -408,6 +412,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/migration/tiered-ci-policy.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/migration/ci-speed-checklist.md",
       "classification": "copy_to_downstream"
     },
@@ -565,6 +573,10 @@
     },
     {
       "path": "scripts/plate/select_ci_jobs.py",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "scripts/plate/select_tiered_ci_jobs.py",
       "classification": "copy_to_downstream"
     },
     {
