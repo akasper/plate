@@ -56,6 +56,10 @@ PR_GATE_STEP_CONTRACTS: tuple[dict[str, str], ...] = (
         "failure_marker": "No linked issue detected",
     },
     {
+        "step_name": "Gate — reviewer model",
+        "failure_marker": "Reviewer model must differ from author model",
+    },
+    {
         "step_name": "Gate — Feature release fragment",
         "failure_marker": "per-feature change files",
     },
