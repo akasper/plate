@@ -1,0 +1,15 @@
+{
+  "slug": "mcp-tool-profiles-1331",
+  "change_type": "feature",
+  "surface": "src/plate_core/mcp/tool_profiles.py, plate-mcp, docs/mcp.md",
+  "summary": "Named plate-mcp tool profiles with a lean default listing and opt-in profiles via env or CLI flag.",
+  "migration_impact": "MCP hosts now receive a smaller default tools/list unless PLATE_MCP_TOOL_PROFILES or --tool-profiles includes additional profiles or all. gh plate and CLI behavior are unchanged.",
+  "migration_guidance": [
+    "1. To restore the full tool catalog in MCP clients, set PLATE_MCP_TOOL_PROFILES=all or pass --tool-profiles=all to plate-mcp.",
+    "2. For specialized agents, enable only the profiles you need (see docs/mcp.md).",
+    "3. Task specs may reference profile names in tool allow-lists as they land under Epic #1327."
+  ],
+  "agent_notes": "Default MCP attachment uses the default profile alias (~20 tools). Use profile all for exhaustive tool-list tests or full-surface sessions.",
+  "breaking": false,
+  "links": ["#1331", "#1327"]
+}
