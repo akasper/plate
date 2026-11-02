@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import tempfile
 import unittest
 import warnings
@@ -235,6 +236,71 @@ class TemplatePayloadInventoryTests(unittest.TestCase):
 
         for item in files:
             self.assertEqual(item.get("classification"), "copy_to_downstream")
+
+
+class TemplatePayloadWorkflowStaticTests(unittest.TestCase):
+    """#1329: static checks on shipped template workflows."""
+
+    SCRIPT_REF = re.compile(
+        r"(?<![\w./])(?:\./)?(scripts/[^\s\"'`]+?\.(?:sh|ps1|py|js))\b"
+    )
+    LOCAL_ACTION_REF = re.compile(r"uses:\s*\./(\.github/actions/[^\s\r\n]+)")
+
+    @staticmethod
+    def _payload_ships_script(script_ref: str, payload_files: set[str]) -> bool:
+        script_ref = script_ref.lstrip("./")
+        if script_ref in payload_files:
+            return True
+        name = Path(script_ref).name
+        return any(
+            p == f"scripts/{name}" or p == f"scripts/plate/{name}" for p in payload_files
+        )
+
+    def test_payload_workflows_reference_only_shipped_scripts(self):
+        root = payload_root()
+        payload_files = {
+            p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()
+        }
+        workflows_dir = root / ".github" / "workflows"
+        missing: list[str] = []
+        for wf_path in sorted(workflows_dir.glob("*.yml")):
+            text = wf_path.read_text(encoding="utf-8")
+            rel_wf = wf_path.relative_to(root).as_posix()
+            for match in self.SCRIPT_REF.finditer(text):
+                script = match.group(1).lstrip("./")
+                if not self._payload_ships_script(script, payload_files):
+                    missing.append(f"{rel_wf}: {script}")
+            for match in self.LOCAL_ACTION_REF.finditer(text):
+                action_yml = f"{match.group(1).rstrip('/')}/action.yml"
+                if action_yml not in payload_files:
+                    missing.append(f"{rel_wf}: {action_yml}")
+        self.assertEqual(
+            missing,
+            [],
+            "Workflow references missing payload files:\n" + "\n".join(missing),
+        )
+
+    def test_plates_address_pr_feedback_is_manual_only(self):
+        """Matches plate-core: auto-trigger deprecated in favor of local babysit (#112)."""
+        text = (
+            payload_root() / ".github/workflows/plates-address-pr-feedback.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("workflow_dispatch:", text)
+        self.assertNotIn("pull_request_review:", text)
+
+    def test_platform_monitor_uses_only_shipped_labels(self):
+        labels_path = payload_root() / ".github" / "labels.yml"
+        label_names = set(re.findall(r'- name: "([^"]+)"', labels_path.read_text(encoding="utf-8")))
+        workflow = (
+            payload_root() / ".github/workflows/platform-monitor.yml"
+        ).read_text(encoding="utf-8")
+        for label in re.findall(r"labels:\s*\[([^\]]+)\]", workflow):
+            for quoted in re.findall(r"'([^']+)'", label):
+                self.assertIn(
+                    quoted,
+                    label_names,
+                    f"platform-monitor.yml references label not in labels.yml: {quoted}",
+                )
 
 
 class TemplatePayloadAdopterClaimsTests(unittest.TestCase):
