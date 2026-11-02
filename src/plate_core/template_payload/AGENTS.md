@@ -227,7 +227,7 @@ This table documents the responsibilities and tooling for each core PLATE proces
 | Demo GIFs | Developer + Copilot | `npm run record:e2e` + GIF generation scripts | Required for user-visible features | `tests/e2e/fixtures/gifs/`, PR description/.agentic/releases/ |
 | E2E CI Validation | Copilot + Actions | `.github/workflows/test-e2e.yml` | All PRs (videos retained on failure) | Test report, artifact links |
 | GIF Processing (CI) | Actions + ffmpeg | `.github/workflows/test-e2e.yml` `process-gifs` job | Triggered by `demo` label | Artifacts with 90-day retention, PR comment with GIF links |
-| Feature Documentation | Developer + Copilot | per-feature change files in `.agentic/releases/` update | Required for `Feature` PRs | CI gate: `.github/workflows/pr-documentation-check.yml` |
+| Feature Documentation | Developer + Copilot | per-feature change files in `.agentic/releases/` update | Required for `Feature` PRs | CI gate: `pr-gates` in `.github/workflows/plate-pr-gates.yml` |
 | Release Notes | Human + Copilot | `CHANGELOG.md` | Recommended for `Feature` PRs | Links and evidence in CHANGELOG entry |
 | Issue Closure Traceability | Developer + Copilot | Closing keywords + linked PR for most issue types; `<!-- PLATE-TASK-CLOSED -->` completion comment for Task issues | Required | GitHub auto-close on PR merge or Task completion comment |
 | Process Drift Audit | Copilot | Custom audit skills | Per-epic or quarterly | `docs/audits/` committed artifacts |
@@ -441,7 +441,7 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
 
 ## Third-Party Agent Feedback
 
-When a third-party agent (Devin, OpenHands, etc.) leaves feedback on a PR that is **not** already labeled `Feedback Response`, the `.github/workflows/plates-address-pr-feedback.yml` workflow posts a structured `@copilot` trigger comment directly on that same PR. The automation uses `COPILOT_TRIGGER_PAT` (preferred) with fallback to `GITHUB_TOKEN`, applies a dedupe marker, and intentionally avoids creating a new issue or opening a separate PR. `Feedback Response` PRs are already in the dedicated response lane and are skipped by that workflow. The Copilot Coding Agent should follow the **`address-pr-feedback` skill** (`.agentic/skills/address-pr-feedback/SKILL.md`, copied on bootstrap/import-payload):
+Preferred feedback handling is local **`gh plate pr babysit`** / MCP (`plate_pr_babysit`, `plate_resolve_review_thread`) and the **`address-pr-feedback` skill** (`.agentic/skills/address-pr-feedback/SKILL.md`). The shipped `.github/workflows/plates-address-pr-feedback.yml` is **legacy manual-only** (`workflow_dispatch`); do not rely on it for normal operations. When run manually it uses `COPILOT_TRIGGER_PAT` (preferred) with fallback to `GITHUB_TOKEN`, applies a dedupe marker, and avoids creating a new issue or separate PR. `Feedback Response` PRs are skipped. The Copilot Coding Agent should follow the skill when addressing feedback:
 
 1. Review all open inline comments and the overall review body from the named reviewer on the linked PR
 2. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation

@@ -97,7 +97,7 @@ jobs:
               repo: context.repo.repo,
               title: `[Research] GitHub platform monitor — week of ${today}`,
               body,
-              labels: ['Research', 'area:agent', 'need:decision', 'Epic: plate-platform'],
+              labels: ['Research', 'area:agent', 'need:decision'],
             });
 
             core.info(`Created monitoring issue #${issue.data.number}: ${issue.data.html_url}`);
