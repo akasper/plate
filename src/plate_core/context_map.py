@@ -67,7 +67,10 @@ _CONTEXT_ROUTES: tuple[ContextRoute, ...] = (
         id="release-targeting",
         concern="release targeting and integration branch choice",
         first_step="Run `gh plate release status`.",
-        authoritative_artifacts=("live GitHub release state", "AGENTS.md §Branch Model and Ceremonies"),
+        authoritative_artifacts=(
+            "live GitHub release state",
+            "docs/agents/branch-model-and-ceremonies.md",
+        ),
         machine_surfaces=("gh plate release status", "plate_release_status"),
         reference_docs=("docs/design/release-ceremony-refinement.md",),
     ),

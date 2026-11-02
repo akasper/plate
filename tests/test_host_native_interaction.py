@@ -81,11 +81,12 @@ class HostNativeInteractionTests(unittest.TestCase):
     def test_template_agents_md_interactive_epic_planning_native_ui(self):
         """Regression test for #988: template_payload/AGENTS.md Interactive Epic Planning
         section must instruct agents to use host-native look-and-feel."""
-        template_agents = Path("src/plate_core/template_payload/AGENTS.md")
-        self.assertTrue(template_agents.exists(), "Template AGENTS.md must exist")
+        epic_planning = Path(
+            "src/plate_core/template_payload/docs/agents/interactive-epic-planning.md"
+        )
+        self.assertTrue(epic_planning.exists(), "Template interactive-epic-planning page must exist")
 
-        with open(template_agents, encoding="utf-8") as f:
-            content = f.read()
+        content = epic_planning.read_text(encoding="utf-8")
 
         # Find the Interactive Epic Planning section
         self.assertIn("## Interactive Epic Planning", content)

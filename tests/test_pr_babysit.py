@@ -2,6 +2,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _read_repo_file(rel: str) -> str:
+    return (REPO_ROOT / rel).read_text(encoding="utf-8")
+
+
 from plate_core.pr_babysit import (
     _DEFAULT_STRATEGY,
     _default_agent_match,
@@ -979,18 +986,17 @@ class PrBabysitTests(unittest.TestCase):
 
     def test_human_review_required_before_merge_for_certain_prs(self):
         """Regression test for #549: AGENTS.md must explicitly require human review/approval before merge for Bug/Feature/Documentation PRs (and at least one review for Epics/Releases), separate from feedback-resolution for agent threads."""
-        with open("AGENTS.md", encoding="utf-8") as f:
-            agents = f.read()
+        agents = _read_repo_file("AGENTS.md")
+        pr_feedback = _read_repo_file("docs/agents/pr-feedback-and-babysit.md")
         self.assertIn("do not self-merge", agents)
         self.assertIn("Epics and Releases require at least one review as well", agents)
-        self.assertIn("This gate is *not* a substitute for the separate human review/approval requirement", agents)
+        self.assertIn("This gate is *not* a substitute for the separate human review/approval requirement", pr_feedback)
 
     def test_resolve_review_threads_after_feedback_for_check(self):
         """Regression test for #520: AGENTS.md and pr_babysit instructions must require explicitly resolving review threads (via resolveReviewThread) after addressing feedback to clear the feedback-resolution check."""
-        with open("AGENTS.md", encoding="utf-8") as f:
-            agents = f.read()
-        self.assertIn("resolve addressed threads via `plate_resolve_review_thread`", agents)
-        self.assertIn("encapsulated helper", agents)
+        pr_feedback = _read_repo_file("docs/agents/pr-feedback-and-babysit.md")
+        self.assertIn("resolve addressed threads via `plate_resolve_review_thread`", pr_feedback)
+        self.assertIn("encapsulated helper", pr_feedback)
 
         import plate_core.pr_babysit as mod
         doc = getattr(mod, "__doc__", "") or ""
@@ -1019,10 +1025,11 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
-        self.assertIn("address-pr-feedback", agents)
-        self.assertIn(".agentic/skills/address-pr-feedback/SKILL.md", agents)
+        pr_feedback = _read_repo_file("docs/agents/pr-feedback-and-babysit.md")
+        self.assertIn("address-pr-feedback", pr_feedback)
+        self.assertIn(".agentic/skills/address-pr-feedback/SKILL.md", pr_feedback)
         self.assertIn("plate_get_unresolved_review_threads", skill)
-        self.assertIn("zero unresolved threads", agents.lower())
+        self.assertIn("zero unresolved threads", pr_feedback.lower())
 
     def test_complete_babysit_make_green_from_single_high_level_prompt(self):
         """Regression test for #519: guidance and AGENTS must describe a complete 'turn PR green' / full babysit flow from a *single high-level prompt* (not category-by-category), where the agent handles all agent-actionable gates (conflicts, labels, threads, tests) comprehensively using the skill + helpers, reporting summary only at end."""
@@ -1034,9 +1041,10 @@ class PrBabysitTests(unittest.TestCase):
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
-        self.assertIn("From a *single high-level prompt* (\"get this PR green\", \"make mergeable\", \"address all feedback\")", agents)
-        self.assertIn("handle *all* agent-actionable categories (base sync/conflicts, labels, review threads, tests, etc.) in one or minimal comprehensive passes", agents)
-        self.assertIn("(Addresses #519, #528, #526.)", agents)
+        pr_feedback = _read_repo_file("docs/agents/pr-feedback-and-babysit.md")
+        self.assertIn("From a *single high-level prompt* (\"get this PR green\", \"make mergeable\", \"address all feedback\")", pr_feedback)
+        self.assertIn("handle *all* agent-actionable categories (base sync/conflicts, labels, review threads, tests, etc.) in one or minimal comprehensive passes", pr_feedback)
+        self.assertIn("(Addresses #519, #528, #526.)", pr_feedback)
 
     def test_agent_consistently_defaults_to_native_tui_for_qanda_518(self):
         """Regression test for #518: guidance, persona, and AGENTS must require agents to *consistently default to or use Grok Build native TUI interactive configurator (arrow-key forms)* for Q&A (without user reminder; with detection/fallback note)."""
@@ -1084,11 +1092,10 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("encapsulated helpers (get_actionable_review_threads", guidance)
         self.assertIn("Do not hand-roll raw GraphQL, jq, mktemp, sed/NO_COLOR", guidance)
 
-        with open("AGENTS.md", encoding="utf-8") as f:
-            agents = f.read()
-        self.assertIn("plate_get_unresolved_review_threads", agents)
-        self.assertIn("plate_resolve_review_thread", agents)
-        self.assertIn("Do not hand-roll GraphQL/jq/mktemp/sed", agents)
+        pr_feedback = _read_repo_file("docs/agents/pr-feedback-and-babysit.md")
+        self.assertIn("plate_get_unresolved_review_threads", pr_feedback)
+        self.assertIn("plate_resolve_review_thread", pr_feedback)
+        self.assertIn("Do not hand-roll GraphQL/jq/mktemp/sed", pr_feedback)
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
@@ -1113,12 +1120,11 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("start with todo_write; mark done immediately (no batch)", persona)
         self.assertIn("(Addresses #515.)", persona)
 
-        with open("AGENTS.md", encoding="utf-8") as f:
-            agents = f.read()
-        self.assertIn("## Task Management (for agents)", agents)
-        self.assertIn("**must** use the `todo_write` tool (or host equivalent) for any complex multi-step PLATE work with 3+ steps", agents)
-        self.assertIn("Mark each item `completed` **immediately** when that step finishes. **Never batch**", agents)
-        self.assertIn("Examples in context:", agents)
+        task_mgmt = _read_repo_file("docs/agents/task-management.md")
+        self.assertIn("## Task Management (for agents)", task_mgmt)
+        self.assertIn("**must** use the `todo_write` tool (or host equivalent) for any complex multi-step PLATE work with 3+ steps", task_mgmt)
+        self.assertIn("Mark each item `completed` **immediately** when that step finishes. **Never batch**", task_mgmt)
+        self.assertIn("Examples in context:", task_mgmt)
 
     def test_worktree_isolation_robustness_514(self):
         """Regression test for #514: pr_babysit exposes cleanup_git_locks + verify_worktree_is_isolated; rebase and babysit local-rebase paths use them; guidance/AGENTS/persona require verify + lock cleanup before worktree ops (no main checkout pollution)."""
@@ -1142,11 +1148,10 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("cleanup_git_locks", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("(Addresses #514.)", QUIET_OPERATIONS_GUIDANCE)
 
-        with open("AGENTS.md", encoding="utf-8") as f:
-            agents = f.read()
-        self.assertIn("call cleanup_git_locks() + verify_worktree_is_isolated()", agents)
-        self.assertIn("Use isolated worktree for *all* PR changes during babysit/fixes (never main checkout)", agents)
-        self.assertIn("(Addresses #514.)", agents)
+        pr_feedback = _read_repo_file("docs/agents/pr-feedback-and-babysit.md")
+        self.assertIn("call cleanup_git_locks() + verify_worktree_is_isolated()", pr_feedback)
+        self.assertIn("Use isolated worktree for *all* PR changes during babysit/fixes (never main checkout)", pr_feedback)
+        self.assertIn("(Addresses #514.)", pr_feedback)
 
         with open("plugin/agents/plate.agent.md", encoding="utf-8") as f:
             persona = f.read()
@@ -1164,11 +1169,11 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("Run `gh plate release status` (or equivalent MCP/CLI surface) *immediately as the very first action*", QUIET_OPERATIONS_GUIDANCE)
         self.assertIn("(Addresses #513.)", QUIET_OPERATIONS_GUIDANCE)
 
-        with open("AGENTS.md", encoding="utf-8") as f:
-            agents = f.read()
-        self.assertIn("MUST run `gh plate release status` (or inspect the issue's semver track label) *proactively as the very first step before any targeting, branch decision, or `gh pr create`*", agents)
-        self.assertIn("MUST run `gh plate release status` *proactively as the very first step* before any targeting/branch/PR decision", agents)
-        self.assertIn("(Addresses #513.)", agents)
+        branch_model = _read_repo_file("docs/agents/branch-model-and-ceremonies.md")
+        doc_rules = _read_repo_file("docs/agents/documentation-rules.md")
+        self.assertIn("MUST run `gh plate release status` (or inspect the issue's semver track label) *proactively as the very first step before any targeting, branch decision, or `gh pr create`*", branch_model)
+        self.assertIn("MUST run `gh plate release status` *proactively as the very first step* before any targeting/branch/PR decision", doc_rules)
+        self.assertIn("(Addresses #513.)", branch_model)
 
         import plate_core.pr_babysit as pbmod
         doc = getattr(pbmod, "__doc__", "") or ""

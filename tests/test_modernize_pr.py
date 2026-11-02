@@ -114,8 +114,8 @@ class ModernizePrSkillArtifactTests(unittest.TestCase):
 
         with open("AGENTS.md", encoding="utf-8") as f:
             agents = f.read()
-        self.assertIn("modernize-pr-skill-1235", agents)
-        self.assertIn("modernize-pr", agents)
+        self.assertIn("modernize-pr-skill-1235", _read_repo_file("docs/agents/pr-feedback-and-babysit.md"))
+        self.assertIn("modernize-pr", _read_repo_file("docs/agents/pr-feedback-and-babysit.md"))
 
 
 if __name__ == "__main__":
