@@ -15,7 +15,7 @@ description: Reply to every PR review thread, resolve it, and re-query until zer
 
 Reply to every PR review thread, resolve it, and re-query until zero unresolved threads remain (except human-escalated items).
 
-**Owning agents:** software-engineer, ci-engineer
+**Owning agents:** software-engineer, ci-engineer, team-lead
 
 ## Inputs
 

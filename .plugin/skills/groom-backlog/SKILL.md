@@ -15,7 +15,7 @@ description: Review backlog items, identify gaps, and keep work ordered by value
 
 Review backlog items, identify gaps, and keep work ordered by value and readiness.
 
-**Owning agents:** project-manager
+**Owning agents:** project-manager, team-lead, product-manager
 
 ## Inputs
 

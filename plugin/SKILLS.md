@@ -17,36 +17,36 @@ Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same director
 
 | ID | Name | Owning agents |
 | --- | --- | --- |
-| `address-pr-feedback` | Address PR Feedback | `software-engineer`, `ci-engineer` |
+| `address-pr-feedback` | Address PR Feedback | `software-engineer`, `ci-engineer`, `team-lead` |
 | `audit-security-posture` | Audit Security Posture | `security-auditor` |
-| `audit-spec-current` | Audit SPEC.md and CURRENT.md | `software-engineer`, `research-agent` |
+| `audit-spec-current` | Audit SPEC.md and CURRENT.md | `software-engineer`, `research-agent`, `accessibility-specialist` |
 | `calculate-costs` | Calculate Costs | `accountant` |
-| `create-blocking-question-on-obstacle` | Create Blocking Question on Obstacle | `research-agent`, `software-engineer` |
-| `create-wireframe-demo` | Create Wireframe Demo | `user-experience-engineer`, `user-interface-designer` |
+| `create-blocking-question-on-obstacle` | Create Blocking Question on Obstacle | `research-agent`, `software-engineer`, `customer-success-manager` |
+| `create-wireframe-demo` | Create Wireframe Demo | `user-experience-engineer`, `user-interface-designer`, `interaction-designer`, `motion-designer` |
 | `crud-projects` | CRUD Projects | `project-manager` |
-| `define-epic` | Define Epic | `project-manager` |
-| `define-feature-requirements` | Define Feature Requirements | `designer`, `user-experience-engineer` |
+| `define-epic` | Define Epic | `project-manager`, `team-lead`, `product-manager` |
+| `define-feature-requirements` | Define Feature Requirements | `designer`, `user-experience-engineer`, `product-manager`, `interaction-designer`, `design-systems-designer`, `accessibility-specialist`, `design-researcher` |
 | `define-release` | Define Release | `project-manager`, `ci-engineer`, `devops-engineer` |
-| `define-unify-design-theme` | Define or Unify Design Theme | `designer`, `user-interface-designer` |
-| `deploy-project-marketing-site-docs-site` | Deploy Project, Marketing Site, or Docs Site | `dev-relations-expert`, `devops-engineer` |
-| `design-data-pipelines` | Design Data Pipelines | `data-engineer` |
-| `document-new-feature-in-wiki` | Document New Feature in Wiki | `wiki-editor`, `dev-relations-expert` |
+| `define-unify-design-theme` | Define or Unify Design Theme | `designer`, `user-interface-designer`, `brand-designer`, `advertising-designer`, `motion-designer`, `design-systems-designer` |
+| `deploy-project-marketing-site-docs-site` | Deploy Project, Marketing Site, or Docs Site | `dev-relations-expert`, `devops-engineer`, `go-to-market-lead`, `marketing-specialist`, `live-ops-engineer` |
+| `design-data-pipelines` | Design Data Pipelines | `data-engineer`, `machine-learning-engineer` |
+| `document-new-feature-in-wiki` | Document New Feature in Wiki | `wiki-editor`, `dev-relations-expert`, `marketing-specialist`, `customer-success-manager` |
 | `fix-broken-build` | Fix Broken Build | `software-engineer`, `ci-engineer`, `devops-engineer` |
 | `github-discussions` | GitHub Discussions | `research-agent`, `project-manager`, `dev-relations-expert`, `software-engineer` |
-| `groom-backlog` | Groom Backlog | `project-manager` |
-| `identify-market-gaps-and-opportunities` | Identify Market Gaps and Opportunities | `market-researcher`, `research-agent` |
-| `mockup-ui` | Mockup UI | `user-experience-engineer`, `user-interface-designer` |
+| `groom-backlog` | Groom Backlog | `project-manager`, `team-lead`, `product-manager` |
+| `identify-market-gaps-and-opportunities` | Identify Market Gaps and Opportunities | `market-researcher`, `research-agent`, `go-to-market-lead` |
+| `mockup-ui` | Mockup UI | `user-experience-engineer`, `user-interface-designer`, `interaction-designer`, `brand-designer`, `advertising-designer`, `motion-designer`, `design-systems-designer`, `accessibility-specialist` |
 | `modernize-pr` | Modernize PR | `software-engineer`, `ci-engineer` |
-| `profile-and-benchmark` | Profile and Benchmark | `performance-engineer` |
-| `research-synthesis` | Research Synthesis | `market-researcher`, `research-agent` |
+| `profile-and-benchmark` | Profile and Benchmark | `performance-engineer`, `machine-learning-engineer` |
+| `research-synthesis` | Research Synthesis | `market-researcher`, `research-agent`, `product-manager`, `go-to-market-lead`, `design-researcher` |
 | `resume-from-answered-question` | Resume from Answered (Blocking) Question | `research-agent`, `project-manager` |
-| `review-ai-discoverability` | Review AI Discoverability | `dev-relations-expert`, `research-agent` |
-| `review-discussions` | Review Discussions | `market-researcher`, `dev-relations-expert`, `research-agent` |
-| `review-test-coverage` | Review Test Coverage | `software-engineer`, `ci-engineer` |
+| `review-ai-discoverability` | Review AI Discoverability | `dev-relations-expert`, `research-agent`, `go-to-market-lead`, `marketing-specialist`, `brand-designer`, `advertising-designer` |
+| `review-discussions` | Review Discussions | `market-researcher`, `dev-relations-expert`, `research-agent`, `marketing-specialist`, `customer-success-manager`, `design-researcher` |
+| `review-test-coverage` | Review Test Coverage | `software-engineer`, `ci-engineer`, `team-lead`, `machine-learning-engineer` |
 | `run-autonomy-cycle` | Run Autonomy Cycle / Loop | `project-manager` |
-| `run-qanda-session` | Run Q&A Session | `research-agent`, `project-manager` |
+| `run-qanda-session` | Run Q&A Session | `research-agent`, `project-manager`, `customer-success-manager`, `design-researcher` |
 | `update-wiki-to-match-project-state` | Update Wiki to Match Project State | `wiki-editor` |
-| `what-next-plate-process` | What Next? (PLATE Process Guidance) | `research-agent` |
+| `what-next-plate-process` | What Next? (PLATE Process Guidance) | `research-agent`, `team-lead` |
 
 ## Details
 
@@ -54,7 +54,7 @@ Per-skill plugin payloads live under `skills/<id>/SKILL.md` in the same director
 
 Reply to every PR review thread, resolve it, and re-query until zero unresolved threads remain (except human-escalated items).
 
-**Owning agents:** `software-engineer`, `ci-engineer`
+**Owning agents:** `software-engineer`, `ci-engineer`, `team-lead`
 
 **Inputs**
 
@@ -100,7 +100,7 @@ Review code, deps, configs, and workflows for security vulnerabilities, secret l
 
 Compare intended product state with implemented state and flag drift.
 
-**Owning agents:** `software-engineer`, `research-agent`
+**Owning agents:** `software-engineer`, `research-agent`, `accessibility-specialist`
 
 **Inputs**
 
@@ -147,7 +147,7 @@ Estimate the cost impact of feature work, CI runs, projects, or agent activity. 
 
 As deliberate last resort, create a linked blocking Question with structured information dump when hitting a hard informational obstacle on another Issue. Pause the original work.
 
-**Owning agents:** `research-agent`, `software-engineer`
+**Owning agents:** `research-agent`, `software-engineer`, `customer-success-manager`
 
 **Inputs**
 
@@ -168,7 +168,7 @@ As deliberate last resort, create a linked blocking Question with structured inf
 
 Produce a wireframe-style demonstration for a proposed interaction flow.
 
-**Owning agents:** `user-experience-engineer`, `user-interface-designer`
+**Owning agents:** `user-experience-engineer`, `user-interface-designer`, `interaction-designer`, `motion-designer`
 
 **Inputs**
 
@@ -214,7 +214,7 @@ Create, update, and summarize PLATE projects and their metadata.
 
 Frame a coherent epic with scope, outcomes, and child issue boundaries.
 
-**Owning agents:** `project-manager`
+**Owning agents:** `project-manager`, `team-lead`, `product-manager`
 
 **Inputs**
 
@@ -237,7 +237,7 @@ Frame a coherent epic with scope, outcomes, and child issue boundaries.
 
 Convert a product goal into implementation-ready requirements.
 
-**Owning agents:** `designer`, `user-experience-engineer`
+**Owning agents:** `designer`, `user-experience-engineer`, `product-manager`, `interaction-designer`, `design-systems-designer`, `accessibility-specialist`, `design-researcher`
 
 **Inputs**
 
@@ -283,7 +283,7 @@ Turn project progress into a release-ready plan with clear scope and constraints
 
 Align product visuals and interaction patterns around one consistent design theme.
 
-**Owning agents:** `designer`, `user-interface-designer`
+**Owning agents:** `designer`, `user-interface-designer`, `brand-designer`, `advertising-designer`, `motion-designer`, `design-systems-designer`
 
 **Inputs**
 
@@ -306,7 +306,7 @@ Align product visuals and interaction patterns around one consistent design them
 
 Prepare or execute delivery of project-facing sites and docs assets.
 
-**Owning agents:** `dev-relations-expert`, `devops-engineer`
+**Owning agents:** `dev-relations-expert`, `devops-engineer`, `go-to-market-lead`, `marketing-specialist`, `live-ops-engineer`
 
 **Inputs**
 
@@ -329,7 +329,7 @@ Prepare or execute delivery of project-facing sites and docs assets.
 
 Design reliable ETL, schemas, and storage solutions with quality and privacy in mind.
 
-**Owning agents:** `data-engineer`
+**Owning agents:** `data-engineer`, `machine-learning-engineer`
 
 **Inputs**
 
@@ -353,7 +353,7 @@ Design reliable ETL, schemas, and storage solutions with quality and privacy in 
 
 Write wiki content for a newly shipped feature.
 
-**Owning agents:** `wiki-editor`, `dev-relations-expert`
+**Owning agents:** `wiki-editor`, `dev-relations-expert`, `marketing-specialist`, `customer-success-manager`
 
 **Inputs**
 
@@ -429,7 +429,7 @@ Read, list (with category filters e.g. Ideas), get full content, comment on, and
 
 Review backlog items, identify gaps, and keep work ordered by value and readiness.
 
-**Owning agents:** `project-manager`
+**Owning agents:** `project-manager`, `team-lead`, `product-manager`
 
 **Inputs**
 
@@ -452,7 +452,7 @@ Review backlog items, identify gaps, and keep work ordered by value and readines
 
 Gather evidence about user needs, gaps, and product opportunities.
 
-**Owning agents:** `market-researcher`, `research-agent`
+**Owning agents:** `market-researcher`, `research-agent`, `go-to-market-lead`
 
 **Inputs**
 
@@ -475,7 +475,7 @@ Gather evidence about user needs, gaps, and product opportunities.
 
 Produce lightweight UI mockups or interaction sketches for a feature.
 
-**Owning agents:** `user-experience-engineer`, `user-interface-designer`
+**Owning agents:** `user-experience-engineer`, `user-interface-designer`, `interaction-designer`, `brand-designer`, `advertising-designer`, `motion-designer`, `design-systems-designer`, `accessibility-specialist`
 
 **Inputs**
 
@@ -521,7 +521,7 @@ Decide whether a stale pull request still belongs, then rebase safely in an isol
 
 Instrument, measure, and report on performance bottlenecks with actionable optimizations.
 
-**Owning agents:** `performance-engineer`
+**Owning agents:** `performance-engineer`, `machine-learning-engineer`
 
 **Inputs**
 
@@ -544,7 +544,7 @@ Instrument, measure, and report on performance bottlenecks with actionable optim
 
 Consolidate findings from multiple sources into a decision-ready summary.
 
-**Owning agents:** `market-researcher`, `research-agent`
+**Owning agents:** `market-researcher`, `research-agent`, `product-manager`, `go-to-market-lead`, `design-researcher`
 
 **Inputs**
 
@@ -588,7 +588,7 @@ After a blocking Question is answered, retrieve the full answer + provenance, me
 
 Audit agent-readable surfaces and public claims so AI assistants and answer engines can read, verify, and cite the product honestly.
 
-**Owning agents:** `dev-relations-expert`, `research-agent`
+**Owning agents:** `dev-relations-expert`, `research-agent`, `go-to-market-lead`, `marketing-specialist`, `brand-designer`, `advertising-designer`
 
 **Inputs**
 
@@ -612,7 +612,7 @@ Audit agent-readable surfaces and public claims so AI assistants and answer engi
 
 Read issue and PR discussions to extract actionable signals and concerns.
 
-**Owning agents:** `market-researcher`, `dev-relations-expert`, `research-agent`
+**Owning agents:** `market-researcher`, `dev-relations-expert`, `research-agent`, `marketing-specialist`, `customer-success-manager`, `design-researcher`
 
 **Inputs**
 
@@ -635,7 +635,7 @@ Read issue and PR discussions to extract actionable signals and concerns.
 
 Assess whether a change has sufficient automated test coverage.
 
-**Owning agents:** `software-engineer`, `ci-engineer`
+**Owning agents:** `software-engineer`, `ci-engineer`, `team-lead`, `machine-learning-engineer`
 
 **Inputs**
 
@@ -683,7 +683,7 @@ Drive long-running PLATE work via AutonomyEngine surfaces: plate_autonomy_status
 
 Discover, prioritize, present (via native or fallback), and record answers to open Question issues, triggering contemplation against checklist-style answer signals with explicit citations before any Question is considered ready to close.
 
-**Owning agents:** `research-agent`, `project-manager`
+**Owning agents:** `research-agent`, `project-manager`, `customer-success-manager`, `design-researcher`
 
 **Inputs**
 
@@ -728,7 +728,7 @@ Sync the wiki with the current repository state and ongoing work.
 
 Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment based on current repo state (health, open Epics, fragments, Goals page, etc.). Enables autonomous drive of the full process. In looped use, the caller must emit only terse bullet turn summaries and follow quiet comment discipline (see quiet_operations guidance and plate persona).
 
-**Owning agents:** `research-agent`
+**Owning agents:** `research-agent`, `team-lead`
 
 **Inputs**
 

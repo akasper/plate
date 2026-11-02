@@ -61,6 +61,12 @@ jobs:
           export PYTHONPATH="$GITHUB_WORKSPACE/src"
           python3 scripts/generate-plugin-skills.py --check
 
+      - name: Plugin agent surface sync check (AGENTS.md + .agent.md)
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          python3 scripts/generate-plugin-agents.py --check
+
       - name: Grok marketplace packaging check (generator + committed index)
         run: |
           set -euo pipefail

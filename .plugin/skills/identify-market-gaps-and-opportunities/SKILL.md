@@ -15,7 +15,7 @@ description: Gather evidence about user needs, gaps, and product opportunities.
 
 Gather evidence about user needs, gaps, and product opportunities.
 
-**Owning agents:** market-researcher, research-agent
+**Owning agents:** market-researcher, research-agent, go-to-market-lead
 
 ## Inputs
 

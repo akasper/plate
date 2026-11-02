@@ -1,0 +1,15 @@
+{
+  "slug": "narrow-baseline-catalog-roles-1336",
+  "change_type": "feature",
+  "surface": "src/plate_core/data/baseline_catalog.yml, agents_surface renderer, plugin agent personas",
+  "summary": "Add narrow crew roles to the baseline catalog with per-role skills, default MCP tool profiles, generated plugin personas, and label-based role inference.",
+  "migration_impact": "Downstream repos that mirror the baseline catalog gain additional agent ids and must regenerate plugin agent surfaces after import. No new GitHub role labels are introduced.",
+  "migration_guidance": [
+    "1. After upgrading plate-core, run `python3 scripts/generate-plugin-agents.py` if you vendor plugin agent files.",
+    "2. Task specs may reference new baseline agent ids (for example team-lead, product-manager, go-to-market-lead).",
+    "3. Role routing from issues continues to use issue type plus existing labels; do not add role:* labels."
+  ],
+  "agent_notes": "Use `gh plate agents list` to discover new roles. Each catalog agent declares `default_tool_profiles` for MCP hosts (see docs/mcp.md). The hand-authored `plate` coordinator persona is unchanged.",
+  "breaking": false,
+  "links": ["#1336", "#1327"]
+}

@@ -15,7 +15,7 @@ description: Align product visuals and interaction patterns around one consisten
 
 Align product visuals and interaction patterns around one consistent design theme.
 
-**Owning agents:** designer, user-interface-designer
+**Owning agents:** designer, user-interface-designer, brand-designer, advertising-designer, motion-designer, design-systems-designer
 
 ## Inputs
 

@@ -15,7 +15,7 @@ description: Assess whether a change has sufficient automated test coverage.
 
 Assess whether a change has sufficient automated test coverage.
 
-**Owning agents:** software-engineer, ci-engineer
+**Owning agents:** software-engineer, ci-engineer, team-lead, machine-learning-engineer
 
 ## Inputs
 

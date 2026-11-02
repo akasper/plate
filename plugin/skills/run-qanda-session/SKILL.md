@@ -15,7 +15,7 @@ description: Discover, prioritize, present (via native or fallback), and record 
 
 Discover, prioritize, present (via native or fallback), and record answers to open Question issues, triggering contemplation against checklist-style answer signals with explicit citations before any Question is considered ready to close.
 
-**Owning agents:** research-agent, project-manager
+**Owning agents:** research-agent, project-manager, customer-success-manager, design-researcher
 
 ## Inputs
 
