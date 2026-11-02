@@ -7,6 +7,8 @@ import re
 import sys
 from dataclasses import dataclass
 
+from plate_core.pr_gates_closing import _fence_closer_line, parse_fence_opener
+
 FAILURE_HEADING = "Reviewer model must differ from author model"
 
 _COPILOT_ALIASES = frozenset(
@@ -18,6 +20,7 @@ _COPILOT_ALIASES = frozenset(
         "copilot-pull-request-reviewer",
     }
 )
+_CANONICAL_COPILOT_ID = "github-copilot"
 
 _PLACEHOLDER = re.compile(
     r"^(?:tbd|todo|n/a|na|none|—|--|-|\.\.\.|unknown|pending)$",
@@ -25,6 +28,11 @@ _PLACEHOLDER = re.compile(
 )
 
 _TABLE_ROW = re.compile(r"^\s*\|(.+)\|\s*$")
+_SECTION_HEADING = re.compile(r"^##\s+Agent review models\s*$", re.IGNORECASE)
+_NEXT_SECTION = re.compile(r"^##\s+")
+_AUTHOR_LABEL = "author model"
+_REVIEWER_LABEL = "reviewer model"
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -34,10 +42,27 @@ class ReviewModelGateResult:
     warnings: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ParsedReviewModels:
+    author: str | None
+    reviewer: str | None
+    parse_errors: tuple[str, ...]
+
+
+def _is_copilot_identity(text: str) -> bool:
+    if not text:
+        return False
+    if text in _COPILOT_ALIASES:
+        return True
+    return "copilot" in text
+
+
 def normalize_model_id(raw: str) -> str:
     text = (raw or "").strip().strip("`'\"")
     text = re.sub(r"\s+", "-", text.lower())
     text = re.sub(r"-+", "-", text).strip("-")
+    if _is_copilot_identity(text):
+        return _CANONICAL_COPILOT_ID
     return text
 
 
@@ -45,7 +70,7 @@ def model_provider(model_id: str) -> str:
     model = normalize_model_id(model_id)
     if not model:
         return "unknown"
-    if model in _COPILOT_ALIASES or "copilot" in model:
+    if model == _CANONICAL_COPILOT_ID:
         return "github-copilot"
     if model in {"human", "human-review", "human-reviewer"} or model.startswith("human-"):
         return "human"
@@ -73,6 +98,12 @@ def _split_table_cells(row: str) -> list[str]:
     return parts
 
 
+def _normalize_row_label(label: str) -> str:
+    text = label.strip()
+    text = re.sub(r"[*_`]", "", text)
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
 def _is_placeholder(value: str) -> bool:
     cleaned = value.strip().strip("`'\"")
     if not cleaned:
@@ -83,36 +114,87 @@ def _is_placeholder(value: str) -> bool:
 def _row_role(cells: list[str]) -> str | None:
     if len(cells) < 2:
         return None
-    label = cells[0].lower()
-    if "author" in label and "reviewer" not in label:
+    label = _normalize_row_label(cells[0])
+    if label == _AUTHOR_LABEL:
         return "author"
-    if "reviewer" in label:
+    if label == _REVIEWER_LABEL:
         return "reviewer"
     return None
 
 
-def parse_review_models_from_body(body: str) -> tuple[str | None, str | None]:
-    """Return (author_model, reviewer_model) raw cell values from the PR body table."""
+def _agent_review_models_section_lines(body: str) -> list[str] | None:
+    lines = (body or "").splitlines()
+    start: int | None = None
+    for index, line in enumerate(lines):
+        if _SECTION_HEADING.match(line.strip()):
+            start = index + 1
+            break
+    if start is None:
+        return None
+    section: list[str] = []
+    for line in lines[start:]:
+        if _NEXT_SECTION.match(line.strip()):
+            break
+        section.append(line)
+    return section
+
+
+def _strip_inline_html_comments(line: str) -> str:
+    return _HTML_COMMENT.sub("", line)
+
+
+def parse_review_models_from_body(body: str) -> ParsedReviewModels:
+    """Return author/reviewer values from the Agent review models section only."""
+    section = _agent_review_models_section_lines(body)
+    if section is None:
+        return ParsedReviewModels(None, None, ())
+
     author: str | None = None
     reviewer: str | None = None
-    for line in (body or "").splitlines():
+    parse_errors: list[str] = []
+    in_fence = False
+    fence_char = ""
+    fence_len = 0
+
+    for raw_line in section:
+        bare = raw_line.rstrip("\n\r")
+        if in_fence:
+            if _fence_closer_line(bare, fence_char, fence_len):
+                in_fence = False
+                fence_char = ""
+                fence_len = 0
+            continue
+        opener = parse_fence_opener(bare)
+        if opener:
+            fence_char, fence_len = opener
+            in_fence = True
+            continue
+
+        line = _strip_inline_html_comments(bare)
         match = _TABLE_ROW.match(line)
         if not match:
             continue
         cells = _split_table_cells(match.group(1))
         role = _row_role(cells)
         if role == "author":
+            if author is not None:
+                parse_errors.append("Duplicate **Author model** row in Agent review models table.")
             author = cells[1]
         elif role == "reviewer":
+            if reviewer is not None:
+                parse_errors.append("Duplicate **Reviewer model** row in Agent review models table.")
             reviewer = cells[1]
-    return author, reviewer
+
+    return ParsedReviewModels(author, reviewer, tuple(parse_errors))
 
 
 def evaluate_review_model_gate(
     author_raw: str | None,
     reviewer_raw: str | None,
+    *,
+    parse_errors: tuple[str, ...] = (),
 ) -> ReviewModelGateResult:
-    errors: list[str] = []
+    errors: list[str] = list(parse_errors)
     warnings: list[str] = []
 
     if author_raw is None or _is_placeholder(author_raw):
@@ -159,8 +241,12 @@ def evaluate_review_model_gate(
 
 
 def evaluate_review_model_gate_from_body(body: str) -> ReviewModelGateResult:
-    author, reviewer = parse_review_models_from_body(body)
-    return evaluate_review_model_gate(author, reviewer)
+    parsed = parse_review_models_from_body(body)
+    return evaluate_review_model_gate(
+        parsed.author,
+        parsed.reviewer,
+        parse_errors=parsed.parse_errors,
+    )
 
 
 def format_failure_message(result: ReviewModelGateResult) -> str:

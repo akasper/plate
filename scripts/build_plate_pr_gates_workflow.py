@@ -3,9 +3,18 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _plate_core_pip_version() -> str:
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"(?P<ver>[^"]+)"', text, re.MULTILINE)
+    if not match:
+        raise SystemExit("could not read project version from pyproject.toml")
+    return match.group("ver")
 
 
 def _extract_script_block(workflow_path: Path, anchor: str) -> str:
@@ -104,20 +113,7 @@ jobs:
         with:
 @@ISSUE_LINK_SCRIPT@@
 
-      - name: Gate — reviewer model
-        if: |
-          github.event_name == 'pull_request' ||
-          github.event_name == 'pull_request_review' ||
-          github.event_name == 'pull_request_review_comment'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # pr-gates failure marker: Reviewer model must differ from author model
-          set -euo pipefail
-          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
-          pr_number="${{ github.event.pull_request.number }}"
-          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
-          printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
+@@REVIEWER_MODEL_RUN@@
 
       - name: Gate — Feature release fragment (labels)
         if: |
@@ -245,6 +241,54 @@ VALIDATE_TEMPLATE = """
           fi
 """
 
+REVIEWER_MODEL_PLATE = """
+      - name: Gate — reviewer model
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: Reviewer model must differ from author model
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          pr_number="${{ github.event.pull_request.number }}"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
+          printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
+"""
+
+REVIEWER_MODEL_TEMPLATE = """
+      - name: Gate — reviewer model
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: Reviewer model must differ from author model
+          set -euo pipefail
+          pr_number="${{ github.event.pull_request.number }}"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
+          run_reviewer_model_gate() {
+            printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            run_reviewer_model_gate
+          elif python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
+            run_reviewer_model_gate
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
+            if python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
+              run_reviewer_model_gate
+            else
+              echo "::warning title=Reviewer model (warn-only)::plate-core runtime unavailable; skipping reviewer model gate until plate-core is installed."
+            fi
+          fi
+"""
+
 MARK_IMPLEMENTED = """
   mark-implemented-on-release-merge:
     if: |
@@ -296,8 +340,14 @@ def build(variant: str) -> str:
         _extract_script_block(gates_src, "Mark implemented")
     )
     validate_run = VALIDATE_PLATE if variant == "plate" else VALIDATE_TEMPLATE
+    reviewer_run = (
+        REVIEWER_MODEL_PLATE
+        if variant == "plate"
+        else REVIEWER_MODEL_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
+    )
     body = HEADER.replace("@@TITLE_SCRIPT@@", title_script)
     body = body.replace("@@ISSUE_LINK_SCRIPT@@", issue_link_script)
+    body = body.replace("@@REVIEWER_MODEL_RUN@@", reviewer_run.lstrip("\n").rstrip())
     body = body.replace("@@FEATURE_LABELS_SCRIPT@@", feature_labels_script)
     body = body.replace("@@FEATURE_FRAGMENT_SCRIPT@@", feature_fragment_script)
     body = body.replace("@@RELEASE_DETECT_SCRIPT@@", release_detect_script)

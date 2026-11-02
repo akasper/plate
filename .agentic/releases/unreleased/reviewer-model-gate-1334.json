@@ -7,7 +7,8 @@
   "migration_guidance": [
     "1. Run gh plate import-payload (dry-run, then apply) for plate-pr-gates.yml and PULL_REQUEST_TEMPLATE.md, or regenerate gates with scripts/build_plate_pr_gates_workflow.py after upgrading plate-core.",
     "2. Fill Author model and Reviewer model in every Feature/Bug/Documentation PR; use copilot for GitHub Copilot code review when the author was an agent model.",
-    "3. Human merge approval requirements are unchanged; this gate is warn-only for now and will block identical author/reviewer model ids in a later release."
+    "3. Human merge approval requirements are unchanged; this gate is warn-only for now and will block identical author/reviewer model ids in a later release.",
+    "4. Payload plate-pr-gates tries PYTHONPATH, an existing plate-core install, or pip install of the pinned plate-core version in that workflow; if the runtime is still unavailable the step warns and continues (warn-only rollout)."
   ],
   "agent_notes": "Parse the Agent review models table in the PR body. Warn-only by default; `--enforce` makes a missing table or same normalized model id fail. Same provider with different models always warns only.",
   "breaking": false,

@@ -375,10 +375,24 @@ jobs:
         run: |
           # pr-gates failure marker: Reviewer model must differ from author model
           set -euo pipefail
-          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
           pr_number="${{ github.event.pull_request.number }}"
           body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
-          printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
+          run_reviewer_model_gate() {
+            printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            run_reviewer_model_gate
+          elif python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
+            run_reviewer_model_gate
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.8.7" || true
+            if python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
+              run_reviewer_model_gate
+            else
+              echo "::warning title=Reviewer model (warn-only)::plate-core runtime unavailable; skipping reviewer model gate until plate-core is installed."
+            fi
+          fi
 
       - name: Gate — Feature release fragment (labels)
         if: |
