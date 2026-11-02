@@ -1,0 +1,17 @@
+{
+  "slug": "1071-license-dco",
+  "change_type": "process",
+  "surface": "LICENSE (unchanged), README.md, CONTRIBUTING.md, pyproject.toml classifiers",
+  "summary": "Licensing and contributions for 1.0 (#1071): keep MIT + Commons Clause; no CLA; require DCO sign-off on every commit; README and CONTRIBUTING updated; PyPI classifier no longer claims an OSI-approved license.",
+  "migration_impact": "Downstream repos and contributors must follow the documented DCO policy: no CLA, but every commit needs a Signed-off-by trailer (`git commit -s`). LICENSE text is unchanged. Template adopters should merge updated README, CONTRIBUTING, and pyproject.toml license classifiers when syncing PLATE payload; do not invent contributor license-grant language beyond the project LICENSE.",
+  "migration_guidance": [
+    "1. Sync README.md and CONTRIBUTING.md from upstream (or apply equivalent edits): DCO section with link to https://developercertificate.org/, required sign-off on every commit.",
+    "2. Update pyproject.toml classifiers: replace OSI Approved MIT with License :: Other/Proprietary License when mirroring plate_core packaging metadata.",
+    "3. Train contributors and agents to use `git commit -s` (or `--signoff`) on all commits; amend or rebase with `--signoff` to fix history before merge.",
+    "4. Optional follow-up: add a DCO GitHub App or workflow check; docs-only requirement stands until enforcement is decided in #1071."
+  ],
+  "agent_notes": "When opening PRs in PLATE repos, sign every commit with -s. Do not add CLA or commercial-relicensing grant text to CONTRIBUTING—the #1071 decision is DCO only. Process-changing docs PRs should include this fragment (or an equivalent) under .agentic/releases/unreleased/.",
+  "breaking": false,
+  "links": ["#1071", "#1298", "#1350"],
+  "requires": []
+}
