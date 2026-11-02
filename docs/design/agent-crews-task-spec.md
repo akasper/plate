@@ -38,4 +38,4 @@ Copy into `.agentic/tasks/` as a starting point for crew pilots (DentalCoach, Ha
 
 ## Out of scope for #1333
 
-Resource registry/router runtime, reviewer-differs enforcement, new GitHub labels, label-check workflow changes, and procedure authoring are tracked under design #1327 and sibling issues.
+Resource registry/router runtime, new GitHub labels, label-check workflow changes, and procedure authoring are tracked under design #1327 and sibling issues. Reviewer-differs enforcement lives in #1334 (`plate_core.pr_reviewer_model_gate`).

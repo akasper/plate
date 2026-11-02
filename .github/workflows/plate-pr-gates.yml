@@ -365,6 +365,21 @@ jobs:
             core.setFailed(message);
 
 
+      - name: Gate — reviewer model
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: Reviewer model must differ from author model
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          pr_number="${{ github.event.pull_request.number }}"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
+          printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
+
       - name: Gate — Feature release fragment (labels)
         if: |
           github.event_name == 'pull_request' ||

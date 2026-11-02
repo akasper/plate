@@ -42,6 +42,15 @@ Select exactly one PR type label and apply it to this pull request.
 | Epic | TBD |
 | ADR / Discussion | TBD |
 
+## Agent review models
+
+Record the implementation agent and the reviewer. The `pr-gates` check fails when author and reviewer use the same model id, and warns when they share a provider. GitHub Copilot code review is an allowed reviewer — use `copilot` as the reviewer model. Human merge approval is unchanged.
+
+| Role | Model |
+|---|---|
+| Author model | TBD |
+| Reviewer model | TBD |
+
 ## Tests and Evidence
 
 | Evidence Type | Command, Artifact, or Explanation | Result |
