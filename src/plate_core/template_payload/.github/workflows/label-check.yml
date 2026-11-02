@@ -20,6 +20,7 @@ jobs:
             const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Release', 'Research', 'Design', 'Question', 'Task', 'Audit', 'Migration', 'Feedback Response', 'Spike'];
             const requiresMilestone = ['Feature', 'Epic', 'Release'];
             const allowedStatusLabels = ['status:stub', 'status:blocked', 'status:ready-to-work', 'status:implemented'];
+            const allowedTierLabels = ['tier:T0', 'tier:T1', 'tier:T2', 'tier:T3'];
             const issue = context.payload.issue;
 
             if (!issue) {
@@ -43,6 +44,17 @@ jobs:
 
             if (forbiddenPlanningLabels.length > 0) {
               core.setFailed(`PLATE repositories should use GitHub Projects fields for planning state, not labels: ${forbiddenPlanningLabels.join(', ')}.`);
+              return;
+            }
+
+            const tierMatches = labels.filter((label) => allowedTierLabels.includes(label));
+            const invalidTierLabels = labels.filter((label) => /^tier:/.test(label) && !allowedTierLabels.includes(label));
+            if (invalidTierLabels.length > 0) {
+              core.setFailed(`Unsupported tier labels (${invalidTierLabels.join(', ')}). Allowed optional tier labels: ${allowedTierLabels.join(', ')}.`);
+              return;
+            }
+            if (tierMatches.length > 1) {
+              core.setFailed(`At most one optional tier label is allowed (${allowedTierLabels.join(', ')}). Found: ${tierMatches.join(', ')}.`);
               return;
             }
 
