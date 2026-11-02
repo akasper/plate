@@ -2441,6 +2441,32 @@ def cmd_collab(args: argparse.Namespace) -> int:
     return 0 if out.get("allowed") else 1
 
 
+def cmd_tasks_validate(args: argparse.Namespace) -> int:
+    """Validate .agentic/tasks/*.yml against the shipped task spec schema (#1333)."""
+    from .task_spec import validate_task_spec_paths, validate_tasks_directory
+
+    repo_root = Path(args.repo_root or ".").resolve()
+    if args.paths:
+        reports = validate_task_spec_paths([Path(p) for p in args.paths])
+        ok = all(r.valid for r in reports)
+    else:
+        tasks_dir = Path(args.tasks_dir).resolve() if args.tasks_dir else None
+        ok, reports = validate_tasks_directory(repo_root, tasks_dir=tasks_dir)
+    if args.json:
+        print(json.dumps({"valid": ok, "reports": [r.to_dict() for r in reports]}, indent=2))
+        return 0 if ok else 1
+    if not reports:
+        print(f"No task specs found under {repo_root / '.agentic' / 'tasks'}")
+    for report in reports:
+        status = "ok" if report.valid else "INVALID"
+        print(f"{status}: {report.path}")
+        for err in report.errors:
+            print(f"  - {err}")
+    if not ok:
+        print("Task spec validation failed.")
+    return 0 if ok else 1
+
+
 def cmd_task(args: argparse.Namespace) -> int:
     """Create, detect, or close human Task issues (#359/#360)."""
     if getattr(args, "close", None):
@@ -4832,6 +4858,32 @@ def build_parser() -> argparse.ArgumentParser:
     skill_show.add_argument("skill_id", help="Baseline skill id")
     skill_show.add_argument("--json", action="store_true", help="Output JSON")
     skill_show.set_defaults(func=cmd_skill_show)
+
+    tasks = sub.add_parser(
+        "tasks",
+        help="Validate agent crew task specs under .agentic/tasks/ (#1333)",
+    )
+    tasks_sub = tasks.add_subparsers(dest="tasks_command", required=True)
+    tasks_validate = tasks_sub.add_parser("validate", help="Validate task spec YAML files")
+    tasks_validate.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repository root (default: current directory)",
+    )
+    tasks_validate.add_argument(
+        "--tasks-dir",
+        default="",
+        help="Override tasks directory (default: <repo-root>/.agentic/tasks)",
+    )
+    tasks_validate.add_argument(
+        "--path",
+        action="append",
+        dest="paths",
+        default=[],
+        help="Validate a single file (repeatable); skips directory scan",
+    )
+    tasks_validate.add_argument("--json", action="store_true")
+    tasks_validate.set_defaults(func=cmd_tasks_validate)
 
     bootstrap = sub.add_parser("bootstrap", help="Plan/apply baseline PLATE bootstrap actions")
     bootstrap.add_argument("--repo", help="owner/name; defaults to git remote origin")

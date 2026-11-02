@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/akasper/plate/task-spec/1.0",
+  "title": "PLATE agent crew task spec",
+  "description": "Machine-readable task contract for .agentic/tasks/*.yml (extends the #395 delegation packet).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_spec_version",
+    "id",
+    "role",
+    "kind",
+    "level",
+    "route",
+    "inputs",
+    "outputs",
+    "acceptance",
+    "tools",
+    "model_policy",
+    "approval",
+    "budget",
+    "next"
+  ],
+  "properties": {
+    "task_spec_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "role": {
+      "type": "string",
+      "description": "baseline_catalog agent id; runtime may infer role from issue type and labels when routing from GitHub issues."
+    },
+    "kind": {
+      "type": "string",
+      "description": "PLATE issue type label value (Feature, Bug, Research, ...)."
+    },
+    "level": {
+      "type": "string",
+      "enum": ["junior", "senior", "staff"]
+    },
+    "route": {
+      "type": "string",
+      "enum": ["docs", "tests", "fix", "feature", "review"]
+    },
+    "inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/typed_field" }
+    },
+    "outputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/typed_field" }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checks", "success_signal"],
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "success_signal": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "model_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tiers", "start_tier", "max_cost_usd"],
+      "properties": {
+        "tiers": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["T0", "T1", "T2", "T3"] },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "start_tier": {
+          "type": "string",
+          "enum": ["T0", "T1", "T2", "T3"]
+        },
+        "escalation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": {
+            "from": { "type": "string", "enum": ["T0", "T1", "T2", "T3"] },
+            "to": { "type": "string", "enum": ["T0", "T1", "T2", "T3"] }
+          }
+        },
+        "max_cost_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "t3_requires_approval": {
+          "type": "string",
+          "const": "human"
+        }
+      }
+    },
+    "approval": {
+      "type": "string",
+      "enum": ["none", "human-t3", "human-merge", "human-release", "human-external"]
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_tokens_per_run"],
+      "properties": {
+        "max_tokens_per_run": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "next": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/next_edge" }
+    }
+  },
+  "$defs": {
+    "typed_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "text",
+            "integer",
+            "boolean",
+            "issue_ref",
+            "pr_ref",
+            "file_path",
+            "artifact_ref"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "next_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id"],
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "when": {
+          "type": "string",
+          "enum": ["success", "failure", "always"]
+        }
+      }
+    }
+  }
+}

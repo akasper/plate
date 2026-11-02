@@ -7,7 +7,10 @@ Task specs and crew routing can reference profile names in ``tool_allow_profiles
 from __future__ import annotations
 
 import os
+import re
 import sys
+from functools import lru_cache
+from pathlib import Path
 from typing import Iterable
 
 ENV_TOOL_PROFILES = "PLATE_MCP_TOOL_PROFILES"
@@ -262,3 +265,35 @@ def assert_tool_allowed(name: str) -> None:
         f"{describe_active_profiles(active)}. "
         f"Set {ENV_TOOL_PROFILES}=all or add a profile that includes this tool."
     )
+
+
+@lru_cache(maxsize=1)
+def list_mcp_tool_names() -> frozenset[str]:
+    """Every tool name registered in plate-mcp ``tools/list`` (for task-spec validation)."""
+    server_path = Path(__file__).resolve().parent.parent / "mcp_server.py"
+    text = server_path.read_text(encoding="utf-8")
+    names: list[str] = []
+    in_list = False
+    for line in text.splitlines():
+        if 'elif method == "tools/list":' in line:
+            in_list = True
+            continue
+        if in_list and "visible_tools" in line:
+            break
+        if in_list:
+            match = re.search(r'"name": "([^"]+)"', line)
+            if match:
+                names.append(match.group(1))
+    return frozenset(names)
+
+
+def tools_for_named_profiles(profile_names: Iterable[str]) -> frozenset[str]:
+    """Resolve profile names to the MCP tools they expose (excluding ``all``)."""
+    expanded = expand_profile_names(profile_names)
+    if PROFILE_ALL in expanded:
+        return list_mcp_tool_names()
+    out: set[str] = set()
+    for name in list_mcp_tool_names():
+        if tool_visible(name, expanded):
+            out.add(name)
+    return frozenset(out)
