@@ -1,5 +1,6 @@
 import json
 import io
+import os
 import subprocess
 import tempfile
 import unittest
@@ -17,6 +18,15 @@ from plate_core.pr_babysit import BabysitReport
 
 
 class McpTests(unittest.TestCase):
+    def setUp(self) -> None:
+        os.environ["PLATE_MCP_TOOL_PROFILES"] = "all"
+
+    def tearDown(self) -> None:
+        os.environ.pop("PLATE_MCP_TOOL_PROFILES", None)
+        from plate_core.mcp.tool_profiles import reset_mcp_tool_profile_session
+
+        reset_mcp_tool_profile_session()
+
     @patch("plate_core.mcp_server._write")
     @patch("plate_core.mcp_server.get_health")
     def test_tools_call_plate_health(self, mock_get_health, mock_write):

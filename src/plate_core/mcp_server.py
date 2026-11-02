@@ -233,6 +233,12 @@ from .mcp.curiosity_tools import (
     RecordAnswerTool,
     SynthesizePrioritiesTool,
 )
+from .mcp.tool_profiles import (
+    assert_tool_allowed,
+    configure_mcp_tool_profiles,
+    filter_tool_definitions,
+    get_active_mcp_tool_profiles,
+)
 
 
 def _write(obj: dict) -> None:
@@ -306,6 +312,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
     args = params.get("arguments", {}) or {}
 
     try:
+        if name:
+            assert_tool_allowed(str(name))
         if name == "plate_health":
             report = get_health(
                 args.get("repo"),
@@ -2072,6 +2080,7 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
 
 
 def run() -> None:
+    configure_mcp_tool_profiles()
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -2093,12 +2102,7 @@ def run() -> None:
                 }
             )
         elif method == "tools/list":
-            _write(
-                {
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "result": {
-                        "tools": [
+            all_tools = [
                             {
                                 "name": "plate_health",
                                 "description": (
@@ -5227,7 +5231,12 @@ def run() -> None:
                                 },
                             },
                         ]
-                    },
+            visible_tools = filter_tool_definitions(all_tools, get_active_mcp_tool_profiles())
+            _write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {"tools": visible_tools},
                 }
             )
         elif method == "tools/call":
