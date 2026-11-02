@@ -1,0 +1,30 @@
+# Example only — copy to .agentic/ci-policy.yml and edit for your repo.
+# Pair with .agentic/ci-path-jobs.yml (see ci-path-jobs.example.yml).
+version: "1"
+enabled: false
+cost_tiers:
+  small:
+    max_usd: 0.10
+  medium:
+    min_usd: 0.10
+    max_usd: 2.00
+  large:
+    min_usd: 2.00
+job_sizes:
+  validate-process: small
+  product-unit: medium
+  product-e2e: large
+force_run:
+  workflow_globs:
+    - ".github/workflows/**"
+  map_paths:
+    - ".agentic/ci-path-jobs.yml"
+    - ".agentic/ci-path-jobs.yaml"
+    - ".agentic/ci-policy.yml"
+    - ".agentic/ci-policy.yaml"
+  test_path_globs:
+    - "tests/**"
+    - "**/test_*.py"
+    - "**/*_test.py"
+  on_workflow_change: all_jobs
+  on_map_change: all_jobs

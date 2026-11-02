@@ -36,6 +36,10 @@ Shipped under `src/plate_core/data/examples/`:
 
 Copy into `.agentic/tasks/` as a starting point for crew pilots (DentalCoach, Happyhouses, etc.).
 
+## Related design
+
+- [agent-crews-resource-router.md](agent-crews-resource-router.md) — registry record, routing inputs/outputs, Consumption Tracker and Lull reads, reviewer-differs rule (#1337; implementation deferred).
+
 ## Out of scope for #1333
 
-Resource registry/router runtime, reviewer-differs enforcement, new GitHub labels, label-check workflow changes, and procedure authoring are tracked under design #1327 and sibling issues.
+Resource registry/router **runtime**, reviewer-differs **enforcement**, new GitHub labels, label-check workflow changes, and procedure authoring are tracked under design #1327 and sibling issues (interface spec for the router is in the linked doc above).
