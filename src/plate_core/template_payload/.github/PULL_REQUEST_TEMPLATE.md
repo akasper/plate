@@ -44,7 +44,7 @@ Select exactly one PR type label and apply it to this pull request.
 
 ## Agent review models
 
-Record the implementation agent and the reviewer. The `pr-gates` check fails when author and reviewer use the same model id, and warns when they share a provider. GitHub Copilot code review is an allowed reviewer — use `copilot` as the reviewer model. Human merge approval is unchanged.
+Record the implementation agent and the reviewer. The `pr-gates` check currently only warns (warn-only first release) when the table is missing, author and reviewer use the same model id, or they share a provider; it will become blocking in a later release. GitHub Copilot code review is an allowed reviewer — use `copilot` as the reviewer model. Human merge approval is unchanged.
 
 | Role | Model |
 |---|---|

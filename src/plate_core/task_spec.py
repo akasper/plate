@@ -325,18 +325,62 @@ def validate_task_spec_document(
 
 
 def infer_role_from_issue(kind: str, labels: Iterable[str]) -> str | None:
-    """Best-effort role hint from issue type and labels (routing aid; not a validator)."""
+    """Best-effort role hint from issue type and labels (routing aid; not a validator).
+
+    Crew roles are **not** GitHub labels (#1327). Infer from issue type plus stable
+    ``area:*`` (and related) labels only.
+    """
     label_set = {label.strip().lower() for label in labels if label.strip()}
+
+    if kind == "Question":
+        return "customer-success-manager"
     if kind == "Research":
+        if "area:marketing" in label_set:
+            return "market-researcher"
         return "research-agent"
-    if kind in ("Design", "Feature") and "area:design" in label_set:
-        return "designer"
+    if kind == "Design":
+        if "area:marketing" in label_set:
+            return "advertising-designer"
+        if "area:frontend" in label_set:
+            return "interaction-designer"
+        return "design-researcher"
     if kind == "Bug":
+        if "area:tests" in label_set:
+            return "ci-engineer"
+        if "area:infra" in label_set:
+            return "live-ops-engineer"
+        if "area:security" in label_set:
+            return "security-auditor"
         return "software-engineer"
     if kind == "Documentation":
+        if "area:marketing" in label_set:
+            return "marketing-specialist"
         return "wiki-editor"
     if kind == "Release":
         return "project-manager"
+    if kind == "Epic":
+        if "area:agent" in label_set:
+            return "team-lead"
+        return "project-manager"
+    if kind in ("Feature", "Feedback Response"):
+        if "area:marketing" in label_set:
+            return "marketing-specialist"
+        if "area:product" in label_set:
+            return "product-manager"
+        if "area:frontend" in label_set:
+            return "user-experience-engineer"
+        if "area:infra" in label_set:
+            return "devops-engineer"
+        if "area:agent" in label_set:
+            return "team-lead"
+        if "area:backend" in label_set:
+            return "software-engineer"
+        if "area:security" in label_set:
+            return "security-auditor"
+    if kind == "Audit":
+        if "area:marketing" in label_set:
+            return "marketing-specialist"
+        return "research-agent"
     return None
 
 

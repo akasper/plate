@@ -15,7 +15,7 @@ description: Frame a coherent epic with scope, outcomes, and child issue boundar
 
 Frame a coherent epic with scope, outcomes, and child issue boundaries.
 
-**Owning agents:** project-manager
+**Owning agents:** project-manager, team-lead, product-manager
 
 ## Inputs
 

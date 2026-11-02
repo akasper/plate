@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from .context_map import get_context_route
+from .mcp.tool_profiles import KNOWN_PROFILES
 
 
 class BaselineCatalogError(ValueError):
@@ -76,6 +77,7 @@ class BaselineAgent:
     primary_skill_ids: tuple[str, ...]
     constraints: tuple[str, ...]
     surfaces: tuple[str, ...]
+    default_tool_profiles: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,6 +87,7 @@ class BaselineAgent:
             "primary_skill_ids": list(self.primary_skill_ids),
             "constraints": list(self.constraints),
             "surfaces": list(self.surfaces),
+            "default_tool_profiles": list(self.default_tool_profiles),
         }
 
 
@@ -162,6 +165,16 @@ def _load_agents(raw_agents: Any) -> tuple[BaselineAgent, ...]:
         _require(isinstance(agent_id, str) and agent_id, "agent.id must be a non-empty string")
         _require(agent_id not in seen, f"duplicate agent id: {agent_id}")
         seen.add(agent_id)
+        profiles = _as_str_tuple(
+            item.get("default_tool_profiles", []),
+            f"agent {agent_id} default_tool_profiles",
+        )
+        for profile in profiles:
+            key = profile.strip().lower()
+            _require(
+                key in KNOWN_PROFILES,
+                f"agent {agent_id} default_tool_profiles references unknown profile {profile!r}",
+            )
         agents.append(
             BaselineAgent(
                 id=agent_id,
@@ -170,6 +183,7 @@ def _load_agents(raw_agents: Any) -> tuple[BaselineAgent, ...]:
                 primary_skill_ids=_as_str_tuple(item.get("primary_skill_ids", []), f"agent {agent_id} primary_skill_ids"),
                 constraints=_as_str_tuple(item.get("constraints", []), f"agent {agent_id} constraints"),
                 surfaces=_as_str_tuple(item.get("surfaces", []), f"agent {agent_id} surfaces"),
+                default_tool_profiles=profiles,
             )
         )
     return tuple(agents)

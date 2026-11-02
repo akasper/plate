@@ -15,7 +15,7 @@ description: As deliberate last resort, create a linked blocking Question with s
 
 As deliberate last resort, create a linked blocking Question with structured information dump when hitting a hard informational obstacle on another Issue. Pause the original work.
 
-**Owning agents:** research-agent, software-engineer
+**Owning agents:** research-agent, software-engineer, customer-success-manager
 
 ## Inputs
 

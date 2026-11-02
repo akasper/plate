@@ -65,7 +65,11 @@ class ReviewModelGateTests(unittest.TestCase):
         ok_body = "| Author model | human |\n| Reviewer model | copilot |\n"
         self.assertEqual(run_gate(ok_body), 0)
         bad_body = "| Author model | grok |\n| Reviewer model | grok |\n"
-        self.assertEqual(run_gate(bad_body), 1)
+        # Warn-only by default; blocking only with enforce=True.
+        self.assertEqual(run_gate(bad_body), 0)
+        self.assertEqual(run_gate(bad_body, enforce=True), 1)
+        self.assertEqual(run_gate("no table here", enforce=True), 1)
+        self.assertEqual(run_gate("no table here"), 0)
 
     def test_failure_heading_constant(self):
         self.assertIn("differ", FAILURE_HEADING.lower())

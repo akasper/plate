@@ -6,15 +6,25 @@ from plate_core.baseline_catalog import BaselineCatalogError, load_baseline_cata
 
 
 class BaselineCatalogTests(unittest.TestCase):
-    def test_load_baseline_catalog_returns_fifteen_agents(self):
+    def test_load_baseline_catalog_returns_twenty_nine_agents(self):
         catalog = load_baseline_catalog()
-        self.assertEqual(15, len(catalog.agents))
+        self.assertEqual(29, len(catalog.agents))
         agent_ids = {agent.id for agent in catalog.agents}
         self.assertIn("project-manager", agent_ids)
+        self.assertIn("team-lead", agent_ids)
+        self.assertIn("product-manager", agent_ids)
+        self.assertIn("go-to-market-lead", agent_ids)
+        self.assertIn("machine-learning-engineer", agent_ids)
         self.assertIn("research-agent", agent_ids)
         self.assertIn("security-auditor", agent_ids)
         self.assertIn("performance-engineer", agent_ids)
         self.assertIn("data-engineer", agent_ids)
+
+    def test_agents_declare_default_tool_profiles(self):
+        catalog = load_baseline_catalog()
+        for agent in catalog.agents:
+            self.assertGreater(len(agent.default_tool_profiles), 0)
+            self.assertIn("default", agent.default_tool_profiles)
 
     def test_agent_skill_references_are_resolved(self):
         catalog = load_baseline_catalog()

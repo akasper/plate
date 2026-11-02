@@ -2,14 +2,14 @@
   "slug": "reviewer-model-gate-1334",
   "change_type": "feature",
   "surface": ".github/PULL_REQUEST_TEMPLATE.md, plate-pr-gates, plate_core.pr_reviewer_model_gate",
-  "summary": "PR template and pr-gates record author/reviewer models; fail on same model, warn on shared provider; Copilot allowed as reviewer.",
+  "summary": "PR template and pr-gates record author/reviewer models; warn-only in this release (blocking via --enforce later); warns on missing table, same model or shared provider; Copilot allowed as reviewer.",
   "migration_impact": "Adopters should import updated PULL_REQUEST_TEMPLATE.md and plate-pr-gates.yml; fill Agent review models table on new PRs.",
   "migration_guidance": [
     "1. Run gh plate import-payload (dry-run, then apply) for plate-pr-gates.yml and PULL_REQUEST_TEMPLATE.md, or regenerate gates with scripts/build_plate_pr_gates_workflow.py after upgrading plate-core.",
     "2. Fill Author model and Reviewer model in every Feature/Bug/Documentation PR; use copilot for GitHub Copilot code review when the author was an agent model.",
-    "3. Human merge approval requirements are unchanged; this gate only blocks identical author/reviewer model ids."
+    "3. Human merge approval requirements are unchanged; this gate is warn-only for now and will block identical author/reviewer model ids in a later release."
   ],
-  "agent_notes": "Parse the Agent review models table in the PR body. Same normalized model id fails; same provider with different models emits a workflow warning only.",
+  "agent_notes": "Parse the Agent review models table in the PR body. Warn-only by default; `--enforce` makes a missing table or same normalized model id fail. Same provider with different models always warns only.",
   "breaking": false,
   "links": ["#1334", "#1327"]
 }

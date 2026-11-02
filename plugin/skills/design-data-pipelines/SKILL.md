@@ -15,7 +15,7 @@ description: Design reliable ETL, schemas, and storage solutions with quality an
 
 Design reliable ETL, schemas, and storage solutions with quality and privacy in mind.
 
-**Owning agents:** data-engineer
+**Owning agents:** data-engineer, machine-learning-engineer
 
 ## Inputs
 

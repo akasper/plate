@@ -176,11 +176,20 @@ def format_failure_message(result: ReviewModelGateResult) -> str:
     return "\n".join(lines)
 
 
-def run_gate(body: str) -> int:
+def run_gate(body: str, *, enforce: bool = False) -> int:
+    """Return 0 unless ``enforce`` is true and the table fails.
+
+    Warn-only by default (first release): problems are printed as GitHub warnings so
+    adopters can add the table before the check starts blocking.
+    """
     result = evaluate_review_model_gate_from_body(body)
     for warning in result.warnings:
         print(f"::warning title=Reviewer model::{warning}", flush=True)
     if result.ok:
+        return 0
+    if not enforce:
+        for err in result.errors:
+            print(f"::warning title=Reviewer model (warn-only)::{err}", flush=True)
         return 0
     print(format_failure_message(result), file=sys.stderr)
     return 1
@@ -194,6 +203,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Read PR body from standard input",
     )
     parser.add_argument(
+        "--enforce",
+        action="store_true",
+        help="Exit non-zero when the table is missing or author equals reviewer (default: warn only)",
+    )
+    parser.add_argument(
         "path",
         nargs="?",
         help="Path to a file containing the PR body",
@@ -205,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
         body = open(args.path, encoding="utf-8").read()
     else:
         parser.error("provide --stdin or a path argument")
-    return run_gate(body)
+    return run_gate(body, enforce=args.enforce)
 
 
 if __name__ == "__main__":

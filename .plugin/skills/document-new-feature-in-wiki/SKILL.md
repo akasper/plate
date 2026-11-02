@@ -15,7 +15,7 @@ description: Write wiki content for a newly shipped feature.
 
 Write wiki content for a newly shipped feature.
 
-**Owning agents:** wiki-editor, dev-relations-expert
+**Owning agents:** wiki-editor, dev-relations-expert, marketing-specialist, customer-success-manager
 
 ## Inputs
 

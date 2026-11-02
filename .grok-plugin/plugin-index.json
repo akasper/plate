@@ -5,8 +5,124 @@
       "components": {
         "agents": [
           {
+            "name": "accessibility-specialist",
+            "description": "Reviews flows and UI for accessibility gaps with concrete remediation guidance."
+          },
+          {
+            "name": "accountant",
+            "description": "Estimates and tracks the cost impact of features, CI, projects, and agents."
+          },
+          {
+            "name": "advertising-designer",
+            "description": "Produces campaign-ready creative concepts and ad layouts tied to approved positioning."
+          },
+          {
+            "name": "brand-designer",
+            "description": "Aligns visual identity, tone, and brand constraints across product and marketing surfaces."
+          },
+          {
+            "name": "ci-engineer",
+            "description": "Hardens CI pipelines, test execution, and reliability of automated checks."
+          },
+          {
+            "name": "customer-success-manager",
+            "description": "Captures user feedback, answers blocking questions, and turns support signals into backlog-ready issues."
+          },
+          {
+            "name": "data-engineer",
+            "description": "Designs schemas, pipelines, ETL, and storage for reliable data flows and analytics."
+          },
+          {
+            "name": "design-researcher",
+            "description": "Synthesizes user evidence into design decisions and research-backed requirements."
+          },
+          {
+            "name": "design-systems-designer",
+            "description": "Maintains reusable UI patterns, tokens, and component guidance for consistent implementation."
+          },
+          {
+            "name": "designer",
+            "description": "Unifies design themes and turns product intent into concrete feature requirements."
+          },
+          {
+            "name": "dev-relations-expert",
+            "description": "Turns project progress into readable updates for contributors and external audiences."
+          },
+          {
+            "name": "devops-engineer",
+            "description": "Handles delivery, deployment, and release-oriented automation."
+          },
+          {
+            "name": "go-to-market-lead",
+            "description": "Turns product positioning, launch plans, and market signals into actionable GTM work tied to Goals and honest public cl…"
+          },
+          {
+            "name": "interaction-designer",
+            "description": "Designs flows, states, and interaction patterns for task completion and discoverability."
+          },
+          {
+            "name": "live-ops-engineer",
+            "description": "Monitors production health, release readiness, and operational incidents with reversible automation."
+          },
+          {
+            "name": "machine-learning-engineer",
+            "description": "Designs and implements ML/data-model changes with measurable quality and privacy-aware pipelines."
+          },
+          {
+            "name": "market-researcher",
+            "description": "Identifies market gaps, opportunities, and user-facing demand signals."
+          },
+          {
+            "name": "marketing-specialist",
+            "description": "Produces and reviews marketing copy, site updates, and launch materials with discoverability and claim-traceability che…"
+          },
+          {
+            "name": "motion-designer",
+            "description": "Designs motion and transition patterns for demos, onboarding, and marketing media."
+          },
+          {
+            "name": "performance-engineer",
+            "description": "Profiles, benchmarks, and optimizes for latency, throughput, memory, and resource efficiency."
+          },
+          {
             "name": "plate",
             "description": "PLATE context-first agent that gathers repo/epic context and uses MCP tools."
+          },
+          {
+            "name": "product-manager",
+            "description": "Owns product scope, requirements, and outcome framing distinct from project orchestration and engineering team lead wor…"
+          },
+          {
+            "name": "project-manager",
+            "description": "Coordinates project CRUD, backlog grooming, epic framing, release definition, and budgeted autonomy loops (what_next +…"
+          },
+          {
+            "name": "research-agent",
+            "description": "Synthesizes open questions, discussion threads, and evidence into decision-ready findings."
+          },
+          {
+            "name": "security-auditor",
+            "description": "Audits code, dependencies, configs, and processes for security risks, secrets, and compliance gaps."
+          },
+          {
+            "name": "software-engineer",
+            "description": "Implements product changes, reviews test coverage, and fixes broken builds."
+          },
+          {
+            "name": "team-lead",
+            "description": "Leads engineering delivery: unblocks implementers, keeps PRs mergeable, and aligns execution with epic intent without o…"
+          },
+          {
+            "name": "user-experience-engineer",
+            "description": "Shapes flows, wireframes, and mockups that make the product easy to use."
+          },
+          {
+            "name": "user-interface-designer",
+            "description": "Designs visual presentation, layout, and consistent UI patterns."
+          },
+          {
+            "name": "wiki-editor",
+            "description": "Writes and synchronizes wiki content so project state stays documented."
           }
         ],
         "mcpServers": [

@@ -15,7 +15,7 @@ description: Convert a product goal into implementation-ready requirements.
 
 Convert a product goal into implementation-ready requirements.
 
-**Owning agents:** designer, user-experience-engineer
+**Owning agents:** designer, user-experience-engineer, product-manager, interaction-designer, design-systems-designer, accessibility-specialist, design-researcher
 
 ## Inputs
 

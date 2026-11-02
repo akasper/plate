@@ -1258,4 +1258,4 @@ class AutonomyGuidance480Tests(unittest.TestCase):
         self.assertIn("run-autonomy-cycle", skill_ids)
         pm = next(a for a in data["agents"] if a["id"] == "project-manager")
         self.assertIn("run-autonomy-cycle", pm["primary_skill_ids"])
-        self.assertEqual(len(data["agents"]), 15)
+        self.assertEqual(len(data["agents"]), 29)
