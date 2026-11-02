@@ -47,6 +47,19 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
                 workflow.replace(" ", ""),
             )
 
+    def test_issue_label_check_accepts_optional_tier_labels(self):
+        """#1328: optional tier:T0..T3 on issues (at most one)."""
+        repo_workflow = read_text(".github/workflows/label-check.yml")
+        payload_workflow = read_text(
+            "src/plate_core/template_payload/.github/workflows/label-check.yml"
+        )
+        self.assertEqual(repo_workflow, payload_workflow)
+        for workflow in (repo_workflow, payload_workflow):
+            self.assertIn("allowedTierLabels", workflow)
+            self.assertIn("'tier:T0'", workflow)
+            self.assertIn("'tier:T3'", workflow)
+            self.assertIn("At most one optional tier label", workflow)
+
     def test_auto_merge_requires_marker_and_risk_low(self):
         """#1262 item 7: auto-merge stays on AUTONOMOUS_MODE + risk:low only."""
         repo_workflow = read_text(".github/workflows/auto-merge.yml")
