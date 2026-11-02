@@ -1,0 +1,9 @@
+{
+  "slug": "agents-md-slim-core-1330",
+  "change_type": "process",
+  "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, docs/agents/",
+  "summary": "Slim always-loaded AGENTS.md to a ~5k-token core with on-demand docs/agents pages preserving full rule text.",
+  "migration_impact": "After import-payload or self-migrate, open AGENTS.md for the core contract and follow links to docs/agents/ for ceremony, babysit, autonomy, and script detail. No behavioral intent change.",
+  "agent_notes": "Load docs/agents/<topic>.md when work touches that topic; the core index table lists each page.",
+  "links": ["#1330"]
+}

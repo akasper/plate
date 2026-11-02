@@ -18,7 +18,7 @@ class ContextMapTests(unittest.TestCase):
         route = get_context_route("release-targeting")
         self.assertEqual("Run `gh plate release status`.", route.first_step)
         self.assertIn("gh plate release status", route.machine_surfaces)
-        self.assertIn("AGENTS.md §Branch Model and Ceremonies", route.authoritative_artifacts)
+        self.assertIn("docs/agents/branch-model-and-ceremonies.md", route.authoritative_artifacts)
 
     def test_context_map_wiki_page_matches_rendered_output(self):
         doc_path = REPO_ROOT / "docs" / "wiki" / "Agent-Context-Map.md"

@@ -4,6 +4,28 @@ This repository follows the **Product Lifecycle Automation Toolkit and Engine (P
 
 Agents working here should treat repository artifacts as durable project memory, not as optional narrative. Issues, labels, tests, pull requests, per-feature change files in `.agentic/releases/`, wiki pages, release notes, audit outputs, and traceability records are the inspectable record of the project.
 
+## On-demand agent rules
+
+These pages hold the full rule text moved out of the always-loaded core. Open by name when the task needs ceremony detail, feedback handling, autonomy, scripts, E2E demos, or similar.
+
+| Page | When to load |
+|---|---|
+| [autopilot-doctrine.md](agents/autopilot-doctrine.md) | Atomic PR discipline, PR titles, pacing, and human checkpoints. |
+| [e2e-and-demo-gifs.md](agents/e2e-and-demo-gifs.md) | Playwright E2E expectations and demo GIF recording for UI features. |
+| [plate-process-contract.md](agents/plate-process-contract.md) | Process contract table, Task/Spike/Stub semantics, and usage reports. |
+| [risk-assessment-and-labeling.md](agents/risk-assessment-and-labeling.md) | `risk:*` label family definitions and when to apply each level. |
+| [autonomous-mode.md](agents/autonomous-mode.md) | `.github/AUTONOMOUS_MODE` toggle and auto-merge eligibility. |
+| [third-party-agent-feedback.md](agents/third-party-agent-feedback.md) | Inline feedback response, PLATES-CORE tstack blocks, and merge gates. |
+| [interactive-epic-planning.md](agents/interactive-epic-planning.md) | Host-native epic planning Q&A and stub creation (#988). |
+| [documentation-rules.md](agents/documentation-rules.md) | Fragments, PR labels, milestones, and release-status targeting. |
+| [script-policy.md](agents/script-policy.md) | POSIX vs PowerShell script policy and `.plate` `platform`. |
+| [upstream-template-sync.md](agents/upstream-template-sync.md) | `import-payload`, `self-migrate`, and PLATES-CORE marker sync. |
+| [wiki-sync.md](agents/wiki-sync.md) | Opt-in wiki sync rules. |
+| [template-integrity-rules.md](agents/template-integrity-rules.md) | copilot-instructions, CI placeholder guards, and local temp paths. |
+| [real-world-tasks.md](agents/real-world-tasks.md) | Epic planning with human-only external Tasks (plate-core reference). |
+| [branch-model-and-ceremonies.md](agents/branch-model-and-ceremonies.md) | Release branches and ceremonies (plate-core reference). |
+| [pr-feedback-and-babysit.md](agents/pr-feedback-and-babysit.md) | Full PR-green babysit loop (plate-core reference). |
+
 ## Authority Model
 
 The PLATE book explains doctrine and the reasons behind the method. This repository is the source of truth for the **installable template artifacts** because those files must evolve faster than a long-form book can safely absorb. When a repository artifact and book prose disagree, do not preserve both versions indefinitely. Open a corrective issue or pull request that reconciles the doctrine, the template artifact, and any migration note required for existing users.
@@ -14,33 +36,6 @@ The PLATE book explains doctrine and the reasons behind the method. This reposit
 | Implementation | Modify code, tests, docs, and configuration inside an approved task. | Acceptance of risk, merge approval, release approval, and irreversible operational changes. |
 | Process | Follow PLATE rules, detect drift, and suggest process improvements. | Changing required gates, weakening checks, changing merge policy, or adopting new required automation. |
 | Documentation | Update per-feature change files in `.agentic/releases/`, wiki source pages, release notes, audit notes, and traceability records. | Approving claims that affect customers, pricing, legal posture, security posture, or roadmap promises. |
-
-## Autopilot Doctrine
-
-PLATE defaults to an **autopilot posture**: agents should proceed autonomously through a task queue and pause only at defined human checkpoints, rather than asking permission at each step. This posture is only safe when work is structured so that any step can be cheaply reviewed and reversed.
-
-**Atomic PR discipline.** Structure every session as a sequence of small, independently revertable PRs. A PR should have a single clear purpose. Soft limit: ≤ 10 changed files for implementation work. Prefer many small PRs over one large one. If a branch grows beyond the soft limit, split it before opening the PR.
-
-**Easy revert as the norm.** Prefer squash merges (keeps history clean). Never push directly to `main`. Name branches `type/short-description`. Each squash commit on `main` should read as a complete, stand-alone unit of work.
-
-**PR titles are for humans.** Pull request titles must be clean, concise, and written exclusively for human readers. Do not include any bracketed label-style prefixes (for example `[Feature]`, `[Bug]`, `[Documentation]`, `[WIP]`, `[DRAFT]`, or any similar convention). Do not include issue references, closing keywords, or other metadata such as `(Closes #N)`, `Fixes #123`, or equivalent in the title.
-
-All metadata belongs in GitHub's native fields instead:
-- PR type via labels (`Bug`, `Feature`, `Documentation`, or `Feedback Response`)
-
-- Linked issues via the Development sidebar or a closing keyword placed only in the PR *body*
-- Work-in-progress state via the native Draft PR status
-- Epic grouping via milestones
-
-**Agent-specific naming guardrail (Copilot + Grok Build).** GitHub Copilot and Grok Build must both follow the same PR-title rule above. When opening PRs via CLI/API, set a clean human title and put closing keywords only in the PR body. The `PLATE PR Title Check` workflow enforces this.
-
-**Resource consciousness.** Prefer targeted tool calls over exhaustive scans. Batch parallel reads. Stop investigating after sufficient evidence — do not read every file if you already know the answer. Avoid repeatedly regenerating content that has not changed.
-
-**Human checkpoints.** Post a summary comment on the Epic issue when all child issues are resolved. At that point, stop and let the human review before starting the next epic. Do not start a new epic autonomously without instruction.
-
-**Pacing.** Do not create more than five open PRs simultaneously unless they are all marked `auto-merge` and eligible. Sequence work to minimize merge conflicts; prefer additive-first ordering.
-
-**Autonomous mode** (see §Autonomous Mode below) is the formal toggle for the self-merge aspect of this doctrine. The pacing and PR-discipline rules apply in both modes.
 
 ## Required Work Loop
 
@@ -55,83 +50,9 @@ Follow the loop that matches the issue type.
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
 | 5 | Update per-feature change files in `.agentic/releases/` to describe the implemented behavior and verification evidence. |
-| 6 | If the feature includes UI changes, record a demo GIF (see Demo GIF Recording guidance below). |
+| 6 | If the feature includes UI changes, record a demo GIF (see [e2e-and-demo-gifs.md](agents/e2e-and-demo-gifs.md)). |
 | 7 | Determine the correct base branch using `gh plate release status` (legacy `release` for single-release repos; matching `release-*` track otherwise). Open a PR labeled `Feature` **targeting that base** (include `--base release` etc. in `gh pr create`) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
 | 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
-
-**Demo GIF Recording for UI Features**
-
-When implementing a Feature that includes UI changes or user interactions:
-
-1. **Create a Playwright test** that reproduces the feature workflow (login, create an account, navigate a flow, etc.). Ensure the test is deterministic and takes 5-15 seconds.
-
-2. **Record the test** using the local recording scripts:
-   - **macOS/Linux:** `./scripts/e2e-record.sh "test-name" --headed`
-   - **Windows:** `.\scripts\e2e-record.ps1 -TestName "test-name" -Headed`
-   - The `--headed` flag shows the browser during recording; the script captures video automatically.
-
-3. **Generate a demo GIF** when prompted by the script:
-   - Choose quality: `low` (fastest, smallest), `medium` (default), or `high` (best quality)
-   - Accept the suggested name or provide a custom name
-   - GIF is saved to `tests/e2e/fixtures/gifs/`
-
-4. **Include the GIF in your PR description** or wiki article:
-   ```markdown
-   ![Feature Demo](../../fixtures/gifs/feature-name-demo.gif)
-   ```
-
-5. **Commit the GIF** with your PR. GIFs are durable documentation and should be versioned alongside code changes.
-
-**Troubleshooting:** See `scripts/README.md` for complete documentation, ffmpeg installation, GIF size optimization, and troubleshooting.
-
-**Example workflow:**
-```bash
-# Write the test
-# ... edit tests/e2e/features.spec.ts ...
-
-# Record with visible browser
-./scripts/e2e-record.sh "should create new account" --headed
-
-# When prompted, generate a medium-quality GIF
-# GIF is saved: tests/e2e/fixtures/gifs/create-account-demo.gif
-
-# Commit and include in PR
-git add tests/e2e/fixtures/gifs/create-account-demo.gif
-```
-
-**E2E Testing Expectations**
-
-Playwright E2E tests provide reproducible test coverage and visual evidence for user-visible features:
-
-- **Scope:** E2E tests cover browser-based user workflows, API integrations visible in the UI, and critical user paths (login, checkout, account setup, etc.). Do not test internal logic or non-browser services—those belong in unit or integration tests.
-
-- **Coverage expectations:**
-  - New UI features ship with at least 1 Playwright spec covering the happy path
-  - Critical workflows include error condition coverage (form validation errors, API failures, network issues)
-  - Page Object Model pattern (`tests/e2e/pages/`) keeps tests maintainable
-  - Tests are deterministic and run consistently (avoid hard waits; use `waitForSelector`, `waitForLoadState`, etc.)
-
-- **Demo GIFs for user-visible features:**
-  - Record 2–5 seconds of key user interaction (feature demo, not the entire test)
-  - Show the success state or primary feature behavior
-  - Commit GIF to `tests/e2e/fixtures/gifs/feature-name.gif`
-  - Embed in .agentic/releases/, PR description, or wiki: `![Feature demo](tests/e2e/fixtures/gifs/feature-name.gif)`
-
-- **Local testing:**
-  - Run tests: `npm run test:e2e` or `npm run test:e2e:watch`
-  - Debug tests: `npm run test:e2e:debug` (opens inspector + headed browser)
-  - Record demos: `npm run record:e2e feature-name --headed`
-
-- **CI integration:**
-  - `.github/workflows/test-e2e.yml` runs all E2E tests on every PR
-  - Videos retained only on failure (configured in `playwright.config.ts`)
-  - GIF generation triggered when PR has `demo` label
-  - Artifacts uploaded with 90-day retention for debugging
-
-- **Documentation:**
-  - Full guide: `docs/playwright-e2e-guide.md`
-  - Setup and examples: `tests/e2e/README.md`
-  - Recording scripts: `scripts/README.md`
 
 **Bug**
 
@@ -216,377 +137,11 @@ Every issue must close with a traceable artifact. For most issue types this is a
 
 When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. Use a closing keyword when the PR should close the issue on merge, and use the Development sidebar when the issue should remain open after the PR lands. `Feedback Response` PRs remain exempt from the issue-link gate. `Task` issues are exempt when they close via the Task completion comment instead.
 
-## PLATE Process Contract
+## Merge and feedback gates
 
-This table documents the responsibilities and tooling for each core PLATE process element:
+- Require the `pr-gates` check from `.github/workflows/plate-pr-gates.yml` on protected branches so merge waits until agent feedback threads are resolved where applicable.
+- Full third-party feedback steps, pre-merge recheck, and human escalation: [third-party-agent-feedback.md](agents/third-party-agent-feedback.md).
 
-| Process Element | Responsibility | Tool/Script | Status | Evidence |
-|---|---|---|---|---|
-| Unit & Integration Tests | Developer + Copilot | Project-specific stack (Jest, pytest, cargo test, etc.) | Required for all PRs | `.github/workflows/ci.yml` runs project commands |
-| E2E Specs | Developer + Copilot | Playwright (`npm run test:e2e`) | Required for UI features | `.github/workflows/test-e2e.yml`, `tests/e2e/specs/*.spec.ts` |
-| Demo GIFs | Developer + Copilot | `npm run record:e2e` + GIF generation scripts | Required for user-visible features | `tests/e2e/fixtures/gifs/`, PR description/.agentic/releases/ |
-| E2E CI Validation | Copilot + Actions | `.github/workflows/test-e2e.yml` | All PRs (videos retained on failure) | Test report, artifact links |
-| GIF Processing (CI) | Actions + ffmpeg | `.github/workflows/test-e2e.yml` `process-gifs` job | Triggered by `demo` label | Artifacts with 90-day retention, PR comment with GIF links |
-| Feature Documentation | Developer + Copilot | per-feature change files in `.agentic/releases/` update | Required for `Feature` PRs | CI gate: `pr-gates` in `.github/workflows/plate-pr-gates.yml` |
-| Release Notes | Human + Copilot | `CHANGELOG.md` | Recommended for `Feature` PRs | Links and evidence in CHANGELOG entry |
-| Issue Closure Traceability | Developer + Copilot | Closing keywords + linked PR for most issue types; `<!-- PLATE-TASK-CLOSED -->` completion comment for Task issues | Required | GitHub auto-close on PR merge or Task completion comment |
-| Process Drift Audit | Copilot | Custom audit skills | Per-epic or quarterly | `docs/audits/` committed artifacts |
-
-### Playwright E2E Key Responsibilities
-
-**Developer responsibilities:**
-- Write E2E specs for new UI features using Playwright (Page Object Model pattern)
-- Record demo GIFs locally using `npm run record:e2e` for user-visible features
-- Run `npm run test:e2e` locally before opening PR
-- Commit GIFs and specs to the repository
-
-**Copilot responsibilities (when assisting Feature work):**
-- Help write or review Playwright specs and Page Objects
-- Execute `npm run record:e2e` and GIF generation locally when needed
-- Verify all tests pass in CI before PR merge
-- Update per-feature change files in `.agentic/releases/` with evidence links to test files and demo GIFs
-
-**CI/Actions responsibilities:**
-- Run `npm run test:e2e` on every PR (`.github/workflows/test-e2e.yml`)
-- Retain videos only on failure (configured in `playwright.config.ts`)
-- Generate optimized GIFs from videos when PR has `demo` label
-- Validate GIF size (warn at 3MB, fail at 5MB)
-- Upload GIF artifacts with 90-day retention
-- Post PR comment with GIF embedding instructions and artifact links
-
-### Playwright E2E Key Tools and Commands
-
-| Tool/Command | Purpose | When to Use |
-|---|---|---|
-| `npm run test:e2e` | Run all E2E tests locally | Before opening PR |
-| `npm run test:e2e:watch` | Watch mode for development | While writing/debugging tests |
-| `npm run test:e2e:debug` | Run with Playwright Inspector + headed browser | Debugging test failures |
-| `npm run record:e2e <name> --headed` | Record test execution and generate demo GIF | After test is deterministic and passes locally |
-| `.github/workflows/test-e2e.yml` | CI gate for all PRs | Automatic on PR; validates all tests pass |
-| `tests/e2e/README.md` | Setup and usage documentation | First time using Playwright in this repo |
-| `docs/playwright-e2e-guide.md` | Comprehensive Playwright guide | Reference for best practices and troubleshooting |
-| `scripts/README.md` | Recording and GIF generation scripts | Recording demos locally |
-
-### Task Issues
-
-A **Task** is a human-only blocker or explicitly requested human action item. Use Task when:
-- A human must take an action the agent cannot safely perform
-- The work is action-first rather than information-first
-- The blocker may be external to the repository (credentials, DNS, approvals, cloud setup)
-
-Task issues must include in their body:
-- **Human action required**
-- **Why the agent cannot safely proceed**
-- **Context and affected artifacts**
-- **Best-effort instructions**
-- **Done signal**
-- **Related links**
-
-Task issues do **not** require an `Epic: short-name` label. If a Task is clearly Epic-related, it should inherit the Epic milestone instead. They close with a short completion comment that includes `<!-- PLATE-TASK-CLOSED -->`.
-
-### Spike Issues
-
-A **Spike** is a time-boxed investigation with a defined question and a hard timebox. Use Spike (not Research) when:
-- The question has a clear binary or bounded answer ("can we use X for Y?")
-- The work should be discarded or converted if it runs over the timebox
-- You need an answer to unblock a decision, not a general-purpose findings document
-
-Spike issues must include in their body:
-- `**Timebox:**` duration (e.g., "4 hours", "1 day")
-- `**Question:**` the specific question to answer
-- `**Done signal:**` what constitutes a sufficient answer
-
-Spike issues do **not** require an `Epic: short-name` label. They close with a short findings note (committed artifact or inline comment).
-
-### Stub Issues
-
-In PLATE, a **Stub** is an issue that still needs a lot of detail. It serves the purposes of:
-
-1. Adding structure while working through uncertainty.
-2. Serving as a memory placeholder for humans who want to make a sidenote while they are focused on another task.
-3. Providing a surface for pre-planning.
-
-Any kind of Issue — Epic, Feature, Documentation, Bug, Research, Design, Question, Audit, Migration, Release, etc. — can be a Stub. Being a stub just means that it still needs to be defined via the process.
-
-Stubs are a normal and encouraged part of the workflow. They let the project maintain forward structure and memory even when individual items are not yet fully specified.
-
-### Marking and Working with Stubs
-- An issue is (or remains) a stub when its description, acceptance criteria, scope, or other key details are still to be worked out.
-- `need:*` labels (especially `need:decision`, `need:docs`, `need:tests`, `need:design`) indicate specific areas that still need work.
-- The `status:stub` label can be used to explicitly mark an issue that is intentionally in stub state.
-- In interactive planning flows, child stubs are commonly created with the `need:refinement` label (see next section). The deferred-gate rules for `need:refinement` remain valid for these.
-
-### need:refinement Semantics
-
-The `need:refinement` label is applied to planning child stubs created during interactive epic planning. It signals that the issue is intentionally incomplete and not yet ready for implementation.
-
-**Gates deferred by `need:refinement`:**
-- Acceptance criteria completeness check
-- per-feature change files in `.agentic/releases/` update requirement (the stub has no implementation yet)
-
-**Gates that are NEVER deferred, even for `need:refinement` stubs:**
-- Exactly one PLATE issue type label must be present
-- `Feature` stubs must carry the Epic milestone when one is already established
-- Any PR that closes the issue must include a closing keyword (`Closes #N`)
-
-Remove `need:refinement` from an issue when its AC and scope are sufficiently defined for implementation to begin. Agents may remove this label autonomously when adding full AC in a planning follow-up session.
-
-The authoritative definition of Stubs lives in the root `AGENTS.md` of a PLATE repository (see the "Stub Issues" section). This shipped copy aligns with it for convenience in new repositories.
-
-Before closing any issue through an agent-run implementation or answer flow, post a final comment that includes a structured usage block:
-
-```text
-=== USAGE REPORT ===
-tokens: <integer>
-cost: <$0.00>
-duration: <hh:mm:ss>
-=== END USAGE REPORT ===
-```
-
-`Feature` and `Question` issue closures are harvested by `.github/workflows/plates-on-issue-closed.yml` and appended to `.agentic/COSTS.md`. `Task` issues are exempt from the usage-report requirement and instead require the lightweight Task completion comment.
-
-## Risk Assessment and Labeling
-
-The `risk:*` label family communicates review burden and operational caution to humans and agents. Every PR may carry at most one `risk:*` label, selected from: `risk:low`, `risk:medium`, `risk:high`, `risk:critical`.
-
-**risk:low** - Minimal review burden and low operational impact:
-- Addresses third-party feedback or applies reviewed suggestions (Feedback Response PRs are **automatically** labeled `risk:low`)
-- Small, localized changes that do not affect API boundaries, data models, or authentication
-- Pure documentation, comment, or test-only changes that do not affect production behavior
-- Dependency version bumps that pass all CI gates
-- Formatting, naming, or cleanup changes with no semantic impact
-- Changes that provably reduce technical debt with no functional change
-
-**risk:medium** - Moderate review burden or operational caution:
-- New features behind feature flags or in non-production code paths
-- Behavioral changes to non-critical subsystems (logging, monitoring, utilities)
-- Database migrations with forward/backward compatibility; schema changes with no data loss
-- Configuration or deployment changes with straightforward rollback paths
-- Public API additions that are purely additive (no removal or breaking changes)
-
-**risk:high** - High review burden, user impact, or migration risk:
-- Behavioral changes to critical paths (auth, payment, data integrity)
-- Public API breaking changes or removals
-- Database migrations that lose data or cannot be rolled back
-- Infrastructure or deployment changes with unknown rollback procedure
-- Changes affecting multiple subsystems or cross-cutting concerns
-- Changes that modify `SPEC.md`, per-feature change files in `.agentic/releases/`, or public product claims
-
-**risk:critical** - Release, security, compliance, or data risk:
-- Security vulnerabilities (auth bypass, data exposure, injection flaws)
-- Compliance or legal changes (privacy, terms, licensing)
-- Changes affecting billing, pricing, or subscription logic
-- Customer data access, deletion, or transformation
-- Changes to `.github/CODEOWNERS`, `AGENTS.md`, or branch protection rules
-- Modifications to `.github/AUTONOMOUS_MODE` or autonomous mode eligibility criteria
-
-**When to apply risk:low:**
-- Always apply to `Feedback Response` PRs — the `.github/workflows/auto-label-feedback-responses.yml` workflow does this automatically
-- Apply to `Documentation` and `Refactoring` PRs unless they update product specification or public claims
-- Apply to test-only or CI-only PRs that do not affect deployed code
-- Apply to pure chore PRs (dependency bumps, code cleanup) when no behavior changes
-
-**When NOT to apply risk:low:**
-- If `risk:medium`, `risk:high`, or `risk:critical` is more accurate — apply the higher label instead
-- If unsure, apply `risk:medium` or ask a human reviewer to clarify
-- If the PR carries `need:human-review`, `need:security-review`, or `need:decision`, re-assess after those needs are satisfied
-
-## Autonomous Mode
-
-Autonomous mode is an opt-in operating posture for unattended sessions (overnight runs, long-running autopilot, `/delegate` tasks) where no human reviewer is available interactively. It selectively lifts the self-merge prohibition for lightweight, low-risk PRs.
-
-**Toggle:** Create `.github/AUTONOMOUS_MODE` on the default branch to enable. Delete it to return to normal human-in-the-loop operation. The file content is ignored; its presence is the signal.
-
-**When autonomous mode is active:**
-
-| Rule | Normal Mode | Autonomous Mode |
-|---|---|---|
-| Agent may merge own PRs | Never | Permitted for eligible `risk:low` PRs only |
-| Must wait for human merge | Always | May call `gh pr merge --auto --squash` on eligible PRs |
-| May add `auto-merge` label | No | Yes, for eligible PRs |
-
-**Eligibility criteria — all must be true for a PR to qualify:**
-
-- Labeled `risk:low` (see §Risk Assessment and Labeling above)
-- Does not modify `AGENTS.md`, `SPEC.md`, `.github/CODEOWNERS`, or any workflow file
-- Does not add, remove, or alter credential handling, payment logic, authentication, or security controls
-- Does not carry `need:human-review` or `need:security-review`
-- Does not change public-facing claims in `README.md` or marketing documentation
-
-**How to auto-merge an eligible PR in autonomous mode:**
-
-```bash
-# First: gh plate release status  (discover --base: release or release-*)
-gh pr create --base <base> --label "risk:low" --label "auto-merge" [other required labels] ...
-gh pr merge --auto --squash <PR_NUMBER>
-```
-
-For `Feedback Response` PRs, the `.github/workflows/auto-label-feedback-responses.yml` workflow applies both `risk:low` and `auto-merge` labels automatically, so the above workflow call is sufficient.
-
-The `.github/workflows/auto-merge.yml` workflow also triggers on the `auto-merge` label and verifies the marker file before proceeding — providing a second gate.
-
-**GitHub settings required** (one-time per repository):
-
-```bash
-# Allow the repo to use auto-merge
-gh api -X PATCH repos/OWNER/REPO -f allow_auto_merge=true
-
-# Allow Actions to write PRs and contents (needed by the workflow)
-gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
-  -f default_workflow_permissions=write \
-  -F can_approve_pull_request_reviews=false
-```
-
-**Security posture:** Autonomous mode intentionally cannot self-escalate. An agent operating in autonomous mode may not create, modify, or delete `.github/AUTONOMOUS_MODE` itself, and may not relax branch protection rules or modify the eligibility criteria in this file.
-
-## Third-Party Agent Feedback
-
-Preferred feedback handling is local **`gh plate pr babysit`** / MCP (`plate_pr_babysit`, `plate_resolve_review_thread`) and the **`address-pr-feedback` skill** (`.agentic/skills/address-pr-feedback/SKILL.md`). The shipped `.github/workflows/plates-address-pr-feedback.yml` is **legacy manual-only** (`workflow_dispatch`); do not rely on it for normal operations. When run manually it uses `COPILOT_TRIGGER_PAT` (preferred) with fallback to `GITHUB_TOKEN`, applies a dedupe marker, and avoids creating a new issue or separate PR. `Feedback Response` PRs are skipped. The Copilot Coding Agent should follow the skill when addressing feedback:
-
-1. Review all open inline comments and the overall review body from the named reviewer on the linked PR
-2. For any comment that includes a GitHub code suggestion (` ```suggestion ` block): apply it directly as a commit **unless** the suggestion introduces a bug or relies on a false assumption — if you skip a suggestion, reply to that thread with a brief explanation
-3. For all other actionable comments: push a code change or reply explaining why no change is needed
-4. After addressing each comment (via code change, applied suggestion, or explanatory reply), **reply in-thread** (commit SHA or reason), then resolve that thread with `plate_resolve_review_thread` (or the skill's `resolveReviewThread` mutation) **only after its reply** — not via `gh plate pr babysit --act` (bulk outdated auto-resolve). When plate helpers are unavailable, use only the exact `gh api graphql` fallback in `.agentic/skills/address-pr-feedback/SKILL.md` (`reviewThreads` with `isResolved: false` including outdated, pagination, `addPullRequestReviewThreadReply`, `resolveReviewThread`). **"Address feedback" is done only when the skill's re-query returns zero unresolved threads** (except threads escalated with `need:human-review` and an in-thread comment).
-5. **Push all changes to the existing PR branch** — do not open a new issue or a new PR for the feedback response
-6. For items requiring human judgment (credentials, architectural decisions, security changes), add `need:human-review` to the PR and leave a comment identifying what is blocked
-<!-- PLATES-CORE:BEGIN pre-merge-recheck-review-scope-1234 -->
-7. **Keep review loops small (#1234)** — fix real bugs in the intended case; decline extra tests, rare edges, minor perf, or broad compat asks with an in-thread reason, resolve, and list follow-ups; prefer fixes that delete or narrow code (full detail in the **`address-pr-feedback` skill**)
-
-**Pre-merge recheck (#1234).** Before merging, fetch the PR again. Do not merge when it is BEHIND, DIRTY, or CONFLICTING. If base commits landed after the last green run and touch this PR's files, sync the branch, push, and wait for green again. Never use merge bypass flags such as `--admin`. Especially important on integration branches like `release`. (Ideas adapted from [tstack](https://github.com/t3dotgg/tstack), MIT, Theo Browne; see #1232/#1234.)
-<!-- PLATES-CORE:END pre-merge-recheck-review-scope-1234 -->
-
-<!-- PLATES-CORE:BEGIN modernize-pr-skill-1235 -->
-**Modernize stale PRs (#1235).** For old pull requests, follow the **`modernize-pr` skill** (`.agentic/skills/modernize-pr/SKILL.md` after bootstrap). Decide first (one verdict: **MODERNIZE**, **REWORK**, or **CLOSE** with evidence); a successful rebase does not by itself justify keeping the PR. The skill **never closes and never merges** on its own — **CLOSE** is only a recommendation requiring owner approval. It never retargets the base or widens scope, uses an isolated worktree for git work, and does not treat trigger phrases as overrides for merge/close gates. After **MODERNIZE**, compare pre- and post-rebase commits with `git range-diff` and push with `--force-with-lease` pinned to the pre-rebase head SHA. (Ideas adapted from [tstack](https://github.com/t3dotgg/tstack) `modernize`, MIT, Theo Browne; see #1232/#1235.)
-<!-- PLATES-CORE:END modernize-pr-skill-1235 -->
-
-<!-- PLATES-CORE:BEGIN pr-handoff-comment-attribution-1236 -->
-**Credit when finishing someone else's PR (#1236).** When an agent continues work another agent or a human started, stay on the **same PR and branch**. Preserve existing commit authorship; add follow-up commits without rewriting prior authors. Use `Co-authored-by` only with **verified** GitHub identities (from `gh api user`, known owner noreply addresses, or other confirmed metadata)—never guessed emails. On squash merge, retain legitimate human co-author credit in the squash message when appropriate. Link the PR being continued in the first handoff comment. (Ideas adapted from [tstack](https://github.com/t3dotgg/tstack) `takeover`, MIT, Theo Browne; see #1232/#1236.)
-
-**Agent comment attribution (#1236).** Comments an agent posts under a person's account should **name the agent** (on by default). Add one short first line, for example `🤖 Grok Bot on behalf of Andrew`. Configure in `.plate` under `autonomy.comment_attribution`: `enabled` (boolean, default `true`) and `format` (string with `{agent}` and `{on_behalf_of}` placeholders; default `🤖 {agent} on behalf of {on_behalf_of}`). Use the real harness or agent name from the session, not an inferred model label. Applies to PR comments, review replies, and decline reasons—not PR descriptions or commit messages. PLATE code: `plate_core.comment_attribution.apply_comment_attribution`. (Ideas adapted from tstack `leaving-pr-comments`, MIT, Theo Browne; see #1232/#1236.)
-<!-- PLATES-CORE:END pr-handoff-comment-attribution-1236 -->
-
-<!-- PLATES-CORE:BEGIN import-payload-conservative-taxonomy-1250 -->
-**Conservative import-payload (#1250).** With `--strategy conservative`, differing existing payload paths are **conflicts** and are never written — including `.github/labels.yml`, `.github/ISSUE_TEMPLATE/*`, and `.github/PULL_REQUEST_TEMPLATE.md`. Identical files remain unchanged. Manifest `on_conflict: overwrite` applies only to `--strategy safe` (refresh taxonomy/templates on adopt) and `--strategy force`; do not expect conservative mode to refresh those files.
-<!-- PLATES-CORE:END import-payload-conservative-taxonomy-1250 -->
-
-<!-- PLATES-CORE:BEGIN pre-push-hook-template-1281 -->
-**Pre-push hook (#1281).** For checks that must run before every push (format, lint, typecheck on changed files), prefer `gh plate hooks install` plus `hooks.pre_push` commands in `.plate` over prose rules agents can skip. The hook passes silently when no commands are configured. See `docs/bootstrap/pre-push-hook.md`.
-<!-- PLATES-CORE:END pre-push-hook-template-1281 -->
-
-**Lifecycle contract for `Feedback Response` items:**
-
-| Stage | Expected artifact |
-|---|---|
-| Workflow fires | Trigger comment posted on the existing PR (`<!-- plates-feedback-trigger:<agent> -->` + `@copilot` instructions) |
-| Copilot addresses feedback | Commits pushed to the same PR branch; review threads resolved |
-| Escalation | `need:human-review` label + blocking comment when human judgment is required |
-| Completion | `feedback-resolution` check is green (no unresolved review threads, no `CHANGES_REQUESTED` decision), then original PR merges through normal checks |
-
-`Feedback Response` labels remain available process metadata, but this workflow no longer creates feedback-task issues or follow-up response PRs. Feedback is addressed inline on the original PR branch.
-
-**Deduplication:** The workflow posts a tracking comment containing the marker `<!-- plates-feedback-trigger:<agent> -->` on the PR after each trigger. A 10-minute cooldown prevents duplicate Copilot trigger comments when a single review fires multiple parallel events.
-
-**Configuration:** Set the `PLATE_PR_FEEDBACK_AGENTS` repository variable to a comma-separated list of GitHub logins whose feedback should be auto-addressed (e.g., `devin-ai-integration[bot],openhands-agent`). Set `COPILOT_TRIGGER_PAT` (classic PAT with `repo` scope) for reliable `@copilot` routing from Actions. When the variable is absent, the workflow matches common agent login patterns automatically.
-
-**Merge safety gate:** Require the `pr-gates` check from `.github/workflows/plate-pr-gates.yml` in branch protection for `main` so merge and auto-merge wait until agent feedback threads are resolved (this workflow supersedes the older standalone feedback-resolution workflow, which the payload no longer ships).
-
-<!-- PLATES-CORE:BEGIN interactive-epic-planning -->
-## Interactive Epic Planning
-
-When a user expresses intent to plan a new epic, offer a guided Q&A session that extracts requirements and creates the Epic issue and child stubs incrementally. **Present questions using host-native look-and-feel** (Copilot CLI native TUI, Grok Build `ask_user_question`, etc.) rather than free-form chat. This workflow applies in Copilot chat. MCP and CLI surfaces are reserved for Phase 2.
-
-### Intent Detection
-
-Evaluate incoming messages against a 3-tier signal system:
-
-| Tier | Score | Action |
-|---|---|---|
-| HIGH | ≥ 5 pts | Ask the confirmation question immediately |
-| MEDIUM | 3–4 pts | Watch for a follow-up trigger in the next turn; do not interrupt |
-| LOW | ≤ 2 pts | Ignore; do not interrupt the conversation |
-
-Signal weights (cumulative): "plan" or "epic" keyword (+2), explicit "feature" or "capability" keyword (+1), question phrasing or "what would it take" (+1), "breaking down" or "scoping" phrasing (+1), scope-size language ("big", "large", "multi-week") (+1), explicit request ("let's create an epic") (+2).
-
-Confirmation question: *"It sounds like you want to plan a new epic. Should I start a structured planning session? I'll ask a few questions and create the Epic issue and child stubs on GitHub as we go."*
-
-If the user declines, drop to MEDIUM watch state. Do not ask again in the same conversation unless the user re-initiates.
-
-### Minimum Creation Threshold
-
-Create the Epic GitHub issue as soon as you have:
-- A name (title) for the epic
-- A one-sentence problem statement
-
-Do not wait for full AC or scope before creating. Use `need:refinement` on child stubs.
-
-### Duplicate Detection
-
-Before creating, search for open Epic issues with similar titles:
-
-```bash
-gh issue list --repo OWNER/REPO --label Epic --state open --json number,title
-```
-
-Compute Jaccard similarity on title tokens. If any result scores ≥ 0.5, warn the user and offer:
-1. Add child issues to the existing Epic instead
-2. Create a new Epic anyway (distinct scope)
-3. Cancel and open the existing Epic for review
-
-### Q&A Phase
-
-Run at most 8 turns. Each turn = one agent question + one user answer.
-
-**Acceptance criteria arc (turns 1–3):**
-1. "What does success look like when this epic is done?"
-2. Probe: "What's the most important part of that — what has to work for this to be useful?"
-3. Anchor: "How would you know it's truly complete — what's the 'done' signal?"
-
-**Scope arc (turns 4–6):**
-4. "What's explicitly in scope for this epic?"
-5. "What are you explicitly NOT trying to solve with this epic?"
-6. "Are there any epics, issues, or external changes this depends on?"
-
-**Fast path:** If the user says "that's enough" or "I'll fill in the rest," stop at 3 turns minimum.
-
-### Incremental Issue Updates
-
-After each Q&A turn, update the Epic issue body using `gh issue edit`:
-
-```bash
-gh issue edit <NUMBER> --body-file -
-```
-
-Store session state in an HTML comment at the end of the body:
-
-```html
-<!-- PLATE_SESSION_STATE: {"turn": 3, "ac": [...], "scope_in": [...], "scope_out": [...]} -->
-```
-
-Post a `📝 Updated #N` signal in the chat to confirm each update.
-
-### Progressive Child-Issue Creation
-
-Create child stubs in this order: Research → Design → Feature. Create each stub as soon as the need is clear — do not wait until the end of the session.
-
-Required fields for every stub:
-- Title
-- Type label (`Research`, `Design`, or `Feature`)
-- Epic label (`Epic: <slug>`)
-- `need:refinement` label
-- Body: one-line summary + `<!-- PLATES-EPIC: #<epic-number> -->`
-
-### Session Resumption
-
-Reconstruct state from the `PLATE_SESSION_STATE` HTML comment in the Epic body. Re-entry prompt: *"I found a planning session in progress for Epic #N. Would you like to continue from turn [X], or start over?"*
-
-### Completion
-
-When the session ends (turn budget exhausted or user signals done), post a planning summary comment on the Epic issue listing:
-- Final AC items captured
-- Scope in/out items
-- All child issues created (with numbers)
-- Suggested next steps (merge PRs for Research stubs first)
-<!-- PLATES-CORE:END interactive-epic-planning -->
 
 ## Label Rules
 
@@ -602,100 +157,10 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 | `risk:*` | Review burden and release caution. |
 | `need:*` | Missing input or required follow-up. |
 
-## Documentation Rules
-
-Every Feature pull request that changes PLATE process, templates, or agent surfaces must author a fragment under `.agentic/releases/unreleased/<slug>.json`. Documentation pull requests must commit a file to the appropriate `docs/` subdirectory and should explain whether they update process artifacts, product documentation, wiki source material, or public-facing claims. Changes that alter PLATE behavior or process should also add or update a fragment. If a change affects feature behavior, update both implementation evidence and documentation evidence.
-
-**Fragment-first authoring:** The canonical documentation path for PLATE changes is `.agentic/releases/unreleased/<slug>.json`. These fragments accumulate across the Epic and are aggregated at release-cut time into `.agentic/releases/vX.Y.Z/`.
-
-See §Issue Artifact Rules for the full mapping of issue type to required artifact location.
-
-When opening pull requests through GitHub CLI, first run `gh plate release status` to discover the correct integration base branch (`release` for legacy; the matching `release-*` track otherwise). Prefer an atomic command such as `gh pr create --base <base> --label "Feature"` (or the Documentation equivalent, where <base> is from `gh plate release status`). If the PR is already open (e.g., created via the GitHub web UI or REST API), run `gh pr edit <number> --add-label "Feature"` as the very next step before any other work. Never rely on the repository's default branch implicitly; always pass `--base` explicitly (sometimes that will be `main`, e.g. for Release PRs).
-
-**Important:** The checkboxes in the PR template body do **not** apply GitHub labels. Labels must be set explicitly via the CLI or GitHub API.
-
-For **every new pull request**, add exactly one required PR type label (`Bug`, `Feature`, `Documentation`, or `Feedback Response`) at creation time. Unlabeled or multiply-labeled PRs fail CI immediately, and a repair comment will be posted on the PR with the exact `gh pr edit` command to fix it.
-
-For `Feature`, `Bug`, and issue-driven `Documentation` PRs, add the relevant milestone as well. Current rollout is warning-first: the PR issue-link workflow warns when the milestone is missing rather than failing immediately.
-
-## Script Policy and Platform Support
-
-**Default:** PLATE repositories use **POSIX shell (`.sh`) scripts only**. Do not create parallel PowerShell (`.ps1`) twins unless the project explicitly declares Windows support.
-
-**Platform support tiers:**
-
-1. **Default (no platform stated, or Unix-first / cross-platform without explicit Windows):** Ship **shell scripts only** (`.sh`). Do not require or invent parallel `.ps1` scripts.
-
-2. **Windows supported (developer explicitly states):** Keep shell scripts as primary **and also** provide PowerShell equivalents where operators need them (dual-stack). Both `.sh` and `.ps1` must implement the same behavior.
-
-3. **Windows-only (developer explicitly states):** PowerShell is sufficient; POSIX/shell scripts **may be eschewed**.
-
-**Determining platform support:** Platform support must come from **human-stated project intent** in one of these sources:
-- `SPEC.md` or project documentation
-- `.plate` configuration (`platform`: `posix` | `posix-and-windows` | `windows`; a missing key means `posix`)
-- Onboarding answers or bootstrap configuration
-- Explicit instruction during repository setup
-
-**Never infer platform support** from:
-- The developer's laptop operating system
-- The presence of Windows-specific dependencies
-- CI/CD platform choices
-
-**Agent responsibilities:**
-- When creating new scripts, check project platform support first
-- For default projects (no explicit Windows support): create `.sh` only
-- For Windows-supported projects: create both `.sh` (primary) and `.ps1` (equivalent)
-- For Windows-only projects: create `.ps1` only
-- When modifying existing scripts, maintain consistency with the project's declared platform support
-
-**`.plate` platform:** Set `platform` to `posix` (the default when the key is absent), `posix-and-windows`, or `windows`. `gh plate import-payload` and `gh plate bootstrap --apply` copy PLATE-owned scripts for that value. `posix` omits PLATE `.ps1` twins and validation requires `gif-from-video.sh` under `scripts/` or `scripts/plate/`. `posix-and-windows` copies both flavors and validation requires both GIF scripts; template CI still runs the shell validator. `windows` omits PLATE `.sh` twins, validation requires `gif-from-video.ps1` under `scripts/` or `scripts/plate/`, and the copied template CI test job runs `pwsh -File scripts/ValidatePlateRepo.ps1 -Root .` on `windows-latest`. The copied `process-gifs` job calls `gif-from-video.ps1` through `pwsh` and fails if that helper or `pwsh` is missing. `--platform` states the value for that run and is written into `.plate` on apply. The filter names PLATE-owned basenames only and does not delete adopter-owned scripts, including namespaced files under `scripts/plate/`. `scripts/README.md` and `scripts/dev-server.js` are always copied. The template payload stays the dual-stack superset. The PLATE repository itself sets `posix-and-windows`.
-
-## Upstream PLATE Template Synchronization
-
-<!-- PLATES-CORE:BEGIN upstream-template-sync -->
-Downstream PLATE repositories often customize baseline files such as `AGENTS.md`, `.agentic/skills.yml`, and workflow definitions.
-
-**Do not create, clone, fork, or `gh repo create --template` from `akasper/plate_template` or any template repository.** That GitHub template is retired. Never hand-copy PLATE payload files into a target repo. Start new repositories only via **`docs/bootstrap/starting-a-new-repository.md`** (`gh plate bootstrap` / `gh plate import-payload`).
-
-Upgrade and sync scaffold behavior through **`plate-core`** (`gh plate import-payload`, `gh plate self-migrate`, and related surfaces)—not a `plate_template` git remote.
-
-Do not overwrite customized files wholesale during upgrades.
-
-Use **sectional synchronization** for core behavior updates:
-
-1. Plan upgrades with `gh plate self-migrate --plan` (use `--verify` after apply).
-2. Import scaffold files with `gh plate import-payload` (dry-run first; pick a safe strategy).
-3. For marker-owned files, merge only upstream `PLATES-CORE` blocks (via `gh plate self-migrate` marker merge or manual sectional import).
-4. Open an atomic PR labeled `Feature` (or `Documentation` for doc-only syncs) and include `Closes #N` when tied to an issue.
-5. Update per-feature change files in `.agentic/releases/` with the imported behavior and evidence links.
-6. Run the repository's required checks before requesting review.
-
-Marker format for sync-safe blocks:
-
-```md
-<!-- PLATES-CORE:BEGIN block-id -->
-... upstream-owned content ...
-<!-- PLATES-CORE:END block-id -->
-```
-
-When introducing new reusable process guidance, wrap it in a `PLATES-CORE` block so downstream repositories can apply low-friction partial merges without losing local customizations.
-<!-- PLATES-CORE:END upstream-template-sync -->
-
-## Wiki Sync Rules
-
-The **Sync to Wiki on Merge** workflow is opt-in. Agents should not enable broad wiki writes without human approval. Prefer scoped page updates, provenance comments, auditable commits, and reversible changes. If wiki synchronization is requested but not configured, add `need:wiki-sync` and escalate.
-
-## Template Integrity Rules
-
-- Keep `.github/copilot-instructions.md` present and aligned with the repository's real CI/runtime commands.
-- Keep `.github/workflows/ci.yml` pointed at executable validation logic (`scripts/validate_plate_repo.sh`) rather than placeholder echo steps.
-- For repositories that add runtime manifests, replace placeholder CI/docs claims in the same PR that introduces the runtime.
-- Use repository-local temporary paths for scripts and validation helpers; avoid platform-specific assumptions such as `/tmp`.
-
 ## Escalation Rules
 
 Escalate to a human when product intent is ambiguous, acceptance criteria conflict, a required label is missing and cannot be inferred, a workflow would need to be weakened, a secret or permission is required, a public claim might change, or the agent cannot produce the required evidence.
 
 ## Prohibited Actions
 
-Agents must not merge their own pull requests **unless autonomous mode is active (`.github/AUTONOMOUS_MODE` present on the default branch) and the PR meets all eligibility criteria in §Autonomous Mode above**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not clone, fork, or `gh repo create --template` from `akasper/plate_template` (or any template repo), and must not hand-copy PLATE payload files—use `gh plate bootstrap` and `gh plate import-payload` only. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`; `Feedback Response` PRs remain exempt from the issue-link rule. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body, except for `Feedback Response` PRs.
+Agents must not merge their own pull requests **unless autonomous mode is active and the PR meets all eligibility criteria in [autonomous-mode.md](agents/autonomous-mode.md)**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not clone, fork, or `gh repo create --template` from `akasper/plate_template` (or any template repo), and must not hand-copy PLATE payload files—use `gh plate bootstrap` and `gh plate import-payload` only. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`; `Feedback Response` PRs remain exempt from the issue-link rule. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body, except for `Feedback Response` PRs.

@@ -226,18 +226,21 @@ two
         self.assertTrue(any("duplicate" in e.lower() for e in result.get("errors", [])))
 
     def test_real_agents_md_markers_are_parsable(self):
-        """Integration: the real AGENTS.md uses BEGIN/END blocks and must parse cleanly."""
+        """Integration: AGENTS.md must parse cleanly; upstream PLATES-CORE block lives on docs page (#1330)."""
         import os
         agents_path = os.path.join(os.path.dirname(__file__), "..", "AGENTS.md")
         with open(agents_path, "r", encoding="utf-8") as f:
             content = f.read()
         result = marker_module._validate_marker_nesting(content)
         self.assertTrue(result["valid"], f"AGENTS.md markers invalid: {result.get('errors')}")
-        sections = marker_module._find_marked_sections(content)
-        names = [s["name"] for s in sections]
-        self.assertIn("upstream-template-sync", names)
-        # Should find at least the documented sync block
-        self.assertGreaterEqual(len(sections), 1)
+
+        sync_path = os.path.join(os.path.dirname(__file__), "..", "docs", "agents", "upstream-template-sync.md")
+        with open(sync_path, "r", encoding="utf-8") as f:
+            sync_content = f.read()
+        sync_result = marker_module._validate_marker_nesting(sync_content)
+        self.assertTrue(sync_result["valid"], f"upstream-template-sync page invalid: {sync_result.get('errors')}")
+        sync_names = [s["name"] for s in marker_module._find_marked_sections(sync_content)]
+        self.assertIn("upstream-template-sync", sync_names)
 
 
 if __name__ == "__main__":

@@ -289,6 +289,7 @@ def _rewrite_windows_gif_job(text: str, *, namespaced: bool) -> str:
 PLATE_DOCS_SUBDIRS: frozenset[str] = frozenset(
     {
         "adr",
+        "agents",
         "audits",
         "bootstrap",
         "design",

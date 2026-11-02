@@ -228,6 +228,90 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/agents/autonomous-mode.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/autopilot-doctrine.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/branch-model-and-ceremonies.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/cli-body-patterns.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/default-plate-persona.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/documentation-rules.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/e2e-and-demo-gifs.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/github-actions-and-copilot.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/interactive-epic-planning.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/plate-process-contract.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/pm-orchestration.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/pr-feedback-and-babysit.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/real-world-tasks.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/risk-assessment-and-labeling.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/script-policy.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/stub-issues.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/task-management.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/template-integrity-rules.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/third-party-agent-feedback.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/upstream-template-sync.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/wiki-sync.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/audits/audit-report-template.md",
       "classification": "copy_to_downstream"
     },
