@@ -112,10 +112,10 @@ class ModernizePrSkillArtifactTests(unittest.TestCase):
             "modernize-pr skill must ship in template payload for bootstrap",
         )
 
-        with open("AGENTS.md", encoding="utf-8") as f:
+        with open("docs/agents/pr-feedback-and-babysit.md", encoding="utf-8") as f:
             agents = f.read()
-        self.assertIn("modernize-pr-skill-1235", _read_repo_file("docs/agents/pr-feedback-and-babysit.md"))
-        self.assertIn("modernize-pr", _read_repo_file("docs/agents/pr-feedback-and-babysit.md"))
+        self.assertIn("modernize-pr-skill-1235", agents)
+        self.assertIn("modernize-pr", agents)
 
 
 if __name__ == "__main__":
