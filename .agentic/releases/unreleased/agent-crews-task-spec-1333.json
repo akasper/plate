@@ -1,0 +1,15 @@
+{
+  "slug": "agent-crews-task-spec-1333",
+  "change_type": "feature",
+  "surface": "src/plate_core/task_spec.py, src/plate_core/data/task_spec.schema.json, gh plate tasks validate",
+  "summary": "Versioned task spec schema, stdlib validator, and gh plate tasks validate for .agentic/tasks/*.yml.",
+  "migration_impact": "Adopters may add .agentic/tasks/*.yml crew specs and run gh plate tasks validate locally; no workflow or label changes.",
+  "migration_guidance": [
+    "1. Copy examples from src/plate_core/data/examples/ into .agentic/tasks/ when piloting agent crews.",
+    "2. Run gh plate tasks validate (or python -m plate_core.task_spec) before committing task specs.",
+    "3. Reference MCP tool profile names from tool_profiles.py in tools.profiles; level and route stay in the YAML, not GitHub labels."
+  ],
+  "agent_notes": "Task specs extend the #395 delegation packet with typed IO, model tiers, tool allow-lists, and static next edges. Role may be inferred from issue type/labels at runtime; validate with tasks validate.",
+  "breaking": false,
+  "links": ["#1333", "#1327", "#395"]
+}

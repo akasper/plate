@@ -1,0 +1,44 @@
+task_spec_version: "1.0"
+id: research-issue-synthesis
+role: research-agent
+kind: Research
+level: senior
+route: docs
+inputs:
+  - id: issue_number
+    type: issue_ref
+    required: true
+    description: GitHub issue to answer
+  - id: question
+    type: text
+    required: true
+outputs:
+  - id: research_doc
+    type: file_path
+    description: Path under docs/research/
+acceptance:
+  checks:
+    - docs/research/<slug>.md committed with primary sources cited
+    - PR body includes Closes #N when the research closes an issue
+  success_signal: Research artifact answers the issue with explicit tradeoffs
+tools:
+  allow:
+    - plate_what_next
+    - plate_delegate_to_agent
+  profiles:
+    - qanda
+model_policy:
+  tiers:
+    - T1
+    - T2
+  start_tier: T1
+  escalation:
+    from: T1
+    to: T2
+  max_cost_usd: 0.75
+approval: none
+budget:
+  max_tokens_per_run: 80000
+next:
+  - task_id: feature-requirements-from-research
+    when: success
