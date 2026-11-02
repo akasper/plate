@@ -1,0 +1,14 @@
+{
+  "slug": "label-check-optional-tier-labels-1328",
+  "change_type": "feature",
+  "surface": "`.github/workflows/label-check.yml`, template payload `label-check.yml`, repo `labels.yml`, template payload `ci.yml` PR label gate",
+  "summary": "Label-check accepts optional `tier:T0` through `tier:T3` on issues and PRs (at most one, never required), independent of issue/PR type and `risk:*` labels (#1328).",
+  "migration_impact": "Merge updated label-check and PR label gate scripts from plate-core so agent-crew tier metadata no longer fails CI when present.",
+  "migration_guidance": [
+    "Sync `.github/workflows/label-check.yml` and the PR label gate (`.github/workflows/ci.yml` labels job in the template; `.github/workflows/labels.yml` in plate-core) from upstream.",
+    "Optional: add `tier:T0`..`tier:T3` to `.github/labels.yml` when you adopt crew routing labels."
+  ],
+  "agent_notes": "Tier labels are optional metadata; zero or one valid tier label is allowed alongside required type labels and optional risk/area labels.",
+  "breaking": false,
+  "links": ["#1328", "#1327"]
+}

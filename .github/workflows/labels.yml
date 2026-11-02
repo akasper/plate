@@ -25,6 +25,7 @@ jobs:
         with:
           script: |
             const prTypeLabels = ['Bug', 'Feature', 'Documentation', 'Feedback Response'];
+            const allowedTierLabels = ['tier:T0', 'tier:T1', 'tier:T2', 'tier:T3'];
             const prTypeByLower = Object.fromEntries(
               prTypeLabels.map((name) => [name.toLowerCase(), name])
             );
@@ -44,8 +45,16 @@ jobs:
 
             if (forbidden.length > 0) {
               failureMessage = `Pull requests must not use planning state labels (${forbidden.join(', ')}). Use GitHub Projects fields instead.`;
-            } else if (matches.length !== 1) {
-              failureMessage = `Pull requests must have exactly one PR type label (${prTypeLabels.join(', ')}). Found: ${matches.join(', ') || '(none)'}.`;
+            } else {
+              const tierMatches = labels.filter((label) => allowedTierLabels.includes(label));
+              const invalidTierLabels = labels.filter((label) => /^tier:/.test(label) && !allowedTierLabels.includes(label));
+              if (invalidTierLabels.length > 0) {
+                failureMessage = `Unsupported tier labels (${invalidTierLabels.join(', ')}). Allowed optional tier labels: ${allowedTierLabels.join(', ')}.`;
+              } else if (tierMatches.length > 1) {
+                failureMessage = `At most one optional tier label is allowed (${allowedTierLabels.join(', ')}). Found: ${tierMatches.join(', ')}.`;
+              } else if (matches.length !== 1) {
+                failureMessage = `Pull requests must have exactly one PR type label (${prTypeLabels.join(', ')}). Found: ${matches.join(', ') || '(none)'}.`;
+              }
             }
 
             if (failureMessage) {
