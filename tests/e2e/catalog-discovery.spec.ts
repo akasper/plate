@@ -2,7 +2,7 @@
  * Baseline agent and skill catalog discovery.
  *
  * These tests invoke the `gh-plate` CLI to confirm that all baseline agents
- * (15 as of #264 expansion) and their associated skills are discoverable as JSON — the same data the
+ * (29 as of #1336 narrow roles) and their associated skills are discoverable as JSON — the same data the
  * Copilot plugin surfaces through `gh plate agents list` and `gh plate skills list`.
  *
  * Updated as part of Epic #263 E2E polish: exercises the MCP E2E surfaces (validate_e2e_tests
@@ -65,14 +65,28 @@ const EXPECTED_AGENT_IDS = [
   "security-auditor",
   "performance-engineer",
   "data-engineer",
+  "team-lead",
+  "product-manager",
+  "go-to-market-lead",
+  "marketing-specialist",
+  "live-ops-engineer",
+  "machine-learning-engineer",
+  "customer-success-manager",
+  "interaction-designer",
+  "brand-designer",
+  "advertising-designer",
+  "motion-designer",
+  "design-systems-designer",
+  "accessibility-specialist",
+  "design-researcher",
 ];
 
 test.describe("Baseline agent discovery", () => {
-  test("agents list returns exactly 15 agents", () => {
+  test("agents list returns exactly 29 agents", () => {
     const result = runGhPlate("agents", "list", "--json") as {
       agents: Array<{ id: string }>;
     };
-    expect(result.agents).toHaveLength(15);
+    expect(result.agents).toHaveLength(29);
   });
 
   for (const agentId of EXPECTED_AGENT_IDS) {

@@ -15,7 +15,7 @@ description: Produce a wireframe-style demonstration for a proposed interaction 
 
 Produce a wireframe-style demonstration for a proposed interaction flow.
 
-**Owning agents:** user-experience-engineer, user-interface-designer
+**Owning agents:** user-experience-engineer, user-interface-designer, interaction-designer, motion-designer
 
 ## Inputs
 

@@ -15,7 +15,7 @@ description: Prepare or execute delivery of project-facing sites and docs assets
 
 Prepare or execute delivery of project-facing sites and docs assets.
 
-**Owning agents:** dev-relations-expert, devops-engineer
+**Owning agents:** dev-relations-expert, devops-engineer, go-to-market-lead, marketing-specialist, live-ops-engineer
 
 ## Inputs
 

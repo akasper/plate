@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/akasper/plate/baseline_catalog.schema.json",
+  "title": "PLATE baseline agent and skill catalog",
+  "type": "object",
+  "required": ["schema_version", "agents", "skills"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/agent" }
+    },
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/skill" }
+    },
+    "informational_goals": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/informational_goal" }
+    }
+  },
+  "$defs": {
+    "agent": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "description",
+        "primary_skill_ids",
+        "constraints",
+        "surfaces",
+        "default_tool_profiles"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "primary_skill_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "surfaces": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": ["copilot-plugin", "gh-plate", "mcp"]
+          }
+        },
+        "default_tool_profiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Named MCP tool profiles from plate_core.mcp.tool_profiles (typically includes default or explicit profile names)."
+        }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "required": ["id", "name", "description", "owning_agent_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "inputs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "outputs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "owning_agent_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "procedure": { "type": "string" }
+      }
+    },
+    "informational_goal": {
+      "type": "object",
+      "required": ["id", "title", "body"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "related_goals": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "provenance_hint": { "type": "string" },
+        "priority_rationale": { "type": "string" },
+        "refinement_note": { "type": "string" },
+        "provided_by": { "type": "string" }
+      }
+    }
+  }
+}

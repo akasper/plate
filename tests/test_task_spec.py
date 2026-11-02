@@ -54,6 +54,18 @@ class TaskSpecSchemaTests(unittest.TestCase):
     def test_infer_role_from_issue_kind(self):
         self.assertEqual(infer_role_from_issue("Research", []), "research-agent")
         self.assertEqual(infer_role_from_issue("Bug", []), "software-engineer")
+        self.assertEqual(
+            infer_role_from_issue("Feature", ["area:product"]),
+            "product-manager",
+        )
+        self.assertEqual(
+            infer_role_from_issue("Epic", ["area:agent"]),
+            "team-lead",
+        )
+        self.assertEqual(
+            infer_role_from_issue("Feature", ["area:marketing"]),
+            "marketing-specialist",
+        )
 
     def test_resolve_effective_tools_merges_profile_and_allow(self):
         doc = load_task_spec_yaml(_RESEARCH)

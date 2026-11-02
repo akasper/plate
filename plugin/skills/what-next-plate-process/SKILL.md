@@ -15,7 +15,7 @@ description: Use plate_what_next (or equivalent) to get the next recommended PLA
 
 Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment based on current repo state (health, open Epics, fragments, Goals page, etc.). Enables autonomous drive of the full process. In looped use, the caller must emit only terse bullet turn summaries and follow quiet comment discipline (see quiet_operations guidance and plate persona).
 
-**Owning agents:** research-agent
+**Owning agents:** research-agent, team-lead
 
 ## Inputs
 

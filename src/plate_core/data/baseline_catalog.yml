@@ -2,8 +2,7 @@ schema_version: 1
 agents:
 - id: project-manager
   name: Project Manager
-  description: Coordinates project CRUD, backlog grooming, epic framing, release definition, and budgeted
-    autonomy loops (what_next + autonomy engine).
+  description: Coordinates project CRUD, backlog grooming, epic framing, release definition, and budgeted autonomy loops (what_next + autonomy engine).
   primary_skill_ids:
   - crud-projects
   - groom-backlog
@@ -14,14 +13,17 @@ agents:
   constraints:
   - Keep planning outputs concise and actionable.
   - Prefer clear scope boundaries over speculative implementation detail.
-  - For long-running/looped work prefer plate_autonomy_status then plate_autonomy_run_cycle within risk_tolerance
-    and budgets (#480).
-  - Emit only terse bullet turn summaries in loops; exempt PLATE-AUTONOMY-CYCLE / PLATE-PROCEDURE-RUN
-    markers.
+  - For long-running/looped work prefer plate_autonomy_status then plate_autonomy_run_cycle within risk_tolerance and budgets (#480).
+  - Emit only terse bullet turn summaries in loops; exempt PLATE-AUTONOMY-CYCLE / PLATE-PROCEDURE-RUN markers.
   surfaces:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - pm
+  - planning
+  - autonomy
 - id: market-researcher
   name: Market Researcher
   description: Identifies market gaps, opportunities, and user-facing demand signals.
@@ -36,6 +38,10 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - audit
+  - discussions
 - id: designer
   name: Designer
   description: Unifies design themes and turns product intent into concrete feature requirements.
@@ -49,6 +55,9 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - design
 - id: user-experience-engineer
   name: User Experience Engineer
   description: Shapes flows, wireframes, and mockups that make the product easy to use.
@@ -63,6 +72,9 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - design
 - id: user-interface-designer
   name: User Interface Designer
   description: Designs visual presentation, layout, and consistent UI patterns.
@@ -77,6 +89,9 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - design
 - id: software-engineer
   name: Software Engineer
   description: Implements product changes, reviews test coverage, and fixes broken builds.
@@ -89,12 +104,16 @@ agents:
   constraints:
   - Make small, test-driven changes.
   - Preserve behavior unless a change is explicitly intended.
-  - 'Looped or autonomous sessions: use terse bullet turn summaries only and post comments or create issues
-    only on meaningful forward progress per quiet_operations guidance. Prefer MCP data.'
+  - 'Looped or autonomous sessions: use terse bullet turn summaries only and post comments or create issues only on meaningful forward progress per quiet_operations guidance. Prefer MCP data.'
   surfaces:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - bug_loop
+  - feature_loop
+  - review
 - id: ci-engineer
   name: CI Engineer
   description: Hardens CI pipelines, test execution, and reliability of automated checks.
@@ -111,6 +130,10 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - review
+  - bug_loop
 - id: wiki-editor
   name: Wiki Editor
   description: Writes and synchronizes wiki content so project state stays documented.
@@ -124,6 +147,9 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - qanda
 - id: dev-relations-expert
   name: DevRel Expert
   description: Turns project progress into readable updates for contributors and external audiences.
@@ -139,6 +165,10 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - discussions
+  - audit
 - id: devops-engineer
   name: DevOps Engineer
   description: Handles delivery, deployment, and release-oriented automation.
@@ -153,6 +183,10 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - release
+  - adoption
 - id: accountant
   name: Accountant
   description: Estimates and tracks the cost impact of features, CI, projects, and agents.
@@ -165,6 +199,10 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - costs
+  - ledger
 - id: research-agent
   name: Research Agent
   description: Synthesizes open questions, discussion threads, and evidence into decision-ready findings.
@@ -180,16 +218,19 @@ agents:
   constraints:
   - Separate source facts from recommendations.
   - Prefer committed artifacts over ephemeral notes.
-  - 'Looped or autonomous sessions: terse one-sentence bullet turn summaries only; comments and issue
-    creation only on verifiable forward progress (see quiet_operations). Use MCP surfaces for data.'
+  - 'Looped or autonomous sessions: terse one-sentence bullet turn summaries only; comments and issue creation only on verifiable forward progress (see quiet_operations). Use MCP surfaces for data.'
   surfaces:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - qanda
+  - audit
+  - discussions
 - id: security-auditor
   name: Security Auditor
-  description: Audits code, dependencies, configs, and processes for security risks, secrets, and compliance
-    gaps.
+  description: Audits code, dependencies, configs, and processes for security risks, secrets, and compliance gaps.
   primary_skill_ids:
   - audit-security-posture
   constraints:
@@ -199,6 +240,9 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - audit
 - id: performance-engineer
   name: Performance Engineer
   description: Profiles, benchmarks, and optimizes for latency, throughput, memory, and resource efficiency.
@@ -211,6 +255,9 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - bug_loop
 - id: data-engineer
   name: Data Engineer
   description: Designs schemas, pipelines, ETL, and storage for reliable data flows and analytics.
@@ -223,6 +270,263 @@ agents:
   - copilot-plugin
   - gh-plate
   - mcp
+  default_tool_profiles:
+  - default
+  - design
+- id: team-lead
+  name: Team Lead
+  description: 'Leads engineering delivery: unblocks implementers, keeps PRs mergeable, and aligns execution with epic intent without owning full PM ceremony.'
+  primary_skill_ids:
+  - groom-backlog
+  - define-epic
+  - review-test-coverage
+  - address-pr-feedback
+  - what-next-plate-process
+  constraints:
+  - Prefer unblocking and scope clarity over new feature invention.
+  - Escalate product tradeoffs to humans or the product manager role.
+  - Use quiet_operations in loops; batch status for the orchestrator.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - review
+  - feature_loop
+  - bug_loop
+  - process
+- id: product-manager
+  name: Product Manager
+  description: Owns product scope, requirements, and outcome framing distinct from project orchestration and engineering team lead work.
+  primary_skill_ids:
+  - define-feature-requirements
+  - define-epic
+  - groom-backlog
+  - research-synthesis
+  constraints:
+  - Keep requirements tied to evidence and SPEC.md or linked issues.
+  - Separate product intent from implementation detail unless required.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - planning
+  - design
+  - qanda
+- id: go-to-market-lead
+  name: Go-to-Market Lead
+  description: Turns product positioning, launch plans, and market signals into actionable GTM work tied to Goals and honest public claims.
+  primary_skill_ids:
+  - identify-market-gaps-and-opportunities
+  - research-synthesis
+  - review-ai-discoverability
+  - deploy-project-marketing-site-docs-site
+  constraints:
+  - Every launch claim must trace to SPEC.md or a GitHub issue.
+  - Do not invent timelines, customers, or endorsements.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - discussions
+  - audit
+  - qanda
+- id: marketing-specialist
+  name: Marketing Specialist
+  description: Produces and reviews marketing copy, site updates, and launch materials with discoverability and claim-traceability checks.
+  primary_skill_ids:
+  - review-ai-discoverability
+  - deploy-project-marketing-site-docs-site
+  - document-new-feature-in-wiki
+  - review-discussions
+  constraints:
+  - Follow honest-tactics rules from review-ai-discoverability skill.
+  - Escalate legal or store-policy gaps to humans.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - discussions
+  - audit
+  - costs
+- id: live-ops-engineer
+  name: LiveOps Engineer
+  description: Monitors production health, release readiness, and operational incidents with reversible automation.
+  primary_skill_ids:
+  - define-release
+  - fix-broken-build
+  - deploy-project-marketing-site-docs-site
+  constraints:
+  - Prefer observable, reversible operational changes.
+  - Escalate production deploys and credential work to humans.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - monitor
+  - release
+- id: machine-learning-engineer
+  name: Machine Learning Engineer
+  description: Designs and implements ML/data-model changes with measurable quality and privacy-aware pipelines.
+  primary_skill_ids:
+  - design-data-pipelines
+  - profile-and-benchmark
+  - review-test-coverage
+  constraints:
+  - Ground model choices in data and evaluation metrics.
+  - Flag privacy, bias, and safety risks for human review.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - feature_loop
+  - design
+- id: customer-success-manager
+  name: Customer Success Manager
+  description: Captures user feedback, answers blocking questions, and turns support signals into backlog-ready issues.
+  primary_skill_ids:
+  - review-discussions
+  - run-qanda-session
+  - create-blocking-question-on-obstacle
+  - document-new-feature-in-wiki
+  constraints:
+  - Treat user reports as hypotheses until verified in repo artifacts.
+  - Never share secrets or credentials in public threads.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - qanda
+  - discussions
+- id: interaction-designer
+  name: Interaction Designer
+  description: Designs flows, states, and interaction patterns for task completion and discoverability.
+  primary_skill_ids:
+  - create-wireframe-demo
+  - mockup-ui
+  - define-feature-requirements
+  constraints:
+  - Optimize for clarity and task completion over visual novelty.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - design
+- id: brand-designer
+  name: Brand Designer
+  description: Aligns visual identity, tone, and brand constraints across product and marketing surfaces.
+  primary_skill_ids:
+  - define-unify-design-theme
+  - mockup-ui
+  - review-ai-discoverability
+  constraints:
+  - Keep brand claims consistent with SPEC.md and approved marketing policy.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - design
+- id: advertising-designer
+  name: Advertising Designer
+  description: Produces campaign-ready creative concepts and ad layouts tied to approved positioning.
+  primary_skill_ids:
+  - mockup-ui
+  - define-unify-design-theme
+  - review-ai-discoverability
+  constraints:
+  - No untraceable claims or fake social proof in creative briefs.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - design
+- id: motion-designer
+  name: Motion Designer
+  description: Designs motion and transition patterns for demos, onboarding, and marketing media.
+  primary_skill_ids:
+  - create-wireframe-demo
+  - mockup-ui
+  - define-unify-design-theme
+  constraints:
+  - Prefer lightweight motion that supports comprehension, not distraction.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - design
+- id: design-systems-designer
+  name: Design Systems Designer
+  description: Maintains reusable UI patterns, tokens, and component guidance for consistent implementation.
+  primary_skill_ids:
+  - define-unify-design-theme
+  - mockup-ui
+  - define-feature-requirements
+  constraints:
+  - Favor reusable patterns over one-off components.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - design
+- id: accessibility-specialist
+  name: Accessibility Specialist
+  description: Reviews flows and UI for accessibility gaps with concrete remediation guidance.
+  primary_skill_ids:
+  - define-feature-requirements
+  - mockup-ui
+  - audit-spec-current
+  constraints:
+  - Cite WCAG-oriented, testable criteria; escalate legal compliance to humans.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - design
+  - audit
+- id: design-researcher
+  name: Design Researcher
+  description: Synthesizes user evidence into design decisions and research-backed requirements.
+  primary_skill_ids:
+  - research-synthesis
+  - review-discussions
+  - define-feature-requirements
+  - run-qanda-session
+  constraints:
+  - Separate observed user behavior from stakeholder opinion.
+  surfaces:
+  - copilot-plugin
+  - gh-plate
+  - mcp
+  default_tool_profiles:
+  - default
+  - design
+  - qanda
+  - audit
 skills:
 - id: crud-projects
   name: CRUD Projects
@@ -252,6 +556,8 @@ skills:
   - Identify the next three backlog items ready for refinement.
   owning_agent_ids:
   - project-manager
+  - team-lead
+  - product-manager
 - id: define-epic
   name: Define Epic
   description: Frame a coherent epic with scope, outcomes, and child issue boundaries.
@@ -266,6 +572,8 @@ skills:
   - Draft an epic for adding baseline agents and skills to plate_core.
   owning_agent_ids:
   - project-manager
+  - team-lead
+  - product-manager
 - id: define-release
   name: Define Release
   description: Turn project progress into a release-ready plan with clear scope and constraints.
@@ -297,6 +605,7 @@ skills:
   owning_agent_ids:
   - market-researcher
   - research-agent
+  - go-to-market-lead
 - id: research-synthesis
   name: Research Synthesis
   description: Consolidate findings from multiple sources into a decision-ready summary.
@@ -312,6 +621,9 @@ skills:
   owning_agent_ids:
   - market-researcher
   - research-agent
+  - product-manager
+  - go-to-market-lead
+  - design-researcher
 - id: review-discussions
   name: Review Discussions
   description: Read issue and PR discussions to extract actionable signals and concerns.
@@ -328,6 +640,9 @@ skills:
   - market-researcher
   - dev-relations-expert
   - research-agent
+  - marketing-specialist
+  - customer-success-manager
+  - design-researcher
 - id: review-ai-discoverability
   name: Review AI Discoverability
   description: Audit agent-readable surfaces and public claims so AI assistants and answer engines can read, verify, and cite the product honestly.
@@ -344,34 +659,56 @@ skills:
   owning_agent_ids:
   - dev-relations-expert
   - research-agent
-  procedure: |
-    ## When to run
+  - go-to-market-lead
+  - marketing-specialist
+  - brand-designer
+  - advertising-designer
+  procedure: '## When to run
+
 
     - Before launch or major release when AI assistants, coding agents, or answer engines are an audience ([#1159](https://github.com/akasper/plate/issues/1159)).
+
     - After large README, docs-site, or marketing copy changes (parallel to legal [#1118](https://github.com/akasper/plate/issues/1118) and style [#1120](https://github.com/akasper/plate/issues/1120) review stages).
+
     - Lazy-load this skill for discoverability work only; do not preload during unrelated feature or bug loops.
+
 
     ## Checklist (required)
 
+
     Read and complete `docs/marketing/ai-discoverability-review-checklist.md` (repo root; copied on bootstrap/import-payload). Work **surfaces** and **claims** sections separately; every row needs Status + Evidence or N/A with reason.
+
 
     ## Honest tactics (non-negotiable)
 
+
     - Every public claim must trace to `SPEC.md` or a linked GitHub issue—never invent capabilities or endorsements.
+
     - No hidden text, no prompt-injection aimed at models, no fake reviews or social proof.
+
     - This skill is not legal advice; escalate legal, compliance, or store-policy gaps per Epic [#1118](https://github.com/akasper/plate/issues/1118) instead of improvising policy text.
+
 
     ## Procedure
 
+
     1. **Scope** — list URLs/paths in review (README, docs tree, site root from `.agentic/marketing.yml`, optional `llms.txt`, GitHub About metadata).
+
     2. **Surfaces pass** — for each checklist row, verify readability, working links, and parity with `CURRENT.md` / `SPEC.md`; note broken or agent-hostile structure.
+
     3. **Claims pass** — for each marketing or README claim, locate `SPEC.md` or issue proof; flag untraceable, exaggerated, or prompt-injection content.
+
     4. **File work** — open issues per gap with `risk:*` and `need:*` as appropriate; use `Task` when human-only approval is required (public claim changes, legal copy).
+
     5. **Record** — attach the updated checklist (or audit note) to the PR, release checklist, or `docs/audits/` when dogfooding.
+
 
     ## Done gate
 
+
     Checklist surfaces and claims tables are complete (no TBD rows without owner), honest-tactics checks pass or are escalated, and follow-up issues link back to the review scope.
+
+    '
 - id: define-unify-design-theme
   name: Define or Unify Design Theme
   description: Align product visuals and interaction patterns around one consistent design theme.
@@ -387,6 +724,10 @@ skills:
   owning_agent_ids:
   - designer
   - user-interface-designer
+  - brand-designer
+  - advertising-designer
+  - motion-designer
+  - design-systems-designer
 - id: define-feature-requirements
   name: Define Feature Requirements
   description: Convert a product goal into implementation-ready requirements.
@@ -402,6 +743,11 @@ skills:
   owning_agent_ids:
   - designer
   - user-experience-engineer
+  - product-manager
+  - interaction-designer
+  - design-systems-designer
+  - accessibility-specialist
+  - design-researcher
 - id: mockup-ui
   name: Mockup UI
   description: Produce lightweight UI mockups or interaction sketches for a feature.
@@ -417,6 +763,12 @@ skills:
   owning_agent_ids:
   - user-experience-engineer
   - user-interface-designer
+  - interaction-designer
+  - brand-designer
+  - advertising-designer
+  - motion-designer
+  - design-systems-designer
+  - accessibility-specialist
 - id: create-wireframe-demo
   name: Create Wireframe Demo
   description: Produce a wireframe-style demonstration for a proposed interaction flow.
@@ -432,6 +784,8 @@ skills:
   owning_agent_ids:
   - user-experience-engineer
   - user-interface-designer
+  - interaction-designer
+  - motion-designer
 - id: review-test-coverage
   name: Review Test Coverage
   description: Assess whether a change has sufficient automated test coverage.
@@ -447,6 +801,8 @@ skills:
   owning_agent_ids:
   - software-engineer
   - ci-engineer
+  - team-lead
+  - machine-learning-engineer
 - id: fix-broken-build
   name: Fix Broken Build
   description: Diagnose and repair failing builds or test runs.
@@ -478,81 +834,13 @@ skills:
   owning_agent_ids:
   - software-engineer
   - ci-engineer
-  procedure: |
-    ## Per-thread loop
-
-    Repeat until no unresolved threads remain (see Done gate):
-
-    1. **Fetch unresolved threads** — use `plate_get_unresolved_review_threads` (every `isResolved: false`, including outdated) or the GraphQL fallback below. Do **not** use `plate_get_actionable_review_threads` for fetch/done gate (it skips outdated threads).
-    2. **Act** — apply the fix, apply a ` ```suggestion ` block (unless wrong or high-risk), or decline with a brief reason.
-    3. **Reply in-thread** — post on the thread (not only a top-level PR comment). Cite the fix commit SHA or the decline reason.
-    4. **Resolve** — `plate_resolve_review_thread` with that thread's ID (or the `resolveReviewThread` mutation below) **only after** that thread's reply. Do **not** use `gh plate pr babysit --act` as a per-thread resolver (`--act` bulk-closes outdated threads without checking replies).
-
-    Human judgment (credentials, architecture, security): reply explaining the blocker, add `need:human-review`, leave the thread **unresolved**.
-
-    ## Done gate (required)
-
-    Re-query with `plate_get_unresolved_review_threads` (same contract as step 1). **Not done** until the query returns **zero** unresolved threads, except threads explicitly escalated to a human with `need:human-review` and an in-thread comment.
-
-    ## Pre-merge recheck (#1234)
-
-    Immediately before any merge or auto-merge, fetch fresh PR state again. Do **not** merge when the PR is BEHIND, DIRTY, or CONFLICTING relative to its base. If the base branch moved after the last green CI run and the new base commits touch files this PR modifies, sync the branch, push, and wait for checks to pass again. Never use `--admin` or other bypass flags that skip protection or required checks (especially on permissive bases like `release`). (Guidance adapted from tstack, MIT, Theo Browne; see #1232/#1234.)
-
-    ## Keep review loops small (#1234)
-
-    Fix comments that identify real bugs in the intended use case. Decline scope creep—extra tests, rare edge cases, minor performance tweaks, or broad compatibility not required for this PR—with a clear in-thread reason, resolve the thread, and list each declined item as a follow-up. When choosing between fixes, prefer deleting or narrowing code over adding layers. (Same tstack credit as above.)
-
-    ## Credit when finishing someone else's PR (#1236)
-
-    When you take over another agent's or a human's open PR, keep working on the **same branch and PR**. Preserve existing commit authorship; add new commits as yourself (or the active agent identity). Use `Co-authored-by` trailers only with **verified** identities (for example from `gh api user` or the repo owner's known GitHub noreply address)—never invent emails. On squash merge, keep legitimate human co-author credit in the squash commit message when it applies. Link the PR you took over in your first status comment so history stays traceable. (Ideas adapted from tstack `takeover`, MIT, Theo Browne; see #1232/#1236. Wording here is PLATE-original.)
-
-    ## Agent comment attribution (#1236)
-
-    Comments you post under a person's GitHub account (PR comments, review-thread replies, decline reasons) **must identify the agent** unless disabled in config. **On by default:** one short first line, for example `🤖 Grok Bot on behalf of Andrew`. Configure via `.plate` `autonomy.comment_attribution` (`enabled`: boolean, default `true`; `format`: string with `{agent}` and `{on_behalf_of}`, default `🤖 {agent} on behalf of {on_behalf_of}`). Use the harness or agent name you actually have—do not guess model names. Does **not** apply to PR descriptions or commit messages. When using PLATE Python helpers, run bodies through `plate_core.comment_attribution.apply_comment_attribution` before posting. (Ideas adapted from tstack `leaving-pr-comments`, MIT, Theo Browne; see #1232/#1236.)
-
-    ## GraphQL fallback (helpers unavailable)
-
-    Use **only** these exact patterns — no jq/mktemp/sed wrappers.
-
-    **List unresolved threads** (paginate with `pageInfo.endCursor` / `hasNextPage`):
-
-    ```bash
-    gh api graphql -f query='
-    query($owner:String!,$name:String!,$number:Int!,$after:String) {
-      repository(owner:$owner,name:$name) {
-        pullRequest(number:$number) {
-          reviewThreads(first:100, after:$after) {
-            pageInfo { hasNextPage endCursor }
-            nodes { id isResolved isOutdated path
-              comments(last:5) { nodes { databaseId body url author { login } } }
-            }
-          }
-        }
-      }
-    }' -f owner=OWNER -f name=REPO -F number=PR
-    ```
-
-    **Reply in-thread:**
-
-    ```bash
-    gh api graphql -f query='
-    mutation($threadId:ID!,$body:String!) {
-      addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$threadId, body:$body}) {
-        comment { url }
-      }
-    }' -f threadId=THREAD_NODE_ID -f body='Fixed in abc1234: …'
-    ```
-
-    **Resolve thread:**
-
-    ```bash
-    gh api graphql -f query='
-    mutation($threadId:ID!) {
-      resolveReviewThread(input:{threadId:$threadId}) {
-        thread { id isResolved }
-      }
-    }' -f threadId=THREAD_NODE_ID
-    ```
+  - team-lead
+  procedure: "## Per-thread loop\n\nRepeat until no unresolved threads remain (see Done gate):\n\n1. **Fetch unresolved threads** — use `plate_get_unresolved_review_threads` (every `isResolved: false`, including outdated) or the GraphQL fallback below. Do **not** use `plate_get_actionable_review_threads` for fetch/done gate (it skips outdated threads).\n2. **Act** — apply the fix, apply a ` ```suggestion ` block (unless wrong or high-risk), or decline with a brief reason.\n3. **Reply in-thread** — post on the thread (not only a top-level PR comment). Cite the fix commit SHA or the decline reason.\n4. **Resolve** — `plate_resolve_review_thread` with that thread's ID (or the `resolveReviewThread` mutation below) **only after** that thread's reply. Do **not** use `gh plate pr babysit --act` as a per-thread resolver (`--act` bulk-closes outdated threads without checking replies).\n\nHuman judgment (credentials, architecture, security): reply explaining the blocker, add `need:human-review`, leave\
+    \ the thread **unresolved**.\n\n## Done gate (required)\n\nRe-query with `plate_get_unresolved_review_threads` (same contract as step 1). **Not done** until the query returns **zero** unresolved threads, except threads explicitly escalated to a human with `need:human-review` and an in-thread comment.\n\n## Pre-merge recheck (#1234)\n\nImmediately before any merge or auto-merge, fetch fresh PR state again. Do **not** merge when the PR is BEHIND, DIRTY, or CONFLICTING relative to its base. If the base branch moved after the last green CI run and the new base commits touch files this PR modifies, sync the branch, push, and wait for checks to pass again. Never use `--admin` or other bypass flags that skip protection or required checks (especially on permissive bases like `release`). (Guidance adapted from tstack, MIT, Theo Browne; see #1232/#1234.)\n\n## Keep review loops small (#1234)\n\nFix comments that identify real bugs in the intended use case. Decline scope creep—extra tests, rare\
+    \ edge cases, minor performance tweaks, or broad compatibility not required for this PR—with a clear in-thread reason, resolve the thread, and list each declined item as a follow-up. When choosing between fixes, prefer deleting or narrowing code over adding layers. (Same tstack credit as above.)\n\n## Credit when finishing someone else's PR (#1236)\n\nWhen you take over another agent's or a human's open PR, keep working on the **same branch and PR**. Preserve existing commit authorship; add new commits as yourself (or the active agent identity). Use `Co-authored-by` trailers only with **verified** identities (for example from `gh api user` or the repo owner's known GitHub noreply address)—never invent emails. On squash merge, keep legitimate human co-author credit in the squash commit message when it applies. Link the PR you took over in your first status comment so history stays traceable. (Ideas adapted from tstack `takeover`, MIT, Theo Browne; see #1232/#1236. Wording here is PLATE-original.)\n\
+    \n## Agent comment attribution (#1236)\n\nComments you post under a person's GitHub account (PR comments, review-thread replies, decline reasons) **must identify the agent** unless disabled in config. **On by default:** one short first line, for example `\U0001F916 Grok Bot on behalf of Andrew`. Configure via `.plate` `autonomy.comment_attribution` (`enabled`: boolean, default `true`; `format`: string with `{agent}` and `{on_behalf_of}`, default `\U0001F916 {agent} on behalf of {on_behalf_of}`). Use the harness or agent name you actually have—do not guess model names. Does **not** apply to PR descriptions or commit messages. When using PLATE Python helpers, run bodies through `plate_core.comment_attribution.apply_comment_attribution` before posting. (Ideas adapted from tstack `leaving-pr-comments`, MIT, Theo Browne; see #1232/#1236.)\n\n## GraphQL fallback (helpers unavailable)\n\nUse **only** these exact patterns — no jq/mktemp/sed wrappers.\n\n**List unresolved threads** (paginate\
+    \ with `pageInfo.endCursor` / `hasNextPage`):\n\n```bash\ngh api graphql -f query='\nquery($owner:String!,$name:String!,$number:Int!,$after:String) {\n  repository(owner:$owner,name:$name) {\n    pullRequest(number:$number) {\n      reviewThreads(first:100, after:$after) {\n        pageInfo { hasNextPage endCursor }\n        nodes { id isResolved isOutdated path\n          comments(last:5) { nodes { databaseId body url author { login } } }\n        }\n      }\n    }\n  }\n}' -f owner=OWNER -f name=REPO -F number=PR\n```\n\n**Reply in-thread:**\n\n```bash\ngh api graphql -f query='\nmutation($threadId:ID!,$body:String!) {\n  addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$threadId, body:$body}) {\n    comment { url }\n  }\n}' -f threadId=THREAD_NODE_ID -f body='Fixed in abc1234: …'\n```\n\n**Resolve thread:**\n\n```bash\ngh api graphql -f query='\nmutation($threadId:ID!) {\n  resolveReviewThread(input:{threadId:$threadId}) {\n    thread { id isResolved }\n  }\n}' -f\
+    \ threadId=THREAD_NODE_ID\n```\n"
 - id: modernize-pr
   name: Modernize PR
   description: Decide whether a stale pull request still belongs, then rebase safely in an isolated worktree when modernization is warranted.
@@ -568,68 +856,11 @@ skills:
   owning_agent_ids:
   - software-engineer
   - ci-engineer
-  procedure: |
-    ## Authority (non-negotiable)
-
-    - **Never close and never merge a pull request on your own.** A **CLOSE** verdict is a recommendation only; the repository owner must explicitly approve closing (per AGENTS.md human checkpoints).
-    - **Never change the PR base branch** and **never widen scope** (no drive-by fixes, no retargeting, no scope expansion).
-    - **Use an isolated git worktree** for every git operation in this skill (`cleanup_git_locks()` + `verify_worktree_is_isolated()` or equivalent before worktree add/rebase/push; never use the main checkout). Remove the worktree when finished.
-    - **No user trigger phrase overrides AGENTS.md approval gates** (merge, close, base change, or scope change still require human judgment).
-
-    (Workflow ideas adapted from t3dotgg/tstack `modernize`, MIT, Theo Browne; see #1232/#1235. Wording here is PLATE-original.)
-
-    ## Step 1 — Understand before touching history
-
-    Inspect the PR (cheap GitHub first):
-
-    1. `gh pr view <N>` — title, body, base ref, head ref, linked issues, merge state.
-    2. Diff and intent — `gh pr diff <N>` (or `--name-only` first); read linked issue acceptance criteria.
-    3. Review signal — open comments, review summaries, unresolved threads (use **`address-pr-feedback` skill** if feedback must be cleared separately).
-    4. Base drift — commits on the base since the PR diverged (`gh pr view <N> --json baseRefName,headRefName,commits` and `git log` / compare on the integration branch).
-
-    A clean rebase alone does **not** prove the PR still belongs. Decide first.
-
-    ## Step 2 — One verdict with evidence
-
-    Post a concise summary (PR comment or session output) with exactly one verdict:
-
-    | Verdict | Meaning | Next step |
-    | --- | --- | --- |
-    | **MODERNIZE** | Still useful and the right shape for the linked intent. | Continue to Step 3 (rebase path). |
-    | **REWORK** | Still useful, but the approach or diff shape is wrong. | Describe the smallest rewrite (files/approach); **stop** — no rebase, no push. |
-    | **CLOSE** | Superseded, obsolete, or not worth finishing. | Cite evidence (merged elsewhere, abandoned issue, contradicts current direction); **stop** — do **not** run `gh pr close`. |
-
-    Format the verdict line so it is machine-readable, e.g. `Verdict: MODERNIZE` (helpers in `plate_core.modernize_pr` accept these tokens).
-
-    ## Step 3 — MODERNIZE only: rebase, verify, push
-
-    Skip this section for REWORK or CLOSE.
-
-    1. **Record pre-rebase head SHA** — `PRE_HEAD=$(git rev-parse HEAD)` on the PR branch in the worktree before rebase.
-    2. **Rebase onto the existing base** — do not change base; resolve conflicts without scope creep.
-    3. **Run targeted checks** — prefer cheap verification aligned with the diff (not full-suite by default unless required).
-    4. **Compare history** — after a successful rebase, run range-diff against the pre-rebase tip:
-
-       ```bash
-       git range-diff <base>..<PRE_HEAD> <base>..HEAD
-       ```
-
-       Use two-dot ranges so only the PR's commit series is compared (three-dot `...` can show false drops from upstream-only commits). Use `plate_core.modernize_pr.git_range_diff_argv(base=..., pre_rebase_head=PRE_HEAD, post_rebase_head=HEAD)` when building argv in automation. Investigate unexpected commit reordering or dropped commits before pushing.
-
-    5. **Push with lease on the old tip** — only after range-diff review:
-
-       ```bash
-       git push <remote> HEAD:refs/heads/<branch> --force-with-lease=refs/heads/<branch>:<PRE_HEAD>
-       ```
-
-       Use `plate_core.modernize_pr.git_push_force_with_lease_argv(...)` for the exact argv. Never `--force` without lease; never push from the main checkout.
-
-    6. **Stop before merge** — modernization ends at an updated branch and green-enough checks; human review and merge follow normal AGENTS.md gates (including pre-merge recheck #1234).
-
-    ## Done gate
-
-    - REWORK or CLOSE — verdict + evidence recorded; no git history rewrite; no close/merge by the agent.
-    - MODERNIZE — rebase complete, range-diff reviewed, `--force-with-lease` push succeeded using `PRE_HEAD`; PR still open awaiting human merge approval.
+  procedure: "## Authority (non-negotiable)\n\n- **Never close and never merge a pull request on your own.** A **CLOSE** verdict is a recommendation only; the repository owner must explicitly approve closing (per AGENTS.md human checkpoints).\n- **Never change the PR base branch** and **never widen scope** (no drive-by fixes, no retargeting, no scope expansion).\n- **Use an isolated git worktree** for every git operation in this skill (`cleanup_git_locks()` + `verify_worktree_is_isolated()` or equivalent before worktree add/rebase/push; never use the main checkout). Remove the worktree when finished.\n- **No user trigger phrase overrides AGENTS.md approval gates** (merge, close, base change, or scope change still require human judgment).\n\n(Workflow ideas adapted from t3dotgg/tstack `modernize`, MIT, Theo Browne; see #1232/#1235. Wording here is PLATE-original.)\n\n## Step 1 — Understand before touching history\n\nInspect the PR (cheap GitHub first):\n\n1. `gh pr view <N>` — title, body,\
+    \ base ref, head ref, linked issues, merge state.\n2. Diff and intent — `gh pr diff <N>` (or `--name-only` first); read linked issue acceptance criteria.\n3. Review signal — open comments, review summaries, unresolved threads (use **`address-pr-feedback` skill** if feedback must be cleared separately).\n4. Base drift — commits on the base since the PR diverged (`gh pr view <N> --json baseRefName,headRefName,commits` and `git log` / compare on the integration branch).\n\nA clean rebase alone does **not** prove the PR still belongs. Decide first.\n\n## Step 2 — One verdict with evidence\n\nPost a concise summary (PR comment or session output) with exactly one verdict:\n\n| Verdict | Meaning | Next step |\n| --- | --- | --- |\n| **MODERNIZE** | Still useful and the right shape for the linked intent. | Continue to Step 3 (rebase path). |\n| **REWORK** | Still useful, but the approach or diff shape is wrong. | Describe the smallest rewrite (files/approach); **stop** — no rebase, no push.\
+    \ |\n| **CLOSE** | Superseded, obsolete, or not worth finishing. | Cite evidence (merged elsewhere, abandoned issue, contradicts current direction); **stop** — do **not** run `gh pr close`. |\n\nFormat the verdict line so it is machine-readable, e.g. `Verdict: MODERNIZE` (helpers in `plate_core.modernize_pr` accept these tokens).\n\n## Step 3 — MODERNIZE only: rebase, verify, push\n\nSkip this section for REWORK or CLOSE.\n\n1. **Record pre-rebase head SHA** — `PRE_HEAD=$(git rev-parse HEAD)` on the PR branch in the worktree before rebase.\n2. **Rebase onto the existing base** — do not change base; resolve conflicts without scope creep.\n3. **Run targeted checks** — prefer cheap verification aligned with the diff (not full-suite by default unless required).\n4. **Compare history** — after a successful rebase, run range-diff against the pre-rebase tip:\n\n   ```bash\n   git range-diff <base>..<PRE_HEAD> <base>..HEAD\n   ```\n\n   Use two-dot ranges so only the PR's commit series is compared\
+    \ (three-dot `...` can show false drops from upstream-only commits). Use `plate_core.modernize_pr.git_range_diff_argv(base=..., pre_rebase_head=PRE_HEAD, post_rebase_head=HEAD)` when building argv in automation. Investigate unexpected commit reordering or dropped commits before pushing.\n\n5. **Push with lease on the old tip** — only after range-diff review:\n\n   ```bash\n   git push <remote> HEAD:refs/heads/<branch> --force-with-lease=refs/heads/<branch>:<PRE_HEAD>\n   ```\n\n   Use `plate_core.modernize_pr.git_push_force_with_lease_argv(...)` for the exact argv. Never `--force` without lease; never push from the main checkout.\n\n6. **Stop before merge** — modernization ends at an updated branch and green-enough checks; human review and merge follow normal AGENTS.md gates (including pre-merge recheck #1234).\n\n## Done gate\n\n- REWORK or CLOSE — verdict + evidence recorded; no git history rewrite; no close/merge by the agent.\n- MODERNIZE — rebase complete, range-diff reviewed, `--force-with-lease`\
+    \ push succeeded using `PRE_HEAD`; PR still open awaiting human merge approval.\n"
 - id: document-new-feature-in-wiki
   name: Document New Feature in Wiki
   description: Write wiki content for a newly shipped feature.
@@ -645,6 +876,8 @@ skills:
   owning_agent_ids:
   - wiki-editor
   - dev-relations-expert
+  - marketing-specialist
+  - customer-success-manager
 - id: update-wiki-to-match-project-state
   name: Update Wiki to Match Project State
   description: Sync the wiki with the current repository state and ongoing work.
@@ -674,6 +907,7 @@ skills:
   owning_agent_ids:
   - software-engineer
   - research-agent
+  - accessibility-specialist
 - id: deploy-project-marketing-site-docs-site
   name: Deploy Project, Marketing Site, or Docs Site
   description: Prepare or execute delivery of project-facing sites and docs assets.
@@ -689,10 +923,12 @@ skills:
   owning_agent_ids:
   - dev-relations-expert
   - devops-engineer
+  - go-to-market-lead
+  - marketing-specialist
+  - live-ops-engineer
 - id: calculate-costs
   name: Calculate Costs
-  description: Estimate the cost impact of feature work, CI runs, projects, or agent activity. Use plate_costs
-    MCP / gh plate costs to harvest real USAGE REPORTs and aggregate (Epic
+  description: Estimate the cost impact of feature work, CI runs, projects, or agent activity. Use plate_costs MCP / gh plate costs to harvest real USAGE REPORTs and aggregate (Epic
   inputs:
   - Scope estimate
   - Build frequency
@@ -707,9 +943,7 @@ skills:
   - accountant
 - id: run-qanda-session
   name: Run Q&A Session
-  description: Discover, prioritize, present (via native or fallback), and record answers to open Question
-    issues, triggering contemplation against checklist-style answer signals with explicit citations before
-    any Question is considered ready to close.
+  description: Discover, prioritize, present (via native or fallback), and record answers to open Question issues, triggering contemplation against checklist-style answer signals with explicit citations before any Question is considered ready to close.
   inputs:
   - Repo / Epic context
   - Open Questions (via MCP or gh plate qanda)
@@ -721,10 +955,11 @@ skills:
   owning_agent_ids:
   - research-agent
   - project-manager
+  - customer-success-manager
+  - design-researcher
 - id: create-blocking-question-on-obstacle
   name: Create Blocking Question on Obstacle
-  description: As deliberate last resort, create a linked blocking Question with structured information
-    dump when hitting a hard informational obstacle on another Issue. Pause the original work.
+  description: As deliberate last resort, create a linked blocking Question with structured information dump when hitting a hard informational obstacle on another Issue. Pause the original work.
   inputs:
   - Original blocked Issue
   - Blockage details + partial work (never lost)
@@ -735,25 +970,23 @@ skills:
   owning_agent_ids:
   - research-agent
   - software-engineer
+  - customer-success-manager
 - id: resume-from-answered-question
   name: Resume from Answered (Blocking) Question
-  description: After a blocking Question is answered, retrieve the full answer + provenance, merge into
-    the original Issue via unblock report + context updates, and resume the paused work.
+  description: After a blocking Question is answered, retrieve the full answer + provenance, merge into the original Issue via unblock report + context updates, and resume the paused work.
   inputs:
   - Answered blocking Question (with dump marker)
   outputs:
   - Unblock report on original Issue
   - Merged context + resumed work items
   examples:
-  - The blocking Question on user personas was answered. Merge the findings and resume the onboarding
-    Feature.
+  - The blocking Question on user personas was answered. Merge the findings and resume the onboarding Feature.
   owning_agent_ids:
   - research-agent
   - project-manager
 - id: audit-security-posture
   name: Audit Security Posture
-  description: Review code, deps, configs, and workflows for security vulnerabilities, secret leaks, and
-    compliance issues.
+  description: Review code, deps, configs, and workflows for security vulnerabilities, secret leaks, and compliance issues.
   inputs:
   - Code or config diffs
   - Dependency list
@@ -779,6 +1012,7 @@ skills:
   - Profile the report generation endpoint and suggest indexing or caching wins.
   owning_agent_ids:
   - performance-engineer
+  - machine-learning-engineer
 - id: design-data-pipelines
   name: Design Data Pipelines
   description: Design reliable ETL, schemas, and storage solutions with quality and privacy in mind.
@@ -794,28 +1028,22 @@ skills:
   - Design a pipeline to ingest GitHub events into a warehouse for analytics.
   owning_agent_ids:
   - data-engineer
+  - machine-learning-engineer
 - id: what-next-plate-process
   name: What Next? (PLATE Process Guidance)
-  description: Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment
-    based on current repo state (health, open Epics, fragments, Goals page, etc.). Enables autonomous
-    drive of the full process. In looped use, the caller must emit only terse bullet turn summaries and
-    follow quiet comment discipline (see quiet_operations guidance and plate persona).
+  description: Use plate_what_next (or equivalent) to get the next recommended PLATE step + prompt segment based on current repo state (health, open Epics, fragments, Goals page, etc.). Enables autonomous drive of the full process. In looped use, the caller must emit only terse bullet turn summaries and follow quiet comment discipline (see quiet_operations guidance and plate persona).
   inputs:
   - Current repo state (via plate_health, plate_epic_status, release status, labels)
   outputs:
   - next_action + prompt_segment + rationale
   examples:
-  - Call plate_what_next to decide whether to bootstrap, advance an Epic child, cut release, or babysit
-    a PR.
+  - Call plate_what_next to decide whether to bootstrap, advance an Epic child, cut release, or babysit a PR.
   owning_agent_ids:
   - research-agent
+  - team-lead
 - id: run-autonomy-cycle
   name: Run Autonomy Cycle / Loop
-  description: 'Drive long-running PLATE work via AutonomyEngine surfaces: plate_autonomy_status, plate_autonomy_run_cycle,
-    plate_autonomy_list_procedures, plate_autonomy_run_procedure (or gh plate autonomy --status|--run|--loop).
-    Respect .plate autonomy.risk_tolerance, token budgets, and quiet_operations (terse bullets only).
-    Use after plate_what_next when the next step is continuous/scheduled progress. See autonomy_loops
-    guidance (#480 / Epic #470).'
+  description: 'Drive long-running PLATE work via AutonomyEngine surfaces: plate_autonomy_status, plate_autonomy_run_cycle, plate_autonomy_list_procedures, plate_autonomy_run_procedure (or gh plate autonomy --status|--run|--loop). Respect .plate autonomy.risk_tolerance, token budgets, and quiet_operations (terse bullets only). Use after plate_what_next when the next step is continuous/scheduled progress. See autonomy_loops guidance (#480 / Epic #470).'
   inputs:
   - Live autonomy status (risk_tolerance, budget remaining, due procedures)
   - Optional dry_run flag
@@ -825,16 +1053,13 @@ skills:
   - Optional PLATE-AUTONOMY-CYCLE / PLATE-PROCEDURE-RUN markers + USAGE REPORT
   - Terse bullet turn summary for loops
   examples:
-  - Call plate_autonomy_status; if risk_tolerance is medium and budget remains, plate_autonomy_run_cycle
-    dry_run then live.
+  - Call plate_autonomy_status; if risk_tolerance is medium and budget remains, plate_autonomy_run_cycle dry_run then live.
   - gh plate autonomy --loop --max-cycles 3 with quiet bullet summaries only.
   owning_agent_ids:
   - project-manager
 - id: github-discussions
   name: GitHub Discussions
-  description: Read, list (with category filters e.g. Ideas), get full content, comment on, and create
-    GitHub Discussions. Encapsulates the gh api + GraphQL strategy for reliable agent/orchestrator use
-    (Ideas capture, inter-agent comms/logs per
+  description: Read, list (with category filters e.g. Ideas), get full content, comment on, and create GitHub Discussions. Encapsulates the gh api + GraphQL strategy for reliable agent/orchestrator use (Ideas capture, inter-agent comms/logs per
   inputs:
   - repo (owner/name)
   - category (slug e.g. 'ideas' or name)
@@ -873,8 +1098,7 @@ informational_goals:
   body: 'Describe the main personas or organizations that will use or pay for this.
 
 
-    **Answer signal:** A concise description of the target users that can be used for roadmap and design
-    decisions.'
+    **Answer signal:** A concise description of the target users that can be used for roadmap and design decisions.'
   related_goals:
   - Mission
   - Users

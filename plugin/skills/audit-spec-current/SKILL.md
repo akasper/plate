@@ -15,7 +15,7 @@ description: Compare intended product state with implemented state and flag drif
 
 Compare intended product state with implemented state and flag drift.
 
-**Owning agents:** software-engineer, research-agent
+**Owning agents:** software-engineer, research-agent, accessibility-specialist
 
 ## Inputs
 

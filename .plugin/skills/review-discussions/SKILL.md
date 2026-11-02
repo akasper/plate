@@ -15,7 +15,7 @@ description: Read issue and PR discussions to extract actionable signals and con
 
 Read issue and PR discussions to extract actionable signals and concerns.
 
-**Owning agents:** market-researcher, dev-relations-expert, research-agent
+**Owning agents:** market-researcher, dev-relations-expert, research-agent, marketing-specialist, customer-success-manager, design-researcher
 
 ## Inputs
 

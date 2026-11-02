@@ -15,7 +15,7 @@ description: Audit agent-readable surfaces and public claims so AI assistants an
 
 Audit agent-readable surfaces and public claims so AI assistants and answer engines can read, verify, and cite the product honestly.
 
-**Owning agents:** dev-relations-expert, research-agent
+**Owning agents:** dev-relations-expert, research-agent, go-to-market-lead, marketing-specialist, brand-designer, advertising-designer
 
 ## Inputs
 

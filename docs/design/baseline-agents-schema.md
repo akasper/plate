@@ -46,6 +46,9 @@ agents:
     constraints:
       - Keep responses concise and action-oriented.
       - Do not claim live state without querying the repo.
+    default_tool_profiles:
+      - default
+      - delegation
 ```
 
 ### Minimal v1 skill shape

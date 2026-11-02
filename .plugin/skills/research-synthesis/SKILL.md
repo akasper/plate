@@ -15,7 +15,7 @@ description: Consolidate findings from multiple sources into a decision-ready su
 
 Consolidate findings from multiple sources into a decision-ready summary.
 
-**Owning agents:** market-researcher, research-agent
+**Owning agents:** market-researcher, research-agent, product-manager, go-to-market-lead, design-researcher
 
 ## Inputs
 

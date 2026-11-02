@@ -15,7 +15,7 @@ description: Produce lightweight UI mockups or interaction sketches for a featur
 
 Produce lightweight UI mockups or interaction sketches for a feature.
 
-**Owning agents:** user-experience-engineer, user-interface-designer
+**Owning agents:** user-experience-engineer, user-interface-designer, interaction-designer, brand-designer, advertising-designer, motion-designer, design-systems-designer, accessibility-specialist
 
 ## Inputs
 

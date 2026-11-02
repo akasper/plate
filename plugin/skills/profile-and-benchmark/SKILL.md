@@ -15,7 +15,7 @@ description: Instrument, measure, and report on performance bottlenecks with act
 
 Instrument, measure, and report on performance bottlenecks with actionable optimizations.
 
-**Owning agents:** performance-engineer
+**Owning agents:** performance-engineer, machine-learning-engineer
 
 ## Inputs
 
