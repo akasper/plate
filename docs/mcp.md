@@ -12,7 +12,7 @@ When no profile is configured, plate-mcp uses the **`default`** profile: a lean 
 |---|---|
 | `issue` | Repository health, epic status, feature detection |
 | `task` | Human-only Task issue helpers |
-| `review` | PR babysit, merge gates, review-thread helpers |
+| `review` | PR babysit, merge gates, `plate_pr_verify`, review-thread helpers |
 | `delegation` | Baseline agents, skills, context map, `plate_delegate_to_agent` |
 | `process` | `plate_what_next`, `plate_feed` |
 
@@ -92,9 +92,13 @@ Example `.mcp.json` fragment with optional profiles:
 
 Leave `env` unset to keep the lean default.
 
+## PR verify (#1365)
+
+`gh plate pr verify <N>` and MCP `plate_pr_verify` run read-only mechanical pre-merge checks: base branch `main`, PR type and Feature gates (area label, release fragment under `.agentic/releases/unreleased/` or `epic-<NNN>-<slug>/`), milestone, closing keyword, base sync (compare `behind_by == 0`), required CI (latest run per check name, legacy statuses paginated, both check+status must pass when names collide), and paginated unresolved review threads. Exit code 0 only when all checks pass; use `--json` for agents. Optional `--run-tests` / `run_tests=true` runs `PYTHONPATH=src python3 -m unittest discover -s tests` via `run_hidden` and warns when the count looks like a stale base (~1215). This command never merges.
+
 ## Spend ledger (#1352)
 
-Record per-run spend with `plate_ledger_record_spend` (optional token fields, routing inputs, outcome). Attribute with `plate_costs` and `spend_report=true`, or compute one run via `run_cost=true` plus `run_id` or `cloud_agent_id`. CLI: `gh plate ledger --record-spend …`, `gh plate costs --spend-report`, `gh plate costs --run-cost --run-id …`.
+Record per-run spend with `plate_ledger_record_spend` (optional token fields, routing inputs, outcome). Attribute with `plate_costs` and `spend_report=true`, or compute one run via `run_cost=true` plus `run_id` or `cloud_agent_id`. Jev shadow scores (no routing): `plate_ledger_record_jev` or optional `jev_*` on `plate_ledger_record_spend`; CLI `gh plate ledger --record-jev-score …`. CLI: `gh plate ledger --record-spend …`, `gh plate costs --spend-report`, `gh plate costs --run-cost --run-id …`.
 
 ## PR evidence packet (#1364)
 

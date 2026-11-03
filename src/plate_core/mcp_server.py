@@ -31,6 +31,7 @@ from .pr_babysit import (
     resolve_review_thread,
 )
 from .pr_packet import build_pr_packet
+from .pr_verify import verify_pr
 from .plate_config import apply_plate_config_upgrade, get_plate_config_report, init_plate_config
 from .release import (
     cleanup_dead_branches,
@@ -56,6 +57,7 @@ from .ledger import (
     list_decisions,
     query_decisions,
     record_decision,
+    record_jev_score,
     record_spend_interval,
 )
 from .feed import get_user_feed
@@ -765,6 +767,19 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = get_pr_merge_gates(
                 pr_number=pr_number,
                 repo=args.get("repo"),
+            )
+        elif name == "plate_pr_verify":
+            pr_number = args.get("pr_number")
+            if pr_number is None:
+                raise ValueError("pr_number is required")
+            pr_number = int(pr_number)
+            if pr_number <= 0:
+                raise ValueError("pr_number must be > 0")
+            payload = verify_pr(
+                pr_number=pr_number,
+                repo=args.get("repo"),
+                run_tests=bool(args.get("run_tests", False)),
+                repo_root=args.get("repo_root"),
             )
         elif name == "plate_resolve_review_thread":
             thread_id = args.get("thread_id")
@@ -1915,6 +1930,30 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 rediscovery_count=args.get("rediscovery_count"),
                 outcome_accepted=args.get("outcome_accepted"),
                 cost_usd=args.get("cost_usd"),
+                jev_score=args.get("jev_score"),
+                jev_suggested_tier=args.get("jev_suggested_tier"),
+                jev_model=args.get("jev_model"),
+                jev_route_clarity=args.get("jev_route_clarity"),
+                related_issue=args.get("related_issue"),
+                related_pr=args.get("related_pr"),
+                session=str(args.get("session") or ""),
+                metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
+            )
+        elif name == "plate_ledger_record_jev":
+            payload = record_jev_score(
+                jev_score=float(args["jev_score"]),
+                run_id=args.get("run_id"),
+                cloud_agent_id=args.get("cloud_agent_id"),
+                lifecycle_task_type=str(args.get("lifecycle_task_type") or ""),
+                jev_suggested_tier=args.get("jev_suggested_tier"),
+                jev_model=args.get("jev_model"),
+                jev_route_clarity=args.get("jev_route_clarity"),
+                tier=args.get("tier"),
+                model=args.get("model"),
+                route_clarity=args.get("route_clarity"),
+                hardware=args.get("hardware"),
+                effort=args.get("effort"),
+                outcome_accepted=args.get("outcome_accepted"),
                 related_issue=args.get("related_issue"),
                 related_pr=args.get("related_pr"),
                 session=str(args.get("session") or ""),
@@ -3048,6 +3087,38 @@ def run() -> None:
                                         "pr_number": {
                                             "type": "integer",
                                             "description": "Pull request number.",
+                                        },
+                                    },
+                                    "required": ["pr_number"],
+                                },
+                            },
+                            {
+                                "name": "plate_pr_verify",
+                                "description": (
+                                    "Run scripted pre-merge checks for a PR (base main, labels, fragment, milestone, "
+                                    "closing keyword, CI, review threads). Read-only; never merges. Optional run_tests."
+                                ),
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "pr_number": {
+                                            "type": "integer",
+                                            "description": "Pull request number.",
+                                        },
+                                        "run_tests": {
+                                            "type": "boolean",
+                                            "description": (
+                                                "When true, run PYTHONPATH=src python3 -m unittest discover -s tests "
+                                                "locally and include the count (warns on stale-base signatures)."
+                                            ),
+                                        },
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Repository root for run_tests (default: .).",
                                         },
                                     },
                                     "required": ["pr_number"],
@@ -4921,11 +4992,45 @@ def run() -> None:
                                         "rediscovery_count": {"type": "integer"},
                                         "outcome_accepted": {"type": "boolean"},
                                         "cost_usd": {"type": "number"},
+                                        "jev_score": {"type": "number", "description": "Shadow Jev score (#1356); not used for routing"},
+                                        "jev_suggested_tier": {"type": "string", "description": "T0|T1|T2|T3 suggested by Jev"},
+                                        "jev_model": {"type": "string", "description": "Model id Jev suggests"},
+                                        "jev_route_clarity": {"type": "string", "description": "clear|ambiguous per Jev"},
                                         "related_issue": {"type": "integer"},
                                         "related_pr": {"type": "integer"},
                                         "session": {"type": "string"},
                                         "metadata": {"type": "object"},
                                     },
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_record_jev",
+                                "description": "Append Jev shadow scores on a spend_interval ledger row (#1356). Records parallel routing opinion alongside fixed-table execution; nothing reads this for routing until 60+ labeled runs.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "jev_score": {"type": "number", "description": "Required shadow score"},
+                                        "run_id": {"type": "string"},
+                                        "cloud_agent_id": {"type": "string"},
+                                        "lifecycle_task_type": {
+                                            "type": "string",
+                                            "description": "e.g. marketing_copy, support_triage, feature_impl",
+                                        },
+                                        "jev_suggested_tier": {"type": "string", "description": "T0|T1|T2|T3"},
+                                        "jev_model": {"type": "string"},
+                                        "jev_route_clarity": {"type": "string", "description": "clear|ambiguous"},
+                                        "tier": {"type": "string", "description": "Applied fixed-table tier for comparison"},
+                                        "model": {"type": "string", "description": "Applied model for comparison"},
+                                        "route_clarity": {"type": "string", "description": "Applied route clarity"},
+                                        "hardware": {"type": "string"},
+                                        "effort": {"type": "string"},
+                                        "outcome_accepted": {"type": "boolean"},
+                                        "related_issue": {"type": "integer"},
+                                        "related_pr": {"type": "integer"},
+                                        "session": {"type": "string"},
+                                        "metadata": {"type": "object"},
+                                    },
+                                    "required": ["jev_score"],
                                 },
                             },
                             {

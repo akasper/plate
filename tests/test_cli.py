@@ -631,6 +631,13 @@ class CliTests(unittest.TestCase):
         sleep.assert_called_once_with(1, 100)
         clear_pid.assert_called_once()
 
+    def test_ledger_record_jev_score_requires_jev_score(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = main(["ledger", "--record-jev-score", "--run-id", "run-1"])
+        self.assertEqual(code, 2)
+        self.assertIn("--jev-score", err.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

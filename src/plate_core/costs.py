@@ -170,6 +170,14 @@ def _parse_usd(cost_str: str | None) -> float:
         return 0.0
 
 
+def _interval_counts_toward_outcomes(iv: dict[str, Any]) -> bool:
+    """Jev shadow-only rows annotate routing; they must not affect outcome metrics (#1356)."""
+    meta = iv.get("metadata")
+    if isinstance(meta, dict) and meta.get("jev_shadow_mode"):
+        return False
+    return True
+
+
 def _aggregate_spend_intervals(intervals: list[dict[str, Any]]) -> dict[str, Any]:
     total_tokens = 0
     has_tokens = False
@@ -186,6 +194,8 @@ def _aggregate_spend_intervals(intervals: list[dict[str, Any]]) -> dict[str, Any
         if iv.get("cost_usd") is not None:
             has_cost = True
             total_cost += float(iv["cost_usd"])
+        if not _interval_counts_toward_outcomes(iv):
+            continue
         outcome = iv.get("outcome_accepted")
         if outcome is True:
             accepted += 1

@@ -1,0 +1,16 @@
+{
+  "slug": "pr-verify-1365",
+  "change_type": "feature",
+  "surface": "src/plate_core/pr_verify.py, cli.py, mcp_server.py, docs/mcp.md",
+  "summary": "Add gh plate pr verify and plate_pr_verify MCP tool (#1365): scripted read-only pre-merge checks (base main, labels, Feature fragment, milestone, closing keyword, base sync, required CI with cancelled-run dedupe, review threads). Optional local unittest discover with stale-base count warning.",
+  "migration_impact": "Additive CLI subcommand and MCP tool in the default review profile. No merge or mutation behavior.",
+  "migration_guidance": [
+    "1. Agents run gh plate pr verify <N> --json before requesting human merge.",
+    "2. Optional gh plate pr verify <N> --run-tests to confirm unittest count on current main.",
+    "3. MCP hosts use plate_pr_verify with pr_number (and optional run_tests)."
+  ],
+  "agent_notes": "Report-only; never merge from pr verify. Wrong-base PRs fail the base_branch check.",
+  "breaking": false,
+  "links": ["#1365", "#1352", "#1327"],
+  "requires": ["0.8.6"]
+}
