@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 import shutil
 import subprocess
 import tempfile
@@ -12,11 +13,13 @@ from unittest.mock import Mock, patch
 
 from plate_core.bootstrap import (
     _maybe_queue_bootstrap_current_md,
+    _remote_repo_path_missing,
     run_bootstrap,
 )
 from plate_core.github_client import GhApiError
 from plate_core.health import HealthReport
-from plate_core.import_payload import import_payload
+from plate_core.import_payload import import_payload, list_payload_relative_paths
+from plate_core.payload_surface import filter_plate_scripts
 from plate_core.template_payload import payload_root, resolve_template_source
 
 
@@ -70,6 +73,80 @@ def _bash_executable() -> str | None:
 
 
 class BootstrapGreenfieldCurrentMdTests(unittest.TestCase):
+    def test_remote_path_missing_when_ref_unknown(self):
+        """Unknown parent ref means path absent for planning (#1322 review)."""
+        client = Mock()
+        self.assertTrue(_remote_repo_path_missing("owner/repo", client, "CURRENT.md", None))
+        client.api.assert_not_called()
+
+    def test_maybe_queue_current_md_without_parent_ref(self):
+        """Grouped seed plans CURRENT.md when branch tip ref is not resolved yet."""
+        pending: list[tuple[str, bytes]] = []
+        client = Mock()
+        self.assertTrue(
+            _maybe_queue_bootstrap_current_md("owner/repo", client, None, pending)
+        )
+        self.assertEqual([rel for rel, _ in pending], ["CURRENT.md"])
+        client.api.assert_not_called()
+
+    def test_dry_run_counts_current_md_when_branch_ref_missing(self):
+        """Dry-run must plan CURRENT.md seed on empty repos (no initial commit ref)."""
+        health = HealthReport(
+            repo="akasper/empty-greenfield",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=False,
+            open_epic_count=0,
+            status="warn",
+            goals_page_present=False,
+            open_question_count=0,
+            plate_config_present=False,
+            plate_config_valid=False,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+        template_root, _source = resolve_template_source()
+        rel_paths, _omitted = filter_plate_scripts(
+            list_payload_relative_paths(template_root),
+            "posix",
+        )
+        expected_would_copy = len(rel_paths) + 1  # template payload + CURRENT.md
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            if endpoint == "repos/akasper/empty-greenfield":
+                return {"has_wiki": False, "default_branch": "main"}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint.startswith("repos/akasper/empty-greenfield/contents/"):
+                raise GhApiError("HTTP 404 Not Found")
+            if endpoint == "repos/akasper/empty-greenfield/git/ref/heads/main":
+                raise GhApiError("HTTP 404 Not Found")
+            if endpoint.startswith("repos/akasper/empty-greenfield/branches/"):
+                raise GhApiError("HTTP 404 Not Found")
+            return {}
+
+        client.api.side_effect = api_side
+        with patch("plate_core.bootstrap.get_health", return_value=health), patch(
+            "plate_core.bootstrap.resolve_template_source",
+            return_value=(template_root, "bundled"),
+        ):
+            report = run_bootstrap(
+                "akasper/empty-greenfield",
+                apply_mode=False,
+                client=client,
+                adopt=False,
+            )
+
+        copy_action = next(a for a in report.actions if a.name == "copy-template-payload")
+        self.assertEqual(copy_action.state, "planned")
+        self.assertIn("Would copy", copy_action.detail)
+        match = re.search(r"Would copy (\d+) missing", copy_action.detail)
+        self.assertIsNotNone(match, copy_action.detail)
+        would_copy = int(match.group(1))
+        self.assertEqual(would_copy, expected_would_copy, copy_action.detail)
+
     def test_grouped_commit_includes_minimal_current_md(self):
         """Greenfield bootstrap apply queues CURRENT.md in the grouped payload commit (#1322)."""
         health = HealthReport(

@@ -876,7 +876,7 @@ def _remote_repo_path_missing(
 ) -> bool:
     """True when ``rel_path`` is absent at ``parent_ref`` (or ref unknown)."""
     if not parent_ref:
-        return False
+        return True
     endpoint = _contents_endpoint_at_ref(repo, rel_path, parent_ref)
     try:
         payload = gh.api(endpoint)
@@ -920,7 +920,7 @@ def _maybe_queue_bootstrap_current_md(
     pending_writes: list[tuple[str, bytes]],
 ) -> bool:
     """Queue minimal CURRENT.md for grouped bootstrap when remote file is absent (#1322 / #618)."""
-    if not parent_ref or not _remote_repo_path_missing(repo, gh, "CURRENT.md", parent_ref):
+    if not _remote_repo_path_missing(repo, gh, "CURRENT.md", parent_ref):
         return False
     rels = [rel for rel, _ in pending_writes]
     has_pw = _bootstrap_playwright_detected(repo, gh, parent_ref, rels)
@@ -1095,7 +1095,7 @@ def run_bootstrap(
             write_missing=False,
             parent_ref=plan_parent_sha,
         )
-        if plan_parent_sha and _remote_repo_path_missing(target, gh, "CURRENT.md", plan_parent_sha):
+        if _remote_repo_path_missing(target, gh, "CURRENT.md", plan_parent_sha):
             would_copy += 1
         state = "planned"
         if adoption_mode:
