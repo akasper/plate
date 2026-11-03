@@ -1,0 +1,15 @@
+{
+  "slug": "agent-crews-pilot-protocol-1353",
+  "change_type": "documentation",
+  "surface": "docs/design/agent-crews-pilot-protocol.md, docs/design/agent-crews-task-spec.md",
+  "summary": "Agent crews pilot protocol (#1353): paired single-agent vs crew runs on plate and DentalCoach, fixed 30% win threshold and 12-point cap, task mix including lifecycle work, ledger recording fields from #1352, stop rules and report format.",
+  "migration_impact": "Documentation only. Teams running the #1338 pilot should follow the new protocol; no code or workflow changes.",
+  "migration_guidance": [
+    "1. Read docs/design/agent-crews-pilot-protocol.md before scheduling pilot runs.",
+    "2. Record spend with gh plate ledger --record-spend and attribute runs with gh plate costs --run-cost; never invent token or cost values.",
+    "3. On DentalCoach use paired-arm comparison only; do not claim a merged-PR historical baseline."
+  ],
+  "agent_notes": "Closes design scope for #1353. Win metric is all-in cost per accepted outcome with escaped defects no worse; ~20 pairs are directional; ~30-76 pairs needed for a strong 30% cost claim.",
+  "breaking": false,
+  "links": ["#1353", "#1338", "#1352", "#1327"]
+}
