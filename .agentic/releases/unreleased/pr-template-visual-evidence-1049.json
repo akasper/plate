@@ -1,0 +1,15 @@
+{
+  "slug": "pr-template-visual-evidence-1049",
+  "change_type": "feature",
+  "surface": ".github/PULL_REQUEST_TEMPLATE.md",
+  "summary": "Slim PLATE PR template: Summary, What changed, How verified, Links, and Visual evidence with gh --attach guidance; repo and template_payload copies stay aligned.",
+  "migration_impact": "Adopters should import or refresh PULL_REQUEST_TEMPLATE.md (--strategy safe overwrites taxonomy/templates). Author/reviewer models use list lines under Agent review models.",
+  "migration_guidance": [
+    "Run gh plate import-payload --dry-run then --apply with --strategy safe to refresh the PR template, or merge the updated file manually.",
+    "Use gh pr create|edit --body-file and --attach for screenshots; do not commit images.",
+    "Fill Author model and Reviewer model list lines when pr-gates reviewer-model warnings apply."
+  ],
+  "agent_notes": "PR bodies follow the slim section layout; Visual evidence is optional with an explicit N/A line when no UI changed.",
+  "breaking": false,
+  "links": ["#1049", "#1048", "#1053"]
+}

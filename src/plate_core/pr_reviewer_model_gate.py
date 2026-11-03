@@ -28,6 +28,10 @@ _PLACEHOLDER = re.compile(
 )
 
 _TABLE_ROW = re.compile(r"^\s*\|(.+)\|\s*$")
+_ROLE_LINE = re.compile(
+    r"^\s*(?:[-*]\s+)?(?:\*\*)?(Author model|Reviewer model)(?:\*\*)?\s*:\s*(.*)$",
+    re.IGNORECASE,
+)
 _SECTION_HEADING = re.compile(r"^##\s+Agent review models\s*$", re.IGNORECASE)
 _NEXT_SECTION = re.compile(r"^##\s+")
 _AUTHOR_LABEL = "author model"
@@ -172,18 +176,31 @@ def parse_review_models_from_body(body: str) -> ParsedReviewModels:
 
         line = _strip_inline_html_comments(bare)
         match = _TABLE_ROW.match(line)
-        if not match:
+        if match:
+            cells = _split_table_cells(match.group(1))
+            role = _row_role(cells)
+            if role == "author":
+                if author is not None:
+                    parse_errors.append("Duplicate **Author model** row in Agent review models table.")
+                author = cells[1]
+            elif role == "reviewer":
+                if reviewer is not None:
+                    parse_errors.append("Duplicate **Reviewer model** row in Agent review models table.")
+                reviewer = cells[1]
             continue
-        cells = _split_table_cells(match.group(1))
-        role = _row_role(cells)
-        if role == "author":
+        role_match = _ROLE_LINE.match(line)
+        if not role_match:
+            continue
+        label = _normalize_row_label(role_match.group(1))
+        value = role_match.group(2).strip()
+        if label == _AUTHOR_LABEL:
             if author is not None:
-                parse_errors.append("Duplicate **Author model** row in Agent review models table.")
-            author = cells[1]
-        elif role == "reviewer":
+                parse_errors.append("Duplicate **Author model** line in Agent review models section.")
+            author = value
+        elif label == _REVIEWER_LABEL:
             if reviewer is not None:
-                parse_errors.append("Duplicate **Reviewer model** row in Agent review models table.")
-            reviewer = cells[1]
+                parse_errors.append("Duplicate **Reviewer model** line in Agent review models section.")
+            reviewer = value
 
     return ParsedReviewModels(author, reviewer, tuple(parse_errors))
 

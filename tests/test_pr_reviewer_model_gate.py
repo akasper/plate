@@ -75,6 +75,18 @@ class ReviewModelGateTests(unittest.TestCase):
         self.assertEqual(parsed.reviewer, "copilot")
         self.assertTrue(evaluate_review_model_gate_from_body(body).ok)
 
+    def test_parse_list_lines_from_body(self):
+        body = """
+## Agent review models
+
+- Author model: cursor-grok-4.6-high
+- Reviewer model: copilot
+"""
+        parsed = parse_review_models_from_body(body)
+        self.assertEqual(parsed.author, "cursor-grok-4.6-high")
+        self.assertEqual(parsed.reviewer, "copilot")
+        self.assertTrue(evaluate_review_model_gate_from_body(body).ok)
+
     def test_parse_ignores_rows_outside_section(self):
         body = """
 | Author model | evil-author |
