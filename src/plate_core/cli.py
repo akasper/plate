@@ -89,8 +89,21 @@ from .migrate_docs_namespace import migrate_docs_namespace
 from .costs import get_cost_report
 from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle, simulate_autonomy_action
 from .checkpoint import create_checkpoint, decide_checkpoint, get_checkpoint, list_checkpoints, list_open_checkpoints
-from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
+from .ledger import get_decision, list_decisions, query_decisions, record_decision, record_spend_interval, ledger_summary
 from .feed import get_user_feed
+
+
+def _parse_optional_bool(value: str | None) -> bool | None:
+    if value is None or value == "":
+        return None
+    low = str(value).strip().lower()
+    if low in ("true", "1", "yes", "accepted"):
+        return True
+    if low in ("false", "0", "no", "rejected"):
+        return False
+    raise argparse.ArgumentTypeError(f"expected boolean, got {value!r}")
+
+
 from .planning import (
     apply_planning_answer,
     build_plan_from_session,
@@ -1792,7 +1805,44 @@ def cmd_hooks(args: argparse.Namespace) -> int:
 
 
 def cmd_costs(args: argparse.Namespace) -> int:
-    from .costs import format_cost_markdown, get_cost_dashboard, get_cost_report
+    from .costs import (
+        compute_run_all_in_cost,
+        format_cost_markdown,
+        format_spend_attribution_markdown,
+        get_cost_dashboard,
+        get_cost_report,
+        get_spend_attribution_report,
+    )
+
+    if getattr(args, "run_cost", False):
+        out = compute_run_all_in_cost(
+            run_id=getattr(args, "run_id", None),
+            cloud_agent_id=getattr(args, "cloud_agent_id", None),
+            base_dir=getattr(args, "ledger_base_dir", None),
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0 if out.get("ok") else 1
+        if not out.get("ok"):
+            print(out.get("error") or "run cost failed", file=sys.stderr)
+            return 1
+        print(
+            f"run={out.get('run_id') or out.get('cloud_agent_id')} "
+            f"tokens={out.get('total_tokens')} usd={out.get('total_cost_usd')} "
+            f"intervals={out.get('interval_count')}"
+        )
+        return 0
+
+    if getattr(args, "spend_report", False):
+        report = get_spend_attribution_report(
+            base_dir=getattr(args, "ledger_base_dir", None),
+            limit=int(getattr(args, "limit", 500) or 500),
+        )
+        if args.json:
+            print(json.dumps(report))
+            return 0
+        print(format_spend_attribution_markdown(report))
+        return 0
 
     if getattr(args, "dashboard", False):
         dash = get_cost_dashboard(repo=args.repo, epic_label=getattr(args, "epic_label", None))
@@ -1817,6 +1867,37 @@ def cmd_costs(args: argparse.Namespace) -> int:
 
 def cmd_ledger(args: argparse.Namespace) -> int:
     """Provenance / decision ledger CLI (#647)."""
+    if getattr(args, "record_spend", False):
+        out = record_spend_interval(
+            cloud_agent_id=getattr(args, "cloud_agent_id", None),
+            parent_run_id=getattr(args, "parent_run_id", None),
+            run_id=getattr(args, "run_id", None),
+            lifecycle_task_type=getattr(args, "lifecycle_task_type", None) or "",
+            model=getattr(args, "model", None),
+            tier=getattr(args, "tier", None),
+            effort=getattr(args, "effort", None),
+            hardware=getattr(args, "hardware", None),
+            route_clarity=getattr(args, "route_clarity", None),
+            input_tokens=getattr(args, "input_tokens", None),
+            output_tokens=getattr(args, "output_tokens", None),
+            cached_read_tokens=getattr(args, "cached_read_tokens", None),
+            cache_write_tokens=getattr(args, "cache_write_tokens", None),
+            tool_output_tokens=getattr(args, "tool_output_tokens", None),
+            turns=getattr(args, "turns", None),
+            handoff_packet_size=getattr(args, "handoff_packet_size", None),
+            handoff_packet_unit=getattr(args, "handoff_packet_unit", None),
+            rediscovery_count=getattr(args, "rediscovery_count", None),
+            outcome_accepted=getattr(args, "outcome_accepted", None),
+            cost_usd=getattr(args, "cost_usd", None),
+            related_issue=getattr(args, "related_issue", None),
+            related_pr=getattr(args, "related_pr", None),
+            session=getattr(args, "session", None) or "",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(f"recorded spend interval {out.get('id')} run={out.get('run_id')} agent={out.get('cloud_agent_id')}")
+        return 0
     if getattr(args, "record", False):
         out = record_decision(
             action_kind=getattr(args, "action_kind", None) or "unknown",
@@ -5333,6 +5414,25 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Cost+risk dashboard with budgets, burn, drift signals, ranked feed items (#653/#634)",
     )
+    costs.add_argument(
+        "--spend-report",
+        action="store_true",
+        help="Attribute spend from .agentic/ledger spend_interval rows; list unattributed separately (#1352)",
+    )
+    costs.add_argument(
+        "--run-cost",
+        action="store_true",
+        help="Compute all-in ledger cost for --run-id or --cloud-agent-id (#1352)",
+    )
+    costs.add_argument("--run-id", dest="run_id", help="Run id for --run-cost")
+    costs.add_argument("--cloud-agent-id", dest="cloud_agent_id", help="Cloud agent id for --run-cost")
+    costs.add_argument(
+        "--ledger-base-dir",
+        dest="ledger_base_dir",
+        type=Path,
+        help="Ledger directory for spend attribution (default .agentic/ledger)",
+    )
+    costs.add_argument("--limit", type=int, default=500, help="Max spend intervals for --spend-report")
     costs.add_argument("--json", action="store_true", help="Output JSON")
     costs.set_defaults(func=cmd_costs)
 
@@ -5342,6 +5442,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ledger.add_argument("--json", action="store_true")
     ledger.add_argument("--record", action="store_true", help="Record a decision entry")
+    ledger.add_argument(
+        "--record-spend",
+        action="store_true",
+        help="Record a spend_interval entry (#1352)",
+    )
+    ledger.add_argument("--cloud-agent-id", dest="cloud_agent_id")
+    ledger.add_argument("--parent-run-id", dest="parent_run_id")
+    ledger.add_argument("--run-id", dest="run_id")
+    ledger.add_argument("--lifecycle-task-type", dest="lifecycle_task_type")
+    ledger.add_argument("--model")
+    ledger.add_argument("--tier")
+    ledger.add_argument("--effort")
+    ledger.add_argument("--hardware")
+    ledger.add_argument("--route-clarity", dest="route_clarity")
+    ledger.add_argument("--input-tokens", dest="input_tokens", type=int)
+    ledger.add_argument("--output-tokens", dest="output_tokens", type=int)
+    ledger.add_argument("--cached-read-tokens", dest="cached_read_tokens", type=int)
+    ledger.add_argument("--cache-write-tokens", dest="cache_write_tokens", type=int)
+    ledger.add_argument("--tool-output-tokens", dest="tool_output_tokens", type=int)
+    ledger.add_argument("--turns", type=int)
+    ledger.add_argument("--handoff-packet-size", dest="handoff_packet_size", type=int)
+    ledger.add_argument("--handoff-packet-unit", dest="handoff_packet_unit")
+    ledger.add_argument("--rediscovery-count", dest="rediscovery_count", type=int)
+    ledger.add_argument("--outcome-accepted", dest="outcome_accepted", type=_parse_optional_bool)
+    ledger.add_argument("--cost-usd", dest="cost_usd", type=float)
     ledger.add_argument("--action-kind", dest="action_kind", help="Action kind for --record or filter")
     ledger.add_argument("--decision", help="Decision value (proceed|throttle|pause|...)")
     ledger.add_argument("--reason", help="Why this decision was made")

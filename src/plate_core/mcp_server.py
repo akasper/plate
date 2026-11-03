@@ -49,7 +49,14 @@ from .checkpoint import (
     list_checkpoints,
     list_open_checkpoints,
 )
-from .ledger import get_decision, list_decisions, query_decisions, record_decision, ledger_summary
+from .ledger import (
+    get_decision,
+    ledger_summary,
+    list_decisions,
+    query_decisions,
+    record_decision,
+    record_spend_interval,
+)
 from .feed import get_user_feed
 from .planning import (
     apply_planning_answer,
@@ -860,7 +867,29 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 releases_dir=Path(releases_dir_arg) if releases_dir_arg else None,
             ).to_dict()
         elif name == "plate_costs":
-            if args.get("dashboard"):
+            from pathlib import Path as _LedgerPath
+
+            ledger_base = (
+                _LedgerPath(str(args["ledger_base_dir"]))
+                if args.get("ledger_base_dir")
+                else None
+            )
+            if args.get("run_cost"):
+                from .costs import compute_run_all_in_cost
+
+                payload = compute_run_all_in_cost(
+                    run_id=args.get("run_id"),
+                    cloud_agent_id=args.get("cloud_agent_id"),
+                    base_dir=ledger_base,
+                )
+            elif args.get("spend_report") or args.get("spend_attribution"):
+                from .costs import get_spend_attribution_report
+
+                payload = get_spend_attribution_report(
+                    base_dir=ledger_base,
+                    limit=int(args.get("limit") or 500),
+                )
+            elif args.get("dashboard"):
                 from .costs import get_cost_dashboard
                 payload = get_cost_dashboard(
                     repo=args.get("repo"),
@@ -1843,6 +1872,33 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 checkpoint_id=args.get("checkpoint_id"),
                 artifact_links=list(args.get("artifact_links") or []),
                 actor=str(args.get("actor") or "agent"),
+                session=str(args.get("session") or ""),
+                metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
+            )
+        elif name == "plate_ledger_record_spend":
+            payload = record_spend_interval(
+                cloud_agent_id=args.get("cloud_agent_id"),
+                parent_run_id=args.get("parent_run_id"),
+                run_id=args.get("run_id"),
+                lifecycle_task_type=str(args.get("lifecycle_task_type") or ""),
+                model=args.get("model"),
+                tier=args.get("tier"),
+                effort=args.get("effort"),
+                hardware=args.get("hardware"),
+                route_clarity=args.get("route_clarity"),
+                input_tokens=args.get("input_tokens"),
+                output_tokens=args.get("output_tokens"),
+                cached_read_tokens=args.get("cached_read_tokens"),
+                cache_write_tokens=args.get("cache_write_tokens"),
+                tool_output_tokens=args.get("tool_output_tokens"),
+                turns=args.get("turns"),
+                handoff_packet_size=args.get("handoff_packet_size"),
+                handoff_packet_unit=args.get("handoff_packet_unit"),
+                rediscovery_count=args.get("rediscovery_count"),
+                outcome_accepted=args.get("outcome_accepted"),
+                cost_usd=args.get("cost_usd"),
+                related_issue=args.get("related_issue"),
+                related_pr=args.get("related_pr"),
                 session=str(args.get("session") or ""),
                 metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
             )
@@ -3325,6 +3381,21 @@ def run() -> None:
                                             "type": "boolean",
                                             "description": "When true, return cost+risk dashboard (#653/#634) instead of raw aggregate.",
                                         },
+                                        "spend_report": {
+                                            "type": "boolean",
+                                            "description": "When true, return spend attribution from .agentic/ledger spend_interval rows (#1352).",
+                                        },
+                                        "run_cost": {
+                                            "type": "boolean",
+                                            "description": "When true, compute all-in cost for run_id or cloud_agent_id from ledger intervals (#1352).",
+                                        },
+                                        "run_id": {"type": "string"},
+                                        "cloud_agent_id": {"type": "string"},
+                                        "ledger_base_dir": {
+                                            "type": "string",
+                                            "description": "Optional ledger root (defaults to .agentic/ledger).",
+                                        },
+                                        "limit": {"type": "integer"},
                                     },
                                     "required": [],
                                 },
@@ -4775,6 +4846,39 @@ def run() -> None:
                                         "metadata": {"type": "object"},
                                     },
                                     "required": ["action_kind", "decision", "reason"],
+                                },
+                            },
+                            {
+                                "name": "plate_ledger_record_spend",
+                                "description": "Append a spend_interval ledger row with tokens, routing inputs, and outcome (#1352). Durable under .agentic/ledger/.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "cloud_agent_id": {"type": "string"},
+                                        "parent_run_id": {"type": "string"},
+                                        "run_id": {"type": "string"},
+                                        "lifecycle_task_type": {"type": "string"},
+                                        "model": {"type": "string"},
+                                        "tier": {"type": "string", "description": "T0|T1|T2|T3"},
+                                        "effort": {"type": "string"},
+                                        "hardware": {"type": "string", "description": "Optional Lull resource id"},
+                                        "route_clarity": {"type": "string", "description": "clear|ambiguous"},
+                                        "input_tokens": {"type": "integer"},
+                                        "output_tokens": {"type": "integer"},
+                                        "cached_read_tokens": {"type": "integer"},
+                                        "cache_write_tokens": {"type": "integer"},
+                                        "tool_output_tokens": {"type": "integer"},
+                                        "turns": {"type": "integer"},
+                                        "handoff_packet_size": {"type": "integer"},
+                                        "handoff_packet_unit": {"type": "string", "description": "tokens|bytes"},
+                                        "rediscovery_count": {"type": "integer"},
+                                        "outcome_accepted": {"type": "boolean"},
+                                        "cost_usd": {"type": "number"},
+                                        "related_issue": {"type": "integer"},
+                                        "related_pr": {"type": "integer"},
+                                        "session": {"type": "string"},
+                                        "metadata": {"type": "object"},
+                                    },
                                 },
                             },
                             {

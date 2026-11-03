@@ -42,12 +42,12 @@ Enable additional surfaces by name (comma-separated). Each tool belongs to one o
 | `packaging` | Marketplace packaging |
 | `scheduled_ops` | Scheduled operations |
 | `collab` | Driver / ownership collaboration |
-| `ledger` | Decision ledger |
+| `ledger` | Decision ledger + spend intervals (#1352) |
 | `autonomy` | Autonomy engine, checkpoints, procedures |
 | `migrate` | Migration planner/apply, docs namespace |
 | `audit` | SPEC audit, information audit |
 | `discussions` | GitHub Discussions helpers |
-| `costs` | Token/cost reporting |
+| `costs` | Token/cost reporting + spend attribution (`spend_report`, `run_cost` on `plate_costs`) |
 | `all` | Every registered MCP tool (explicit full catalog) |
 
 ## Configuration
@@ -91,6 +91,10 @@ Example `.mcp.json` fragment with optional profiles:
 ```
 
 Leave `env` unset to keep the lean default.
+
+## Spend ledger (#1352)
+
+Record per-run spend with `plate_ledger_record_spend` (optional token fields, routing inputs, outcome). Attribute with `plate_costs` and `spend_report=true`, or compute one run via `run_cost=true` plus `run_id` or `cloud_agent_id`. CLI: `gh plate ledger --record-spend …`, `gh plate costs --spend-report`, `gh plate costs --run-cost --run-id …`.
 
 ## Related design
 

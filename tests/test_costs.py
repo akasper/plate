@@ -4,11 +4,14 @@ import unittest
 from unittest.mock import Mock, patch
 
 from plate_core.costs import (
+    compute_run_all_in_cost,
     get_cost_dashboard,
     get_cost_report,
+    get_spend_attribution_report,
     harvest_usage_reports,
     _parse_usage_block,
 )
+from plate_core.ledger import record_spend_interval
 
 
 class CostsTests(unittest.TestCase):
@@ -401,6 +404,55 @@ class CostDashboard653Tests(unittest.TestCase):
         )
         gates = [i for i in dash["feed_items"] if i.get("type") == "budget_gate"]
         self.assertTrue(gates, dash["feed_items"])
+
+
+class SpendLedger1352Tests(unittest.TestCase):
+    def test_compute_run_all_in_cost_sums_recorded_tokens(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "ledger"
+            base.mkdir()
+            record_spend_interval(
+                run_id="run-1",
+                cloud_agent_id="agent-1",
+                input_tokens=100,
+                output_tokens=50,
+                cost_usd=0.5,
+                outcome_accepted=True,
+                base_dir=base,
+            )
+            record_spend_interval(
+                run_id="run-1",
+                input_tokens=20,
+                tool_output_tokens=5,
+                cost_usd=0.1,
+                outcome_accepted=False,
+                base_dir=base,
+            )
+            out = compute_run_all_in_cost(run_id="run-1", base_dir=base)
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["total_tokens"], 175)
+            self.assertAlmostEqual(out["total_cost_usd"], 0.6)
+            self.assertEqual(out["accepted_outcomes"], 1)
+
+    def test_attribution_report_lists_unattributed_separately(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "ledger"
+            base.mkdir()
+            record_spend_interval(run_id="run-a", input_tokens=10, base_dir=base)
+            record_spend_interval(cloud_agent_id="agent-only", input_tokens=5, base_dir=base)
+            record_spend_interval(input_tokens=3, base_dir=base)
+            report = get_spend_attribution_report(base_dir=base)
+            keys = {r["attribution_key"] for r in report["attributed_runs"]}
+            self.assertIn("run-a", keys)
+            self.assertIn("agent-only", keys)
+            self.assertEqual(report["unattributed"]["interval_count"], 1)
+            self.assertEqual(report["unattributed"]["total_tokens"], 3)
 
 
 if __name__ == "__main__":
