@@ -94,7 +94,7 @@ Leave `env` unset to keep the lean default.
 
 ## PR verify (#1365)
 
-`gh plate pr verify <N>` and MCP `plate_pr_verify` run read-only mechanical pre-merge checks: base branch `main`, PR type and Feature gates (area label, unreleased fragment), milestone, closing keyword, base sync, required CI (latest run per check name, ignoring cancelled duplicates superseded by success), and unresolved review threads. Exit code 0 only when all checks pass; use `--json` for agents. Optional `--run-tests` / `run_tests=true` runs `PYTHONPATH=src python3 -m unittest discover -s tests` and warns when the count looks like a stale base (~1215). This command never merges.
+`gh plate pr verify <N>` and MCP `plate_pr_verify` run read-only mechanical pre-merge checks: base branch `main`, PR type and Feature gates (area label, release fragment under `.agentic/releases/unreleased/` or `epic-<NNN>-<slug>/`), milestone, closing keyword, base sync (compare `behind_by == 0`), required CI (latest run per check name, legacy statuses paginated, both check+status must pass when names collide), and paginated unresolved review threads. Exit code 0 only when all checks pass; use `--json` for agents. Optional `--run-tests` / `run_tests=true` runs `PYTHONPATH=src python3 -m unittest discover -s tests` via `run_hidden` and warns when the count looks like a stale base (~1215). This command never merges.
 
 ## Spend ledger (#1352)
 

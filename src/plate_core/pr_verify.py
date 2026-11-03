@@ -14,7 +14,12 @@ from typing import Any, Callable
 
 from .github_client import GhApiError, GhClient
 from .health import resolve_repo
-from .pr_babysit import _detect_base_branch_out_of_sync, _load_pr_data, get_unresolved_review_threads
+from .pr_babysit import (
+    _detect_base_branch_out_of_sync,
+    _extract_unresolved_threads,
+    _load_pr_data,
+)
+from .procutil import run_hidden
 from .pr_gates_closing import body_has_strict_closing_keyword
 from .pr_gates_contract import RECOMMENDED_REQUIRED_CHECK_CONTEXTS
 from .pr_watch_guards import (
@@ -27,12 +32,14 @@ from .pr_watch_guards import (
 PR_TYPE_LABELS: tuple[str, ...] = ("Bug", "Feature", "Documentation", "Feedback Response")
 PR_TYPE_BY_LOWER = {name.lower(): name for name in PR_TYPE_LABELS}
 AREA_LABEL_RE = re.compile(r"^area:", re.IGNORECASE)
-UNRELEASED_FRAGMENT_RE = re.compile(
-    r"^\.agentic/releases/unreleased/[^/]+\.json$", re.IGNORECASE
+RELEASE_FRAGMENT_RE = re.compile(
+    r"^\.agentic/releases/(?:unreleased|epic-\d+-[^/]+)/[^/]+\.json$",
+    re.IGNORECASE,
 )
 FAIL_CONCLUSIONS = frozenset(
     {"failure", "timed_out", "cancelled", "action_required", "startup_failure", "error"}
 )
+PASS_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
 STALE_BASE_TEST_COUNT_WARN = 1220
 
 
@@ -70,8 +77,15 @@ def _pr_type_labels(labels: list[str]) -> list[str]:
     return [PR_TYPE_BY_LOWER[name.lower()] for name in labels if name.lower() in PR_TYPE_BY_LOWER]
 
 
-def _run_sort_key(run: dict[str, Any]) -> tuple[str, int]:
-    return (str(run.get("started_at") or run.get("updated_at") or ""), int(run.get("id") or 0))
+def _run_sort_key(run: dict[str, Any]) -> tuple[int, str, int]:
+    """Prefer in-flight runs over older completed runs when timestamps are missing."""
+    status = str(run.get("status") or "").lower()
+    ts = str(run.get("started_at") or run.get("updated_at") or "")
+    run_id = int(run.get("id") or 0)
+    ts_key = ts if ts else f"id:{run_id:020d}"
+    if status != "completed":
+        return (1, ts_key, run_id)
+    return (0, ts_key, run_id)
 
 
 def latest_check_run_by_name(check_runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -83,8 +97,11 @@ def latest_check_run_by_name(check_runs: list[dict[str, Any]]) -> dict[str, dict
         name = str(run.get("name") or "").strip()
         if not name:
             continue
-        grouped.setdefault(name, []).append(run)
-    return {name: max(runs, key=_run_sort_key) for name, runs in grouped.items()}
+        grouped.setdefault(name.lower(), []).append(run)
+    latest: dict[str, dict[str, Any]] = {}
+    for name, runs in grouped.items():
+        latest[name.lower()] = max(runs, key=_run_sort_key)
+    return latest
 
 
 def latest_status_by_context(status_json: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
@@ -98,10 +115,31 @@ def latest_status_by_context(status_json: dict[str, Any] | None) -> dict[str, di
         if not ctx:
             continue
         grouped.setdefault(ctx, []).append(item)
-    return {
-        ctx: max(items, key=lambda s: str(s.get("updated_at") or ""))
-        for ctx, items in grouped.items()
-    }
+    latest: dict[str, dict[str, Any]] = {}
+    for ctx, items in grouped.items():
+        latest[ctx.lower()] = max(items, key=lambda s: str(s.get("updated_at") or ""))
+    return latest
+
+
+def _check_run_issue(run: dict[str, Any]) -> str | None:
+    status = str(run.get("status") or "").lower()
+    conclusion = str(run.get("conclusion") or "").lower()
+    if status != "completed":
+        return "pending"
+    if conclusion in FAIL_CONCLUSIONS:
+        return "failing"
+    if conclusion not in PASS_CONCLUSIONS:
+        return "failing"
+    return None
+
+
+def _status_issue(stat: dict[str, Any]) -> str | None:
+    state = str(stat.get("state") or "").lower()
+    if state in ("pending", "expected", "queued"):
+        return "pending"
+    if state in ("failure", "error"):
+        return "failing"
+    return None
 
 
 def effective_ci_snapshot(
@@ -118,24 +156,23 @@ def effective_ci_snapshot(
     failing: list[str] = []
     pending: list[str] = []
     for ctx in sorted(required):
-        run = latest_runs.get(ctx)
+        ctx_key = ctx.lower()
+        run = latest_runs.get(ctx_key)
+        stat = latest_status.get(ctx_key)
+        issues: list[str] = []
         if run:
-            status = str(run.get("status") or "").lower()
-            conclusion = str(run.get("conclusion") or "").lower()
-            if status != "completed":
-                pending.append(ctx)
-            elif conclusion in FAIL_CONCLUSIONS:
-                failing.append(ctx)
-            continue
-        stat = latest_status.get(ctx)
+            issue = _check_run_issue(run)
+            if issue:
+                issues.append(issue)
         if stat:
-            state = str(stat.get("state") or "").lower()
-            if state in ("pending", "expected", "queued"):
-                pending.append(ctx)
-            elif state in ("failure", "error"):
-                failing.append(ctx)
-            continue
-        if ctx in missing:
+            issue = _status_issue(stat)
+            if issue:
+                issues.append(issue)
+        if "failing" in issues:
+            failing.append(ctx)
+        elif "pending" in issues:
+            pending.append(ctx)
+        elif not run and not stat and ctx in missing:
             pending.append(ctx)
     raw_state = compute_raw_ci_state(status_json, list(latest_runs.values()), missing_required=missing)
     return {
@@ -181,6 +218,8 @@ def _fetch_changed_files(client: GhClient, repo: str, pr_number: int) -> list[st
             break
         for item in batch:
             if isinstance(item, dict):
+                if str(item.get("status") or "") == "removed":
+                    continue
                 filename = item.get("filename")
                 if filename:
                     paths.append(str(filename))
@@ -190,11 +229,33 @@ def _fetch_changed_files(client: GhClient, repo: str, pr_number: int) -> list[st
     return paths
 
 
+def _fetch_commit_statuses(client: GhClient, repo: str, head_sha: str) -> dict[str, Any]:
+    """Fetch all legacy commit statuses (paginated) plus combined rollup state."""
+    owner, name = _split_repo(repo)
+    combined = client.api(f"repos/{owner}/{name}/commits/{head_sha}/status") or {}
+    if not isinstance(combined, dict):
+        combined = {}
+    statuses: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        batch = client.api(
+            f"repos/{owner}/{name}/commits/{head_sha}/statuses",
+            fields={"per_page": 100, "page": page},
+        )
+        if not isinstance(batch, list) or not batch:
+            break
+        statuses.extend(item for item in batch if isinstance(item, dict))
+        if len(batch) < 100:
+            break
+        page += 1
+    if statuses:
+        combined = {**combined, "statuses": statuses}
+    return combined
+
+
 def _fetch_check_runs(client: GhClient, repo: str, head_sha: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     owner, name = _split_repo(repo)
-    status_json = client.api(f"repos/{owner}/{name}/commits/{head_sha}/status") or {}
-    if not isinstance(status_json, dict):
-        status_json = {}
+    status_json = _fetch_commit_statuses(client, repo, head_sha)
     check_runs: list[dict[str, Any]] = []
     page = 1
     while True:
@@ -212,6 +273,90 @@ def _fetch_check_runs(client: GhClient, repo: str, head_sha: str) -> tuple[dict[
     return status_json, check_runs
 
 
+_REVIEW_THREADS_PAGE_QUERY = """
+query($owner: String!, $repo: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          isResolved
+          isOutdated
+          path
+          comments(last: 5) {
+            nodes {
+              databaseId
+              body
+              url
+              path
+              author { login }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+def _load_review_threads_paginated(
+    client: GhClient, repo: str, pr_number: int
+) -> tuple[list[dict[str, Any]], bool]:
+    """Load all review threads; return (nodes, pagination_complete)."""
+    owner, name = _split_repo(repo)
+    nodes: list[dict[str, Any]] = []
+    after: str | None = None
+    while True:
+        fields: dict[str, Any] = {
+            "query": _REVIEW_THREADS_PAGE_QUERY,
+            "owner": owner,
+            "repo": name,
+            "number": pr_number,
+        }
+        if after:
+            fields["after"] = after
+        payload = client.api("graphql", method="POST", fields=fields)
+        if payload and payload.get("errors"):
+            return nodes, False
+        pr = (
+            ((payload or {}).get("data") or {})
+            .get("repository", {})
+            .get("pullRequest", {})
+        )
+        if not pr:
+            return nodes, False
+        conn = pr.get("reviewThreads") or {}
+        batch = conn.get("nodes") or []
+        if isinstance(batch, list):
+            nodes.extend(t for t in batch if isinstance(t, dict))
+        page_info = conn.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            return nodes, True
+        after = page_info.get("endCursor")
+        if not after:
+            return nodes, False
+
+
+def _fetch_compare_behind(
+    client: GhClient, repo: str, base_sha: str, head_sha: str
+) -> dict[str, Any]:
+    if not base_sha or not head_sha:
+        return {"verified": False, "behind_by": None}
+    owner, name = _split_repo(repo)
+    try:
+        payload = client.api(f"repos/{owner}/{name}/compare/{base_sha}...{head_sha}")
+    except GhApiError:
+        return {"verified": False, "behind_by": None}
+    if not isinstance(payload, dict):
+        return {"verified": False, "behind_by": None}
+    behind = payload.get("behind_by")
+    if behind is None:
+        return {"verified": False, "behind_by": None}
+    return {"verified": True, "behind_by": int(behind)}
+
+
 def run_unittest_discover(
     repo_root: str | None = None,
     *,
@@ -220,7 +365,7 @@ def run_unittest_discover(
     """Run the PLATE unit test suite locally (stdlib unittest discover)."""
     cmd = [sys.executable, "-m", "unittest", "discover", "-s", "tests"]
     env = {"PYTHONPATH": "src"}
-    run = runner or subprocess.run
+    run = runner or run_hidden
     completed = run(
         cmd,
         cwd=repo_root or ".",
@@ -259,6 +404,7 @@ def verify_pr(
     labels = _label_names(pull)
     type_matches = _pr_type_labels(labels)
     base_ref = ((pull.get("base") or {}).get("ref") or "").strip()
+    base_sha = ((pull.get("base") or {}).get("sha") or "").strip()
     head_sha = ((pull.get("head") or {}).get("sha") or "").strip()
     body = pull.get("body") or ""
     milestone = pull.get("milestone")
@@ -324,13 +470,13 @@ def verify_pr(
                 )
             )
         paths = _fetch_changed_files(gh, target, pr_number)
-        fragment_paths = [p for p in paths if UNRELEASED_FRAGMENT_RE.match(p)]
+        fragment_paths = [p for p in paths if RELEASE_FRAGMENT_RE.match(p)]
         if fragment_paths:
             checks.append(
                 VerifyCheck(
                     "release_fragment",
                     True,
-                    "Unreleased release fragment present in PR files.",
+                    "Release fragment present under .agentic/releases/unreleased/ or epic-<NNN>-<slug>/.",
                     {"paths": fragment_paths[:5]},
                 )
             )
@@ -339,7 +485,8 @@ def verify_pr(
                 VerifyCheck(
                     "release_fragment",
                     False,
-                    "Feature PRs require a JSON fragment under .agentic/releases/unreleased/.",
+                    "Feature PRs require a JSON fragment under .agentic/releases/unreleased/ "
+                    "or .agentic/releases/epic-<NNN>-<slug>/.",
                 )
             )
     elif pr_type:
@@ -410,13 +557,24 @@ def verify_pr(
 
     pr_data = _load_pr_data(gh, target, pr_number)
     sync = _detect_base_branch_out_of_sync(pr_data)
-    if sync.get("out_of_sync"):
+    compare = _fetch_compare_behind(gh, target, base_sha, head_sha)
+    if not compare.get("verified"):
         checks.append(
             VerifyCheck(
                 "base_sync",
                 False,
-                f"Head branch is out of sync with base ({sync.get('state')}).",
+                "Could not verify head is up to date with base (compare unavailable).",
                 {"merge_state": sync.get("state")},
+            )
+        )
+    elif sync.get("out_of_sync") or int(compare.get("behind_by") or 0) > 0:
+        checks.append(
+            VerifyCheck(
+                "base_sync",
+                False,
+                f"Head branch is out of sync with base ({sync.get('state')}; "
+                f"behind_by={compare.get('behind_by')}).",
+                {"merge_state": sync.get("state"), "behind_by": compare.get("behind_by")},
             )
         )
     else:
@@ -424,7 +582,8 @@ def verify_pr(
             VerifyCheck(
                 "base_sync",
                 True,
-                f"Head branch is up to date with base ({sync.get('state') or 'UNKNOWN'}).",
+                f"Head branch contains current base ({sync.get('state') or 'UNKNOWN'}; behind_by=0).",
+                {"behind_by": 0},
             )
         )
 
@@ -481,18 +640,32 @@ def verify_pr(
         )
 
     try:
-        unresolved = get_unresolved_review_threads(pr_number, repo=target, client=gh)
-        if unresolved:
+        if pr_data.get("review_threads_unavailable"):
+            raise GhApiError(
+                "Review thread data unavailable (GraphQL rate limit REST fallback)"
+            )
+        threads, pagination_complete = _load_review_threads_paginated(gh, target, pr_number)
+        if not pagination_complete:
             checks.append(
                 VerifyCheck(
                     "review_threads",
                     False,
-                    f"{len(unresolved)} unresolved review thread(s).",
-                    {"count": len(unresolved)},
+                    "Review thread pagination incomplete; cannot verify feedback resolution.",
                 )
             )
         else:
-            checks.append(VerifyCheck("review_threads", True, "All review threads resolved."))
+            unresolved = _extract_unresolved_threads(threads)
+            if unresolved:
+                checks.append(
+                    VerifyCheck(
+                        "review_threads",
+                        False,
+                        f"{len(unresolved)} unresolved review thread(s).",
+                        {"count": len(unresolved)},
+                    )
+                )
+            else:
+                checks.append(VerifyCheck("review_threads", True, "All review threads resolved."))
     except GhApiError as exc:
         if pr_data.get("review_threads_unavailable"):
             checks.append(
