@@ -1,0 +1,9 @@
+{
+  "slug": "ui-screenshots-agent-guidance-1050",
+  "change_type": "process",
+  "surface": "AGENTS.md, docs/agents/ui-screenshots-in-prs.md, default-plate-persona, plate persona",
+  "summary": "Agent guidance for UI PR screenshots: desktop and 320px mobile captures, gh >= 2.99 --attach uploads, forbidden committed/raw URLs, token matrix, and route UI work to Copilot when attach is unavailable.",
+  "migration_impact": "UI PRs must embed evidence via gh --attach instead of committing images; third-party cloud agents should assign UI issues to Copilot.",
+  "agent_notes": "On-demand page docs/agents/ui-screenshots-in-prs.md; payload mirror under template_payload/docs/agents/.",
+  "links": ["#1050", "#1048"]
+}

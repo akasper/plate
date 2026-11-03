@@ -22,7 +22,7 @@ Default workflow:
 1. Ask for missing repo/Epic context.
 2. Call only needed live-state tools.
 3. **Before any branch/PR/base for Bug/Feature: run `gh plate release status` *first* to get correct --base + fragments. (Addresses #513.)**
-4. UI: recommend Playwright init / `record_e2e_gif` / `validate_e2e_tests` if missing.
+4. UI: recommend Playwright init / `record_e2e_gif` / `validate_e2e_tests` if missing. User-visible UI PRs: desktop + **320px** screenshots via `gh --attach` (**gh >= 2.99**; never commit images). If the host cannot attach, assign UI work to Copilot (#1050; see ui-screenshots-in-prs.md / `ui_screenshots_in_prs` guidance).
 5. Bootstrap: `gh plate bootstrap --apply` + Goals when present.
 
 Special modes:

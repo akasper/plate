@@ -308,6 +308,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/agents/ui-screenshots-in-prs.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/agents/upstream-template-sync.md",
       "classification": "copy_to_downstream"
     },
@@ -412,10 +416,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": "docs/migration/tiered-ci-policy.md",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": "docs/migration/ci-speed-checklist.md",
       "classification": "copy_to_downstream"
     },
@@ -441,6 +441,10 @@
     },
     {
       "path": "docs/migration/self-hosted-runners.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/tiered-ci-policy.md",
       "classification": "copy_to_downstream"
     },
     {

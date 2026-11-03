@@ -202,6 +202,36 @@ When a step must happen on every push (format, lint, typecheck, or similar fast 
 """
 
 
+UI_SCREENSHOTS_IN_PRS_GUIDANCE = """
+## UI Screenshots in Pull Requests (#1050)
+
+User-visible UI changes require inline visual proof on the PR. **Never commit screenshot binaries to git.**
+
+### Required evidence
+- Desktop-width capture and **320px** mobile-width capture for every UI PR.
+- Before and after shots when altering existing UI (where practical).
+- Embed inline in the PR body or PR comments.
+
+### Upload protocol
+1. Run `gh --version` and confirm **gh >= 2.99** (required for `--attach`).
+2. Upload with `gh pr create|edit|comment --attach ./capture.png` (multiple `--attach` flags allowed).
+
+### Forbidden
+- Committed images in the repo or PR branch.
+- Relative repository paths in markdown image tags.
+- `raw.githubusercontent.com` or `blob/...?raw=true` URLs.
+
+### Who can attach (token matrix)
+- **Yes:** local CLI agents using `gho_`, `ghp_`, or `github_pat_` tokens; GitHub Copilot cloud coding agent.
+- **No:** third-party cloud agents (Cursor, Amp, Devin, etc.) — no user PAT on hosted runners.
+
+### Routing
+Assign UI-heavy issues to **GitHub Copilot's cloud coding agent**. Agents that cannot `--attach` must hand off UI screenshot work to Copilot (or a human with local `gh`), not improvise broken embeds.
+
+See AGENTS.md and docs/agents/ui-screenshots-in-prs.md for the full rule.
+"""
+
+
 def get_agent_guidance_sections() -> dict[str, str]:
     """Return guidance sections for agents."""
     return {
@@ -213,6 +243,7 @@ def get_agent_guidance_sections() -> dict[str, str]:
         "task_management": TASK_MANAGEMENT_GUIDANCE,
         "local_hook_enforcement": LOCAL_HOOK_ENFORCEMENT_GUIDANCE,
         "autonomy_loops": AUTONOMY_LOOPS_GUIDANCE,
+        "ui_screenshots_in_prs": UI_SCREENSHOTS_IN_PRS_GUIDANCE,
     }
 
 

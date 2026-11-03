@@ -12,6 +12,7 @@ When operating in a repository that has adopted PLATE (signaled locally by `.pla
 - This default ensures the full PLATE rules (this document), quiet operations, thin surfaces, delegation packets, ceremony flows, human checkpoints, and traceability are applied consistently.
 - Power users and non-PLATE work can still use other agents or the raw host persona; the opt-out is reversible.
 - Template payloads and onboarding ship with this expectation.
+- **UI screenshot evidence (#1050):** User-visible UI PRs require desktop and **320px** mobile captures (before/after when practical), embedded inline via `gh pr create|edit|comment --attach` after confirming **gh >= 2.99** (`gh --version`). Never commit screenshot binaries or use relative/`raw.githubusercontent.com`/`blob/...?raw=true` embeds. Third-party cloud agents without PAT upload must assign UI work to **GitHub Copilot's cloud coding agent**. See [ui-screenshots-in-prs.md](agents/ui-screenshots-in-prs.md).
 
 ### Workarounds for Default Persona and Auto-Discovery Without Host Coordination
 
