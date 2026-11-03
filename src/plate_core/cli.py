@@ -33,6 +33,7 @@ from .pr_babysit import (
     sleep_until_watch_interval,
     stop_babysit_watchers,
 )
+from .pr_packet import build_pr_packet
 from .pr_watch_backoff import Backoff, SystemWatchClock, should_stop
 from .pr_watch_probe import (
     GhApiHttp,
@@ -1579,6 +1580,21 @@ def cmd_pr_health(args: argparse.Namespace) -> int:
     print(f"Actionable agent threads: {result.get('actionable_agent_threads')}")
     if result.get('note'):
         print(f"Note: {result['note']}")
+    return 0
+
+
+def cmd_pr_packet(args: argparse.Namespace) -> int:
+    result = build_pr_packet(
+        pr_number=args.pr_number,
+        repo=args.repo,
+        max_bytes=args.max_bytes,
+        record_ledger=bool(args.record_ledger),
+        turns=args.turns,
+        run_id=args.run_id,
+        cloud_agent_id=args.cloud_agent_id,
+        ledger_base_dir=getattr(args, "ledger_base_dir", None),
+    )
+    print(result.json_text, end="")
     return 0
 
 
@@ -5350,6 +5366,33 @@ def build_parser() -> argparse.ArgumentParser:
     pr_health.add_argument("--repo", help="owner/name; defaults to git remote origin")
     pr_health.add_argument("--json", action="store_true", help="Output JSON")
     pr_health.set_defaults(func=cmd_pr_health)
+
+    pr_packet = sub.add_parser(
+        "pr-packet",
+        help="Emit a compact JSON evidence packet for PR review feedback (#1364)",
+    )
+    pr_packet.add_argument("pr_number", type=int, help="Pull request number")
+    pr_packet.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    pr_packet.add_argument(
+        "--max-bytes",
+        type=int,
+        default=6144,
+        help="Maximum UTF-8 packet size before truncation (default 6144)",
+    )
+    pr_packet.add_argument(
+        "--record-ledger",
+        action="store_true",
+        help="Append spend_interval with handoff_packet_size and --turns (#1352)",
+    )
+    pr_packet.add_argument("--turns", type=int, help="Agent turns for spend ledger when --record-ledger")
+    pr_packet.add_argument("--run-id", dest="run_id", help="Run id for spend ledger attribution")
+    pr_packet.add_argument("--cloud-agent-id", dest="cloud_agent_id", help="Cloud agent id for spend ledger")
+    pr_packet.add_argument(
+        "--ledger-base-dir",
+        dest="ledger_base_dir",
+        help="Ledger directory for --record-ledger (default .agentic/ledger)",
+    )
+    pr_packet.set_defaults(func=cmd_pr_packet)
 
     release = sub.add_parser("release", help="Release status and notes diff (read-only MVP)")
     release_sub = release.add_subparsers(dest="release_command", required=True)

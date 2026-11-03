@@ -96,6 +96,17 @@ Leave `env` unset to keep the lean default.
 
 Record per-run spend with `plate_ledger_record_spend` (optional token fields, routing inputs, outcome). Attribute with `plate_costs` and `spend_report=true`, or compute one run via `run_cost=true` plus `run_id` or `cloud_agent_id`. CLI: `gh plate ledger --record-spend …`, `gh plate costs --spend-report`, `gh plate costs --run-cost --run-id …`.
 
+## PR evidence packet (#1364)
+
+Use `plate_pr_packet` (or `gh plate pr-packet <N>`) once at the start of a feedback or babysit turn instead of re-reading every review thread and CI log. The JSON includes unresolved/outdated/addressed thread summaries, failing-check log excerpts, PR facts (base, head SHA, behind-by, labels, milestone, `Closes` links), and probe metadata from the babysit watch ETag/`since` helpers.
+
+Agent flow:
+
+1. Call `plate_pr_packet` with `pr_number` (and `repo` when not in a clone).
+2. Act only on threads whose `state` is `unresolved`; treat `outdated`/`addressed` per address-pr-feedback done gate.
+3. For failing checks, use the included `log_excerpt` before any broad local test run (CI diagnosis first).
+4. During crew measurement, pass `turns` and set `record_ledger=true` so `handoff_packet_size` lands in the spend ledger for before/after comparisons.
+
 ## Related design
 
 - Agent/skill discovery tools: `docs/design/mcp-agent-skill-tool-surface.md`

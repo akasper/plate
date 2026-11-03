@@ -1,0 +1,16 @@
+{
+  "slug": "pr-packet-1364",
+  "change_type": "feature",
+  "surface": "src/plate_core/pr_packet.py, cli.py, mcp_server.py, docs/mcp.md",
+  "summary": "Add gh plate pr-packet and plate_pr_packet MCP tool: size-capped JSON evidence packets for PR review feedback, reusing watch probe ETag/since detection and spend-ledger handoff_packet_size (#1364).",
+  "migration_impact": "New CLI subcommand and review-profile MCP tool. Optional --record-ledger / record_ledger writes spend_interval rows with measured packet bytes.",
+  "migration_guidance": [
+    "1. Agents call gh plate pr-packet <N> --json or plate_pr_packet instead of re-fetching raw review comments.",
+    "2. Pass turns and record_ledger during crew pilots to compare babysit cost (#1327 / #1352).",
+    "3. Hosts on default MCP profile get plate_pr_packet via the review profile bundle."
+  ],
+  "agent_notes": "Treat the packet as the single handoff artifact for feedback work; escalate with plate_pr_babysit only when the packet shows unresolved threads or failing checks.",
+  "breaking": false,
+  "links": ["#1364", "#1352", "#1327", "#1078"],
+  "requires": ["0.8.6"]
+}

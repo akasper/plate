@@ -30,6 +30,7 @@ from .pr_babysit import (
     get_unresolved_review_threads,
     resolve_review_thread,
 )
+from .pr_packet import build_pr_packet
 from .plate_config import apply_plate_config_upgrade, get_plate_config_report, init_plate_config
 from .release import (
     cleanup_dead_branches,
@@ -786,6 +787,23 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
                 ),
             }
+        elif name == "plate_pr_packet":
+            pr_number = args.get("pr_number")
+            if pr_number is None:
+                raise ValueError("pr_number is required")
+            pr_number = int(pr_number)
+            if pr_number <= 0:
+                raise ValueError("pr_number must be > 0")
+            result = build_pr_packet(
+                pr_number=pr_number,
+                repo=args.get("repo"),
+                max_bytes=int(args.get("max_bytes") or 6144),
+                record_ledger=bool(args.get("record_ledger", False)),
+                turns=args.get("turns"),
+                run_id=args.get("run_id"),
+                cloud_agent_id=args.get("cloud_agent_id"),
+            )
+            payload = json.loads(result.json_text)
         elif name == "plate_get_unresolved_review_threads":
             pr_number = args.get("pr_number")
             if pr_number is None:
@@ -3094,6 +3112,35 @@ def run() -> None:
                                             "enum": ["all", "bot-only", "human-only"],
                                             "description": "pr_review_scope (#496). Default all.",
                                         },
+                                    },
+                                    "required": ["pr_number"],
+                                },
+                            },
+                            {
+                                "name": "plate_pr_packet",
+                                "description": "Compact JSON evidence packet for PR review feedback (#1364): threads, failing check excerpts, PR facts, probe deltas. Prefer over re-reading raw bot comments.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "pr_number": {
+                                            "type": "integer",
+                                            "description": "Pull request number.",
+                                        },
+                                        "max_bytes": {
+                                            "type": "integer",
+                                            "description": "UTF-8 size cap before truncation (default 6144).",
+                                        },
+                                        "record_ledger": {
+                                            "type": "boolean",
+                                            "description": "Record handoff_packet_size (+ optional turns) to spend ledger.",
+                                        },
+                                        "turns": {"type": "integer"},
+                                        "run_id": {"type": "string"},
+                                        "cloud_agent_id": {"type": "string"},
                                     },
                                     "required": ["pr_number"],
                                 },
