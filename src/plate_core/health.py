@@ -164,6 +164,10 @@ class HealthReport:
     stale_required_check_contexts: list[str] = field(default_factory=list)
     missing_recommended_check_contexts: list[str] = field(default_factory=list)
     label_case_mismatches: list[str] = field(default_factory=list)
+    # #1095 Copilot review effort (GitHub setting; best-effort API probe)
+    copilot_review_effort_status: str | None = None
+    copilot_review_effort_level: str | None = None
+    copilot_review_effort_next_step: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -755,6 +759,28 @@ def get_health(
     except Exception as e:
         errors.append(f"self_migrate: {e}")
 
+    copilot_review_effort_status: str | None = None
+    copilot_review_effort_level: str | None = None
+    copilot_review_effort_next_step: str | None = None
+    try:
+        from .copilot_code_review import summarize_copilot_review_effort
+
+        cre = summarize_copilot_review_effort(gh, target)
+        copilot_review_effort_status = str(cre.get("status") or "manual")
+        if cre.get("effort"):
+            copilot_review_effort_level = str(cre.get("effort"))
+        if cre.get("next_step"):
+            copilot_review_effort_next_step = str(cre.get("next_step"))
+        if copilot_review_effort_status == "warn":
+            errors.append(
+                "copilot_review_effort: repository default is not Lite; "
+                + (copilot_review_effort_next_step or "set Review effort level to Lite")
+            )
+    except Exception as e:
+        errors.append(f"copilot_review_effort: {e}")
+        copilot_review_effort_status = "error"
+        copilot_review_effort_next_step = f"Copilot review effort check failed: {e}"
+
     report = HealthReport(
         repo=target,
         label_coverage_ok=label_ok,
@@ -801,5 +827,8 @@ def get_health(
         self_migrate_ready=self_migrate_ready,
         self_migrate_target=self_migrate_target,
         self_migrate_next_command=self_migrate_next_command,
+        copilot_review_effort_status=copilot_review_effort_status,
+        copilot_review_effort_level=copilot_review_effort_level,
+        copilot_review_effort_next_step=copilot_review_effort_next_step,
     )
     return report

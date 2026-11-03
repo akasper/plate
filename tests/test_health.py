@@ -59,6 +59,8 @@ class FakeClient:
             return {"name": "AGENTS.md", "type": "file"}
         if "contents/.agentic" in endpoint:
             return {"name": ".agentic", "type": "dir"}
+        if "copilot/code-review/configuration" in endpoint or "copilot/code_review/configuration" in endpoint:
+            raise GhApiError("404 Not Found")
         raise AssertionError(f"unexpected endpoint: {endpoint}")
 
 

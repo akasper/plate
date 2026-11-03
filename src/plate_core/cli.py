@@ -379,6 +379,13 @@ def cmd_health(args: argparse.Namespace) -> int:
         )
         if report.self_migrate_next_command:
             print(f"Self-migrate next: {report.self_migrate_next_command}")
+    if report.copilot_review_effort_status:
+        print(
+            f"Copilot review effort (#1095): status={report.copilot_review_effort_status} "
+            f"level={report.copilot_review_effort_level or 'unknown'}"
+        )
+        if report.copilot_review_effort_next_step:
+            print(f"Copilot review effort next: {report.copilot_review_effort_next_step}")
     if report.plate_config_layout_error:
         return 1
     return 0 if report.status != "fail" else 1
@@ -654,6 +661,7 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     report = assess_adoption_readiness(
         getattr(args, "repo_root", ".") or ".",
         include_optional=not bool(getattr(args, "no_optional", False)),
+        github_repo=getattr(args, "repo", None),
     )
     if args.json:
         print(json.dumps(report))
@@ -5082,7 +5090,12 @@ def build_parser() -> argparse.ArgumentParser:
     adopt.add_argument(
         "--no-optional",
         action="store_true",
-        help="Skip optional SPEC.md/CURRENT.md checks",
+        help="Skip optional SPEC.md/CURRENT.md and Copilot review effort checks",
+    )
+    adopt.add_argument(
+        "--repo",
+        default=None,
+        help="GitHub owner/name for remote Copilot review effort check (default: git origin)",
     )
     adopt.add_argument(
         "--first-qa-plan",

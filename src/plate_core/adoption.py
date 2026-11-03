@@ -188,10 +188,44 @@ def assess_adoption_readiness(
                 detail="CURRENT.md" if current.is_file() else "optional missing",
             )
         )
+        if github_repo:
+            remote_repo = github_repo
+        else:
+            from .health import _try_repo_from_git_remote
+
+            remote_repo = _try_repo_from_git_remote(root)
+        if remote_repo:
+            try:
+                from .copilot_code_review import (
+                    adoption_check_for_review_effort,
+                    summarize_copilot_review_effort,
+                )
+                from .github_client import GhClient
+
+                cre_summary = summarize_copilot_review_effort(GhClient(), remote_repo)
+                checks.append(adoption_check_for_review_effort(cre_summary))
+            except Exception as exc:
+                checks.append(
+                    _check(
+                        check_id="copilot_review_effort_lite",
+                        title="Copilot code review effort is Lite (GitHub setting)",
+                        ok=False,
+                        minutes=2,
+                        fix_command=(
+                            "Verify manually: repository Settings → Copilot → Code review → Lite"
+                        ),
+                        detail=f"remote check failed: {exc}",
+                    )
+                )
 
     failed = [c for c in checks if not c["ok"]]
     # Optional failures do not block "core ready" or inflate hard budget the same way
-    core_failed = [c for c in failed if c["id"] not in ("spec_md", "current_md")]
+    core_failed = [
+        c
+        for c in failed
+        if c["id"]
+        not in ("spec_md", "current_md", "copilot_review_effort_lite")
+    ]
     est = sum(int(c["minutes_if_missing"]) for c in core_failed)
     optional_est = sum(
         int(c["minutes_if_missing"]) for c in failed if c["id"] in ("spec_md", "current_md")

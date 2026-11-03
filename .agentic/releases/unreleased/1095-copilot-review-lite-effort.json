@@ -1,0 +1,16 @@
+{
+  "slug": "1095-copilot-review-lite-effort",
+  "change_type": "feature",
+  "surface": "plate_core.copilot_code_review, gh plate health/adopt, docs/agents/github-actions-and-copilot.md",
+  "summary": "Document Lite as the PLATE Copilot review effort default and warn via health/adopt when GitHub exposes a non-Lite repository setting (#1095).",
+  "migration_impact": "Adopters should set repository Copilot code review Review effort level to Lite. Run gh plate health or gh plate adopt --json after upgrade; follow manual verification when the GitHub API cannot read the setting.",
+  "migration_guidance": [
+    "1. Repository Settings → Copilot → Code review → set Review effort level to Lite.",
+    "2. Run gh plate health --json and confirm copilot_review_effort_status is ok (or complete the manual step in next_step).",
+    "3. For risk:high or risk:critical PRs, request Balanced per review when deeper analysis is warranted."
+  ],
+  "agent_notes": "GitHub default effort is Balanced; PLATE cost policy prefers Lite at repo/org level. probe_repository_review_effort tries preview configuration endpoints; when unreadable, health/adopt emit manual verification steps without failing core adoption.",
+  "breaking": false,
+  "links": ["#1095", "#1091"],
+  "requires": []
+}
