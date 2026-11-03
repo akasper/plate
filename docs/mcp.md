@@ -98,7 +98,7 @@ Record per-run spend with `plate_ledger_record_spend` (optional token fields, ro
 
 ## PR evidence packet (#1364)
 
-Use `plate_pr_packet` (or `gh plate pr-packet <N>`) once at the start of a feedback or babysit turn instead of re-reading every review thread and CI log. The JSON includes unresolved/outdated/addressed thread summaries, failing-check log excerpts, PR facts (base, head SHA, behind-by, labels, milestone, `Closes` links), and probe metadata from the babysit watch ETag/`since` helpers.
+Use `plate_pr_packet` (or `gh plate pr-packet <N>`) once at the start of a feedback or babysit turn instead of re-reading every review thread and CI log. The JSON includes unresolved/outdated/addressed thread summaries, failing-check log excerpts (check-run output, with GitHub Actions job logs as fallback), PR facts (base, head SHA, behind-by, labels, milestone, `Closes` links), and probe metadata from the same ETag/`since` helpers as babysit watch. Packet checkpoints persist under a separate `.packet-probe.json` file so pr-packet does not advance babysit watch state. Review threads are paginated; when pagination stops early the packet may set `review_threads_complete: false`. Size limits apply to the same indented JSON the CLI and MCP emit (`byte_size` matches that UTF-8 length).
 
 Agent flow:
 

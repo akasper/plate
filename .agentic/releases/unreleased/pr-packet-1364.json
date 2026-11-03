@@ -1,7 +1,7 @@
 {
   "slug": "pr-packet-1364",
   "change_type": "feature",
-  "surface": "src/plate_core/pr_packet.py, cli.py, mcp_server.py, docs/mcp.md",
+  "surface": "src/plate_core/pr_packet.py, cli.py, mcp_server.py, docs/mcp.md, tests/test_pr_packet.py",
   "summary": "Add gh plate pr-packet and plate_pr_packet MCP tool: size-capped JSON evidence packets for PR review feedback, reusing watch probe ETag/since detection and spend-ledger handoff_packet_size (#1364).",
   "migration_impact": "New CLI subcommand and review-profile MCP tool. Optional --record-ledger / record_ledger writes spend_interval rows with measured packet bytes.",
   "migration_guidance": [
