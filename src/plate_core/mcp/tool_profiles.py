@@ -75,6 +75,7 @@ def profiles_for_tool(name: str) -> frozenset[str]:
         "plate_resolve_review_thread",
         "plate_get_unresolved_review_threads",
         "plate_get_actionable_review_threads",
+        "plate_pr_packet",
     ):
         profiles.add("review")
     elif name in (
