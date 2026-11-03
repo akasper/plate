@@ -39,6 +39,7 @@ Copy into `.agentic/tasks/` as a starting point for crew pilots (DentalCoach, Ha
 ## Related design
 
 - [agent-crews-resource-router.md](agent-crews-resource-router.md) — registry record, routing inputs/outputs, Consumption Tracker and Lull reads, reviewer-differs rule (#1337; implementation deferred).
+- [agent-crews-pilot-protocol.md](agent-crews-pilot-protocol.md) — paired single-agent vs crew pilot on plate and DentalCoach (#1353 / #1338): task mix, ledger fields, stop rules, report format.
 
 ## Out of scope for #1333
 
