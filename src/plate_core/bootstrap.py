@@ -14,7 +14,7 @@ from urllib.parse import quote
 from .github_client import GhApiError, GhClient
 from .github_labels import prepare_label_description, sync_repository_labels_from_registry
 from .health import get_health, resolve_repo
-from .import_payload import list_payload_relative_paths
+from .import_payload import build_minimal_current_md, list_payload_relative_paths
 from .payload_surface import filter_plate_scripts, prepare_copied_text, resolve_local_goals_wiki
 from .plate_config import (
     ALLOWED_PLATFORMS,
@@ -612,6 +612,76 @@ def _contents_endpoint_at_ref(repo: str, rel_path: str, ref: str | None) -> str:
     return endpoint
 
 
+def _remote_file_exists_at_ref(
+    repo: str,
+    rel_path: str,
+    gh: GhClient,
+    *,
+    parent_ref: str | None = None,
+) -> bool:
+    """True when ``rel_path`` exists as a file at ``parent_ref`` (or default branch tip)."""
+    endpoint = _contents_endpoint_at_ref(repo, rel_path, parent_ref)
+    try:
+        payload = gh.api(endpoint)
+    except GhApiError as error:
+        if _is_missing_content_error(error) or _is_empty_repository_error(error):
+            return False
+        raise
+    return isinstance(payload, dict) and payload.get("type") == "file"
+
+
+def _remote_playwright_configured_at_ref(
+    repo: str,
+    gh: GhClient,
+    *,
+    parent_ref: str | None = None,
+) -> bool:
+    """Detect Playwright scaffolding on the remote tree (#618 / #1322)."""
+    if _remote_file_exists_at_ref(repo, "playwright.config.ts", gh, parent_ref=parent_ref):
+        return True
+    endpoint = _contents_endpoint_at_ref(repo, "tests/e2e", parent_ref)
+    try:
+        payload = gh.api(endpoint)
+    except GhApiError as error:
+        if _is_missing_content_error(error) or _is_empty_repository_error(error):
+            return False
+        raise
+    if isinstance(payload, list):
+        return True
+    return isinstance(payload, dict) and payload.get("type") == "dir"
+
+
+def _bootstrap_playwright_signal(
+    pending_writes: list[tuple[str, bytes]],
+    skipped_identical: list[str],
+    repo: str,
+    parent_ref: str,
+    gh: GhClient,
+) -> bool:
+    markers = ("playwright.config.ts", "tests/e2e")
+    for rel, _ in pending_writes:
+        if any(marker in rel for marker in markers):
+            return True
+    for rel in skipped_identical:
+        if any(marker in rel for marker in markers):
+            return True
+    return _remote_playwright_configured_at_ref(repo, gh, parent_ref=parent_ref)
+
+
+def _bootstrap_current_md_write_if_missing(
+    repo: str,
+    parent_ref: str,
+    gh: GhClient,
+    *,
+    has_playwright: bool,
+) -> tuple[str, bytes] | None:
+    """Queue minimal CURRENT.md for the grouped bootstrap commit when absent (#1322)."""
+    if _remote_file_exists_at_ref(repo, "CURRENT.md", gh, parent_ref=parent_ref):
+        return None
+    body = build_minimal_current_md(has_playwright=has_playwright)
+    return ("CURRENT.md", body.encode("utf-8"))
+
+
 def _resolve_branch_parent_commit(
     repo: str,
     branch: str,
@@ -980,6 +1050,22 @@ def run_bootstrap(
             parent_ref=parent_sha,
         )
         bootstrap_writes = list(payload_writes)
+        has_playwright = _bootstrap_playwright_signal(
+            bootstrap_writes,
+            skipped_identical_paths,
+            target,
+            parent_sha,
+            gh,
+        )
+        current_md_write = _bootstrap_current_md_write_if_missing(
+            target,
+            parent_sha,
+            gh,
+            has_playwright=has_playwright,
+        )
+        if current_md_write is not None:
+            bootstrap_writes.append(current_md_write)
+            copied_count += 1
         if not health.plate_config_present:
             bootstrap_writes.append(
                 _bootstrap_plate_bytes_for_grouped_commit(
@@ -1025,6 +1111,8 @@ def run_bootstrap(
             platform=resolved_platform,
             write_missing=False,
         )
+        if not _remote_file_exists_at_ref(target, "CURRENT.md", gh, parent_ref=None):
+            would_copy += 1
         state = "planned"
         if adoption_mode:
             detail = (

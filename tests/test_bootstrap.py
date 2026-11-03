@@ -443,6 +443,7 @@ class BootstrapTests(unittest.TestCase):
         tree_entries = commit_tree[0].kwargs.get("fields", {}).get("tree", [])
         tree_paths = {entry.get("path") for entry in tree_entries if isinstance(entry, dict)}
         self.assertIn("AGENTS.md", tree_paths)
+        self.assertIn("CURRENT.md", tree_paths)
         self.assertIn("docs/wiki/Goals.md", tree_paths)
         self.assertIn(".plate", tree_paths)
         self.assertNotIn("README.md", tree_paths)
@@ -1032,6 +1033,132 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(commit_posts[0].kwargs.get("fields", {}).get("message"), "Bootstrap: initialize PLATE template payload")
         self.assertEqual(len(commit_posts), 1)
         self.assertGreaterEqual(git_store.get("blob_count", 0), 2)
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_seeds_current_md_in_grouped_commit(self, mock_get_health):
+        """#1322: greenfield bootstrap seeds CURRENT.md when absent (validate_plate_repo)."""
+        from plate_core.import_payload import build_minimal_current_md
+
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/current-md-repo",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+        git_store: dict = {}
+        blob_bodies: list[bytes] = []
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/current-md-repo":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if endpoint.startswith("repos/akasper/current-md-repo/contents/"):
+                if method == "GET":
+                    raise GhApiError("HTTP 404 Not Found")
+                return {}
+            if endpoint.startswith("repos/akasper/current-md-repo/branches/main"):
+                return {"commit": {"sha": "abc123"}}
+            if method == "POST" and endpoint.endswith("/git/blobs"):
+                fields = k.get("fields") or {}
+                raw = base64.b64decode(fields.get("content", ""))
+                blob_bodies.append(raw)
+                git_store["blob_count"] = git_store.get("blob_count", 0) + 1
+                return {"sha": f"blob{git_store['blob_count']:04d}"}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                run_bootstrap("akasper/current-md-repo", apply_mode=True, client=client)
+
+        expected = build_minimal_current_md(has_playwright=False).encode("utf-8")
+        self.assertIn(expected, blob_bodies)
+
+    @patch("plate_core.bootstrap.get_health")
+    def test_apply_skips_current_md_when_already_on_remote(self, mock_get_health):
+        """#1322: bootstrap must not overwrite an existing remote CURRENT.md."""
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/has-current",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="pass",
+            goals_page_present=True,
+            open_question_count=0,
+            plate_config_present=True,
+            plate_config_valid=True,
+            curiosity_answers_present=False,
+        )
+        client = Mock()
+        git_store: dict = {}
+
+        def api_side(endpoint, *a, **k):
+            endpoint = str(endpoint)
+            method = k.get("method", "GET")
+            if endpoint == "repos/akasper/has-current":
+                return {"has_wiki": True, "default_branch": "main", "permissions": {"push": True}}
+            if "/issues?" in endpoint and "labels=Question" in endpoint:
+                return []
+            if "contents/CURRENT.md" in endpoint and method == "GET":
+                return {
+                    "type": "file",
+                    "content": base64.b64encode(b"# existing CURRENT\n").decode("ascii"),
+                }
+            if endpoint.startswith("repos/akasper/has-current/contents/"):
+                if method == "GET":
+                    raise GhApiError("HTTP 404 Not Found")
+                return {}
+            if endpoint.startswith("repos/akasper/has-current/branches/main"):
+                return {"commit": {"sha": "abc123"}}
+            git_resp = _bootstrap_git_data_side_effect(endpoint, method, git_store)
+            if git_resp is not None:
+                return git_resp
+            return {}
+
+        client.api.side_effect = api_side
+        with _make_template_root() as tmpdir:
+            template_root = Path(tmpdir)
+            with patch(
+                "plate_core.bootstrap.resolve_template_source",
+                return_value=(template_root, "explicit_path"),
+            ):
+                run_bootstrap("akasper/has-current", apply_mode=True, client=client)
+
+        tree_posts = [
+            c
+            for c in client.api.call_args_list
+            if c.args
+            and str(c.args[0]).endswith("/git/trees")
+            and c.kwargs.get("method") == "POST"
+        ]
+        self.assertTrue(tree_posts)
+        tree_paths = {
+            entry.get("path")
+            for entry in tree_posts[0].kwargs.get("fields", {}).get("tree", [])
+            if isinstance(entry, dict)
+        }
+        self.assertNotIn("CURRENT.md", tree_paths)
 
     @patch("plate_core.bootstrap.get_health")
     def test_apply_aborts_grouped_commit_when_branch_tip_moves(self, mock_get_health):

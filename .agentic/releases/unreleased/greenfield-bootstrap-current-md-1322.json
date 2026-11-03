@@ -1,0 +1,14 @@
+{
+  "slug": "greenfield-bootstrap-current-md-1322",
+  "change_type": "fix",
+  "surface": "src/plate_core/bootstrap.py",
+  "summary": "Seed minimal CURRENT.md during greenfield bootstrap when absent (#1322) so validate_plate_repo passes immediately after bootstrap.",
+  "migration_impact": "Greenfield `gh plate bootstrap --apply` includes CURRENT.md in the initial grouped commit when missing. Existing CURRENT.md is never overwritten.",
+  "migration_guidance": [
+    "1. Upgrade plate-core to a release containing this fix.",
+    "2. Existing adopters with a missing CURRENT.md can run `gh plate import-payload --apply` or add CURRENT.md manually; re-bootstrap is not required."
+  ],
+  "agent_notes": "After greenfield bootstrap, CURRENT.md should exist for CI validate_plate_repo. Edit capability rows as features land; prefer `.agentic/releases/unreleased/` fragments for process evidence.",
+  "breaking": false,
+  "links": ["#1322", "#618"]
+}
