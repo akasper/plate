@@ -38,6 +38,7 @@ Copy into `.agentic/tasks/` as a starting point for crew pilots (DentalCoach, Ha
 
 ## Related design
 
+- [agent-crews.md](agent-crews.md) — parent design (#1327 / #1354): crew model, tiers, measurement, pilot, Jev shadow mode
 - [agent-crews-resource-router.md](agent-crews-resource-router.md) — registry record, routing inputs/outputs, Consumption Tracker and Lull reads, reviewer-differs rule (#1337; implementation deferred).
 
 ## Out of scope for #1333
