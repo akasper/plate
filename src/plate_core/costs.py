@@ -16,6 +16,7 @@ from typing import Any
 
 from .github_client import GhClient
 from .health import resolve_repo
+from .ledger import LEDGER_DIR, list_spend_intervals, sum_spend_interval_tokens
 
 
 @dataclass
@@ -167,6 +168,162 @@ def _parse_usd(cost_str: str | None) -> float:
         return float(str(cost_str).replace("$", "").replace(",", "").strip() or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _aggregate_spend_intervals(intervals: list[dict[str, Any]]) -> dict[str, Any]:
+    total_tokens = 0
+    has_tokens = False
+    total_cost = 0.0
+    has_cost = False
+    accepted = 0
+    rejected = 0
+    unknown_outcome = 0
+    for iv in intervals:
+        tok = sum_spend_interval_tokens(iv)
+        if tok is not None:
+            has_tokens = True
+            total_tokens += tok
+        if iv.get("cost_usd") is not None:
+            has_cost = True
+            total_cost += float(iv["cost_usd"])
+        outcome = iv.get("outcome_accepted")
+        if outcome is True:
+            accepted += 1
+        elif outcome is False:
+            rejected += 1
+        else:
+            unknown_outcome += 1
+    return {
+        "interval_count": len(intervals),
+        "total_tokens": total_tokens if has_tokens else None,
+        "total_cost_usd": round(total_cost, 6) if has_cost else None,
+        "accepted_outcomes": accepted,
+        "rejected_outcomes": rejected,
+        "unknown_outcomes": unknown_outcome,
+        "cost_per_accepted_outcome_usd": (
+            round(total_cost / accepted, 6) if has_cost and accepted else None
+        ),
+    }
+
+
+def compute_run_all_in_cost(
+    *,
+    run_id: str | None = None,
+    cloud_agent_id: str | None = None,
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    """All-in cost for one run from recorded spend intervals (#1352).
+
+    Sums only caller-recorded token and USD fields; never infers missing values.
+    """
+    if not run_id and not cloud_agent_id:
+        return {"ok": False, "error": "run_id or cloud_agent_id required"}
+    intervals = list_spend_intervals(
+        run_id=run_id,
+        cloud_agent_id=cloud_agent_id if run_id is None else None,
+        base_dir=base_dir,
+        limit=1000,
+    )
+    agg = _aggregate_spend_intervals(intervals)
+    return {
+        "ok": True,
+        "run_id": run_id,
+        "cloud_agent_id": cloud_agent_id,
+        "intervals": intervals,
+        **agg,
+        "note": "All-in cost uses only recorded interval fields; omitted token fields are not estimated.",
+    }
+
+
+def get_spend_attribution_report(
+    *,
+    base_dir: Path | None = None,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Attribute spend per run/cloud agent; list unattributed intervals separately (#1352)."""
+    intervals = list_spend_intervals(limit=limit, base_dir=base_dir)
+    runs: dict[str, dict[str, Any]] = {}
+    unattributed: list[dict[str, Any]] = []
+    for iv in intervals:
+        key = iv.get("run_id") or iv.get("cloud_agent_id")
+        if not key:
+            unattributed.append(iv)
+            continue
+        bucket = runs.setdefault(
+            str(key),
+            {
+                "attribution_key": str(key),
+                "run_id": iv.get("run_id"),
+                "cloud_agent_id": iv.get("cloud_agent_id"),
+                "intervals": [],
+            },
+        )
+        bucket["intervals"].append(iv)
+    run_summaries: list[dict[str, Any]] = []
+    for _key, bucket in runs.items():
+        agg = _aggregate_spend_intervals(bucket["intervals"])
+        run_summaries.append(
+            {
+                **{k: v for k, v in bucket.items() if k != "intervals"},
+                **agg,
+                "interval_ids": [i.get("id") for i in bucket["intervals"]],
+            }
+        )
+    run_summaries.sort(
+        key=lambda r: (r.get("total_tokens") or 0, str(r.get("attribution_key") or "")),
+        reverse=True,
+    )
+    unattributed_agg = _aggregate_spend_intervals(unattributed)
+    return {
+        "dir": str(base_dir or LEDGER_DIR),
+        "attributed_runs": run_summaries,
+        "unattributed": {
+            "interval_ids": [i.get("id") for i in unattributed],
+            **unattributed_agg,
+        },
+        "note": (
+            "Attributed by run_id when present, otherwise cloud_agent_id. "
+            "Unattributed spend is reported separately and is never split evenly."
+        ),
+    }
+
+
+def format_spend_attribution_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Spend attribution (ledger)",
+        "",
+        report.get("note") or "",
+        "",
+        f"- Ledger dir: {report.get('dir')}",
+        "",
+        "## Attributed runs",
+        "",
+    ]
+    runs = report.get("attributed_runs") or []
+    if not runs:
+        lines.append("_None._")
+    else:
+        lines.append("| Key | run_id | agent | intervals | tokens | USD | accepted | cost/accepted |")
+        lines.append("|---|---|---|---:|---:|---:|---:|---:|")
+        for r in runs:
+            lines.append(
+                f"| {r.get('attribution_key')} | {r.get('run_id') or ''} | {r.get('cloud_agent_id') or ''} | "
+                f"{r.get('interval_count')} | {r.get('total_tokens')} | {r.get('total_cost_usd')} | "
+                f"{r.get('accepted_outcomes')} | {r.get('cost_per_accepted_outcome_usd')} |"
+            )
+    un = report.get("unattributed") or {}
+    lines.extend(
+        [
+            "",
+            "## Unattributed",
+            "",
+            f"- Intervals: {un.get('interval_count', 0)}",
+            f"- Tokens: {un.get('total_tokens')}",
+            f"- USD: {un.get('total_cost_usd')}",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def get_cost_dashboard(

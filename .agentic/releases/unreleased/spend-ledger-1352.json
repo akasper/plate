@@ -1,0 +1,16 @@
+{
+  "slug": "spend-ledger-1352",
+  "change_type": "feature",
+  "surface": "src/plate_core/ledger.py, src/plate_core/costs.py, mcp_server.py, cli.py, docs/mcp.md",
+  "summary": "Spend ledger (#1352): record spend_interval rows under .agentic/ledger with optional token, routing, handoff, and outcome fields; attribute spend per run/cloud agent and report unattributed intervals separately; compute all-in run cost from recorded fields only.",
+  "migration_impact": "Additive ledger record_type spend_interval and plate_ledger_record_spend MCP tool. plate_costs / gh plate costs gain spend_report and run_cost modes. Existing decision ledger JSON loads unchanged.",
+  "migration_guidance": [
+    "1. Callers record intervals via plate_ledger_record_spend or gh plate ledger --record-spend (pass only measured fields).",
+    "2. Pilot attribution: gh plate costs --spend-report or plate_costs spend_report=true.",
+    "3. One run all-in: gh plate costs --run-cost --run-id <id> or plate_costs run_cost=true."
+  ],
+  "agent_notes": "Never invent token or cost values. cost_per_accepted_outcome_usd uses intervals where outcome_accepted=true and cost_usd was recorded.",
+  "breaking": false,
+  "links": ["#1352", "#1338", "#1327"],
+  "requires": ["0.8.6"]
+}

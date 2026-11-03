@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,10 +15,14 @@ from plate_core.ledger import (
     ledger_summary,
     list_blocking_decisions,
     list_decisions,
+    list_spend_intervals,
     query_decisions,
     record_decision,
     record_from_autonomy_action,
+    record_spend_interval,
     render_decision_marker,
+    sum_spend_interval_tokens,
+    validate_ledger_entry,
 )
 
 
@@ -139,6 +144,86 @@ class TestLedger647(unittest.TestCase):
         self.assertIn("decide_checkpoint", labels)
         self.assertIn("resume_shadow", labels)
         self.assertIn("inspect", labels)
+
+
+class TestSpendLedger1352(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self._tmp.name) / "ledger"
+        self.base.mkdir(parents=True)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_legacy_decision_json_loads_without_record_type(self):
+        legacy = {
+            "id": "dec-legacy001",
+            "action_kind": "what_next",
+            "decision": "proceed",
+            "reason": "ok",
+            "sources": [],
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+        path = self.base / "dec-legacy001.json"
+        path.write_text(json.dumps(legacy), encoding="utf-8")
+        got = get_decision("dec-legacy001", base_dir=self.base)
+        self.assertIsNotNone(got)
+        self.assertEqual(got["action_kind"], "what_next")
+        rows = list_decisions(base_dir=self.base)
+        self.assertEqual(len(rows), 1)
+        spend_rows = list_spend_intervals(base_dir=self.base)
+        self.assertEqual(spend_rows, [])
+
+    def test_record_spend_interval_and_list(self):
+        out = record_spend_interval(
+            run_id="run-a",
+            cloud_agent_id="bc-agent-1",
+            parent_run_id="coord-9",
+            lifecycle_task_type="marketing_copy",
+            model="composer-2.5",
+            tier="T2",
+            effort="low",
+            route_clarity="clear",
+            input_tokens=100,
+            output_tokens=40,
+            cached_read_tokens=10,
+            tool_output_tokens=5,
+            turns=3,
+            handoff_packet_size=1200,
+            handoff_packet_unit="tokens",
+            rediscovery_count=1,
+            outcome_accepted=True,
+            cost_usd=0.12,
+            base_dir=self.base,
+        )
+        self.assertTrue(out["id"].startswith("spend-"))
+        self.assertEqual(sum_spend_interval_tokens(out), 155)
+        rows = list_spend_intervals(run_id="run-a", base_dir=self.base)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["lifecycle_task_type"], "marketing_copy")
+        self.assertNotIn(
+            rows[0]["id"],
+            {r.get("id") for r in list_decisions(base_dir=self.base)},
+        )
+
+    def test_validate_rejects_bad_tier(self):
+        with self.assertRaises(ValueError):
+            record_spend_interval(tier="T9", base_dir=self.base)
+
+    def test_validate_ledger_entry_normalizes_spend(self):
+        normalized, errors = validate_ledger_entry(
+            {
+                "id": "spend-test",
+                "record_type": "spend_interval",
+                "tier": "t1",
+                "route_clarity": "AMBIGUOUS",
+                "input_tokens": "10",
+            }
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(normalized["tier"], "T1")
+        self.assertEqual(normalized["route_clarity"], "ambiguous")
+        self.assertEqual(normalized["input_tokens"], 10)
 
 
 class TestAutonomyLedgerWire(unittest.TestCase):
