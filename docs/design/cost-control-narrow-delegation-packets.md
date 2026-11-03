@@ -240,3 +240,7 @@ This design is implemented correctly when follow-up work delivers all of the fol
 3. Delegated agents can rehydrate only the context they need by following retrieval hints.
 4. CLI, MCP, and host-agent surfaces can all consume the same underlying packet model.
 5. Packet construction remains deterministic and testable.
+
+## Related design
+
+- [agent-crews-pilot-protocol.md](agent-crews-pilot-protocol.md) — paired pilot measuring crew workflow vs single-agent flow; extends packet handoff metrics (#1353 / #1338).
