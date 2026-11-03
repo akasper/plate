@@ -1868,6 +1868,9 @@ def cmd_costs(args: argparse.Namespace) -> int:
 def cmd_ledger(args: argparse.Namespace) -> int:
     """Provenance / decision ledger CLI (#647)."""
     if getattr(args, "record_jev_score", False):
+        if getattr(args, "jev_score", None) is None:
+            print("--jev-score is required with --record-jev-score", file=sys.stderr)
+            return 2
         out = record_jev_score(
             jev_score=float(args.jev_score),
             run_id=getattr(args, "run_id", None),

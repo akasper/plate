@@ -390,7 +390,7 @@ def record_jev_score(
         effort=effort,
         hardware=hardware,
         route_clarity=route_clarity,
-        outcome_accepted=outcome_accepted,
+        outcome_accepted=None,
         jev_score=jev_score,
         jev_suggested_tier=jev_suggested_tier,
         jev_model=jev_model,
