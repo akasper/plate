@@ -9,6 +9,9 @@ Every autonomous decision/action can append an inspectable, queryable record:
 Spend intervals (#1352) use the same durable store with record_type=spend_interval
 for per-run token/cost attribution (pilot #1338 / lifecycle tasks beyond dev).
 
+Optional Jev shadow fields on the same record type (#1356): parallel scores alongside
+fixed-table routing; nothing in plate_core reads them for routing.
+
 Durable store: `.agentic/ledger/<id>.json` (append-only files).
 Complements USAGE REPORTs and PLATE-AUTONOMY-CYCLE markers without replacing them.
 """
@@ -91,6 +94,10 @@ class SpendIntervalRecord:
     rediscovery_count: int | None = None
     outcome_accepted: bool | None = None
     cost_usd: float | None = None
+    jev_score: float | None = None
+    jev_suggested_tier: str | None = None
+    jev_model: str | None = None
+    jev_route_clarity: str | None = None
     related_issue: int | None = None
     related_pr: int | None = None
     session: str = ""
@@ -174,6 +181,16 @@ def validate_ledger_entry(data: dict[str, Any]) -> tuple[dict[str, Any] | None, 
     unit = data.get("handoff_packet_unit")
     if unit is not None and str(unit).strip() and str(unit).lower() not in HANDOFF_PACKET_UNITS:
         errors.append(f"handoff_packet_unit must be one of {sorted(HANDOFF_PACKET_UNITS)}")
+    jev_tier = data.get("jev_suggested_tier")
+    if jev_tier is not None and str(jev_tier).strip() and str(jev_tier).upper() not in VALID_TIERS:
+        errors.append(f"jev_suggested_tier must be one of {sorted(VALID_TIERS)}")
+    jev_route = data.get("jev_route_clarity")
+    if (
+        jev_route is not None
+        and str(jev_route).strip()
+        and str(jev_route).lower() not in VALID_ROUTE_CLARITY
+    ):
+        errors.append(f"jev_route_clarity must be one of {sorted(VALID_ROUTE_CLARITY)}")
     if not str(data.get("id") or "").strip():
         errors.append("spend_interval entries require id")
     if errors:
@@ -198,9 +215,21 @@ def validate_ledger_entry(data: dict[str, Any]) -> tuple[dict[str, Any] | None, 
             "related_pr": _optional_int(data.get("related_pr")),
             "cost_usd": _optional_float(data.get("cost_usd")),
             "outcome_accepted": _optional_bool(data.get("outcome_accepted")),
+            "jev_score": _optional_float(data.get("jev_score")),
+            "jev_suggested_tier": (
+                str(jev_tier).upper() if jev_tier not in (None, "") else None
+            ),
+            "jev_route_clarity": (
+                str(jev_route).lower() if jev_route not in (None, "") else None
+            ),
         }
     ).to_dict()
     return normalized, []
+
+
+def spend_interval_has_jev_score(entry: dict[str, Any]) -> bool:
+    """True when a spend row carries a recorded Jev shadow score (#1356)."""
+    return entry.get("jev_score") is not None
 
 
 def sum_spend_interval_tokens(entry: dict[str, Any]) -> int | None:
@@ -268,6 +297,10 @@ def record_spend_interval(
     rediscovery_count: int | None = None,
     outcome_accepted: bool | None = None,
     cost_usd: float | None = None,
+    jev_score: float | None = None,
+    jev_suggested_tier: str | None = None,
+    jev_model: str | None = None,
+    jev_route_clarity: str | None = None,
     related_issue: int | None = None,
     related_pr: int | None = None,
     session: str = "",
@@ -300,6 +333,10 @@ def record_spend_interval(
         "rediscovery_count": rediscovery_count,
         "outcome_accepted": outcome_accepted,
         "cost_usd": cost_usd,
+        "jev_score": jev_score,
+        "jev_suggested_tier": (jev_suggested_tier or None),
+        "jev_model": (jev_model or None),
+        "jev_route_clarity": (jev_route_clarity or None),
         "related_issue": related_issue,
         "related_pr": related_pr,
         "session": session or "",
@@ -314,6 +351,56 @@ def record_spend_interval(
     out = dict(normalized)
     out["path"] = str(path)
     return out
+
+
+def record_jev_score(
+    *,
+    jev_score: float,
+    run_id: str | None = None,
+    cloud_agent_id: str | None = None,
+    lifecycle_task_type: str = "",
+    jev_suggested_tier: str | None = None,
+    jev_model: str | None = None,
+    jev_route_clarity: str | None = None,
+    tier: str | None = None,
+    model: str | None = None,
+    route_clarity: str | None = None,
+    hardware: str | None = None,
+    effort: str | None = None,
+    outcome_accepted: bool | None = None,
+    related_issue: int | None = None,
+    related_pr: int | None = None,
+    session: str = "",
+    metadata: dict[str, Any] | None = None,
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Append Jev shadow scores on a spend_interval row (#1356); does not affect routing."""
+    if jev_score is None:
+        raise ValueError("jev_score is required")
+    if not (run_id or cloud_agent_id):
+        raise ValueError("run_id or cloud_agent_id is required for Jev score attribution")
+    meta = dict(metadata or {})
+    meta.setdefault("jev_shadow_mode", True)
+    return record_spend_interval(
+        cloud_agent_id=cloud_agent_id,
+        run_id=run_id,
+        lifecycle_task_type=lifecycle_task_type,
+        model=model,
+        tier=tier,
+        effort=effort,
+        hardware=hardware,
+        route_clarity=route_clarity,
+        outcome_accepted=None,
+        jev_score=jev_score,
+        jev_suggested_tier=jev_suggested_tier,
+        jev_model=jev_model,
+        jev_route_clarity=jev_route_clarity,
+        related_issue=related_issue,
+        related_pr=related_pr,
+        session=session,
+        metadata=meta,
+        base_dir=base_dir,
+    )
 
 
 def record_decision(
@@ -419,6 +506,7 @@ def list_spend_intervals(
     cloud_agent_id: str | None = None,
     lifecycle_task_type: str | None = None,
     outcome_accepted: bool | None = None,
+    jev_scored: bool | None = None,
     limit: int = 200,
     base_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
@@ -436,6 +524,10 @@ def list_spend_intervals(
         if lifecycle_task_type and data.get("lifecycle_task_type") != lifecycle_task_type:
             continue
         if outcome_accepted is not None and data.get("outcome_accepted") is not outcome_accepted:
+            continue
+        if jev_scored is True and not spend_interval_has_jev_score(data):
+            continue
+        if jev_scored is False and spend_interval_has_jev_score(data):
             continue
         data["path"] = str(f)
         rows.append(data)

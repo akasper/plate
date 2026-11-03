@@ -1,0 +1,16 @@
+{
+  "slug": "jev-shadow-scoring-1356",
+  "change_type": "feature",
+  "surface": "src/plate_core/ledger.py, mcp_server.py, cli.py, docs/design/jev-shadow-scoring.md",
+  "summary": "Jev shadow scoring (#1356): optional jev_* fields on spend_interval ledger rows, record_jev_score API, gh plate ledger --record-jev-score, and plate_ledger_record_jev MCP tool. Scores are stored for later comparison to fixed-table routing and outcomes; nothing reads them for routing until 60+ labeled runs.",
+  "migration_impact": "Additive optional fields on spend_interval JSON. New MCP tool plate_ledger_record_jev. Existing ledger rows unchanged.",
+  "migration_guidance": [
+    "1. After a run, record applied routing via --record-spend or plate_ledger_record_spend.",
+    "2. Record Jev opinion via gh plate ledger --record-jev-score --run-id <id> --jev-score <n> (optional jev_suggested_tier, jev_model, jev_route_clarity).",
+    "3. Do not branch routing on jev_* until shadow evaluation completes (60 labeled runs)."
+  ],
+  "agent_notes": "Shadow only: no router or tier logic may consume jev_score. lifecycle_task_type should reflect non-dev work when applicable.",
+  "breaking": false,
+  "links": ["#1356", "#1347", "#1352", "#1327"],
+  "requires": ["0.8.6"]
+}
