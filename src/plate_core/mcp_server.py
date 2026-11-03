@@ -30,6 +30,7 @@ from .pr_babysit import (
     get_unresolved_review_threads,
     resolve_review_thread,
 )
+from .pr_verify import verify_pr
 from .plate_config import apply_plate_config_upgrade, get_plate_config_report, init_plate_config
 from .release import (
     cleanup_dead_branches,
@@ -765,6 +766,19 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = get_pr_merge_gates(
                 pr_number=pr_number,
                 repo=args.get("repo"),
+            )
+        elif name == "plate_pr_verify":
+            pr_number = args.get("pr_number")
+            if pr_number is None:
+                raise ValueError("pr_number is required")
+            pr_number = int(pr_number)
+            if pr_number <= 0:
+                raise ValueError("pr_number must be > 0")
+            payload = verify_pr(
+                pr_number=pr_number,
+                repo=args.get("repo"),
+                run_tests=bool(args.get("run_tests", False)),
+                repo_root=args.get("repo_root"),
             )
         elif name == "plate_resolve_review_thread":
             thread_id = args.get("thread_id")
@@ -3055,6 +3069,38 @@ def run() -> None:
                                         "pr_number": {
                                             "type": "integer",
                                             "description": "Pull request number.",
+                                        },
+                                    },
+                                    "required": ["pr_number"],
+                                },
+                            },
+                            {
+                                "name": "plate_pr_verify",
+                                "description": (
+                                    "Run scripted pre-merge checks for a PR (base main, labels, fragment, milestone, "
+                                    "closing keyword, CI, review threads). Read-only; never merges. Optional run_tests."
+                                ),
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {
+                                            "type": "string",
+                                            "description": "owner/name. Optional if running inside repo clone.",
+                                        },
+                                        "pr_number": {
+                                            "type": "integer",
+                                            "description": "Pull request number.",
+                                        },
+                                        "run_tests": {
+                                            "type": "boolean",
+                                            "description": (
+                                                "When true, run PYTHONPATH=src python3 -m unittest discover -s tests "
+                                                "locally and include the count (warns on stale-base signatures)."
+                                            ),
+                                        },
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Repository root for run_tests (default: .).",
                                         },
                                     },
                                     "required": ["pr_number"],
