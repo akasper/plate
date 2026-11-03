@@ -14,7 +14,7 @@ from urllib.parse import quote
 from .github_client import GhApiError, GhClient
 from .github_labels import prepare_label_description, sync_repository_labels_from_registry
 from .health import get_health, resolve_repo
-from .import_payload import list_payload_relative_paths
+from .import_payload import build_minimal_current_md, list_payload_relative_paths
 from .payload_surface import filter_plate_scripts, prepare_copied_text, resolve_local_goals_wiki
 from .plate_config import (
     ALLOWED_PLATFORMS,
@@ -868,6 +868,68 @@ def _process_template_payload(
     return copied_or_would, skipped_identical, skipped_stale, pending_writes
 
 
+def _remote_repo_path_missing(
+    repo: str,
+    gh: GhClient,
+    rel_path: str,
+    parent_ref: str | None,
+) -> bool:
+    """True when ``rel_path`` is absent at ``parent_ref`` (or ref unknown)."""
+    if not parent_ref:
+        return True
+    endpoint = _contents_endpoint_at_ref(repo, rel_path, parent_ref)
+    try:
+        payload = gh.api(endpoint)
+    except GhApiError as error:
+        if _is_missing_content_error(error) or _is_empty_repository_error(error):
+            return True
+        raise
+    if isinstance(payload, dict) and payload.get("type") == "file":
+        return False
+    if isinstance(payload, list) and payload:
+        return False
+    return True
+
+
+def _bootstrap_payload_includes_playwright(rel_paths: list[str]) -> bool:
+    for rel in rel_paths:
+        if rel == "playwright.config.ts" or rel.startswith("tests/e2e"):
+            return True
+    return False
+
+
+def _bootstrap_playwright_detected(
+    repo: str,
+    gh: GhClient,
+    parent_ref: str | None,
+    payload_rel_paths: list[str],
+) -> bool:
+    if _bootstrap_payload_includes_playwright(payload_rel_paths):
+        return True
+    if parent_ref and not _remote_repo_path_missing(repo, gh, "playwright.config.ts", parent_ref):
+        return True
+    if parent_ref and not _remote_repo_path_missing(repo, gh, "tests/e2e", parent_ref):
+        return True
+    return False
+
+
+def _maybe_queue_bootstrap_current_md(
+    repo: str,
+    gh: GhClient,
+    parent_ref: str | None,
+    pending_writes: list[tuple[str, bytes]],
+) -> bool:
+    """Queue minimal CURRENT.md for grouped bootstrap when remote file is absent (#1322 / #618)."""
+    if not _remote_repo_path_missing(repo, gh, "CURRENT.md", parent_ref):
+        return False
+    rels = [rel for rel, _ in pending_writes]
+    has_pw = _bootstrap_playwright_detected(repo, gh, parent_ref, rels)
+    pending_writes.append(
+        ("CURRENT.md", build_minimal_current_md(has_playwright=has_pw).encode("utf-8"))
+    )
+    return True
+
+
 def _validate_bootstrap_preconditions(repo: str, repo_obj: dict, default_branch: str, gh: GhClient) -> None:
     permissions = repo_obj.get("permissions")
     if isinstance(permissions, dict) and permissions.get("push") is False:
@@ -989,6 +1051,8 @@ def run_bootstrap(
                     resolved_platform,
                 )
             )
+        if _maybe_queue_bootstrap_current_md(target, gh, parent_sha, bootstrap_writes):
+            copied_count += 1
         if bootstrap_writes:
             _commit_repository_files(
                 gh,
@@ -1017,6 +1081,11 @@ def run_bootstrap(
             stale=skipped_stale_paths,
         )
     else:
+        plan_parent_sha: str | None = None
+        try:
+            plan_parent_sha, _ = _resolve_branch_parent_commit(target, default_branch, gh)
+        except (GhApiError, RuntimeError):
+            plan_parent_sha = None
         would_copy, skipped_identical_paths, skipped_stale_paths, _pending = _process_template_payload(
             target,
             default_branch,
@@ -1024,7 +1093,10 @@ def run_bootstrap(
             template_root,
             platform=resolved_platform,
             write_missing=False,
+            parent_ref=plan_parent_sha,
         )
+        if _remote_repo_path_missing(target, gh, "CURRENT.md", plan_parent_sha):
+            would_copy += 1
         state = "planned"
         if adoption_mode:
             detail = (

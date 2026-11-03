@@ -1,0 +1,10 @@
+{
+  "slug": "greenfield-current-md-1322",
+  "change_type": "fix",
+  "surface": "src/plate_core/bootstrap.py",
+  "summary": "Greenfield `gh plate bootstrap --apply` seeds minimal CURRENT.md from the import-payload #618 template in the grouped payload commit when remote CURRENT.md is absent, so `scripts/validate_plate_repo.sh` passes on a fresh repo (#1322).",
+  "migration_impact": "New greenfield bootstraps after this change include CURRENT.md on the default branch without a separate import-payload step. Existing repos with CURRENT.md are unchanged (bootstrap skips the path).",
+  "agent_notes": "Seed Epic milestone attachment for label-check was already handled by `_resolve_bootstrap_epic_milestone_number` and create-initial-epic apply logic; this fragment covers the missing CURRENT.md half of #1322.",
+  "breaking": false,
+  "links": ["#1322", "#618", "#1193"]
+}
