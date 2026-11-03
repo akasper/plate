@@ -167,6 +167,7 @@ Adopters without Lull omit the snapshot; ranking skips lull-weighting.
 
 ## Related artifacts
 
+- [agent-crews.md](agent-crews.md) — parent design (#1327 / #1354): crew model, levels, pilot, deferred application
 - [agent-crews-task-spec.md](agent-crews-task-spec.md) — task spec fields the router consumes
 - Design #1327 — epic requirements for crews, tiers, and review rule
 - `src/plate_core/task_spec.py` — tier/level/route constants and validation rules
