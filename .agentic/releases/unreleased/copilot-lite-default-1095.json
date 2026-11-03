@@ -1,0 +1,15 @@
+{
+  "slug": "copilot-lite-default-1095",
+  "change_type": "docs",
+  "surface": "docs/copilot-review.md",
+  "summary": "Document PLATE default Copilot review effort Lite at repo/org level and Balanced for risk:high or risk:critical review requests; record that default effort is not API-readable so no doctor check (#1095).",
+  "migration_impact": "Adopters should read docs/copilot-review.md and set repository Copilot code review Review effort level to Lite in GitHub Settings; use Balanced only when requesting review on high-risk PRs.",
+  "migration_guidance": [
+    "1. Open repository Settings → Copilot → Code review and set Review effort level to Lite (organization default optional).",
+    "2. When requesting Copilot review on PRs labeled risk:high or risk:critical, choose Balanced for that request only.",
+    "3. No gh plate import-payload or workflow change is required; verify manually because GitHub does not expose the default effort level via REST/GraphQL read APIs."
+  ],
+  "agent_notes": "Default effort is UI-only on GitHub; PLATE does not add doctor/adopt verification until a read API exists. Pair with agents/github-actions-and-copilot.md for when to request Copilot at all.",
+  "breaking": false,
+  "links": ["#1095", "#1091"]
+}

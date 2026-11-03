@@ -1,0 +1,10 @@
+{
+  "slug": "pr-template-visual-evidence-1049",
+  "change_type": "feature",
+  "surface": ".github/PULL_REQUEST_TEMPLATE.md, template payload, bootstrap",
+  "summary": "Replace the table-heavy PR template with Summary, What changed, How verified, Links, and Visual evidence sections; document gh --attach for screenshots and bootstrap/import seeding when the template file is absent (#1049).",
+  "migration_impact": "Run `gh plate import-payload --strategy safe` (or conservative when the path is missing) to add or refresh `.github/PULL_REQUEST_TEMPLATE.md` in downstream repos. Conservative import leaves a customized template unchanged.",
+  "agent_notes": "Repo and payload copies must stay identical. Do not commit screenshot binaries; use `gh pr create|edit --attach` per template guidance.",
+  "breaking": false,
+  "links": ["#1049", "#1048", "#1053"]
+}
