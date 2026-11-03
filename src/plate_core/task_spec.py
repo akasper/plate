@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping, Sequence
 
 import yaml
 
@@ -52,6 +52,11 @@ APPROVAL_GATES = frozenset(
     {"none", "human-t3", "human-merge", "human-release", "human-external"}
 )
 NEXT_WHEN = frozenset({"success", "failure", "always"})
+JUNIOR_CHEAPER_FIRST_ROUTES = frozenset({"docs", "tests"})
+RISK_CRITICAL_LABEL = "risk:critical"
+HUMAN_APPROVAL_GATES = frozenset(
+    {"human-t3", "human-merge", "human-release", "human-external"}
+)
 
 _ID_RE = __import__("re").compile(r"^[a-z][a-z0-9-]*$")
 _FIELD_ID_RE = __import__("re").compile(r"^[a-z][a-z0-9_]*$")
@@ -59,6 +64,96 @@ _FIELD_ID_RE = __import__("re").compile(r"^[a-z][a-z0-9_]*$")
 
 class TaskSpecError(ValueError):
     """Raised when a task spec document is invalid."""
+
+
+@dataclass(frozen=True)
+class LevelTierPolicyRow:
+    """One row of the fixed level→tier table (#1355 / #1327)."""
+
+    level: str
+    default_tier: str
+    allowed_tiers: frozenset[str]
+    human_assignable: bool
+    notes: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "level": self.level,
+            "default_tier": self.default_tier,
+            "allowed_tiers": sorted(self.allowed_tiers, key=TIER_ORDER.index),
+            "human_assignable": self.human_assignable,
+            "notes": self.notes,
+        }
+
+
+LEVEL_TIER_POLICY: tuple[LevelTierPolicyRow, ...] = (
+    LevelTierPolicyRow(
+        "junior",
+        "T1",
+        frozenset({"T0", "T1", "T2"}),
+        False,
+        "Economical hosted band; prefer cheapest tier for docs/tests when CI validates output.",
+    ),
+    LevelTierPolicyRow(
+        "senior",
+        "T2",
+        frozenset({"T1", "T2", "T3"}),
+        False,
+        "Default crew implementation band.",
+    ),
+    LevelTierPolicyRow(
+        "staff",
+        "T3",
+        frozenset({"T2", "T3"}),
+        True,
+        "Premium tier or a human registry record; T3 requires human approval in the spec.",
+    ),
+)
+_LEVEL_POLICY_BY_LEVEL = {row.level: row for row in LEVEL_TIER_POLICY}
+
+
+def level_tier_policy_row(level: str) -> LevelTierPolicyRow:
+    try:
+        return _LEVEL_POLICY_BY_LEVEL[level]
+    except KeyError as exc:
+        raise TaskSpecError(f"unknown level {level!r}") from exc
+
+
+def level_tier_policy_table() -> tuple[dict[str, Any], ...]:
+    """Serialize the level-to-tier policy for docs, schema, and tests."""
+    return tuple(row.to_dict() for row in LEVEL_TIER_POLICY)
+
+
+def recommended_start_tier(
+    level: str,
+    route: str,
+    *,
+    allowed_tiers: Sequence[str],
+    ci_validates_output: bool = False,
+) -> str:
+    """Return the policy start tier for a level/route given the spec's allowed tiers."""
+    policy = level_tier_policy_row(level)
+    tier_set = [t for t in allowed_tiers if t in policy.allowed_tiers]
+    if not tier_set:
+        raise TaskSpecError(
+            f"model_policy.tiers has no tiers allowed for level {level!r}"
+        )
+    if (
+        level == "junior"
+        and route in JUNIOR_CHEAPER_FIRST_ROUTES
+        and ci_validates_output
+    ):
+        return min(tier_set, key=TIER_ORDER.index)
+    default = policy.default_tier
+    if default in tier_set:
+        return default
+    return min(tier_set, key=lambda t: abs(TIER_ORDER.index(t) - TIER_ORDER.index(default)))
+
+
+def issue_risk_requires_human_approver(labels: Iterable[str]) -> bool:
+    """True when GitHub labels include risk:critical (#1327 / #1355)."""
+    normalized = {label.strip().lower() for label in labels if label.strip()}
+    return RISK_CRITICAL_LABEL in normalized
 
 
 @dataclass(frozen=True)
@@ -213,6 +308,70 @@ def _validate_model_policy(model_policy: Any, path: str, approval: str) -> None:
             )
 
 
+def _validate_level_tier_policy(
+    *,
+    level: str,
+    route: str,
+    model_policy: Mapping[str, Any],
+    approval: str,
+    path: str,
+    issue_labels: Iterable[str] | None = None,
+    acceptance: Mapping[str, Any] | None = None,
+) -> None:
+    policy = level_tier_policy_row(level)
+    tiers_raw = model_policy.get("tiers")
+    if not isinstance(tiers_raw, list):
+        return
+    tiers = [t for t in tiers_raw if isinstance(t, str)]
+    for tier in tiers:
+        if tier not in policy.allowed_tiers:
+            raise TaskSpecError(
+                _err(
+                    path,
+                    f"model_policy.tiers {tier!r} is not allowed for level {level!r} "
+                    f"(allowed: {sorted(policy.allowed_tiers, key=TIER_ORDER.index)})",
+                )
+            )
+    start = model_policy.get("start_tier")
+    if not isinstance(start, str):
+        return
+    ci_validates = False
+    if acceptance is not None and acceptance.get("ci_validates_output") is True:
+        ci_validates = True
+    expected_start = recommended_start_tier(
+        level,
+        route,
+        allowed_tiers=tiers,
+        ci_validates_output=ci_validates,
+    )
+    if start != expected_start:
+        if (
+            level == "junior"
+            and route in JUNIOR_CHEAPER_FIRST_ROUTES
+            and ci_validates
+        ):
+            detail = (
+                f"cheapest allowed tier when acceptance.ci_validates_output is true "
+                f"(expected {expected_start!r})"
+            )
+        else:
+            detail = (
+                f"mapped initial tier for level {level!r} is {expected_start!r} "
+                "(escalation may move upward via model_policy.escalation)"
+            )
+        raise TaskSpecError(
+            _err(path, f"model_policy.start_tier must be {expected_start!r}: {detail}")
+        )
+    if issue_labels is not None and issue_risk_requires_human_approver(issue_labels):
+        if approval not in HUMAN_APPROVAL_GATES:
+            raise TaskSpecError(
+                _err(
+                    path,
+                    f"approval must be human-t3 or stronger when issue carries {RISK_CRITICAL_LABEL!r}",
+                )
+            )
+
+
 def _validate_next(next_edges: Any, path: str, *, known_ids: frozenset[str] | None) -> None:
     if not isinstance(next_edges, list):
         raise TaskSpecError(_err(path, "next must be a list"))
@@ -237,6 +396,7 @@ def validate_task_spec_document(
     *,
     path: str = "<document>",
     known_task_ids: frozenset[str] | None = None,
+    issue_labels: Iterable[str] | None = None,
 ) -> TaskSpecValidationReport:
     errors: list[str] = []
     task_id = str(data.get("id") or "")
@@ -278,11 +438,27 @@ def validate_task_spec_document(
         success_signal = acceptance.get("success_signal")
         if not isinstance(success_signal, str) or not success_signal.strip():
             raise TaskSpecError(_err(path, "acceptance.success_signal must be a non-empty string"))
+        ci_flag = acceptance.get("ci_validates_output")
+        if ci_flag is not None and not isinstance(ci_flag, bool):
+            raise TaskSpecError(
+                _err(path, "acceptance.ci_validates_output must be a boolean when set")
+            )
+        if set(acceptance) - {"checks", "success_signal", "ci_validates_output"}:
+            raise TaskSpecError(_err(path, "acceptance has unknown keys"))
         _validate_tools(data.get("tools"), path)
         approval = _require_str(data.get("approval"), "approval", path)
         if approval not in APPROVAL_GATES:
             raise TaskSpecError(_err(path, f"approval must be one of {sorted(APPROVAL_GATES)}"))
         _validate_model_policy(data.get("model_policy"), path, approval)
+        _validate_level_tier_policy(
+            level=level,
+            route=route,
+            model_policy=data.get("model_policy") or {},
+            approval=approval,
+            path=path,
+            issue_labels=issue_labels,
+            acceptance=acceptance,
+        )
         budget = data.get("budget")
         if not isinstance(budget, dict):
             raise TaskSpecError(_err(path, "budget must be a mapping"))

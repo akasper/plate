@@ -1,0 +1,15 @@
+{
+  "slug": "level-to-tier-policy-1355",
+  "change_type": "feature",
+  "surface": "src/plate_core/task_spec.py, src/plate_core/data/task_spec.schema.json, docs/design/agent-crews-resource-router.md",
+  "summary": "Fixed level-to-tier policy table (#1355): junior→T1, senior→T2, staff→T3 or human; risk:critical human approval; junior docs/tests cheapest start tier when acceptance.ci_validates_output; enforced in task spec validator with schema metadata.",
+  "migration_impact": "Task specs that violate the level/tier band or junior docs/tests start rules fail gh plate tasks validate. Pass issue_labels when validating dispatch tied to risk:critical issues.",
+  "migration_guidance": [
+    "1. Keep model_policy.tiers within the allowed set for each level (see level_tier_policy_table() or router design doc).",
+    "2. Set start_tier to the mapped initial tier for the level; set acceptance.ci_validates_output: true on junior docs/tests tasks when CI checks output, then start at the cheapest listed tier.",
+    "3. When routing from risk:critical issues, set approval to human-t3 or stronger."
+  ],
+  "agent_notes": "Policy matches agent-crews.md #1327 decisions. No new GitHub labels beyond optional tier:T0-T3.",
+  "breaking": false,
+  "links": ["#1355", "#1327", "#1337", "#1333"]
+}
