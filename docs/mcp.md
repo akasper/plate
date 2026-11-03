@@ -12,7 +12,7 @@ When no profile is configured, plate-mcp uses the **`default`** profile: a lean 
 |---|---|
 | `issue` | Repository health, epic status, feature detection |
 | `task` | Human-only Task issue helpers |
-| `review` | PR babysit, merge gates, review-thread helpers |
+| `review` | PR babysit, merge gates, `plate_pr_verify`, review-thread helpers |
 | `delegation` | Baseline agents, skills, context map, `plate_delegate_to_agent` |
 | `process` | `plate_what_next`, `plate_feed` |
 
@@ -91,6 +91,10 @@ Example `.mcp.json` fragment with optional profiles:
 ```
 
 Leave `env` unset to keep the lean default.
+
+## PR verify (#1365)
+
+`gh plate pr verify <N>` and MCP `plate_pr_verify` run read-only mechanical pre-merge checks: base branch `main`, PR type and Feature gates (area label, unreleased fragment), milestone, closing keyword, base sync, required CI (latest run per check name, ignoring cancelled duplicates superseded by success), and unresolved review threads. Exit code 0 only when all checks pass; use `--json` for agents. Optional `--run-tests` / `run_tests=true` runs `PYTHONPATH=src python3 -m unittest discover -s tests` and warns when the count looks like a stale base (~1215). This command never merges.
 
 ## Spend ledger (#1352)
 

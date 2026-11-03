@@ -24,6 +24,7 @@ from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .github_client import GhApiError, GhClient
 from .health import get_health, label_coverage_fix_command, resolve_repo
+from .pr_verify import format_pr_verify_text, verify_pr
 from .pr_babysit import (
     babysit_pr,
     claim_babysit_watch,
@@ -1580,6 +1581,20 @@ def cmd_pr_health(args: argparse.Namespace) -> int:
     if result.get('note'):
         print(f"Note: {result['note']}")
     return 0
+
+
+def cmd_pr_verify(args: argparse.Namespace) -> int:
+    report = verify_pr(
+        pr_number=args.pr_number,
+        repo=args.repo,
+        run_tests=bool(getattr(args, "run_tests", False)),
+        repo_root=getattr(args, "repo_root", None) or ".",
+    )
+    if args.json:
+        print(json.dumps(report))
+    else:
+        print(format_pr_verify_text(report))
+    return 0 if report.get("passed") else 1
 
 
 def cmd_release_status(args: argparse.Namespace) -> int:
@@ -5350,6 +5365,25 @@ def build_parser() -> argparse.ArgumentParser:
     pr_health.add_argument("--repo", help="owner/name; defaults to git remote origin")
     pr_health.add_argument("--json", action="store_true", help="Output JSON")
     pr_health.set_defaults(func=cmd_pr_health)
+
+    pr_verify = pr_sub.add_parser(
+        "verify",
+        help="Run scripted pre-merge checks for a PR (read-only; never merges)",
+    )
+    pr_verify.add_argument("pr_number", type=int, help="Pull request number")
+    pr_verify.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    pr_verify.add_argument(
+        "--run-tests",
+        action="store_true",
+        help="Run PYTHONPATH=src python3 -m unittest discover -s tests locally",
+    )
+    pr_verify.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repository root for --run-tests (default: .)",
+    )
+    pr_verify.add_argument("--json", action="store_true", help="Output JSON")
+    pr_verify.set_defaults(func=cmd_pr_verify)
 
     release = sub.add_parser("release", help="Release status and notes diff (read-only MVP)")
     release_sub = release.add_subparsers(dest="release_command", required=True)

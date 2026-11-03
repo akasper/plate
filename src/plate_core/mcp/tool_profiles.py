@@ -71,6 +71,7 @@ def profiles_for_tool(name: str) -> frozenset[str]:
     elif name in (
         "plate_pr_babysit",
         "plate_get_pr_merge_gates",
+        "plate_pr_verify",
         "plate_resolve_review_thread",
         "plate_get_unresolved_review_threads",
         "plate_get_actionable_review_threads",
