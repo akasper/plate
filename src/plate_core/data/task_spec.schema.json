@@ -46,7 +46,7 @@
     "route": {
       "type": "string",
       "enum": ["docs", "tests", "fix", "feature", "review"],
-      "description": "Work route. Junior docs/tests must start at the cheapest allowed tier when CI validates output (#1355)."
+      "description": "Work route. Junior docs/tests use cheapest start tier only when acceptance.ci_validates_output is true (#1355)."
     },
     "inputs": {
       "type": "array",
@@ -68,6 +68,11 @@
         "success_signal": {
           "type": "string",
           "minLength": 1
+        },
+        "ci_validates_output": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, junior route docs/tests must start at the cheapest tier in model_policy.tiers (CI checks the output). Default false: use the level default start tier."
         }
       }
     },
@@ -99,7 +104,7 @@
         "start_tier": {
           "type": "string",
           "enum": ["T0", "T1", "T2", "T3"],
-          "description": "Initial tier for the run; must not exceed the level default tier in level_to_tier_policy."
+          "description": "Initial tier for the run; must match the mapped initial tier for level (and junior docs/tests cheapest tier when acceptance.ci_validates_output is true)."
         },
         "escalation": {
           "type": "object",

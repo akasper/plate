@@ -25,9 +25,9 @@ Andrew’s #1327 decisions (recorded in [agent-crews.md](agent-crews.md)) fix ho
 
 | Level | Default tier | Allowed `model_policy.tiers` | Human assignable | Notes |
 |---|---|---|---|---|
-| **junior** | **T1** | T0, T1, T2 | no | **`start_tier` must not exceed T1.** For **`route: docs`** or **`route: tests`**, **`start_tier` must be the cheapest tier listed** in `model_policy.tiers` (cheaper model first when CI validates output). |
-| **senior** | **T2** | T1, T2, T3 | no | Default implementation band; **`start_tier` must not exceed T2** (may start lower and use one escalation step). |
-| **staff** | **T3** | T2, T3 | **yes** | Premium models or a **human** registry record (`kind: human`). When **T3** is used, `model_policy.t3_requires_approval: human` and a human **`approval`** gate are required (unchanged from task spec rules). |
+| **junior** | **T1** | T0, T1, T2 | no | **`start_tier` must be T1** unless **`acceptance.ci_validates_output: true`** and **`route`** is **`docs`** or **`tests`**, then **`start_tier` must be the cheapest tier listed** in `model_policy.tiers`. Escalation may step upward within allowed tiers. |
+| **senior** | **T2** | T1, T2, T3 | no | **`start_tier` must be T2** (mapped initial tier); use **`model_policy.escalation`** for one upward step within allowed tiers. |
+| **staff** | **T3** | T2, T3 | **yes** | **`start_tier` must be T3** for model runs, or assign a **human** registry record (`kind: human`). When **T3** is used, `model_policy.t3_requires_approval: human` and a human **`approval`** gate are required (unchanged from task spec rules). |
 
 **Risk:** When dispatch ties a run to a GitHub issue or PR carrying **`risk:critical`**, the task spec’s **`approval`** must be **`human-t3`** or stronger (`human-merge`, `human-release`, `human-external`). The router and validator treat this as a hard gate—no autonomous model path to merge.
 

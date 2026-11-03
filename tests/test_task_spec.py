@@ -48,19 +48,54 @@ class TaskSpecSchemaTests(unittest.TestCase):
             self.assertEqual(row["human_assignable"], schema_row["human_assignable"])
         self.assertEqual(len(LEVEL_TIER_POLICY), 3)
 
-    def test_recommended_start_tier_junior_docs_uses_cheapest(self):
+    def test_recommended_start_tier_junior_docs_uses_cheapest_when_ci(self):
         self.assertEqual(
-            recommended_start_tier("junior", "docs", allowed_tiers=["T1", "T2"]),
+            recommended_start_tier(
+                "junior",
+                "docs",
+                allowed_tiers=["T1", "T2"],
+                ci_validates_output=True,
+            ),
             "T1",
         )
         self.assertEqual(
-            recommended_start_tier("junior", "tests", allowed_tiers=["T0", "T1"]),
+            recommended_start_tier(
+                "junior",
+                "tests",
+                allowed_tiers=["T0", "T1"],
+                ci_validates_output=True,
+            ),
             "T0",
+        )
+        self.assertEqual(
+            recommended_start_tier("junior", "docs", allowed_tiers=["T0", "T1"]),
+            "T1",
         )
         self.assertEqual(
             recommended_start_tier("senior", "docs", allowed_tiers=["T1", "T2"]),
             "T2",
         )
+
+    def test_reject_senior_start_below_mapped_initial(self):
+        doc = load_task_spec_yaml(_RESEARCH)
+        doc = dict(doc)
+        doc["model_policy"] = {
+            "tiers": ["T1", "T2"],
+            "start_tier": "T1",
+            "max_cost_usd": 0.5,
+        }
+        report = validate_task_spec_document(doc, path="test.yml")
+        self.assertFalse(report.valid)
+        self.assertTrue(any("mapped initial tier" in e for e in report.errors))
+
+    def test_reject_staff_start_below_mapped_initial(self):
+        doc = load_task_spec_yaml(_DESIGN)
+        doc = dict(doc)
+        doc["model_policy"] = dict(doc["model_policy"])
+        doc["model_policy"]["start_tier"] = "T2"
+        report = validate_task_spec_document(doc, path="test.yml")
+        self.assertFalse(report.valid)
+        self.assertTrue(any("mapped initial tier" in e for e in report.errors))
 
     def test_issue_risk_critical_requires_human_gate(self):
         self.assertTrue(issue_risk_requires_human_approver(["risk:critical"]))
@@ -79,7 +114,24 @@ class TaskSpecSchemaTests(unittest.TestCase):
         self.assertFalse(report.valid)
         self.assertTrue(any("not allowed for level" in e for e in report.errors))
 
-    def test_reject_junior_docs_start_above_cheapest(self):
+    def test_reject_junior_docs_start_above_cheapest_when_ci(self):
+        doc = load_task_spec_yaml(_RESEARCH)
+        doc = dict(doc)
+        doc["level"] = "junior"
+        doc["route"] = "docs"
+        doc["acceptance"] = dict(doc["acceptance"])
+        doc["acceptance"]["ci_validates_output"] = True
+        doc["model_policy"] = {
+            "tiers": ["T0", "T1"],
+            "start_tier": "T1",
+            "max_cost_usd": 0.5,
+        }
+        doc["approval"] = "none"
+        report = validate_task_spec_document(doc, path="test.yml")
+        self.assertFalse(report.valid)
+        self.assertTrue(any("ci_validates_output" in e for e in report.errors))
+
+    def test_junior_docs_without_ci_allows_default_start(self):
         doc = load_task_spec_yaml(_RESEARCH)
         doc = dict(doc)
         doc["level"] = "junior"
@@ -91,8 +143,7 @@ class TaskSpecSchemaTests(unittest.TestCase):
         }
         doc["approval"] = "none"
         report = validate_task_spec_document(doc, path="test.yml")
-        self.assertFalse(report.valid)
-        self.assertTrue(any("cheapest" in e for e in report.errors))
+        self.assertTrue(report.valid, report.errors)
 
     def test_risk_critical_requires_human_approval_in_spec(self):
         doc = load_task_spec_yaml(_RESEARCH)

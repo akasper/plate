@@ -30,10 +30,7 @@ model_policy:
   tiers:
     - T2
     - T3
-  start_tier: T2
-  escalation:
-    from: T2
-    to: T3
+  start_tier: T3
   max_cost_usd: 2.0
   t3_requires_approval: human
 approval: human-t3

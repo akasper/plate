@@ -124,7 +124,13 @@ def level_tier_policy_table() -> tuple[dict[str, Any], ...]:
     return tuple(row.to_dict() for row in LEVEL_TIER_POLICY)
 
 
-def recommended_start_tier(level: str, route: str, *, allowed_tiers: Sequence[str]) -> str:
+def recommended_start_tier(
+    level: str,
+    route: str,
+    *,
+    allowed_tiers: Sequence[str],
+    ci_validates_output: bool = False,
+) -> str:
     """Return the policy start tier for a level/route given the spec's allowed tiers."""
     policy = level_tier_policy_row(level)
     tier_set = [t for t in allowed_tiers if t in policy.allowed_tiers]
@@ -132,7 +138,11 @@ def recommended_start_tier(level: str, route: str, *, allowed_tiers: Sequence[st
         raise TaskSpecError(
             f"model_policy.tiers has no tiers allowed for level {level!r}"
         )
-    if level == "junior" and route in JUNIOR_CHEAPER_FIRST_ROUTES:
+    if (
+        level == "junior"
+        and route in JUNIOR_CHEAPER_FIRST_ROUTES
+        and ci_validates_output
+    ):
         return min(tier_set, key=TIER_ORDER.index)
     default = policy.default_tier
     if default in tier_set:
@@ -306,6 +316,7 @@ def _validate_level_tier_policy(
     approval: str,
     path: str,
     issue_labels: Iterable[str] | None = None,
+    acceptance: Mapping[str, Any] | None = None,
 ) -> None:
     policy = level_tier_policy_row(level)
     tiers_raw = model_policy.get("tiers")
@@ -324,22 +335,32 @@ def _validate_level_tier_policy(
     start = model_policy.get("start_tier")
     if not isinstance(start, str):
         return
-    if TIER_ORDER.index(start) > TIER_ORDER.index(policy.default_tier):
-        raise TaskSpecError(
-            _err(
-                path,
-                f"model_policy.start_tier {start!r} exceeds default {policy.default_tier!r} "
-                f"for level {level!r}",
+    ci_validates = False
+    if acceptance is not None and acceptance.get("ci_validates_output") is True:
+        ci_validates = True
+    expected_start = recommended_start_tier(
+        level,
+        route,
+        allowed_tiers=tiers,
+        ci_validates_output=ci_validates,
+    )
+    if start != expected_start:
+        if (
+            level == "junior"
+            and route in JUNIOR_CHEAPER_FIRST_ROUTES
+            and ci_validates
+        ):
+            detail = (
+                f"cheapest allowed tier when acceptance.ci_validates_output is true "
+                f"(expected {expected_start!r})"
             )
-        )
-    expected_start = recommended_start_tier(level, route, allowed_tiers=tiers)
-    if level == "junior" and route in JUNIOR_CHEAPER_FIRST_ROUTES and start != expected_start:
-        raise TaskSpecError(
-            _err(
-                path,
-                f"model_policy.start_tier must be {expected_start!r} for junior {route} "
-                "(cheapest allowed tier when CI validates output)",
+        else:
+            detail = (
+                f"mapped initial tier for level {level!r} is {expected_start!r} "
+                "(escalation may move upward via model_policy.escalation)"
             )
+        raise TaskSpecError(
+            _err(path, f"model_policy.start_tier must be {expected_start!r}: {detail}")
         )
     if issue_labels is not None and issue_risk_requires_human_approver(issue_labels):
         if approval not in HUMAN_APPROVAL_GATES:
@@ -417,6 +438,13 @@ def validate_task_spec_document(
         success_signal = acceptance.get("success_signal")
         if not isinstance(success_signal, str) or not success_signal.strip():
             raise TaskSpecError(_err(path, "acceptance.success_signal must be a non-empty string"))
+        ci_flag = acceptance.get("ci_validates_output")
+        if ci_flag is not None and not isinstance(ci_flag, bool):
+            raise TaskSpecError(
+                _err(path, "acceptance.ci_validates_output must be a boolean when set")
+            )
+        if set(acceptance) - {"checks", "success_signal", "ci_validates_output"}:
+            raise TaskSpecError(_err(path, "acceptance has unknown keys"))
         _validate_tools(data.get("tools"), path)
         approval = _require_str(data.get("approval"), "approval", path)
         if approval not in APPROVAL_GATES:
@@ -429,6 +457,7 @@ def validate_task_spec_document(
             approval=approval,
             path=path,
             issue_labels=issue_labels,
+            acceptance=acceptance,
         )
         budget = data.get("budget")
         if not isinstance(budget, dict):

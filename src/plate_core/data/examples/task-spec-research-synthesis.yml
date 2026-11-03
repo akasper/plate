@@ -31,10 +31,7 @@ model_policy:
   tiers:
     - T1
     - T2
-  start_tier: T1
-  escalation:
-    from: T1
-    to: T2
+  start_tier: T2
   max_cost_usd: 0.75
 approval: none
 budget:
