@@ -308,6 +308,7 @@ def _load_review_threads_paginated(
     owner, name = _split_repo(repo)
     nodes: list[dict[str, Any]] = []
     after: str | None = None
+    seen_cursors: set[str] = set()
     while True:
         fields: dict[str, Any] = {
             "query": _REVIEW_THREADS_PAGE_QUERY,
@@ -335,8 +336,11 @@ def _load_review_threads_paginated(
         if not page_info.get("hasNextPage"):
             return nodes, True
         after = page_info.get("endCursor")
-        if not after:
+        # Fail closed on a missing or repeated cursor so a misbehaving API
+        # cannot make this loop forever.
+        if not after or after in seen_cursors:
             return nodes, False
+        seen_cursors.add(after)
 
 
 def _fetch_compare_behind(
