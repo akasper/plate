@@ -1,5 +1,6 @@
 """Tests for GhClient field serialization and resilience (#270 error/rate/secret)."""
 
+import base64
 import json
 import unittest
 from unittest.mock import MagicMock, patch
@@ -96,6 +97,25 @@ class GhClientJsonInputTests(unittest.TestCase):
             cmd = mock_run.call_args[0][0]
             self.assertIn("--input", cmd)
             self.assertNotIn("-f", cmd)
+
+    def test_git_blob_base64_over_linux_argv_cap_uses_json_input(self):
+        """Regression #1030: bootstrap blob uploads must not pass base64 on gh argv."""
+        raw = b"X" * (97 * 1024)
+        b64 = base64.b64encode(raw).decode("ascii")
+        self.assertGreater(len(b64), 128 * 1024, "fixture must exceed typical Linux MAX_ARG_STRLEN")
+        with patch("plate_core.github_client.run_hidden") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout='{"sha":"blobsha"}', stderr="")
+            GhClient().api(
+                "repos/owner/repo/git/blobs",
+                method="POST",
+                fields={"content": b64, "encoding": "base64"},
+            )
+            cmd = mock_run.call_args[0][0]
+            self.assertIn("--input", cmd)
+            joined = " ".join(cmd)
+            self.assertNotIn(b64[:512], joined)
+            body = mock_run.call_args[1].get("input") or ""
+            self.assertIn(b64, body)
 
 
 class GhClientGitTreeSerializationTests(unittest.TestCase):
