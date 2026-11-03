@@ -19,6 +19,22 @@ This document specifies the **registry record shape**, **router inputs and outpu
 - `T3` requires human approval per task spec (`t3_requires_approval: human` and a matching `approval` gate); the router must not assign `T3` until approval is recorded.
 - Consumption and lull integrations are **optional adapters**; adopters without those feeds still route from registry + task spec + static availability.
 
+## Level-to-tier policy table (#1355)
+
+Andrew’s #1327 decisions (recorded in [agent-crews.md](agent-crews.md)) fix how **level** maps to model **tiers** before optional registry ranking. The same table is enforced in `plate_core.task_spec` (`LEVEL_TIER_POLICY`, `level_tier_policy_table()`) and documented in `task_spec.schema.json` under `$defs.level_to_tier_policy`.
+
+| Level | Default tier | Allowed `model_policy.tiers` | Human assignable | Notes |
+|---|---|---|---|---|
+| **junior** | **T1** | T0, T1, T2 | no | **`start_tier` must not exceed T1.** For **`route: docs`** or **`route: tests`**, **`start_tier` must be the cheapest tier listed** in `model_policy.tiers` (cheaper model first when CI validates output). |
+| **senior** | **T2** | T1, T2, T3 | no | Default implementation band; **`start_tier` must not exceed T2** (may start lower and use one escalation step). |
+| **staff** | **T3** | T2, T3 | **yes** | Premium models or a **human** registry record (`kind: human`). When **T3** is used, `model_policy.t3_requires_approval: human` and a human **`approval`** gate are required (unchanged from task spec rules). |
+
+**Risk:** When dispatch ties a run to a GitHub issue or PR carrying **`risk:critical`**, the task spec’s **`approval`** must be **`human-t3`** or stronger (`human-merge`, `human-release`, `human-external`). The router and validator treat this as a hard gate—no autonomous model path to merge.
+
+**Labels:** Only optional **`tier:T0`–`tier:T3`** may appear on issues/PRs. Do **not** add `level:*`, `route:*`, or `role:*` labels; level and route stay in the task spec.
+
+**Escalation:** At most one tier step per run (`model_policy.escalation`), consistent with the task spec validator; the router must not silently assign a tier outside the level’s allowed set.
+
 ## Resource registry record (interface)
 
 Registry data is a set of records (future default location: `.agentic/resources/*.yml` or a single `.agentic/resources/registry.yml`—exact path is a follow-up issue). Each record describes one assignable endpoint.

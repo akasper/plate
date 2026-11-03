@@ -25,7 +25,7 @@ gh plate tasks validate [--repo-root PATH] [--json]
 python -m plate_core.task_spec [--repo-root PATH] [--path FILE ...] [--json]
 ```
 
-Validates every `*.yml` / `*.yaml` under `.agentic/tasks/` (or explicit `--path` files). Cross-checks `next.task_id` references within the validated set.
+Validates every `*.yml` / `*.yaml` under `.agentic/tasks/` (or explicit `--path` files). Cross-checks `next.task_id` references within the validated set. Enforces the **level-to-tier policy table** (#1355): allowed tiers per level, `start_tier` ceiling, junior docs/tests cheaper-first start, and optional `issue_labels` for `risk:critical` human approval when validating dispatch packets.
 
 ## Examples
 

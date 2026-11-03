@@ -40,11 +40,13 @@
     },
     "level": {
       "type": "string",
-      "enum": ["junior", "senior", "staff"]
+      "enum": ["junior", "senior", "staff"],
+      "description": "Agent seniority band. Default model tier: junior→T1, senior→T2, staff→T3 or human (#1355). Enforced by plate_core.task_spec level_tier_policy_table()."
     },
     "route": {
       "type": "string",
-      "enum": ["docs", "tests", "fix", "feature", "review"]
+      "enum": ["docs", "tests", "fix", "feature", "review"],
+      "description": "Work route. Junior docs/tests must start at the cheapest allowed tier when CI validates output (#1355)."
     },
     "inputs": {
       "type": "array",
@@ -96,7 +98,8 @@
         },
         "start_tier": {
           "type": "string",
-          "enum": ["T0", "T1", "T2", "T3"]
+          "enum": ["T0", "T1", "T2", "T3"],
+          "description": "Initial tier for the run; must not exceed the level default tier in level_to_tier_policy."
         },
         "escalation": {
           "type": "object",
@@ -138,6 +141,47 @@
     }
   },
   "$defs": {
+    "level_to_tier_policy": {
+      "description": "Fixed level→tier table (#1355 / #1327). Canonical enforcement lives in plate_core.task_spec.LEVEL_TIER_POLICY.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "default_tier", "allowed_tiers", "human_assignable", "notes"],
+        "properties": {
+          "level": { "type": "string", "enum": ["junior", "senior", "staff"] },
+          "default_tier": { "type": "string", "enum": ["T0", "T1", "T2", "T3"] },
+          "allowed_tiers": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["T0", "T1", "T2", "T3"] }
+          },
+          "human_assignable": { "type": "boolean" },
+          "notes": { "type": "string" }
+        }
+      },
+      "default": [
+        {
+          "level": "junior",
+          "default_tier": "T1",
+          "allowed_tiers": ["T0", "T1", "T2"],
+          "human_assignable": false,
+          "notes": "Prefer cheapest tier for docs/tests when CI validates output."
+        },
+        {
+          "level": "senior",
+          "default_tier": "T2",
+          "allowed_tiers": ["T1", "T2", "T3"],
+          "human_assignable": false,
+          "notes": "Default crew implementation band."
+        },
+        {
+          "level": "staff",
+          "default_tier": "T3",
+          "allowed_tiers": ["T2", "T3"],
+          "human_assignable": true,
+          "notes": "Premium tier or human; T3 requires human approval in model_policy."
+        }
+      ]
+    },
     "typed_field": {
       "type": "object",
       "additionalProperties": false,
