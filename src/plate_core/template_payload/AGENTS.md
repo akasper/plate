@@ -142,6 +142,33 @@ When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is
 - Require the `pr-gates` check from `.github/workflows/plate-pr-gates.yml` on protected branches so merge waits until agent feedback threads are resolved where applicable.
 - Full third-party feedback steps, pre-merge recheck, and human escalation: [third-party-agent-feedback.md](agents/third-party-agent-feedback.md).
 
+## UI screenshots in pull requests (#1050)
+
+User-visible UI changes require inline visual proof on the pull request.
+
+**Required captures:** desktop viewport width, **320px** mobile viewport width, embedded **inline** in the PR description or PR comments; include **before and after** images when the change alters existing UI.
+
+**Upload (never commit binaries):** Run `gh --version` first (**gh >= 2.99** required for `--attach`). Attach when creating, editing, or commenting:
+
+```bash
+gh pr create --attach ./desktop-after.png --attach ./mobile-320-after.png ...
+gh pr edit <number> --attach ./shot.png
+gh pr comment <number> --attach ./shot.png
+```
+
+**Forbidden:** committing screenshot files to git; relative repository paths in markdown image embeds; `raw.githubusercontent.com` or `blob/...?raw=true` URLs for PR evidence.
+
+**Token matrix (who can `--attach`):**
+
+| Agent context | PAT / host | Can use `gh --attach`? |
+|---|---|---|
+| Local CLI agents | `gho_`, `ghp_`, `github_pat_` | Yes |
+| GitHub Copilot cloud coding agent | Copilot-hosted | Yes |
+| Third-party cloud agents (Cursor, Amp, Devin, etc.) | No user PAT on hosted runners | No |
+
+Third-party cloud agents do not receive a user PAT; they cannot upload PR attachments.
+
+**Routing UI work to Copilot:** Assign UI-heavy issues to **GitHub Copilot's cloud coding agent** (assign the issue to Copilot on GitHub). An agent that cannot use `gh pr create|edit|comment --attach` must hand off UI screenshot work to Copilot (or a human with local `gh` and a PAT) rather than committing images or using broken URL embeds.
 
 ## Label Rules
 
