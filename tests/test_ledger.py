@@ -19,8 +19,10 @@ from plate_core.ledger import (
     query_decisions,
     record_decision,
     record_from_autonomy_action,
+    record_jev_score,
     record_spend_interval,
     render_decision_marker,
+    spend_interval_has_jev_score,
     sum_spend_interval_tokens,
     validate_ledger_entry,
 )
@@ -224,6 +226,53 @@ class TestSpendLedger1352(unittest.TestCase):
         self.assertEqual(normalized["tier"], "T1")
         self.assertEqual(normalized["route_clarity"], "ambiguous")
         self.assertEqual(normalized["input_tokens"], 10)
+
+    def test_record_jev_score_shadow_fields(self):
+        out = record_jev_score(
+            run_id="run-jev-1",
+            lifecycle_task_type="support_triage",
+            jev_score=0.82,
+            jev_suggested_tier="T1",
+            jev_model="composer-2.5",
+            jev_route_clarity="ambiguous",
+            tier="T2",
+            model="gpt-5.6-sol-high",
+            route_clarity="clear",
+            base_dir=self.base,
+        )
+        self.assertTrue(out["metadata"].get("jev_shadow_mode"))
+        self.assertEqual(out["jev_score"], 0.82)
+        self.assertEqual(out["jev_suggested_tier"], "T1")
+        self.assertEqual(out["tier"], "T2")
+        scored = list_spend_intervals(jev_scored=True, base_dir=self.base)
+        self.assertEqual(len(scored), 1)
+        self.assertTrue(spend_interval_has_jev_score(scored[0]))
+
+    def test_record_jev_score_requires_run_identity(self):
+        with self.assertRaises(ValueError):
+            record_jev_score(jev_score=1.0, base_dir=self.base)
+
+    def test_validate_rejects_bad_jev_tier(self):
+        with self.assertRaises(ValueError):
+            record_jev_score(
+                run_id="r1",
+                jev_score=0.5,
+                jev_suggested_tier="T9",
+                base_dir=self.base,
+            )
+
+    def test_spend_interval_can_carry_jev_on_same_row(self):
+        out = record_spend_interval(
+            run_id="run-combined",
+            lifecycle_task_type="marketing_copy",
+            tier="T2",
+            cost_usd=0.05,
+            jev_score=0.71,
+            jev_suggested_tier="T2",
+            base_dir=self.base,
+        )
+        self.assertEqual(out["cost_usd"], 0.05)
+        self.assertEqual(out["jev_score"], 0.71)
 
 
 class TestAutonomyLedgerWire(unittest.TestCase):

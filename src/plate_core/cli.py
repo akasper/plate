@@ -89,7 +89,7 @@ from .migrate_docs_namespace import migrate_docs_namespace
 from .costs import get_cost_report
 from .autonomy import AutonomyEngine, get_autonomy_status, run_autonomy_cycle, simulate_autonomy_action
 from .checkpoint import create_checkpoint, decide_checkpoint, get_checkpoint, list_checkpoints, list_open_checkpoints
-from .ledger import get_decision, list_decisions, query_decisions, record_decision, record_spend_interval, ledger_summary
+from .ledger import get_decision, list_decisions, query_decisions, record_decision, record_jev_score, record_spend_interval, ledger_summary
 from .feed import get_user_feed
 
 
@@ -1867,6 +1867,36 @@ def cmd_costs(args: argparse.Namespace) -> int:
 
 def cmd_ledger(args: argparse.Namespace) -> int:
     """Provenance / decision ledger CLI (#647)."""
+    if getattr(args, "record_jev_score", False):
+        if getattr(args, "jev_score", None) is None:
+            print("--jev-score is required with --record-jev-score", file=sys.stderr)
+            return 2
+        out = record_jev_score(
+            jev_score=float(args.jev_score),
+            run_id=getattr(args, "run_id", None),
+            cloud_agent_id=getattr(args, "cloud_agent_id", None),
+            lifecycle_task_type=getattr(args, "lifecycle_task_type", None) or "",
+            jev_suggested_tier=getattr(args, "jev_suggested_tier", None),
+            jev_model=getattr(args, "jev_model", None),
+            jev_route_clarity=getattr(args, "jev_route_clarity", None),
+            tier=getattr(args, "tier", None),
+            model=getattr(args, "model", None),
+            route_clarity=getattr(args, "route_clarity", None),
+            hardware=getattr(args, "hardware", None),
+            effort=getattr(args, "effort", None),
+            outcome_accepted=getattr(args, "outcome_accepted", None),
+            related_issue=getattr(args, "related_issue", None),
+            related_pr=getattr(args, "related_pr", None),
+            session=getattr(args, "session", None) or "",
+        )
+        if args.json:
+            print(json.dumps(out))
+            return 0
+        print(
+            f"recorded Jev shadow score {out.get('id')} run={out.get('run_id')} "
+            f"score={out.get('jev_score')} suggested_tier={out.get('jev_suggested_tier')}"
+        )
+        return 0
     if getattr(args, "record_spend", False):
         out = record_spend_interval(
             cloud_agent_id=getattr(args, "cloud_agent_id", None),
@@ -1889,6 +1919,10 @@ def cmd_ledger(args: argparse.Namespace) -> int:
             rediscovery_count=getattr(args, "rediscovery_count", None),
             outcome_accepted=getattr(args, "outcome_accepted", None),
             cost_usd=getattr(args, "cost_usd", None),
+            jev_score=getattr(args, "jev_score", None),
+            jev_suggested_tier=getattr(args, "jev_suggested_tier", None),
+            jev_model=getattr(args, "jev_model", None),
+            jev_route_clarity=getattr(args, "jev_route_clarity", None),
             related_issue=getattr(args, "related_issue", None),
             related_pr=getattr(args, "related_pr", None),
             session=getattr(args, "session", None) or "",
@@ -5447,6 +5481,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Record a spend_interval entry (#1352)",
     )
+    ledger.add_argument(
+        "--record-jev-score",
+        action="store_true",
+        dest="record_jev_score",
+        help="Record Jev shadow score on a spend_interval row (#1356); does not route",
+    )
     ledger.add_argument("--cloud-agent-id", dest="cloud_agent_id")
     ledger.add_argument("--parent-run-id", dest="parent_run_id")
     ledger.add_argument("--run-id", dest="run_id")
@@ -5467,6 +5507,10 @@ def build_parser() -> argparse.ArgumentParser:
     ledger.add_argument("--rediscovery-count", dest="rediscovery_count", type=int)
     ledger.add_argument("--outcome-accepted", dest="outcome_accepted", type=_parse_optional_bool)
     ledger.add_argument("--cost-usd", dest="cost_usd", type=float)
+    ledger.add_argument("--jev-score", dest="jev_score", type=float, help="Jev shadow score (#1356)")
+    ledger.add_argument("--jev-suggested-tier", dest="jev_suggested_tier", help="Jev suggested T0–T3")
+    ledger.add_argument("--jev-model", dest="jev_model", help="Model id Jev suggests for the task")
+    ledger.add_argument("--jev-route-clarity", dest="jev_route_clarity", help="clear|ambiguous per Jev")
     ledger.add_argument("--action-kind", dest="action_kind", help="Action kind for --record or filter")
     ledger.add_argument("--decision", help="Decision value (proceed|throttle|pause|...)")
     ledger.add_argument("--reason", help="Why this decision was made")

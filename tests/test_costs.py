@@ -11,7 +11,7 @@ from plate_core.costs import (
     harvest_usage_reports,
     _parse_usage_block,
 )
-from plate_core.ledger import record_spend_interval
+from plate_core.ledger import record_jev_score, record_spend_interval
 
 
 class CostsTests(unittest.TestCase):
@@ -436,6 +436,36 @@ class SpendLedger1352Tests(unittest.TestCase):
             self.assertEqual(out["total_tokens"], 175)
             self.assertAlmostEqual(out["total_cost_usd"], 0.6)
             self.assertEqual(out["accepted_outcomes"], 1)
+
+    def test_jev_shadow_score_after_spend_does_not_double_count_outcomes(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "ledger"
+            base.mkdir()
+            record_spend_interval(
+                run_id="run-jev-outcome",
+                cost_usd=1.0,
+                outcome_accepted=True,
+                base_dir=base,
+            )
+            record_jev_score(
+                run_id="run-jev-outcome",
+                jev_score=0.75,
+                outcome_accepted=True,
+                base_dir=base,
+            )
+            out = compute_run_all_in_cost(run_id="run-jev-outcome", base_dir=base)
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["accepted_outcomes"], 1)
+            self.assertAlmostEqual(out["cost_per_accepted_outcome_usd"], 1.0)
+            report = get_spend_attribution_report(base_dir=base)
+            run_row = next(
+                r for r in report["attributed_runs"] if r.get("run_id") == "run-jev-outcome"
+            )
+            self.assertEqual(run_row["accepted_outcomes"], 1)
+            self.assertAlmostEqual(run_row["cost_per_accepted_outcome_usd"], 1.0)
 
     def test_attribution_report_lists_unattributed_separately(self):
         import tempfile

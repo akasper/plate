@@ -94,7 +94,7 @@ Leave `env` unset to keep the lean default.
 
 ## Spend ledger (#1352)
 
-Record per-run spend with `plate_ledger_record_spend` (optional token fields, routing inputs, outcome). Attribute with `plate_costs` and `spend_report=true`, or compute one run via `run_cost=true` plus `run_id` or `cloud_agent_id`. CLI: `gh plate ledger --record-spend …`, `gh plate costs --spend-report`, `gh plate costs --run-cost --run-id …`.
+Record per-run spend with `plate_ledger_record_spend` (optional token fields, routing inputs, outcome). Attribute with `plate_costs` and `spend_report=true`, or compute one run via `run_cost=true` plus `run_id` or `cloud_agent_id`. Jev shadow scores (no routing): `plate_ledger_record_jev` or optional `jev_*` on `plate_ledger_record_spend`; CLI `gh plate ledger --record-jev-score …`. CLI: `gh plate ledger --record-spend …`, `gh plate costs --spend-report`, `gh plate costs --run-cost --run-id …`.
 
 ## Related design
 

@@ -94,7 +94,9 @@ Runtime assignment (model, local runtime, or human) reads PLATE files only—reg
 
 [#1356](https://github.com/akasper/plate/issues/1356): Jev **scores tasks alongside** the table and **records** scores; it **does not route**. Score records should capture the full routing factor set (model, tier, hardware via Lull, route clarity, lifecycle task type) during early measurement so outcomes can be compared later ([#1356](https://github.com/akasper/plate/issues/1356#issuecomment-6590798351)). **Do not use Jev to choose tier or resource until shadow mode has at least 60 labeled runs** to evaluate routing quality ([#1347](https://github.com/akasper/plate/issues/1347), [#1356](https://github.com/akasper/plate/issues/1356)).
 
-Ledger fields that support this observation (when recorded): `tier`, `hardware`, `route_clarity`, `lifecycle_task_type` on `spend_interval` rows ([#1352](https://github.com/akasper/plate/issues/1352)).
+**Record format and write paths:** [jev-shadow-scoring.md](jev-shadow-scoring.md).
+
+Ledger fields that support this observation (when recorded): `tier`, `hardware`, `route_clarity`, `lifecycle_task_type` on `spend_interval` rows ([#1352](https://github.com/akasper/plate/issues/1352)); Jev shadow columns `jev_score`, `jev_suggested_tier`, `jev_model`, `jev_route_clarity` on the same record type ([#1356](https://github.com/akasper/plate/issues/1356)).
 
 ## Reviewer differs from author
 
@@ -119,8 +121,9 @@ Router-level fingerprint rules: [agent-crews-resource-router.md](agent-crews-res
 | Tokens | `input_tokens`, `output_tokens`, `cached_read_tokens`, `cache_write_tokens`, `tool_output_tokens`, `turns` |
 | Handoff | `handoff_packet_size`, `handoff_packet_unit`, `rediscovery_count` |
 | Outcome | `outcome_accepted`, `cost_usd`, `related_issue`, `related_pr` |
+| Jev shadow (#1356) | `jev_score`, `jev_suggested_tier`, `jev_model`, `jev_route_clarity` (write-only; not used for routing) |
 
-Reporting: `gh plate costs --spend-report`, `gh plate costs --run-cost --run-id …`, MCP `plate_costs` / `plate_ledger_record_spend` (see [docs/mcp.md](../mcp.md)). Unattributed intervals are listed separately—never split evenly.
+Reporting: `gh plate costs --spend-report`, `gh plate costs --run-cost --run-id …`, MCP `plate_costs` / `plate_ledger_record_spend` (see [docs/mcp.md](../mcp.md)). Jev shadow scores: `gh plate ledger --record-jev-score …` / `plate_ledger_record_jev` ([#1356](https://github.com/akasper/plate/issues/1356), [jev-shadow-scoring.md](jev-shadow-scoring.md)). Unattributed intervals are listed separately—never split evenly.
 
 Baseline and crew arms of the pilot should use the same measurement hooks ([#1338](https://github.com/akasper/plate/issues/1338)).
 
