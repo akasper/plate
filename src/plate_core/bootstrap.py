@@ -581,6 +581,7 @@ BOOTSTRAP_STALE_UPGRADE_POINTER = (
 )
 
 BOOTSTRAP_TEMPLATE_COMMIT_MESSAGE = "Bootstrap: initialize PLATE template payload"
+PULL_REQUEST_TEMPLATE_REL = ".github/PULL_REQUEST_TEMPLATE.md"
 
 
 def _bootstrap_payload_write_error(
@@ -930,6 +931,32 @@ def _maybe_queue_bootstrap_current_md(
     return True
 
 
+def _maybe_queue_bootstrap_pull_request_template(
+    repo: str,
+    gh: GhClient,
+    parent_ref: str | None,
+    pending_writes: list[tuple[str, bytes]],
+    template_root: Path,
+    *,
+    platform: str,
+) -> bool:
+    """Queue bundled PR template when remote file is absent (#1049).
+
+    Idempotent with template-payload copy: no-op when the path is already queued or
+    the remote file exists.
+    """
+    rel = PULL_REQUEST_TEMPLATE_REL
+    if any(queued_rel == rel for queued_rel, _ in pending_writes):
+        return False
+    if not _remote_repo_path_missing(repo, gh, rel, parent_ref):
+        return False
+    source = template_root / rel
+    if not source.is_file():
+        return False
+    pending_writes.append((rel, _local_template_file_bytes(rel, source, platform)))
+    return True
+
+
 def _validate_bootstrap_preconditions(repo: str, repo_obj: dict, default_branch: str, gh: GhClient) -> None:
     permissions = repo_obj.get("permissions")
     if isinstance(permissions, dict) and permissions.get("push") is False:
@@ -1052,6 +1079,15 @@ def run_bootstrap(
                 )
             )
         if _maybe_queue_bootstrap_current_md(target, gh, parent_sha, bootstrap_writes):
+            copied_count += 1
+        if _maybe_queue_bootstrap_pull_request_template(
+            target,
+            gh,
+            parent_sha,
+            bootstrap_writes,
+            template_root,
+            platform=resolved_platform,
+        ):
             copied_count += 1
         if bootstrap_writes:
             _commit_repository_files(
