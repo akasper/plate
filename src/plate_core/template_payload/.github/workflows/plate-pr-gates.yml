@@ -386,7 +386,7 @@ jobs:
           elif python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
             run_reviewer_model_gate
           else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.8.7" || true
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.9.0" || true
             if python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
               run_reviewer_model_gate
             else

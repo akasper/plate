@@ -1,0 +1,524 @@
+{
+  "version": "0.9.0",
+  "summary": "PLATE 0.9.0 -- 31 change(s): 1161-ai-discoverability-templates, 1167-ai-discoverability-review-skill, agent-crews-pilot-protocol-1353, agent-crews-task-spec-1333, agents-md-slim-core-1330....",
+  "cut_at": "2026-11-04T03:00:01Z",
+  "fragment_count": 31,
+  "fragment_slugs": [
+    "1161-ai-discoverability-templates",
+    "1167-ai-discoverability-review-skill",
+    "agent-crews-pilot-protocol-1353",
+    "agent-crews-task-spec-1333",
+    "agents-md-slim-core-1330",
+    "bootstrap-grouped-commit-1277",
+    "ci-audit-1282",
+    "ci-audit-skill-1301",
+    "ci-cd-split-guidance-1269",
+    "ci-path-job-map-1270",
+    "ci-speed-checklist-1283",
+    "copilot-lite-default-1095",
+    "greenfield-current-md-1322",
+    "jev-shadow-scoring-1356",
+    "label-check-optional-tier-labels-1328",
+    "level-to-tier-policy-1355",
+    "marketing-ai-discoverability-config-1164",
+    "mcp-tool-profiles-1331",
+    "narrow-baseline-catalog-roles-1336",
+    "plate-ci-speed-1284",
+    "pr-handoff-comment-attribution-1236",
+    "pr-packet-1364",
+    "pr-template-visual-evidence-1049",
+    "pr-verify-1365",
+    "pre-commit-hook-mcp-1302",
+    "pre-push-hook-template-1281",
+    "release-repair-output-1194",
+    "reviewer-model-gate-1334",
+    "spend-ledger-1352",
+    "tiered-ci-policy-1332",
+    "ui-screenshots-agent-guidance-1050"
+  ],
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/template_payload/docs/marketing/ai-discoverability/ + template_payload_inventory.json",
+      "migration_impact": "New adopters receive `docs/marketing/ai-discoverability/` scaffolding on import-payload or bootstrap. Existing repos are unchanged until they import or copy the directory.",
+      "agent_notes": "Templates only\u2014skill (#1167), marketing.yml ai_discoverability (#1164), and automation (#1168) are separate. Use honest tactics; every control answer must cite SPEC.md or an issue.",
+      "migration_guidance": [
+        "Run `gh plate import-payload` with an appropriate strategy to add `docs/marketing/ai-discoverability/` if missing.",
+        "Fill control sources in `prompt-set.md`, run baseline prompts, and record results in `baseline-log.md` before launch.",
+        "Do not add hidden text or prompt injection; keep claims traceable to SPEC.md or issues per Epic #1159."
+      ],
+      "links": [
+        "#1161",
+        "#1159",
+        "#1111"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "baseline_catalog.yml (review-ai-discoverability) + docs/marketing/ai-discoverability-review-checklist.md + template payload skill/checklist",
+      "migration_impact": "Downstream repos receive the checklist and `.agentic/skills/review-ai-discoverability/SKILL.md` on import-payload; baseline catalog and plugin SKILLS surfaces gain the new skill. `.agentic/marketing.yml` references the checklist artifact.",
+      "agent_notes": "Lazy-load the review-ai-discoverability skill for discoverability or launch reviews\u2014not ordinary implementation loops. Every claim must trace to SPEC.md or an issue; no hidden text or fake endorsements.",
+      "migration_guidance": [
+        "Run `gh plate import-payload` (or bootstrap) to copy the checklist and skill.",
+        "Add `review-ai-discoverability` to local agent workflows or run via dev-relations-expert delegation before launch.",
+        "Complete docs/marketing/ai-discoverability-review-checklist.md; file gaps as issues per honest-tactics rules in Epic #1159."
+      ],
+      "links": [
+        "#1167",
+        "#1159",
+        "#1118",
+        "#1120"
+      ]
+    },
+    {
+      "change_type": "documentation",
+      "surface": "docs/design/agent-crews-pilot-protocol.md, docs/design/agent-crews-task-spec.md",
+      "migration_impact": "Documentation only. Teams running the #1338 pilot should follow the new protocol; no code or workflow changes.",
+      "agent_notes": "Closes design scope for #1353. Win metric is all-in cost per accepted outcome with escaped defects no worse; ~20 pairs are directional; ~30-76 pairs needed for a strong 30% cost claim.",
+      "migration_guidance": [
+        "1. Read docs/design/agent-crews-pilot-protocol.md before scheduling pilot runs.",
+        "2. Record spend with gh plate ledger --record-spend and attribute runs with gh plate costs --run-cost; never invent token or cost values.",
+        "3. On DentalCoach use paired-arm comparison only; do not claim a merged-PR historical baseline."
+      ],
+      "links": [
+        "#1353",
+        "#1338",
+        "#1352",
+        "#1327"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/task_spec.py, src/plate_core/data/task_spec.schema.json, gh plate tasks validate",
+      "migration_impact": "Adopters may add .agentic/tasks/*.yml crew specs and run gh plate tasks validate locally; no workflow or label changes.",
+      "agent_notes": "Task specs extend the #395 delegation packet with typed IO, model tiers, tool allow-lists, and static next edges. Role may be inferred from issue type/labels at runtime; validate with tasks validate.",
+      "migration_guidance": [
+        "1. Copy examples from src/plate_core/data/examples/ into .agentic/tasks/ when piloting agent crews.",
+        "2. Run gh plate tasks validate (or python -m plate_core.task_spec) before committing task specs.",
+        "3. Reference MCP tool profile names from tool_profiles.py in tools.profiles; level and route stay in the YAML, not GitHub labels."
+      ],
+      "links": [
+        "#1333",
+        "#1327",
+        "#395"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, docs/agents/",
+      "migration_impact": "After import-payload or self-migrate, open AGENTS.md for the core contract and follow links to docs/agents/ for ceremony, babysit, autonomy, and script detail. No behavioral intent change.",
+      "agent_notes": "Load docs/agents/<topic>.md when work touches that topic; the core index table lists each page.",
+      "links": [
+        "#1330"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/bootstrap.py",
+      "migration_impact": "New repositories bootstrapped with plate-core after this change show a single grouped scaffold commit on the default branch (plus the existing optional initial README commit on empty repos). Stale-skip reporting and label sync behavior are unchanged.",
+      "agent_notes": "When reviewing bootstrap history on a repo, expect one commit titled \"Bootstrap: initialize PLATE template payload\" for scaffold files rather than dozens of per-path commits. Re-run bootstrap still skips identical and stale remote paths per #1257.",
+      "links": [
+        "#1277",
+        "#1267"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "gh plate ci audit + plate_core.ci_audit + docs/design/ci-audit-command.md",
+      "migration_impact": "Additive CLI only. Adopters run `gh plate ci audit [--limit N] [--json]` against their repo; no workflow or branch-protection changes.",
+      "agent_notes": "Workflow motivation credited in docs to Owen Gretzinger's Oct 2026 X post on Boardy CI analysis (see issue #1282); PLATE heuristics and output are original. Complements research #1271 and feeds future nightly audit procedures under #1268.",
+      "migration_guidance": [
+        "Ensure `gh` is authenticated with Actions read access for the target repository.",
+        "Run `gh plate ci audit --json` locally or from a scheduled procedure when baselining CI minutes.",
+        "Read docs/design/ci-audit-command.md for setup/test step heuristics before acting on numbers."
+      ],
+      "links": [
+        "#1282",
+        "#1268",
+        "#1271"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".agentic/skills/ci-audit/SKILL.md + docs/migration/ci-speed-checklist.md (payload mirror)",
+      "migration_impact": "Bootstrapped repos receive `.agentic/skills/ci-audit/SKILL.md` on import-payload. The CI speed checklist links to the skill; no baseline catalog or workflow changes.",
+      "agent_notes": "Lazy-load `.agentic/skills/ci-audit/SKILL.md` only for CI speed or minutes baselining work\u2014not for ordinary feature loops. Measure with `gh plate ci audit [--json]`; treat cache hint_* fields as name-based guesses.",
+      "migration_guidance": [
+        "Run `gh plate import-payload` (or bootstrap) to copy `.agentic/skills/ci-audit/SKILL.md`.",
+        "When improving CI speed, read the skill from docs/migration/ci-speed-checklist.md before baselining minutes.",
+        "Requires `gh plate` with the ci audit command (#1282); see docs/design/ci-audit-command.md in plate-core for heuristics."
+      ],
+      "links": [
+        "#1301",
+        "#1282",
+        "#1283",
+        "#1268"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/migration/ci-cd-split-guidance.md + template_payload copy",
+      "migration_impact": "Optional read for adopters reshaping CI; no workflow import required. Sync the doc via gh plate import-payload when upgrading plate-core.",
+      "agent_notes": "PLATES-CORE block id ci-cd-split-heavy-jobs holds sync-safe bullet guidance. actions-cost-rollout link points at akasper/plate main (not in default payload). Do not edit the separate CI speed checklist page for #1283.",
+      "migration_guidance": [
+        "Read docs/migration/ci-cd-split-guidance.md before removing OS matrices or installer jobs from PR workflows.",
+        "Keep branch protection on labels, test, and pr-gates; do not require check names from workflows that do not run on every pull_request (pending checks block merges).",
+        "Job-level if: skips satisfy required checks; workflow-level filters that skip the whole workflow do not.",
+        "Run post-merge or release pipelines after integration merges to catch platform-specific regressions."
+      ],
+      "links": [
+        "#1269",
+        "#1268"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core/ci_path_jobs.py, scripts/plate/select_ci_jobs.py, .github/actions/plate-select-ci-jobs, docs/migration/ci-path-job-selection.md",
+      "migration_impact": "Optional: adopters enable path selection by adding config and wiring plate-select-ci-jobs; required checks labels, test, and pr-gates stay unchanged with an aggregate test job pattern.",
+      "agent_notes": "Regression: tests/test_ci_path_jobs.py. Helper exits 1 on safety fail. PLATE_CI_FULL_SUITE or --full-suite selects all jobs. Credits in docs/migration/ci-path-job-selection.md.",
+      "migration_guidance": [
+        "1. Copy .agentic/ci-path-jobs.example.yml to .agentic/ci-path-jobs.yml and set enabled: true with your modules and all_jobs list.",
+        "2. Add a select job using .github/actions/plate-select-ci-jobs; gate optional jobs with jobs_json / run_all outputs.",
+        "3. Keep job ids labels, test (aggregate), and pr-gates for branch protection; optional jobs may skip but aggregate test must pass.",
+        "4. Add plate-ci-scheduled-full-suite.example.yml (or equivalent) on main with full-suite: true for nightly coverage."
+      ],
+      "links": [
+        "#1270",
+        "#1268"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/migration/ci-speed-checklist.md + template_payload copy + PLATES-CORE block ci-speed-checklist-1283",
+      "migration_impact": "New optional doc at docs/migration/ci-speed-checklist.md. Adopters on import-payload receive the same file under template paths; merge the PLATES-CORE block if they customized a fork of the page.",
+      "agent_notes": "When improving CI speed, follow docs/migration/ci-speed-checklist.md; measure with gh plate ci audit (#1282) and track minutes (#1272). Idea themes credited to Owen Gretzinger's Oct 2026 X post, summarized in the doc.",
+      "migration_guidance": [
+        "1. Pull or run gh plate import-payload to copy docs/migration/ci-speed-checklist.md.",
+        "2. Link the page from your operator index if you maintain a local docs README.",
+        "3. Apply checklist items in your own workflows; PLATE required gates (labels, test, pr-gates) stay unchanged."
+      ],
+      "links": [
+        "#1283",
+        "#1268",
+        "#1210",
+        "#1214",
+        "#1272",
+        "#1282"
+      ]
+    },
+    {
+      "change_type": "docs",
+      "surface": "docs/copilot-review.md",
+      "migration_impact": "Adopters should read docs/copilot-review.md and set repository Copilot code review Review effort level to Lite in GitHub Settings; use Balanced only when requesting review on high-risk PRs.",
+      "agent_notes": "Default effort is UI-only on GitHub; PLATE does not add doctor/adopt verification until a read API exists. Pair with agents/github-actions-and-copilot.md for when to request Copilot at all.",
+      "migration_guidance": [
+        "1. Open repository Settings \u2192 Copilot \u2192 Code review and set Review effort level to Lite (organization default optional).",
+        "2. When requesting Copilot review on PRs labeled risk:high or risk:critical, choose Balanced for that request only.",
+        "3. No gh plate import-payload or workflow change is required; verify manually because GitHub does not expose the default effort level via REST/GraphQL read APIs."
+      ],
+      "links": [
+        "#1095",
+        "#1091"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/bootstrap.py",
+      "migration_impact": "New greenfield bootstraps after this change include CURRENT.md on the default branch without a separate import-payload step. Existing repos with CURRENT.md are unchanged (bootstrap skips the path).",
+      "agent_notes": "Seed Epic milestone attachment for label-check was already handled by `_resolve_bootstrap_epic_milestone_number` and create-initial-epic apply logic; this fragment covers the missing CURRENT.md half of #1322.",
+      "links": [
+        "#1322",
+        "#618",
+        "#1193"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/ledger.py, mcp_server.py, cli.py, docs/design/jev-shadow-scoring.md",
+      "migration_impact": "Additive optional fields on spend_interval JSON. New MCP tool plate_ledger_record_jev. Existing ledger rows unchanged.",
+      "agent_notes": "Shadow only: no router or tier logic may consume jev_score. lifecycle_task_type should reflect non-dev work when applicable.",
+      "migration_guidance": [
+        "1. After a run, record applied routing via --record-spend or plate_ledger_record_spend.",
+        "2. Record Jev opinion via gh plate ledger --record-jev-score --run-id <id> --jev-score <n> (optional jev_suggested_tier, jev_model, jev_route_clarity).",
+        "3. Do not branch routing on jev_* until shadow evaluation completes (60 labeled runs)."
+      ],
+      "links": [
+        "#1356",
+        "#1347",
+        "#1352",
+        "#1327"
+      ],
+      "requires": [
+        "0.8.6"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "`.github/workflows/label-check.yml`, template payload `label-check.yml`, repo `labels.yml`, template payload `ci.yml` PR label gate",
+      "migration_impact": "Merge updated label-check and PR label gate scripts from plate-core so agent-crew tier metadata no longer fails CI when present.",
+      "agent_notes": "Tier labels are optional metadata; zero or one valid tier label is allowed alongside required type labels and optional risk/area labels.",
+      "migration_guidance": [
+        "Sync `.github/workflows/label-check.yml` and the PR label gate (`.github/workflows/ci.yml` labels job in the template; `.github/workflows/labels.yml` in plate-core) from upstream.",
+        "Optional: add `tier:T0`..`tier:T3` to `.github/labels.yml` when you adopt crew routing labels."
+      ],
+      "links": [
+        "#1328",
+        "#1327"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/task_spec.py, src/plate_core/data/task_spec.schema.json, docs/design/agent-crews-resource-router.md",
+      "migration_impact": "Task specs that violate the level/tier band or junior docs/tests start rules fail gh plate tasks validate. Pass issue_labels when validating dispatch tied to risk:critical issues.",
+      "agent_notes": "Policy matches agent-crews.md #1327 decisions. No new GitHub labels beyond optional tier:T0-T3.",
+      "migration_guidance": [
+        "1. Keep model_policy.tiers within the allowed set for each level (see level_tier_policy_table() or router design doc).",
+        "2. Set start_tier to the mapped initial tier for the level; set acceptance.ci_validates_output: true on junior docs/tests tasks when CI checks output, then start at the cheapest listed tier.",
+        "3. When routing from risk:critical issues, set approval to human-t3 or stronger."
+      ],
+      "links": [
+        "#1355",
+        "#1327",
+        "#1337",
+        "#1333"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".agentic/marketing.yml (repo + template_payload)",
+      "migration_impact": "Adopters who customized marketing.yml should merge the new ai_discoverability block and update source_of_product_truth from CURRENT.md to SPEC.md when refreshing from payload.",
+      "agent_notes": "Honest tactics only: visibility prompts and public claims must trace to SPEC.md or an issue. Do not add a separate ai_discoverability config file \u2014 everything lives in .agentic/marketing.yml.",
+      "migration_guidance": [
+        "Set claim_review_policy.source_of_product_truth to SPEC.md (CURRENT.md is deprecated for product truth).",
+        "Add the ai_discoverability block under claim_review_policy when enabling Epic #1159 visibility checks; keep enabled: false until engines and caps are chosen.",
+        "Point prompt_set at your prompt-set file (template default: docs/marketing/ai-discoverability/prompt-set.md once #1161 lands)."
+      ],
+      "links": [
+        "#1164",
+        "#1159"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/mcp/tool_profiles.py, plate-mcp, docs/mcp.md",
+      "migration_impact": "MCP hosts now receive a smaller default tools/list unless PLATE_MCP_TOOL_PROFILES or --tool-profiles includes additional profiles or all. gh plate and CLI behavior are unchanged.",
+      "agent_notes": "Default MCP attachment uses the default profile alias (~20 tools). Use profile all for exhaustive tool-list tests or full-surface sessions.",
+      "migration_guidance": [
+        "1. To restore the full tool catalog in MCP clients, set PLATE_MCP_TOOL_PROFILES=all or pass --tool-profiles=all to plate-mcp.",
+        "2. For specialized agents, enable only the profiles you need (see docs/mcp.md).",
+        "3. Task specs may reference profile names in tool allow-lists as they land under Epic #1327."
+      ],
+      "links": [
+        "#1331",
+        "#1327"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/data/baseline_catalog.yml, agents_surface renderer, plugin agent personas",
+      "migration_impact": "Downstream repos that mirror the baseline catalog gain additional agent ids and must regenerate plugin agent surfaces after import. No new GitHub role labels are introduced.",
+      "agent_notes": "Use `gh plate agents list` to discover new roles. Each catalog agent declares `default_tool_profiles` for MCP hosts (see docs/mcp.md). The hand-authored `plate` coordinator persona is unchanged.",
+      "migration_guidance": [
+        "1. After upgrading plate-core, run `python3 scripts/generate-plugin-agents.py` if you vendor plugin agent files.",
+        "2. Task specs may reference new baseline agent ids (for example team-lead, product-manager, go-to-market-lead).",
+        "3. Role routing from issues continues to use issue type plus existing labels; do not add role:* labels."
+      ],
+      "links": [
+        "#1336",
+        "#1327"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": ".github/workflows/ci.yml (plate repository only)",
+      "migration_impact": "None for downstream repos. The plate-select-runs-on action stays in the template payload for private adopters.",
+      "agent_notes": "Only plate's own workflow changed. Adopters apply the same ideas through docs/plate/migration/ci-speed-checklist.md.",
+      "links": [
+        "#1284",
+        "#1268"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "AGENTS.md + address-pr-feedback skill + plate_core.comment_attribution",
+      "migration_impact": "Adopters get updated AGENTS.md PLATES-CORE block and address-pr-feedback skill text. Optional `.plate` autonomy.comment_attribution overrides default-on behavior.",
+      "agent_notes": "Ideas adapted from t3dotgg/tstack takeover and leaving-pr-comments skills (MIT, copyright Theo Browne) per #1232; PLATE wording and apply_comment_attribution helper are original. After editing baseline_catalog address-pr-feedback procedure, run python3 scripts/generate-plugin-skills.py.",
+      "migration_guidance": [
+        "Merge or import the pr-handoff-comment-attribution-1236 PLATES-CORE block into AGENTS.md.",
+        "Refresh .agentic/skills/address-pr-feedback/SKILL.md from bootstrap/import-payload or regenerate from plate-core.",
+        "To disable attribution headers, set autonomy.comment_attribution.enabled to false in .plate."
+      ],
+      "links": [
+        "#1236",
+        "#1232"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pr_packet.py, cli.py, mcp_server.py, docs/mcp.md, tests/test_pr_packet.py",
+      "migration_impact": "New CLI subcommand and review-profile MCP tool. Optional --record-ledger / record_ledger writes spend_interval rows with measured packet bytes.",
+      "agent_notes": "Treat the packet as the single handoff artifact for feedback work; escalate with plate_pr_babysit only when the packet shows unresolved threads or failing checks.",
+      "migration_guidance": [
+        "1. Agents call gh plate pr-packet <N> --json or plate_pr_packet instead of re-fetching raw review comments.",
+        "2. Pass turns and record_ledger during crew pilots to compare babysit cost (#1327 / #1352).",
+        "3. Hosts on default MCP profile get plate_pr_packet via the review profile bundle."
+      ],
+      "links": [
+        "#1364",
+        "#1352",
+        "#1327",
+        "#1078"
+      ],
+      "requires": [
+        "0.8.6"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/PULL_REQUEST_TEMPLATE.md, template payload, bootstrap",
+      "migration_impact": "Run `gh plate import-payload --strategy safe` (or conservative when the path is missing) to add or refresh `.github/PULL_REQUEST_TEMPLATE.md` in downstream repos. Conservative import leaves a customized template unchanged.",
+      "agent_notes": "Repo and payload copies must stay identical. Do not commit screenshot binaries; use `gh pr create|edit --attach` per template guidance.",
+      "links": [
+        "#1049",
+        "#1048",
+        "#1053"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/pr_verify.py, cli.py, mcp_server.py, docs/mcp.md",
+      "migration_impact": "Additive CLI subcommand and MCP tool in the default review profile. No merge or mutation behavior.",
+      "agent_notes": "Report-only; never merge from pr verify. Wrong-base PRs fail the base_branch check.",
+      "migration_guidance": [
+        "1. Agents run gh plate pr verify <N> --json before requesting human merge.",
+        "2. Optional gh plate pr verify <N> --run-tests to confirm unittest count on current main.",
+        "3. MCP hosts use plate_pr_verify with pr_number (and optional run_tests)."
+      ],
+      "links": [
+        "#1365",
+        "#1352",
+        "#1327"
+      ],
+      "requires": [
+        "0.8.6"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core.git_hooks + gh plate hooks + MCP plate_hooks_install/plate_hooks_status + scripts/plate/pre-commit-hook.sh + docs/bootstrap/pre-push-hook.md",
+      "migration_impact": "Optional: configure hooks.pre_commit in .plate, run `gh plate hooks install --hook pre-commit`, or call plate_hooks_install. Pre-push behavior unchanged.",
+      "agent_notes": "Use plate_hooks_status to inspect both hooks; plate_hooks_install with hook pre-push or pre-commit. See docs/bootstrap/pre-push-hook.md.",
+      "migration_guidance": [
+        "Import payload or bootstrap to receive scripts/plate/pre-commit-hook.sh.",
+        "Add hooks.pre_commit command templates to .plate when commit-time checks are preferred.",
+        "Run `gh plate hooks install --hook pre-commit` or MCP plate_hooks_install with hook pre-commit."
+      ],
+      "links": [
+        "#1302",
+        "#1281",
+        "#1290"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core.git_hooks + gh plate hooks + scripts/plate/pre-push-hook.sh + docs/bootstrap/pre-push-hook.md + AGENTS.md PLATES-CORE block",
+      "migration_impact": "Adopters opt in: set hooks.pre_push commands in .plate and run `gh plate hooks install`. Bootstrap surfaces the optional step. No CI or branch-protection changes.",
+      "agent_notes": "Prefer installed hooks over AGENTS.md prose for must-always-run local checks. Idea credit: Owen Gretzinger X post on Boardy CI (Oct 2026); PLATE wording and tooling are original.",
+      "migration_guidance": [
+        "Import payload or bootstrap to receive scripts/plate/pre-push-hook.sh and docs/bootstrap/pre-push-hook.md.",
+        "Add hooks.pre_push format/lint/typecheck command templates to .plate (use {files} for changed paths).",
+        "Run `gh plate hooks install` from the repo root on each developer machine."
+      ],
+      "links": [
+        "#1281",
+        "#1268"
+      ]
+    },
+    {
+      "change_type": "cli",
+      "surface": "gh plate release repair",
+      "migration_impact": "None. Output and JSON gain extra fields; no behavior change and no payload change.",
+      "agent_notes": "Read the required, reason, doc and canonical_next_release_issue fields from release repair JSON instead of inferring them.",
+      "links": [
+        "#1194",
+        "#1193"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/PULL_REQUEST_TEMPLATE.md, plate-pr-gates, plate_core.pr_reviewer_model_gate",
+      "migration_impact": "Adopters should import updated PULL_REQUEST_TEMPLATE.md and plate-pr-gates.yml; fill Agent review models table on new PRs.",
+      "agent_notes": "Parse the Agent review models table in the PR body. Warn-only by default; `--enforce` makes a missing table or same normalized model id fail. Same provider with different models always warns only.",
+      "migration_guidance": [
+        "1. Run gh plate import-payload (dry-run, then apply) for plate-pr-gates.yml and PULL_REQUEST_TEMPLATE.md, or regenerate gates with scripts/build_plate_pr_gates_workflow.py after upgrading plate-core.",
+        "2. Fill Author model and Reviewer model in every Feature/Bug/Documentation PR; use copilot for GitHub Copilot code review when the author was an agent model.",
+        "3. Human merge approval requirements are unchanged; this gate is warn-only for now and will block identical author/reviewer model ids in a later release.",
+        "4. Payload plate-pr-gates tries PYTHONPATH, an existing plate-core install, or pip install of the pinned plate-core version in that workflow; if the runtime is still unavailable the step warns and continues (warn-only rollout)."
+      ],
+      "links": [
+        "#1334",
+        "#1327"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/ledger.py, src/plate_core/costs.py, mcp_server.py, cli.py, docs/mcp.md",
+      "migration_impact": "Additive ledger record_type spend_interval and plate_ledger_record_spend MCP tool. plate_costs / gh plate costs gain spend_report and run_cost modes. Existing decision ledger JSON loads unchanged.",
+      "agent_notes": "Never invent token or cost values. cost_per_accepted_outcome_usd uses intervals where outcome_accepted=true and cost_usd was recorded.",
+      "migration_guidance": [
+        "1. Callers record intervals via plate_ledger_record_spend or gh plate ledger --record-spend (pass only measured fields).",
+        "2. Pilot attribution: gh plate costs --spend-report or plate_costs spend_report=true.",
+        "3. One run all-in: gh plate costs --run-cost --run-id <id> or plate_costs run_cost=true."
+      ],
+      "links": [
+        "#1352",
+        "#1338",
+        "#1327"
+      ],
+      "requires": [
+        "0.8.6"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core/ci_tiered_policy.py, scripts/plate/select_tiered_ci_jobs.py, docs/migration/tiered-ci-policy.md, .agentic/ci-policy.example.yml",
+      "migration_impact": "Optional: adopters copy ci-policy.example.yml, classify job_sizes from gh plate ci audit, and call select_tiered_ci_jobs before gating optional jobs. Required checks labels, test, and pr-gates unchanged until a follow-up PR wires workflows.",
+      "agent_notes": "Regression: tests/test_ci_tiered_policy.py. Policy doc notes out-of-scope workflow changes (#1332 scope split).",
+      "migration_guidance": [
+        "1. Keep ci-path-jobs.yml enabled with all optional job ids.",
+        "2. Copy .agentic/ci-policy.example.yml to .agentic/ci-policy.yml; set enabled: true and job_sizes from measured runs.",
+        "3. Pass --pr-kind ordinary or release_patch|release_minor|release_major from Release metadata; use nightly for scheduled full suite.",
+        "4. Wire select_tiered_ci_jobs in CI only after owner approval; keep aggregate test job pattern from ci-path-job-selection.md."
+      ],
+      "links": [
+        "#1332",
+        "#1268",
+        "#1270",
+        "#1269"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, .github/agents/plate-configurator.agent.md",
+      "migration_impact": "UI PRs must embed evidence via gh --attach instead of committing images; third-party cloud agents should assign UI issues to Copilot.",
+      "agent_notes": "Rule lives in AGENTS.md and plate-configurator.agent.md; keep repo and template_payload copies identical.",
+      "links": [
+        "#1050",
+        "#1048"
+      ]
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": "",
+  "closes_block": "Closes #1161, #1159, #1111, #1167, #1118, #1120, #1353, #1338, #1352, #1327, #1333, #395, #1330, #1277, #1267, #1282, #1268, #1271, #1301, #1283, #1269, #1270, #1210, #1214, #1272, #1095, #1091, #1322, #618, #1193, #1356, #1347, #1328, #1355, #1337, #1164, #1331, #1336, #1284, #1236, #1232, #1364, #1078, #1049, #1048, #1053, #1365, #1302, #1281, #1290, #1194, #1334, #1332, #1050"
+}

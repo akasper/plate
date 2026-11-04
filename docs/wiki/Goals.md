@@ -37,11 +37,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 ## Current State & Evidence
 
-*(Snapshot after v0.8.7 — update at major cuts and when North Star shifts.)*
+*(Snapshot after v0.9.0 — update at major cuts and when North Star shifts.)*
 
-**Shipped foundations (v0.8.0, public pin v0.8.7):**
+**Shipped foundations (v0.8.0, public pin v0.9.0):**
 
-- Public **PyPI** package `plate-core==0.8.7`, shared library for CLI / MCP / plugins.
+- Public **PyPI** package `plate-core==0.9.0`, shared library for CLI / MCP / plugins.
 - **`gh plate`** thin-shim extension path and release-track / ceremony tooling.
 - Autonomy and adoption foundations: budgeted AutonomyEngine, adopt / import-payload / self-migrate surfaces, quiet ops, baseline persona when PLATE signals are present.
 - Endless feed / Q&A / planning primitives and Information Audit Goals convention (Epic #218 lineage).
@@ -79,6 +79,8 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 - `pr-gates` survives multi-label PR creation, accepts only explicit closing references, and replays Development sidebar events in order. Payload CI reports the `labels` check context (#1228, #1231, #1229).
 - `babysit --watch` adds guards for required checks, CI settle, REST fallback, base-branch overlap, and restart-safe event memory (#1233, #1246).
 - A `.plate/` directory gets a clear layout error, `release finalize` accepts relative `--releases-dir`, and merge guidance adds a pre-merge recheck (#1227, #1226, #1234).
+
+**Shipped in v0.9.0 (was Next Release #1279):** agent crews task spec, tiers and pilot protocol; `pr verify` and `pr-packet`; spend ledger with Jev shadow scoring; tiered CI, path-job map and `ci audit`; slim AGENTS.md core; AI discoverability templates and skill; grouped bootstrap commit; pre-commit/pre-push hooks; MCP tool profiles.
 
 **Shipped in v0.8.7 (was Next Release #1248):**
 
