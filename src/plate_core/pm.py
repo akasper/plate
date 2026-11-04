@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .state_store import CorruptStateError, load_strict, locked_json
+
 PM_DIR = Path(".agentic/pm")
 QUEUE_FILE = "queue.json"
 LAST_CYCLE_FILE = "last_cycle.json"
@@ -782,48 +784,46 @@ class ProjectManager:
         if not path.exists():
             return []
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                rows = data.get("assignments") or []
-            elif isinstance(data, list):
-                rows = data
-            else:
-                rows = []
-            out = [r for r in rows if isinstance(r, dict)]
-            # Heal pre-#890 queue rows blocked solely for risk=off → proposed (#889/#660)
-            changed = False
-            for r in out:
-                if migrate_legacy_risk_off_blocked_assignment(r):
-                    changed = True
-            if changed:
-                try:
-                    path.write_text(
-                        json.dumps(
-                            {"updated_at": _now(), "assignments": out},
-                            indent=2,
-                        )
-                        + "\n",
-                        encoding="utf-8",
-                    )
-                except Exception:
-                    pass
-            return out
+            data = load_strict(path)
+        except CorruptStateError:
+            raise
         except Exception:
             return []
+        if isinstance(data, dict):
+            rows = data.get("assignments") or []
+        elif isinstance(data, list):
+            rows = data
+        else:
+            rows = []
+        out = [r for r in rows if isinstance(r, dict)]
+        # Heal pre-#890 queue rows blocked solely for risk=off → proposed (#889/#660)
+        changed = False
+        for r in out:
+            if migrate_legacy_risk_off_blocked_assignment(r):
+                changed = True
+        if changed:
+            try:
+                path.write_text(
+                    json.dumps(
+                        {"updated_at": _now(), "assignments": out},
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+        return out
 
     def _save_queue(self) -> None:
         path = self._queue_path()
-        path.write_text(
-            json.dumps(
-                {
-                    "updated_at": _now(),
-                    "assignments": self._assignments,
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+
+        def _empty_queue() -> dict[str, Any]:
+            return {"updated_at": _now(), "assignments": []}
+
+        with locked_json(path, missing_factory=_empty_queue) as data:
+            data["updated_at"] = _now()
+            data["assignments"] = self._assignments
 
     def list_queue(
         self,
