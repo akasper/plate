@@ -65,7 +65,7 @@ Task specs carry **`level`**, **`route`**, **`model_policy`**, **`tools`**, **`a
 
 | Level | Typical tier start | Notes |
 |---|---|---|
-| **junior** | **T1** (economical hosted; e.g. DeepSeek via OpenRouter per #1327) | Prefer cheaper models for **docs** and **tests** when CI validates output |
+| **junior** | **T1** (economical hosted; the orchestrator chooses an approved model) | Prefer cheaper models for **docs** and **tests** when CI validates output |
 | **senior** | **T2** (default crew band; e.g. composer-2.5 low effort) | Default implementation band |
 | **staff** | **T3** or a **human** | `model_policy.t3_requires_approval: human` + approval gate in spec |
 
@@ -74,7 +74,7 @@ Task specs carry **`level`**, **`route`**, **`model_policy`**, **`tools`**, **`a
 | Label | Meaning (#1327) |
 |---|---|
 | `tier:T0` | Local / low-latency |
-| `tier:T1` | DeepSeek via OpenRouter |
+| `tier:T1` | Economical hosted model tier; model chosen by the orchestrator from an approved list |
 | `tier:T2` | composer-2.5 at low effort |
 | `tier:T3` | Higher effort or Claude; **human approves per task** before use |
 
