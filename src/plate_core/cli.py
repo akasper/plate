@@ -25,6 +25,13 @@ from .features import detect_playwright_e2e_local, get_features
 from .github_client import GhApiError, GhClient
 from .health import get_health, label_coverage_fix_command, resolve_repo
 from .pr_verify import format_pr_verify_text, verify_pr
+from .pr_preflight import (
+    create_pr_with_preflight,
+    format_preflight_json,
+    format_preflight_text,
+    parse_labels_option,
+    run_preflight,
+)
 from .pr_babysit import (
     babysit_pr,
     claim_babysit_watch,
@@ -1611,6 +1618,41 @@ def cmd_pr_verify(args: argparse.Namespace) -> int:
     else:
         print(format_pr_verify_text(report))
     return 0 if report.get("passed") else 1
+
+
+def cmd_pr_preflight(args: argparse.Namespace) -> int:
+    labels = parse_labels_option(getattr(args, "labels", None))
+    gh_argv = list(getattr(args, "gh_argv", None) or [])
+    body_file = getattr(args, "body_file", None)
+    if body_file:
+        gh_argv = ["--body-file", body_file, *gh_argv]
+    report = run_preflight(
+        body=None,
+        labels=labels or None,
+        base=getattr(args, "base", None),
+        repo=args.repo,
+        repo_root=getattr(args, "repo_root", None) or ".",
+        argv=gh_argv,
+    )
+    if args.json:
+        print(format_preflight_json(report), end="")
+    else:
+        print(format_preflight_text(report))
+    return 0 if report.get("passed") else 1
+
+
+def cmd_pr_create(args: argparse.Namespace) -> int:
+    gh_argv = list(getattr(args, "gh_argv", None) or [])
+    exit_code, report = create_pr_with_preflight(
+        gh_argv,
+        repo=args.repo,
+        repo_root=getattr(args, "repo_root", None) or ".",
+    )
+    if args.json:
+        print(format_preflight_json(report), end="")
+    elif not report.get("passed"):
+        print(format_preflight_text(report))
+    return exit_code
 
 
 def cmd_release_status(args: argparse.Namespace) -> int:
@@ -5461,6 +5503,41 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pr_verify.add_argument("--json", action="store_true", help="Output JSON")
     pr_verify.set_defaults(func=cmd_pr_verify)
+
+    pr_preflight = pr_sub.add_parser(
+        "preflight",
+        help="Run local plate-pr-gates + labels checks before opening a PR",
+    )
+    pr_preflight.add_argument("--body-file", dest="body_file", help="PR body file (also accepted via trailing gh args)")
+    pr_preflight.add_argument("--base", help="Integration base branch for --base validation")
+    pr_preflight.add_argument(
+        "--labels",
+        help="Comma-separated PR type/area labels (same as gh pr create --label, combined)",
+    )
+    pr_preflight.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    pr_preflight.add_argument("--repo-root", default=".", help="Repository root (default: .)")
+    pr_preflight.add_argument("--json", action="store_true", help="Output JSON")
+    pr_preflight.add_argument(
+        "gh_argv",
+        nargs=argparse.REMAINDER,
+        help="Optional gh-style args (--body-file, --label, --base) when not passed as flags above",
+    )
+    pr_preflight.set_defaults(func=cmd_pr_preflight)
+
+    pr_create = pr_sub.add_parser(
+        "create",
+        help="Run preflight then gh pr create (passes through remaining gh arguments)",
+        add_help=False,
+    )
+    pr_create.add_argument("--repo", help="owner/name; defaults to git remote origin")
+    pr_create.add_argument("--repo-root", default=".", help="Repository root (default: .)")
+    pr_create.add_argument("--json", action="store_true", help="Output JSON preflight report on failure")
+    pr_create.add_argument(
+        "gh_argv",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to gh pr create after preflight passes",
+    )
+    pr_create.set_defaults(func=cmd_pr_create)
 
     release = sub.add_parser("release", help="Release status and notes diff (read-only MVP)")
     release_sub = release.add_subparsers(dest="release_command", required=True)

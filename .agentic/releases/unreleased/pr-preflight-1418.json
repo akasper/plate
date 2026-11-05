@@ -1,0 +1,10 @@
+{
+  "slug": "pr-preflight-1418",
+  "change_type": "feature",
+  "surface": "gh plate pr preflight/create, plate_core.pr_gates_checks, plate-pr-gates failure text",
+  "summary": "Local PR preflight runs plate-pr-gates and labels checks before gh pr create; CI issue-link failures include the exact Closes line to add.",
+  "migration_impact": "Agents should prefer `gh plate pr create` or run `gh plate pr preflight` before opening PRs. Adopters import regenerated plate-pr-gates.yml when syncing payload.",
+  "agent_notes": "Run `gh plate pr preflight --body-file body.md --base release --labels Feature,area:cli` (or `gh plate pr create -- …`) before spending tokens on CI fix-ups. Shared checks live in plate_core.pr_gates_checks.",
+  "breaking": false,
+  "links": ["#1418", "#391"]
+}
