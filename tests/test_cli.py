@@ -466,20 +466,24 @@ class CliTests(unittest.TestCase):
 
 
     @patch("plate_core.release.create_github_release")
+    @patch("plate_core.release.fast_forward_release_branches")
     @patch("plate_core.release.perform_guarded_hard_reset")
     @patch("plate_core.release.ensure_next_release_issue")
-    def test_release_finalize_dry_run_and_apply(self, mock_ensure, mock_reset, mock_create):
-        """#592: finalize now calls core automation (create always, reset only on --apply)."""
+    def test_release_finalize_dry_run_and_apply(self, mock_ensure, mock_reset, mock_ff, mock_create):
+        """#592/#1434: finalize calls create always; fast-forward on --apply; hard reset only with --force-hard-reset."""
         mock_create.return_value = {"tag": "v0.7.1", "exists": True, "created": False}
-        mock_reset.return_value = {"would_reset": True, "command": "git ..."}
+        mock_ff.return_value = {"ok": True, "results": []}
+        mock_reset.return_value = {"would_reset": True, "commands": []}
         mock_ensure.return_value = {"exists": True}
         out = io.StringIO()
         with redirect_stdout(out):
             code = main(["release", "finalize", "v0.7.1", "--dry-run"])
         self.assertEqual(code, 0)
         mock_create.assert_called()
-        args, kwargs = mock_reset.call_args
+        mock_ff.assert_called()
+        _args, kwargs = mock_ff.call_args
         self.assertFalse(kwargs.get("apply", False))
+        mock_reset.assert_not_called()
 
     @patch("plate_core.cli.get_autonomy_status")
     def test_autonomy_status_prints_pressure_and_pause(self, mock_status):
