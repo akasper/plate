@@ -349,8 +349,37 @@ jobs:
               return;
             }
             
+            let fixLine = 'Add "Closes #N" to the PR body (replace N with the issue this PR resolves).';
+            try {
+              const { execFileSync } = require('child_process');
+              const workspace = process.env.GITHUB_WORKSPACE || '.';
+              fixLine = execFileSync(
+                'python3',
+                [
+                  '-m',
+                  'plate_core.pr_gates_payload',
+                  'closing-fix-line',
+                  '--labels',
+                  labels.join(','),
+                  '--owner',
+                  context.repo.owner,
+                  '--repo',
+                  context.repo.repo,
+                ],
+                {
+                  env: { ...process.env, PYTHONPATH: `${workspace}/src` },
+                  input: rawBody,
+                  encoding: 'utf8',
+                }
+              ).trim();
+            } catch (error) {
+              core.warning(`Could not compute closing-keyword fix line via plate_core (${error.message}); using default text.`);
+            }
+            
             const message = [
               '## ⚠️ No linked issue detected',
+              '',
+              fixLine,
               '',
               'PLATE requires `Feature`, `Bug`, and issue-driven `Documentation` PRs to link at least one tracked issue.',
               '',
