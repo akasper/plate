@@ -21,10 +21,11 @@ PLATE_PR_GATES_LABELS: frozenset[str] = frozenset(
         "Feedback Response",
         "no-issue",
         "Release",
+        "main-source-override",
     }
 )
 
-PLATE_PR_GATES_LABELS_JSON = '["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'
+PLATE_PR_GATES_LABELS_JSON = '["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override"]'
 
 # Status check contexts superseded by PLATE_PR_GATES_CHECK_NAME.
 DEPRECATED_PR_GATE_CHECK_CONTEXTS: frozenset[str] = frozenset(
@@ -54,6 +55,10 @@ PR_GATE_STEP_CONTRACTS: tuple[dict[str, str], ...] = (
     {
         "step_name": "Gate — issue links",
         "failure_marker": "No linked issue detected",
+    },
+    {
+        "step_name": "Gate — main source",
+        "failure_marker": "main-source",
     },
     {
         "step_name": "Gate — reviewer model",
