@@ -160,6 +160,13 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn('git tag "${RELEASE_TAG}" "${MERGE_SHA}"', workflow)
         self.assertIn('git push origin "refs/tags/${RELEASE_TAG}"', workflow)
 
+    def test_release_workflow_fast_forward_job_can_comment_on_issues(self):
+        workflow = read_text(".github/workflows/release.yml")
+        job_block = workflow.split("fast-forward-release-branches:", 1)[1].split("\n  deploy:", 1)[0]
+        self.assertIn("post_release_fast_forward_comment", workflow)
+        self.assertIn("issues: write", job_block)
+        self.assertIn("contents: write", job_block)
+
 
 if __name__ == "__main__":
     unittest.main()
