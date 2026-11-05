@@ -26,6 +26,10 @@ __all__ = [
 
 Transition = tuple[str, str, str]
 
+# Empty lockfiles from a crashed creator between O_EXCL and pid write are not stale
+# until older than this grace window.
+_EMPTY_LOCK_MAX_AGE_SEC = 5.0
+
 _refuse_save: set[str] = set()
 
 
@@ -116,12 +120,25 @@ def _pid_is_alive(pid: int) -> bool:
         return True
 
 
+def _lockfile_age_sec(lock_path: Path, stat: os.stat_result) -> float:
+    return max(0.0, time.time() - stat.st_mtime)
+
+
 def _lock_is_stale(lock_path: Path) -> bool:
     try:
+        stat = lock_path.stat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+
+    try:
         raw = lock_path.read_text(encoding="utf-8").strip()
+        if not raw:
+            return _lockfile_age_sec(lock_path, stat) > _EMPTY_LOCK_MAX_AGE_SEC
         pid = int(raw.split()[0])
-    except (OSError, ValueError):
-        return True
+    except (OSError, ValueError, IndexError):
+        return _lockfile_age_sec(lock_path, stat) > _EMPTY_LOCK_MAX_AGE_SEC
     return not _pid_is_alive(pid)
 
 

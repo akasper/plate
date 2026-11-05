@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,6 +15,7 @@ from plate_core.state_store import (
     CorruptStateError,
     IllegalTransition,
     Machine,
+    _lock_is_stale,
     assert_terminal_states_have_no_outgoing,
     atomic_write_json,
     clear_save_refusal,
@@ -48,27 +50,58 @@ class StateStoreFoundationTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "store.json"
             errors: list[BaseException] = []
+            thread_count = 8
+            appends_per_thread = 25
 
-            def append_record(tag: str) -> None:
+            def append_records(thread_id: int) -> None:
                 try:
-                    with locked_json(
-                        path,
-                        missing_factory=lambda: {"records": []},
-                    ) as data:
-                        rows = data.setdefault("records", [])
-                        rows.append(tag)
+                    for i in range(appends_per_thread):
+                        tag = f"t{thread_id}-{i}"
+                        with locked_json(
+                            path,
+                            missing_factory=lambda: {"records": []},
+                        ) as data:
+                            rows = data.setdefault("records", [])
+                            rows.append(tag)
                 except BaseException as exc:
                     errors.append(exc)
 
-            t1 = threading.Thread(target=append_record, args=("a",))
-            t2 = threading.Thread(target=append_record, args=("b",))
-            t1.start()
-            t2.start()
-            t1.join()
-            t2.join()
+            threads = [
+                threading.Thread(target=append_records, args=(tid,))
+                for tid in range(thread_count)
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
             self.assertEqual(errors, [])
             loaded = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(sorted(loaded["records"]), ["a", "b"])
+            expected = {
+                f"t{tid}-{i}"
+                for tid in range(thread_count)
+                for i in range(appends_per_thread)
+            }
+            self.assertEqual(set(loaded["records"]), expected)
+            self.assertEqual(len(loaded["records"]), thread_count * appends_per_thread)
+
+    def test_empty_fresh_lockfile_is_not_stale(self):
+        with TemporaryDirectory() as tmp:
+            lock_path = Path(tmp) / "store.json.lock"
+            lock_path.write_text("", encoding="utf-8")
+            self.assertFalse(_lock_is_stale(lock_path))
+
+    def test_old_empty_lockfile_is_reclaimed(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "store.json"
+            lock_path = path.with_suffix(path.suffix + ".lock")
+            lock_path.write_text("", encoding="utf-8")
+            old = time.time() - 10.0
+            os.utime(lock_path, (old, old))
+            self.assertTrue(_lock_is_stale(lock_path))
+            with locked_json(path, missing_factory=lambda: {"ok": True}) as data:
+                data["ok"] = True
+            self.assertTrue(path.is_file())
+            self.assertFalse(lock_path.exists())
 
     def test_stale_lock_is_reclaimed(self):
         with TemporaryDirectory() as tmp:
