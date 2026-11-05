@@ -18,6 +18,11 @@ AREA_LABEL_RE = re.compile(r"^area:", re.IGNORECASE)
 LOOSE_ISSUE_REF_RE = re.compile(r"#(\d+)\b")
 REFS_ISSUE_RE = re.compile(r"\bRefs\s+#(\d+)\b", re.IGNORECASE)
 TRACK_LABEL_TO_BRANCH = {"Major": "release-major", "Minor": "release-minor", "Patch": "release-patch"}
+MAIN_SOURCE_OVERRIDE_LABEL = "main-source-override"
+ALLOWED_MAIN_SOURCE_HEAD_BRANCHES = frozenset(
+    {"release", "release-patch", "release-minor", "release-major"}
+)
+MAIN_SOURCE_FAILURE_HEADING = "main-source"
 
 
 @dataclass(frozen=True)
@@ -186,6 +191,48 @@ def resolve_expected_integration_base(
     return "main"
 
 
+def is_allowed_main_source_head(head: str | None) -> bool:
+    """Return True when ``head`` may merge into ``main`` without override (#1435)."""
+    branch = (head or "").strip()
+    if not branch:
+        return False
+    if branch in ALLOWED_MAIN_SOURCE_HEAD_BRANCHES:
+        return True
+    return branch.startswith("release-v")
+
+
+def has_main_source_override(labels: list[str]) -> bool:
+    """``main-source-override`` on the PR bypasses the gate (#1435).
+
+    Approver-only application is enforced by lifecycle config (#1425) when present;
+    until then any PR carrying the label is accepted.
+    """
+    return MAIN_SOURCE_OVERRIDE_LABEL in normalize_label_list(labels)
+
+
+def check_main_source(
+    base: str | None,
+    head: str | None,
+    labels: list[str],
+) -> GateFailure | None:
+    """Fail PRs into ``main`` unless head is an allowed release branch (#1435)."""
+    base_ref = (base or "").strip()
+    if base_ref != "main":
+        return None
+    if has_main_source_override(labels):
+        return None
+    head_ref = (head or "").strip()
+    if is_allowed_main_source_head(head_ref):
+        return None
+    allowed = "release, release-patch, release-minor, release-major, or release-v*"
+    return GateFailure(
+        "main_source",
+        f"PRs into `main` must come from {allowed} (found head {head_ref!r}). "
+        f"Target a release integration branch instead (`gh plate release status`), "
+        f"or have an approver apply the `{MAIN_SOURCE_OVERRIDE_LABEL}` label for a one-off exception.",
+    )
+
+
 def check_integration_base_branch(
     base: str | None,
     *,
@@ -212,6 +259,7 @@ def run_preflight_gate_checks(
     body: str | None,
     labels: list[str],
     base: str | None,
+    head: str | None = None,
     changed_paths: list[str],
     owner: str | None,
     repo: str | None,
@@ -241,6 +289,9 @@ def run_preflight_gate_checks(
     )
     if base_fail:
         failures.append(base_fail)
+    main_fail = check_main_source(base, head, labels)
+    if main_fail:
+        failures.append(main_fail)
     return failures
 
 
