@@ -24,6 +24,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .state_store import CorruptStateError, load_strict, locked_json
+
 OPS_DIR = Path(".agentic/scheduled_ops")
 RUNS_FILE = "runs.json"
 MARKER_BEGIN = "<!-- PLATE-SCHEDULED-OP:BEGIN -->"
@@ -217,26 +219,33 @@ def _store_path(base: Path | None = None) -> Path:
     return d / RUNS_FILE
 
 
+def _empty_store() -> dict[str, Any]:
+    return {"version": 1, "runs": [], "last_run_by_op": {}}
+
+
+def _normalize_store(data: dict[str, Any]) -> dict[str, Any]:
+    data.setdefault("version", 1)
+    data.setdefault("runs", [])
+    data.setdefault("last_run_by_op", {})
+    return data
+
+
 def _load(base: Path | None = None) -> dict[str, Any]:
     path = _store_path(base)
     if not path.exists():
-        return {"version": 1, "runs": [], "last_run_by_op": {}}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return {"version": 1, "runs": [], "last_run_by_op": {}}
-        data.setdefault("version", 1)
-        data.setdefault("runs", [])
-        data.setdefault("last_run_by_op", {})
-        return data
-    except (OSError, json.JSONDecodeError):
-        return {"version": 1, "runs": [], "last_run_by_op": {}}
+        return _empty_store()
+    data = load_strict(path)
+    if not isinstance(data, dict):
+        raise CorruptStateError(f"expected JSON object at {path}")
+    return _normalize_store(data)
 
 
 def _save(data: dict[str, Any], base: Path | None = None) -> Path:
     path = _store_path(base)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    with locked_json(path, missing_factory=_empty_store) as stored:
+        stored.clear()
+        stored.update(_normalize_store(dict(data)))
     return path
 
 

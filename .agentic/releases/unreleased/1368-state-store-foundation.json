@@ -1,0 +1,21 @@
+{
+  "slug": "1368-state-store-foundation",
+  "change_type": "feature",
+  "surface": "src/plate_core/state_store.py, src/plate_core/pm.py, src/plate_core/fleet.py, src/plate_core/scheduled_ops.py, tests/test_state_store.py",
+  "summary": "Foundation slice for #1368: locked atomic JSON store (state_store.py) and first migrations for PM queue, fleet handoffs, and scheduled ops runs.",
+  "migration_impact": "Corrupt or truncated JSON under .agentic/pm/queue.json, .agentic/fleet/handoffs.json, or .agentic/scheduled_ops/runs.json now raises CorruptStateError instead of being silently reset; repair or remove the file before resuming writes.",
+  "migration_guidance": [
+    "1. Upgrade plate_core.",
+    "2. If CLI or MCP errors with CorruptStateError on these paths, inspect the JSON file and restore from backup or delete to recreate an empty store.",
+    "3. Follow-up PRs will migrate remaining .agentic writers listed in issue #1368."
+  ],
+  "agent_notes": "Use plate_core.state_store.locked_json for new durable JSON stores; do not swallow JSONDecodeError on load. Epic #1383 / issue #1368 remaining modules migrate separately.",
+  "breaking": false,
+  "links": [
+    "#1368",
+    "#1383"
+  ],
+  "requires": [
+    "0.8.1"
+  ]
+}
