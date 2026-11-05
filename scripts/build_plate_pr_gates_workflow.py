@@ -72,8 +72,8 @@ on:
 concurrency:
   # Non-gating label events use an isolated group and must not cancel real gate runs (#1228).
   # Review events use a separate group so they never cancel in-flight pull_request gate runs (#1258).
-  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') && 'review' || github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name) && 'label-noop' || 'gate' }}
-  cancel-in-progress: ${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') || !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name)) }}
+  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') && 'review' || github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override"]'), github.event.label.name) && 'label-noop' || 'gate' }}
+  cancel-in-progress: ${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') || !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override"]'), github.event.label.name)) }}
 
 permissions:
   contents: read
@@ -112,6 +112,8 @@ jobs:
         uses: actions/github-script@v8
         with:
 @@ISSUE_LINK_SCRIPT@@
+
+@@MAIN_SOURCE_RUN@@
 
 @@REVIEWER_MODEL_RUN@@
 
@@ -241,6 +243,58 @@ VALIDATE_TEMPLATE = """
           fi
 """
 
+MAIN_SOURCE_PLATE = """
+      - name: Gate — main source
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: main-source
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          python3 -m plate_core.pr_main_source_gate --base "${base_ref}" --head "${head_ref}" --labels "${labels}"
+"""
+
+MAIN_SOURCE_TEMPLATE = """
+      - name: Gate — main source
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: main-source
+          set -euo pipefail
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          run_main_source_gate() {
+            python3 -m plate_core.pr_main_source_gate --base "${base_ref}" --head "${head_ref}" --labels "${labels}"
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            run_main_source_gate
+          elif python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
+            run_main_source_gate
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
+            if python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
+              run_main_source_gate
+            else
+              echo "::warning title=Main source (warn-only)::plate-core runtime unavailable; skipping main-source gate until plate-core is installed."
+            fi
+          fi
+"""
+
 REVIEWER_MODEL_PLATE = """
       - name: Gate — reviewer model
         if: |
@@ -340,6 +394,11 @@ def build(variant: str) -> str:
         _extract_script_block(gates_src, "Mark implemented")
     )
     validate_run = VALIDATE_PLATE if variant == "plate" else VALIDATE_TEMPLATE
+    main_source_run = (
+        MAIN_SOURCE_PLATE
+        if variant == "plate"
+        else MAIN_SOURCE_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
+    )
     reviewer_run = (
         REVIEWER_MODEL_PLATE
         if variant == "plate"
@@ -347,6 +406,7 @@ def build(variant: str) -> str:
     )
     body = HEADER.replace("@@TITLE_SCRIPT@@", title_script)
     body = body.replace("@@ISSUE_LINK_SCRIPT@@", issue_link_script)
+    body = body.replace("@@MAIN_SOURCE_RUN@@", main_source_run.lstrip("\n").rstrip())
     body = body.replace("@@REVIEWER_MODEL_RUN@@", reviewer_run.lstrip("\n").rstrip())
     body = body.replace("@@FEATURE_LABELS_SCRIPT@@", feature_labels_script)
     body = body.replace("@@FEATURE_FRAGMENT_SCRIPT@@", feature_fragment_script)
