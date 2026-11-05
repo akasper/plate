@@ -81,6 +81,37 @@ def read_base_from_argv(argv: list[str]) -> str | None:
     return None
 
 
+def read_head_from_argv(argv: list[str]) -> str | None:
+    idx = 0
+    while idx < len(argv):
+        token = argv[idx]
+        if token == "--head" and idx + 1 < len(argv):
+            return argv[idx + 1]
+        if token.startswith("--head="):
+            return token.split("=", 1)[1]
+        idx += 1
+    return None
+
+
+def current_git_branch(
+    repo_root: Path,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = run_hidden,
+) -> str | None:
+    root = repo_root.resolve()
+    completed = runner(
+        ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        return None
+    name = (completed.stdout or "").strip()
+    if not name or name == "HEAD":
+        return None
+    return name
+
+
 def git_changed_paths(
     repo_root: Path,
     base_branch: str,
@@ -140,6 +171,7 @@ def run_preflight(
     body: str | None = None,
     labels: list[str] | None = None,
     base: str | None = None,
+    head: str | None = None,
     repo: str | None = None,
     repo_root: str | Path = ".",
     argv: list[str] | None = None,
@@ -152,6 +184,7 @@ def run_preflight(
     label_list = normalize_label_list(labels) or collect_labels_from_argv(argv)
     body_text = body if body is not None else read_body_from_argv(argv, root)
     base_ref = base if base is not None else read_base_from_argv(argv)
+    head_ref = head if head is not None else read_head_from_argv(argv)
 
     target = resolve_repo(repo)
     owner, name = _split_repo(target)
@@ -173,10 +206,15 @@ def run_preflight(
         runner = git_runner or run_hidden
         paths = git_changed_paths(root, compare_base, runner=runner)
 
+    if head_ref is None:
+        runner = git_runner or run_hidden
+        head_ref = current_git_branch(root, runner=runner)
+
     failures = run_preflight_gate_checks(
         body=body_text,
         labels=label_list,
         base=base_ref,
+        head=head_ref,
         changed_paths=paths,
         owner=owner,
         repo=name,

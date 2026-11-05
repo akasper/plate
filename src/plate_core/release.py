@@ -1349,6 +1349,293 @@ def create_github_release(
             pass
 
 
+STANDING_TRACK_BRANCHES = ("release-major", "release-minor", "release-patch", "release")
+
+RELEASE_BRANCH_FAST_FORWARD_BYPASS_HINT = (
+    "Release branches ruleset (id 26613570) requires a bypass actor for direct ref updates. "
+    "Add github-actions[bot] (or the lifecycle GitHub App) as a ruleset bypass actor."
+)
+
+
+def find_standing_next_release_issue(
+    repo: str | None = None,
+    client: GhClient | None = None,
+) -> dict | None:
+    """Return the open standing Next Release issue, if any (does not create)."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    q = quote_plus(f'repo:{target} is:issue is:open label:Release "Next Release"')
+    try:
+        search = gh.api(f"search/issues?q={q}") or {}
+        items = search.get("items") or []
+        canonical = pick_canonical_next_release_issue(items)
+        if canonical:
+            return {
+                "number": canonical.get("number"),
+                "url": canonical.get("html_url"),
+                "title": canonical.get("title"),
+            }
+    except Exception:
+        pass
+    return None
+
+
+def post_release_fast_forward_comment(
+    body: str,
+    *,
+    repo: str | None = None,
+    client: GhClient | None = None,
+    issue_number: int | None = None,
+) -> dict:
+    """Post a ceremony comment on the standing Next Release issue (best-effort)."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    number = issue_number
+    if number is None:
+        found = find_standing_next_release_issue(repo=repo, client=gh)
+        number = found.get("number") if found else None
+    if not number:
+        return {"commented": False, "error": "no_target_issue"}
+    try:
+        created = gh.api(
+            f"repos/{target}/issues/{number}/comments",
+            method="POST",
+            fields={"body": body},
+        ) or {}
+        return {
+            "commented": True,
+            "issue_number": number,
+            "url": created.get("html_url"),
+        }
+    except Exception as exc:
+        return {"commented": False, "error": f"comment_failed: {exc}"}
+
+
+def _release_git_root(repo_root: Path | str | None) -> Path:
+    if repo_root is not None:
+        return Path(repo_root)
+    return find_repo_root(Path("."))
+
+
+def _remote_branch_exists(branch: str, *, cwd: str) -> bool:
+    proc = run_hidden(
+        ["git", "ls-remote", "--heads", "origin", branch],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return bool((proc.stdout or "").strip())
+
+
+def _resolve_local_ref(ref: str, *, cwd: str) -> str | None:
+    proc = run_hidden(
+        ["git", "rev-parse", ref],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    sha = (proc.stdout or "").strip()
+    return sha or None
+
+
+def _is_git_ancestor(ancestor: str, descendant: str, *, cwd: str) -> bool:
+    proc = run_hidden(
+        ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
+def _unshipped_commit_summaries(tag_commit: str, branch: str, *, cwd: str, limit: int = 20) -> list[str]:
+    proc = run_hidden(
+        ["git", "log", "--oneline", f"{tag_commit}..origin/{branch}"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    lines = [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+    return lines[:limit]
+
+
+def _push_error_is_ruleset_bypass(stderr: str) -> bool:
+    text = (stderr or "").lower()
+    needles = (
+        "protected",
+        "refusing to allow",
+        "gh006",
+        "ruleset",
+        "cannot force push",
+        "permission denied",
+        "bypass",
+    )
+    return any(item in text for item in needles)
+
+
+def fast_forward_release_branches(
+    tag: str,
+    *,
+    repo: str | None = None,
+    repo_root: Path | str | None = None,
+    dry_run: bool = False,
+    apply: bool = True,
+    client: GhClient | None = None,
+    branches: tuple[str, ...] | None = None,
+) -> dict:
+    """Fast-forward existing release branches to a release tag without force push (#1434).
+
+    Processes ``STANDING_TRACK_BRANCHES`` in order; stops on the first blocked branch
+    (branch tip is not an ancestor of the tag commit). Missing remote branches are skipped.
+    """
+    _ = client
+    raw = (tag or "").strip()
+    if not raw:
+        return {"ok": False, "error": "invalid_tag", "tag": tag}
+    tag_name = raw if raw.lower().startswith("v") else f"v{raw.lstrip('v')}"
+    ver = tag_name.lstrip("v")
+    branch_list = branches or STANDING_TRACK_BRANCHES
+
+    try:
+        ls = run_hidden(
+            ["git", "ls-remote", "--tags", "origin", tag_name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if not (ls.stdout or "").strip():
+            return {
+                "ok": False,
+                "error": "tag_not_found_on_origin",
+                "tag": tag_name,
+                "recommended": f"Confirm tag {tag_name} exists (release workflow or manual). Then re-run finalize.",
+            }
+    except Exception as exc:
+        return {"ok": False, "error": f"tag_check_failed: {exc}", "tag": tag_name}
+
+    try:
+        root = _release_git_root(repo_root)
+        cwd = str(root)
+        fetch_refs = [tag_name, *branch_list]
+        fetch_proc = run_hidden(
+            ["git", "fetch", "origin", *fetch_refs],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if fetch_proc.returncode != 0:
+            return {
+                "ok": False,
+                "error": "fetch_failed",
+                "tag": tag_name,
+                "stderr": fetch_proc.stderr or fetch_proc.stdout,
+            }
+
+        tag_commit = _resolve_local_ref(f"refs/tags/{tag_name}", cwd=cwd) or _resolve_local_ref(tag_name, cwd=cwd)
+        if not tag_commit:
+            return {"ok": False, "error": "tag_commit_unresolved", "tag": tag_name}
+
+        results: list[dict] = []
+        for branch in branch_list:
+            if not _remote_branch_exists(branch, cwd=cwd):
+                results.append({"branch": branch, "status": "skipped_missing"})
+                continue
+
+            branch_tip = _resolve_local_ref(f"origin/{branch}", cwd=cwd)
+            if not branch_tip:
+                return {
+                    "ok": False,
+                    "error": "branch_tip_unresolved",
+                    "tag": tag_name,
+                    "tag_commit": tag_commit,
+                    "branch": branch,
+                    "results": results,
+                }
+
+            if branch_tip == tag_commit:
+                results.append({"branch": branch, "status": "noop", "commit": branch_tip})
+                continue
+
+            if not _is_git_ancestor(branch_tip, tag_commit, cwd=cwd):
+                blocked = {
+                    "branch": branch,
+                    "branch_tip": branch_tip,
+                    "tag_commit": tag_commit,
+                    "unshipped_commits": _unshipped_commit_summaries(tag_commit, branch, cwd=cwd),
+                }
+                return {
+                    "ok": False,
+                    "blocked": blocked,
+                    "tag": tag_name,
+                    "tag_commit": tag_commit,
+                    "results": results,
+                    "stop_policy": "stop_on_first_block",
+                }
+
+            push_ref = f"{tag_commit}:refs/heads/{branch}"
+            if dry_run or not apply:
+                results.append(
+                    {
+                        "branch": branch,
+                        "status": "would_fast_forward",
+                        "from": branch_tip,
+                        "to": tag_commit,
+                        "push": f"git push origin {push_ref}",
+                    }
+                )
+                continue
+
+            push_proc = run_hidden(
+                ["git", "push", "origin", push_ref],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if push_proc.returncode != 0:
+                err = push_proc.stderr or push_proc.stdout or ""
+                payload: dict = {
+                    "ok": False,
+                    "error": "push_failed",
+                    "tag": tag_name,
+                    "tag_commit": tag_commit,
+                    "branch": branch,
+                    "stderr": err,
+                    "results": results,
+                }
+                if _push_error_is_ruleset_bypass(err):
+                    payload["bypass_required"] = True
+                    payload["bypass_hint"] = RELEASE_BRANCH_FAST_FORWARD_BYPASS_HINT
+                return payload
+
+            results.append(
+                {
+                    "branch": branch,
+                    "status": "fast_forwarded",
+                    "from": branch_tip,
+                    "to": tag_commit,
+                }
+            )
+
+        return {
+            "ok": True,
+            "tag": tag_name,
+            "version": ver,
+            "tag_commit": tag_commit,
+            "results": results,
+            "repo": resolve_repo(repo),
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"fast_forward_exception: {exc}", "tag": tag_name}
+
+
 def perform_guarded_hard_reset(
     version: str,
     releases_dir: Path | None = None,
@@ -1356,34 +1643,30 @@ def perform_guarded_hard_reset(
     dry_run: bool = False,
     apply: bool = False,
     client: GhClient | None = None,
+    branches: tuple[str, ...] | None = None,
 ) -> dict:
-    """Guarded hard-reset of the (legacy) release branch to the release tag.
+    """Admin-only force reset of standing release branches to the release tag.
 
     Strong guards per #592 planning:
     - Only mutates when apply=True (and not dry_run).
     - Verifies the tag exists on origin before any reset.
-    - Uses --force-with-lease.
+    - Uses --force-with-lease (never part of the automatic fast-forward path).
     - On failure or guard fail: clear error + recommended command, no mutation.
-    - Reusable; called from CLI finalize with --apply.
+    - Reusable from CLI finalize with --force-hard-reset --apply only (#1434).
     """
-    gh = client or GhClient()
-    target = resolve_repo(repo)
-    effective = releases_dir or Path(".agentic/releases")
+    _ = client
+    _ = releases_dir
+    _ = repo
     ver = version.lstrip("v")
     tag = f"v{ver}"
+    branch_list = branches or STANDING_TRACK_BRANCHES
 
-    # Basic validation (non-fatal; main guard is the tag existence check below)
-    # validate_release_workspace is available in this module at runtime.
-
-    # Guard 1: tag must exist on remote.
-    # Use bare tag name (not refs/tags/ prefix) because PLATE releases use
-    # lightweight tags (git tag vX.Y.Z, not annotated). The refs/tags/ form
-    # only matches annotated tags and would cause the first lookup to always
-    # fail for our tags, falling back silently. See review on #601.
     try:
         ls = run_hidden(
             ["git", "ls-remote", "--tags", "origin", tag],
-            capture_output=True, text=True, check=False
+            capture_output=True,
+            text=True,
+            check=False
         )
         if not ls.stdout.strip():
             return {
@@ -1393,71 +1676,110 @@ def perform_guarded_hard_reset(
     except Exception as e:
         return {"error": f"tag_check_failed: {e}"}
 
-    target_branch = "release"
-
-    # Safer reset using update-ref + push --force-with-lease.
-    # This updates the remote ref directly without requiring a local checkout
-    # of the target_branch or a clean working tree. Addresses review feedback
-    # on #601 (dirty tree would cause generic checkout failure).
-    # Still fetches first to ensure the tag is known locally.
-    cmd = [
-        "git", "fetch", "origin", tag,
-        "&&", "git", "update-ref", f"refs/heads/{target_branch}", f"refs/tags/{tag}",
-        "&&", "git", "push", "--force-with-lease", "origin", target_branch,
-    ]
-    shell_cmd = " ".join(cmd)
-
-    if dry_run or not apply:
-        return {
-            "would_reset": True,
-            "target_branch": target_branch,
-            "tag": tag,
-            "command": shell_cmd,
-            "note": "Hard reset skipped (dry_run or --apply not passed). This is destructive; use --apply only after confirming the tag. Uses update-ref (no local branch checkout required).",
-        }
-
     try:
-        root = find_repo_root(Path("."))
-        # Run the three git steps without a shell so Windows does not flash
-        # cmd.exe (#1073). Failure of one step stops the rest, same as `&&`.
-        steps = [
-            ["git", "fetch", "origin", tag],
-            ["git", "update-ref", f"refs/heads/{target_branch}", f"refs/tags/{tag}"],
-            ["git", "push", "--force-with-lease", "origin", target_branch],
-        ]
-        stdout_parts: list[str] = []
-        stderr_parts: list[str] = []
-        failed = False
-        for step in steps:
-            proc = run_hidden(
-                step,
-                cwd=str(root),
-                capture_output=True,
-                text=True,
-                check=False,
+        root = _release_git_root(None)
+        cwd = str(root)
+        existing = [name for name in branch_list if _remote_branch_exists(name, cwd=cwd)]
+        if not existing:
+            return {"error": "no_release_branches_on_origin", "tag": tag}
+
+        planned: list[dict] = []
+        for target_branch in existing:
+            shell_cmd = " ".join(
+                [
+                    "git", "fetch", "origin", tag,
+                    "&&", "git", "update-ref", f"refs/heads/{target_branch}", f"refs/tags/{tag}",
+                    "&&", "git", "push", "--force-with-lease", "origin", target_branch,
+                ]
             )
-            if proc.stdout:
-                stdout_parts.append(proc.stdout)
-            if proc.stderr:
-                stderr_parts.append(proc.stderr)
-            if proc.returncode != 0:
-                failed = True
-                break
-        if failed:
+            planned.append({"branch": target_branch, "command": shell_cmd})
+
+        if dry_run or not apply:
             return {
-                "error": "reset_command_failed",
-                "stdout": "".join(stdout_parts),
-                "stderr": "".join(stderr_parts),
-                "command": shell_cmd,
+                "would_reset": True,
+                "branches": existing,
+                "tag": tag,
+                "commands": planned,
+                "note": (
+                    "Hard reset skipped (dry_run or --apply not passed). Destructive admin path only; "
+                    "use --force-hard-reset --apply after confirming the tag."
+                ),
             }
+
+        applied: list[dict] = []
+        for target_branch in existing:
+            steps = [
+                ["git", "fetch", "origin", tag],
+                ["git", "update-ref", f"refs/heads/{target_branch}", f"refs/tags/{tag}"],
+                ["git", "push", "--force-with-lease", "origin", target_branch],
+            ]
+            stdout_parts: list[str] = []
+            stderr_parts: list[str] = []
+            failed = False
+            for step in steps:
+                proc = run_hidden(
+                    step,
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if proc.stdout:
+                    stdout_parts.append(proc.stdout)
+                if proc.stderr:
+                    stderr_parts.append(proc.stderr)
+                if proc.returncode != 0:
+                    failed = True
+                    break
+            if failed:
+                return {
+                    "error": "reset_command_failed",
+                    "branch": target_branch,
+                    "stdout": "".join(stdout_parts),
+                    "stderr": "".join(stderr_parts),
+                    "applied": applied,
+                }
+            applied.append({"branch": target_branch, "reset": True})
+
         return {
             "reset": True,
-            "target_branch": target_branch,
+            "branches": existing,
             "tag": tag,
-            "command": shell_cmd,
+            "applied": applied,
         }
     except Exception as e:
-        return {"error": f"reset_exception: {e}", "command": shell_cmd}
+        return {"error": f"reset_exception: {e}"}
+
+
+
+def format_fast_forward_failure_comment(result: dict) -> str:
+    """Human-readable Next Release comment when fast-forward fails (#1434)."""
+    lines = [
+        "PLATE (Grok Bot): Release branch fast-forward **blocked** after tag creation.",
+        "",
+        f"Tag: `{result.get('tag', '')}` ({result.get('tag_commit', '')})",
+    ]
+    blocked = result.get("blocked") or {}
+    if blocked:
+        lines.extend(
+            [
+                "",
+                f"Blocked branch: `{blocked.get('branch')}` (tip `{blocked.get('branch_tip')}`).",
+                "The branch is not an ancestor of the tag commit; unshipped commits were not reset.",
+            ]
+        )
+        commits = blocked.get("unshipped_commits") or []
+        if commits:
+            lines.append("")
+            lines.append("Unshipped commits (sample):")
+            for item in commits:
+                lines.append(f"- `{item}`")
+    if result.get("bypass_hint"):
+        lines.extend(["", str(result.get("bypass_hint"))])
+    elif result.get("stderr"):
+        lines.extend(["", "Push error:", "```", str(result.get("stderr")).strip(), "```"])
+    lines.extend(["", "Design: #1433. Repair: repo admin resolves divergence, then re-run finalize or the workflow."])
+    return "\n".join(lines)
 
 
 def normalize_release_tag(version: str | None) -> str | None:
@@ -1542,8 +1864,6 @@ def ensure_next_release_issue(
     except Exception as e:
         return {"error": f"create_failed: {e}"}
 
-
-STANDING_TRACK_BRANCHES = ("release-major", "release-minor", "release-patch", "release")
 
 # Standing Next Release starter issue messaging (#1194; mandatory adoption #1193).
 NEXT_RELEASE_CEREMONY_DOC = "docs/design/release-ceremony-refinement.md"

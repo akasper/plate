@@ -127,6 +127,10 @@
   color: "ededed"
   description: "PR does not close a tracked issue (chore, bump, hotfix). Silences issue-link check."
 
+- name: "main-source-override"
+  color: "fbca04"
+  description: "Bypass main-source pr-gates check for one PR (#1435); approvers when lifecycle config exists."
+
 - name: "status:blocked"
   color: "b60205"
   description: "Feature issue has one or more open native GitHub blockers."

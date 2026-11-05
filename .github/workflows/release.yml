@@ -24,6 +24,8 @@ jobs:
         startsWith(github.event.pull_request.head.ref, 'release-v')
       )
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.release-version.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -128,6 +130,72 @@ jobs:
       # Same simple assets convention (v{ver}/assets/ if present in the checked-out artifact).
       # Added in #593; idempotent via the helper; graceful on 404/exists/rate/etc.
       # (The explicit `gh plate release finalize` path remains available for repair/manual runs.)
+
+  fast-forward-release-branches:
+    needs: tag-release-merge
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      (
+        contains(github.event.pull_request.labels.*.name, 'Release') ||
+        github.event.pull_request.head.ref == 'release' ||
+        startsWith(github.event.pull_request.head.ref, 'release-v')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward release branches to tag (no force push)
+        env:
+          RELEASE_TAG: ${{ needs.tag-release-merge.outputs.release_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from plate_core.release import (
+              fast_forward_release_branches,
+              format_fast_forward_failure_comment,
+              post_release_fast_forward_comment,
+          )
+
+          tag = os.environ.get("RELEASE_TAG", "").strip()
+          if not tag:
+              print("RELEASE_TAG missing; cannot fast-forward release branches.", file=sys.stderr)
+              raise SystemExit(1)
+
+          result = fast_forward_release_branches(tag, apply=True)
+          print(json.dumps(result, indent=2))
+          if result.get("ok"):
+              raise SystemExit(0)
+
+          comment = format_fast_forward_failure_comment(result)
+          posted = post_release_fast_forward_comment(comment)
+          print(json.dumps({"issue_comment": posted}, indent=2))
+
+          if result.get("bypass_required"):
+              print(result.get("bypass_hint", ""), file=sys.stderr)
+          if result.get("blocked"):
+              blocked = result["blocked"]
+              print(
+                  f"Fast-forward blocked on {blocked.get('branch')}: branch is not an ancestor of the tag.",
+                  file=sys.stderr,
+              )
+          else:
+              print(result.get("error", "fast_forward_failed"), file=sys.stderr)
+              if result.get("stderr"):
+                  print(result["stderr"], file=sys.stderr)
+          raise SystemExit(1)
+          PY
 
   deploy:
     if: github.event_name == 'push'
