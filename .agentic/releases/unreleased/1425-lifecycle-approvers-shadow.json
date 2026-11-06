@@ -1,7 +1,7 @@
 {
   "slug": "1425-lifecycle-approvers-shadow",
   "change_type": "feature",
-  "surface": "src/plate_core/lifecycle_policy.py, src/plate_core/cli.py gh plate process init, .agentic/process.yml lifecycle stub, template_payload mirror, tests/test_lifecycle_policy_1425.py, docs/integrations/issue-lifecycle-1425-bounded-slice.md",
+  "surface": "src/plate_core/lifecycle_policy.py, src/plate_core/cli.py gh plate process init, .agentic/process.yml lifecycle stub, template_payload mirror, tests/test_lifecycle_policy_1425.py, docs/design/issue-lifecycle.md, docs/integrations/issue-lifecycle-1425-bounded-slice.md",
   "summary": "Bounded pure/shadow policy for #1425: lifecycle.approvers + balanced lifecycle.gates in process.yml via gh plate process init; resolve_runtime_approvers fail-closed; shadow decisions for label downgrade, rolling-hour risk:critical raises, first-line /plate approval commands, pending_write suppression; autonomy stricter-wins helper; taxonomy attribute matching; source-scan guard for human-review removal. No GitHub mutations, event log (#1443), or leases (#1445).",
   "migration_impact": "Adopters may run `gh plate process init` to populate lifecycle.approvers and gates; org repos must pass --approvers. Existing process.yml gains optional lifecycle: {} placeholder.",
   "agent_notes": "Refs #1425; complements design #1420; defers full approval engine (#1374) and auto-merge eligibility (#1398).",

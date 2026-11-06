@@ -6,9 +6,10 @@ and leases (#1445) stays behind explicit call sites.
 
 Contract references: #1425 (slice 4), design #1420, related #1374 / #1398.
 
-**Gate semantics (canonical #1432):** In ``lifecycle.gates``, ``true`` means **human
-approval is required** for that gate; ``false`` means this gate does not add that
-requirement in the bounded policy layer.
+**Gate semantics (canonical):** Matches design PR
+https://github.com/akasper/plate/pull/1432 — in ``lifecycle.gates``, ``true`` means
+**human approval is required** for that gate; ``false`` means this gate does not add
+that requirement in the bounded policy layer.
 """
 
 from __future__ import annotations
@@ -34,14 +35,11 @@ RISK_TOLERANCE_RANK: dict[str, int] = {
     "high": 3,
 }
 
-# Canonical PLATE label prefixes for default taxonomy (adopters may override via lifecycle.taxonomy).
-DEFAULT_TAXONOMY: dict[str, str] = {
-    "risk_prefix": "risk:",
-    "tier_prefix": "tier:",
-}
-
 # Ordered least → most severe (for ``risk:*`` label bodies after the prefix).
 RISK_SEVERITY_ORDER: tuple[str, ...] = ("low", "medium", "high", "critical")
+
+# Canonical PLATE tier bodies after ``tier:`` (T0 lowest authority → T3 highest).
+TIER_AUTHORITY_ORDER: tuple[str, ...] = ("T0", "T1", "T2", "T3")
 
 # Balanced defaults (#1425): True = human approval required for this gate (#1432).
 DEFAULT_LIFECYCLE_GATES: dict[str, bool] = {
@@ -62,13 +60,6 @@ DEFAULT_LIFECYCLE_GATES: dict[str, bool] = {
     "project_budget": True,
     "license": True,
 }
-
-# Substrings that identify PLATE marker comments / pending write hints in text (supplementary).
-_PENDING_WRITE_MARKERS: tuple[str, ...] = (
-    "PLATE_PENDING_WRITE",
-    "pending_write",
-    "<!-- PLATE",
-)
 
 _APPROVAL_COMMAND_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^\s*/plate\s+resume\b", re.I),
@@ -91,12 +82,33 @@ def parse_first_line(comment_body: str | None) -> str:
     return text.split("\n", 1)[0].strip()
 
 
-def comment_has_pending_write_suppression(body: str | None) -> bool:
-    """True when comment body suggests an in-flight PLATE pending write (text heuristic)."""
-    if not body:
-        return False
-    lower = body.lower()
-    return any(m.lower() in lower for m in _PENDING_WRITE_MARKERS)
+def parse_pending_write_record(raw: str | None) -> dict[str, Any] | None:
+    """Parse marker ``pending_write`` JSON: ``transition_id``, ``added``, ``removed``.
+
+    Returns None if *raw* is not a well-formed record (no substring heuristics).
+    """
+    if not raw or not str(raw).strip():
+        return None
+    try:
+        import json as _json
+
+        data = _json.loads(str(raw).strip())
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    tid = data.get("transition_id")
+    if not isinstance(tid, str) or not tid.strip():
+        return None
+    added = data.get("added", [])
+    removed = data.get("removed", [])
+    if not isinstance(added, list) or not isinstance(removed, list):
+        return None
+    if not all(isinstance(x, str) and x.strip() for x in added):
+        return None
+    if not all(isinstance(x, str) and x.strip() for x in removed):
+        return None
+    return {"transition_id": tid.strip(), "added": added, "removed": removed}
 
 
 def parse_plate_approval_command(first_line: str) -> str | None:
@@ -117,18 +129,98 @@ def _normalize_label(label: str) -> str:
     return str(label or "").strip()
 
 
-def _taxonomy_map(lifecycle_block: Mapping[str, Any] | None) -> dict[str, str]:
-    t = DEFAULT_TAXONOMY.copy()
-    if not lifecycle_block:
-        return t
-    raw = lifecycle_block.get("taxonomy")
-    if not isinstance(raw, dict):
-        return t
-    for k in ("risk_prefix", "tier_prefix"):
-        v = raw.get(k)
-        if isinstance(v, str) and v.strip():
-            t[k] = v.strip()
-    return t
+def _prefix_from_convention(prefixes: Any, key: str, fallback: str) -> str:
+    if isinstance(prefixes, dict):
+        raw = prefixes.get(key)
+        if isinstance(raw, str) and raw.strip():
+            p = raw.strip()
+            return p if p.endswith(":") else p + ":"
+    return fallback
+
+
+def resolve_taxonomy_config(
+    *,
+    process_yaml_root: Mapping[str, Any] | None,
+    lifecycle_block: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge canonical ``lifecycle.taxonomy`` (PR #1432) with defaults.
+
+    Expected keys in YAML: ``type_labels``, ``prefixes``, ``tier_prefix`` referencing
+    ``labels.issue_type_labels`` / ``labels.prefix_convention`` in ``process.yml``.
+    Unknown keys are ignored.
+    """
+    labels_cfg: dict[str, Any] = {}
+    if isinstance(process_yaml_root, dict):
+        lc = process_yaml_root.get("labels")
+        if isinstance(lc, dict):
+            labels_cfg = lc
+
+    issue_types: list[str] = []
+    it = labels_cfg.get("issue_type_labels")
+    if isinstance(it, dict):
+        req = it.get("required_exactly_one")
+        if isinstance(req, list):
+            issue_types = [str(x).strip() for x in req if isinstance(x, str) and str(x).strip()]
+
+    prefixes_map = labels_cfg.get("prefix_convention")
+    risk_p = _prefix_from_convention(prefixes_map, "risk", "risk:")
+    need_p = _prefix_from_convention(prefixes_map, "need", "need:")
+    tier_p = "tier:"
+
+    tax: dict[str, Any] = {
+        "issue_type_labels": list(issue_types),
+        "risk_prefix": risk_p,
+        "need_prefix": need_p,
+        "tier_prefix": tier_p,
+    }
+
+    lt = lifecycle_block.get("taxonomy") if isinstance(lifecycle_block, dict) else None
+    if isinstance(lt, dict):
+        tl_ref = lt.get("type_labels")
+        if tl_ref == "labels.issue_type_labels" and issue_types:
+            tax["issue_type_labels"] = list(issue_types)
+        elif isinstance(tl_ref, list):
+            tax["issue_type_labels"] = [str(x).strip() for x in tl_ref if isinstance(x, str) and str(x).strip()]
+
+        pref_ref = lt.get("prefixes")
+        if pref_ref == "labels.prefix_convention":
+            tax["risk_prefix"] = risk_p
+            tax["need_prefix"] = need_p
+        elif isinstance(pref_ref, dict):
+            tax["risk_prefix"] = _prefix_from_convention(pref_ref, "risk", tax["risk_prefix"])
+            tax["need_prefix"] = _prefix_from_convention(pref_ref, "need", tax["need_prefix"])
+
+        tp = lt.get("tier_prefix")
+        if isinstance(tp, str) and tp.strip():
+            tps = tp.strip()
+            tax["tier_prefix"] = tps if tps.endswith(":") else tps + ":"
+
+    return tax
+
+
+def _value_after_prefix(label: str, prefix: str) -> str | None:
+    ln = _normalize_label(label)
+    p = prefix if prefix.endswith(":") else prefix + ":"
+    if len(ln) <= len(p) or ln[: len(p)].lower() != p.lower():
+        return None
+    return ln[len(p) :].strip()
+
+
+def _labels_with_unknown_prefix_bodies(
+    labels: Sequence[str],
+    prefix: str,
+    known: set[str],
+) -> bool:
+    p = prefix if prefix.endswith(":") else prefix + ":"
+    for lab in labels:
+        if not _normalize_label(lab):
+            continue
+        body = _value_after_prefix(lab, p)
+        if body is None:
+            continue
+        if body not in known:
+            return True
+    return False
 
 
 def _labels_with_prefix(labels: Iterable[str], prefix: str) -> list[str]:
@@ -138,48 +230,81 @@ def _labels_with_prefix(labels: Iterable[str], prefix: str) -> list[str]:
     return [x for x in labels if _normalize_label(x).lower().startswith(p)]
 
 
-def _risk_value_from_label(label: str, risk_prefix: str) -> str | None:
-    """Return severity token after ``risk:`` (case-insensitive)."""
-    ln = _normalize_label(label)
-    rp = risk_prefix if risk_prefix.endswith(":") else risk_prefix + ":"
-    if len(ln) <= len(rp) or ln[: len(rp)].lower() != rp.lower():
-        return None
-    return ln[len(rp) :].strip().lower() or None
-
-
 def effective_risk_level(
     labels: Sequence[str],
     *,
+    process_yaml_root: Mapping[str, Any] | None = None,
     lifecycle_block: Mapping[str, Any] | None = None,
 ) -> str | None:
-    """Highest ``risk:*`` severity present, or None if no mapped risk label."""
-    tax = _taxonomy_map(lifecycle_block)
-    rp = tax["risk_prefix"]
+    """Highest mapped ``risk`` severity, or None if absent or unmapped bodies exist."""
+    tax = resolve_taxonomy_config(
+        process_yaml_root=process_yaml_root,
+        lifecycle_block=lifecycle_block,
+    )
+    rp = str(tax["risk_prefix"])
+    known = set(RISK_SEVERITY_ORDER)
+    norm = [_normalize_label(x) for x in labels if _normalize_label(x)]
+    if _labels_with_unknown_prefix_bodies(norm, rp, known):
+        return None
     values: list[str] = []
-    for lab in labels:
-        v = _risk_value_from_label(_normalize_label(lab), rp)
+    for lab in norm:
+        v = _value_after_prefix(lab, rp)
         if v is None:
             continue
-        if v not in RISK_SEVERITY_ORDER:
-            # Unrecognized risk body: do not guess severity.
+        vl = v.lower()
+        if vl not in RISK_SEVERITY_ORDER:
             return None
-        values.append(v)
+        values.append(vl)
     if not values:
         return None
     return max(values, key=lambda x: RISK_SEVERITY_ORDER.index(x))
+
+
+def effective_tier_authority(
+    labels: Sequence[str],
+    *,
+    process_yaml_root: Mapping[str, Any] | None = None,
+    lifecycle_block: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Highest ``tier`` authority (T0<T1<T2<T3), or None if absent or ambiguous/unmapped."""
+    tax = resolve_taxonomy_config(
+        process_yaml_root=process_yaml_root,
+        lifecycle_block=lifecycle_block,
+    )
+    tp = str(tax["tier_prefix"])
+    known = set(TIER_AUTHORITY_ORDER)
+    norm = [_normalize_label(x) for x in labels if _normalize_label(x)]
+    tiers = _labels_with_prefix(norm, tp)
+    if len(tiers) != 1:
+        return None
+    body = _value_after_prefix(tiers[0], tp)
+    if body is None:
+        return None
+    if body not in known:
+        return None
+    return body
 
 
 def label_change_is_approver_only_downgrade(
     prev_labels: Sequence[str],
     new_labels: Sequence[str],
     *,
+    process_yaml_root: Mapping[str, Any] | None = None,
     lifecycle_block: Mapping[str, Any] | None = None,
 ) -> tuple[bool, list[str]]:
     """True when effective risk/tier drops or protected need:* labels are removed (#1425).
 
     Replacing ``risk:low`` with ``risk:critical`` is **not** a downgrade (effective risk rises).
+    Lowering ``tier:T3`` → ``tier:T2`` **is** a downgrade (authority drop).
     """
-    tax = _taxonomy_map(lifecycle_block)
+    tax = resolve_taxonomy_config(
+        process_yaml_root=process_yaml_root,
+        lifecycle_block=lifecycle_block,
+    )
+    need_hp = str(tax["need_prefix"])
+    human_lab = f"{need_hp}human-review".lower()
+    sec_lab = f"{need_hp}security-review".lower()
+
     prev_norm = [_normalize_label(x) for x in prev_labels if _normalize_label(x)]
     new_norm = [_normalize_label(x) for x in new_labels if _normalize_label(x)]
     prev_set = set(prev_norm)
@@ -188,8 +313,12 @@ def label_change_is_approver_only_downgrade(
 
     reasons: list[str] = []
 
-    prev_risk = effective_risk_level(prev_norm, lifecycle_block=lifecycle_block)
-    new_risk = effective_risk_level(new_norm, lifecycle_block=lifecycle_block)
+    prev_risk = effective_risk_level(
+        prev_norm, process_yaml_root=process_yaml_root, lifecycle_block=lifecycle_block
+    )
+    new_risk = effective_risk_level(
+        new_norm, process_yaml_root=process_yaml_root, lifecycle_block=lifecycle_block
+    )
     if prev_risk is None and new_risk is None:
         pass  # only non-risk or unknown risk labels
     elif prev_risk is None or new_risk is None:
@@ -199,18 +328,24 @@ def label_change_is_approver_only_downgrade(
         if RISK_SEVERITY_ORDER.index(new_risk) < RISK_SEVERITY_ORDER.index(prev_risk):
             reasons.append(f"risk_downgrade:{prev_risk}->{new_risk}")
 
-    # Tier: at most one tier label in canonical model; drop in max tier is downgrade.
-    tp = tax["tier_prefix"]
-    prev_tiers = _labels_with_prefix(prev_norm, tp)
-    new_tiers = _labels_with_prefix(new_norm, tp)
-    prev_tier_val = prev_tiers[0] if len(prev_tiers) == 1 else None
-    new_tier_count = len(new_tiers)
-    if prev_tier_val and new_tier_count == 0:
-        reasons.append(f"tier_removed:{prev_tier_val}")
+    prev_tier = effective_tier_authority(
+        prev_norm, process_yaml_root=process_yaml_root, lifecycle_block=lifecycle_block
+    )
+    new_tier = effective_tier_authority(
+        new_norm, process_yaml_root=process_yaml_root, lifecycle_block=lifecycle_block
+    )
+    if prev_tier is not None and new_tier is None:
+        tp = str(tax["tier_prefix"])
+        prev_tiers = _labels_with_prefix(prev_norm, tp)
+        if prev_tiers and not _labels_with_prefix(new_norm, tp):
+            reasons.append(f"tier_removed:{prev_tiers[0]}")
+    elif prev_tier is not None and new_tier is not None:
+        if TIER_AUTHORITY_ORDER.index(new_tier) < TIER_AUTHORITY_ORDER.index(prev_tier):
+            reasons.append(f"tier_downgrade:{prev_tier}->{new_tier}")
 
     for lab in removed:
         low = lab.lower()
-        if low in ("need:human-review", "need:security-review"):
+        if low in (human_lab, sec_lab):
             reasons.append(f"removed:{lab}")
 
     return bool(reasons), reasons
@@ -220,15 +355,18 @@ def label_indicates_critical_raise(
     prev_labels: Sequence[str],
     new_labels: Sequence[str],
     *,
+    process_yaml_root: Mapping[str, Any] | None = None,
     lifecycle_block: Mapping[str, Any] | None = None,
 ) -> tuple[bool, bool]:
     """Transition to effective risk *critical* from a lower level."""
     prev = effective_risk_level(
         [_normalize_label(x) for x in prev_labels if _normalize_label(x)],
+        process_yaml_root=process_yaml_root,
         lifecycle_block=lifecycle_block,
     )
     new = effective_risk_level(
         [_normalize_label(x) for x in new_labels if _normalize_label(x)],
+        process_yaml_root=process_yaml_root,
         lifecycle_block=lifecycle_block,
     )
     already = prev == "critical"
@@ -306,25 +444,27 @@ def match_labels_by_taxonomy(
     risk: str | None = None,
     tier: str | None = None,
     issue_type: str | None = None,
+    process_yaml_root: Mapping[str, Any] | None = None,
     lifecycle_block: Mapping[str, Any] | None = None,
 ) -> TaxonomyMatchResult:
-    """Match issue labels using configurable taxonomy (fail closed on unmapped risk/tier)."""
+    """Match issue labels using ``lifecycle.taxonomy`` + ``labels`` from process.yml (#1432)."""
     norm = [_normalize_label(x) for x in labels if _normalize_label(x)]
-    tax = _taxonomy_map(lifecycle_block)
+    tax = resolve_taxonomy_config(
+        process_yaml_root=process_yaml_root,
+        lifecycle_block=lifecycle_block,
+    )
 
     if risk is not None:
-        rp = tax["risk_prefix"]
+        rp = str(tax["risk_prefix"])
         expected = f"{rp}{risk}" if rp.endswith(":") else f"{rp}:{risk}"
-        # Compare case-insensitive on prefix+value
         if not any(_normalize_label(x).lower() == expected.lower() for x in norm):
-            # If any risk label exists but none match expected, do not silently pass.
             risky = _labels_with_prefix(norm, rp)
             if risky:
                 return TaxonomyMatchResult(False, "risk label present but does not match requested value")
             return TaxonomyMatchResult(False, "expected risk label missing")
 
     if tier is not None:
-        tp = tax["tier_prefix"]
+        tp = str(tax["tier_prefix"])
         expected = f"{tp}{tier}" if tp.endswith(":") else f"{tp}:{tier}"
         if not any(_normalize_label(x).lower() == expected.lower() for x in norm):
             tiers = _labels_with_prefix(norm, tp)
@@ -333,6 +473,11 @@ def match_labels_by_taxonomy(
             return TaxonomyMatchResult(False, "expected tier label missing")
 
     if issue_type is not None:
+        allowed = tax.get("issue_type_labels")
+        if not isinstance(allowed, list) or not allowed:
+            return TaxonomyMatchResult(False, "issue type labels not resolved from process.yml")
+        if issue_type not in allowed:
+            return TaxonomyMatchResult(False, "requested issue type not in configured taxonomy")
         if issue_type not in norm:
             return TaxonomyMatchResult(False, "issue type label missing")
 
@@ -414,18 +559,20 @@ def read_lifecycle_block(repo_root: Path) -> dict[str, Any]:
     return block or {}
 
 
-def read_lifecycle_block_for_init_merge(repo_root: Path) -> dict[str, Any] | None:
-    """Load ``lifecycle`` for ``process init``: returns None if file missing; raises if invalid."""
+def read_lifecycle_block_for_init_merge(
+    repo_root: Path,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Return ``(lifecycle_block | None, full_process_root | None)`` for init merge."""
     root = read_process_yaml_root(repo_root)
     if root is None:
-        return None
+        return None, None
     raw = extract_lifecycle_value(root)
     if raw is _SENTINEL:
-        return {}
+        return {}, root
     block, err = normalize_lifecycle_block(raw)
     if err:
         raise ValueError(f"{err} (.agentic/process.yml)")
-    return dict(block or {})
+    return dict(block or {}), root
 
 
 def parse_lifecycle_approvers_list(raw: Any) -> tuple[str, ...] | None:
@@ -540,6 +687,7 @@ def plan_init_process_yaml(
     confirm_non_owner_for_default: bool = False,
     confirm_non_owner_for_explicit_approvers: bool = False,
     existing_lifecycle: Mapping[str, Any] | None = None,
+    process_yaml_root: Mapping[str, Any] | None = None,
     force_lifecycle: bool = False,
 ) -> dict[str, Any]:
     """Build ``lifecycle`` fragment for merge into ``.agentic/process.yml``.
@@ -552,14 +700,18 @@ def plan_init_process_yaml(
         raise ValueError("token_user_login is required")
 
     prior = dict(existing_lifecycle or {})
-    prior_approvers = prior.get("approvers")
     prior_gates = prior.get("gates")
 
     org = bool(repo_obj and repo_obj.get("owner", {}).get("type") == "Organization")
 
     new_block: dict[str, Any] = {}
 
-    if force_lifecycle or prior_approvers is None or (isinstance(prior_approvers, list) and len(prior_approvers) == 0):
+    if not force_lifecycle and prior.get("approvers") is None and "approvers" in prior:
+        raise ValueError("lifecycle.approvers is null; remove the key or set a non-null list")
+
+    if not force_lifecycle and "approvers" in prior:
+        new_block["approvers"] = copy.deepcopy(prior["approvers"])
+    else:
         if org:
             if not org_approvers:
                 raise ValueError("organization repository requires explicit approvers")
@@ -589,8 +741,6 @@ def plan_init_process_yaml(
                     "token user does not match repo owner.login; re-run with confirm_non_owner"
                 )
             new_block["approvers"] = [tu]
-    else:
-        new_block["approvers"] = copy.deepcopy(prior_approvers)
 
     if force_lifecycle or prior_gates is None:
         merged_gates = dict(DEFAULT_LIFECYCLE_GATES)
@@ -603,8 +753,27 @@ def plan_init_process_yaml(
         merged_gates = dict(DEFAULT_LIFECYCLE_GATES)
     new_block["gates"] = merged_gates
 
-    if "taxonomy" in prior and not force_lifecycle:
+    if not force_lifecycle and "taxonomy" in prior:
         new_block["taxonomy"] = copy.deepcopy(prior["taxonomy"])
+    elif not force_lifecycle:
+        new_block["taxonomy"] = {
+            "type_labels": "labels.issue_type_labels",
+            "prefixes": "labels.prefix_convention",
+            "tier_prefix": "tier:",
+        }
+    elif "taxonomy" in prior:
+        new_block["taxonomy"] = copy.deepcopy(prior["taxonomy"])
+    else:
+        new_block["taxonomy"] = {
+            "type_labels": "labels.issue_type_labels",
+            "prefixes": "labels.prefix_convention",
+            "tier_prefix": "tier:",
+        }
+    if process_yaml_root is not None:
+        resolve_taxonomy_config(
+            process_yaml_root=process_yaml_root,
+            lifecycle_block=new_block,
+        )
 
     return {"lifecycle": new_block}
 
@@ -633,8 +802,8 @@ def write_process_yaml_lifecycle(
     """Merge *fragment* into ``.agentic/process.yml`` and write. Used by ``gh plate process init``."""
     path = repo_root / PROCESS_REL
     if path.is_file():
-        current = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(current, dict):
+        current = read_process_yaml_root(repo_root)
+        if current is None:
             current = {}
     else:
         if not create:
@@ -694,6 +863,7 @@ def decide_issue_label_change(
     resolved: ResolvedApprovers,
     critical_tracker: RollingCriticalRaiseTracker | None,
     now: datetime | None = None,
+    process_yaml_root: Mapping[str, Any] | None = None,
     lifecycle_block: Mapping[str, Any] | None = None,
 ) -> ShadowLabelChangeDecision:
     """Fail-closed policy for shadow simulation (#1425; no GitHub writes)."""
@@ -702,6 +872,7 @@ def decide_issue_label_change(
     downgrade, removed = label_change_is_approver_only_downgrade(
         prev_labels,
         new_labels,
+        process_yaml_root=process_yaml_root,
         lifecycle_block=lifecycle_block,
     )
     if downgrade:
@@ -716,6 +887,7 @@ def decide_issue_label_change(
     raised, _already = label_indicates_critical_raise(
         prev_labels,
         new_labels,
+        process_yaml_root=process_yaml_root,
         lifecycle_block=lifecycle_block,
     )
     if raised:
@@ -747,7 +919,7 @@ def decide_approval_command(
     comment_body: str | None,
     actor_login: str | None,
     resolved: ResolvedApprovers,
-    pending_write_state: str | None = None,
+    pending_write_record_json: str | None = None,
 ) -> ShadowApprovalCommandDecision:
     """First-line-only /plate resume|approve; approver-only; pending_write blocks."""
     first = parse_first_line(comment_body)
@@ -755,18 +927,13 @@ def decide_approval_command(
     if cmd is None:
         return ShadowApprovalCommandDecision(False, "not_approval_command", ())
 
-    if pending_write_state and str(pending_write_state).strip().lower() in (
-        "pending",
-        "in_flight",
-        "blocked",
-        "yes",
-        "true",
-        "1",
-    ):
-        return ShadowApprovalCommandDecision(False, "pending_write", ("authoritative pending_write state",))
-
-    if comment_has_pending_write_suppression(comment_body):
-        return ShadowApprovalCommandDecision(False, "pending_write", ("pending_write text heuristic",))
+    rec = parse_pending_write_record(pending_write_record_json)
+    if rec is not None:
+        return ShadowApprovalCommandDecision(
+            False,
+            "pending_write",
+            (f"pending_write transition_id={rec['transition_id']}",),
+        )
 
     if not is_approver(actor_login, resolved):
         return ShadowApprovalCommandDecision(False, "approver_required", ("actor is not an approver",))
