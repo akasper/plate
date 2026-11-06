@@ -343,7 +343,7 @@ REVIEWER_MODEL_TEMPLATE = """
           fi
 """
 
-MARK_IMPLEMENTED = """
+MARK_IMPLEMENTED_PLATE = """
   mark-implemented-on-release-merge:
     if: |
       (github.event_name == 'pull_request' &&
@@ -360,10 +360,61 @@ MARK_IMPLEMENTED = """
       issues: write
       pull-requests: read
     steps:
-      - name: Mark implemented + auto-close linked issues (integration merge)
-        uses: actions/github-script@v8
+      - uses: actions/checkout@v4
         with:
-@@MARK_SCRIPT@@
+          fetch-depth: 1
+
+      - name: Mark implemented + auto-close linked issues (integration merge)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          python3 -m plate_core.gh_actions_mark_implemented
+"""
+
+MARK_IMPLEMENTED_TEMPLATE = """
+  mark-implemented-on-release-merge:
+    if: |
+      (github.event_name == 'pull_request' &&
+       github.event.action == 'closed' &&
+       github.event.pull_request.merged == true &&
+       (startsWith(github.event.pull_request.base.ref, 'release') ||
+        github.event.pull_request.base.ref == 'release' ||
+        startsWith(github.event.pull_request.base.ref, 'epic/'))) ||
+      (github.event_name == 'push' &&
+       (startsWith(github.ref, 'refs/heads/release') || startsWith(github.ref, 'refs/heads/epic/')))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Mark implemented + auto-close linked issues (integration merge)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          run_mark_implemented() {
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            python3 -m plate_core.gh_actions_mark_implemented
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            run_mark_implemented
+          elif python3 -c "import plate_core.gh_actions_mark_implemented" 2>/dev/null; then
+            run_mark_implemented
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
+            if python3 -c "import plate_core.gh_actions_mark_implemented" 2>/dev/null; then
+              run_mark_implemented
+            else
+              echo "::warning title=Integration merge (warn-only)::plate-core runtime unavailable; skipping mark-implemented until plate-core is installed."
+            fi
+          fi
 """
 
 
@@ -390,9 +441,6 @@ def build(variant: str) -> str:
     feedback_script = _yaml_script(
         _extract_script_block(gates_src, "Gate — feedback resolution")
     )
-    mark_script = _yaml_script(
-        _extract_script_block(gates_src, "Mark implemented")
-    )
     validate_run = VALIDATE_PLATE if variant == "plate" else VALIDATE_TEMPLATE
     main_source_run = (
         MAIN_SOURCE_PLATE
@@ -415,7 +463,12 @@ def build(variant: str) -> str:
     body = body.replace(
         "@@VALIDATE_RELEASE_RUN@@", validate_run.lstrip("\n").rstrip() + "\n"
     )
-    body += MARK_IMPLEMENTED.replace("@@MARK_SCRIPT@@", mark_script)
+    if variant == "plate":
+        body += MARK_IMPLEMENTED_PLATE
+    else:
+        body += MARK_IMPLEMENTED_TEMPLATE.replace(
+            "@@PLATE_CORE_VERSION@@", _plate_core_pip_version()
+        )
     return body
 
 

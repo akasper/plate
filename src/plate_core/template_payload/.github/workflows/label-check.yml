@@ -47,6 +47,14 @@ jobs:
               return;
             }
 
+            const statusMatches = labels.filter((label) => allowedStatusLabels.includes(label));
+            if (statusMatches.length > 1) {
+              core.setFailed(
+                `At most one PLATE status label is allowed (${allowedStatusLabels.join(', ')}). Found: ${[...new Set(statusMatches)].sort().join(', ')}.`
+              );
+              return;
+            }
+
             const tierMatches = labels.filter((label) => allowedTierLabels.includes(label));
             const invalidTierLabels = labels.filter((label) => /^tier:/.test(label) && !allowedTierLabels.includes(label));
             if (invalidTierLabels.length > 0) {
