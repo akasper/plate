@@ -1,0 +1,10 @@
+{
+  "slug": "1439-release-window-gate",
+  "change_type": "feature",
+  "surface": "plate-pr-gates, plate_core.pr_gates_checks, release cut/finalize, gh plate release status",
+  "summary": "While the standing Next Release issue has release-window:open, pr-gates blocks PRs whose base is a release integration branch unless release-window-override is applied; cut applies the label; finalize removes it from the next standing issue.",
+  "migration_impact": "Regenerate or import plate-pr-gates.yml. Sync labels including release-window:open and release-window-override. Release cut (non-dry-run) applies release-window:open on the Next Release issue; finalize clears it when spawning the next standing issue.",
+  "agent_notes": "gh plate release status reports release_window_open. Use release-window-override only for approver-sanctioned exceptions (#1439).",
+  "breaking": false,
+  "links": ["#1439"]
+}

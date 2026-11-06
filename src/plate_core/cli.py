@@ -4412,6 +4412,7 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
         perform_guarded_hard_reset,
         ensure_next_release_issue,
         plan_gh_plate_sync,
+        set_next_release_release_window_open,
     )
 
     create_info = create_github_release(
@@ -4440,6 +4441,9 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
 
     next_info = ensure_next_release_issue()
     print(f"Next Release issue: {next_info}")
+
+    rw_close = set_next_release_release_window_open(want_open=False, dry_run=dry_run)
+    print(f"Next Release release-window label: {rw_close}")
 
     gh_plate_plan = plan_gh_plate_sync(version)
     print(f"gh-plate sync plan (#613): {gh_plate_plan}")

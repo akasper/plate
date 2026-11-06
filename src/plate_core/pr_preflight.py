@@ -210,6 +210,8 @@ def run_preflight(
         runner = git_runner or run_hidden
         head_ref = current_git_branch(root, runner=runner)
 
+    rw_open = bool(release_status.get("release_window_open"))
+
     failures = run_preflight_gate_checks(
         body=body_text,
         labels=label_list,
@@ -220,6 +222,7 @@ def run_preflight(
         repo=name,
         release_branch_mode=mode,
         release_track_branches=tracks if isinstance(tracks, dict) else {},
+        release_window_open=rw_open,
     )
     return preflight_report_dict(failures, expected_base=expected, labels=label_list)
 

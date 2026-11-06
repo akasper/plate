@@ -47,6 +47,7 @@ class ReleaseStatusReport:
     extension_release_checks: list[dict]
     # Refined ceremony (Epic #306): standing Next Release + track visibility + on-hold Epics via native links.
     active_next_release: dict | None = None
+    release_window_open: bool = False
     linked_epics: list[dict] = field(default_factory=list)
     on_hold_epics: list[dict] = field(default_factory=list)
     release_track_summary: dict = field(default_factory=dict)  # e.g. {"Major": 3, "Minor": 5, "Patch": 2}
@@ -71,6 +72,7 @@ class ReleaseStatusReport:
             "pending_fragments": [f.to_dict() for f in self.pending_fragments],
             "extension_release_checks": self.extension_release_checks,
             "active_next_release": self.active_next_release,
+            "release_window_open": self.release_window_open,
             "linked_epics": self.linked_epics,
             "on_hold_epics": self.on_hold_epics,
             "release_track_summary": self.release_track_summary,
@@ -556,13 +558,22 @@ def get_release_status(
     # Refined ceremony support (Epic #306): detect standing "Next Release" and its linked Epics (via native sidebar/connected events).
     # Also compute basic track summary from open Epics/Features with Major/Minor/Patch labels, and on-hold (track label but no link to active Next).
     active_next_release = None
+    release_window_open = False
     linked_epics: list[dict] = []
     on_hold_epics: list[dict] = []
     release_track_summary: dict = {"Major": 0, "Minor": 0, "Patch": 0}
 
     active_next = next((i for i in open_release_issues if "next" in (i.get("title") or "").lower()), None)
     if active_next:
-        active_next_release = active_next
+        active_next_release = dict(active_next)
+        try:
+            detail = gh.api(f"repos/{target}/issues/{active_next['number']}")
+            if isinstance(detail, dict):
+                labels_on_nr = [str(l.get("name", "")) for l in (detail.get("labels") or [])]
+                active_next_release["labels"] = labels_on_nr
+                release_window_open = RELEASE_WINDOW_OPEN_LABEL in labels_on_nr
+        except Exception:
+            release_window_open = False
         # Use GraphQL to get connected Epics (adapted from pr-issue-link-check and epics.py patterns).
         try:
             owner, repo_name = target.split("/", 1) if "/" in target else (target, target)
@@ -673,6 +684,7 @@ def get_release_status(
         pending_fragments=pending_fragments,
         extension_release_checks=extension_release_checks,
         active_next_release=active_next_release,
+        release_window_open=release_window_open,
         linked_epics=linked_epics,
         on_hold_epics=on_hold_epics,
         release_track_summary=release_track_summary,
@@ -1218,6 +1230,15 @@ def cut_release(
         f"  7. (Legacy) Hard-reset release branch: "
         f"git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease"
     )
+    try:
+        rw = set_next_release_release_window_open(want_open=True)
+        if not rw.get("ok"):
+            print(
+                f"NOTE: Could not apply `{RELEASE_WINDOW_OPEN_LABEL}` on the standing Next Release issue "
+                f"({rw.get('error', rw)}). Merge freezes still apply once the label is set manually."
+            )
+    except Exception as exc:
+        print(f"NOTE: release-window hook after cut failed: {exc}")
     return 0
 
 
@@ -1351,6 +1372,12 @@ def create_github_release(
 
 STANDING_TRACK_BRANCHES = ("release-major", "release-minor", "release-patch", "release")
 
+RELEASE_WINDOW_OPEN_LABEL = "release-window:open"
+RELEASE_WINDOW_OVERRIDE_LABEL = "release-window-override"
+RELEASE_INTEGRATION_BRANCHES = frozenset(
+    {"release", "release-patch", "release-minor", "release-major"}
+)
+
 RELEASE_BRANCH_FAST_FORWARD_BYPASS_HINT = (
     "Release branches ruleset (id 26613570) requires a bypass actor for direct ref updates. "
     "Add github-actions[bot] (or the lifecycle GitHub App) as a ruleset bypass actor."
@@ -1378,6 +1405,47 @@ def find_standing_next_release_issue(
     except Exception:
         pass
     return None
+
+
+def set_next_release_release_window_open(
+    *,
+    want_open: bool,
+    dry_run: bool = False,
+    repo: str | None = None,
+    client: GhClient | None = None,
+) -> dict:
+    """Apply or remove ``release-window:open`` on the standing Next Release issue (#1439)."""
+    if dry_run:
+        return {"ok": True, "skipped": True, "reason": "dry_run", "would_set_open": want_open}
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    issue = find_standing_next_release_issue(repo=target, client=gh)
+    if not issue or not issue.get("number"):
+        return {"ok": True, "skipped": True, "reason": "no_next_release"}
+    number = int(issue["number"])
+    try:
+        detail = gh.api(f"repos/{target}/issues/{number}") or {}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "issue_number": number}
+    names = [str(l.get("name", "")) for l in (detail.get("labels") or [])]
+    has = RELEASE_WINDOW_OPEN_LABEL in names
+    if want_open and has:
+        return {"ok": True, "skipped": True, "issue_number": number, "state": "already_open"}
+    if not want_open and not has:
+        return {"ok": True, "skipped": True, "issue_number": number, "state": "already_closed"}
+    if want_open:
+        new_labels = names + [RELEASE_WINDOW_OPEN_LABEL]
+    else:
+        new_labels = [n for n in names if n != RELEASE_WINDOW_OPEN_LABEL]
+    try:
+        gh.api(
+            f"repos/{target}/issues/{number}",
+            method="PATCH",
+            fields={"labels": new_labels},
+        )
+    except Exception as exc:
+        return {"ok": False, "issue_number": number, "error": str(exc)}
+    return {"ok": True, "issue_number": number, "release_window_open": want_open}
 
 
 def post_release_fast_forward_comment(
@@ -1856,7 +1924,7 @@ def ensure_next_release_issue(
     fields = {
         "title": "Next Release",
         "body": "Standing target for the next PLATE release (auto-created by finalize). Use the Development sidebar to link Epics and work targeting this release.",
-        "labels": ["Release"],
+        "labels": ["Release", RELEASE_WINDOW_OPEN_LABEL],
     }
     try:
         created = gh.api(f"repos/{target}/issues", method="POST", fields=fields) or {}
