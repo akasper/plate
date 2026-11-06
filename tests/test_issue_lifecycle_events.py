@@ -175,6 +175,45 @@ class IssueLifecycleEventLogTests(unittest.TestCase):
             self.assertTrue(path.is_file())
             self.assertEqual(path.read_text(encoding="utf-8").strip(), from_parent)
 
+    def test_writer_id_recover_empty_file(self):
+        """Crash after O_EXCL create but before write leaves empty writer_id; recover."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wid_path = root / ".agentic" / "events" / "writer_id"
+            wid_path.parent.mkdir(parents=True, exist_ok=True)
+            wid_path.write_text("", encoding="utf-8")
+
+            row = append_issue_lifecycle_event(
+                "a/b",
+                1,
+                event_type="error",
+                summary="after recovery",
+                plate_root=root,
+            )
+            line = wid_path.read_text(encoding="utf-8").strip()
+            self.assertEqual(len(line), 26)
+            self.assertTrue(line.isalnum())
+            self.assertEqual(row["writer_id"], line)
+
+    def test_writer_id_recover_truncated_ulid(self):
+        """Partial line from interrupted write is not a valid id; replace under lock."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wid_path = root / ".agentic" / "events" / "writer_id"
+            wid_path.parent.mkdir(parents=True, exist_ok=True)
+            wid_path.write_text(mint_ulid()[:10], encoding="utf-8")
+
+            row = append_issue_lifecycle_event(
+                "a/b",
+                1,
+                event_type="retry",
+                summary="ok",
+                plate_root=root,
+            )
+            line = wid_path.read_text(encoding="utf-8").strip()
+            self.assertEqual(len(line), 26)
+            self.assertEqual(row["writer_id"], line)
+
     def test_concurrent_append_no_torn_lines(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -130,41 +130,62 @@ def _read_writer_id_file(path: Path) -> str | None:
     return None
 
 
+def _unlink_corrupt_writer_id(path: Path) -> None:
+    """Remove empty or invalid ``writer_id`` (interrupted create or truncation).
+
+    Only call while holding ``writer_id.lock``. A valid 26-char ULID line is
+    never removed.
+    """
+    if not path.exists():
+        return
+    if _read_writer_id_file(path) is not None:
+        return
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def _get_or_create_writer_id(plate_root: Path | None) -> str:
     """Return the stable writer id for this clone, creating it if needed.
 
     Uses a repo-wide lock file plus ``O_CREAT|O_EXCL`` so concurrent processes
-    cannot mint two ids for the same ``writer_id`` path.
+    cannot mint two ids for the same ``writer_id`` path. If a process crashes
+    after ``O_EXCL`` but before the ULID line is written, the path can exist
+    empty or truncated; that is detected and removed under the same lock, then
+    initialization is retried.
     """
     path = _writer_id_path(plate_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = path.with_suffix(".lock")
 
     with _lockfile(lock_path):
-        existing = _read_writer_id_file(path)
-        if existing is not None:
-            return existing
-        try:
-            fd = os.open(
-                str(path),
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                0o644,
-            )
-        except FileExistsError:
-            for _ in range(100):
-                existing = _read_writer_id_file(path)
-                if existing is not None:
-                    return existing
-                time.sleep(0.02)
-            raise RuntimeError(f"writer_id at {path} missing or corrupt after peer create")
-        try:
-            wid = _mint_writer_id()
-            data = (wid + "\n").encode("ascii")
-            os.write(fd, data)
-            os.fsync(fd)
-            return wid
-        finally:
-            os.close(fd)
+        max_rounds = 32
+        for _ in range(max_rounds):
+            existing = _read_writer_id_file(path)
+            if existing is not None:
+                return existing
+            _unlink_corrupt_writer_id(path)
+            try:
+                fd = os.open(
+                    str(path),
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o644,
+                )
+            except FileExistsError:
+                # Peer or prior round left a file; re-read after unlink or valid fill.
+                continue
+            try:
+                wid = _mint_writer_id()
+                data = (wid + "\n").encode("ascii")
+                os.write(fd, data)
+                os.fsync(fd)
+                return wid
+            finally:
+                os.close(fd)
+        raise RuntimeError(
+            f"writer_id at {path} could not be initialized after {max_rounds} attempts"
+        )
 
 
 def scrub_issue_lifecycle_payload(value: Any) -> Any:
