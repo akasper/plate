@@ -9,6 +9,10 @@ def read_text(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
 
 
+def _fast_forward_release_job_block(workflow: str) -> str:
+    return workflow.split("fast-forward-release-branches:", 1)[1].split("\n  deploy:", 1)[0]
+
+
 class NativeGitHubPrIntegrationTests(unittest.TestCase):
     def test_feature_issue_template_uses_epic_milestones(self):
         template = read_text(".github/ISSUE_TEMPLATE/feature.yml")
@@ -162,10 +166,33 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
 
     def test_release_workflow_fast_forward_job_can_comment_on_issues(self):
         workflow = read_text(".github/workflows/release.yml")
-        job_block = workflow.split("fast-forward-release-branches:", 1)[1].split("\n  deploy:", 1)[0]
+        job_block = _fast_forward_release_job_block(workflow)
         self.assertIn("post_release_fast_forward_comment", workflow)
         self.assertIn("issues: write", job_block)
         self.assertIn("contents: write", job_block)
+
+    def test_release_workflow_fast_forward_uses_app_token_and_missing_secret_fallback(self):
+        """#1438: FF job uses create-github-app-token; warns and skips push without secrets."""
+        repo = read_text(".github/workflows/release.yml")
+        payload = read_text("src/plate_core/template_payload/.github/workflows/release.yml")
+        repo_block = _fast_forward_release_job_block(repo)
+        payload_block = _fast_forward_release_job_block(payload)
+        self.assertEqual(repo_block, payload_block)
+        for block in (repo_block, payload_block):
+            self.assertIn("actions/create-github-app-token@v1", block)
+            self.assertIn("id: plate-app-token", block)
+            self.assertIn("app-id: ${{ secrets.PLATE_APP_ID }}", block)
+            self.assertIn("private-key: ${{ secrets.PLATE_APP_PRIVATE_KEY }}", block)
+            self.assertIn("repositories: |", block)
+            self.assertIn("${{ github.event.repository.name }}", block)
+            self.assertIn("token: ${{ steps.plate-app-token.outputs.token || github.token }}", block)
+            self.assertIn("GH_TOKEN: ${{ github.token }}", block)
+            self.assertIn("Warn when lifecycle App secrets are missing", block)
+            self.assertIn("if: ${{ secrets.PLATE_APP_ID == '' || secrets.PLATE_APP_PRIVATE_KEY == '' }}", block)
+            self.assertIn("::warning::", block)
+            self.assertIn("Release-branch fast-forward was skipped", block)
+            self.assertNotIn("--force", block)
+            self.assertNotIn("--force-with-lease", block)
 
 
 if __name__ == "__main__":
