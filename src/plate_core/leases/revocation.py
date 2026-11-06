@@ -11,7 +11,12 @@ Outcome = Literal["requeue", "needs_human"]
 
 @dataclass
 class RevocationLedger:
-    """Counts revoked renewals per supervising *requester* (process identity)."""
+    """Counts revoked renewals per supervising *requester* (process identity).
+
+    This is an in-memory helper for a single PLATE supervisor process. Multiple
+    unsynchronized threads sharing one ledger should use an external lock; separate
+    processes need a persisted counter (out of scope for #1427).
+    """
 
     threshold: int
     counts: dict[str, int] = field(default_factory=dict)

@@ -2,7 +2,7 @@
   "slug": "1427-lease-adapters",
   "change_type": "feature",
   "surface": "src/plate_core/leases/, src/plate_core/process_config.py, .agentic/process.yml, template_payload process.yml, tests/test_lease_adapters_contract.py",
-  "summary": "Issue lifecycle slice 6 (#1427): lease adapter port (Local always-grant, Lockfile fcntl + JSON) with process.yml keys (leases.adapter, ttl_s, grace_s, no_capacity_deadline, revocations_before_human), merger for defaults, revocation/requeue ledger, crash recovery helper, and unittest contract suite.",
+  "summary": "Issue lifecycle slice 6 (#1427): lease adapter port (Local always-grant, Lockfile fcntl + JSON) with process.yml keys (leases.adapter, ttl_s, grace_s, no_capacity_deadline, revocations_before_human), merger for defaults, revocation/requeue ledger, crash recovery helper, and unittest contract suite. Lockfile path: full-buffer os.write, safe corrupt-state handling (no double-grant), replace-failure falls back to wait, release persists last_release forensic fields.",
   "migration_impact": "Optional new ``leases:`` block in ``.agentic/process.yml``; omitting it is fine — code merges the same defaults (adapter local, ttl_s 600, grace_s 60, no_capacity_deadline 6h, revocations_before_human 3).",
   "agent_notes": "Lull hub adapter remains out of scope (#1431). Max overrun after failed renew documented as ttl/3 + grace_s via max_lease_runover_seconds.",
   "breaking": false,

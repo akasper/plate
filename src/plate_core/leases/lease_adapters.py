@@ -24,6 +24,46 @@ from .types import (
 )
 
 
+def _write_all(fd: int, data: bytes) -> None:
+    """Write every byte (``os.write`` may short-write on some paths)."""
+
+    view = memoryview(data)
+    offset = 0
+    total = len(data)
+    while offset < total:
+        n = os.write(fd, view[offset:])
+        if n is None or n <= 0:
+            raise OSError(f"os.write returned non-positive length: {n!r}")
+        offset += n
+
+
+def _unlink_quiet(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        try:
+            if path.is_file():
+                path.unlink()
+        except OSError:
+            pass
+
+
+def _validate_active_record(active: dict[str, Any]) -> bool:
+    """Return True when ``active`` looks like a live lockfile lease record."""
+
+    try:
+        if str(active.get("lease_id", "")).strip() == "":
+            return False
+        if str(active.get("idempotency_key", "")).strip() == "":
+            return False
+        if str(active.get("requester", "")).strip() == "":
+            return False
+        exp = float(active.get("expires_at", 0.0))
+    except (TypeError, ValueError):
+        return False
+    return exp > 0.0
+
+
 class LeaseAdapter(ABC):
     """Capacity lease port (Lull contract; exclusivity remains with the claim)."""
 
@@ -169,27 +209,64 @@ class LockfileLeaseAdapter(LeaseAdapter):
     def _with_mutex(self) -> "_Mutex":
         return _Mutex(self._mutex_path)
 
-    def _read_state(self) -> dict[str, Any]:
+    def _read_state(self) -> tuple[dict[str, Any], str]:
+        """Return ``(state, integrity)`` where integrity is ok|missing|corrupt.
+
+        **Corrupt** means the file exists but is not usable JSON with a sane shape.
+        Callers must not treat that as a free slot — that would double-grant capacity.
+        """
+
         if not self._state_path.is_file():
-            return {"active": None}
+            return {"active": None}, "missing"
         try:
-            data = json.loads(self._state_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return {"active": None}
+            raw = self._state_path.read_text(encoding="utf-8")
+        except OSError:
+            return {"active": None, "state_integrity": "corrupt"}, "corrupt"
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return {"active": None, "state_integrity": "corrupt"}, "corrupt"
         if not isinstance(data, dict):
-            return {"active": None}
-        return data
+            return {"active": None, "state_integrity": "corrupt"}, "corrupt"
+        active = data.get("active")
+        if active is None:
+            return data, "ok"
+        if isinstance(active, dict):
+            now = time.time()
+            if _validate_active_record(active):
+                if self._active_expired(active, now):
+                    cleaned = dict(data)
+                    cleaned["active"] = None
+                    return cleaned, "ok"
+                return data, "ok"
+            return {"active": None, "state_integrity": "corrupt"}, "corrupt"
+        return {"active": None, "state_integrity": "corrupt"}, "corrupt"
 
     def _write_state_atomic(self, state: dict[str, Any]) -> None:
         tmp = self._state_path.with_suffix(".json.tmp")
         payload = json.dumps(state, indent=2, sort_keys=True) + "\n"
+        encoded = payload.encode("utf-8")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
-            os.write(fd, payload.encode("utf-8"))
+            _write_all(fd, encoded)
             os.fsync(fd)
-        finally:
+        except OSError:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            _unlink_quiet(tmp)
+            raise
+        try:
             os.close(fd)
-        os.replace(tmp, self._state_path)
+        except OSError:
+            _unlink_quiet(tmp)
+            raise
+        try:
+            os.replace(tmp, self._state_path)
+        except OSError:
+            _unlink_quiet(tmp)
+            raise
 
     def _active_expired(self, active: dict[str, Any], now: float) -> bool:
         exp = float(active.get("expires_at", 0.0))
@@ -207,7 +284,9 @@ class LockfileLeaseAdapter(LeaseAdapter):
         del wait_seconds
         now = time.time()
         with self._with_mutex():
-            state = self._read_state()
+            state, integrity = self._read_state()
+            if integrity == "corrupt":
+                return LeaseAcquireResult(status="wait", wait_seconds=300)
             active = state.get("active")
             if isinstance(active, dict) and not self._active_expired(active, now):
                 if active.get("idempotency_key") == idempotency_key:
@@ -224,13 +303,18 @@ class LockfileLeaseAdapter(LeaseAdapter):
                 "expires_at": now + float(self._ttl_s),
             }
             state["active"] = record
-            self._write_state_atomic(state)
+            try:
+                self._write_state_atomic(state)
+            except OSError:
+                return LeaseAcquireResult(status="wait", wait_seconds=300)
             return LeaseAcquireResult(status="granted", lease_id=lease_id)
 
     def renew(self, *, lease_id: str, requester: str) -> LeaseRenewResult:
         now = time.time()
         with self._with_mutex():
-            state = self._read_state()
+            state, integrity = self._read_state()
+            if integrity == "corrupt":
+                return LeaseRenewResult(status="not_found")
             active = state.get("active")
             if not isinstance(active, dict):
                 return LeaseRenewResult(status="not_found")
@@ -240,11 +324,17 @@ class LockfileLeaseAdapter(LeaseAdapter):
                 return LeaseRenewResult(status="revoked")
             if self._active_expired(active, now):
                 state["active"] = None
-                self._write_state_atomic(state)
+                try:
+                    self._write_state_atomic(state)
+                except OSError:
+                    return LeaseRenewResult(status="not_found")
                 return LeaseRenewResult(status="expired")
             active["expires_at"] = now + float(self._ttl_s)
             state["active"] = active
-            self._write_state_atomic(state)
+            try:
+                self._write_state_atomic(state)
+            except OSError:
+                return LeaseRenewResult(status="not_found")
             return LeaseRenewResult(status="ok")
 
     def release(
@@ -255,9 +345,10 @@ class LockfileLeaseAdapter(LeaseAdapter):
         left_running: bool,
         notes: str,
     ) -> None:
-        del left_running, notes
         with self._with_mutex():
-            state = self._read_state()
+            state, integrity = self._read_state()
+            if integrity == "corrupt":
+                return
             active = state.get("active")
             if (
                 isinstance(active, dict)
@@ -265,12 +356,24 @@ class LockfileLeaseAdapter(LeaseAdapter):
                 and active.get("requester") == requester
             ):
                 state["active"] = None
-                self._write_state_atomic(state)
+                state["last_release"] = {
+                    "lease_id": lease_id,
+                    "requester": requester,
+                    "left_running": bool(left_running),
+                    "notes": str(notes),
+                    "released_at": time.time(),
+                }
+                try:
+                    self._write_state_atomic(state)
+                except OSError:
+                    return
 
     def list_by_requester(self, requester: str) -> list[LeaseRecord]:
         now = time.time()
         with self._with_mutex():
-            state = self._read_state()
+            state, integrity = self._read_state()
+            if integrity == "corrupt":
+                return []
             active = state.get("active")
             if not isinstance(active, dict):
                 return []

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import multiprocessing
 import os
 import tempfile
 import unittest
 from collections import defaultdict
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from plate_core.leases import (
     LeaseAdapter,
@@ -20,6 +21,7 @@ from plate_core.leases import (
     max_lease_runover_seconds,
     recover_lease_or_release,
 )
+from plate_core.leases import lease_adapters as lease_adapters_mod
 from plate_core.process_config import (
     DEFAULT_LEASES_CONFIG,
     load_merged_process_config,
@@ -253,4 +255,132 @@ class TestMaxRunover(unittest.TestCase):
         ttl = DEFAULT_LEASES_CONFIG["ttl_s"]
         grace = DEFAULT_LEASES_CONFIG["grace_s"]
         self.assertEqual(max_lease_runover_seconds(ttl, grace), ttl // 3 + grace)
+
+
+class TestLockfileLeaseAdapterSafety(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp()
+        self._lock_dir = Path(self._tmp) / "leases"
+        self._tags = LeaseTags(
+            repo="r",
+            issue="1",
+            state="ready",
+            transition_id="t0",
+            tier="T0",
+            budget={},
+        )
+
+    def _adapter(self) -> LockfileLeaseAdapter:
+        return LockfileLeaseAdapter(self._lock_dir, ttl_s=600)
+
+    def test_write_all_handles_short_write(self) -> None:
+        out = Path(self._tmp) / "pipe.bin"
+        buf = b"short-write regression payload"
+        fd = os.open(out, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            real_write = lease_adapters_mod.os.write
+            calls = {"n": 0}
+
+            def short_write(fd_inner: int, data: bytes | memoryview) -> int:
+                if calls["n"] == 0:
+                    calls["n"] += 1
+                    chunk = data[:1] if len(data) > 0 else data
+                    return real_write(fd_inner, chunk)
+                return real_write(fd_inner, data)
+
+            with patch.object(lease_adapters_mod.os, "write", side_effect=short_write):
+                lease_adapters_mod._write_all(fd, buf)
+        finally:
+            os.close(fd)
+        self.assertEqual(out.read_bytes(), buf)
+
+    def test_acquire_returns_wait_when_state_replace_fails(self) -> None:
+        ad = self._adapter()
+        real_replace = os.replace
+
+        def replace_fail(src: os.PathLike[str], dst: os.PathLike[str]) -> None:
+            if str(src).endswith(".json.tmp"):
+                raise OSError("simulated ENOSPC on replace")
+            return real_replace(src, dst)
+
+        with patch.object(lease_adapters_mod.os, "replace", side_effect=replace_fail):
+            r1 = ad.acquire(
+                idempotency_key="a",
+                requester="p",
+                tags=self._tags,
+                claim_oid=None,
+                wait_seconds=0,
+            )
+            r2 = ad.acquire(
+                idempotency_key="b",
+                requester="p",
+                tags=self._tags,
+                claim_oid=None,
+                wait_seconds=0,
+            )
+        self.assertEqual(r1.status, "wait")
+        self.assertEqual(r2.status, "wait")
+        self.assertFalse(ad._state_path.is_file())
+
+    def test_corrupt_state_file_does_not_open_capacity(self) -> None:
+        ad = self._adapter()
+        ad._state_path.parent.mkdir(parents=True, exist_ok=True)
+        ad._state_path.write_text("{ not valid json ", encoding="utf-8")
+        r = ad.acquire(
+            idempotency_key="k",
+            requester="p",
+            tags=self._tags,
+            claim_oid=None,
+            wait_seconds=0,
+        )
+        self.assertEqual(r.status, "wait")
+        self.assertEqual(r.wait_seconds, 300)
+
+    def test_malformed_active_record_treated_as_corruption(self) -> None:
+        ad = self._adapter()
+        ad._state_path.parent.mkdir(parents=True, exist_ok=True)
+        bad = {
+            "active": {
+                "lease_id": "",
+                "idempotency_key": "x",
+                "requester": "q",
+                "expires_at": 1.0,
+                "tags": {},
+            }
+        }
+        ad._state_path.write_text(json.dumps(bad), encoding="utf-8")
+        r = ad.acquire(
+            idempotency_key="new",
+            requester="p",
+            tags=self._tags,
+            claim_oid=None,
+            wait_seconds=0,
+        )
+        self.assertEqual(r.status, "wait")
+
+    def test_release_appends_forensic_last_release(self) -> None:
+        ad = self._adapter()
+        ac = ad.acquire(
+            idempotency_key="fr",
+            requester="p",
+            tags=self._tags,
+            claim_oid="oid1",
+            wait_seconds=0,
+        )
+        self.assertEqual(ac.status, "granted")
+        lid = ac.lease_id
+        self.assertIsNotNone(lid)
+        ad.release(
+            lease_id=str(lid),
+            requester="p",
+            left_running=True,
+            notes="evidence saved",
+        )
+        payload = json.loads(ad._state_path.read_text(encoding="utf-8"))
+        self.assertIsNone(payload.get("active"))
+        lr = payload.get("last_release")
+        self.assertIsInstance(lr, dict)
+        self.assertEqual(lr.get("lease_id"), lid)
+        self.assertTrue(lr.get("left_running"))
+        self.assertEqual(lr.get("notes"), "evidence saved")
 
