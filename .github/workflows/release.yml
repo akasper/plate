@@ -146,12 +146,34 @@ jobs:
     permissions:
       contents: write
       issues: write
+    env:
+      # Map secrets here so step `if:` can use `env.*` (secrets.* is not allowed in step if expressions).
+      PLATE_FF_APP_ID: ${{ secrets.PLATE_APP_ID }}
+      PLATE_FF_APP_PRIVATE_KEY: ${{ secrets.PLATE_APP_PRIVATE_KEY }}
     steps:
+      - name: Warn when lifecycle App secrets are missing (fast-forward push skipped)
+        if: ${{ env.PLATE_FF_APP_ID == '' || env.PLATE_FF_APP_PRIVATE_KEY == '' }}
+        run: |
+          echo '::warning::Release-branch fast-forward was skipped because repository secrets PLATE_APP_ID and PLATE_APP_PRIVATE_KEY are not both configured. On user-owned repositories, branch rulesets often block github-actions from pushing standing release-track branches; configure a GitHub App with Contents (read/write) plus Issues and Pull requests (read/write), install it on this repo, add those secrets, and register the App as an Always-allow bypass actor on the release-branch ruleset (or run a manual admin fast-forward). Organization repositories may instead grant github-actions bypass where policy allows.'
+
+      - uses: actions/create-github-app-token@v1
+        id: plate-app-token
+        if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}
+        with:
+          app-id: ${{ secrets.PLATE_APP_ID }}
+          private-key: ${{ secrets.PLATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            ${{ github.event.repository.name }}
+
       - uses: actions/checkout@v4
+        if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}
         with:
           fetch-depth: 0
+          token: ${{ steps.plate-app-token.outputs.token || github.token }}
 
       - name: Fast-forward release branches to tag (no force push)
+        if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}
         env:
           RELEASE_TAG: ${{ needs.tag-release-merge.outputs.release_tag }}
           GH_TOKEN: ${{ github.token }}
