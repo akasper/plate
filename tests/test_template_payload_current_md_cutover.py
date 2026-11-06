@@ -43,6 +43,7 @@ class TemplatePayloadCurrentMdCutoverTests(unittest.TestCase):
         self.assertIn("milestones_are_canonical_epics: true", process)
         self.assertIn("Standing 'Next Release' issue exists", process)
         self.assertIn(".agentic/releases/unreleased/", process)
+        self.assertIn("lifecycle:", process)
 
     def test_template_payload_workflows_use_milestones_and_fragments(self):
         label_check = read(".github/workflows/label-check.yml")
