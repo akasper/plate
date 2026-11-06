@@ -465,6 +465,57 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["candidates"], ["feature-merged"])
 
 
+    @patch("plate_core.release.plan_gh_plate_sync")
+    @patch("plate_core.release.ensure_next_release_issue")
+    @patch("plate_core.release.set_next_release_release_window_open")
+    @patch("plate_core.release.create_github_release")
+    @patch("plate_core.release.fast_forward_release_branches")
+    @patch("plate_core.release.perform_guarded_hard_reset")
+    @patch("plate_core.release.validate_release_workspace")
+    @patch("plate_core.release._load_release")
+    def test_release_finalize_closes_window_before_ensure_next_issue(
+        self,
+        mock_load_release,
+        mock_validate,
+        mock_reset,
+        mock_ff,
+        mock_create,
+        mock_set_rw,
+        mock_ensure,
+        mock_plan_sync,
+    ):
+        """#1439: close release window on the cut-cycle issue before creating the next standing Next Release."""
+        mock_validate.return_value = type("R", (), {"errors": []})()
+        mock_load_release.return_value = {}
+        mock_create.return_value = {"tag": "v0.7.1", "exists": True, "created": False}
+        mock_ff.return_value = {"ok": True, "results": []}
+        mock_set_rw.return_value = {"ok": True, "issue_number": 50}
+        mock_ensure.return_value = {"created": True, "issue": {"number": 51}}
+        mock_plan_sync.return_value = {"ok": True}
+
+        order: list[str] = []
+
+        def rw_side_effect(**kwargs):
+            order.append("close_window")
+            return mock_set_rw.return_value
+
+        def ensure_side_effect(*_a, **_kw):
+            order.append("ensure_next")
+            return mock_ensure.return_value
+
+        mock_set_rw.side_effect = rw_side_effect
+        mock_ensure.side_effect = ensure_side_effect
+
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["release", "finalize", "v0.7.1", "--dry-run"])
+        self.assertEqual(code, 0)
+        self.assertEqual(order, ["close_window", "ensure_next"])
+        mock_set_rw.assert_called_once()
+        _rw_kwargs = mock_set_rw.call_args.kwargs
+        self.assertFalse(_rw_kwargs.get("want_open", True))
+        self.assertTrue(_rw_kwargs.get("dry_run"))
+
     @patch("plate_core.release.create_github_release")
     @patch("plate_core.release.fast_forward_release_branches")
     @patch("plate_core.release.perform_guarded_hard_reset")

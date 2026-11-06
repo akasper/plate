@@ -1924,7 +1924,8 @@ def ensure_next_release_issue(
     fields = {
         "title": "Next Release",
         "body": "Standing target for the next PLATE release (auto-created by finalize). Use the Development sidebar to link Epics and work targeting this release.",
-        "labels": ["Release", RELEASE_WINDOW_OPEN_LABEL],
+        # Window starts closed; `cut_release` opens via `set_next_release_release_window_open` (#1439).
+        "labels": ["Release"],
     }
     try:
         created = gh.api(f"repos/{target}/issues", method="POST", fields=fields) or {}

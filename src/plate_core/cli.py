@@ -4399,7 +4399,7 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     print("  2. gh release create (rich notes from release.json summary+entries; simple assets from v*/assets/ if present).")
     print("  3. Fast-forward standing release branches to the tag when --apply (no force push).")
     print("  3b. Admin hard-reset (--force-hard-reset --apply) uses force-with-lease on existing tracks only.")
-    print("  4. Ensure a fresh 'Next Release' issue (label: Release) exists for the standing target.")
+    print("  4. Close release-window on the prior standing issue, then ensure a fresh 'Next Release' issue (label: Release only) exists.")
     print("  5. Invoke .plate release triggers + extension release_checks (human approval where required).")
     print("  6. gh-plate thin-shim sync/tag/release via publish-gh-plate-extension.yml on plate tag push (#613).")
     if release_data.get("closes_block"):
@@ -4439,11 +4439,13 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
         )
         print(f"Admin hard reset: {reset_info}")
 
-    next_info = ensure_next_release_issue()
-    print(f"Next Release issue: {next_info}")
-
+    # Close merge-freeze window on the standing Next Release that was open during cut,
+    # before ensuring a fresh standing issue (new issue must not inherit release-window:open).
     rw_close = set_next_release_release_window_open(want_open=False, dry_run=dry_run)
     print(f"Next Release release-window label: {rw_close}")
+
+    next_info = ensure_next_release_issue()
+    print(f"Next Release issue: {next_info}")
 
     gh_plate_plan = plan_gh_plate_sync(version)
     print(f"gh-plate sync plan (#613): {gh_plate_plan}")

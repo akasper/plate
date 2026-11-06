@@ -1468,6 +1468,14 @@ class FinalizeAutomationTests(unittest.TestCase):
         ]
         info = ensure_next_release_issue(client=mock_client)
         self.assertTrue(info.get("created") or info.get("exists"))
+        create_calls = [
+            c
+            for c in mock_client.api.call_args_list
+            if len(c[0]) > 0 and str(c[0][0]).endswith("/issues") and c[1].get("method") == "POST"
+        ]
+        self.assertEqual(len(create_calls), 1)
+        _args, kwargs = create_calls[0]
+        self.assertEqual(kwargs.get("fields", {}).get("labels"), ["Release"])
 
 
 class GhPlateSyncPlanTests(unittest.TestCase):
