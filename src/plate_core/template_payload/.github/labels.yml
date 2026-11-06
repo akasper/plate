@@ -121,6 +121,14 @@
   color: "fbca04"
   description: "Bypass main-source pr-gates check for one PR (#1435); approvers when lifecycle config exists."
 
+- name: "release-window:open"
+  color: "b60205"
+  description: "Standing Next Release issue: merge freeze into release integration branches (#1439)."
+
+- name: "release-window-override"
+  color: "fbca04"
+  description: "Bypass release-window pr-gates check for one PR (#1439); approvers when lifecycle config exists."
+
 - name: "status:blocked"
   color: "b60205"
   description: "Feature issue has one or more open native GitHub blockers."
