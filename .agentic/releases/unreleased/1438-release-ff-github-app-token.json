@@ -2,7 +2,7 @@
   "slug": "1438-release-ff-github-app-token",
   "change_type": "feature",
   "surface": ".github/workflows/release.yml, src/plate_core/template_payload/.github/workflows/release.yml, docs/agents/branch-model-and-ceremonies.md",
-  "summary": "The post-tag fast-forward job mints a GitHub App installation token (actions/create-github-app-token@v1, secrets PLATE_APP_ID + PLATE_APP_PRIVATE_KEY) scoped to the repo for checkout/push; missing secrets log ::warning:: and skip the push. GH_TOKEN remains the default token for gh API issue comments. PR gates issue-link step treats Refs #N like a development sidebar link (#1438).",
+  "summary": "The post-tag fast-forward job mints a GitHub App installation token (actions/create-github-app-token@v1, secrets PLATE_APP_ID + PLATE_APP_PRIVATE_KEY) scoped to the repo for checkout/push; missing secrets log ::warning:: and skip the push (job env maps secrets so step if: uses env.* — secrets.* is invalid in step if). GH_TOKEN remains the default token for gh API issue comments. PR gates issue-link step treats Refs #N like a development sidebar link (#1438).",
   "migration_impact": "Adopters need both App secrets and ruleset bypass for automated FF on user-owned repos, or accept manual/admin finalize; org repos may use github-actions bypass instead.",
   "migration_guidance": [
     "1. Install a GitHub App on the repo with Contents, Issues, Pull requests, Actions, and Checks permissions; add PLATE_APP_ID and PLATE_APP_PRIVATE_KEY repository secrets.",
