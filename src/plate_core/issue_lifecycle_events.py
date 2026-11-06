@@ -14,7 +14,6 @@ import json
 import os
 import re
 import secrets
-import threading
 import time
 from pathlib import Path
 from typing import Any, Iterator, Literal
@@ -70,7 +69,13 @@ _SCRUB_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 
 _SUMMARY_MAX = 500
 
-_writer_id_lock = threading.Lock()
+
+def _scrub_str(text: str) -> str:
+    """Apply token redactions to a single string."""
+    s = text
+    for pattern, repl in _SCRUB_PATTERNS:
+        s = pattern.sub(repl, s)
+    return s
 
 
 def mint_ulid(when_ms: int | None = None) -> str:
@@ -92,6 +97,11 @@ def mint_ulid(when_ms: int | None = None) -> str:
     return "".join(reversed(chars))
 
 
+def _mint_writer_id() -> str:
+    """ULID for a new clone ``writer_id`` file (indirection for tests)."""
+    return mint_ulid()
+
+
 def _repo_slug(repo: str) -> str:
     s = str(repo).strip()
     if not _REPO_SLUG_RE.match(s):
@@ -109,34 +119,59 @@ def _writer_id_path(plate_root: Path | None) -> Path:
     return _events_root(plate_root) / "writer_id"
 
 
+def _read_writer_id_file(path: Path) -> str | None:
+    """Return the writer id if the file exists and looks like a ULID."""
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if len(raw) == 26 and raw.isalnum():
+        return raw
+    return None
+
+
 def _get_or_create_writer_id(plate_root: Path | None) -> str:
+    """Return the stable writer id for this clone, creating it if needed.
+
+    Uses a repo-wide lock file plus ``O_CREAT|O_EXCL`` so concurrent processes
+    cannot mint two ids for the same ``writer_id`` path.
+    """
     path = _writer_id_path(plate_root)
-    with _writer_id_lock:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            existing = path.read_text(encoding="utf-8").strip()
-        except OSError:
-            existing = ""
-        if existing and len(existing) == 26 and existing.isalnum():
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_suffix(".lock")
+
+    with _lockfile(lock_path):
+        existing = _read_writer_id_file(path)
+        if existing is not None:
             return existing
-        wid = mint_ulid()
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(wid + "\n", encoding="utf-8")
-        os.replace(tmp, path)
-        return wid
+        try:
+            fd = os.open(
+                str(path),
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o644,
+            )
+        except FileExistsError:
+            for _ in range(100):
+                existing = _read_writer_id_file(path)
+                if existing is not None:
+                    return existing
+                time.sleep(0.02)
+            raise RuntimeError(f"writer_id at {path} missing or corrupt after peer create")
+        try:
+            wid = _mint_writer_id()
+            data = (wid + "\n").encode("ascii")
+            os.write(fd, data)
+            os.fsync(fd)
+            return wid
+        finally:
+            os.close(fd)
 
 
 def scrub_issue_lifecycle_payload(value: Any) -> Any:
     """Recursively scrub strings in JSON-like structures."""
 
-    def scrub_str(text: str) -> str:
-        s = text
-        for pattern, repl in _SCRUB_PATTERNS:
-            s = pattern.sub(repl, s)
-        return s
-
     if isinstance(value, str):
-        return scrub_str(value)
+        return _scrub_str(value)
     if isinstance(value, dict):
         return {str(k): scrub_issue_lifecycle_payload(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -167,7 +202,9 @@ def _compute_event_key(
     transition_id: str | None,
 ) -> str:
     if transition_id is not None and str(transition_id).strip():
-        return f"{str(transition_id).strip()}:{event_type}"
+        # Same redaction as payload fields so secrets cannot leak via ``event_key``.
+        tid = _scrub_str(str(transition_id).strip())
+        return f"{tid}:{event_type}"
     return mint_ulid()
 
 

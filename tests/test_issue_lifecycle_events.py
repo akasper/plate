@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import threading
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
-
-import unittest
 
 from plate_core.issue_lifecycle_events import (
     append_issue_lifecycle_event,
@@ -16,6 +16,14 @@ from plate_core.issue_lifecycle_events import (
     mint_ulid,
     scrub_issue_lifecycle_payload,
 )
+
+
+def _mp_child_writer_id(root_str: str, out: multiprocessing.Queue) -> None:
+    from pathlib import Path
+
+    from plate_core.issue_lifecycle_events import _get_or_create_writer_id
+
+    out.put(_get_or_create_writer_id(Path(root_str)))
 
 
 class IssueLifecycleEventLogTests(unittest.TestCase):
@@ -50,9 +58,11 @@ class IssueLifecycleEventLogTests(unittest.TestCase):
             ]
             self.assertEqual(seq2, seq1 + 1)
 
-            # New process: reload writer_id and seq from disk
-            with mock.patch("plate_core.issue_lifecycle_events._get_or_create_writer_id") as gw:
-                gw.return_value = wid
+            # Simulated restart: recreate the module entrypoint but same on-disk writer_id.
+            with mock.patch(
+                "plate_core.issue_lifecycle_events._mint_writer_id",
+                side_effect=AssertionError("writer_id must be read from disk, not reminted"),
+            ):
                 append_issue_lifecycle_event(
                     repo,
                     1,
@@ -121,6 +131,49 @@ class IssueLifecycleEventLogTests(unittest.TestCase):
 
         scrubbed = scrub_issue_lifecycle_payload({"t": "Bearer sometokenvaluehere"})
         self.assertEqual(scrubbed["t"], "Bearer [REDACTED_TOKEN]")
+
+    def test_event_key_scrubs_transition_id_tokens(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            secret = "ghp_" + "x" * 36
+            tid = f" lbl:{secret}:end "
+            row = append_issue_lifecycle_event(
+                "a/b",
+                1,
+                event_type="state_transition",
+                transition_id=tid,
+                summary="ok",
+                plate_root=root,
+            )
+            # Strip + scrub must run before event_key is formed.
+            self.assertEqual(
+                row["event_key"],
+                f"lbl:[REDACTED_TOKEN]:end:state_transition",
+            )
+            log_line = (
+                root / ".agentic" / "events" / "a-b" / "issue-1.jsonl"
+            ).read_text(encoding="utf-8")
+            self.assertNotIn(secret, log_line)
+
+    def test_writer_id_file_cross_process_single_id(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ctx = multiprocessing.get_context("spawn")
+            q: multiprocessing.Queue = ctx.Queue()
+            proc = ctx.Process(target=_mp_child_writer_id, args=(str(tmp), q))
+            proc.start()
+            from_child = q.get(timeout=30)
+            proc.join(timeout=30)
+            self.assertEqual(proc.exitcode, 0)
+
+            from plate_core.issue_lifecycle_events import _get_or_create_writer_id
+
+            from_parent = _get_or_create_writer_id(root)
+
+            self.assertEqual(from_parent, from_child)
+            path = root / ".agentic" / "events" / "writer_id"
+            self.assertTrue(path.is_file())
+            self.assertEqual(path.read_text(encoding="utf-8").strip(), from_parent)
 
     def test_concurrent_append_no_torn_lines(self):
         with TemporaryDirectory() as tmp:
