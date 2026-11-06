@@ -16,23 +16,44 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+from plate_core.issue_status_lifecycle import should_apply_status_implemented
 from plate_core.pr_gates_closing import parse_strict_closing_issue_numbers
 
 # Issue type labels that must never be auto-closed by integration merge
 _SKIP_CLOSE_TYPES = frozenset({"Epic", "Task", "Release"})
 
-# Types we expect to close when Closes is present
+# PLATE issue type labels (``label-check``); excluding these means no typed issue.
+_PLATE_ISSUE_TYPE_LABELS = frozenset(
+    {
+        "Bug",
+        "Feature",
+        "Epic",
+        "Release",
+        "Research",
+        "Design",
+        "Question",
+        "Task",
+        "Audit",
+        "Migration",
+        "Feedback Response",
+        "Spike",
+        "Documentation",
+    }
+)
+
+# Subset of issue types that may be auto-closed when ``Closes`` lands on integration
 _CLOSABLE_TYPES = frozenset(
     {
         "Bug",
         "Feature",
-        "Documentation",
         "Research",
         "Design",
         "Question",
         "Audit",
         "Migration",
         "Feedback Response",
+        "Spike",
+        "Documentation",
     }
 )
 
@@ -72,13 +93,15 @@ def should_auto_close_issue(
     skip = labs & _SKIP_CLOSE_TYPES
     if skip:
         return {"close": False, "reason": f"skip_type:{','.join(sorted(skip))}"}
-    if labs & _CLOSABLE_TYPES:
+    type_hits = labs & _PLATE_ISSUE_TYPE_LABELS
+    if not type_hits:
+        return {"close": False, "reason": "no_issue_type_label"}
+    closable = type_hits & _CLOSABLE_TYPES
+    if closable:
         return {"close": True, "reason": "closable_type"}
-    # No recognized type: still close if Closes was explicit (safe default for
-    # unlabeled historical issues) — but prefer skip when only process labels.
-    if not labs:
-        return {"close": True, "reason": "unlabeled_explicit_closes"}
-    return {"close": True, "reason": "explicit_closes_default"}
+    # Typed issue that is not auto-closed (for example only ``Epic`` — should be
+    # caught by ``skip`` above; remaining hits are unexpected combinations).
+    return {"close": False, "reason": f"skip_type:{','.join(sorted(type_hits))}"}
 
 
 def plan_integration_closes(
@@ -87,11 +110,15 @@ def plan_integration_closes(
     pr_body: str | None,
     pr_number: int | None = None,
     issues: list[dict[str, Any]] | None = None,
+    has_pr_payload: bool = True,
 ) -> dict[str, Any]:
     """Build an auditable plan: which issues to label/close after integration merge.
 
     `issues` optional pre-fetched rows: {number, state, labels: [str]}.
     When omitted, plan only lists numbers parsed from the body (fetch later).
+
+    ``has_pr_payload`` should be False for ``push`` events with no pull request
+    payload (the mark-implemented job cannot parse ``Closes`` from a PR body).
     """
     base = (base_ref or "").replace("refs/heads/", "")
     if not is_integration_branch(base):
@@ -103,6 +130,18 @@ def plan_integration_closes(
             "to_close": [],
             "skipped": [],
             "parsed": [],
+        }
+
+    if not has_pr_payload:
+        return {
+            "action": "skip",
+            "reason": "push_event_no_pr_body",
+            "base_ref": base,
+            "to_label": [],
+            "to_close": [],
+            "skipped": [],
+            "parsed": [],
+            "pr_number": pr_number,
         }
 
     parsed = parse_closing_issue_numbers(pr_body)
@@ -126,15 +165,17 @@ def plan_integration_closes(
     for num in parsed:
         row = by_num.get(num)
         if row is None:
-            # unknown: still label + attempt close (CI will 404-skip if missing)
+            # Unknown until fetch: plan label + close attempt (workflow resolves labels).
             to_label.append(num)
             to_close.append({"number": num, "reason": "pending_fetch"})
             continue
         labs = row.get("labels") or []
         if isinstance(labs, list) and labs and isinstance(labs[0], dict):
             labs = [x.get("name") for x in labs if x.get("name")]
-        decision = should_auto_close_issue(labs, state=str(row.get("state") or "open"))
-        to_label.append(num)
+        labs_list = [x for x in labs if x]
+        decision = should_auto_close_issue(labs_list, state=str(row.get("state") or "open"))
+        if should_apply_status_implemented(labs_list):
+            to_label.append(num)
         if decision["close"]:
             to_close.append({"number": num, "reason": decision["reason"]})
         else:

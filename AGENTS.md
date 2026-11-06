@@ -197,6 +197,8 @@ Third-party cloud agents do not receive a user PAT; they cannot upload PR attach
 
 Use labels as stable process metadata. Do not create ad hoc labels unless they change routing, enforcement, reporting, auditing, review burden, or agent behavior. Use GitHub Projects fields for frequently changing planning state such as priority, owner, rank, iteration, target date, or release target. The `status:blocked`, `status:ready-to-work`, and `status:implemented` (auto-set on release-branch merge per #556; means landed in RC but not yet shipped to main+tag) labels are the explicit exception used by PLATES native trigger workflows.
 
+**Issue `status:*` lifecycle (#1385):** At most one of `status:stub`, `status:blocked`, `status:ready-to-work`, or `status:implemented` may appear on an issue (enforced by `label-check`). The integration merge job in `plate-pr-gates` adds `status:implemented` only for issues that are not typed Epic, Task, or Release; those types keep the issue open when `Closes` lands on a release branch until their own ceremony. Push events to integration branches do not carry a merged PR body, so that job skips parsing `Closes` keywords (use the merge-closed pull_request event or link issues another way).
+
 | Label Family | Usage |
 |---|---|
 | `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Task`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |

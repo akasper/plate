@@ -49,6 +49,11 @@ class TestShouldClose(unittest.TestCase):
         self.assertTrue(should_auto_close_issue(["Bug"])["close"])
         self.assertTrue(should_auto_close_issue(["Documentation"])["close"])
 
+    def test_no_plate_issue_type_no_auto_close(self):
+        decision = should_auto_close_issue(["area:agent", "risk:low"])
+        self.assertFalse(decision["close"])
+        self.assertEqual(decision["reason"], "no_issue_type_label")
+
     def test_already_closed(self):
         self.assertFalse(should_auto_close_issue(["Feature"], state="closed")["close"])
 
@@ -69,9 +74,18 @@ class TestPlan(unittest.TestCase):
             ],
         )
         self.assertEqual(plan["action"], "apply")
-        self.assertEqual(plan["to_label"], [10, 20])
+        self.assertEqual(plan["to_label"], [10])
         self.assertEqual([c["number"] for c in plan["to_close"]], [10])
         self.assertEqual([s["number"] for s in plan["skipped"]], [20])
+
+    def test_push_event_skips_without_pr_payload(self):
+        plan = plan_integration_closes(
+            base_ref="release",
+            pr_body="Closes #1",
+            has_pr_payload=False,
+        )
+        self.assertEqual(plan["action"], "skip")
+        self.assertEqual(plan["reason"], "push_event_no_pr_body")
 
     def test_render_comment_has_marker(self):
         text = render_close_comment(pr_number=42, base_ref="release")
