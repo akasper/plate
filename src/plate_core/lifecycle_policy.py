@@ -1,10 +1,14 @@
-"""Pure lifecycle policy: approvers, gate defaults, and shadow decisions (#1425).
+"""Pure lifecycle policy: approvers, gate keys, and shadow decisions (#1425).
 
 This module is intentionally **side-effect free**: it does not call GitHub, mutate
 labels, or enqueue auto-merge. Integration with wake loops, event logs (#1443),
 and leases (#1445) stays behind explicit call sites.
 
 Contract references: #1425 (slice 4), design #1420, related #1374 / #1398.
+
+**Gate semantics (canonical #1432):** In ``lifecycle.gates``, ``true`` means **human
+approval is required** for that gate; ``false`` means this gate does not add that
+requirement in the bounded policy layer.
 """
 
 from __future__ import annotations
@@ -20,6 +24,8 @@ import yaml
 
 PROCESS_REL = ".agentic/process.yml"
 
+_SENTINEL = object()
+
 # Ordered low → high; used with stricter-wins helpers.
 RISK_TOLERANCE_RANK: dict[str, int] = {
     "off": 0,
@@ -28,7 +34,16 @@ RISK_TOLERANCE_RANK: dict[str, int] = {
     "high": 3,
 }
 
-# Balanced defaults (#1425): True = gate is "open" for policy checks that consult this map.
+# Canonical PLATE label prefixes for default taxonomy (adopters may override via lifecycle.taxonomy).
+DEFAULT_TAXONOMY: dict[str, str] = {
+    "risk_prefix": "risk:",
+    "tier_prefix": "tier:",
+}
+
+# Ordered least → most severe (for ``risk:*`` label bodies after the prefix).
+RISK_SEVERITY_ORDER: tuple[str, ...] = ("low", "medium", "high", "critical")
+
+# Balanced defaults (#1425): True = human approval required for this gate (#1432).
 DEFAULT_LIFECYCLE_GATES: dict[str, bool] = {
     "merge": True,
     "start_tier_T3": True,
@@ -42,13 +57,13 @@ DEFAULT_LIFECYCLE_GATES: dict[str, bool] = {
     "start": False,
     "file_issue": False,
     "issue_over_allocation": False,
-    # Fixed / human-only in full lifecycle; kept False so defaults never waive human review.
-    "gate_label_downgrade": False,
-    "project_budget": False,
-    "license": False,
+    # Fixed human-only controls: always require human approval (immutable).
+    "gate_label_downgrade": True,
+    "project_budget": True,
+    "license": True,
 }
 
-# Substrings that identify PLATE marker comments / pending write hints (#1425).
+# Substrings that identify PLATE marker comments / pending write hints in text (supplementary).
 _PENDING_WRITE_MARKERS: tuple[str, ...] = (
     "PLATE_PENDING_WRITE",
     "pending_write",
@@ -77,7 +92,7 @@ def parse_first_line(comment_body: str | None) -> str:
 
 
 def comment_has_pending_write_suppression(body: str | None) -> bool:
-    """True when comment body suggests an in-flight PLATE pending write (best-effort)."""
+    """True when comment body suggests an in-flight PLATE pending write (text heuristic)."""
     if not body:
         return False
     lower = body.lower()
@@ -102,38 +117,122 @@ def _normalize_label(label: str) -> str:
     return str(label or "").strip()
 
 
-def label_indicates_downgrade(
+def _taxonomy_map(lifecycle_block: Mapping[str, Any] | None) -> dict[str, str]:
+    t = DEFAULT_TAXONOMY.copy()
+    if not lifecycle_block:
+        return t
+    raw = lifecycle_block.get("taxonomy")
+    if not isinstance(raw, dict):
+        return t
+    for k in ("risk_prefix", "tier_prefix"):
+        v = raw.get(k)
+        if isinstance(v, str) and v.strip():
+            t[k] = v.strip()
+    return t
+
+
+def _labels_with_prefix(labels: Iterable[str], prefix: str) -> list[str]:
+    p = prefix.lower()
+    if not p.endswith(":"):
+        p = p + ":"
+    return [x for x in labels if _normalize_label(x).lower().startswith(p)]
+
+
+def _risk_value_from_label(label: str, risk_prefix: str) -> str | None:
+    """Return severity token after ``risk:`` (case-insensitive)."""
+    ln = _normalize_label(label)
+    rp = risk_prefix if risk_prefix.endswith(":") else risk_prefix + ":"
+    if len(ln) <= len(rp) or ln[: len(rp)].lower() != rp.lower():
+        return None
+    return ln[len(rp) :].strip().lower() or None
+
+
+def effective_risk_level(
+    labels: Sequence[str],
+    *,
+    lifecycle_block: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Highest ``risk:*`` severity present, or None if no mapped risk label."""
+    tax = _taxonomy_map(lifecycle_block)
+    rp = tax["risk_prefix"]
+    values: list[str] = []
+    for lab in labels:
+        v = _risk_value_from_label(_normalize_label(lab), rp)
+        if v is None:
+            continue
+        if v not in RISK_SEVERITY_ORDER:
+            # Unrecognized risk body: do not guess severity.
+            return None
+        values.append(v)
+    if not values:
+        return None
+    return max(values, key=lambda x: RISK_SEVERITY_ORDER.index(x))
+
+
+def label_change_is_approver_only_downgrade(
     prev_labels: Sequence[str],
     new_labels: Sequence[str],
+    *,
+    lifecycle_block: Mapping[str, Any] | None = None,
 ) -> tuple[bool, list[str]]:
-    """Detect removals that qualify as approver-only downgrades (#1425).
+    """True when effective risk/tier drops or protected need:* labels are removed (#1425).
 
-    Downgrade = removing any of ``risk:*``, ``tier:*``, ``need:human-review``,
-    ``need:security-review`` from the issue label set.
+    Replacing ``risk:low`` with ``risk:critical`` is **not** a downgrade (effective risk rises).
     """
-    prev = {_normalize_label(x) for x in prev_labels if _normalize_label(x)}
-    new = {_normalize_label(x) for x in new_labels if _normalize_label(x)}
-    removed = prev - new
-    downgrade_labels = [
-        x
-        for x in removed
-        if x.startswith("risk:")
-        or x.startswith("tier:")
-        or x in ("need:human-review", "need:security-review")
-    ]
-    return bool(downgrade_labels), downgrade_labels
+    tax = _taxonomy_map(lifecycle_block)
+    prev_norm = [_normalize_label(x) for x in prev_labels if _normalize_label(x)]
+    new_norm = [_normalize_label(x) for x in new_labels if _normalize_label(x)]
+    prev_set = set(prev_norm)
+    new_set = set(new_norm)
+    removed = prev_set - new_set
+
+    reasons: list[str] = []
+
+    prev_risk = effective_risk_level(prev_norm, lifecycle_block=lifecycle_block)
+    new_risk = effective_risk_level(new_norm, lifecycle_block=lifecycle_block)
+    if prev_risk is None and new_risk is None:
+        pass  # only non-risk or unknown risk labels
+    elif prev_risk is None or new_risk is None:
+        if new_risk is None and prev_risk is not None:
+            reasons.append("risk_cleared")
+    else:
+        if RISK_SEVERITY_ORDER.index(new_risk) < RISK_SEVERITY_ORDER.index(prev_risk):
+            reasons.append(f"risk_downgrade:{prev_risk}->{new_risk}")
+
+    # Tier: at most one tier label in canonical model; drop in max tier is downgrade.
+    tp = tax["tier_prefix"]
+    prev_tiers = _labels_with_prefix(prev_norm, tp)
+    new_tiers = _labels_with_prefix(new_norm, tp)
+    prev_tier_val = prev_tiers[0] if len(prev_tiers) == 1 else None
+    new_tier_count = len(new_tiers)
+    if prev_tier_val and new_tier_count == 0:
+        reasons.append(f"tier_removed:{prev_tier_val}")
+
+    for lab in removed:
+        low = lab.lower()
+        if low in ("need:human-review", "need:security-review"):
+            reasons.append(f"removed:{lab}")
+
+    return bool(reasons), reasons
 
 
 def label_indicates_critical_raise(
     prev_labels: Sequence[str],
     new_labels: Sequence[str],
+    *,
+    lifecycle_block: Mapping[str, Any] | None = None,
 ) -> tuple[bool, bool]:
-    """Return (raised, already_critical) for transition to ``risk:critical``."""
-    prev = {_normalize_label(x).lower() for x in prev_labels}
-    new = {_normalize_label(x).lower() for x in new_labels}
-    critical = "risk:critical"
-    already = critical in prev
-    raised = critical in new and not already
+    """Transition to effective risk *critical* from a lower level."""
+    prev = effective_risk_level(
+        [_normalize_label(x) for x in prev_labels if _normalize_label(x)],
+        lifecycle_block=lifecycle_block,
+    )
+    new = effective_risk_level(
+        [_normalize_label(x) for x in new_labels if _normalize_label(x)],
+        lifecycle_block=lifecycle_block,
+    )
+    already = prev == "critical"
+    raised = new == "critical" and not already
     return raised, already
 
 
@@ -167,27 +266,38 @@ def merged_lifecycle_gates(yaml_fragment: Mapping[str, Any] | None) -> dict[str,
 
 
 def gate_requires_human_review(key: str, gates: Mapping[str, bool] | None = None) -> bool:
-    """True when this gate key is closed or fixed human-only (immutable human gates)."""
+    """True when this gate requires human approval (#1432: gate true → human required)."""
     g = dict(gates) if gates is not None else merged_lifecycle_gates(None)
     if key in ("gate_label_downgrade", "project_budget", "license"):
         return True
-    return not bool(g.get(key, False))
+    return bool(g.get(key, False))
 
 
 def stricter_autonomy_cap(
     *,
-    gate_allows: bool,
+    gate_requires_human: bool,
     risk_tolerance: str | None,
     action_needs_min_tolerance: str = "medium",
 ) -> tuple[bool, str]:
-    """Apply gate first, then cap by ``autonomy.risk_tolerance`` (stricter wins)."""
-    if not gate_allows:
-        return False, "lifecycle gate closed"
+    """Apply lifecycle gate first, then cap by ``autonomy.risk_tolerance`` (stricter wins).
+
+    ``gate_requires_human`` is the result of ``gate_requires_human_review(...)`` for the action.
+    """
+    if gate_requires_human:
+        return False, "lifecycle gate requires human approval"
     need = risk_tolerance_rank(action_needs_min_tolerance)
     have = risk_tolerance_rank(risk_tolerance)
     if have < need:
         return False, f"risk_tolerance caps action (have {have}, need {need})"
     return True, "ok"
+
+
+class TaxonomyMatchResult:
+    __slots__ = ("ok", "reason")
+
+    def __init__(self, ok: bool, reason: str = "") -> None:
+        self.ok = ok
+        self.reason = reason
 
 
 def match_labels_by_taxonomy(
@@ -196,19 +306,37 @@ def match_labels_by_taxonomy(
     risk: str | None = None,
     tier: str | None = None,
     issue_type: str | None = None,
-) -> bool:
-    """Match issue labels using attribute prefixes, not free-form taxonomy strings."""
-    norm = {_normalize_label(x) for x in labels if _normalize_label(x)}
+    lifecycle_block: Mapping[str, Any] | None = None,
+) -> TaxonomyMatchResult:
+    """Match issue labels using configurable taxonomy (fail closed on unmapped risk/tier)."""
+    norm = [_normalize_label(x) for x in labels if _normalize_label(x)]
+    tax = _taxonomy_map(lifecycle_block)
+
     if risk is not None:
-        if f"risk:{risk}" not in norm:
-            return False
+        rp = tax["risk_prefix"]
+        expected = f"{rp}{risk}" if rp.endswith(":") else f"{rp}:{risk}"
+        # Compare case-insensitive on prefix+value
+        if not any(_normalize_label(x).lower() == expected.lower() for x in norm):
+            # If any risk label exists but none match expected, do not silently pass.
+            risky = _labels_with_prefix(norm, rp)
+            if risky:
+                return TaxonomyMatchResult(False, "risk label present but does not match requested value")
+            return TaxonomyMatchResult(False, "expected risk label missing")
+
     if tier is not None:
-        if f"tier:{tier}" not in norm:
-            return False
+        tp = tax["tier_prefix"]
+        expected = f"{tp}{tier}" if tp.endswith(":") else f"{tp}:{tier}"
+        if not any(_normalize_label(x).lower() == expected.lower() for x in norm):
+            tiers = _labels_with_prefix(norm, tp)
+            if tiers:
+                return TaxonomyMatchResult(False, "tier label present but does not match requested value")
+            return TaxonomyMatchResult(False, "expected tier label missing")
+
     if issue_type is not None:
         if issue_type not in norm:
-            return False
-    return True
+            return TaxonomyMatchResult(False, "issue type label missing")
+
+    return TaxonomyMatchResult(True, "")
 
 
 @dataclass
@@ -232,43 +360,76 @@ def _owner_login_from_repo(repo_obj: Mapping[str, Any] | None) -> str | None:
     return None
 
 
-def _read_lifecycle_block(repo_root: Path) -> dict[str, Any]:
+def read_process_yaml_root(repo_root: Path) -> dict[str, Any] | None:
+    """Load ``.agentic/process.yml`` root mapping, or None if missing.
+
+    Raises ``ValueError`` when the file exists but the document root is not a mapping.
+    """
     path = repo_root / PROCESS_REL
     if not path.is_file():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"invalid YAML in {PROCESS_REL}: {exc}") from exc
+    if data is None:
         return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
-        return {}
-    life = data.get("lifecycle")
-    return life if isinstance(life, dict) else {}
-
-
-def read_lifecycle_block(repo_root: Path) -> dict[str, Any]:
-    """Return the ``lifecycle`` mapping from ``.agentic/process.yml`` (empty if missing)."""
-    return _read_lifecycle_block(repo_root)
-
-
-def fetch_token_user_login(gh: Any) -> str:
-    """Return ``login`` from ``GET /user`` (raises ValueError on failure)."""
-    data = gh.api("user")
-    if not isinstance(data, dict):
-        raise ValueError("unexpected /user response")
-    login = data.get("login")
-    if not isinstance(login, str) or not login.strip():
-        raise ValueError("missing login in /user response")
-    return login.strip()
-
-
-def fetch_repo(owner_name: str, gh: Any) -> dict[str, Any]:
-    """Return repository object for ``owner/name``."""
-    data = gh.api(f"repos/{owner_name}")
-    if not isinstance(data, dict):
-        raise ValueError(f"unexpected repos/{owner_name} response")
+        raise ValueError(".agentic/process.yml root must be a mapping")
     return data
 
 
+def extract_lifecycle_value(root_data: dict[str, Any] | None) -> Any:
+    """Return raw ``lifecycle`` value: use ``_SENTINEL`` if key absent."""
+    if root_data is None:
+        return _SENTINEL
+    if "lifecycle" not in root_data:
+        return _SENTINEL
+    return root_data.get("lifecycle")
+
+
+def normalize_lifecycle_block(
+    lifecycle_raw: Any,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Return (block_dict, error). None block + error means fail closed."""
+    if lifecycle_raw is _SENTINEL:
+        return {}, None
+    if lifecycle_raw is None:
+        return None, "lifecycle is explicitly null"
+    if not isinstance(lifecycle_raw, dict):
+        return None, "lifecycle must be a mapping"
+    return lifecycle_raw, None
+
+
+def read_lifecycle_block(repo_root: Path) -> dict[str, Any]:
+    """Return the ``lifecycle`` mapping when valid; ``{{}}`` if key absent; raise on null/malformed."""
+
+    root = read_process_yaml_root(repo_root)
+    if root is None:
+        return {}
+    raw = extract_lifecycle_value(root)
+    block, err = normalize_lifecycle_block(raw)
+    if err:
+        raise ValueError(err)
+    return block or {}
+
+
+def read_lifecycle_block_for_init_merge(repo_root: Path) -> dict[str, Any] | None:
+    """Load ``lifecycle`` for ``process init``: returns None if file missing; raises if invalid."""
+    root = read_process_yaml_root(repo_root)
+    if root is None:
+        return None
+    raw = extract_lifecycle_value(root)
+    if raw is _SENTINEL:
+        return {}
+    block, err = normalize_lifecycle_block(raw)
+    if err:
+        raise ValueError(f"{err} (.agentic/process.yml)")
+    return dict(block or {})
+
+
 def parse_lifecycle_approvers_list(raw: Any) -> tuple[str, ...] | None:
-    """Return normalized logins or None if key absent, () if empty list."""
+    """Return normalized logins, None if key absent, () only via explicit empty list."""
     if raw is None:
         return None
     if not isinstance(raw, list):
@@ -283,24 +444,35 @@ def parse_lifecycle_approvers_list(raw: Any) -> tuple[str, ...] | None:
 
 def resolve_runtime_approvers(
     *,
-    lifecycle_yaml: Mapping[str, Any] | None,
-    token_user_login: str | None,
+    lifecycle_block: Mapping[str, Any] | None,
+    lifecycle_parse_error: str | None,
     repo_obj: Mapping[str, Any] | None,
 ) -> ResolvedApprovers:
-    """Resolve effective approver set (fail closed when unset or empty)."""
-    life = lifecycle_yaml or {}
-    raw = life.get("approvers")
+    """Resolve effective approver set (fail closed when unset or invalid)."""
+    if lifecycle_parse_error:
+        return ResolvedApprovers((), "none", True, lifecycle_parse_error)
+
+    life: dict[str, Any] = dict(lifecycle_block or {})
+
+    if "approvers" not in life:
+        raw: Any = _SENTINEL
+    else:
+        raw = life.get("approvers")
+
     org = bool(repo_obj.get("owner", {}).get("type") == "Organization") if isinstance(
         repo_obj, dict
     ) else False
 
-    if raw is None:
+    if raw is _SENTINEL:
         if org:
             return ResolvedApprovers((), "none", True, "org repo requires explicit lifecycle.approvers")
         owner = _owner_login_from_repo(repo_obj)
         if not owner:
             return ResolvedApprovers((), "none", True, "cannot resolve repo owner for approver fallback")
         return ResolvedApprovers((owner.lower(),), "owner_fallback", False, "")
+
+    if raw is None:
+        return ResolvedApprovers((), "none", True, "lifecycle.approvers is explicitly null")
 
     try:
         approvers = parse_lifecycle_approvers_list(raw)
@@ -314,6 +486,33 @@ def resolve_runtime_approvers(
     return ResolvedApprovers(approvers, "explicit_config", False, "")
 
 
+def resolve_runtime_approvers_from_repo_yaml(
+    repo_root: Path | None,
+    *,
+    repo_obj: Mapping[str, Any] | None,
+) -> ResolvedApprovers:
+    """Load process.yml from disk and resolve approvers (null/malformed fail closed)."""
+    root = Path(repo_root) if repo_root is not None else Path(".")
+    data = read_process_yaml_root(root)
+    if data is None:
+        return resolve_runtime_approvers(
+            lifecycle_block={},
+            lifecycle_parse_error=None,
+            repo_obj=repo_obj,
+        )
+    raw_life = extract_lifecycle_value(data)
+    if raw_life is _SENTINEL:
+        block: dict[str, Any] | None = {}
+        err = None
+    else:
+        block, err = normalize_lifecycle_block(raw_life)
+    return resolve_runtime_approvers(
+        lifecycle_block=block,
+        lifecycle_parse_error=err,
+        repo_obj=repo_obj,
+    )
+
+
 def is_approver(
     actor_login: str | None,
     resolved: ResolvedApprovers,
@@ -323,62 +522,95 @@ def is_approver(
     return actor_login.strip().lower() in resolved.logins
 
 
+def _merge_gates_preserve_stricter(existing: dict[str, bool], defaults: dict[str, bool]) -> dict[str, bool]:
+    """Preserve configured gates; add defaults only for keys that are absent."""
+    out = {k: bool(v) for k, v in existing.items()}
+    for k, dflt in defaults.items():
+        if k not in out:
+            out[k] = bool(dflt)
+    return out
+
+
 def plan_init_process_yaml(
     *,
     token_user_login: str,
     repo_obj: Mapping[str, Any] | None,
     org_approvers: Sequence[str] | None,
     explicit_user_approvers: Sequence[str] | None = None,
-    confirm_non_owner: bool = False,
+    confirm_non_owner_for_default: bool = False,
+    confirm_non_owner_for_explicit_approvers: bool = False,
+    existing_lifecycle: Mapping[str, Any] | None = None,
+    force_lifecycle: bool = False,
 ) -> dict[str, Any]:
-    """Build ``lifecycle`` block for ``.agentic/process.yml`` at init/bootstrap time.
+    """Build ``lifecycle`` fragment for merge into ``.agentic/process.yml``.
 
-    - User-owned repo: approvers default to the token user **only** when that user is
-      the repository owner (``owner.login``); otherwise require ``confirm_non_owner``.
-      Optional ``explicit_user_approvers`` overrides the default list (e.g. multiple humans).
-    - Organization: **must** pass explicit ``org_approvers`` (non-empty).
+    Preserves existing non-empty ``approvers`` and stricter ``gates`` unless
+    ``force_lifecycle`` is true.
     """
     tu = token_user_login.strip().lower()
     if not tu:
         raise ValueError("token_user_login is required")
 
-    gates_payload = {"approvers": None, "gates": copy.deepcopy(DEFAULT_LIFECYCLE_GATES)}
+    prior = dict(existing_lifecycle or {})
+    prior_approvers = prior.get("approvers")
+    prior_gates = prior.get("gates")
 
     org = bool(repo_obj and repo_obj.get("owner", {}).get("type") == "Organization")
-    if org:
-        if not org_approvers:
-            raise ValueError("organization repository requires explicit approvers")
-        apps = [a.strip().lower() for a in org_approvers if isinstance(a, str) and a.strip()]
-        if not apps:
-            raise ValueError("organization approvers list is empty")
-        gates_payload["approvers"] = apps
-        return {"lifecycle": gates_payload}
 
-    owner = _owner_login_from_repo(repo_obj)
-    if owner is None:
-        raise ValueError("cannot read owner.login from repo object")
-    owner_l = owner.lower()
-    if explicit_user_approvers:
-        apps = [a.strip().lower() for a in explicit_user_approvers if isinstance(a, str) and a.strip()]
-        if not apps:
-            raise ValueError("explicit user approvers list is empty")
-        gates_payload["approvers"] = apps
-        return {"lifecycle": gates_payload}
+    new_block: dict[str, Any] = {}
 
-    if tu != owner_l and not confirm_non_owner:
-        raise ValueError(
-            "token user does not match repo owner.login; re-run with confirm_non_owner"
+    if force_lifecycle or prior_approvers is None or (isinstance(prior_approvers, list) and len(prior_approvers) == 0):
+        if org:
+            if not org_approvers:
+                raise ValueError("organization repository requires explicit approvers")
+            apps = [a.strip().lower() for a in org_approvers if isinstance(a, str) and a.strip()]
+            if not apps:
+                raise ValueError("organization approvers list is empty")
+            new_block["approvers"] = apps
+        elif explicit_user_approvers:
+            apps = [a.strip().lower() for a in explicit_user_approvers if isinstance(a, str) and a.strip()]
+            if not apps:
+                raise ValueError("explicit user approvers list is empty")
+            owner = _owner_login_from_repo(repo_obj)
+            if owner is None:
+                raise ValueError("cannot read owner.login from repo object")
+            if tu != owner.lower() and not confirm_non_owner_for_explicit_approvers:
+                raise ValueError(
+                    "token user does not match repo owner.login; re-run with confirm_non_owner"
+                )
+            new_block["approvers"] = apps
+        else:
+            owner = _owner_login_from_repo(repo_obj)
+            if owner is None:
+                raise ValueError("cannot read owner.login from repo object")
+            owner_l = owner.lower()
+            if tu != owner_l and not confirm_non_owner_for_default:
+                raise ValueError(
+                    "token user does not match repo owner.login; re-run with confirm_non_owner"
+                )
+            new_block["approvers"] = [tu]
+    else:
+        new_block["approvers"] = copy.deepcopy(prior_approvers)
+
+    if force_lifecycle or prior_gates is None:
+        merged_gates = dict(DEFAULT_LIFECYCLE_GATES)
+    elif isinstance(prior_gates, dict):
+        merged_gates = _merge_gates_preserve_stricter(
+            {k: bool(v) for k, v in prior_gates.items()},
+            DEFAULT_LIFECYCLE_GATES,
         )
-    gates_payload["approvers"] = [tu]
-    return {"lifecycle": gates_payload}
+    else:
+        merged_gates = dict(DEFAULT_LIFECYCLE_GATES)
+    new_block["gates"] = merged_gates
+
+    if "taxonomy" in prior and not force_lifecycle:
+        new_block["taxonomy"] = copy.deepcopy(prior["taxonomy"])
+
+    return {"lifecycle": new_block}
 
 
 def apply_lifecycle_fragment(existing: dict[str, Any], fragment: dict[str, Any]) -> dict[str, Any]:
-    """Deep-merge mappings from *fragment* into a copy of *existing* (YAML root).
-
-    Dict values merge recursively; lists and scalars replace. Missing keys on the
-    left are added from the right.
-    """
+    """Deep-merge mappings from *fragment* into a copy of *existing* (YAML root)."""
 
     def _merge(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
         result = copy.deepcopy(a)
@@ -462,21 +694,30 @@ def decide_issue_label_change(
     resolved: ResolvedApprovers,
     critical_tracker: RollingCriticalRaiseTracker | None,
     now: datetime | None = None,
+    lifecycle_block: Mapping[str, Any] | None = None,
 ) -> ShadowLabelChangeDecision:
     """Fail-closed policy for shadow simulation (#1425; no GitHub writes)."""
     actor = (actor_login or "").strip().lower()
 
-    downgrade, removed = label_indicates_downgrade(prev_labels, new_labels)
+    downgrade, removed = label_change_is_approver_only_downgrade(
+        prev_labels,
+        new_labels,
+        lifecycle_block=lifecycle_block,
+    )
     if downgrade:
         if is_approver(actor, resolved):
             return ShadowLabelChangeDecision(True, "downgrade_ok_approver", ())
         return ShadowLabelChangeDecision(
             False,
             "downgrade_reverted",
-            (f"removing labels requires approver: {', '.join(removed)}",),
+            (f"change requires approver: {', '.join(removed)}",),
         )
 
-    raised, _already = label_indicates_critical_raise(prev_labels, new_labels)
+    raised, _already = label_indicates_critical_raise(
+        prev_labels,
+        new_labels,
+        lifecycle_block=lifecycle_block,
+    )
     if raised:
         if is_approver(actor, resolved):
             return ShadowLabelChangeDecision(True, "critical_raise_approver", ())
@@ -506,6 +747,7 @@ def decide_approval_command(
     comment_body: str | None,
     actor_login: str | None,
     resolved: ResolvedApprovers,
+    pending_write_state: str | None = None,
 ) -> ShadowApprovalCommandDecision:
     """First-line-only /plate resume|approve; approver-only; pending_write blocks."""
     first = parse_first_line(comment_body)
@@ -513,8 +755,18 @@ def decide_approval_command(
     if cmd is None:
         return ShadowApprovalCommandDecision(False, "not_approval_command", ())
 
+    if pending_write_state and str(pending_write_state).strip().lower() in (
+        "pending",
+        "in_flight",
+        "blocked",
+        "yes",
+        "true",
+        "1",
+    ):
+        return ShadowApprovalCommandDecision(False, "pending_write", ("authoritative pending_write state",))
+
     if comment_has_pending_write_suppression(comment_body):
-        return ShadowApprovalCommandDecision(False, "pending_write", ("pending_write present",))
+        return ShadowApprovalCommandDecision(False, "pending_write", ("pending_write text heuristic",))
 
     if not is_approver(actor_login, resolved):
         return ShadowApprovalCommandDecision(False, "approver_required", ("actor is not an approver",))
@@ -541,3 +793,22 @@ def assert_no_path_removes_human_review(module_names: Sequence[str]) -> None:
 def pl_allowed_code_paths_for_human_review_audit() -> tuple[str, ...]:
     """Modules scanned by ``test_no_code_path_removes_human_review``."""
     return ("plate_core.lifecycle_policy",)
+
+
+def fetch_token_user_login(gh: Any) -> str:
+    """Return ``login`` from ``GET /user`` (raises ValueError on failure)."""
+    data = gh.api("user")
+    if not isinstance(data, dict):
+        raise ValueError("unexpected /user response")
+    login = data.get("login")
+    if not isinstance(login, str) or not login.strip():
+        raise ValueError("missing login in /user response")
+    return login.strip()
+
+
+def fetch_repo(owner_name: str, gh: Any) -> dict[str, Any]:
+    """Return repository object for ``owner/name``."""
+    data = gh.api(f"repos/{owner_name}")
+    if not isinstance(data, dict):
+        raise ValueError(f"unexpected repos/{owner_name} response")
+    return data

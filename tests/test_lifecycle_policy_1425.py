@@ -15,15 +15,19 @@ import yaml
 
 from plate_core.cli import main
 from plate_core.lifecycle_policy import (
+    DEFAULT_LIFECYCLE_GATES,
     assert_no_path_removes_human_review,
     decide_approval_command,
     decide_issue_label_change,
+    effective_risk_level,
     gate_requires_human_review,
+    label_change_is_approver_only_downgrade,
     match_labels_by_taxonomy,
     merged_lifecycle_gates,
     parse_lifecycle_approvers_list,
     plan_init_process_yaml,
     pl_allowed_code_paths_for_human_review_audit,
+    read_process_yaml_root,
     resolve_runtime_approvers,
     RollingCriticalRaiseTracker,
     stricter_autonomy_cap,
@@ -61,18 +65,35 @@ class InitProcessYamlTests(unittest.TestCase):
 class RuntimeApproverTests(unittest.TestCase):
     def test_runtime_fallback_owner_only_for_user_repo(self):
         r = resolve_runtime_approvers(
-            lifecycle_yaml={},
-            token_user_login="ignored",
+            lifecycle_block={},
+            lifecycle_parse_error=None,
             repo_obj={"owner": {"type": "User", "login": "dana"}},
         )
         self.assertFalse(r.refuse_all)
         self.assertEqual(r.logins, ("dana",))
         self.assertEqual(r.source, "owner_fallback")
 
+    def test_explicit_null_approvers_fail_closed(self):
+        r = resolve_runtime_approvers(
+            lifecycle_block={"approvers": None},
+            lifecycle_parse_error=None,
+            repo_obj={"owner": {"type": "User", "login": "dana"}},
+        )
+        self.assertTrue(r.refuse_all)
+        self.assertIn("null", r.reason.lower())
+
+    def test_malformed_lifecycle_fail_closed(self):
+        r = resolve_runtime_approvers(
+            lifecycle_block=None,
+            lifecycle_parse_error="lifecycle must be a mapping",
+            repo_obj={"owner": {"type": "User", "login": "dana"}},
+        )
+        self.assertTrue(r.refuse_all)
+
     def test_empty_approvers_refuses_approval_actions(self):
         r = resolve_runtime_approvers(
-            lifecycle_yaml={"approvers": []},
-            token_user_login="x",
+            lifecycle_block={"approvers": []},
+            lifecycle_parse_error=None,
             repo_obj={"owner": {"type": "User", "login": "x"}},
         )
         self.assertTrue(r.refuse_all)
@@ -88,8 +109,8 @@ class RuntimeApproverTests(unittest.TestCase):
 class ShadowDecisionTests(unittest.TestCase):
     def test_non_approver_downgrade_reverted(self):
         resolved = resolve_runtime_approvers(
-            lifecycle_yaml={"approvers": ["boss"]},
-            token_user_login=None,
+            lifecycle_block={"approvers": ["boss"]},
+            lifecycle_parse_error=None,
             repo_obj={"owner": {"type": "User", "login": "boss"}},
         )
         prev = ["risk:high", "tier:T2"]
@@ -104,18 +125,25 @@ class ShadowDecisionTests(unittest.TestCase):
         self.assertFalse(dec.allowed)
         self.assertEqual(dec.kind, "downgrade_reverted")
 
+    def test_replace_low_with_critical_is_not_downgrade(self):
+        down, reasons = label_change_is_approver_only_downgrade(
+            ["risk:low", "Feature"],
+            ["risk:critical", "Feature"],
+        )
+        self.assertFalse(down, msg=reasons)
+
     def test_fourth_critical_raise_in_hour_reverted(self):
         resolved = resolve_runtime_approvers(
-            lifecycle_yaml={"approvers": ["boss"]},
-            token_user_login=None,
+            lifecycle_block={"approvers": ["boss"]},
+            lifecycle_parse_error=None,
             repo_obj={"owner": {"type": "User", "login": "boss"}},
         )
         tracker = RollingCriticalRaiseTracker(window=timedelta(hours=1))
         t0 = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
         prev_sets = [
-            (["risk:low"], ["risk:low", "risk:critical"]),
-            (["risk:medium"], ["risk:medium", "risk:critical"]),
-            (["risk:high"], ["risk:high", "risk:critical"]),
+            (["risk:low"], ["risk:critical"]),
+            (["risk:medium"], ["risk:critical"]),
+            (["risk:high"], ["risk:critical"]),
         ]
         actor = "novice"
         for i, (p, n) in enumerate(prev_sets):
@@ -130,7 +158,7 @@ class ShadowDecisionTests(unittest.TestCase):
             self.assertTrue(dec.allowed, msg=f"iteration {i}")
         dec4 = decide_issue_label_change(
             prev_labels=["risk:low"],
-            new_labels=["risk:low", "risk:critical"],
+            new_labels=["risk:critical"],
             actor_login=actor,
             resolved=resolved,
             critical_tracker=tracker,
@@ -141,8 +169,8 @@ class ShadowDecisionTests(unittest.TestCase):
 
     def test_command_parsed_from_first_line_only(self):
         resolved = resolve_runtime_approvers(
-            lifecycle_yaml={"approvers": ["pat"]},
-            token_user_login=None,
+            lifecycle_block={"approvers": ["pat"]},
+            lifecycle_parse_error=None,
             repo_obj={"owner": {"type": "User", "login": "pat"}},
         )
         body = "context line\n/plate approve"
@@ -165,32 +193,68 @@ class ShadowDecisionTests(unittest.TestCase):
         self.assertFalse(d3.allowed)
         self.assertEqual(d3.kind, "pending_write")
 
+    def test_pending_write_authoritative_state(self):
+        resolved = resolve_runtime_approvers(
+            lifecycle_block={"approvers": ["pat"]},
+            lifecycle_parse_error=None,
+            repo_obj={"owner": {"type": "User", "login": "pat"}},
+        )
+        d = decide_approval_command(
+            comment_body="/plate approve",
+            actor_login="pat",
+            resolved=resolved,
+            pending_write_state="pending",
+        )
+        self.assertFalse(d.allowed)
+        self.assertEqual(d.kind, "pending_write")
+        self.assertIn("authoritative", d.reasons[0])
+
 
 class PolicyPrimitiveTests(unittest.TestCase):
-    def test_gate_defaults_immutable_human_keys(self):
+    def test_gate_semantics_true_means_human_required(self):
         gates = merged_lifecycle_gates(None)
-        self.assertTrue(gate_requires_human_review("gate_label_downgrade", gates))
-        self.assertTrue(gate_requires_human_review("merge", {"merge": False}))
+        self.assertTrue(gate_requires_human_review("merge", gates))
+        self.assertFalse(gate_requires_human_review("merge", {"merge": False}))
+        self.assertTrue(gate_requires_human_review("gate_label_downgrade", {"gate_label_downgrade": False}))
 
     def test_taxonomy_attribute_matching(self):
         labels = ["risk:critical", "tier:T3", "Feature"]
-        self.assertTrue(
-            match_labels_by_taxonomy(labels, risk="critical", tier="T3", issue_type="Feature")
+        m = match_labels_by_taxonomy(
+            labels, risk="critical", tier="T3", issue_type="Feature"
         )
-        self.assertFalse(match_labels_by_taxonomy(labels, risk="high"))
+        self.assertTrue(m.ok)
+        m2 = match_labels_by_taxonomy(labels, risk="high")
+        self.assertFalse(m2.ok)
+
+    def test_taxonomy_custom_prefix(self):
+        life = {"taxonomy": {"risk_prefix": "severity:", "tier_prefix": "level:"}}
+        labels = ["severity:critical", "level:T3", "Feature"]
+        self.assertEqual(effective_risk_level(labels, lifecycle_block=life), "critical")
+        m = match_labels_by_taxonomy(
+            labels, risk="critical", tier="T3", issue_type="Feature", lifecycle_block=life
+        )
+        self.assertTrue(m.ok)
 
     def test_stricter_of_gate_and_risk_tolerance(self):
         ok, reason = stricter_autonomy_cap(
-            gate_allows=True,
+            gate_requires_human=True,
             risk_tolerance="low",
             action_needs_min_tolerance="medium",
         )
         self.assertFalse(ok)
-        self.assertIn("risk_tolerance", reason)
+        self.assertIn("lifecycle gate", reason.lower())
 
     def test_parse_approvers_errors_on_wrong_type(self):
         with self.assertRaises(ValueError):
             parse_lifecycle_approvers_list("alice")
+
+    def test_process_yaml_non_mapping_root_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".agentic").mkdir(parents=True, exist_ok=True)
+            (root / ".agentic" / "process.yml").write_text("- not a mapping\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                read_process_yaml_root(root)
 
 
 class HumanReviewSourceScanTests(unittest.TestCase):
@@ -239,6 +303,73 @@ class ProcessInitCliTests(unittest.TestCase):
             data = yaml.safe_load((root / ".agentic" / "process.yml").read_text(encoding="utf-8"))
             self.assertEqual(data["process"]["name"], "X")
             self.assertEqual(data["lifecycle"]["approvers"], ["alice"])
+
+    def test_rerun_init_preserves_stricter_gates_and_approvers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".agentic").mkdir(parents=True, exist_ok=True)
+            strict_gates = dict(DEFAULT_LIFECYCLE_GATES)
+            strict_gates["merge"] = True
+            strict_gates["start"] = True
+            (root / ".agentic" / "process.yml").write_text(
+                yaml.safe_dump(
+                    {
+                        "lifecycle": {
+                            "approvers": ["bob", "carol"],
+                            "gates": strict_gates,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            mock_repo = {"owner": {"type": "User", "login": "alice"}}
+            with (
+                patch("plate_core.cli.resolve_repo", return_value="alice/plate"),
+                patch("plate_core.cli.fetch_token_user_login", return_value="intruder"),
+                patch("plate_core.cli.fetch_repo", return_value=mock_repo),
+            ):
+                code = main(["process", "init", "--repo-root", str(root), "--json"])
+            self.assertEqual(code, 0)
+            data = yaml.safe_load((root / ".agentic" / "process.yml").read_text(encoding="utf-8"))
+            self.assertEqual(data["lifecycle"]["approvers"], ["bob", "carol"])
+            self.assertTrue(data["lifecycle"]["gates"]["merge"])
+            self.assertTrue(data["lifecycle"]["gates"]["start"])
+
+    def test_explicit_approvers_non_owner_requires_confirm(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mock_repo = {"owner": {"type": "User", "login": "alice"}}
+            with (
+                patch("plate_core.cli.resolve_repo", return_value="alice/plate"),
+                patch("plate_core.cli.fetch_token_user_login", return_value="bob"),
+                patch("plate_core.cli.fetch_repo", return_value=mock_repo),
+            ):
+                code = main(
+                    [
+                        "process",
+                        "init",
+                        "--repo-root",
+                        str(root),
+                        "--approvers",
+                        "carol",
+                        "--json",
+                    ]
+                )
+            self.assertEqual(code, 1)
+
+    def test_invalid_process_yml_root_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".agentic").mkdir(parents=True, exist_ok=True)
+            (root / ".agentic" / "process.yml").write_text("bad: [", encoding="utf-8")
+            mock_repo = {"owner": {"type": "User", "login": "alice"}}
+            with (
+                patch("plate_core.cli.resolve_repo", return_value="alice/plate"),
+                patch("plate_core.cli.fetch_token_user_login", return_value="alice"),
+                patch("plate_core.cli.fetch_repo", return_value=mock_repo),
+            ):
+                code = main(["process", "init", "--repo-root", str(root), "--json"])
+            self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":

@@ -287,6 +287,7 @@ from .lifecycle_policy import (
     fetch_repo,
     fetch_token_user_login,
     plan_init_process_yaml,
+    read_lifecycle_block_for_init_merge,
     write_process_yaml_lifecycle,
 )
 
@@ -1020,14 +1021,17 @@ def cmd_process_init(args: argparse.Namespace) -> int:
         approvers_raw = (getattr(args, "approvers", None) or "").strip()
         approver_list = [x.strip() for x in approvers_raw.split(",") if x.strip()] if approvers_raw else None
         is_org = isinstance(repo_obj, dict) and repo_obj.get("owner", {}).get("type") == "Organization"
+        confirm = bool(getattr(args, "i_understand_token_user_is_not_repo_owner", False))
+        existing = read_lifecycle_block_for_init_merge(root)
         fragment = plan_init_process_yaml(
             token_user_login=login,
             repo_obj=repo_obj,
             org_approvers=approver_list if is_org else None,
             explicit_user_approvers=approver_list if not is_org and approver_list else None,
-            confirm_non_owner=bool(
-                getattr(args, "i_understand_token_user_is_not_repo_owner", False)
-            ),
+            confirm_non_owner_for_default=confirm,
+            confirm_non_owner_for_explicit_approvers=confirm,
+            existing_lifecycle=existing,
+            force_lifecycle=bool(getattr(args, "force_lifecycle", False)),
         )
         path = write_process_yaml_lifecycle(root, fragment, create=True)
     except (ValueError, OSError, RuntimeError) as exc:
@@ -5377,6 +5381,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--i-understand-token-user-is-not-repo-owner",
         action="store_true",
         help="Allow init when GET /user login differs from repos/OWNER/REPO owner.login (personal repo)",
+    )
+    proc_init.add_argument(
+        "--force-lifecycle",
+        action="store_true",
+        help="Replace lifecycle.approvers and gates with defaults instead of preserving stricter existing config",
     )
     proc_init.add_argument("--json", action="store_true", help="Output JSON")
     proc_init.set_defaults(func=cmd_process_init)

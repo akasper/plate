@@ -10,9 +10,10 @@ process:
     conflict_resolution: "Open a corrective issue or pull request; avoid duplicating fast-changing artifacts in long-form prose."
 
 # Issue lifecycle: approvers + gate defaults (#1425). Populated by `gh plate process init`
-# (writes `lifecycle.approvers` and balanced `lifecycle.gates`). Empty or absent approvers
-# on org-owned repositories is fail-closed; user-owned repos without `approvers` resolve
-# the owner from `GET /repos/OWNER/REPO` at runtime (see plate_core.lifecycle_policy).
+# (writes `lifecycle.approvers` and balanced `lifecycle.gates`). See
+# docs/integrations/issue-lifecycle-1425-bounded-slice.md. Empty or absent approvers on
+# org-owned repositories is fail-closed; user-owned repos without `approvers` resolve the
+# owner from `GET /repos/OWNER/REPO` at runtime (see plate_core.lifecycle_policy).
 lifecycle: {}
 
 principles:
