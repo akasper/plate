@@ -27,6 +27,24 @@ python -m plate_core.task_spec [--repo-root PATH] [--path FILE ...] [--json]
 
 Validates every `*.yml` / `*.yaml` under `.agentic/tasks/` (or explicit `--path` files). Cross-checks `next.task_id` references within the validated set. Enforces the **level-to-tier policy table** (#1355): allowed tiers per level, mapped initial `start_tier`, optional **`acceptance.ci_validates_output`** for junior docs/tests cheaper-first start, and optional `issue_labels` for `risk:critical` human approval when validating dispatch packets.
 
+Escalation validation (#1381): `model_policy.escalation.from` must equal `model_policy.start_tier`, and `to` must be exactly one tier higher (no multi-step jumps). Hosts may use pure `next_run_state()` in `plate_core.task_spec` for run-time transitions; persist the run step before invoking a model.
+
+### Per-run state machine (#1381)
+
+States: `start(tier = s)` · `escalated` · `stopped_reported` · `awaiting_human` (T3 escalation) · `done`.
+
+| From | Event / guard | To | Side effects | In code? |
+|---|---|---|---|---|
+| (none) | route the task: level, route, `ci_validates_output` | start(s = `recommended_start_tier`) | | validation only |
+| start(s) | acceptance fails, `escalation.from == s`, `to` = next tier | escalated(to) | ledger spend interval (`metadata.tier_step`) | `next_run_state` |
+| start(s) | acceptance fails, no escalation | stopped_reported | report | `next_run_state` |
+| escalated | acceptance fails again | stopped_reported | report; no further step | `next_run_state` |
+| any | next tier is T3 on failed start | awaiting_human | human approves per task | `next_run_state` |
+| start / escalated | acceptance passes | done | | `next_run_state` |
+| any | downgrade below allowed tiers | (illegal) | | not checked at run time |
+
+Terminal: `done`, `stopped_reported`. Initial: `start(s)`.
+
 ## Examples
 
 Shipped under `src/plate_core/data/examples/`:
