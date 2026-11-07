@@ -37,6 +37,7 @@ ROUTES = frozenset({"docs", "tests", "fix", "feature", "review"})
 TIERS = frozenset({"T0", "T1", "T2", "T3"})
 TIER_ORDER = ("T0", "T1", "T2", "T3")
 RUN_STATES = frozenset({"start", "escalated", "stopped_reported", "awaiting_human", "done"})
+TERMINAL_RUN_STATES = frozenset({"done", "stopped_reported"})
 TYPED_FIELD_TYPES = frozenset(
     {
         "string",
@@ -158,6 +159,14 @@ class TaskRunSnapshot:
     state: str
 
 
+def _coerce_run_state(run_state: str | TaskRunSnapshot | Mapping[str, Any]) -> str:
+    if isinstance(run_state, TaskRunSnapshot):
+        return run_state.state
+    if isinstance(run_state, Mapping):
+        return str(run_state.get("state") or "")
+    return str(run_state)
+
+
 def task_spec_escalation(spec: Mapping[str, Any]) -> dict[str, Any] | None:
     """Return ``model_policy.escalation`` from a task spec mapping, if present."""
     model_policy = spec.get("model_policy")
@@ -175,26 +184,43 @@ def next_run_state(
     run_state: str | TaskRunSnapshot | Mapping[str, Any],
     outcome_ok: bool,
     spec: Mapping[str, Any],
+    *,
+    human_escalation_approved: bool | None = None,
 ) -> str:
-    """Pure transition helper for one acceptance outcome (#1381).
+    """Pure transition helper for acceptance outcomes and the T3 human gate (#1381).
 
     Does not call models or perform I/O. The caller must persist the current run
     step (including state) before invoking a model on the next tier.
+
+    From ``awaiting_human``, set ``human_escalation_approved`` explicitly (``True`` →
+    ``escalated``, ``False`` → ``stopped_reported``). Generic ``outcome_ok`` does not
+    complete or leave that state. Terminal states are returned unchanged.
     """
-    if isinstance(run_state, TaskRunSnapshot):
-        state = run_state.state
-    elif isinstance(run_state, Mapping):
-        state = str(run_state.get("state") or "")
-    else:
-        state = str(run_state)
+    state = _coerce_run_state(run_state)
+    if state not in RUN_STATES:
+        raise TaskSpecError(f"invalid run state {state!r}")
+    if state in TERMINAL_RUN_STATES:
+        return state
+    if state == "awaiting_human":
+        if human_escalation_approved is True:
+            return "escalated"
+        if human_escalation_approved is False:
+            return "stopped_reported"
+        if outcome_ok:
+            raise TaskSpecError(
+                "awaiting_human cannot transition to done without human_escalation_approved"
+            )
+        return "awaiting_human"
     if outcome_ok:
         return "done"
     escalation = task_spec_escalation(spec)
-    if state == "start" and escalation:
-        to_tier = escalation.get("to")
-        if to_tier == "T3":
-            return "awaiting_human"
-        return "escalated"
+    if state == "start":
+        if escalation:
+            to_tier = escalation.get("to")
+            if to_tier == "T3":
+                return "awaiting_human"
+            return "escalated"
+        return "stopped_reported"
     return "stopped_reported"
 
 

@@ -13,6 +13,7 @@ from plate_core.task_spec import (
     TASK_SPEC_VERSION,
     LEVEL_TIER_POLICY,
     TaskRunSnapshot,
+    TaskSpecError,
     infer_role_from_issue,
     issue_risk_requires_human_approver,
     level_tier_policy_table,
@@ -273,13 +274,52 @@ class TaskSpecSchemaTests(unittest.TestCase):
             ("start", False, spec_escalate_t3, "awaiting_human"),
             ("start", False, spec_no_escalation, "stopped_reported"),
             ("escalated", False, spec_escalate_t2, "stopped_reported"),
-            ("awaiting_human", False, spec_escalate_t3, "stopped_reported"),
-            ("awaiting_human", True, spec_escalate_t3, "done"),
+            ("awaiting_human", False, spec_escalate_t3, "awaiting_human"),
         ]
         for state, outcome_ok, spec, expected in cases:
             with self.subTest(state=state, outcome_ok=outcome_ok, expected=expected):
                 got = next_run_state(TaskRunSnapshot(state=state), outcome_ok, spec)
                 self.assertEqual(got, expected)
+
+    def test_awaiting_human_requires_explicit_human_gate(self):
+        spec = {"model_policy": {"escalation": {"from": "T2", "to": "T3"}}}
+        with self.assertRaises(TaskSpecError):
+            next_run_state("awaiting_human", True, spec)
+        self.assertEqual(
+            next_run_state(
+                "awaiting_human",
+                False,
+                spec,
+                human_escalation_approved=True,
+            ),
+            "escalated",
+        )
+        self.assertEqual(
+            next_run_state(
+                "awaiting_human",
+                False,
+                spec,
+                human_escalation_approved=False,
+            ),
+            "stopped_reported",
+        )
+
+    def test_terminal_run_states_are_idempotent(self):
+        spec = {"model_policy": {"escalation": {"from": "T1", "to": "T2"}}}
+        for terminal in ("done", "stopped_reported"):
+            for outcome_ok in (True, False):
+                with self.subTest(terminal=terminal, outcome_ok=outcome_ok):
+                    self.assertEqual(
+                        next_run_state(terminal, outcome_ok, spec),
+                        terminal,
+                    )
+
+    def test_invalid_run_state_rejected(self):
+        spec: dict = {"model_policy": {}}
+        for bad in ("", "bogus", "DONE"):
+            with self.subTest(state=bad):
+                with self.assertRaises(TaskSpecError):
+                    next_run_state(bad, True, spec)
 
     def test_t3_escalation_requires_awaiting_human(self):
         spec = {"model_policy": {"escalation": {"from": "T2", "to": "T3"}}}

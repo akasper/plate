@@ -41,9 +41,12 @@ States: `start(tier = s)` · `escalated` · `stopped_reported` · `awaiting_huma
 | escalated | acceptance fails again | stopped_reported | report; no further step | `next_run_state` |
 | any | next tier is T3 on failed start | awaiting_human | human approves per task | `next_run_state` |
 | start / escalated | acceptance passes | done | | `next_run_state` |
+| awaiting_human | human approves (`human_escalation_approved=True`) | escalated | | `next_run_state` |
+| awaiting_human | human declines (`human_escalation_approved=False`) | stopped_reported | | `next_run_state` |
+| done / stopped_reported | any further outcome | (unchanged) | idempotent | `next_run_state` |
 | any | downgrade below allowed tiers | (illegal) | | not checked at run time |
 
-Terminal: `done`, `stopped_reported`. Initial: `start(s)`.
+`next_run_state` rejects unknown run states and refuses `outcome_ok` from `awaiting_human` without an explicit human gate. Terminal: `done`, `stopped_reported`. Initial: `start(s)`.
 
 ## Examples
 
