@@ -337,10 +337,12 @@ INTEGRATION_BASE_PLATE = """
           base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
           head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
           python3 -m plate_core.pr_integration_base_gate \
             --base "${base_ref}" \
             --head "${head_ref}" \
             --labels "${labels}" \
+            --body "${body}" \
             --repo "${GITHUB_REPOSITORY}"
 """
 
@@ -360,11 +362,13 @@ INTEGRATION_BASE_TEMPLATE = """
           base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
           head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
           ensure_plate_core
           python3 -m plate_core.pr_integration_base_gate \
             --base "${base_ref}" \
             --head "${head_ref}" \
             --labels "${labels}" \
+            --body "${body}" \
             --repo "${GITHUB_REPOSITORY}"
 """
 

@@ -11,7 +11,8 @@ from plate_core.branch_policy import (
 )
 from plate_core.pr_integration_base_gate import run_gate
 from plate_core.pr_main_source_gate import run_gate as run_main_source_gate
-from plate_core.pr_gates_checks import resolve_expected_integration_base
+from plate_core.release import probe_remote_branch
+from plate_core.pr_gates_checks import resolve_integration_base, resolve_expected_integration_base
 
 
 class BranchPolicyTests(unittest.TestCase):
@@ -103,13 +104,41 @@ class BranchPolicyTests(unittest.TestCase):
         )
         self.assertEqual(len(failures), 1)
 
+    def test_major_label_missing_branch_errors_not_fallback(self):
+        res = resolve_integration_base(
+            release_branch_mode="multi-track",
+            release_track_branches={
+                "release-minor": True,
+                "release-major": False,
+                "release-patch": True,
+            },
+            pr_labels=["Feature"],
+            issue_labels=["Major"],
+        )
+        self.assertIsNone(res.expected)
+        self.assertIn("release-major", res.error or "")
+
+    def test_major_on_issue_labels_matches_preflight(self):
+        res = resolve_integration_base(
+            release_branch_mode="multi-track",
+            release_track_branches={
+                "release-minor": True,
+                "release-major": True,
+                "release-patch": True,
+            },
+            pr_labels=["Feature"],
+            issue_labels=["Major"],
+        )
+        self.assertEqual(res.expected, "release-major")
+
     def test_no_release_branches_fail_closed(self):
-        expected = resolve_expected_integration_base(
+        res = resolve_integration_base(
             release_branch_mode="none",
             release_track_branches={},
             pr_labels=["Feature"],
         )
-        self.assertIsNone(expected)
+        self.assertIsNone(res.expected)
+        self.assertTrue(res.error)
         failures = evaluate_integration_branch_policy(
             base="release-minor",
             head="cursor/x",
@@ -179,6 +208,26 @@ class BranchPolicyTests(unittest.TestCase):
     def test_main_source_cli_unchanged(self):
         self.assertEqual(run_main_source_gate(base="main", head="release", labels=["Release"]), 0)
         self.assertEqual(run_main_source_gate(base="main", head="cursor/x", labels=["Feature"]), 1)
+
+    def test_probe_branch_404_vs_api_error(self):
+        from plate_core.github_client import GhApiError
+
+        class _Gh:
+            def __init__(self, mode: str):
+                self.mode = mode
+
+            def api(self, _endpoint: str):
+                if self.mode == "404":
+                    raise GhApiError("gh: Not Found (HTTP 404)")
+                raise GhApiError("gh: Resource not accessible (HTTP 403)")
+
+        exists, err = probe_remote_branch(_Gh("403"), "o/r", "release-minor")  # type: ignore[arg-type]
+        self.assertIsNone(exists)
+        self.assertIn("403", err or "")
+
+        exists, err = probe_remote_branch(_Gh("404"), "o/r", "release-minor")  # type: ignore[arg-type]
+        self.assertFalse(exists)
+        self.assertIsNone(err)
 
 
 if __name__ == "__main__":

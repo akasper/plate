@@ -13,7 +13,7 @@ from .pr_gates_checks import (
     check_main_source,
     is_allowed_main_source_head,
     normalize_label_list,
-    resolve_expected_integration_base,
+    resolve_integration_base,
 )
 
 INTEGRATION_BASE_FAILURE_HEADING = "integration-base"
@@ -94,12 +94,15 @@ def evaluate_integration_branch_policy(
     if is_valid_epic_base_for_head(base, head):
         return []
 
-    expected = resolve_expected_integration_base(
+    resolution = resolve_integration_base(
         release_branch_mode=release_branch_mode,
         release_track_branches=release_track_branches,
         pr_labels=labels,
         issue_labels=issue_labels,
     )
+    if resolution.error:
+        return [GateFailure("base_branch", resolution.error)]
+    expected = resolution.expected
     if expected is None:
         return [
             GateFailure(

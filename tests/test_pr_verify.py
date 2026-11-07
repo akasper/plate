@@ -7,6 +7,7 @@ import unittest
 from contextlib import contextmanager
 from unittest.mock import patch
 
+from plate_core.branch_policy_inputs import BranchPolicyContext
 from plate_core.release import ReleaseStatusReport
 from plate_core.pr_verify import (
     _fetch_commit_statuses,
@@ -90,9 +91,13 @@ def _verify_pr_fixtures(overrides=None):
 
 
 @contextmanager
-def _verify_pr_context():
+def _verify_pr_context(*, issue_labels: list[str] | None = None):
+    ctx = BranchPolicyContext(
+        release_status=_release_status_legacy(),
+        issue_labels=issue_labels or [],
+    )
     with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
-        with patch("plate_core.pr_verify.get_release_status", return_value=_release_status_legacy()):
+        with patch("plate_core.pr_verify.gather_branch_policy_context", return_value=(ctx, None)):
             yield
 
 
@@ -335,8 +340,9 @@ class TestVerifyPr(unittest.TestCase):
                 }
             )
         )
+        ctx = BranchPolicyContext(release_status=multi_status, issue_labels=[])
         with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
-            with patch("plate_core.pr_verify.get_release_status", return_value=multi_status):
+            with patch("plate_core.pr_verify.gather_branch_policy_context", return_value=(ctx, None)):
                 report = verify_pr(9, repo="o/r", client=client)
         base_check = next(c for c in report["checks"] if c["id"] == "base_branch")
         self.assertFalse(base_check["passed"])

@@ -21,9 +21,9 @@ from .pr_babysit import (
 )
 from .procutil import run_hidden
 from .branch_policy import evaluate_full_branch_policy
+from .branch_policy_inputs import gather_branch_policy_context
 from .pr_gates_closing import body_has_strict_closing_keyword
 from .pr_gates_contract import RECOMMENDED_REQUIRED_CHECK_CONTEXTS
-from .release import get_release_status
 from .pr_watch_guards import (
     compute_raw_ci_state,
     fetch_required_check_contexts,
@@ -417,24 +417,25 @@ def verify_pr(
     has_no_issue = "no-issue" in labels
 
     head_ref = ((pull.get("head") or {}).get("ref") or "").strip()
-    try:
-        release_status = get_release_status(target, client=gh)
+    policy_ctx, meta_fail = gather_branch_policy_context(
+        repo=target,
+        pr_labels=labels,
+        body=body,
+        client=gh,
+    )
+    branch_failures = []
+    if meta_fail:
+        branch_failures = [meta_fail]
+    elif policy_ctx is not None:
+        status = policy_ctx.release_status
         branch_failures = evaluate_full_branch_policy(
             base=base_ref,
             head=head_ref,
             labels=labels,
-            release_branch_mode=release_status.release_branch_mode,
-            release_track_branches=release_status.release_track_branches,
+            release_branch_mode=status.release_branch_mode,
+            release_track_branches=status.release_track_branches,
+            issue_labels=policy_ctx.issue_labels,
         )
-    except Exception as exc:  # noqa: BLE001 — verify must report, not crash
-        checks.append(
-            VerifyCheck(
-                "base_branch",
-                False,
-                f"Could not evaluate branch policy: {exc}",
-            )
-        )
-        branch_failures = []
     if branch_failures:
         checks.append(
             VerifyCheck(
