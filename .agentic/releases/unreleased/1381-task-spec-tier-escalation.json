@@ -1,0 +1,10 @@
+{
+  "slug": "1381-task-spec-tier-escalation",
+  "change_type": "feature",
+  "surface": "plate_core.task_spec, plate_core.ledger, docs/design/agent-crews-task-spec.md",
+  "summary": "Task specs require one-step tier escalation from start_tier; hosts get pure next_run_state and optional spend metadata.tier_step.",
+  "migration_impact": "Task YAML with multi-step or mismatched escalation.from must be corrected before validate passes. Hosts may call next_run_state and persist run state before each model invocation.",
+  "agent_notes": "Validate .agentic/tasks with gh plate tasks validate; escalation.to must be exactly one tier above start_tier. Record tier_step start|escalated on spend intervals when piloting crews.",
+  "breaking": false,
+  "links": ["#1381"]
+}
