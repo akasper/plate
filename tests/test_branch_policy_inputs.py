@@ -64,12 +64,12 @@ class BranchPolicyInputsTests(unittest.TestCase):
             release_branch_mode="unverified",
             branch_verification_errors=["release-minor: HTTP 503"],
         )
-        with patch("plate_core.branch_policy_inputs.get_release_status", return_value=status):
-            ctx, fail = gather_branch_policy_context(
-                repo="o/r",
-                pr_labels=["Feature"],
-                body="Closes #1\n",
-            )
+        ctx, fail = gather_branch_policy_context(
+            repo="o/r",
+            pr_labels=["Feature"],
+            body="Summary only\n",
+            release_status=status,
+        )
         self.assertIsNone(ctx)
         self.assertIsNotNone(fail)
 

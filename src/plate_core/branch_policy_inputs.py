@@ -17,6 +17,26 @@ class BranchPolicyContext:
     issue_labels: list[str]
 
 
+def release_status_from_dict(payload: dict, *, repo: str = "unknown/unknown") -> ReleaseStatusReport:
+    tracks = payload.get("release_track_branches") or {}
+    return ReleaseStatusReport(
+        repo=str(payload.get("repo") or repo),
+        release_branch_exists=bool(tracks.get("release")),
+        release_track_branches=tracks if isinstance(tracks, dict) else {},
+        release_branch_mode=str(payload.get("release_branch_mode") or "legacy"),
+        release_branch_reset_target=str(payload.get("release_branch_reset_target") or "main"),
+        warnings=list(payload.get("warnings") or []),
+        open_release_issues=list(payload.get("open_release_issues") or []),
+        current_version=payload.get("current_version"),
+        latest_version=payload.get("latest_version"),
+        pending_fragment_count=int(payload.get("pending_fragment_count") or 0),
+        pending_fragments=[],
+        extension_release_checks=list(payload.get("extension_release_checks") or []),
+        release_window_open=bool(payload.get("release_window_open")),
+        branch_verification_errors=list(payload.get("branch_verification_errors") or []),
+    )
+
+
 def fetch_labels_for_linked_issues(
     repo: str,
     issue_numbers: list[int],

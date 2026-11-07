@@ -11,32 +11,13 @@ from plate_core.branch_policy import (
     evaluate_integration_branch_policy,
 )
 from plate_core.branch_policy_inputs import gather_branch_policy_context
-from plate_core.release import ReleaseStatusReport
+from plate_core.branch_policy_inputs import release_status_from_dict
 
 
 def parse_labels(raw: str | None) -> list[str]:
     if not raw:
         return []
     return [part.strip() for part in raw.split(",") if part.strip()]
-
-
-def _status_from_json(payload: dict) -> ReleaseStatusReport:
-    tracks = payload.get("release_track_branches") or {}
-    return ReleaseStatusReport(
-        repo=str(payload.get("repo") or "unknown/unknown"),
-        release_branch_exists=bool(tracks.get("release")),
-        release_track_branches=tracks if isinstance(tracks, dict) else {},
-        release_branch_mode=str(payload.get("release_branch_mode") or "legacy"),
-        release_branch_reset_target="main",
-        warnings=[],
-        open_release_issues=[],
-        current_version=None,
-        latest_version=None,
-        pending_fragment_count=0,
-        pending_fragments=[],
-        extension_release_checks=[],
-        branch_verification_errors=list(payload.get("branch_verification_errors") or []),
-    )
 
 
 def run_gate(
@@ -50,7 +31,7 @@ def run_gate(
 ) -> int:
     label_list = labels
     if release_status_json:
-        status = _status_from_json(json.loads(release_status_json))
+        status = release_status_from_dict(json.loads(release_status_json))
         ctx, meta_fail = gather_branch_policy_context(
             repo=repo,
             pr_labels=label_list,

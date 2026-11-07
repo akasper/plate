@@ -7,10 +7,13 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable
 
-from .branch_policy_inputs import gather_branch_policy_context
+from .branch_policy_inputs import (
+    BranchPolicyContext,
+    gather_branch_policy_context,
+    release_status_from_dict,
+)
 from .health import resolve_repo
 from .pr_gates_checks import (
-    GateFailure,
     normalize_label_list,
     preflight_report_dict,
     resolve_expected_integration_base,
@@ -190,15 +193,27 @@ def run_preflight(
     target = resolve_repo(repo)
     owner, name = _split_repo(target)
 
-    policy_ctx, meta_fail = gather_branch_policy_context(
-        repo=repo,
-        pr_labels=label_list,
-        body=body_text,
-    )
-    if policy_ctx is not None:
-        release_status = policy_ctx.release_status.to_dict()
-    elif release_status is None:
-        release_status = get_release_status(repo).to_dict()
+    meta_fail = None
+    if release_status is not None:
+        status_obj = release_status_from_dict(release_status, repo=target)
+        policy_ctx = BranchPolicyContext(release_status=status_obj, issue_labels=[])
+        release_status = status_obj.to_dict()
+        if status_obj.branch_verification_errors:
+            meta_fail = gather_branch_policy_context(
+                repo=repo,
+                pr_labels=label_list,
+                body=body_text,
+                release_status=status_obj,
+            )[1]
+    else:
+        policy_ctx, meta_fail = gather_branch_policy_context(
+            repo=repo,
+            pr_labels=label_list,
+            body=body_text,
+        )
+        release_status = (
+            policy_ctx.release_status.to_dict() if policy_ctx else get_release_status(repo).to_dict()
+        )
 
     mode = str(release_status.get("release_branch_mode") or "legacy")
     tracks = release_status.get("release_track_branches") or {}
