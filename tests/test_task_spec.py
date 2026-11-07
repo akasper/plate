@@ -12,10 +12,13 @@ from plate_core.cli import main
 from plate_core.task_spec import (
     TASK_SPEC_VERSION,
     LEVEL_TIER_POLICY,
+    TaskRunSnapshot,
+    TaskSpecError,
     infer_role_from_issue,
     issue_risk_requires_human_approver,
     level_tier_policy_table,
     load_task_spec_yaml,
+    next_run_state,
     recommended_start_tier,
     resolve_effective_tool_allow_list,
     task_spec_schema,
@@ -200,6 +203,137 @@ class TaskSpecSchemaTests(unittest.TestCase):
         tools = resolve_effective_tool_allow_list(doc["tools"])
         self.assertIn("plate_what_next", tools)
         self.assertIn("plate_list_questions", tools)
+
+    def _minimal_doc(self, **model_policy: object) -> dict:
+        base = load_task_spec_yaml(_RESEARCH)
+        doc = dict(base)
+        doc["model_policy"] = {
+            "tiers": ["T1", "T2"],
+            "start_tier": "T2",
+            "max_cost_usd": 0.5,
+            **model_policy,
+        }
+        return doc
+
+    def test_reject_multi_step_escalation(self):
+        for from_tier, to_tier in (("T0", "T2"), ("T1", "T3"), ("T0", "T3")):
+            with self.subTest(from_tier=from_tier, to_tier=to_tier):
+                doc = self._minimal_doc(
+                    tiers=[from_tier, to_tier],
+                    start_tier=from_tier,
+                    escalation={"from": from_tier, "to": to_tier},
+                )
+                if from_tier == "T1":
+                    doc["model_policy"]["tiers"] = ["T1", "T2", "T3"]
+                report = validate_task_spec_document(doc, path="test.yml")
+                self.assertFalse(report.valid)
+                self.assertTrue(
+                    any("exactly one tier step" in e for e in report.errors),
+                    report.errors,
+                )
+
+    def test_reject_escalation_from_not_equal_start_tier(self):
+        doc = self._minimal_doc(
+            start_tier="T2",
+            escalation={"from": "T1", "to": "T2"},
+        )
+        report = validate_task_spec_document(doc, path="test.yml")
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any("escalation.from must equal" in e for e in report.errors),
+            report.errors,
+        )
+
+    def test_valid_one_step_escalation(self):
+        doc = self._minimal_doc(
+            start_tier="T2",
+            tiers=["T2", "T3"],
+            escalation={"from": "T2", "to": "T3"},
+            t3_requires_approval="human",
+        )
+        doc["approval"] = "human-t3"
+        report = validate_task_spec_document(doc, path="test.yml")
+        self.assertTrue(report.valid, report.errors)
+
+    def test_next_run_state_table(self):
+        spec_escalate_t2 = {
+            "model_policy": {
+                "escalation": {"from": "T1", "to": "T2"},
+            }
+        }
+        spec_escalate_t3 = {
+            "model_policy": {
+                "escalation": {"from": "T2", "to": "T3"},
+            }
+        }
+        spec_no_escalation: dict = {"model_policy": {}}
+        cases = [
+            ("start", True, spec_escalate_t2, "done"),
+            ("escalated", True, spec_escalate_t2, "done"),
+            ("start", False, spec_escalate_t2, "escalated"),
+            ("start", False, spec_escalate_t3, "awaiting_human"),
+            ("start", False, spec_no_escalation, "stopped_reported"),
+            ("escalated", False, spec_escalate_t2, "stopped_reported"),
+            ("awaiting_human", False, spec_escalate_t3, "awaiting_human"),
+        ]
+        for state, outcome_ok, spec, expected in cases:
+            with self.subTest(state=state, outcome_ok=outcome_ok, expected=expected):
+                got = next_run_state(TaskRunSnapshot(state=state), outcome_ok, spec)
+                self.assertEqual(got, expected)
+
+    def test_awaiting_human_requires_explicit_human_gate(self):
+        spec = {"model_policy": {"escalation": {"from": "T2", "to": "T3"}}}
+        with self.assertRaises(TaskSpecError):
+            next_run_state("awaiting_human", True, spec)
+        self.assertEqual(
+            next_run_state(
+                "awaiting_human",
+                False,
+                spec,
+                human_escalation_approved=True,
+            ),
+            "escalated",
+        )
+        self.assertEqual(
+            next_run_state(
+                "awaiting_human",
+                False,
+                spec,
+                human_escalation_approved=False,
+            ),
+            "stopped_reported",
+        )
+
+    def test_terminal_run_states_are_idempotent(self):
+        spec = {"model_policy": {"escalation": {"from": "T1", "to": "T2"}}}
+        for terminal in ("done", "stopped_reported"):
+            for outcome_ok in (True, False):
+                with self.subTest(terminal=terminal, outcome_ok=outcome_ok):
+                    self.assertEqual(
+                        next_run_state(terminal, outcome_ok, spec),
+                        terminal,
+                    )
+
+    def test_invalid_run_state_rejected(self):
+        spec: dict = {"model_policy": {}}
+        for bad in ("", "bogus", "DONE"):
+            with self.subTest(state=bad):
+                with self.assertRaises(TaskSpecError):
+                    next_run_state(bad, True, spec)
+
+    def test_t3_escalation_requires_awaiting_human(self):
+        spec = {"model_policy": {"escalation": {"from": "T2", "to": "T3"}}}
+        self.assertEqual(
+            next_run_state("start", False, spec),
+            "awaiting_human",
+        )
+
+    def test_second_failure_after_escalation_stops(self):
+        spec = {"model_policy": {"escalation": {"from": "T1", "to": "T2"}}}
+        self.assertEqual(
+            next_run_state("escalated", False, spec),
+            "stopped_reported",
+        )
 
 
 class TaskSpecCliTests(unittest.TestCase):
