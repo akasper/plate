@@ -20,8 +20,10 @@ from .pr_babysit import (
     _load_pr_data,
 )
 from .procutil import run_hidden
+from .branch_policy import evaluate_full_branch_policy
 from .pr_gates_closing import body_has_strict_closing_keyword
 from .pr_gates_contract import RECOMMENDED_REQUIRED_CHECK_CONTEXTS
+from .release import get_release_status
 from .pr_watch_guards import (
     compute_raw_ci_state,
     fetch_required_check_contexts,
@@ -414,24 +416,40 @@ def verify_pr(
     milestone = pull.get("milestone")
     has_no_issue = "no-issue" in labels
 
-    if base_ref == "main":
-        checks.append(VerifyCheck("base_branch", True, "Base branch is main."))
-    elif base_ref == "release":
+    head_ref = ((pull.get("head") or {}).get("ref") or "").strip()
+    try:
+        release_status = get_release_status(target, client=gh)
+        branch_failures = evaluate_full_branch_policy(
+            base=base_ref,
+            head=head_ref,
+            labels=labels,
+            release_branch_mode=release_status.release_branch_mode,
+            release_track_branches=release_status.release_track_branches,
+        )
+    except Exception as exc:  # noqa: BLE001 — verify must report, not crash
         checks.append(
             VerifyCheck(
                 "base_branch",
                 False,
-                "Base branch is release; PLATE PRs must target main.",
-                {"base_ref": base_ref},
+                f"Could not evaluate branch policy: {exc}",
             )
         )
-    else:
+        branch_failures = []
+    if branch_failures:
         checks.append(
             VerifyCheck(
                 "base_branch",
                 False,
-                f"Base branch must be main (found {base_ref!r}).",
-                {"base_ref": base_ref},
+                "; ".join(item.message for item in branch_failures),
+                {"base_ref": base_ref, "head_ref": head_ref},
+            )
+        )
+    elif not any(c.id == "base_branch" for c in checks):
+        checks.append(
+            VerifyCheck(
+                "base_branch",
+                True,
+                f"Branch policy OK (base {base_ref!r}, head {head_ref!r}).",
             )
         )
 

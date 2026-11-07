@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import unittest
+from contextlib import contextmanager
 from unittest.mock import patch
 
+from plate_core.release import ReleaseStatusReport
 from plate_core.pr_verify import (
     _fetch_commit_statuses,
     _fetch_compare_behind,
@@ -87,12 +89,41 @@ def _verify_pr_fixtures(overrides=None):
     return base
 
 
+@contextmanager
+def _verify_pr_context():
+    with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
+        with patch("plate_core.pr_verify.get_release_status", return_value=_release_status_legacy()):
+            yield
+
+
+def _release_status_legacy() -> ReleaseStatusReport:
+    return ReleaseStatusReport(
+        repo="o/r",
+        release_branch_exists=True,
+        release_track_branches={
+            "release": True,
+            "release-major": False,
+            "release-minor": False,
+            "release-patch": False,
+        },
+        release_branch_mode="legacy",
+        release_branch_reset_target="main",
+        warnings=[],
+        open_release_issues=[],
+        current_version=None,
+        latest_version=None,
+        pending_fragment_count=0,
+        pending_fragments=[],
+        extension_release_checks=[],
+    )
+
+
 def _good_pull(**overrides):
     base = {
         "body": "Summary\n\nCloses #1365\n",
         "labels": [{"name": "Feature"}, {"name": "area:agent"}],
-        "base": {"ref": "main", "sha": "base111"},
-        "head": {"sha": "abc123"},
+        "base": {"ref": "release", "sha": "base111"},
+        "head": {"ref": "feature/x", "sha": "abc123"},
         "milestone": {"title": "Agent crews"},
     }
     base.update(overrides)
@@ -186,7 +217,7 @@ class TestStatusPagination(unittest.TestCase):
 class TestVerifyPr(unittest.TestCase):
     def test_happy_path_feature_pr(self):
         client = _FakeClient(_verify_pr_fixtures())
-        with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
+        with _verify_pr_context():
             report = verify_pr(9, repo="o/r", client=client)
         self.assertTrue(report["passed"])
         ids = [c["id"] for c in report["checks"]]
@@ -204,7 +235,7 @@ class TestVerifyPr(unittest.TestCase):
                 }
             )
         )
-        with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
+        with _verify_pr_context():
             report = verify_pr(9, repo="o/r", client=client)
         fragment = next(c for c in report["checks"] if c["id"] == "release_fragment")
         self.assertTrue(fragment["passed"])
@@ -222,7 +253,7 @@ class TestVerifyPr(unittest.TestCase):
                 }
             )
         )
-        with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
+        with _verify_pr_context():
             report = verify_pr(9, repo="o/r", client=client)
         fragment = next(c for c in report["checks"] if c["id"] == "release_fragment")
         self.assertFalse(fragment["passed"])
@@ -247,7 +278,7 @@ class TestVerifyPr(unittest.TestCase):
                 }
             )
         )
-        with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
+        with _verify_pr_context():
             report = verify_pr(9, repo="o/r", client=client)
         sync = next(c for c in report["checks"] if c["id"] == "base_sync")
         self.assertFalse(sync["passed"])
@@ -271,23 +302,42 @@ class TestVerifyPr(unittest.TestCase):
                 }
             )
         )
-        with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
+        with _verify_pr_context():
             report = verify_pr(9, repo="o/r", client=client)
         threads = next(c for c in report["checks"] if c["id"] == "review_threads")
         self.assertFalse(threads["passed"])
 
-    def test_fails_on_release_base(self):
+    def test_fails_on_wrong_integration_base(self):
+        multi_status = ReleaseStatusReport(
+            repo="o/r",
+            release_branch_exists=False,
+            release_track_branches={
+                "release": False,
+                "release-major": True,
+                "release-minor": True,
+                "release-patch": True,
+            },
+            release_branch_mode="multi-track",
+            release_branch_reset_target="main",
+            warnings=[],
+            open_release_issues=[],
+            current_version=None,
+            latest_version=None,
+            pending_fragment_count=0,
+            pending_fragments=[],
+            extension_release_checks=[],
+        )
         client = _FakeClient(
             _verify_pr_fixtures(
                 {
-                    "repos/o/r/pulls/9": _good_pull(base={"ref": "release", "sha": "base111"}),
+                    "repos/o/r/pulls/9": _good_pull(base={"ref": "release-patch", "sha": "base111"}),
                     "repos/o/r/pulls/9/files": [],
                 }
             )
         )
         with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
-            report = verify_pr(9, repo="o/r", client=client)
-        self.assertFalse(report["passed"])
+            with patch("plate_core.pr_verify.get_release_status", return_value=multi_status):
+                report = verify_pr(9, repo="o/r", client=client)
         base_check = next(c for c in report["checks"] if c["id"] == "base_branch")
         self.assertFalse(base_check["passed"])
 
@@ -320,7 +370,7 @@ class TestVerifyPr(unittest.TestCase):
                 }
             )
         )
-        with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
+        with _verify_pr_context():
             report = verify_pr(9, repo="o/r", client=client)
         self.assertFalse(report["passed"])
         thread_check = next(c for c in report["checks"] if c["id"] == "review_threads")

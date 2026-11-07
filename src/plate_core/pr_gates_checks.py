@@ -194,7 +194,13 @@ def resolve_expected_integration_base(
         return "release"
     if tracks.get("release-minor"):
         return "release-minor"
-    return "main"
+    if tracks.get("release-major"):
+        return "release-major"
+    if tracks.get("release-patch"):
+        return "release-patch"
+    if mode == "none":
+        return None
+    return None
 
 
 def is_allowed_main_source_head(head: str | None) -> bool:
@@ -273,10 +279,17 @@ def check_release_window(
 def check_integration_base_branch(
     base: str | None,
     *,
-    expected: str,
+    expected: str | None,
     release_branch_mode: str,
+    head: str | None = None,
 ) -> GateFailure | None:
     got = (base or "").strip()
+    if expected is None:
+        return GateFailure(
+            "base_branch",
+            "No release integration branches are configured. "
+            "Run `gh plate bootstrap --apply`, then `gh plate release status`.",
+        )
     if not got:
         return GateFailure(
             "base_branch",
@@ -314,22 +327,18 @@ def run_preflight_gate_checks(
     ):
         if check:
             failures.append(check)
-    expected = resolve_expected_integration_base(
-        release_branch_mode=release_branch_mode,
-        release_track_branches=release_track_branches,
-        pr_labels=labels,
-        issue_labels=issue_labels,
+    from .branch_policy import evaluate_full_branch_policy
+
+    failures.extend(
+        evaluate_full_branch_policy(
+            base=base,
+            head=head,
+            labels=labels,
+            release_branch_mode=release_branch_mode,
+            release_track_branches=release_track_branches,
+            issue_labels=issue_labels,
+        )
     )
-    base_fail = check_integration_base_branch(
-        base,
-        expected=expected,
-        release_branch_mode=release_branch_mode,
-    )
-    if base_fail:
-        failures.append(base_fail)
-    main_fail = check_main_source(base, head, labels)
-    if main_fail:
-        failures.append(main_fail)
     rw_fail = check_release_window(
         base,
         labels,
