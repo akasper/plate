@@ -411,6 +411,24 @@ jobs:
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
           python3 -m plate_core.pr_main_source_gate --base "${base_ref}" --head "${head_ref}" --labels "${labels}"
 
+      - name: Gate — integration base
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: integration-base
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
+          python3 -m plate_core.pr_integration_base_gate             --base "${base_ref}"             --head "${head_ref}"             --labels "${labels}"             --body "${body}"             --repo "${GITHUB_REPOSITORY}"
+
       - name: Gate — release window
         if: |
           github.event_name == 'pull_request' ||

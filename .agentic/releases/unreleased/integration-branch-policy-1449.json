@@ -1,0 +1,16 @@
+{
+  "slug": "integration-branch-policy-1449",
+  "change_type": "feature",
+  "surface": "plate_core.branch_policy, pr_integration_base_gate, plate-pr-gates.yml template, pr_verify",
+  "summary": "Shared branch policy for integration-base targeting in CI (fail-closed payload), preflight, and pr verify (#1449 / #1448 S1).",
+  "migration_impact": "Adopters importing the updated plate-pr-gates workflow need vendored src/plate_core or a plate-core release that includes pr_integration_base_gate; missing runtime fails the job instead of warn-only skip.",
+  "agent_notes": "Use gh plate release status for --base; gh plate pr preflight before create. Parent #1448 remains open until ruleset/onboarding stages land.",
+  "merge_blockers": [
+    "TRUSTED_EXECUTION: pr-gates runs policy from the PR head checkout (PYTHONPATH=src). A required check alone is not authoritative against malicious PR changes; trusted execution (e.g. default-branch/ref-pinned gate or lifecycle App) is a follow-up, not in S1.",
+    "PYPI_0.9.0: template pip install plate-core==0.9.0 does not ship pr_integration_base_gate; adopters fail closed until a release includes this module or they vendor src/plate_core.",
+    "MAIN_RULESET: S2 still required — pr-gates on main as a required check in GitHub rulesets (Lull/Commemorative evidence).",
+    "OVERRIDE_POLICY: #1425 approver-only override labels remain out of scope (#1446 parked)."
+  ],
+  "breaking": false,
+  "links": ["#1449", "#1448", "#1418", "#1435"]
+}

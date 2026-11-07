@@ -20,6 +20,8 @@ from .pr_babysit import (
     _load_pr_data,
 )
 from .procutil import run_hidden
+from .branch_policy import evaluate_full_branch_policy
+from .branch_policy_inputs import gather_branch_policy_context
 from .pr_gates_closing import body_has_strict_closing_keyword
 from .pr_gates_contract import RECOMMENDED_REQUIRED_CHECK_CONTEXTS
 from .pr_watch_guards import (
@@ -414,24 +416,41 @@ def verify_pr(
     milestone = pull.get("milestone")
     has_no_issue = "no-issue" in labels
 
-    if base_ref == "main":
-        checks.append(VerifyCheck("base_branch", True, "Base branch is main."))
-    elif base_ref == "release":
+    head_ref = ((pull.get("head") or {}).get("ref") or "").strip()
+    policy_ctx, meta_fail = gather_branch_policy_context(
+        repo=target,
+        pr_labels=labels,
+        body=body,
+        client=gh,
+    )
+    branch_failures = []
+    if meta_fail:
+        branch_failures = [meta_fail]
+    elif policy_ctx is not None:
+        status = policy_ctx.release_status
+        branch_failures = evaluate_full_branch_policy(
+            base=base_ref,
+            head=head_ref,
+            labels=labels,
+            release_branch_mode=status.release_branch_mode,
+            release_track_branches=status.release_track_branches,
+            issue_labels=policy_ctx.issue_labels,
+        )
+    if branch_failures:
         checks.append(
             VerifyCheck(
                 "base_branch",
                 False,
-                "Base branch is release; PLATE PRs must target main.",
-                {"base_ref": base_ref},
+                "; ".join(item.message for item in branch_failures),
+                {"base_ref": base_ref, "head_ref": head_ref},
             )
         )
-    else:
+    elif not any(c.id == "base_branch" for c in checks):
         checks.append(
             VerifyCheck(
                 "base_branch",
-                False,
-                f"Base branch must be main (found {base_ref!r}).",
-                {"base_ref": base_ref},
+                True,
+                f"Branch policy OK (base {base_ref!r}, head {head_ref!r}).",
             )
         )
 

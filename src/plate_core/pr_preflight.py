@@ -7,9 +7,13 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable
 
+from .branch_policy_inputs import (
+    BranchPolicyContext,
+    gather_branch_policy_context,
+    release_status_from_dict,
+)
 from .health import resolve_repo
 from .pr_gates_checks import (
-    GateFailure,
     normalize_label_list,
     preflight_report_dict,
     resolve_expected_integration_base,
@@ -189,16 +193,36 @@ def run_preflight(
     target = resolve_repo(repo)
     owner, name = _split_repo(target)
 
-    if release_status is None:
-        report = get_release_status(repo)
-        release_status = report.to_dict()
+    meta_fail = None
+    if release_status is not None:
+        status_obj = release_status_from_dict(release_status, repo=target)
+        policy_ctx = BranchPolicyContext(release_status=status_obj, issue_labels=[])
+        release_status = status_obj.to_dict()
+        if status_obj.branch_verification_errors:
+            meta_fail = gather_branch_policy_context(
+                repo=repo,
+                pr_labels=label_list,
+                body=body_text,
+                release_status=status_obj,
+            )[1]
+    else:
+        policy_ctx, meta_fail = gather_branch_policy_context(
+            repo=repo,
+            pr_labels=label_list,
+            body=body_text,
+        )
+        release_status = (
+            policy_ctx.release_status.to_dict() if policy_ctx else get_release_status(repo).to_dict()
+        )
 
     mode = str(release_status.get("release_branch_mode") or "legacy")
     tracks = release_status.get("release_track_branches") or {}
+    issue_labels = policy_ctx.issue_labels if policy_ctx else []
     expected = resolve_expected_integration_base(
         release_branch_mode=mode,
         release_track_branches=tracks if isinstance(tracks, dict) else {},
         pr_labels=label_list,
+        issue_labels=issue_labels,
     )
     compare_base = base_ref or expected
     paths = changed_paths
@@ -222,9 +246,12 @@ def run_preflight(
         repo=name,
         release_branch_mode=mode,
         release_track_branches=tracks if isinstance(tracks, dict) else {},
+        issue_labels=issue_labels,
         release_window_open=rw_open,
     )
-    return preflight_report_dict(failures, expected_base=expected, labels=label_list)
+    if meta_fail:
+        failures = [meta_fail, *failures]
+    return preflight_report_dict(failures, expected_base=expected or "", labels=label_list)
 
 
 def format_preflight_text(report: dict[str, Any]) -> str:
