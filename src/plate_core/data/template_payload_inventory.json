@@ -36,6 +36,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".agentic/policy-runtime.json",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".agentic/skills.yml",
       "classification": "copy_to_downstream"
     },
