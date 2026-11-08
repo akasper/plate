@@ -58,10 +58,40 @@ def verify_modules_importable(modules: tuple[str, ...] | list[str] | None = None
     return errors
 
 
+def verify_modules_provenance(
+    trusted_src_root: Path,
+    modules: tuple[str, ...] | list[str] | None = None,
+) -> list[str]:
+    """Ensure loaded modules resolved under trusted_src_root (not PR workspace shadow)."""
+    root = trusted_src_root.resolve()
+    if not root.is_dir():
+        return [f"trusted src root not found: {root}"]
+    plate_root = (root / "plate_core").resolve()
+    names = tuple(modules or REQUIRED_POLICY_MODULES)
+    errors: list[str] = []
+    for name in names:
+        try:
+            mod = importlib.import_module(name)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{name}: import failed: {exc}")
+            continue
+        mod_file = getattr(mod, "__file__", None)
+        if not mod_file:
+            errors.append(f"{name}: no __file__ (cannot verify provenance)")
+            continue
+        path = Path(mod_file).resolve()
+        if not str(path).startswith(str(plate_root)):
+            errors.append(
+                f"{name}: loaded from {path} (expected under {plate_root})"
+            )
+    return errors
+
+
 def describe_trust_prerequisite() -> str:
     return (
-        "Merge-authoritative branch policy requires default-branch vendored "
-        "src/plate_core (or a published plate-core wheel that includes required "
-        "modules). Until deployed, pr-gates may use workspace fallback with a "
-        "warning — that path is not safe against malicious PRs changing gate code."
+        "Authoritative branch policy requires default-branch vendored src/plate_core "
+        "(git archive) or a published plate-core wheel that satisfies "
+        ".agentic/policy-runtime.json. There is no PR-workspace fallback. "
+        "pull_request workflow steps remain PR-editable until pinned on default branch "
+        "or enforced by plate-lifecycle App; merging to release-minor does not deploy to main."
     )

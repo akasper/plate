@@ -1,12 +1,12 @@
 {
   "slug": "integration-branch-policy-1449",
   "change_type": "feature",
-  "surface": "plate_core.branch_policy, pr_integration_base_gate, plate-pr-gates.yml template, pr_verify",
+  "surface": "plate_core.branch_policy, issue_context, policy_runtime, pr_integration_base_gate, plate-pr-gates.yml template, pr_verify",
   "summary": "Shared branch policy for integration-base targeting in CI (fail-closed payload), preflight, and pr verify (#1449 / #1448 S1).",
   "migration_impact": "Adopters importing the updated plate-pr-gates workflow need vendored src/plate_core or a plate-core release that includes pr_integration_base_gate; missing runtime fails the job instead of warn-only skip.",
   "agent_notes": "Use gh plate release status for --base; gh plate pr preflight before create. Parent #1448 remains open until ruleset/onboarding stages land.",
   "merge_blockers": [
-    "TRUSTED_EXECUTION: workflow prepares default-branch src/plate_core into PLATE_POLICY_PYTHONPATH when archive succeeds; until this PR merges, plate dogfood may warn-fallback to PR workspace (not merge-authoritative). Future plate-lifecycle App remains optional hardening; no second App/PAT required.",
+    "TRUSTED_EXECUTION: pr-gates prepare step fails closed (no PR workspace fallback); branch-policy CLIs run isolated (PLATE_POLICY_RUN_DIR, PYTHONNOUSERSITE). pull_request workflow YAML remains PR-editable until default-branch deploy; plate-lifecycle App optional; see docs/design/trusted-policy-runtime-threat-model-1449.md.",
     "PYPI_0.9.0: .agentic/policy-runtime.json documents max_known_published_version 0.9.0; pip alone cannot satisfy required_modules — adopters must vendor default-branch src until a newer wheel is published and verified.",
     "MAIN_RULESET: S2 still required — pr-gates on main as a required check in GitHub rulesets (Lull/Commemorative evidence).",
     "OVERRIDE_POLICY: #1425 approver-only override labels remain out of scope (#1446 parked)."

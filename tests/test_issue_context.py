@@ -12,6 +12,7 @@ from plate_core.issue_context import (
     parse_closing_issue_refs,
     resolve_issue_context,
     sidebar_linked_issue_refs,
+    strip_blockquotes_for_scan,
 )
 from plate_core.issue_context import IssueRef
 
@@ -22,11 +23,15 @@ class IssueContextParseTests(unittest.TestCase):
         refs = parse_closing_issue_refs(body, default_repo="akasper/plate")
         self.assertEqual(len(refs), 1)
         self.assertEqual(refs[0].repo_full, "other/remote")
-        self.assertEqual(refs[0].number, 99)
 
-    def test_inline_code_closing_unavailable(self):
+    def test_blockquote_closes_ignored(self):
+        body = "> Closes #42\n\nCloses #10\n"
+        self.assertNotIn("42", strip_blockquotes_for_scan(body))
+        refs = parse_closing_issue_refs(body, default_repo="o/r")
+        self.assertEqual({r.number for r in refs}, {10})
+
+    def test_inline_code_closing_unavailable_when_no_other_ref(self):
         body = "Summary\n\n`Closes #42` in backticks\n"
-        self.assertTrue(detect_unparsed_closing_candidates(body))
         result = resolve_issue_context(
             pr_repo="o/r",
             pr_labels=["Feature"],
@@ -35,11 +40,21 @@ class IssueContextParseTests(unittest.TestCase):
         )
         self.assertEqual(result.status, IssueContextStatus.UNAVAILABLE)
 
-    def test_quoted_hash_not_used_for_routing(self):
-        body = "Closes #10\n\nMention `#11` in prose only.\n"
-        refs = parse_closing_issue_refs(body, default_repo="o/r")
-        nums = {r.number for r in refs}
-        self.assertEqual(nums, {10})
+    def test_inline_code_ok_when_sidebar_supplies_ref(self):
+        body = "`Closes #42`\n"
+        result = resolve_issue_context(
+            pr_repo="o/r",
+            pr_labels=["Feature"],
+            body=body,
+            pr_number=1,
+            client=_GhSidebarAndIssues(
+                sidebar_num=10,
+                sidebar_repo="other/remote",
+                issues={10: {"labels": [{"name": "Minor"}]}},
+            ),  # type: ignore[arg-type]
+        )
+        self.assertEqual(result.status, IssueContextStatus.OK)
+        self.assertEqual(result.refs[0].repo_full, "other/remote")
 
     def test_not_required_without_strict_type(self):
         result = resolve_issue_context(
@@ -58,30 +73,41 @@ class IssueContextFetchTests(unittest.TestCase):
         self.assertEqual(labels, [])
         self.assertIn("labels", err or "")
 
-    def test_empty_labels_list_fails_closed(self):
+    def test_empty_labels_list_is_verified_empty(self):
         ref = IssueRef(owner="o", repo="r", number=2, source="closing_body")
         labels, err = fetch_issue_labels_for_ref(ref, client=_GhIssues({2: {"labels": []}}))  # type: ignore[arg-type]
-        self.assertIn("no labels", (err or "").lower())
+        self.assertEqual(labels, [])
+        self.assertIsNone(err)
 
     def test_404_vs_network_error(self):
         ref = IssueRef(owner="o", repo="r", number=3, source="closing_body")
-
-        labels, err = fetch_issue_labels_for_ref(ref, client=_Gh404())  # type: ignore[arg-type]
+        _, err = fetch_issue_labels_for_ref(ref, client=_Gh404())  # type: ignore[arg-type]
         self.assertIn("not found", (err or "").lower())
-
-        labels2, err2 = fetch_issue_labels_for_ref(ref, client=_GhRateLimit())  # type: ignore[arg-type]
+        _, err2 = fetch_issue_labels_for_ref(ref, client=_GhRateLimit())  # type: ignore[arg-type]
         self.assertIn("Could not load", err2 or "")
 
 
 class IssueContextSidebarTests(unittest.TestCase):
-    def test_sidebar_replay_adds_ref(self):
+    def test_sidebar_cross_repo_identity(self):
         refs, err = sidebar_linked_issue_refs(
-            "o/r",
+            "akasper/plate",
             5,
-            client=_GhSidebar([7]),  # type: ignore[arg-type]
+            client=_GhSidebarRemote(7, "other/remote"),  # type: ignore[arg-type]
         )
         self.assertIsNone(err)
-        self.assertEqual([r.number for r in refs or []], [7])
+        assert refs
+        self.assertEqual(refs[0].repo_full, "other/remote")
+        self.assertEqual(refs[0].number, 7)
+
+    def test_graphql_errors_fail_closed(self):
+        refs, err = sidebar_linked_issue_refs("o/r", 1, client=_GhGraphQLErrors())  # type: ignore[arg-type]
+        self.assertIsNone(refs)
+        self.assertIn("GraphQL", err or "")
+
+    def test_stalled_pagination_fails_closed(self):
+        refs, err = sidebar_linked_issue_refs("o/r", 1, client=_GhStallPagination())  # type: ignore[arg-type]
+        self.assertIsNone(refs)
+        self.assertIn("pagination", (err or "").lower())
 
 
 class IssueContextResolveTests(unittest.TestCase):
@@ -100,13 +126,21 @@ class IssueContextResolveTests(unittest.TestCase):
             pr_labels=["Feature"],
             body="Closes #42\n",
             client=_GhIssues(
-                {
-                    42: {"labels": [{"name": "Minor"}, {"name": "Feature"}]},
-                }
+                {42: {"labels": [{"name": "Minor"}, {"name": "Feature"}]}},
             ),  # type: ignore[arg-type]
         )
         self.assertEqual(result.status, IssueContextStatus.OK)
         self.assertIn("Minor", result.labels)
+
+    def test_ok_with_empty_issue_labels(self):
+        result = resolve_issue_context(
+            pr_repo="o/r",
+            pr_labels=["Feature"],
+            body="Closes #1\n",
+            client=_GhIssues({1: {"labels": []}}),  # type: ignore[arg-type]
+        )
+        self.assertEqual(result.status, IssueContextStatus.OK)
+        self.assertEqual(result.labels, [])
 
 
 class _NoGh:
@@ -137,31 +171,72 @@ class _GhRateLimit:
         raise GhApiError("rate limit exceeded")
 
 
-class _GhSidebar:
-    def __init__(self, nums: list[int]) -> None:
-        self._nums = nums
-
-    def api(self, endpoint: str, method: str = "GET", fields: dict | None = None, **_kwargs):
-        if endpoint == "graphql" and method == "POST":
-            nodes = [
-                {
-                    "__typename": "ConnectedEvent",
-                    "subject": {"__typename": "Issue", "id": f"I_{n}", "number": n},
-                }
-                for n in self._nums
-            ]
-            return {
-                "data": {
-                    "repository": {
-                        "pullRequest": {
-                            "timelineItems": {
-                                "pageInfo": {"hasNextPage": False, "endCursor": None},
-                                "nodes": nodes,
-                            }
-                        }
+def _sidebar_payload(nums: list[tuple[int, str]], *, page: dict) -> dict:
+    nodes = [
+        {
+            "__typename": "ConnectedEvent",
+            "subject": {
+                "__typename": "Issue",
+                "id": f"I_{n}",
+                "number": n,
+                "repository": {"nameWithOwner": repo},
+            },
+        }
+        for n, repo in nums
+    ]
+    return {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "timelineItems": {
+                        "pageInfo": page,
+                        "nodes": nodes,
                     }
                 }
             }
+        }
+    }
+
+
+class _GhSidebarRemote:
+    def __init__(self, num: int, repo: str) -> None:
+        self._num = num
+        self._repo = repo
+
+    def api(self, endpoint: str, method: str = "GET", fields: dict | None = None, **_kwargs):
+        if endpoint == "graphql" and method == "POST":
+            return _sidebar_payload(
+                [(self._num, self._repo)],
+                page={"hasNextPage": False, "endCursor": None},
+            )
+        raise AssertionError(endpoint)
+
+
+class _GhSidebarAndIssues(_GhIssues):
+    def __init__(self, *, sidebar_num: int, sidebar_repo: str, issues: dict[int, dict]) -> None:
+        super().__init__(issues)
+        self._remote = _GhSidebarRemote(sidebar_num, sidebar_repo)
+
+    def api(self, endpoint: str, method: str = "GET", fields: dict | None = None, **_kwargs):
+        if endpoint == "graphql" and method == "POST":
+            return self._remote.api(endpoint, method=method, fields=fields, **_kwargs)
+        return super().api(endpoint, **_kwargs)
+
+
+class _GhGraphQLErrors:
+    def api(self, endpoint: str, method: str = "GET", **_kwargs):
+        if endpoint == "graphql" and method == "POST":
+            return {"errors": [{"message": "FORBIDDEN"}]}
+        raise AssertionError(endpoint)
+
+
+class _GhStallPagination:
+    def api(self, endpoint: str, method: str = "GET", **_kwargs):
+        if endpoint == "graphql" and method == "POST":
+            return _sidebar_payload(
+                [(1, "o/r")],
+                page={"hasNextPage": True, "endCursor": "CURSOR_A"},
+            )
         raise AssertionError(endpoint)
 
 

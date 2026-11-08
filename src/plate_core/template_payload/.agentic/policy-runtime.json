@@ -2,7 +2,8 @@
   "schema": 1,
   "trusted_execution": {
     "mode": "default_branch_vendored_src",
-    "prerequisite": "Sparse-checkout src/plate_core from the repository default branch into PLATE_POLICY_PYTHONPATH before branch-policy gates. Do not execute policy modules from the PR head checkout."
+    "prerequisite": "git archive origin/<default_branch> src/plate_core and .agentic/policy-runtime.json into PLATE_POLICY_PYTHONPATH; fail closed if verify fails. No PR workspace fallback. Run gate CLIs from PLATE_POLICY_RUN_DIR with PYTHONNOUSERSITE=1. Workflow pinning on main or plate-lifecycle App is a separate deploy step.",
+    "threat_model_doc": "docs/design/trusted-policy-runtime-threat-model-1449.md"
   },
   "plate_core_wheel": {
     "max_known_published_version": "0.9.0",

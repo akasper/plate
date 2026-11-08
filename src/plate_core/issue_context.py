@@ -29,11 +29,25 @@ query($owner: String!, $repo: String!, $number: Int!, $after: String) {
           __typename
           ... on ConnectedEvent {
             createdAt
-            subject { __typename ... on Issue { id number } }
+            subject {
+              __typename
+              ... on Issue {
+                id
+                number
+                repository { nameWithOwner }
+              }
+            }
           }
           ... on DisconnectedEvent {
             createdAt
-            subject { __typename ... on Issue { id number } }
+            subject {
+              __typename
+              ... on Issue {
+                id
+                number
+                repository { nameWithOwner }
+              }
+            }
           }
         }
       }
@@ -80,6 +94,24 @@ def strip_inline_code_for_scan(text: str | None) -> str:
     return INLINE_CODE_RE.sub(lambda m: " " * len(m.group(0)), text)
 
 
+def strip_blockquotes_for_scan(text: str | None) -> str:
+    """Drop markdown blockquote lines from closing-keyword scan input."""
+    if not text:
+        return ""
+    kept: list[str] = []
+    for line in text.splitlines():
+        if line.lstrip().startswith(">"):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def _scan_body_for_closing(body: str | None) -> str:
+    return strip_closing_scan_text(
+        strip_inline_code_for_scan(strip_blockquotes_for_scan(body))
+    )
+
+
 def parse_closing_issue_refs(
     body: str | None,
     *,
@@ -87,7 +119,7 @@ def parse_closing_issue_refs(
 ) -> list[IssueRef]:
     """Parse closing keywords from fence-stripped, inline-code-stripped body."""
     owner, name = default_repo.split("/", 1)
-    cleaned = strip_closing_scan_text(strip_inline_code_for_scan(body))
+    cleaned = _scan_body_for_closing(body)
     seen: set[tuple[str, str, int]] = set()
     out: list[IssueRef] = []
     for match in CLOSING_KEYWORD_STRICT_RE.finditer(cleaned):
@@ -113,9 +145,9 @@ def detect_unparsed_closing_candidates(body: str | None) -> bool:
     """True when #N or closing-like text appears outside scannable prose."""
     if not body:
         return False
-    raw_clean = strip_closing_scan_text(body)
+    raw_clean = strip_closing_scan_text(strip_blockquotes_for_scan(body))
     raw_loose = {int(m) for m in _LOOSE_HASH_RE.findall(raw_clean)}
-    stripped = strip_closing_scan_text(strip_inline_code_for_scan(body))
+    stripped = _scan_body_for_closing(body)
     strict_nums = {ref.number for ref in parse_closing_issue_refs(stripped, default_repo="x/y")}
     strict_from_stripped = set()
     owner_l = "x"
@@ -133,6 +165,21 @@ def detect_unparsed_closing_candidates(body: str | None) -> bool:
     return False
 
 
+def _issue_ref_from_graphql_subject(subject: dict[str, Any], *, fallback_repo: str) -> IssueRef | None:
+    if subject.get("__typename") != "Issue":
+        return None
+    issue_id = subject.get("id")
+    num = subject.get("number")
+    if issue_id is None or num is None:
+        return None
+    repo_full = ((subject.get("repository") or {}).get("nameWithOwner") or "").strip()
+    if repo_full and "/" in repo_full:
+        ref_owner, ref_repo = repo_full.split("/", 1)
+    else:
+        ref_owner, ref_repo = fallback_repo.split("/", 1)
+    return IssueRef(owner=ref_owner, repo=ref_repo, number=int(num), source="sidebar")
+
+
 def sidebar_linked_issue_refs(
     pr_repo: str,
     pr_number: int,
@@ -141,8 +188,9 @@ def sidebar_linked_issue_refs(
 ) -> tuple[list[IssueRef] | None, str | None]:
     """Replay Development sidebar links; None refs means API failure."""
     owner, name = pr_repo.split("/", 1)
-    linked_by_id: dict[str, int] = {}
+    linked_by_id: dict[str, IssueRef] = {}
     after: str | None = None
+    seen_cursors: set[str] = set()
     try:
         while True:
             payload = client.api(
@@ -156,34 +204,50 @@ def sidebar_linked_issue_refs(
                     "after": after,
                 },
             )
-            pr = (((payload or {}).get("data") or {}).get("repository") or {}).get(
-                "pullRequest"
-            )
+            gql_errors = (payload or {}).get("errors") or []
+            if gql_errors:
+                msgs = "; ".join(
+                    str(item.get("message") or item) for item in gql_errors if item
+                )
+                return None, f"Development sidebar GraphQL errors: {msgs}"
+            repo_data = ((payload or {}).get("data") or {}).get("repository")
+            if not repo_data:
+                return None, "Could not load repository for Development sidebar links."
+            pr = repo_data.get("pullRequest")
             if not pr:
                 return None, "Could not load PR timeline for Development sidebar links."
-            items = pr.get("timelineItems") or {}
-            events = items.get("nodes") or []
-            page = items.get("pageInfo") or {}
+            if "timelineItems" not in pr:
+                return None, "PR timeline metadata unavailable for Development sidebar links."
+            items = pr["timelineItems"]
+            if not isinstance(items, dict):
+                return None, "Invalid PR timeline payload for Development sidebar links."
+            events = items.get("nodes")
+            if events is None:
+                return None, "PR timeline nodes missing for Development sidebar links."
+            page = items.get("pageInfo")
+            if not isinstance(page, dict):
+                return None, "PR timeline pageInfo missing for Development sidebar links."
             for node in events:
                 subject = node.get("subject") or {}
-                if subject.get("__typename") != "Issue":
-                    continue
-                issue_id = subject.get("id")
-                num = subject.get("number")
-                if issue_id is None or num is None:
+                ref = _issue_ref_from_graphql_subject(subject, fallback_repo=pr_repo)
+                if ref is None:
                     continue
                 if node.get("__typename") == "ConnectedEvent":
-                    linked_by_id[str(issue_id)] = int(num)
+                    linked_by_id[str(subject.get("id"))] = ref
                 elif node.get("__typename") == "DisconnectedEvent":
-                    linked_by_id.pop(str(issue_id), None)
+                    linked_by_id.pop(str(subject.get("id")), None)
             if not page.get("hasNextPage"):
                 break
-            after = page.get("endCursor")
-        owner_s, name_s = owner, name
-        return [
-            IssueRef(owner=owner_s, repo=name_s, number=n, source="sidebar")
-            for n in sorted(set(linked_by_id.values()))
-        ], None
+            end_cursor = page.get("endCursor")
+            if not end_cursor:
+                return None, "Sidebar timeline pagination incomplete (missing endCursor)."
+            if end_cursor in seen_cursors:
+                return None, "Sidebar timeline pagination stalled (repeated endCursor)."
+            seen_cursors.add(str(end_cursor))
+            if after is not None and end_cursor == after:
+                return None, "Sidebar timeline pagination did not advance."
+            after = end_cursor
+        return sorted(linked_by_id.values(), key=lambda r: (r.repo_full.lower(), r.number)), None
     except GhApiError as exc:
         return None, f"Development sidebar link verification failed: {exc}"
 
@@ -197,10 +261,7 @@ def _merge_labels_from_issue_payload(payload: dict[str, Any] | None) -> tuple[li
     if not isinstance(raw, list):
         return [], "Issue labels field is not a list."
     names = [str(item.get("name") or "").strip() for item in raw if isinstance(item, dict)]
-    labels = [n for n in names if n]
-    if not labels:
-        return [], "Linked issue has no labels; branch policy cannot read track metadata."
-    return labels, None
+    return [n for n in names if n], None
 
 
 def fetch_issue_labels_for_ref(
@@ -251,12 +312,13 @@ def resolve_issue_context(
                     refs.append(sr)
                     seen.add(key)
 
-    if detect_unparsed_closing_candidates(body):
+    if not refs and detect_unparsed_closing_candidates(body):
         return IssueContextResult(
             status=IssueContextStatus.UNAVAILABLE,
             message=(
                 "Closing references appear inside inline code, comments, or fences where "
-                "branch policy cannot read them. Move Closes #N into normal PR body prose."
+                "branch policy cannot read them. Move Closes #N into normal PR body prose, "
+                "or use a Development sidebar link when the PR number is available."
             ),
         )
 
