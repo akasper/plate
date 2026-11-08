@@ -28,6 +28,7 @@ def run_gate(
     repo: str | None,
     body: str | None = None,
     release_status_json: str | None = None,
+    pr_number: int | None = None,
 ) -> int:
     label_list = labels
     if release_status_json:
@@ -37,12 +38,14 @@ def run_gate(
             pr_labels=label_list,
             body=body,
             release_status=status,
+            pr_number=pr_number,
         )
     else:
         ctx, meta_fail = gather_branch_policy_context(
             repo=repo,
             pr_labels=label_list,
             body=body,
+            pr_number=pr_number,
         )
     if meta_fail:
         print(
@@ -82,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--labels", default="", help="Comma-separated PR labels")
     parser.add_argument("--body", default="", help="PR body (for linked-issue track labels)")
     parser.add_argument("--repo", default=None, help="owner/name (default: gh repo resolution)")
+    parser.add_argument("--pr-number", type=int, default=None, help="PR number for sidebar links")
     parser.add_argument(
         "--release-status-json",
         default=None,
@@ -95,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         repo=args.repo,
         body=args.body or None,
         release_status_json=args.release_status_json,
+        pr_number=args.pr_number,
     )
 
 

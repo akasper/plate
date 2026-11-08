@@ -5,11 +5,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from plate_core.branch_policy_inputs import (
-    fetch_labels_for_linked_issues,
-    gather_branch_policy_context,
-)
-from plate_core.github_client import GhApiError
+from plate_core.branch_policy_inputs import gather_branch_policy_context
+from plate_core.issue_context import IssueContextResult, IssueContextStatus
 from plate_core.release import ReleaseStatusReport
 
 
@@ -39,25 +36,46 @@ def _status(**overrides) -> ReleaseStatusReport:
 
 
 class BranchPolicyInputsTests(unittest.TestCase):
-    def test_fetch_issue_labels_merges_major(self):
-        class _Gh:
-            def api(self, endpoint: str):
-                if endpoint.endswith("/issues/42"):
-                    return {"labels": [{"name": "Major"}, {"name": "Feature"}]}
-                raise AssertionError(endpoint)
+    def test_gather_includes_issue_labels_when_resolved(self):
+        status = _status()
+        with patch(
+            "plate_core.branch_policy_inputs.resolve_issue_context",
+            return_value=IssueContextResult(
+                status=IssueContextStatus.OK,
+                labels=["Minor", "Feature"],
+            ),
+        ):
+            ctx, fail = gather_branch_policy_context(
+                repo="o/r",
+                pr_labels=["Feature"],
+                body="Closes #1\n",
+                release_status=status,
+                pr_number=99,
+            )
+        self.assertIsNone(fail)
+        self.assertIsNotNone(ctx)
+        assert ctx is not None
+        self.assertIn("Minor", ctx.issue_labels)
 
-        labels, err = fetch_labels_for_linked_issues("o/r", [42], client=_Gh())  # type: ignore[arg-type]
-        self.assertIsNone(err)
-        self.assertIn("Major", labels)
-
-    def test_fetch_issue_labels_fail_closed_on_api_error(self):
-        class _Gh:
-            def api(self, _endpoint: str):
-                raise GhApiError("rate limit")
-
-        labels, err = fetch_labels_for_linked_issues("o/r", [1], client=_Gh())  # type: ignore[arg-type]
-        self.assertEqual(labels, [])
-        self.assertIn("rate limit", err or "")
+    def test_gather_fails_on_issue_unavailable(self):
+        status = _status()
+        with patch(
+            "plate_core.branch_policy_inputs.resolve_issue_context",
+            return_value=IssueContextResult(
+                status=IssueContextStatus.UNAVAILABLE,
+                message="sidebar API down",
+            ),
+        ):
+            ctx, fail = gather_branch_policy_context(
+                repo="o/r",
+                pr_labels=["Feature"],
+                body="Closes #1\n",
+                release_status=status,
+            )
+        self.assertIsNone(ctx)
+        self.assertIsNotNone(fail)
+        assert fail is not None
+        self.assertIn("sidebar", fail.message)
 
     def test_gather_fails_on_unverified_branches(self):
         status = _status(

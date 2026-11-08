@@ -193,18 +193,15 @@ def run_preflight(
     target = resolve_repo(repo)
     owner, name = _split_repo(target)
 
-    meta_fail = None
     if release_status is not None:
         status_obj = release_status_from_dict(release_status, repo=target)
-        policy_ctx = BranchPolicyContext(release_status=status_obj, issue_labels=[])
+        policy_ctx, meta_fail = gather_branch_policy_context(
+            repo=repo,
+            pr_labels=label_list,
+            body=body_text,
+            release_status=status_obj,
+        )
         release_status = status_obj.to_dict()
-        if status_obj.branch_verification_errors:
-            meta_fail = gather_branch_policy_context(
-                repo=repo,
-                pr_labels=label_list,
-                body=body_text,
-                release_status=status_obj,
-            )[1]
     else:
         policy_ctx, meta_fail = gather_branch_policy_context(
             repo=repo,

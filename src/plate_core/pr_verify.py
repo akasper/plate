@@ -421,6 +421,7 @@ def verify_pr(
         repo=target,
         pr_labels=labels,
         body=body,
+        pr_number=pr_number,
         client=gh,
     )
     branch_failures = []

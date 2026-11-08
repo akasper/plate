@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .github_client import GhApiError, GhClient
+from .github_client import GhClient
 from .health import resolve_repo
+from .issue_context import IssueContextStatus, resolve_issue_context
 from .pr_gates_checks import GateFailure, normalize_label_list, requires_strict_closing_keyword
-from .pr_gates_closing import parse_strict_closing_issue_numbers
 from .release import ReleaseStatusReport, get_release_status
 
 
@@ -37,28 +37,30 @@ def release_status_from_dict(payload: dict, *, repo: str = "unknown/unknown") ->
     )
 
 
-def fetch_labels_for_linked_issues(
-    repo: str,
-    issue_numbers: list[int],
+def _issue_labels_from_context(
     *,
-    client: GhClient | None = None,
-) -> tuple[list[str], str | None]:
-    """Return merged label names from linked issues, or an error message."""
-    if not issue_numbers:
+    pr_repo: str,
+    pr_labels: list[str],
+    body: str | None,
+    pr_number: int | None,
+    client: GhClient,
+) -> tuple[list[str], GateFailure | None]:
+    if not requires_strict_closing_keyword(pr_labels):
         return [], None
-    gh = client or GhClient()
-    target = resolve_repo(repo)
-    labels: list[str] = []
-    for num in issue_numbers:
-        try:
-            payload = gh.api(f"repos/{target}/issues/{num}") or {}
-        except GhApiError as exc:
-            return [], f"Could not load labels for linked issue #{num}: {exc}"
-        for item in payload.get("labels") or []:
-            name = (item.get("name") or "").strip()
-            if name:
-                labels.append(name)
-    return labels, None
+    result = resolve_issue_context(
+        pr_repo=pr_repo,
+        pr_labels=pr_labels,
+        body=body,
+        pr_number=pr_number,
+        client=client,
+    )
+    if result.status == IssueContextStatus.NOT_REQUIRED:
+        return [], None
+    if result.status == IssueContextStatus.UNAVAILABLE:
+        return [], GateFailure("base_branch", result.message or "Issue context unavailable.")
+    if result.status == IssueContextStatus.ABSENT:
+        return [], None
+    return list(result.labels), None
 
 
 def gather_branch_policy_context(
@@ -66,6 +68,7 @@ def gather_branch_policy_context(
     repo: str | None,
     pr_labels: list[str],
     body: str | None,
+    pr_number: int | None = None,
     client: GhClient | None = None,
     release_status: ReleaseStatusReport | None = None,
 ) -> tuple[BranchPolicyContext | None, GateFailure | None]:
@@ -84,24 +87,13 @@ def gather_branch_policy_context(
             "Release branch metadata is unavailable; retry when GitHub API is reachable.",
         )
 
-    issue_labels: list[str] = []
-    labs = normalize_label_list(pr_labels)
-    if requires_strict_closing_keyword(labs):
-        numbers = parse_strict_closing_issue_numbers(body)
-        if numbers:
-            issue_labels, err = fetch_labels_for_linked_issues(
-                status.repo,
-                numbers,
-                client=gh,
-            )
-            if err:
-                return None, GateFailure("base_branch", err)
-        elif body_has_closing_refs_without_strict(body):
-            pass
+    issue_labels, issue_fail = _issue_labels_from_context(
+        pr_repo=status.repo,
+        pr_labels=normalize_label_list(pr_labels),
+        body=body,
+        pr_number=pr_number,
+        client=gh,
+    )
+    if issue_fail:
+        return None, issue_fail
     return BranchPolicyContext(release_status=status, issue_labels=issue_labels), None
-
-
-def body_has_closing_refs_without_strict(body: str | None) -> bool:
-    """Heuristic: body mentions #N but strict parse found nothing (metadata may be incomplete)."""
-    text = body or ""
-    return "#" in text and not parse_strict_closing_issue_numbers(text)
