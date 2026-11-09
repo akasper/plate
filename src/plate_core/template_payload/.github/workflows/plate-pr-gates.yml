@@ -323,7 +323,7 @@ jobs:
             
             const bodyLinked = new Set();
             const bodyParseRe =
-              /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)|#(\d+))\b/gi;
+              /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?|refs?|references?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)|#(\d+))\b/gi;
             const repoOwner = context.repo.owner.toLowerCase();
             const repoName = context.repo.repo.toLowerCase();
             let m;

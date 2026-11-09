@@ -60,6 +60,23 @@ The next-* (permissive integration) and versioned `release-vX.Y.Z` branches (and
 
 See the design doc and bootstrap output for current recommended protection details. The "only epic-close" restriction is relaxed for the multi-track model in favor of track labels + the final Release PR gate.
 
+### Automated post-tag fast-forward (`release.yml`) and credentials
+
+After a Release PR merges to `main`, `.github/workflows/release.yml` fast-forwards standing release-track branches (`release-major`, `release-minor`, `release-patch`, legacy `release`) to the new tag using **non-destructive** `git push` ref updates only (never `--force`).
+
+**GitHub App path (recommended on personal/user-owned repos):** Branch rulesets often block the default `GITHUB_TOKEN` from pushing directly to protected release branches. Configure a dedicated GitHub App (no webhook required):
+
+1. Create the App with **Contents** (read/write), **Issues** and **Pull requests** (read/write), and **Actions** plus **Checks** (read).
+2. Install the App on the repository that runs PLATE.
+3. Add repository secrets **`PLATE_APP_ID`** (numeric App ID) and **`PLATE_APP_PRIVATE_KEY`** (PEM). Names are fixed in the shipped workflow; to use different names, fork or patch `.github/workflows/release.yml` and keep the values in repository secrets.
+4. In repository **Settings → Rules → Rulesets**, edit the ruleset that covers your standing release branches: add the App as a **bypass actor** with **Always allow** so the post-merge job can update those refs without a pull request.
+
+**Organization repositories:** You may alternatively add `github-actions` as a bypass actor on that ruleset if org policy allows, and rely on the default token—then the App secrets are optional and the workflow skips only the push (with an explicit warning) when secrets are absent.
+
+**Free / unbranded path:** There is no requirement to use a public App name; you can use a fine-grained PAT stored in repository secrets and a small custom workflow, or have a maintainer run `gh plate release finalize <ver> --apply` (or an admin-level manual `git push` fast-forward) when automation cannot bypass protection.
+
+If **`PLATE_APP_ID`** or **`PLATE_APP_PRIVATE_KEY`** is missing, the fast-forward job logs a workflow warning and does not attempt the push, so the workflow stays green while you add credentials or perform a manual fast-forward.
+
 ### Fragment authoring
 
 Every Feature (or process-changing) PR that changes PLATE process, templates, or agent surfaces must include a fragment under `.agentic/releases/unreleased/<slug>.json`. See `.agentic/releases/unreleased/README.md` for the schema and field guide. This includes all changes in a Release ceremony refinement Epic (new labels, branch model updates, CI conditions, tooling enhancements, milestone rules, .plate config, etc.). Fragments accumulate across the Epic's lifetime and are swept into the versioned directory at release-cut time.

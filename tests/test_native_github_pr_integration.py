@@ -1,12 +1,39 @@
 import unittest
 from pathlib import Path
 
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def read_text(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+
+
+def _fast_forward_release_job_block(workflow: str) -> str:
+    return workflow.split("fast-forward-release-branches:", 1)[1].split("\n  deploy:", 1)[0]
+
+
+def _step_if_secrets_violations(relative_path: str) -> list[str]:
+    """GitHub rejects `secrets.*` in step-level `if:` expressions; map secrets to job env instead (#1444)."""
+    text = read_text(relative_path)
+    bad: list[str] = []
+    for doc in yaml.safe_load_all(text):
+        if not isinstance(doc, dict) or "jobs" not in doc:
+            continue
+        for job_id, job in doc["jobs"].items():
+            if not isinstance(job, dict):
+                continue
+            for idx, step in enumerate(job.get("steps") or []):
+                if not isinstance(step, dict):
+                    continue
+                cond = step.get("if")
+                if cond is None:
+                    continue
+                if "secrets." in str(cond):
+                    step_name = step.get("name", step.get("uses", f"step[{idx}]"))
+                    bad.append(f"{relative_path} job={job_id} step {idx} ({step_name}): if contains secrets.*")
+    return bad
 
 
 class NativeGitHubPrIntegrationTests(unittest.TestCase):
@@ -162,10 +189,48 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
 
     def test_release_workflow_fast_forward_job_can_comment_on_issues(self):
         workflow = read_text(".github/workflows/release.yml")
-        job_block = workflow.split("fast-forward-release-branches:", 1)[1].split("\n  deploy:", 1)[0]
+        job_block = _fast_forward_release_job_block(workflow)
         self.assertIn("post_release_fast_forward_comment", workflow)
         self.assertIn("issues: write", job_block)
         self.assertIn("contents: write", job_block)
+
+    def test_release_workflow_fast_forward_uses_app_token_and_missing_secret_fallback(self):
+        """#1438: FF job uses create-github-app-token; warns and skips push without secrets."""
+        repo = read_text(".github/workflows/release.yml")
+        payload = read_text("src/plate_core/template_payload/.github/workflows/release.yml")
+        repo_block = _fast_forward_release_job_block(repo)
+        payload_block = _fast_forward_release_job_block(payload)
+        self.assertEqual(repo_block, payload_block)
+        for block in (repo_block, payload_block):
+            self.assertIn("actions/create-github-app-token@v1", block)
+            self.assertIn("id: plate-app-token", block)
+            self.assertIn("app-id: ${{ secrets.PLATE_APP_ID }}", block)
+            self.assertIn("private-key: ${{ secrets.PLATE_APP_PRIVATE_KEY }}", block)
+            self.assertIn("PLATE_FF_APP_ID: ${{ secrets.PLATE_APP_ID }}", block)
+            self.assertIn("PLATE_FF_APP_PRIVATE_KEY: ${{ secrets.PLATE_APP_PRIVATE_KEY }}", block)
+            self.assertIn("repositories: |", block)
+            self.assertIn("${{ github.event.repository.name }}", block)
+            self.assertIn("token: ${{ steps.plate-app-token.outputs.token || github.token }}", block)
+            self.assertIn("GH_TOKEN: ${{ github.token }}", block)
+            self.assertIn("Warn when lifecycle App secrets are missing", block)
+            self.assertIn(
+                "if: ${{ env.PLATE_FF_APP_ID == '' || env.PLATE_FF_APP_PRIVATE_KEY == '' }}",
+                block,
+            )
+            self.assertIn("if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}", block)
+            self.assertIn("::warning::", block)
+            self.assertIn("Release-branch fast-forward was skipped", block)
+            self.assertNotIn("--force", block)
+            self.assertNotIn("--force-with-lease", block)
+
+    def test_release_workflows_have_no_secrets_in_step_if_expressions(self):
+        """Regression: GitHub Actions rejects secrets.* in step `if:` — use job env (#1444 review)."""
+        for rel in (
+            ".github/workflows/release.yml",
+            "src/plate_core/template_payload/.github/workflows/release.yml",
+        ):
+            bad = _step_if_secrets_violations(rel)
+            self.assertEqual(bad, [], msg=";\n".join(bad) if bad else "")
 
 
 if __name__ == "__main__":
