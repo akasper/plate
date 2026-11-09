@@ -1,0 +1,10 @@
+{
+  "slug": "1422-issue-lifecycle-jsonl",
+  "change_type": "feature",
+  "surface": "src/plate_core/issue_lifecycle_events.py, src/plate_core/gh_actions_mark_implemented.py, .gitignore",
+  "summary": "Append-only local JSONL log under .agentic/events/ with ULID event_id, per-writer seq (locked JSON + file lock), stable event_key for transition retries (transition_id scrubbed into event_key), secret scrubbing before write, cross-process-safe writer_id (lock + O_EXCL + unlink/retry on empty/truncated crash), and ordered iteration API for repo+issue; integration merge path logs state_transition before GitHub label/close writes.",
+  "migration_impact": "Repositories may accumulate ignored .agentic/events/ files locally; no template migration required.",
+  "agent_notes": "Uses state_store.locked_json (#1368) for seq; concurrent appends use dedicated .jsonl.lock. Part of epic #1383.",
+  "breaking": false,
+  "links": ["#1422", "#1383"]
+}
