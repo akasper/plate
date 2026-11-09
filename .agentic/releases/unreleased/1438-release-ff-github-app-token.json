@@ -1,0 +1,16 @@
+{
+  "slug": "1438-release-ff-github-app-token",
+  "change_type": "feature",
+  "surface": ".github/workflows/release.yml, src/plate_core/template_payload/.github/workflows/release.yml, docs/agents/branch-model-and-ceremonies.md",
+  "summary": "The post-tag fast-forward job mints a GitHub App installation token (actions/create-github-app-token@v1, secrets PLATE_APP_ID + PLATE_APP_PRIVATE_KEY) scoped to the repo for checkout/push; missing secrets log ::warning:: and skip the push (job env maps secrets so step if: uses env.* — secrets.* is invalid in step if). GH_TOKEN remains the default token for gh API issue comments. PR gates issue-link step treats Refs #N like a development sidebar link (#1438).",
+  "migration_impact": "Adopters need both App secrets and ruleset bypass for automated FF on user-owned repos, or accept manual/admin finalize; org repos may use github-actions bypass instead.",
+  "migration_guidance": [
+    "1. Install a GitHub App on the repo with Contents, Issues, Pull requests, Actions, and Checks permissions; add PLATE_APP_ID and PLATE_APP_PRIVATE_KEY repository secrets.",
+    "2. Add the App as an Always-allow bypass actor on the standing release-branch ruleset (or grant github-actions bypass where policy allows).",
+    "3. Without both secrets the workflow warns and skips the push; use gh plate release finalize or manual git fast-forward."
+  ],
+  "agent_notes": "Unit tests parse release.yml (repo + template_payload) for the FF job. End-to-end App token minting is not exercised in CI.",
+  "breaking": false,
+  "links": ["#1438", "#1437"],
+  "requires": ["0.9.0"]
+}
