@@ -22,6 +22,7 @@ These pages hold the full rule text moved out of the always-loaded core. Open by
 | [github-actions-and-copilot.md](agents/github-actions-and-copilot.md) | Actions cost controls and Copilot review / autostart policy. |
 | [documentation-rules.md](agents/documentation-rules.md) | Fragments, PR labels, milestones, and release-status targeting for docs PRs. |
 | [script-policy.md](agents/script-policy.md) | POSIX vs PowerShell script policy and `.plate` `platform`. |
+| [database-migration-naming.md](agents/database-migration-naming.md) | UTC timestamp + slug filenames for new DB migrations (#1451). |
 | [cli-body-patterns.md](agents/cli-body-patterns.md) | Safe multiline `gh pr create` / issue bodies (#62). |
 | [upstream-template-sync.md](agents/upstream-template-sync.md) | `import-payload`, `self-migrate`, and PLATES-CORE marker sync. |
 | [wiki-sync.md](agents/wiki-sync.md) | Opt-in wiki sync and Goals page convention. |
