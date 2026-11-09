@@ -94,6 +94,8 @@ jobs:
         with:
           fetch-depth: 0
 
+@@TRUSTED_RUNTIME_PREP@@
+
       - name: Gate — PR title
         if: |
           github.event_name == 'pull_request_review' ||
@@ -177,6 +179,59 @@ jobs:
 @@VALIDATE_RELEASE_RUN@@
 """
 
+TRUSTED_RUNTIME_PREP = """
+      - name: Prepare trusted policy runtime
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
+          git fetch --no-tags --depth=1 origin "${default_branch}"
+          trusted="${RUNNER_TEMP}/plate-policy-trusted"
+          verify_cwd="${RUNNER_TEMP}/plate-policy-verify-cwd"
+          rm -rf "${trusted}" "${verify_cwd}" && mkdir -p "${trusted}" "${verify_cwd}"
+          if ! git archive "origin/${default_branch}" src/plate_core .agentic/policy-runtime.json | tar -x -C "${trusted}"; then
+            echo "::error title=policy-runtime::Could not archive policy runtime from origin/${default_branch}."
+            exit 1
+          fi
+          if [ ! -d "${trusted}/src/plate_core" ] || [ ! -f "${trusted}/.agentic/policy-runtime.json" ]; then
+            echo "::error title=policy-runtime::Default-branch archive missing src/plate_core or .agentic/policy-runtime.json (deploy policy to default branch before merge-authoritative gates)."
+            exit 1
+          fi
+          if ! (
+            cd "${verify_cwd}"
+            export PYTHONPATH="${trusted}/src"
+            export PYTHONNOUSERSITE=1
+            python3 -m plate_core.policy_runtime_verify --root "${trusted}" --require-provenance "${trusted}/src"
+          ); then
+            echo "::error title=policy-runtime::Default-branch policy runtime failed manifest/provenance verification."
+            exit 1
+          fi
+          echo "PLATE_POLICY_PYTHONPATH=${trusted}/src" >> "${GITHUB_ENV}"
+          echo "PLATE_POLICY_RUN_DIR=${RUNNER_TEMP}/plate-policy-exec-isolated" >> "${GITHUB_ENV}"
+"""
+
+POLICY_RUN_SHELL = """
+          if [ -z "${PLATE_POLICY_PYTHONPATH:-}" ]; then
+            echo "::error title=policy-runtime::PLATE_POLICY_PYTHONPATH unset; trusted prepare step must succeed before branch-policy gates."
+            exit 1
+          fi
+          _policy_run_dir="${PLATE_POLICY_RUN_DIR:-${RUNNER_TEMP}/plate-policy-exec-isolated}"
+          mkdir -p "${_policy_run_dir}"
+          run_policy_module() {
+            (
+              cd "${_policy_run_dir}"
+              export PYTHONPATH="${PLATE_POLICY_PYTHONPATH}"
+              export PYTHONNOUSERSITE=1
+              python3 "$@"
+            )
+          }
+"""
+
 VALIDATE_PLATE = """
       - name: Gate — validate release PR
         if: steps.release_gate_detect.outputs.run == 'true'
@@ -254,12 +309,12 @@ MAIN_SOURCE_PLATE = """
         run: |
           # pr-gates failure marker: main-source
           set -euo pipefail
-          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+@@POLICY_RUN_SHELL@@
           pr_number="${{ github.event.pull_request.number }}"
           base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
           head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
-          python3 -m plate_core.pr_main_source_gate --base "${base_ref}" --head "${head_ref}" --labels "${labels}"
+          run_policy_module -m plate_core.pr_main_source_gate --base "${base_ref}" --head "${head_ref}" --labels "${labels}"
 """
 
 RELEASE_WINDOW_PLATE = """
@@ -274,11 +329,22 @@ RELEASE_WINDOW_PLATE = """
         run: |
           # pr-gates failure marker: release-window
           set -euo pipefail
-          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+@@POLICY_RUN_SHELL@@
           pr_number="${{ github.event.pull_request.number }}"
           base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
-          python3 -m plate_core.pr_release_window_gate --base "${base_ref}" --labels "${labels}"
+          run_policy_module -m plate_core.pr_release_window_gate --base "${base_ref}" --labels "${labels}"
+"""
+
+PLATE_CORE_ENSURE_SHELL = """
+          ensure_plate_core() {
+            if [ -n "${PLATE_POLICY_PYTHONPATH:-}" ]; then
+              export PYTHONPATH="${PLATE_POLICY_PYTHONPATH}"
+              return 0
+            fi
+            echo "::error title=plate-core required::PLATE_POLICY_PYTHONPATH unset; trusted prepare step must archive default-branch src/plate_core (PyPI plate-core==@@PLATE_CORE_VERSION@@ alone is insufficient)."
+            exit 1
+          }
 """
 
 MAIN_SOURCE_TEMPLATE = """
@@ -292,26 +358,68 @@ MAIN_SOURCE_TEMPLATE = """
         run: |
           # pr-gates failure marker: main-source
           set -euo pipefail
+@@PLATE_CORE_ENSURE_SHELL@@
           pr_number="${{ github.event.pull_request.number }}"
           base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
           head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
-          run_main_source_gate() {
-            python3 -m plate_core.pr_main_source_gate --base "${base_ref}" --head "${head_ref}" --labels "${labels}"
-          }
-          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
-            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
-            run_main_source_gate
-          elif python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
-            run_main_source_gate
-          else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
-            if python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
-              run_main_source_gate
-            else
-              echo "::warning title=Main source (warn-only)::plate-core runtime unavailable; skipping main-source gate until plate-core is installed."
-            fi
-          fi
+          ensure_plate_core
+@@POLICY_RUN_SHELL@@
+          run_policy_module -m plate_core.pr_main_source_gate --base "${base_ref}" --head "${head_ref}" --labels "${labels}"
+"""
+
+INTEGRATION_BASE_PLATE = """
+      - name: Gate — integration base
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: integration-base
+          set -euo pipefail
+@@POLICY_RUN_SHELL@@
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
+          run_policy_module -m plate_core.pr_integration_base_gate \
+            --base "${base_ref}" \
+            --head "${head_ref}" \
+            --labels "${labels}" \
+            --body "${body}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pr-number "${pr_number}"
+"""
+
+INTEGRATION_BASE_TEMPLATE = """
+      - name: Gate — integration base
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: integration-base
+          set -euo pipefail
+@@PLATE_CORE_ENSURE_SHELL@@
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
+          ensure_plate_core
+@@POLICY_RUN_SHELL@@
+          run_policy_module -m plate_core.pr_integration_base_gate \
+            --base "${base_ref}" \
+            --head "${head_ref}" \
+            --labels "${labels}" \
+            --body "${body}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pr-number "${pr_number}"
 """
 
 RELEASE_WINDOW_TEMPLATE = """
@@ -326,25 +434,13 @@ RELEASE_WINDOW_TEMPLATE = """
         run: |
           # pr-gates failure marker: release-window
           set -euo pipefail
+@@PLATE_CORE_ENSURE_SHELL@@
           pr_number="${{ github.event.pull_request.number }}"
           base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
-          run_release_window_gate() {
-            python3 -m plate_core.pr_release_window_gate --base "${base_ref}" --labels "${labels}"
-          }
-          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
-            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
-            run_release_window_gate
-          elif python3 -c "import plate_core.pr_release_window_gate" 2>/dev/null; then
-            run_release_window_gate
-          else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
-            if python3 -c "import plate_core.pr_release_window_gate" 2>/dev/null; then
-              run_release_window_gate
-            else
-              echo "::warning title=Release window (warn-only)::plate-core runtime unavailable; skipping release-window gate until plate-core is installed."
-            fi
-          fi
+          ensure_plate_core
+@@POLICY_RUN_SHELL@@
+          run_policy_module -m plate_core.pr_release_window_gate --base "${base_ref}" --labels "${labels}" --repo "${GITHUB_REPOSITORY}"
 """
 
 REVIEWER_MODEL_PLATE = """
@@ -358,10 +454,10 @@ REVIEWER_MODEL_PLATE = """
         run: |
           # pr-gates failure marker: Reviewer model must differ from author model
           set -euo pipefail
-          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+@@POLICY_RUN_SHELL@@
           pr_number="${{ github.event.pull_request.number }}"
           body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
-          printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
+          printf '%s' "${body}" | run_policy_module -m plate_core.pr_reviewer_model_gate --stdin
 """
 
 REVIEWER_MODEL_TEMPLATE = """
@@ -375,24 +471,12 @@ REVIEWER_MODEL_TEMPLATE = """
         run: |
           # pr-gates failure marker: Reviewer model must differ from author model
           set -euo pipefail
+@@PLATE_CORE_ENSURE_SHELL@@
           pr_number="${{ github.event.pull_request.number }}"
           body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
-          run_reviewer_model_gate() {
-            printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
-          }
-          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
-            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
-            run_reviewer_model_gate
-          elif python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
-            run_reviewer_model_gate
-          else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
-            if python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
-              run_reviewer_model_gate
-            else
-              echo "::warning title=Reviewer model (warn-only)::plate-core runtime unavailable; skipping reviewer model gate until plate-core is installed."
-            fi
-          fi
+          ensure_plate_core
+@@POLICY_RUN_SHELL@@
+          printf '%s' "${body}" | run_policy_module -m plate_core.pr_reviewer_model_gate --stdin
 """
 
 MARK_IMPLEMENTED_PLATE = """
@@ -494,19 +578,37 @@ def build(variant: str) -> str:
         _extract_script_block(gates_src, "Gate — feedback resolution")
     )
     validate_run = VALIDATE_PLATE if variant == "plate" else VALIDATE_TEMPLATE
-    main_source_run = (
-        (MAIN_SOURCE_PLATE + RELEASE_WINDOW_PLATE)
-        if variant == "plate"
-        else (MAIN_SOURCE_TEMPLATE + RELEASE_WINDOW_TEMPLATE).replace(
-            "@@PLATE_CORE_VERSION@@", _plate_core_pip_version()
+    plate_ver = _plate_core_pip_version()
+    ensure_shell = PLATE_CORE_ENSURE_SHELL.replace("@@PLATE_CORE_VERSION@@", plate_ver)
+    policy_run = POLICY_RUN_SHELL.rstrip()
+
+    def _tpl(block: str) -> str:
+        return (
+            block.replace("@@PLATE_CORE_VERSION@@", plate_ver)
+            .replace("@@PLATE_CORE_ENSURE_SHELL@@", ensure_shell.rstrip())
+            .replace("@@POLICY_RUN_SHELL@@", policy_run)
         )
+
+    plate_policy_run = policy_run
+
+    def _plate(block: str) -> str:
+        return block.replace("@@POLICY_RUN_SHELL@@", plate_policy_run)
+
+    main_source_run = (
+        (
+            _plate(MAIN_SOURCE_PLATE)
+            + _plate(INTEGRATION_BASE_PLATE)
+            + _plate(RELEASE_WINDOW_PLATE)
+        )
+        if variant == "plate"
+        else _tpl(MAIN_SOURCE_TEMPLATE + INTEGRATION_BASE_TEMPLATE + RELEASE_WINDOW_TEMPLATE)
     )
     reviewer_run = (
-        REVIEWER_MODEL_PLATE
-        if variant == "plate"
-        else REVIEWER_MODEL_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
+        _plate(REVIEWER_MODEL_PLATE) if variant == "plate" else _tpl(REVIEWER_MODEL_TEMPLATE)
     )
-    body = HEADER.replace("@@TITLE_SCRIPT@@", title_script)
+    trusted_prep = TRUSTED_RUNTIME_PREP.lstrip("\n").rstrip() + "\n"
+    body = HEADER.replace("@@TRUSTED_RUNTIME_PREP@@", trusted_prep)
+    body = body.replace("@@TITLE_SCRIPT@@", title_script)
     body = body.replace("@@ISSUE_LINK_SCRIPT@@", issue_link_script)
     body = body.replace("@@MAIN_SOURCE_RUN@@", main_source_run.lstrip("\n").rstrip())
     body = body.replace("@@REVIEWER_MODEL_RUN@@", reviewer_run.lstrip("\n").rstrip())

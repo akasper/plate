@@ -56,6 +56,7 @@ class ReleaseStatusReport:
     github_release_is_latest: bool = False
     github_release_url: str | None = None
     github_release_tag: str | None = None
+    branch_verification_errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = {
@@ -63,6 +64,7 @@ class ReleaseStatusReport:
             "release_branch_exists": self.release_branch_exists,
             "release_track_branches": self.release_track_branches,
             "release_branch_mode": self.release_branch_mode,
+            "branch_verification_errors": list(self.branch_verification_errors),
             "release_branch_reset_target": self.release_branch_reset_target,
             "warnings": self.warnings,
             "open_release_issues": self.open_release_issues,
@@ -493,6 +495,22 @@ def _load_extension_release_checks(agentic_dir: Path) -> list[dict]:
         return []
 
 
+def probe_remote_branch(
+    gh: GhClient,
+    repo: str,
+    branch_name: str,
+) -> tuple[bool | None, str | None]:
+    """Return ``(exists, error)``. ``exists is None`` means API failure (not verified absence)."""
+    try:
+        gh.api(f"repos/{repo}/branches/{branch_name}")
+        return True, None
+    except GhApiError as exc:
+        msg = str(exc).lower()
+        if "404" in msg or "not found" in msg:
+            return False, None
+        return None, f"{branch_name}: {exc}"
+
+
 def get_release_status(
     repo: str | None = None,
     releases_dir: Path | None = None,
@@ -502,23 +520,26 @@ def get_release_status(
     gh = client or GhClient()
     target = resolve_repo(repo)
 
-    def _branch_exists(branch_name: str) -> bool:
-        try:
-            gh.api(f"repos/{target}/branches/{branch_name}")
-            return True
-        except GhApiError:
-            return False
-
-    release_track_branches = {
-        "release": _branch_exists("release"),
-        "release-major": _branch_exists("release-major"),
-        "release-minor": _branch_exists("release-minor"),
-        "release-patch": _branch_exists("release-patch"),
-    }
-    release_branch_exists = release_track_branches["release"]
-    tracks_present = [b for b in ["release-major", "release-minor", "release-patch"] if release_track_branches[b]]
+    branch_verification_errors: list[str] = []
+    release_track_branches: dict[str, bool] = {}
+    for branch_name in ("release", "release-major", "release-minor", "release-patch"):
+        exists, err = probe_remote_branch(gh, target, branch_name)
+        if err:
+            branch_verification_errors.append(err)
+        elif exists is True:
+            release_track_branches[branch_name] = True
+        else:
+            release_track_branches[branch_name] = False
+    release_branch_exists = release_track_branches.get("release", False)
+    tracks_present = [
+        b
+        for b in ["release-major", "release-minor", "release-patch"]
+        if release_track_branches.get(b)
+    ]
     warnings: list[str] = []
-    if len(tracks_present) == 3:
+    if branch_verification_errors:
+        release_branch_mode = "unverified"
+    elif len(tracks_present) == 3:
         release_branch_mode = "multi-track"
     elif release_branch_exists and len(tracks_present) == 0:
         release_branch_mode = "legacy"
@@ -544,6 +565,11 @@ def get_release_status(
         release_branch_mode = "none"
         warnings.append(
             "No release integration branches detected. Run 'gh plate bootstrap --apply' to initialize standing release branches."
+        )
+
+    if branch_verification_errors:
+        warnings.append(
+            "Branch presence checks failed (API/auth/network); branch policy gates will fail closed until resolved."
         )
 
     # Find open Release issues
@@ -691,6 +717,7 @@ def get_release_status(
         github_release_exists=bool(gh_rel.get("exists")),
         github_release_is_latest=bool(gh_rel.get("is_latest")),
         github_release_url=gh_rel.get("url"),
+        branch_verification_errors=branch_verification_errors,
         github_release_tag=gh_rel.get("tag"),
     )
 

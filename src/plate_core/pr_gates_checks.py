@@ -168,33 +168,90 @@ def check_strict_closing_keyword(
     return GateFailure("closing_keyword", closing_keyword_fix_message(issue_number=issue_num))
 
 
+@dataclass(frozen=True)
+class IntegrationBaseResolution:
+    expected: str | None
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.expected is not None and not self.error
+
+
+def resolve_integration_base(
+    *,
+    release_branch_mode: str,
+    release_track_branches: dict[str, bool] | None,
+    pr_labels: list[str],
+    issue_labels: list[str] | None = None,
+) -> IntegrationBaseResolution:
+    """Deterministic integration base; explicit track labels never fall back to another track."""
+    if "Release" in normalize_label_list(pr_labels):
+        return IntegrationBaseResolution(expected="main")
+    mode = (release_branch_mode or "").strip() or "legacy"
+    if mode == "unverified":
+        return IntegrationBaseResolution(
+            expected=None,
+            error="Release branch metadata is unverified; cannot resolve integration base.",
+        )
+    tracks = release_track_branches or {}
+    combined = set(normalize_label_list(pr_labels)) | set(normalize_label_list(issue_labels))
+    if mode in ("multi-track", "track-only", "hybrid"):
+        for track in ("Major", "Minor", "Patch"):
+            if track not in combined:
+                continue
+            branch = TRACK_LABEL_TO_BRANCH[track]
+            if tracks.get(branch):
+                return IntegrationBaseResolution(expected=branch)
+            return IntegrationBaseResolution(
+                expected=None,
+                error=(
+                    f"Work is labeled {track} but branch {branch!r} is missing. "
+                    "Run `gh plate bootstrap --apply` to repair standing track branches."
+                ),
+            )
+        for branch in ("release-minor", "release-major", "release-patch"):
+            if tracks.get(branch):
+                return IntegrationBaseResolution(expected=branch)
+        return IntegrationBaseResolution(
+            expected=None,
+            error=(
+                "No release-minor, release-major, or release-patch branch exists. "
+                "Run `gh plate bootstrap --apply` to create standing release branches."
+            ),
+        )
+    if mode == "none":
+        return IntegrationBaseResolution(
+            expected=None,
+            error="No release integration branches detected. Run `gh plate bootstrap --apply`.",
+        )
+    if tracks.get("release") or mode == "legacy":
+        if tracks.get("release"):
+            return IntegrationBaseResolution(expected="release")
+        return IntegrationBaseResolution(
+            expected=None,
+            error="Legacy release mode requires branch `release`. Run `gh plate bootstrap --apply`.",
+        )
+    return IntegrationBaseResolution(
+        expected=None,
+        error="Could not resolve integration base; run `gh plate release status` for repair hints.",
+    )
+
+
 def resolve_expected_integration_base(
     *,
     release_branch_mode: str,
     release_track_branches: dict[str, bool] | None,
     pr_labels: list[str],
     issue_labels: list[str] | None = None,
-) -> str:
-    """Expected --base for Feature/Bug/Documentation work (Release PRs target main)."""
-    if "Release" in normalize_label_list(pr_labels):
-        return "main"
-    tracks = release_track_branches or {}
-    combined = set(normalize_label_list(pr_labels)) | set(normalize_label_list(issue_labels))
-    mode = (release_branch_mode or "").strip() or "legacy"
-    if mode in ("multi-track", "track-only", "hybrid"):
-        for track in ("Major", "Minor", "Patch"):
-            if track in combined:
-                branch = TRACK_LABEL_TO_BRANCH[track]
-                if tracks.get(branch):
-                    return branch
-        for branch in ("release-minor", "release-major", "release-patch"):
-            if tracks.get(branch):
-                return branch
-    if tracks.get("release") or mode == "legacy":
-        return "release"
-    if tracks.get("release-minor"):
-        return "release-minor"
-    return "main"
+) -> str | None:
+    """Return expected base ref only (no error text); prefer ``resolve_integration_base``."""
+    return resolve_integration_base(
+        release_branch_mode=release_branch_mode,
+        release_track_branches=release_track_branches,
+        pr_labels=pr_labels,
+        issue_labels=issue_labels,
+    ).expected
 
 
 def is_allowed_main_source_head(head: str | None) -> bool:
@@ -273,10 +330,17 @@ def check_release_window(
 def check_integration_base_branch(
     base: str | None,
     *,
-    expected: str,
+    expected: str | None,
     release_branch_mode: str,
+    head: str | None = None,
 ) -> GateFailure | None:
     got = (base or "").strip()
+    if expected is None:
+        return GateFailure(
+            "base_branch",
+            "No release integration branches are configured. "
+            "Run `gh plate bootstrap --apply`, then `gh plate release status`.",
+        )
     if not got:
         return GateFailure(
             "base_branch",
@@ -314,22 +378,18 @@ def run_preflight_gate_checks(
     ):
         if check:
             failures.append(check)
-    expected = resolve_expected_integration_base(
-        release_branch_mode=release_branch_mode,
-        release_track_branches=release_track_branches,
-        pr_labels=labels,
-        issue_labels=issue_labels,
+    from .branch_policy import evaluate_full_branch_policy
+
+    failures.extend(
+        evaluate_full_branch_policy(
+            base=base,
+            head=head,
+            labels=labels,
+            release_branch_mode=release_branch_mode,
+            release_track_branches=release_track_branches,
+            issue_labels=issue_labels,
+        )
     )
-    base_fail = check_integration_base_branch(
-        base,
-        expected=expected,
-        release_branch_mode=release_branch_mode,
-    )
-    if base_fail:
-        failures.append(base_fail)
-    main_fail = check_main_source(base, head, labels)
-    if main_fail:
-        failures.append(main_fail)
     rw_fail = check_release_window(
         base,
         labels,

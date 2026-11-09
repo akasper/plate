@@ -63,6 +63,10 @@ PR_GATE_STEP_CONTRACTS: tuple[dict[str, str], ...] = (
         "failure_marker": "main-source",
     },
     {
+        "step_name": "Gate — integration base",
+        "failure_marker": "integration-base",
+    },
+    {
         "step_name": "Gate — release window",
         "failure_marker": "release-window",
     },

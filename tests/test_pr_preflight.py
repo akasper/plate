@@ -47,17 +47,28 @@ class PrPreflightGateTests(unittest.TestCase):
         self.assertIs(payload.issue_link_gate_failure_lines, checks_fn)
 
     def test_run_preflight_report_passes_with_injected_state(self):
-        report = preflight.run_preflight(
-            body="Closes #1418",
-            labels=["Feature", "area:cli"],
-            base="release",
-            changed_paths=[".agentic/releases/unreleased/x.json"],
-            repo="akasper/plate",
-            release_status={
-                "release_branch_mode": "legacy",
-                "release_track_branches": {"release": True},
-            },
-        )
+        from unittest.mock import patch
+
+        from plate_core.issue_context import IssueContextResult, IssueContextStatus
+
+        with patch(
+            "plate_core.branch_policy_inputs.resolve_issue_context",
+            return_value=IssueContextResult(
+                status=IssueContextStatus.ABSENT,
+                labels=[],
+            ),
+        ):
+            report = preflight.run_preflight(
+                body="Closes #1418",
+                labels=["Feature", "area:cli"],
+                base="release",
+                changed_paths=[".agentic/releases/unreleased/x.json"],
+                repo="akasper/plate",
+                release_status={
+                    "release_branch_mode": "legacy",
+                    "release_track_branches": {"release": True},
+                },
+            )
         self.assertTrue(report["passed"])
         self.assertEqual(report["expected_base"], "release")
 
