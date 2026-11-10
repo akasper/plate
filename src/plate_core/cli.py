@@ -282,6 +282,14 @@ from .plate_config import (
     init_plate_config,
     load_plate_config,
 )
+from .github_client import GhClient
+from .lifecycle_policy import (
+    fetch_repo,
+    fetch_token_user_login,
+    plan_init_process_yaml,
+    read_lifecycle_block_for_init_merge,
+    write_process_yaml_lifecycle,
+)
 
 
 def cmd_health(args: argparse.Namespace) -> int:
@@ -998,6 +1006,52 @@ def cmd_config_upgrade(args: argparse.Namespace) -> int:
         print("Migration guidance:")
         for step in report.migration_guidance:
             print(f"- {step}")
+    return 0
+
+
+def cmd_process_init(args: argparse.Namespace) -> int:
+    """Merge ``lifecycle.approvers`` + balanced ``lifecycle.gates`` into ``.agentic/process.yml`` (#1425)."""
+
+    repo = getattr(args, "repo", None) or resolve_repo(None)
+    root = Path(args.repo_root)
+    gh = GhClient()
+    try:
+        login = fetch_token_user_login(gh)
+        repo_obj = fetch_repo(repo, gh)
+        approvers_raw = (getattr(args, "approvers", None) or "").strip()
+        approver_list = [x.strip() for x in approvers_raw.split(",") if x.strip()] if approvers_raw else None
+        is_org = isinstance(repo_obj, dict) and repo_obj.get("owner", {}).get("type") == "Organization"
+        confirm = bool(getattr(args, "i_understand_token_user_is_not_repo_owner", False))
+        existing_block, process_root = read_lifecycle_block_for_init_merge(root)
+        fragment = plan_init_process_yaml(
+            token_user_login=login,
+            repo_obj=repo_obj,
+            org_approvers=approver_list if is_org else None,
+            explicit_user_approvers=approver_list if not is_org and approver_list else None,
+            confirm_non_owner_for_default=confirm,
+            confirm_non_owner_for_explicit_approvers=confirm,
+            existing_lifecycle=existing_block,
+            process_yaml_root=process_root,
+            force_lifecycle=bool(getattr(args, "force_lifecycle", False)),
+        )
+        path = write_process_yaml_lifecycle(root, fragment, create=True)
+    except (ValueError, OSError, RuntimeError) as exc:
+        if args.json:
+            print(json.dumps({"ok": False, "error": str(exc)}))
+        else:
+            print(str(exc))
+        return 1
+
+    payload = {
+        "ok": True,
+        "path": str(path.resolve()),
+        "repo": repo,
+        "token_user": login,
+    }
+    if args.json:
+        print(json.dumps(payload))
+        return 0
+    print(f"Wrote lifecycle fragment to {payload['path']}")
     return 0
 
 
@@ -5304,6 +5358,38 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cfg_upgrade.add_argument("--json", action="store_true", help="Output JSON")
     cfg_upgrade.set_defaults(func=cmd_config_upgrade)
+
+    process = sub.add_parser("process", help="Lifecycle process.yml helpers (#1425)")
+    process_sub = process.add_subparsers(dest="process_command", required=True)
+    proc_init = process_sub.add_parser(
+        "init",
+        help="Merge lifecycle.approvers + balanced lifecycle.gates into .agentic/process.yml",
+    )
+    proc_init.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repository root (default: current directory)",
+    )
+    proc_init.add_argument(
+        "--repo",
+        help="owner/name; defaults to git remote origin (used for org vs user and owner.login)",
+    )
+    proc_init.add_argument(
+        "--approvers",
+        help="Organization repos: comma-separated GitHub logins (required). User repos: optional override.",
+    )
+    proc_init.add_argument(
+        "--i-understand-token-user-is-not-repo-owner",
+        action="store_true",
+        help="Allow init when GET /user login differs from repos/OWNER/REPO owner.login (personal repo)",
+    )
+    proc_init.add_argument(
+        "--force-lifecycle",
+        action="store_true",
+        help="Replace lifecycle.approvers and gates with defaults instead of preserving stricter existing config",
+    )
+    proc_init.add_argument("--json", action="store_true", help="Output JSON")
+    proc_init.set_defaults(func=cmd_process_init)
 
     runner = sub.add_parser(
         "runner",
