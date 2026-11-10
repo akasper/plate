@@ -19,6 +19,7 @@ These pages hold the full rule text moved out of the always-loaded core. Open by
 | [interactive-epic-planning.md](agents/interactive-epic-planning.md) | Host-native epic planning Q&A and stub creation (#988). |
 | [documentation-rules.md](agents/documentation-rules.md) | Fragments, PR labels, milestones, and release-status targeting. |
 | [script-policy.md](agents/script-policy.md) | POSIX vs PowerShell script policy and `.plate` `platform`. |
+| [database-migration-naming.md](agents/database-migration-naming.md) | UTC timestamp + slug filenames for new DB migrations (#1451). |
 | [upstream-template-sync.md](agents/upstream-template-sync.md) | `import-payload`, `self-migrate`, and PLATES-CORE marker sync. |
 | [wiki-sync.md](agents/wiki-sync.md) | Opt-in wiki sync rules. |
 | [template-integrity-rules.md](agents/template-integrity-rules.md) | copilot-instructions, CI placeholder guards, and local temp paths. |

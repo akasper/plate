@@ -1379,8 +1379,9 @@ RELEASE_INTEGRATION_BRANCHES = frozenset(
 )
 
 RELEASE_BRANCH_FAST_FORWARD_BYPASS_HINT = (
-    "Release branches ruleset (id 26613570) requires a bypass actor for direct ref updates. "
-    "Add github-actions[bot] (or the lifecycle GitHub App) as a ruleset bypass actor."
+    "A branch ruleset may block github-actions from pushing updates to standing release branches. "
+    "Add your lifecycle GitHub App (or another bypass-capable identity) as a ruleset bypass actor "
+    "with Always allow, or use an admin-performed manual fast-forward."
 )
 
 

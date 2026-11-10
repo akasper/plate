@@ -14,6 +14,7 @@ import urllib.request
 from typing import Any
 
 from plate_core.integration_close import render_close_comment, should_auto_close_issue
+from plate_core.issue_lifecycle_events import append_issue_lifecycle_event
 from plate_core.issue_status_lifecycle import (
     ALLOWED_STATUS_LABELS,
     should_apply_status_implemented,
@@ -55,6 +56,7 @@ def main() -> int:
     owner = repo["owner"]["login"]
     name = repo["name"]
     api = f"https://api.github.com/repos/{owner}/{name}"
+    repo_slug = f"{owner}/{name}"
 
     event_name = os.environ.get("GITHUB_EVENT_NAME", "")
 
@@ -132,6 +134,24 @@ def main() -> int:
                 print(f"Skip labeling #{num}: {e}", file=sys.stderr)
                 skipped.append({"number": num, "reason": f"status_validation:{e}"})
             else:
+                to_add = sorted(add)
+                label_transition = (
+                    f"integrate_merge:{base_ref}:pr{pr_number}:issue{num}:status_labels"
+                )
+                append_issue_lifecycle_event(
+                    repo_slug,
+                    num,
+                    event_type="state_transition",
+                    transition_id=label_transition,
+                    summary=(
+                        f"Integration merge to {base_ref}: apply status labels "
+                        f"+{to_add} -{sorted(remove & ALLOWED_STATUS_LABELS)}"
+                    ),
+                    links={
+                        "api_base": api,
+                        "pull_request": f"https://github.com/{repo_slug}/pull/{pr_number}",
+                    },
+                )
                 for old in remove:
                     if old in ALLOWED_STATUS_LABELS:
                         path = urllib.parse.quote(old, safe="")
@@ -139,7 +159,6 @@ def main() -> int:
                             _req_json("DELETE", f"{api}/issues/{num}/labels/{path}", token)
                         except urllib.error.HTTPError:
                             pass
-                to_add = sorted(add)
                 if to_add:
                     try:
                         _req_json("POST", f"{api}/issues/{num}/labels", token, {"labels": to_add})
@@ -159,6 +178,18 @@ def main() -> int:
             skipped.append({"number": num, "reason": decision["reason"]})
             continue
 
+        close_transition = f"integrate_merge:{base_ref}:pr{pr_number}:issue{num}:close"
+        append_issue_lifecycle_event(
+            repo_slug,
+            num,
+            event_type="state_transition",
+            transition_id=close_transition,
+            summary=f"Integration merge to {base_ref}: close issue via PR #{pr_number}.",
+            links={
+                "api_base": api,
+                "pull_request": f"https://github.com/{repo_slug}/pull/{pr_number}",
+            },
+        )
         body = render_close_comment(pr_number=int(pr_number), base_ref=base_ref)
         try:
             _req_json("POST", f"{api}/issues/{num}/comments", token, {"body": body})

@@ -212,3 +212,6 @@ tests/e2e/package-lock.json
 
 # Ephemeral #650 hybrid/non-code project profile (local override)
 .agentic/hybrid/
+
+# Ephemeral #1422 issue lifecycle JSONL outbox (local; not release artifacts)
+.agentic/events/
