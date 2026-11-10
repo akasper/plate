@@ -417,7 +417,7 @@ jobs:
           elif python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
             run_main_source_gate
           else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.9.0" || true
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.10.0" || true
             if python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
               run_main_source_gate
             else
@@ -448,7 +448,7 @@ jobs:
           elif python3 -c "import plate_core.pr_release_window_gate" 2>/dev/null; then
             run_release_window_gate
           else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.9.0" || true
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.10.0" || true
             if python3 -c "import plate_core.pr_release_window_gate" 2>/dev/null; then
               run_release_window_gate
             else
@@ -477,7 +477,7 @@ jobs:
           elif python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
             run_reviewer_model_gate
           else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.9.0" || true
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.10.0" || true
             if python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
               run_reviewer_model_gate
             else
@@ -797,7 +797,7 @@ jobs:
           elif python3 -c "import plate_core.gh_actions_mark_implemented" 2>/dev/null; then
             run_mark_implemented
           else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.9.0" || true
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.10.0" || true
             if python3 -c "import plate_core.gh_actions_mark_implemented" 2>/dev/null; then
               run_mark_implemented
             else
