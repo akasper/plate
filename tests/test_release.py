@@ -30,6 +30,9 @@ from plate_core.release import (
     normalize_release_tag,
     plan_gh_plate_sync,
     perform_guarded_hard_reset,
+    fast_forward_release_branches,
+    STANDING_TRACK_BRANCHES,
+    format_fast_forward_failure_comment,
     ensure_next_release_issue,
     diagnose_release_standing_state,
     repair_release_standing_state,
@@ -1287,8 +1290,174 @@ class FinalizeAutomationTests(unittest.TestCase):
             d = self._make_versioned_release(tmp, "0.7.1")
             info = perform_guarded_hard_reset("0.7.1", releases_dir=d, dry_run=True, apply=False, client=mock_client)
             self.assertTrue(info.get("would_reset"))
-            self.assertIn("command", info)
-            self.assertIn("release", info["command"])
+            self.assertIn("commands", info)
+            joined = " ".join(item.get("command", "") for item in info["commands"])
+            self.assertIn("release", joined)
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
+    def test_fast_forward_all_branches_legacy_release_only(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+        tag_commit = "tagsha"
+        release_tip = "releasesha"
+
+        def fake_run(argv, **kwargs):
+            cmd = argv
+            if cmd[:3] == ["git", "ls-remote", "--tags"]:
+                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v0.9.0", "returncode": 0})()
+            if cmd[:3] == ["git", "ls-remote", "--heads"]:
+                branch = cmd[4]
+                if branch == "release":
+                    return type("P", (), {"stdout": f"{release_tip} refs/heads/release", "returncode": 0})()
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if cmd[:2] == ["git", "fetch"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if cmd[:2] == ["git", "rev-parse"]:
+                ref = cmd[2]
+                if ref == "refs/tags/v0.9.0":
+                    return type("P", (), {"stdout": tag_commit, "returncode": 0})()
+                if ref == "origin/release":
+                    return type("P", (), {"stdout": release_tip, "returncode": 0})()
+            if cmd[:3] == ["git", "merge-base", "--is-ancestor"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if cmd[:3] == ["git", "push", "origin"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if cmd[:3] == ["git", "log", "--oneline"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        info = fast_forward_release_branches(
+            "v0.9.0",
+            apply=True,
+            branches=("release",),
+        )
+        self.assertTrue(info.get("ok"))
+        statuses = [item["status"] for item in info["results"]]
+        self.assertEqual(statuses, ["fast_forwarded"])
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
+    def test_fast_forward_stop_on_first_block(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+        tag_commit = "tagsha"
+        tips = {"release-major": "majorsha", "release-minor": "minorsha"}
+
+        def fake_run(argv, **kwargs):
+            if argv[:3] == ["git", "ls-remote", "--tags"]:
+                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v1.0.0", "returncode": 0})()
+            if argv[:3] == ["git", "ls-remote", "--heads"]:
+                branch = argv[4]
+                if branch in tips:
+                    return type("P", (), {"stdout": f"{tips[branch]} refs/heads/{branch}", "returncode": 0})()
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "fetch"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "rev-parse"]:
+                ref = argv[2]
+                if ref == "refs/tags/v1.0.0":
+                    return type("P", (), {"stdout": tag_commit, "returncode": 0})()
+                for branch, tip in tips.items():
+                    if ref == f"origin/{branch}":
+                        return type("P", (), {"stdout": tip, "returncode": 0})()
+            if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
+                ancestor, descendant = argv[3], argv[4]
+                if ancestor == tips["release-major"]:
+                    return type("P", (), {"stdout": "", "returncode": 1})()
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "log", "--oneline"]:
+                return type("P", (), {"stdout": "deadbeef diverged", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        info = fast_forward_release_branches(
+            "v1.0.0",
+            apply=True,
+            branches=("release-major", "release-minor"),
+        )
+        self.assertFalse(info.get("ok"))
+        self.assertEqual(info.get("stop_policy"), "stop_on_first_block")
+        self.assertEqual(info["blocked"]["branch"], "release-major")
+        self.assertEqual(info["results"], [])
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
+    def test_fast_forward_idempotent_noop(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+        sha = "samecommit"
+
+        def fake_run(argv, **kwargs):
+            if argv[:3] == ["git", "ls-remote", "--tags"]:
+                return type("P", (), {"stdout": f"{sha} refs/tags/v0.9.1", "returncode": 0})()
+            if argv[:3] == ["git", "ls-remote", "--heads"]:
+                return type("P", (), {"stdout": f"{sha} refs/heads/release", "returncode": 0})()
+            if argv[:2] == ["git", "fetch"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "rev-parse"]:
+                return type("P", (), {"stdout": sha, "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        first = fast_forward_release_branches("v0.9.1", apply=True, branches=("release",))
+        second = fast_forward_release_branches("v0.9.1", apply=True, branches=("release",))
+        self.assertTrue(first.get("ok"))
+        self.assertTrue(second.get("ok"))
+        self.assertEqual(first["results"][0]["status"], "noop")
+        self.assertEqual(second["results"][0]["status"], "noop")
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
+    def test_fast_forward_multi_track_skips_missing(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+        tag_commit = "tagsha"
+        tip = "branchsha"
+
+        def fake_run(argv, **kwargs):
+            if argv[:3] == ["git", "ls-remote", "--tags"]:
+                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v2.0.0", "returncode": 0})()
+            if argv[:3] == ["git", "ls-remote", "--heads"]:
+                branch = argv[4]
+                if branch == "release-patch":
+                    return type("P", (), {"stdout": f"{tip} refs/heads/{branch}", "returncode": 0})()
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "fetch"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "rev-parse"]:
+                ref = argv[2]
+                if "v2.0.0" in ref:
+                    return type("P", (), {"stdout": tag_commit, "returncode": 0})()
+                if ref == "origin/release-patch":
+                    return type("P", (), {"stdout": tip, "returncode": 0})()
+            if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "push", "origin"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        info = fast_forward_release_branches("v2.0.0", apply=True, branches=STANDING_TRACK_BRANCHES)
+        self.assertTrue(info.get("ok"))
+        by_branch = {item["branch"]: item["status"] for item in info["results"]}
+        self.assertEqual(by_branch["release-major"], "skipped_missing")
+        self.assertEqual(by_branch["release-minor"], "skipped_missing")
+        self.assertEqual(by_branch["release-patch"], "fast_forwarded")
+        self.assertEqual(by_branch["release"], "skipped_missing")
+
+    def test_format_fast_forward_failure_comment_includes_blocked_branch(self):
+        body = format_fast_forward_failure_comment(
+            {
+                "tag": "v1.0.0",
+                "tag_commit": "abc",
+                "blocked": {
+                    "branch": "release",
+                    "branch_tip": "def",
+                    "unshipped_commits": ["111 bad"],
+                },
+            }
+        )
+        self.assertIn("PLATE (Grok Bot):", body)
+        self.assertIn("release", body)
+        self.assertIn("111 bad", body)
 
     @patch("plate_core.release.GhClient")
     def test_ensure_next_issue_creates_when_missing(self, mock_client_cls):
@@ -1299,6 +1468,14 @@ class FinalizeAutomationTests(unittest.TestCase):
         ]
         info = ensure_next_release_issue(client=mock_client)
         self.assertTrue(info.get("created") or info.get("exists"))
+        create_calls = [
+            c
+            for c in mock_client.api.call_args_list
+            if len(c[0]) > 0 and str(c[0][0]).endswith("/issues") and c[1].get("method") == "POST"
+        ]
+        self.assertEqual(len(create_calls), 1)
+        _args, kwargs = create_calls[0]
+        self.assertEqual(kwargs.get("fields", {}).get("labels"), ["Release"])
 
 
 class GhPlateSyncPlanTests(unittest.TestCase):

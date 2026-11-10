@@ -36,6 +36,8 @@ LEVELS = frozenset({"junior", "senior", "staff"})
 ROUTES = frozenset({"docs", "tests", "fix", "feature", "review"})
 TIERS = frozenset({"T0", "T1", "T2", "T3"})
 TIER_ORDER = ("T0", "T1", "T2", "T3")
+RUN_STATES = frozenset({"start", "escalated", "stopped_reported", "awaiting_human", "done"})
+TERMINAL_RUN_STATES = frozenset({"done", "stopped_reported"})
 TYPED_FIELD_TYPES = frozenset(
     {
         "string",
@@ -148,6 +150,78 @@ def recommended_start_tier(
     if default in tier_set:
         return default
     return min(tier_set, key=lambda t: abs(TIER_ORDER.index(t) - TIER_ORDER.index(default)))
+
+
+@dataclass(frozen=True)
+class TaskRunSnapshot:
+    """Per-run state for ``next_run_state`` (#1381); hosts persist before model invocation."""
+
+    state: str
+
+
+def _coerce_run_state(run_state: str | TaskRunSnapshot | Mapping[str, Any]) -> str:
+    if isinstance(run_state, TaskRunSnapshot):
+        return run_state.state
+    if isinstance(run_state, Mapping):
+        return str(run_state.get("state") or "")
+    return str(run_state)
+
+
+def task_spec_escalation(spec: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return ``model_policy.escalation`` from a task spec mapping, if present."""
+    model_policy = spec.get("model_policy")
+    if not isinstance(model_policy, Mapping):
+        return None
+    escalation = model_policy.get("escalation")
+    if escalation is None:
+        return None
+    if not isinstance(escalation, Mapping):
+        return None
+    return dict(escalation)
+
+
+def next_run_state(
+    run_state: str | TaskRunSnapshot | Mapping[str, Any],
+    outcome_ok: bool,
+    spec: Mapping[str, Any],
+    *,
+    human_escalation_approved: bool | None = None,
+) -> str:
+    """Pure transition helper for acceptance outcomes and the T3 human gate (#1381).
+
+    Does not call models or perform I/O. The caller must persist the current run
+    step (including state) before invoking a model on the next tier.
+
+    From ``awaiting_human``, set ``human_escalation_approved`` explicitly (``True`` →
+    ``escalated``, ``False`` → ``stopped_reported``). Generic ``outcome_ok`` does not
+    complete or leave that state. Terminal states are returned unchanged.
+    """
+    state = _coerce_run_state(run_state)
+    if state not in RUN_STATES:
+        raise TaskSpecError(f"invalid run state {state!r}")
+    if state in TERMINAL_RUN_STATES:
+        return state
+    if state == "awaiting_human":
+        if human_escalation_approved is True:
+            return "escalated"
+        if human_escalation_approved is False:
+            return "stopped_reported"
+        if outcome_ok:
+            raise TaskSpecError(
+                "awaiting_human cannot transition to done without human_escalation_approved"
+            )
+        return "awaiting_human"
+    if outcome_ok:
+        return "done"
+    escalation = task_spec_escalation(spec)
+    if state == "start":
+        if escalation:
+            to_tier = escalation.get("to")
+            if to_tier == "T3":
+                return "awaiting_human"
+            return "escalated"
+        return "stopped_reported"
+    return "stopped_reported"
 
 
 def issue_risk_requires_human_approver(labels: Iterable[str]) -> bool:
@@ -295,8 +369,16 @@ def _validate_model_policy(model_policy: Any, path: str, approval: str) -> None:
             raise TaskSpecError(_err(path, "model_policy.escalation from/to must be T0..T3"))
         if from_tier not in tiers or to_tier not in tiers:
             raise TaskSpecError(_err(path, "model_policy.escalation tiers must be listed in tiers"))
-        if TIER_ORDER.index(to_tier) <= TIER_ORDER.index(from_tier):
-            raise TaskSpecError(_err(path, "model_policy.escalation must move to a higher tier"))
+        if from_tier != start:
+            raise TaskSpecError(
+                _err(path, "model_policy.escalation.from must equal model_policy.start_tier")
+            )
+        from_index = TIER_ORDER.index(from_tier)
+        to_index = TIER_ORDER.index(to_tier)
+        if to_index != from_index + 1:
+            raise TaskSpecError(
+                _err(path, "model_policy.escalation must be exactly one tier step")
+            )
     if "T3" in tiers:
         if model_policy.get("t3_requires_approval") != "human":
             raise TaskSpecError(

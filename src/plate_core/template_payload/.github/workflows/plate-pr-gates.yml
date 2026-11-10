@@ -27,8 +27,8 @@ on:
 concurrency:
   # Non-gating label events use an isolated group and must not cancel real gate runs (#1228).
   # Review events use a separate group so they never cancel in-flight pull_request gate runs (#1258).
-  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') && 'review' || github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override"]'), github.event.label.name) && 'label-noop' || 'gate' }}
-  cancel-in-progress: ${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') || !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override"]'), github.event.label.name)) }}
+  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') && 'review' || github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override","release-window-override","release-window:open"]'), github.event.label.name) && 'label-noop' || 'gate' }}
+  cancel-in-progress: ${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') || !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override","release-window-override","release-window:open"]'), github.event.label.name)) }}
 
 permissions:
   contents: read
@@ -323,7 +323,7 @@ jobs:
             
             const bodyLinked = new Set();
             const bodyParseRe =
-              /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)|#(\d+))\b/gi;
+              /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?|refs?|references?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)|#(\d+))\b/gi;
             const repoOwner = context.repo.owner.toLowerCase();
             const repoName = context.repo.repo.toLowerCase();
             let m;
@@ -417,11 +417,42 @@ jobs:
           elif python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
             run_main_source_gate
           else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.9.0" || true
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.10.0" || true
             if python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
               run_main_source_gate
             else
               echo "::warning title=Main source (warn-only)::plate-core runtime unavailable; skipping main-source gate until plate-core is installed."
+            fi
+          fi
+
+      - name: Gate — release window
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: release-window
+          set -euo pipefail
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          run_release_window_gate() {
+            python3 -m plate_core.pr_release_window_gate --base "${base_ref}" --labels "${labels}"
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            run_release_window_gate
+          elif python3 -c "import plate_core.pr_release_window_gate" 2>/dev/null; then
+            run_release_window_gate
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.10.0" || true
+            if python3 -c "import plate_core.pr_release_window_gate" 2>/dev/null; then
+              run_release_window_gate
+            else
+              echo "::warning title=Release window (warn-only)::plate-core runtime unavailable; skipping release-window gate until plate-core is installed."
             fi
           fi
 
@@ -446,7 +477,7 @@ jobs:
           elif python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
             run_reviewer_model_gate
           else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.9.0" || true
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.10.0" || true
             if python3 -c "import plate_core.pr_reviewer_model_gate" 2>/dev/null; then
               run_reviewer_model_gate
             else
@@ -748,188 +779,28 @@ jobs:
       issues: write
       pull-requests: read
     steps:
-      - name: Mark implemented + auto-close linked issues (integration merge)
-        uses: actions/github-script@v8
+      - uses: actions/checkout@v4
         with:
-          script: |
-            const isPR = !!context.payload.pull_request;
-            const pr = context.payload.pull_request;
-            const baseRef = isPR ? pr.base.ref : (context.ref || '').replace('refs/heads/', '');
-            const isIntegration =
-              !!baseRef &&
-              (baseRef === 'release' ||
-                baseRef.startsWith('release-') ||
-                baseRef.startsWith('release/') ||
-                baseRef.startsWith('epic/') ||
-                baseRef.startsWith('epic-'));
-            if (!isIntegration || baseRef === 'main') {
-              core.info(`Not a PLATE integration merge (base=${baseRef}); skipping.`);
-              return;
-            }
-            
-            function isFenceCloser(bare, fenceChar, fenceLen) {
-              let re;
-              if (fenceChar === '`') {
-                re = new RegExp(`^( {0,3})\`{${fenceLen},}[ \\t]*$`);
-              } else {
-                re = new RegExp(`^( {0,3})~{${fenceLen},}[ \\t]*$`);
-              }
-              return re.test(bare);
-            }
-            
-            function stripClosingScanText(markdown) {
-              const text = markdown || '';
-              if (!text) {
-                return '';
-              }
-              const fenceOpener = /^( {0,3})(`{3,}|~{3,})(.*)$/;
-              const out = [];
-              let inFence = false;
-              let fenceChar = '';
-              let fenceLen = 0;
-              let pos = 0;
-              while (pos < text.length) {
-                let lineEnd = text.indexOf('\n', pos);
-                if (lineEnd === -1) {
-                  lineEnd = text.length;
-                }
-                const line = text.slice(pos, lineEnd);
-                const bare = line.replace(/\r$/, '');
-                if (inFence) {
-                  if (isFenceCloser(bare, fenceChar, fenceLen)) {
-                    inFence = false;
-                    fenceChar = '';
-                    fenceLen = 0;
-                  }
-                } else {
-                  const opener = bare.match(fenceOpener);
-                  if (opener) {
-                    fenceChar = opener[2][0];
-                    fenceLen = opener[2].length;
-                    inFence = true;
-                  } else {
-                    out.push(line + (lineEnd < text.length ? '\n' : ''));
-                  }
-                }
-                pos = lineEnd < text.length ? lineEnd + 1 : text.length;
-              }
-              return out.join('').replace(/<!--[\s\S]*?-->/g, '');
-            }
-            
-            // Parse Closes/Fixes/Resolves (body only; title must not carry keywords)
-            const linked = new Set();
-            if (isPR) {
-              const body = stripClosingScanText(pr.body || '');
-              const closingPattern =
-                /\b(closes?|closed|fixe?s?|fixed|resolve[sd]?)\s+(?:https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)|#(\d+))\b/gi;
-              const repoOwner = context.repo.owner.toLowerCase();
-              const repoName = context.repo.repo.toLowerCase();
-              let m;
-              while ((m = closingPattern.exec(body)) !== null) {
-                const urlOwner = m[2];
-                const urlRepo = m[3];
-                const issueNum = parseInt(m[4] || m[5], 10);
-                if (urlOwner && urlRepo) {
-                  if (
-                    urlOwner.toLowerCase() !== repoOwner ||
-                    urlRepo.toLowerCase() !== repoName
-                  ) {
-                    core.info(
-                      `Skipping #${issueNum} from ${urlOwner}/${urlRepo} (not ${context.repo.owner}/${context.repo.repo}).`
-                    );
-                    continue;
-                  }
-                }
-                linked.add(issueNum);
-              }
-            }
-            if (linked.size === 0) {
-              core.info('No linked issues via closing keywords; nothing to label/close.');
-              return;
-            }
-            
-            const SKIP_CLOSE = new Set(['Epic', 'Task', 'Release']);
-            const label = 'status:implemented';
-            const prNumber = isPR ? pr.number : 0;
-            const closed = [];
-            const labeled = [];
-            const skipped = [];
-            
-            for (const num of linked) {
-              let issue;
-              try {
-                const resp = await github.rest.issues.get({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: num,
-                });
-                issue = resp.data;
-              } catch (e) {
-                core.warning(`Could not fetch #${num}: ${e.message}`);
-                continue;
-              }
-            
-              // Always attempt status:implemented on open issues
-              if (issue.state === 'open') {
-                try {
-                  await github.rest.issues.addLabels({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: num,
-                    labels: [label],
-                  });
-                  labeled.push(num);
-                  core.info(`Added ${label} to #${num} (merged to ${baseRef}).`);
-                } catch (e) {
-                  core.warning(`Failed to label #${num}: ${e.message}`);
-                }
-              } else {
-                core.info(`#${num} already ${issue.state}; skip label/close.`);
-                skipped.push({ number: num, reason: `already_${issue.state}` });
-                continue;
-              }
-            
-              const names = (issue.labels || []).map((l) =>
-                typeof l === 'string' ? l : l.name
-              );
-              const skipHit = names.filter((n) => SKIP_CLOSE.has(n));
-              if (skipHit.length) {
-                core.info(`Skip auto-close #${num}: types ${skipHit.join(',')}`);
-                skipped.push({ number: num, reason: `skip_type:${skipHit.join(',')}` });
-                continue;
-              }
-            
-              const commentBody = [
-                `Auto-closed after merge of #${prNumber} into \`${baseRef}\` (PLATE integration-branch close, #427).`,
-                '',
-                '<!-- PLATE-INTEGRATION-CLOSE:BEGIN -->',
-                JSON.stringify({ pr: prNumber, base: baseRef, reason: 'closing_keyword' }),
-                '<!-- PLATE-INTEGRATION-CLOSE:END -->',
-                '',
-              ].join('\n');
-            
-              try {
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: num,
-                  body: commentBody,
-                });
-                await github.rest.issues.update({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: num,
-                  state: 'closed',
-                  state_reason: 'completed',
-                });
-                closed.push(num);
-                core.info(`Closed #${num} after merge to ${baseRef}.`);
-              } catch (e) {
-                core.warning(`Failed to close #${num}: ${e.message}`);
-              }
-            }
-            
-            core.info(
-              `Integration close audit: labeled=[${labeled.join(',')}] closed=[${closed.join(',')}] skipped=${JSON.stringify(skipped)}`
-            );
+          fetch-depth: 1
 
+      - name: Mark implemented + auto-close linked issues (integration merge)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          run_mark_implemented() {
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            python3 -m plate_core.gh_actions_mark_implemented
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            run_mark_implemented
+          elif python3 -c "import plate_core.gh_actions_mark_implemented" 2>/dev/null; then
+            run_mark_implemented
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.10.0" || true
+            if python3 -c "import plate_core.gh_actions_mark_implemented" 2>/dev/null; then
+              run_mark_implemented
+            else
+              echo "::warning title=Integration merge (warn-only)::plate-core runtime unavailable; skipping mark-implemented until plate-core is installed."
+            fi
+          fi

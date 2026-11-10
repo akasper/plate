@@ -37,11 +37,11 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 
 ## Current State & Evidence
 
-*(Snapshot after v0.9.0 — update at major cuts and when North Star shifts.)*
+*(Snapshot after v0.10.0 — update at major cuts and when North Star shifts.)*
 
-**Shipped foundations (v0.8.0, public pin v0.9.0):**
+**Shipped foundations (v0.8.0, public pin v0.10.0):**
 
-- Public **PyPI** package `plate-core==0.9.0`, shared library for CLI / MCP / plugins.
+- Public **PyPI** package `plate-core==0.10.0`, shared library for CLI / MCP / plugins.
 - **`gh plate`** thin-shim extension path and release-track / ceremony tooling.
 - Autonomy and adoption foundations: budgeted AutonomyEngine, adopt / import-payload / self-migrate surfaces, quiet ops, baseline persona when PLATE signals are present.
 - Endless feed / Q&A / planning primitives and Information Audit Goals convention (Epic #218 lineage).
@@ -83,6 +83,9 @@ Strategic outcomes for **this** product (PLATE / `plate-core`):
 **Shipped in v0.9.0 (was Next Release #1279):** agent crews task spec, tiers and pilot protocol; `pr verify` and `pr-packet`; spend ledger with Jev shadow scoring; tiered CI, path-job map and `ci audit`; slim AGENTS.md core; AI discoverability templates and skill; grouped bootstrap commit; pre-commit/pre-push hooks; MCP tool profiles.
 
 **Shipped in v0.8.7 (was Next Release #1248):**
+
+**Shipped in v0.10.0 (was Next Release #1413):** release-branch fast-forward with GitHub App token; release-window merge freeze; main-source gate; issue status:* lifecycle + JSONL event log; lease adapters; state store foundation; one-step task-spec escalation; PR preflight; timestamp migration naming guidance.
+
 
 - Bootstrap syncs the full label registry, labels seeded starter issues, names skipped paths, and reports stale skipped files with an upgrade pointer (#1255, #1256, #1266, #1267, #1257).
 - `health` checks label coverage against `.github/labels.yml` and audits a remote-only `SPEC.md`. `label-check` accepts `Spike` and the allowed `status:*` labels (#1260, #1262).

@@ -17,6 +17,8 @@ PLATE uses a **multi-track release-oriented branch model** (refined in the Relea
 
 The `pr-gates` workflow enforces this with a **main-source** check: a PR whose base is `main` fails unless its head branch is `release`, `release-patch`, `release-minor`, `release-major`, or matches `release-v*`. Approvers may apply the `main-source-override` label for a one-off exception (approver enforcement follows lifecycle config when present).
 
+**Release window (merge freeze):** while the active standing Next Release issue (label `Release`, title contains `Next Release`) carries `release-window:open`, `pr-gates` fails any PR whose **base** is `release`, `release-patch`, `release-minor`, or `release-major`. There is no active Next Release → the window is treated as closed (no block). `gh plate release cut` applies `release-window:open` after a successful cut; `gh plate release finalize` closes the window on that issue first, then ensures a fresh standing Next Release (labels: `Release` only — the window stays closed until the next cut). Approvers may apply `release-window-override` on a PR for a one-off exception (#1439).
+
 **Legacy single `release` branch** remains supported during transition for repos not yet adopting the multi-track model. See the design doc and migration guidance in the release-ceremony-refinement fragment for adoption steps. The persistent `release` (when present) continues to point at the tip that will become (or most recently became) a tag.
 
 **For agents opening PRs:** MUST run `gh plate release status` (or inspect the issue's semver track label) *proactively as the very first step before any targeting, branch decision, or `gh pr create`*. Include `--base <base>` explicitly (where <base> is the value reported by `gh plate release status`, e.g. `release` for legacy or `release-minor` etc. for multi-track). Defaulting to `main` is incorrect for ongoing Feature/Bug work and will require manual retargeting. The "Open a PR" steps in the Feature and Bug work loops above take precedence for execution. (Addresses #513.)
@@ -57,6 +59,23 @@ The next-* (permissive integration) and versioned `release-vX.Y.Z` branches (and
 - Status checks: same as `main` (plus the differentiated heavy CI jobs for Release contexts).
 
 See the design doc and bootstrap output for current recommended protection details. The "only epic-close" restriction is relaxed for the multi-track model in favor of track labels + the final Release PR gate.
+
+### Automated post-tag fast-forward (`release.yml`) and credentials
+
+After a Release PR merges to `main`, `.github/workflows/release.yml` fast-forwards standing release-track branches (`release-major`, `release-minor`, `release-patch`, legacy `release`) to the new tag using **non-destructive** `git push` ref updates only (never `--force`).
+
+**GitHub App path (recommended on personal/user-owned repos):** Branch rulesets often block the default `GITHUB_TOKEN` from pushing directly to protected release branches. Configure a dedicated GitHub App (no webhook required):
+
+1. Create the App with **Contents** (read/write), **Issues** and **Pull requests** (read/write), and **Actions** plus **Checks** (read).
+2. Install the App on the repository that runs PLATE.
+3. Add repository secrets **`PLATE_APP_ID`** (numeric App ID) and **`PLATE_APP_PRIVATE_KEY`** (PEM). Names are fixed in the shipped workflow; to use different names, fork or patch `.github/workflows/release.yml` and keep the values in repository secrets.
+4. In repository **Settings → Rules → Rulesets**, edit the ruleset that covers your standing release branches: add the App as a **bypass actor** with **Always allow** so the post-merge job can update those refs without a pull request.
+
+**Organization repositories:** You may alternatively add `github-actions` as a bypass actor on that ruleset if org policy allows, and rely on the default token—then the App secrets are optional and the workflow skips only the push (with an explicit warning) when secrets are absent.
+
+**Free / unbranded path:** There is no requirement to use a public App name; you can use a fine-grained PAT stored in repository secrets and a small custom workflow, or have a maintainer run `gh plate release finalize <ver> --apply` (or an admin-level manual `git push` fast-forward) when automation cannot bypass protection.
+
+If **`PLATE_APP_ID`** or **`PLATE_APP_PRIVATE_KEY`** is missing, the fast-forward job logs a workflow warning and does not attempt the push, so the workflow stays green while you add credentials or perform a manual fast-forward.
 
 ### Fragment authoring
 

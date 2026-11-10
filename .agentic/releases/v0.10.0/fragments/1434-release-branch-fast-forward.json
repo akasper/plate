@@ -1,0 +1,22 @@
+{
+  "slug": "1434-release-branch-fast-forward",
+  "change_type": "feature",
+  "surface": "src/plate_core/release.py, .github/workflows/release.yml, gh plate release finalize",
+  "summary": "After a release tag lands on main, fast-forward existing release track branches to the tag without force push (#1434; design #1433).",
+  "migration_impact": "Release finalization and release.yml now move standing release branches via non-force fast-forward. Admin force-with-lease reset requires gh plate release finalize --force-hard-reset --apply.",
+  "migration_guidance": [
+    "1. Upgrade plate_core and sync release.yml from upstream.",
+    "2. If branch rulesets block direct pushes to standing release branches, add your lifecycle GitHub App (secrets PLATE_APP_ID + PLATE_APP_PRIVATE_KEY) as a ruleset bypass actor with Always allow, or grant github-actions bypass on org repos where policy allows.",
+    "3. Re-run gh plate release finalize <ver> --apply to repair a missed fast-forward; use --force-hard-reset --apply only for explicit admin recovery."
+  ],
+  "agent_notes": "Automatic path never force-pushes release branches. Stop-on-first-block when a branch diverged from the tag; inspect blocked.unshipped_commits in the helper result.",
+  "breaking": false,
+  "links": [
+    "#1434",
+    "#1433",
+    "#1383"
+  ],
+  "requires": [
+    "0.9.0"
+  ]
+}

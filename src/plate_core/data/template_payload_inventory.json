@@ -248,6 +248,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "docs/agents/database-migration-naming.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "docs/agents/default-plate-persona.md",
       "classification": "copy_to_downstream"
     },

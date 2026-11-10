@@ -10,6 +10,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from .pr_gates_closing import body_has_strict_closing_keyword, parse_strict_closing_issue_numbers
+from .release import (
+    RELEASE_INTEGRATION_BRANCHES,
+    RELEASE_WINDOW_OPEN_LABEL,
+    RELEASE_WINDOW_OVERRIDE_LABEL,
+)
 
 PR_TYPE_LABELS: tuple[str, ...] = ("Bug", "Feature", "Documentation", "Feedback Response")
 PR_TYPE_BY_LOWER = {name.lower(): name for name in PR_TYPE_LABELS}
@@ -23,6 +28,7 @@ ALLOWED_MAIN_SOURCE_HEAD_BRANCHES = frozenset(
     {"release", "release-patch", "release-minor", "release-major"}
 )
 MAIN_SOURCE_FAILURE_HEADING = "main-source"
+RELEASE_WINDOW_FAILURE_HEADING = "release-window"
 
 
 @dataclass(frozen=True)
@@ -233,6 +239,37 @@ def check_main_source(
     )
 
 
+def has_release_window_override(labels: list[str]) -> bool:
+    """``release-window-override`` on the PR bypasses the release-window gate (#1439)."""
+    return RELEASE_WINDOW_OVERRIDE_LABEL in normalize_label_list(labels)
+
+
+def check_release_window(
+    base: str | None,
+    labels: list[str],
+    *,
+    release_window_open: bool,
+) -> GateFailure | None:
+    """Block merges into release integration branches while the Next Release window is open (#1439).
+
+    Window state comes from the standing Next Release issue (``release-window:open`` label).
+    No active Next Release is treated as closed (do not block). Override via ``release-window-override`` on the PR.
+    """
+    base_ref = (base or "").strip()
+    if base_ref not in RELEASE_INTEGRATION_BRANCHES:
+        return None
+    if has_release_window_override(labels):
+        return None
+    if not release_window_open:
+        return None
+    return GateFailure(
+        "release_window",
+        f"The active Next Release issue has `{RELEASE_WINDOW_OPEN_LABEL}` (packaging / merge freeze). "
+        f"Wait until finalization clears the window, or have an approver apply `{RELEASE_WINDOW_OVERRIDE_LABEL}` "
+        f"for a one-off exception.",
+    )
+
+
 def check_integration_base_branch(
     base: str | None,
     *,
@@ -266,6 +303,7 @@ def run_preflight_gate_checks(
     release_branch_mode: str,
     release_track_branches: dict[str, bool] | None,
     issue_labels: list[str] | None = None,
+    release_window_open: bool = False,
 ) -> list[GateFailure]:
     failures: list[GateFailure] = []
     for check in (
@@ -292,6 +330,13 @@ def run_preflight_gate_checks(
     main_fail = check_main_source(base, head, labels)
     if main_fail:
         failures.append(main_fail)
+    rw_fail = check_release_window(
+        base,
+        labels,
+        release_window_open=release_window_open,
+    )
+    if rw_fail:
+        failures.append(rw_fail)
     return failures
 
 

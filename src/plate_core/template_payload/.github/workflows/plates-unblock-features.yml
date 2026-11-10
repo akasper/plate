@@ -98,7 +98,16 @@ jobs:
               }
 
               const existingLabels = (feature.labels || []).map((label) => (typeof label === 'string' ? label : label.name || ''));
-              const nextLabels = [...new Set(existingLabels.filter((name) => name !== 'status:blocked').concat('status:ready-to-work'))];
+              const allowedStatus = new Set(['status:stub', 'status:blocked', 'status:ready-to-work', 'status:implemented']);
+              const statusHits = existingLabels.filter((name) => allowedStatus.has(name));
+              if (statusHits.length > 1) {
+                core.warning(
+                  `Feature #${feature.number} has multiple PLATE status labels (${[...new Set(statusHits)].sort().join(', ')}); refusing automatic unblock promotion until label-check passes.`
+                );
+                continue;
+              }
+              const withoutStatus = existingLabels.filter((name) => !allowedStatus.has(name));
+              const nextLabels = [...new Set(withoutStatus.concat('status:ready-to-work'))];
 
               const changed =
                 nextLabels.length !== existingLabels.length ||

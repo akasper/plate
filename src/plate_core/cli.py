@@ -4364,16 +4364,18 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     """First-class finalize for refined ceremony (part of #569 / Epic #306, #591 / #592).
     GitHub Actions owns initial tag on merged Release PR. This surface coordinates:
     - gh release create from release.json (rich notes + simple assets)
-    - guarded hard-reset of release branch to tag (opt-in via --apply + pre-checks)
+    - guarded fast-forward of release branches to tag (default with --apply)
+    - optional admin hard-reset (--force-hard-reset --apply)
     - ensure next 'Next Release' issue
     - downstream .plate triggers (extensible)
-    Core logic lives in plate_core/release.py (create_github_release, perform_guarded_hard_reset,
-    ensure_next_release_issue) for reuse by workflow automation in sibling slices.
+    Core logic lives in plate_core/release.py (create_github_release, fast_forward_release_branches,
+    perform_guarded_hard_reset, ensure_next_release_issue) for reuse by workflow automation in sibling slices.
     See docs/design/release-ceremony-refinement.md, AGENTS.md, and #591/#592.
     """
     version = getattr(args, "version", None) or "vX.Y.Z"
     dry_run = getattr(args, "dry_run", False)
     apply = getattr(args, "apply", False)
+    force_hard_reset = getattr(args, "force_hard_reset", False)
     raw_releases = getattr(args, "releases_dir", None)
     releases_dir = Path(raw_releases) if raw_releases else Path(".agentic/releases")
     print(f"Running release finalize for {version} (dry_run={dry_run}, apply={apply})...")
@@ -4395,8 +4397,9 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     print("Finalize steps (executed where applicable):")
     print("  1. Tag verified/created by release.yml on merge (see validate_release_workspace).")
     print("  2. gh release create (rich notes from release.json summary+entries; simple assets from v*/assets/ if present).")
-    print("  3. Guarded hard-reset (legacy 'release' branch) ONLY if --apply and all guards pass (tag on origin, artifact match).")
-    print("  4. Ensure a fresh 'Next Release' issue (label: Release) exists for the standing target.")
+    print("  3. Fast-forward standing release branches to the tag when --apply (no force push).")
+    print("  3b. Admin hard-reset (--force-hard-reset --apply) uses force-with-lease on existing tracks only.")
+    print("  4. Close release-window on the prior standing issue, then ensure a fresh 'Next Release' issue (label: Release only) exists.")
     print("  5. Invoke .plate release triggers + extension release_checks (human approval where required).")
     print("  6. gh-plate thin-shim sync/tag/release via publish-gh-plate-extension.yml on plate tag push (#613).")
     if release_data.get("closes_block"):
@@ -4405,9 +4408,11 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     # Always attempt create (idempotent + safe). Reset only on explicit --apply.
     from plate_core.release import (
         create_github_release,
+        fast_forward_release_branches,
         perform_guarded_hard_reset,
         ensure_next_release_issue,
         plan_gh_plate_sync,
+        set_next_release_release_window_open,
     )
 
     create_info = create_github_release(
@@ -4417,13 +4422,27 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     )
     print(f"\nGitHub Release: {create_info}")
 
-    reset_info = perform_guarded_hard_reset(
-        version=version,
-        releases_dir=releases_dir,
+    ff_info = fast_forward_release_branches(
+        version,
         dry_run=dry_run,
-        apply=apply,
+        apply=apply and not force_hard_reset,
     )
-    print(f"Hard reset: {reset_info}")
+    print(f"Release branch fast-forward: {ff_info}")
+
+    reset_info: dict = {"skipped": True, "reason": "not_requested"}
+    if force_hard_reset:
+        reset_info = perform_guarded_hard_reset(
+            version=version,
+            releases_dir=releases_dir,
+            dry_run=dry_run,
+            apply=apply,
+        )
+        print(f"Admin hard reset: {reset_info}")
+
+    # Close merge-freeze window on the standing Next Release that was open during cut,
+    # before ensuring a fresh standing issue (new issue must not inherit release-window:open).
+    rw_close = set_next_release_release_window_open(want_open=False, dry_run=dry_run)
+    print(f"Next Release release-window label: {rw_close}")
 
     next_info = ensure_next_release_issue()
     print(f"Next Release issue: {next_info}")
@@ -4433,13 +4452,20 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     print("  (Token-scoped workflow owns live git ops on akasper/gh-plate; re-run via Actions workflow_dispatch if repair needed.)")
 
     if dry_run:
-        print("[DRY RUN] No side effects executed (create/reset simulated above).")
+        print("[DRY RUN] No side effects executed (create/fast-forward simulated above).")
         if release_data:
             print("Release data preview keys:", list(release_data.keys())[:5])
         return 0
 
+    if apply and not force_hard_reset and not ff_info.get("ok", True):
+        print("\nFinalize aborted: release branch fast-forward did not succeed.", file=sys.stderr)
+        return 1
+
     print("\nFinalize actions complete (where guards/apply allowed).")
-    print("Review the outputs above. Re-run with --apply if you need the hard-reset after confirming state.")
+    if force_hard_reset:
+        print("Review admin hard-reset output above. Automatic path uses fast-forward only.")
+    else:
+        print("Review fast-forward output above. Use --force-hard-reset --apply only for admin repair.")
     return 0
 
 
@@ -6452,7 +6478,13 @@ def build_parser() -> argparse.ArgumentParser:
     rel_finalize.add_argument(
         "--apply",
         action="store_true",
-        help="Perform side effects including guarded hard-reset of the release branch. GitHub Release creation is attempted by default (idempotent via existence check).",
+        help="Perform side effects including fast-forward of release branches to the tag (no force push). GitHub Release creation is attempted by default (idempotent via existence check).",
+    )
+    rel_finalize.add_argument(
+        "--force-hard-reset",
+        dest="force_hard_reset",
+        action="store_true",
+        help="Admin-only: force-with-lease reset of existing release track branches (requires --apply). Not part of the automatic ceremony.",
     )
     rel_finalize.add_argument("--json", action="store_true", help="Output JSON (future)")
     rel_finalize.set_defaults(func=cmd_release_finalize)
