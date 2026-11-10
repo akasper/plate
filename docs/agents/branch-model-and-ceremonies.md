@@ -13,7 +13,7 @@ PLATE uses a **multi-track release-oriented branch model** (refined in the Relea
 | `epic/<short-name>` | Owned by one Epic. Feature/Bug PRs for that Epic typically target a track-specific next- branch (see below) after receiving a Major/Minor/Patch label. | Feature/Bug PRs (squash), funneled by track label |
 | `release-major`, `release-minor`, `release-patch` | Permissive "next" integration branches associated with the standing "Next Release" issue. Work labeled with the matching semver track targets the corresponding branch during active development / scope negotiation. These act as the "dumping ground" until packaging. | Work carrying the matching Major/Minor/Patch label (plus epic-close PRs for that track) |
 | `release-vX.Y.Z` (or equivalent versioned) | Concrete, tighter integration branch created during the packaging phase for a specific release. Receives the final stabilization work and is the source of the Release PR to main. | Final stabilization changes for that versioned release |
-| `main` | Stable, tagged history. Every commit on `main` is a semver release. | Release PRs only (squash) from a versioned release branch |
+| `main` | Stable, tagged history. Every commit on `main` is a semver release. | Release PRs only (**merge commit** or fast-forward; never squash/rebase) from a versioned release branch (#1455) |
 
 The `pr-gates` workflow enforces this with a **main-source** check: a PR whose base is `main` fails unless its head branch is `release`, `release-patch`, `release-minor`, `release-major`, or matches `release-v*`. Approvers may apply the `main-source-override` label for a one-off exception (approver enforcement follows lifecycle config when present).
 
@@ -38,8 +38,8 @@ See the detailed steps in the **Release** work loop table above and the full mod
 1. Standing "Next Release" issue exists and is the target for Epics (via sidebar links) and track-labeled work (Major/Minor/Patch labels drive landing on the matching `release-major` / `release-minor` / `release-patch` permissive next- branches).
 2. Packaging (the decision + freeze + version lock point): determine semver, create versioned `release-vX.Y.Z` branch (combining tracks for minor/major as appropriate), rename the issue to the concrete version, immediately spawn a fresh "Next Release" issue.
 3. Release PR from the versioned branch → `main` (this PR uses the `Documentation` PR type label **and** the `Release` label; the latter plus the `release-v*` / legacy `release` branch context triggers the differentiated heavy CI jobs and prevents the skip described in #532).
-4. Human merge.
-5. GitHub Actions tags the merged Release PR commit (`vX.Y.Z`), then finalization handles configurable downstream triggers (`.plate/` + extensions), ensures next Next Release exists, and hard-resets the relevant branch as needed.
+4. Human merge with **Create a merge commit** (`gh pr merge <N> --merge`) or fast-forward. Do not squash or rebase-merge Release PRs; squash breaks post-tag fast-forward of standing release-track branches (#1455).
+5. GitHub Actions tags the merged Release PR commit (`vX.Y.Z`), then finalization handles configurable downstream triggers (`.plate/` + extensions), ensures next Next Release exists, and fast-forwards (or admin-resets) the relevant branches as needed.
 6. GitHub Release created from the aggregated notes.
 
 Legacy single-`release` + upfront versioned Release issue flow remains valid for transition (see migration guidance in the release-ceremony-refinement fragment).
@@ -76,6 +76,8 @@ After a Release PR merges to `main`, `.github/workflows/release.yml` fast-forwar
 **Free / unbranded path:** There is no requirement to use a public App name; you can use a fine-grained PAT stored in repository secrets and a small custom workflow, or have a maintainer run `gh plate release finalize <ver> --apply` (or an admin-level manual `git push` fast-forward) when automation cannot bypass protection.
 
 If **`PLATE_APP_ID`** or **`PLATE_APP_PRIVATE_KEY`** is missing, the fast-forward job logs a workflow warning and does not attempt the push, so the workflow stays green while you add credentials or perform a manual fast-forward.
+
+**Merge method on `main` (recommended, maintainer-only):** Optionally restrict allowed merge methods on `main` to merge commits only in repository Settings → Rules. PLATE documents this recommendation; it does not change branch protection or rulesets automatically.
 
 ### Fragment authoring
 

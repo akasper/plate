@@ -33,6 +33,10 @@ from plate_core.release import (
     fast_forward_release_branches,
     STANDING_TRACK_BRANCHES,
     format_fast_forward_failure_comment,
+    format_release_finalize_recovery_command,
+    assess_release_pr_merge_commit,
+    suspect_squash_merged_release,
+    format_release_pr_merge_reminder,
     ensure_next_release_issue,
     diagnose_release_standing_state,
     repair_release_standing_state,
@@ -1365,6 +1369,8 @@ class FinalizeAutomationTests(unittest.TestCase):
                 if ancestor == tips["release-major"]:
                     return type("P", (), {"stdout": "", "returncode": 1})()
                 return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "rev-parse"] and argv[2].endswith("^{tree}"):
+                return type("P", (), {"stdout": "treesha", "returncode": 0})()
             if argv[:3] == ["git", "log", "--oneline"]:
                 return type("P", (), {"stdout": "deadbeef diverged", "returncode": 0})()
             raise AssertionError(argv)
@@ -1379,6 +1385,51 @@ class FinalizeAutomationTests(unittest.TestCase):
         self.assertEqual(info.get("stop_policy"), "stop_on_first_block")
         self.assertEqual(info["blocked"]["branch"], "release-major")
         self.assertEqual(info["results"], [])
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
+    def test_fast_forward_squash_detected_includes_recovery(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+        tag_commit = "tagsha"
+        branch_tip = "branchsha"
+
+        def fake_run(argv, **kwargs):
+            if argv[:3] == ["git", "ls-remote", "--tags"]:
+                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v0.10.0", "returncode": 0})()
+            if argv[:3] == ["git", "ls-remote", "--heads"]:
+                if argv[4] == "release-minor":
+                    return type("P", (), {"stdout": f"{branch_tip} refs/heads/release-minor", "returncode": 0})()
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "fetch"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "rev-parse"]:
+                ref = argv[2]
+                if ref == "refs/tags/v0.10.0":
+                    return type("P", (), {"stdout": tag_commit, "returncode": 0})()
+                if ref == "origin/release-minor":
+                    return type("P", (), {"stdout": branch_tip, "returncode": 0})()
+                if ref.endswith("^{tree}"):
+                    return type("P", (), {"stdout": "matchingtree", "returncode": 0})()
+            if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
+                return type("P", (), {"stdout": "", "returncode": 1})()
+            if argv[:3] == ["git", "log", "--oneline"]:
+                return type("P", (), {"stdout": "abc123 squashed history", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        info = fast_forward_release_branches(
+            "v0.10.0",
+            apply=True,
+            branches=("release-minor",),
+        )
+        self.assertFalse(info.get("ok"))
+        self.assertTrue(info.get("squash_merged_suspected"))
+        self.assertEqual(
+            info.get("recovery_command"),
+            format_release_finalize_recovery_command("0.10.0"),
+        )
+        comment = format_fast_forward_failure_comment(info)
+        self.assertIn("--force-hard-reset --apply", comment)
 
     @patch("plate_core.release._release_git_root")
     @patch("plate_core.release.run_hidden")
@@ -1458,6 +1509,40 @@ class FinalizeAutomationTests(unittest.TestCase):
         self.assertIn("PLATE (Grok Bot):", body)
         self.assertIn("release", body)
         self.assertIn("111 bad", body)
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
+    def test_assess_release_pr_merge_commit_merge_vs_squash(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+
+        def merge_run(argv, **kwargs):
+            if argv[:3] == ["git", "rev-list", "--parents"]:
+                return type("P", (), {"stdout": "abcd1111 parent1 parent2", "returncode": 0})()
+            if argv[:2] == ["git", "log"] and "--format=%s" in argv:
+                return type("P", (), {"stdout": "Merge pull request #1", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = merge_run
+        merge_info = assess_release_pr_merge_commit("abcd1111")
+        self.assertTrue(merge_info.get("ok"))
+        self.assertIsNone(merge_info.get("warning"))
+
+        def squash_run(argv, **kwargs):
+            if argv[:3] == ["git", "rev-list", "--parents"]:
+                return type("P", (), {"stdout": "squashsha parent1", "returncode": 0})()
+            if argv[:2] == ["git", "log"] and "--format=%s" in argv:
+                return type("P", (), {"stdout": "v0.10.0 (#1453)", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = squash_run
+        squash_info = assess_release_pr_merge_commit("squashsha")
+        self.assertFalse(squash_info.get("ok"))
+        self.assertIn("squash", (squash_info.get("warning") or "").lower())
+
+    def test_format_release_pr_merge_reminder_mentions_merge_not_squash(self):
+        body = format_release_pr_merge_reminder()
+        self.assertIn("--merge", body)
+        self.assertIn("never", body.lower())
 
     @patch("plate_core.release.GhClient")
     def test_ensure_next_issue_creates_when_missing(self, mock_client_cls):

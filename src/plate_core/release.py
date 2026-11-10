@@ -1185,6 +1185,7 @@ def cut_release(
             print(f"  {path.relative_to(repo_root)} -> {version}")
         print("\n[DRY RUN] release.json preview:")
         print(json.dumps(release_data, indent=2))
+        print(f"\n[DRY RUN] Recommended Release PR body sections:\n{format_release_pr_merge_reminder()}")
         if closes_block:
             print(f"\n[DRY RUN] Recommended Closes block for Release PR body:\n{closes_block}")
         return 0
@@ -1220,7 +1221,10 @@ def cut_release(
     print("Next steps:")
     print(f"  1. Review {versioned_dir / 'release.json'} and adjust the summary if needed.")
     print(f"  2. Commit the new {versioned_dir}/ directory.")
-    print("  3. Open a PR: release -> main (use the 'Closes' block below in the body if present).")
+    print("  3. Open a Release PR: versioned release branch -> main (merge method required; see body sections below).")
+    print(f"     CLI merge: gh pr merge <N> --{RELEASE_PR_REQUIRED_MERGE_METHOD}")
+    print("\nRecommended Release PR body sections:\n")
+    print(format_release_pr_merge_reminder())
     if closes_block:
         print(f"\nRecommended Closes block for Release PR body (enables one merge to main closing addressed issues):\n{closes_block}\n")
     print(f"  4. Ensure the Release PR passes version-sync and remote tag-conflict validation for v{version}.")
@@ -1522,6 +1526,126 @@ def _is_git_ancestor(ancestor: str, descendant: str, *, cwd: str) -> bool:
     return proc.returncode == 0
 
 
+RELEASE_PR_REQUIRED_MERGE_METHOD = "merge"
+
+RELEASE_PR_MERGE_METHOD_GUIDANCE = (
+    "Release PRs (versioned release branch → `main`) must land with a **merge commit** "
+    "(GitHub: Create a merge commit) or fast-forward. Do **not** squash or rebase-merge. "
+    "Squash/rebase breaks automatic post-tag fast-forward of standing release-track branches (#1455)."
+)
+
+RELEASE_PR_MAIN_PROTECTION_RECOMMENDATION = (
+    "Optional maintainer hardening: in repository Settings → Rules, restrict allowed merge "
+    "methods on `main` to **merge commits only** (disable squash and rebase). PLATE tooling "
+    "documents this recommendation but never changes branch protection or rulesets for you."
+)
+
+
+def format_release_pr_merge_reminder() -> str:
+    """Markdown block for Release PR bodies and cut output (#1455)."""
+    return "\n".join(
+        [
+            "## Release PR merge method (required)",
+            "",
+            RELEASE_PR_MERGE_METHOD_GUIDANCE,
+            "",
+            "CLI: `gh pr merge <N> --merge` (never `--squash` or `--rebase` on Release PRs).",
+            "",
+            RELEASE_PR_MAIN_PROTECTION_RECOMMENDATION,
+        ]
+    )
+
+
+def format_release_finalize_recovery_command(version: str) -> str:
+    """Exact admin repair command when a release was squash-merged (#1455)."""
+    ver = str(version or "").strip().lstrip("v")
+    if not ver:
+        return "gh plate release finalize <ver> --force-hard-reset --apply"
+    return f"gh plate release finalize {ver} --force-hard-reset --apply"
+
+
+def _git_tree_id(ref: str, *, cwd: str) -> str | None:
+    proc = run_hidden(
+        ["git", "rev-parse", f"{ref}^{{tree}}"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    tree = (proc.stdout or "").strip()
+    return tree or None
+
+
+def suspect_squash_merged_release(
+    branch_tip: str,
+    tag_commit: str,
+    *,
+    cwd: str,
+) -> bool:
+    """True when ancestry is broken but trees match (typical squash-merge symptom, #1455)."""
+    if _is_git_ancestor(branch_tip, tag_commit, cwd=cwd):
+        return False
+    branch_tree = _git_tree_id(branch_tip, cwd=cwd)
+    tag_tree = _git_tree_id(tag_commit, cwd=cwd)
+    if not branch_tree or not tag_tree:
+        return False
+    return branch_tree == tag_tree
+
+
+def assess_release_pr_merge_commit(
+    merge_sha: str,
+    *,
+    repo_root: Path | str | None = None,
+) -> dict:
+    """Heuristic warning when a merged Release PR may not preserve release-branch ancestry (#1455)."""
+    sha = (merge_sha or "").strip()
+    if not sha:
+        return {"ok": True, "warning": None, "reason": "missing_merge_sha"}
+    cwd = str(_release_git_root(repo_root))
+    parents_proc = run_hidden(
+        ["git", "rev-list", "--parents", "-n", "1", sha],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    line = (parents_proc.stdout or "").strip()
+    if parents_proc.returncode != 0 or not line:
+        return {"ok": True, "warning": None, "reason": "unresolved_merge_sha"}
+    parts = line.split()
+    parent_count = max(0, len(parts) - 1)
+    subj_proc = run_hidden(
+        ["git", "log", "-1", "--format=%s", sha],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    subject = (subj_proc.stdout or "").strip()
+    merge_pr_subject = subject.startswith("Merge pull request")
+    if parent_count >= 2 or merge_pr_subject:
+        return {
+            "ok": True,
+            "method": RELEASE_PR_REQUIRED_MERGE_METHOD,
+            "warning": None,
+            "parent_count": parent_count,
+        }
+    warning = (
+        "Release PR merge commit has a single parent and does not look like a merge commit. "
+        "If this Release PR was squash- or rebase-merged, standing release branches cannot "
+        "fast-forward to the tag without admin repair (#1455). Merge Release PRs with "
+        "Create a merge commit (or fast-forward), not squash/rebase."
+    )
+    return {
+        "ok": False,
+        "method": "squash_or_rebase_suspected",
+        "warning": warning,
+        "parent_count": parent_count,
+    }
+
+
 def _unshipped_commit_summaries(tag_commit: str, branch: str, *, cwd: str, limit: int = 20) -> list[str]:
     proc = run_hidden(
         ["git", "log", "--oneline", f"{tag_commit}..origin/{branch}"],
@@ -1633,20 +1757,31 @@ def fast_forward_release_branches(
                 continue
 
             if not _is_git_ancestor(branch_tip, tag_commit, cwd=cwd):
+                squash_suspected = suspect_squash_merged_release(
+                    branch_tip, tag_commit, cwd=cwd
+                )
                 blocked = {
                     "branch": branch,
                     "branch_tip": branch_tip,
                     "tag_commit": tag_commit,
                     "unshipped_commits": _unshipped_commit_summaries(tag_commit, branch, cwd=cwd),
+                    "squash_merged_suspected": squash_suspected,
                 }
-                return {
+                if squash_suspected:
+                    recovery = format_release_finalize_recovery_command(ver)
+                    blocked["recovery_command"] = recovery
+                payload = {
                     "ok": False,
                     "blocked": blocked,
                     "tag": tag_name,
                     "tag_commit": tag_commit,
                     "results": results,
                     "stop_policy": "stop_on_first_block",
+                    "squash_merged_suspected": squash_suspected,
                 }
+                if squash_suspected:
+                    payload["recovery_command"] = blocked["recovery_command"]
+                return payload
 
             push_ref = f"{tag_commit}:refs/heads/{branch}"
             if dry_run or not apply:
@@ -1837,6 +1972,18 @@ def format_fast_forward_failure_comment(result: dict) -> str:
                 "The branch is not an ancestor of the tag commit; unshipped commits were not reset.",
             ]
         )
+        if blocked.get("squash_merged_suspected"):
+            recovery = blocked.get("recovery_command") or result.get("recovery_command")
+            lines.extend(
+                [
+                    "",
+                    "Likely cause: the Release PR was **squash-merged** (or rebase-merged) into `main`.",
+                    RELEASE_PR_MERGE_METHOD_GUIDANCE,
+                ]
+            )
+            if recovery:
+                lines.append("")
+                lines.append(f"Recovery (admin, after maintainer approval): `{recovery}`")
         commits = blocked.get("unshipped_commits") or []
         if commits:
             lines.append("")

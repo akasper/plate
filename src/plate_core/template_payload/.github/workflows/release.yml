@@ -32,6 +32,26 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
+      - name: Warn when Release PR merge may break release-branch fast-forward (#1455)
+        env:
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          python - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+          from plate_core.release import assess_release_pr_merge_commit
+
+          merge_sha = os.environ.get("MERGE_SHA", "").strip()
+          report = assess_release_pr_merge_commit(merge_sha, repo_root=Path("."))
+          print(report)
+          warning = report.get("warning")
+          if warning:
+              print(f"::warning::{warning}", file=sys.stderr)
+          PY
+
       - name: Resolve release artifact version
         id: release-version
         env:

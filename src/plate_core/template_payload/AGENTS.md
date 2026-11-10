@@ -116,8 +116,8 @@ Commit progress to `docs/migration/`. Update completion status in `docs/migratio
 | 2 | Use `gh plate release status` to confirm the expected fragments, targeted epics, and release-track state. |
 | 3 | During packaging, lock the semver, create the versioned `release-vX.Y.Z` branch, and rename or replace the standing issue with the concrete release issue. |
 | 4 | Run `gh plate release cut vX.Y.Z` (or the equivalent script) to aggregate fragments into `.agentic/releases/vX.Y.Z/`. |
-| 5 | Open a Release PR from the versioned release branch to `main`, run the heavy release validation path, and include `Closes #N` in the PR body. |
-| 6 | After human approval and merge, the release workflow tags the merged Release PR commit. Then publish the GitHub Release and create a fresh standing `Next Release` issue for subsequent work. |
+| 5 | Open a Release PR from the versioned release branch to `main`, run the heavy release validation path, and include `Closes #N` in the PR body. `gh plate release cut` prints the required merge method: merge commit (`gh pr merge <N> --merge`) or fast-forward — never squash or rebase-merge (#1455). |
+| 6 | After human approval, merge the Release PR with a merge commit (not squash/rebase). The release workflow tags the merged Release PR commit. Then publish the GitHub Release and create a fresh standing `Next Release` issue for subsequent work. If finalize detects a squash-merged release, use `gh plate release finalize <ver> --force-hard-reset --apply` for admin repair. |
 
 ## Issue Artifact Rules
 
