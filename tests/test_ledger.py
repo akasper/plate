@@ -274,6 +274,30 @@ class TestSpendLedger1352(unittest.TestCase):
         self.assertEqual(out["cost_usd"], 0.05)
         self.assertEqual(out["jev_score"], 0.71)
 
+    def test_spend_interval_metadata_tier_step(self):
+        out = record_spend_interval(
+            run_id="run-tier-step",
+            tier="T1",
+            metadata={"tier_step": "start"},
+            base_dir=self.base,
+        )
+        self.assertEqual(out["metadata"]["tier_step"], "start")
+        out2 = record_spend_interval(
+            run_id="run-tier-step-2",
+            tier="T2",
+            metadata={"tier_step": "ESCALATED"},
+            base_dir=self.base,
+        )
+        self.assertEqual(out2["metadata"]["tier_step"], "escalated")
+
+    def test_validate_rejects_bad_tier_step(self):
+        with self.assertRaises(ValueError) as ctx:
+            record_spend_interval(
+                metadata={"tier_step": "retry"},
+                base_dir=self.base,
+            )
+        self.assertIn("tier_step", str(ctx.exception))
+
 
 class TestAutonomyLedgerWire(unittest.TestCase):
     def test_run_cycle_writes_ledger_entries(self):
