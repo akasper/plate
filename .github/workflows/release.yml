@@ -32,6 +32,29 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
+      - name: Warn when Release PR merge may break release-branch fast-forward (#1455)
+        continue-on-error: true
+        env:
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set +e
+          merge_sha="${MERGE_SHA}"
+          if [ -z "${merge_sha}" ]; then
+            echo "MERGE_SHA missing; skipping merge-method advisory."
+            exit 0
+          fi
+          parent_count=0
+          if parent_line="$(git rev-list --parents -n 1 "${merge_sha}" 2>/dev/null)"; then
+            parent_count=$(( $(wc -w <<< "${parent_line}") - 1 ))
+          fi
+          subject="$(git log -1 --format=%s "${merge_sha}" 2>/dev/null || true)"
+          if [ "${parent_count}" -ge 2 ] || echo "${subject}" | grep -Eq '^Merge pull request'; then
+            echo "Release merge commit parent_count=${parent_count}; merge-commit shape looks OK for release-branch fast-forward."
+            exit 0
+          fi
+          echo "::warning::Release PR merge commit has parent_count=${parent_count} and does not look like a merge commit (${subject}). If this Release PR was squash- or rebase-merged, standing release branches cannot fast-forward to the tag without admin repair (#1455). Merge Release PRs with Create a merge commit (or fast-forward), not squash/rebase."
+          exit 0
+
       - name: Resolve release version
         id: release-version
         run: |

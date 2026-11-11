@@ -8,7 +8,7 @@ PLATE defaults to an **autopilot posture**: agents should proceed autonomously t
 
 **Atomic PR discipline.** Structure every session as a sequence of small, independently revertable PRs. A PR should have a single clear purpose. Soft limit: ≤ 10 changed files for implementation work. Prefer many small PRs over one large one. If a branch grows beyond the soft limit, split it before opening the PR.
 
-**Easy revert as the norm.** Prefer squash merges (keeps history clean). Never push directly to `main`. Name branches `type/short-description`. Each squash commit on `main` should read as a complete, stand-alone unit of work.
+**Easy revert as the norm.** Prefer squash merges on integration branches (`release-*`, `epic/*`). Never push directly to `main`. **Exception:** Release PRs into `main` must use a merge commit or fast-forward, not squash/rebase, so post-tag release-branch fast-forward works (#1455). Name branches `type/short-description`.
 
 **PR titles are for humans.** Pull request titles must be clean, concise, and written exclusively for human readers. Do not include any bracketed label-style prefixes (for example `[Feature]`, `[Bug]`, `[Documentation]`, `[WIP]`, `WIP:`, `[DRAFT]`, `DRAFT:`, or any similar convention). Do not include issue references, closing keywords, or other metadata such as `(Closes #N)`, `Fixes #123`, or equivalent in the title.
 

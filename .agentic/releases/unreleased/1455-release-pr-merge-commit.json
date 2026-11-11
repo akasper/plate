@@ -1,0 +1,9 @@
+{
+  "slug": "1455-release-pr-merge-commit",
+  "change_type": "fix",
+  "surface": "plate_core.release / gh plate release cut|finalize / release.yml",
+  "summary": "Require merge-commit Release PRs to main; detect squash-merged releases and print admin recovery.",
+  "migration_impact": "Adopters should merge Release PRs with a merge commit (not squash). After upgrading plate-core, `gh plate release cut` and finalize print merge-method guidance; finalize suggests `gh plate release finalize <ver> --force-hard-reset --apply` when squash is detected.",
+  "agent_notes": "Release PRs to main: `gh pr merge <N> --merge` only. If fast-forward fails with squash_merged_suspected, run the printed recovery command with maintainer approval. Optionally restrict merge methods on main in Settings → Rules (recommendation only).",
+  "links": ["#1455", "#1434", "#1438"]
+}

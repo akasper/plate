@@ -4459,6 +4459,16 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
 
     if apply and not force_hard_reset and not ff_info.get("ok", True):
         print("\nFinalize aborted: release branch fast-forward did not succeed.", file=sys.stderr)
+        if ff_info.get("squash_merged_suspected"):
+            from plate_core.release import format_release_finalize_recovery_command
+
+            recovery = ff_info.get("recovery_command") or format_release_finalize_recovery_command(version)
+            print(
+                "\nSquash-merged release detected (release-track head is not an ancestor of the tag "
+                "while tree content matches).",
+                file=sys.stderr,
+            )
+            print(f"Recovery command (admin, after maintainer approval):\n  {recovery}", file=sys.stderr)
         return 1
 
     print("\nFinalize actions complete (where guards/apply allowed).")
