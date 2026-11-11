@@ -187,6 +187,29 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn('git tag "${RELEASE_TAG}" "${MERGE_SHA}"', workflow)
         self.assertIn('git push origin "refs/tags/${RELEASE_TAG}"', workflow)
 
+    def test_template_release_workflow_merge_warning_is_plate_core_free(self):
+        """#1455: adopter release.yml must not import plate_core before tagging."""
+        for rel in (
+            ".github/workflows/release.yml",
+            "src/plate_core/template_payload/.github/workflows/release.yml",
+        ):
+            workflow = read_text(rel)
+            warn_block = workflow.split("Warn when Release PR merge may break", 1)[1].split(
+                "Resolve release", 1
+            )[0]
+            self.assertIn("continue-on-error: true", warn_block)
+            self.assertIn("git rev-list --parents", warn_block)
+            self.assertNotIn("plate_core.release", warn_block)
+            self.assertNotIn("PYTHONPATH", warn_block)
+
+    def test_template_release_workflow_artifact_resolver_diffs_first_parent(self):
+        payload = read_text("src/plate_core/template_payload/.github/workflows/release.yml")
+        self.assertIn('git rev-parse "${MERGE_SHA}^1"', payload)
+        self.assertIn(
+            'git diff-tree --no-commit-id --name-only -r "${parent_sha}" "${MERGE_SHA}"',
+            payload,
+        )
+
     def test_release_workflow_fast_forward_job_can_comment_on_issues(self):
         workflow = read_text(".github/workflows/release.yml")
         job_block = _fast_forward_release_job_block(workflow)

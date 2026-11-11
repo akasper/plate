@@ -1578,20 +1578,104 @@ def _git_tree_id(ref: str, *, cwd: str) -> str | None:
     return tree or None
 
 
+_RELEASE_BUMP_PATH_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\.agentic/releases/v[0-9]+\.[0-9]+\.[0-9]+/"),
+    re.compile(r"^\.agentic/releases/unreleased/"),
+    re.compile(r"^CHANGELOG(\.md)?$", re.IGNORECASE),
+    re.compile(r"^CHANGES(\.md)?$", re.IGNORECASE),
+    re.compile(r"^VERSION$"),
+    re.compile(r"^pyproject\.toml$"),
+    re.compile(r"^package\.json$"),
+    re.compile(r"(^|/)plugin\.json$"),
+    re.compile(r"(^|/)marketplace\.json$"),
+    re.compile(r"^src/[^/]+/__init__\.py$"),
+)
+
+_RELEASE_JSON_IN_MERGE_RE = re.compile(
+    r"^\.agentic/releases/v[0-9]+\.[0-9]+\.[0-9]+/release\.json$"
+)
+
+
+def _is_release_bump_path(path: str) -> bool:
+    norm = path.strip().replace("\\", "/")
+    return any(pattern.search(norm) for pattern in _RELEASE_BUMP_PATH_PATTERNS)
+
+
+def _diff_name_only_between_refs(left: str, right: str, *, cwd: str) -> list[str]:
+    proc = run_hidden(
+        ["git", "diff", "--name-only", left, right],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return []
+    return [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+
+
+def _diff_is_release_bump_only(left: str, right: str, *, cwd: str) -> bool:
+    names = _diff_name_only_between_refs(left, right, cwd=cwd)
+    if not names:
+        return True
+    return all(_is_release_bump_path(name) for name in names)
+
+
+def list_release_json_paths_in_merge_commit(merge_sha: str, *, cwd: str) -> list[str]:
+    """List versioned release.json paths introduced by a merge/squash commit (#1455).
+
+    Uses a first-parent diff so merge commits (required for Release PRs) resolve artifacts.
+    """
+    sha = (merge_sha or "").strip()
+    if not sha:
+        return []
+    parent = _resolve_local_ref(f"{sha}^1", cwd=cwd)
+    if parent:
+        proc = run_hidden(
+            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", parent, sha],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    else:
+        proc = run_hidden(
+            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if proc.returncode != 0:
+        return []
+    paths = [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+    return [path for path in paths if _RELEASE_JSON_IN_MERGE_RE.match(path)]
+
+
 def suspect_squash_merged_release(
     branch_tip: str,
     tag_commit: str,
     *,
     cwd: str,
+    release_pr_head: str | None = None,
 ) -> bool:
-    """True when ancestry is broken but trees match (typical squash-merge symptom, #1455)."""
+    """True when ancestry is broken and release history looks squash-rewritten (#1455)."""
     if _is_git_ancestor(branch_tip, tag_commit, cwd=cwd):
         return False
     branch_tree = _git_tree_id(branch_tip, cwd=cwd)
     tag_tree = _git_tree_id(tag_commit, cwd=cwd)
-    if not branch_tree or not tag_tree:
-        return False
-    return branch_tree == tag_tree
+    if branch_tree and tag_tree and branch_tree == tag_tree:
+        return True
+    if _diff_is_release_bump_only(branch_tip, tag_commit, cwd=cwd):
+        return True
+    if release_pr_head:
+        head_tree = _git_tree_id(release_pr_head, cwd=cwd)
+        if head_tree and tag_tree and head_tree == tag_tree:
+            return True
+    assess = assess_release_pr_merge_commit(tag_commit, repo_root=cwd)
+    if not assess.get("ok") and assess.get("method") == "squash_or_rebase_suspected":
+        return True
+    return False
 
 
 def assess_release_pr_merge_commit(

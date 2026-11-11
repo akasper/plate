@@ -33,24 +33,27 @@ jobs:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - name: Warn when Release PR merge may break release-branch fast-forward (#1455)
+        continue-on-error: true
         env:
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
-          set -euo pipefail
-          export PYTHONPATH="$GITHUB_WORKSPACE/src"
-          python - <<'PY'
-          import os
-          import sys
-          from pathlib import Path
-          from plate_core.release import assess_release_pr_merge_commit
-
-          merge_sha = os.environ.get("MERGE_SHA", "").strip()
-          report = assess_release_pr_merge_commit(merge_sha, repo_root=Path("."))
-          print(report)
-          warning = report.get("warning")
-          if warning:
-              print(f"::warning::{warning}", file=sys.stderr)
-          PY
+          set +e
+          merge_sha="${MERGE_SHA}"
+          if [ -z "${merge_sha}" ]; then
+            echo "MERGE_SHA missing; skipping merge-method advisory."
+            exit 0
+          fi
+          parent_count=0
+          if parent_line="$(git rev-list --parents -n 1 "${merge_sha}" 2>/dev/null)"; then
+            parent_count=$(( $(wc -w <<< "${parent_line}") - 1 ))
+          fi
+          subject="$(git log -1 --format=%s "${merge_sha}" 2>/dev/null || true)"
+          if [ "${parent_count}" -ge 2 ] || echo "${subject}" | grep -Eq '^Merge pull request'; then
+            echo "Release merge commit parent_count=${parent_count}; merge-commit shape looks OK for release-branch fast-forward."
+            exit 0
+          fi
+          echo "::warning::Release PR merge commit has parent_count=${parent_count} and does not look like a merge commit (${subject}). If this Release PR was squash- or rebase-merged, standing release branches cannot fast-forward to the tag without admin repair (#1455). Merge Release PRs with Create a merge commit (or fast-forward), not squash/rebase."
+          exit 0
 
       - name: Resolve release artifact version
         id: release-version
@@ -58,7 +61,12 @@ jobs:
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           set -euo pipefail
-          release_files="$(git diff-tree --no-commit-id --name-only -r "${MERGE_SHA}" | grep -E '^\.agentic/releases/v[0-9]+\.[0-9]+\.[0-9]+/release\.json$' || true)"
+          parent_sha="$(git rev-parse "${MERGE_SHA}^1" 2>/dev/null || true)"
+          if [ -n "${parent_sha}" ]; then
+            release_files="$(git diff-tree --no-commit-id --name-only -r "${parent_sha}" "${MERGE_SHA}" | grep -E '^\.agentic/releases/v[0-9]+\.[0-9]+\.[0-9]+/release\.json$' || true)"
+          else
+            release_files="$(git diff-tree --no-commit-id --name-only -r "${MERGE_SHA}" | grep -E '^\.agentic/releases/v[0-9]+\.[0-9]+\.[0-9]+/release\.json$' || true)"
+          fi
           release_file_count="$(printf '%s\n' "${release_files}" | sed '/^$/d' | wc -l | tr -d ' ')"
           if [ "${release_file_count}" -ne 1 ]; then
             echo "Expected exactly one versioned release artifact in merged Release commit ${MERGE_SHA}, found ${release_file_count}."

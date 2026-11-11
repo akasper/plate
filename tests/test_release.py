@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -36,6 +37,9 @@ from plate_core.release import (
     format_release_finalize_recovery_command,
     assess_release_pr_merge_commit,
     suspect_squash_merged_release,
+    list_release_json_paths_in_merge_commit,
+    _diff_is_release_bump_only,
+    _is_release_bump_path,
     format_release_pr_merge_reminder,
     ensure_next_release_issue,
     diagnose_release_standing_state,
@@ -1370,7 +1374,15 @@ class FinalizeAutomationTests(unittest.TestCase):
                     return type("P", (), {"stdout": "", "returncode": 1})()
                 return type("P", (), {"stdout": "", "returncode": 0})()
             if argv[:2] == ["git", "rev-parse"] and argv[2].endswith("^{tree}"):
-                return type("P", (), {"stdout": "treesha", "returncode": 0})()
+                if "tags" in argv[2] or argv[2] == tag_commit:
+                    return type("P", (), {"stdout": "tagtree", "returncode": 0})()
+                return type("P", (), {"stdout": "branchtree", "returncode": 0})()
+            if argv[:3] == ["git", "diff", "--name-only"]:
+                return type("P", (), {"stdout": "src/unrelated.py", "returncode": 0})()
+            if argv[:3] == ["git", "rev-list", "--parents"]:
+                return type("P", (), {"stdout": f"{tag_commit} parentmain", "returncode": 0})()
+            if argv[:2] == ["git", "log"] and "--format=%s" in argv:
+                return type("P", (), {"stdout": "Merge pull request #1", "returncode": 0})()
             if argv[:3] == ["git", "log", "--oneline"]:
                 return type("P", (), {"stdout": "deadbeef diverged", "returncode": 0})()
             raise AssertionError(argv)
@@ -1389,9 +1401,18 @@ class FinalizeAutomationTests(unittest.TestCase):
     @patch("plate_core.release._release_git_root")
     @patch("plate_core.release.run_hidden")
     def test_fast_forward_squash_detected_includes_recovery(self, mock_run, mock_root):
+        """#1455 v0.10.0 shape: release-minor stayed on 0.9.0 trees while tag carried 0.10.0 bump files."""
         mock_root.return_value = Path("/tmp/repo")
-        tag_commit = "tagsha"
-        branch_tip = "branchsha"
+        tag_commit = "43e6d95"
+        branch_tip = "e84454f"
+        bump_diff = "\n".join(
+            [
+                ".agentic/releases/v0.10.0/release.json",
+                ".agentic/releases/v0.10.0/fragments/1455.json",
+                "pyproject.toml",
+                "src/plate_core/__init__.py",
+            ]
+        )
 
         def fake_run(argv, **kwargs):
             if argv[:3] == ["git", "ls-remote", "--tags"]:
@@ -1409,9 +1430,17 @@ class FinalizeAutomationTests(unittest.TestCase):
                 if ref == "origin/release-minor":
                     return type("P", (), {"stdout": branch_tip, "returncode": 0})()
                 if ref.endswith("^{tree}"):
-                    return type("P", (), {"stdout": "matchingtree", "returncode": 0})()
+                    if tag_commit in ref or "tags" in ref:
+                        return type("P", (), {"stdout": "tagtree10", "returncode": 0})()
+                    return type("P", (), {"stdout": "branchtree09", "returncode": 0})()
             if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
                 return type("P", (), {"stdout": "", "returncode": 1})()
+            if argv[:3] == ["git", "diff", "--name-only"]:
+                return type("P", (), {"stdout": bump_diff, "returncode": 0})()
+            if argv[:3] == ["git", "rev-list", "--parents"]:
+                return type("P", (), {"stdout": f"{tag_commit} parentmain", "returncode": 0})()
+            if argv[:2] == ["git", "log"] and "--format=%s" in argv:
+                return type("P", (), {"stdout": "v0.10.0 (#1453)", "returncode": 0})()
             if argv[:3] == ["git", "log", "--oneline"]:
                 return type("P", (), {"stdout": "abc123 squashed history", "returncode": 0})()
             raise AssertionError(argv)
@@ -1543,6 +1572,147 @@ class FinalizeAutomationTests(unittest.TestCase):
         body = format_release_pr_merge_reminder()
         self.assertIn("--merge", body)
         self.assertIn("never", body.lower())
+
+    def test_release_bump_path_classifier(self):
+        self.assertTrue(_is_release_bump_path(".agentic/releases/v0.10.0/release.json"))
+        self.assertTrue(_is_release_bump_path("pyproject.toml"))
+        self.assertFalse(_is_release_bump_path("src/plate_core/release.py"))
+
+    @patch("plate_core.release.run_hidden")
+    def test_diff_is_release_bump_only_v010_shape(self, mock_run):
+        bump_diff = "\n".join(
+            [
+                ".agentic/releases/v0.10.0/release.json",
+                "pyproject.toml",
+                "src/plate_core/__init__.py",
+            ]
+        )
+        mock_run.return_value = type("P", (), {"stdout": bump_diff, "returncode": 0})()
+        self.assertTrue(_diff_is_release_bump_only("e84454f", "43e6d95", cwd="/tmp"))
+
+    @patch("plate_core.release.run_hidden")
+    def test_list_release_json_paths_uses_first_parent_diff(self, mock_run):
+        calls: list[list[str]] = []
+
+        def fake_run(argv, **kwargs):
+            calls.append(list(argv))
+            if argv[:2] == ["git", "rev-parse"]:
+                return type("P", (), {"stdout": "parent1", "returncode": 0})()
+            if argv[:3] == ["git", "diff-tree", "--no-commit-id"]:
+                return type(
+                    "P",
+                    (),
+                    {
+                        "stdout": ".agentic/releases/v0.10.0/release.json\npyproject.toml\n",
+                        "returncode": 0,
+                    },
+                )()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        paths = list_release_json_paths_in_merge_commit("mergecommit", cwd="/tmp/repo")
+        self.assertEqual(paths, [".agentic/releases/v0.10.0/release.json"])
+        diff_calls = [c for c in calls if c[:3] == ["git", "diff-tree", "--no-commit-id"]]
+        self.assertEqual(diff_calls[0][5:7], ["parent1", "mergecommit"])
+
+    def test_list_release_json_paths_merge_commit_fixture_repo(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            (root / "README.md").write_text("base\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=root, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "base"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "checkout", "-b", "release-v0.10.0"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            rel_dir = root / ".agentic/releases/v0.10.0"
+            rel_dir.mkdir(parents=True)
+            (rel_dir / "release.json").write_text(
+                '{"version": "0.10.0"}',
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", ".agentic"], cwd=root, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "cut v0.10.0"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(["git", "checkout", "main"], cwd=root, check=True, capture_output=True)
+            head_before = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            subprocess.run(
+                ["git", "merge", "--no-ff", "-m", "Merge pull request #1453 from release-v0.10.0", "release-v0.10.0"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            merge_sha = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            self.assertNotEqual(head_before, merge_sha)
+            paths = list_release_json_paths_in_merge_commit(merge_sha, cwd=str(root))
+            self.assertEqual(paths, [".agentic/releases/v0.10.0/release.json"])
+
+    @patch("plate_core.release.assess_release_pr_merge_commit")
+    @patch("plate_core.release.run_hidden")
+    def test_suspect_squash_v010_incident_without_identical_trees(
+        self, mock_run, mock_assess
+    ):
+        """Regression for #1455 production incident: 0.9.0 track tip vs 0.10.0 squash tag."""
+
+        def fake_run(argv, **kwargs):
+            if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
+                return type("P", (), {"returncode": 1})()
+            if argv[:2] == ["git", "rev-parse"] and argv[2].endswith("^{tree}"):
+                if "43e6d95" in argv[2]:
+                    return type("P", (), {"stdout": "tagtree10", "returncode": 0})()
+                return type("P", (), {"stdout": "branchtree09", "returncode": 0})()
+            if argv[:3] == ["git", "diff", "--name-only"]:
+                return type(
+                    "P",
+                    (),
+                    {
+                        "stdout": ".agentic/releases/v0.10.0/release.json\npyproject.toml\n",
+                        "returncode": 0,
+                    },
+                )()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        mock_assess.return_value = {"ok": False, "method": "squash_or_rebase_suspected"}
+        self.assertTrue(
+            suspect_squash_merged_release("e84454f", "43e6d95", cwd="/tmp/repo")
+        )
 
     @patch("plate_core.release.GhClient")
     def test_ensure_next_issue_creates_when_missing(self, mock_client_cls):
