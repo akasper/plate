@@ -35,6 +35,8 @@ VALID_STRATEGIES: tuple[str, ...] = ("safe", "conservative", "force")
 
 # Root template README is PLATE scaffolding prose, not adopter product docs (#1188).
 ROOT_PAYLOAD_README = "README.md"
+# Shipped in template payload (#1461); preserve adopter edits when present.
+UNRELEASED_LAYOUT_README = ".agentic/releases/unreleased/README.md"
 
 # Minimal CURRENT.md for adoption/import when absent (#618).
 # Not in payload include_globs (repo-specific); seeded by importer.
@@ -582,6 +584,25 @@ def plan_import_payload(
             if apply:
                 report.skipped.append(rel)
             continue
+        if rel == UNRELEASED_LAYOUT_README:
+            dest_early = target / rel
+            if dest_early.is_file():
+                report.files.append(
+                    PayloadFileDecision(
+                        path=rel,
+                        action="skip",
+                        classification=classify_template_file(rel, manifest),
+                        detail=(
+                            "existing unreleased README preserved "
+                            "(never overwrite; #1461)"
+                        ),
+                        target_path=rel,
+                    )
+                )
+                report.would_skip.append(rel)
+                if apply:
+                    report.skipped.append(rel)
+                continue
         source = template_root / rel
         # Prefer namespaced install path for plate scripts/docs when adopting (#621, #1015)
         preferred_rel = rel
@@ -665,9 +686,14 @@ def plan_import_payload(
     _seed_current_md_if_missing(target, report, apply=bool(apply))
     # #1188: never copy template root README; seed a short project stub when absent.
     _seed_readme_if_missing(target, report, apply=bool(apply))
-    # Adopter core_ready requires .agentic/releases[/unreleased] (#996 follow-on /
-    # under-30m path). Template payload ships .agentic/*.yml only — seed layout.
-    _seed_releases_layout_if_missing(target, report, apply=bool(apply))
+    # Adopter core_ready requires .agentic/releases[/unreleased] (#996). Payload
+    # now ships the README (#1461); seed backfills older templates without it.
+    _seed_releases_layout_if_missing(
+        target,
+        report,
+        apply=bool(apply),
+        payload_rel_paths=set(rel_paths),
+    )
     # Root .plate is not in template payload globs; seed DEFAULT_CONFIG JSON when
     # missing so local import can reach adoption core_ready without remote bootstrap.
     # Never overwrite an existing .plate (adopter customizations win).
@@ -902,17 +928,24 @@ def _seed_releases_layout_if_missing(
     report: ImportPayloadReport,
     *,
     apply: bool,
+    payload_rel_paths: set[str] | None = None,
 ) -> None:
     """Ensure `.agentic/releases/unreleased/` exists for adoption core_ready.
 
     assess_adoption_readiness requires ``.agentic/releases`` plus ``unreleased``
-    (or a ``v*`` dir). Template payload does not ship that empty tree, so pure
-    import left adopters stuck on bootstrap for a directory mkdir (#996 path).
+    (or a ``v*`` dir). When the template payload already ships the README (#1461),
+    skip seeding that file so dry-run plans do not list it twice.
     """
     releases = target / ".agentic" / "releases"
     unreleased = releases / "unreleased"
     readme = unreleased / "README.md"
-    rel = ".agentic/releases/unreleased/README.md"
+    rel = UNRELEASED_LAYOUT_README
+    if payload_rel_paths and rel in payload_rel_paths:
+        if apply and not releases.is_dir():
+            releases.mkdir(parents=True, exist_ok=True)
+        if apply and not unreleased.is_dir() and not any(releases.glob("v*")):
+            unreleased.mkdir(parents=True, exist_ok=True)
+        return
     decision_base = {
         "path": rel,
         "classification": "adoption_seed",

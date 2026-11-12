@@ -36,6 +36,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".agentic/releases/unreleased/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".agentic/skills.yml",
       "classification": "copy_to_downstream"
     },
