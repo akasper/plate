@@ -194,6 +194,8 @@ Third-party cloud agents do not receive a user PAT; they cannot upload PR attach
 
 **Routing UI work to Copilot:** Assign UI-heavy issues to **GitHub Copilot's cloud coding agent** (assign the issue to Copilot on GitHub). An agent that cannot use `gh pr create|edit|comment --attach` must hand off UI screenshot work to Copilot (or a human with local `gh` and a PAT) rather than committing images or using broken URL embeds.
 
+**CI check (#1052):** Workflow `.github/workflows/plate-ui-pr-image-check.yml` (job `ui-pr-image`) warns on UI-touching PRs without valid `user-attachments` images. It is optional—not a required merge gate. UI globs live in `.agentic/ui-paths.yml`. Skip with a PR body line `Visual evidence: not applicable — <reason>`. To block merges, set repository variable `PLATE_UI_PR_IMAGE_ENFORCE` to `true` (or `1`).
+
 ## Label Rules
 
 Use labels as stable process metadata. Do not create ad hoc labels unless they change routing, enforcement, reporting, auditing, review burden, or agent behavior. Use GitHub Projects fields for frequently changing planning state such as priority, owner, rank, iteration, target date, or release target. The `status:blocked`, `status:ready-to-work`, and `status:implemented` (auto-set on release-branch merge per #556; means landed in RC but not yet shipped to main+tag) labels are the explicit exception used by PLATES native trigger workflows.

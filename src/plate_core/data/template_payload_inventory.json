@@ -60,6 +60,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".agentic/ui-paths.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".github/AUTONOMOUS_MODE",
       "classification": "copy_to_downstream"
     },
@@ -161,6 +165,10 @@
     },
     {
       "path": ".github/workflows/plate-pr-gates.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plate-ui-pr-image-check.yml",
       "classification": "copy_to_downstream"
     },
     {
@@ -416,10 +424,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": "docs/migration/tiered-ci-policy.md",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": "docs/migration/ci-speed-checklist.md",
       "classification": "copy_to_downstream"
     },
@@ -445,6 +449,10 @@
     },
     {
       "path": "docs/migration/self-hosted-runners.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/tiered-ci-policy.md",
       "classification": "copy_to_downstream"
     },
     {

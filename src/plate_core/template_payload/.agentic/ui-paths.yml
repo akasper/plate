@@ -1,0 +1,14 @@
+# UI path globs for plate_core.pr_ui_pr_image_check (#1052).
+# Downstream repos may edit this file without touching `.plate`.
+globs:
+  - web/**
+  - app/**
+  - src/components/**
+  - public/**
+  - "*.css"
+  - "*.scss"
+  - "*.tsx"
+  - "*.jsx"
+  - "*.vue"
+  - "*.svelte"
+  - "*.html"
