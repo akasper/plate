@@ -6,12 +6,12 @@ import argparse
 import os
 import re
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-
 import yaml
 
-from plate_core.ci_path_jobs import _path_matches_pattern
+from plate_core.ci_path_jobs import path_matches_pattern
 
 WARNING_HEADING = "UI PR visual evidence"
 
@@ -36,7 +36,10 @@ _VISUAL_EVIDENCE_NA = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
-_HTML_IMG = re.compile(r"""<img\b[^>]*\ssrc\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+_HTML_IMG = re.compile(
+    r"""<img\b[^>]*\ssrc\s*=\s*(?:["']([^"']+)["']|([^\s>]+))""",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -52,12 +55,13 @@ def default_ui_paths_file() -> Path:
 
 
 def load_ui_globs(repo_root: Path | None = None) -> list[str]:
+    """Load UI path globs from ``.agentic/ui-paths.yml`` (``globs`` list) or built-in defaults."""
     root = repo_root or Path.cwd()
     config_path = root / default_ui_paths_file()
     if config_path.is_file():
         data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
-            globs = data.get("globs") or data.get("paths")
+            globs = data.get("globs")
             if isinstance(globs, list) and all(isinstance(g, str) for g in globs):
                 return [g.strip() for g in globs if g.strip()]
     return list(DEFAULT_UI_GLOBS)
@@ -69,7 +73,7 @@ def touches_ui_paths(changed_paths: list[str], globs: list[str] | None = None) -
         normalized = path.strip().replace("\\", "/")
         if not normalized:
             continue
-        if any(_path_matches_pattern(pattern, normalized) for pattern in patterns):
+        if any(path_matches_pattern(pattern, normalized) for pattern in patterns):
             return True
     return False
 
@@ -84,7 +88,9 @@ def extract_image_urls(body: str) -> list[str]:
     for match in _MD_IMAGE.finditer(text):
         urls.append(match.group(1).strip())
     for match in _HTML_IMG.finditer(text):
-        urls.append(match.group(1).strip())
+        url = (match.group(1) or match.group(2) or "").strip()
+        if url:
+            urls.append(url)
     return urls
 
 
@@ -93,6 +99,7 @@ def is_valid_user_attachment(url: str) -> bool:
 
 
 def classify_bad_image_url(url: str) -> str | None:
+    """Classify disallowed image URL kinds per #1052 (relative, raw host, blob ?raw=true)."""
     if is_valid_user_attachment(url):
         return None
     lower = url.lower()
@@ -104,16 +111,19 @@ def classify_bad_image_url(url: str) -> str | None:
         return "raw.githubusercontent.com URL"
     if "blob/" in lower and "raw=true" in lower:
         return "blob/...?raw=true URL"
-    if "github.com" in lower and "/blob/" in lower:
-        return "blob URL (use gh pr edit --attach instead)"
-    return "non-user-attachments image URL"
+    return None
 
 
 def _fix_lines(pr_number: int | None) -> list[str]:
-    n = pr_number if pr_number is not None else "N"
+    edit_hint = (
+        f"Re-embed screenshots with `gh pr edit {pr_number} --body-file body.md --attach ./shot.png` "
+        "(requires gh >= 2.99)."
+        if pr_number is not None
+        else "Re-embed screenshots with `gh pr edit <PR> --body-file body.md --attach ./shot.png` "
+        "(requires gh >= 2.99)."
+    )
     return [
-        f"Re-embed screenshots with `gh pr edit {n} --body-file body.md --attach ./shot.png` "
-        "(requires gh >= 2.99).",
+        edit_hint,
         "Third-party cloud agents without a user PAT cannot upload attachments — assign the issue "
         "to GitHub Copilot's cloud coding agent (or a human with local `gh` and a PAT) for UI screenshot work.",
     ]
@@ -139,8 +149,7 @@ def evaluate_ui_pr_image_check(
 
     bad: list[str] = []
     for url in urls:
-        kind = classify_bad_image_url(url)
-        if kind is not None:
+        if classify_bad_image_url(url) is not None:
             bad.append(url)
 
     messages: list[str] = [
@@ -172,8 +181,8 @@ def run_check(
     repo_root: Path | None = None,
     pr_number: int | None = None,
     enforce: bool = False,
+    emit_warning: Callable[[str], None] | None = None,
 ) -> int:
-    enforce = _enforce_from_env(enforce)
     result = evaluate_ui_pr_image_check(
         body,
         changed_paths,
@@ -182,11 +191,16 @@ def run_check(
     )
     if result.skipped or result.ok:
         return 0
+
+    def default_warn(msg: str) -> None:
+        print(f"::warning title={WARNING_HEADING}::{msg}", flush=True)
+
+    warn = emit_warning or default_warn
     for msg in result.messages:
         if enforce:
             print(msg, file=sys.stderr)
         else:
-            print(f"::warning title={WARNING_HEADING}::{msg}", flush=True)
+            warn(msg)
     if enforce:
         print(f"## ⚠️ {WARNING_HEADING}", file=sys.stderr)
         return 1
@@ -214,8 +228,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("path", nargs="?", help="File containing PR body (alternative to --stdin)")
     args = parser.parse_args(argv)
 
-    enforce = _enforce_from_env(args.enforce)
-
     if args.stdin:
         body = sys.stdin.read()
     elif args.path:
@@ -232,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
         changed,
         repo_root=Path(args.repo_root),
         pr_number=args.pr_number,
-        enforce=enforce,
+        enforce=_enforce_from_env(args.enforce),
     )
 
 

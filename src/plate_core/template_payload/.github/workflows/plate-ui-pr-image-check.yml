@@ -18,7 +18,6 @@ jobs:
   ui-pr-image:
     name: ui-pr-image
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
