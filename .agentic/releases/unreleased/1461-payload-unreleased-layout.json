@@ -3,8 +3,8 @@
   "change_type": "fix",
   "surface": "src/plate_core/template_payload/.agentic/releases/unreleased/README.md",
   "summary": "Ship `.agentic/releases/unreleased/README.md` in the bundled template payload so greenfield `gh plate bootstrap --apply` satisfies the `agentic_releases` adoption check without a follow-up `import-payload`.",
-  "migration_impact": "New greenfield bootstraps are `core_ready` for the releases layout immediately after bootstrap. Repos bootstrapped before this fix can still run `gh plate import-payload --apply` to seed the layout via the existing adoption seed.",
-  "agent_notes": "Do not remove `_seed_releases_layout_if_missing` in import_payload; it backfills adopters who bootstrapped on older template payloads. After this change, import-payload may skip seeding when the payload README is already present.",
+  "migration_impact": "New greenfield bootstraps receive the same unreleased README as the #996 import seed. `conservative` and `safe` import skip an existing file at that path (including #996-seeded or custom text) instead of raising a payload conflict or escape hatch. Older template payloads without this file still get the adoption seed on import.",
+  "agent_notes": "Template README must stay byte-identical to `MINIMAL_UNRELEASED_README` in import_payload so identical seeded copies skip under conservative. `_seed_releases_layout_if_missing` is a no-op for the README when the payload manifest includes the path; it still mkdir-backfills pre-#1461 templates.",
   "breaking": false,
   "links": ["#1461", "#996"]
 }

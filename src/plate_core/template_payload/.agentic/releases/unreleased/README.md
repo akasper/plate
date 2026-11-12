@@ -6,6 +6,5 @@ Author Feature/process changes as `<slug>.json` here (see PLATE fragment contrac
 in upstream `akasper/plate` / `docs` and `AGENTS.md`). At release cut, fragments
 aggregate into `.agentic/releases/vX.Y.Z/`.
 
-This starter file is included in the greenfield template payload so adoption
-readiness (`core_ready`) can see a valid `.agentic/releases/unreleased/` layout
-after `gh plate bootstrap --apply`.
+This starter file was seeded by `gh plate import-payload` so adoption readiness
+(`core_ready`) can see a valid `.agentic/releases/unreleased/` layout.
