@@ -1,0 +1,51 @@
+# Optional warn-first check: UI-touching PRs should embed user-attachments images (#1052).
+# Not a required merge gate. Set repository variable PLATE_UI_PR_IMAGE_ENFORCE=true to fail.
+name: PLATE UI PR image check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: plate-ui-pr-image-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  ui-pr-image:
+    name: ui-pr-image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install check dependencies
+        run: python -m pip install --quiet pyyaml
+
+      - name: UI PR image check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLATE_UI_PR_IMAGE_ENFORCE: ${{ vars.PLATE_UI_PR_IMAGE_ENFORCE }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          pr_number="${{ github.event.pull_request.number }}"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files" --paginate --jq '.[].filename' > /tmp/pr-files.txt
+          enforce_args=()
+          if [ "${PLATE_UI_PR_IMAGE_ENFORCE:-}" = "1" ] || [ "${PLATE_UI_PR_IMAGE_ENFORCE:-}" = "true" ]; then
+            enforce_args+=(--enforce)
+          fi
+          printf '%s' "${body}" | python3 -m plate_core.pr_ui_pr_image_check \
+            --stdin \
+            --pr-number "${pr_number}" \
+            --files /tmp/pr-files.txt \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            "${enforce_args[@]}"

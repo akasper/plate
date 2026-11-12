@@ -626,6 +626,14 @@
     {
       "path": "tests/e2e/specs/failing-example.spec.ts",
       "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/ui-paths.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plate-ui-pr-image-check.yml",
+      "classification": "copy_to_downstream"
     }
   ]
 }
