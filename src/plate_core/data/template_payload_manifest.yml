@@ -17,7 +17,11 @@ include_globs:
   - "playwright.config.ts"
 
 # Local-only test media and spikes — not shipped to downstream adopters (#1152).
+# Installed plate-core may compile scripts/plate/*.py into __pycache__; never ship (#1459).
 exclude_globs:
+  - "**/__pycache__/**"
+  - "**/*.pyc"
+  - "**/*.pyo"
   - "tests/spike-videos/**"
   - "tests/e2e/fixtures/gifs/*.gif"
   - "tests/e2e/fixtures/gifs/*.webm"

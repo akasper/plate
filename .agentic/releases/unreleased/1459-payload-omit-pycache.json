@@ -1,0 +1,10 @@
+{
+  "slug": "1459-payload-omit-pycache",
+  "change_type": "fix",
+  "surface": "src/plate_core/data/template_payload_manifest.yml, src/plate_core/template_payload.py (should_include_template_file)",
+  "summary": "Greenfield bootstrap and import-payload no longer copy __pycache__ or *.pyc from the installed plate-core payload tree.",
+  "migration_impact": "New bootstraps and import-payload runs omit bytecode. Repos that already committed scripts/plate/__pycache__/ may delete those paths and add local gitignore rules (#1460).",
+  "agent_notes": "After upgrading plate-core, re-run import-payload only if you need refreshed scaffolding; remove any previously copied __pycache__ under scripts/plate/ from git history if present.",
+  "breaking": false,
+  "links": ["#1459"]
+}

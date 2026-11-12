@@ -175,9 +175,18 @@ def classify_template_file(path: str, manifest: TemplatePayloadManifest) -> str:
     return "exclude"
 
 
+def _is_payload_bytecode_path(rel: str) -> bool:
+    """Bytecode artifacts must never ship in the template payload (#1459)."""
+    if rel.endswith((".pyc", ".pyo")):
+        return True
+    return "__pycache__" in PurePosixPath(rel).parts
+
+
 def should_include_template_file(path: str, manifest: TemplatePayloadManifest) -> bool:
     """Return True when path is selected for payload inclusion by manifest rules."""
     rel = normalize_rel_path(path)
+    if _is_payload_bytecode_path(rel):
+        return False
     if manifest.include_globs and not matches_any(rel, manifest.include_globs):
         return False
     if manifest.exclude_globs and matches_any(rel, manifest.exclude_globs):
