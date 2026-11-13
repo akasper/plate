@@ -32,7 +32,7 @@ DEFAULT_UI_GLOBS: tuple[str, ...] = (
 USER_ATTACHMENTS_PREFIX = "https://github.com/user-attachments/assets/"
 
 _VISUAL_EVIDENCE_NA = re.compile(
-    r"^Visual evidence:\s*not applicable\s*[—\-]\s*.+",
+    r"^Visual evidence:\s*not applicable\s*[—–\-]\s*.+",
     re.MULTILINE | re.IGNORECASE,
 )
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
@@ -54,17 +54,44 @@ def default_ui_paths_file() -> Path:
     return Path(".agentic") / "ui-paths.yml"
 
 
+def _warn_malformed_ui_paths(config_path: Path, detail: str) -> None:
+    print(
+        f"::warning title={WARNING_HEADING}::Malformed UI paths config {config_path}: "
+        f"{detail}; using built-in default UI globs.",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 def load_ui_globs(repo_root: Path | None = None) -> list[str]:
-    """Load UI path globs from ``.agentic/ui-paths.yml`` (``globs`` list) or built-in defaults."""
+    """Load UI path globs from ``.agentic/ui-paths.yml`` (``globs`` list) or built-in defaults.
+
+    A missing config file falls back silently to :data:`DEFAULT_UI_GLOBS`. When the
+    file exists but is malformed — unparsable YAML, not a mapping, missing ``globs``,
+    or ``globs`` not being a list of strings — a warning naming the path is written
+    to stderr and the built-in defaults are returned instead of failing open silently.
+    """
     root = repo_root or Path.cwd()
     config_path = root / default_ui_paths_file()
-    if config_path.is_file():
+    if not config_path.is_file():
+        return list(DEFAULT_UI_GLOBS)
+
+    try:
         data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            globs = data.get("globs")
-            if isinstance(globs, list) and all(isinstance(g, str) for g in globs):
-                return [g.strip() for g in globs if g.strip()]
-    return list(DEFAULT_UI_GLOBS)
+    except yaml.YAMLError as exc:
+        _warn_malformed_ui_paths(config_path, f"unparsable YAML ({exc})")
+        return list(DEFAULT_UI_GLOBS)
+
+    if not isinstance(data, dict):
+        _warn_malformed_ui_paths(config_path, "top-level value is not a mapping")
+        return list(DEFAULT_UI_GLOBS)
+
+    globs = data.get("globs")
+    if not isinstance(globs, list) or not all(isinstance(g, str) for g in globs):
+        _warn_malformed_ui_paths(config_path, "missing or invalid 'globs' list")
+        return list(DEFAULT_UI_GLOBS)
+
+    return [g.strip() for g in globs if g.strip()]
 
 
 def touches_ui_paths(changed_paths: list[str], globs: list[str] | None = None) -> bool:
