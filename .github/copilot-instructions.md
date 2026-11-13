@@ -39,7 +39,7 @@ Then use the lightest surface that can answer the question:
 - `AGENTS.md` is authoritative for process details. Keep this file focused on routing and first-step guidance.
 - Run `gh plate release status` before opening PRs that target the integration branch.
 - Apply exactly one PR type label at creation time.
-- `Feature` PRs that change PLATE behavior, templates, or agent surfaces must add a fragment under `.agentic/releases/unreleased/`.
+- `Feature` and `Hardening` PRs that change PLATE behavior, templates, or agent surfaces must add a fragment under `.agentic/releases/unreleased/` (`change_type: "hardening"` for Hardening).
 - Keep changes small, reversible, and evidence-backed.
 - Stack selection remains a human decision until the Research issue is resolved.
 

@@ -59,6 +59,18 @@ Follow the loop that matches the issue type.
 
 Reproduce the failure or document why reproduction is not yet possible. Add a regression test. Include `Closes #N` in the PR body. Label missing information with `need:reproduction`, `need:tests`, or `need:human-review`.
 
+**Hardening**
+
+Use Hardening for standalone executable test coverage, CI reliability, isolation, or safety work that adds no product capability. Real defect corrections stay Bug; new capabilities stay Feature; executable tests must never be classified as Documentation.
+
+| Step | Required Behavior |
+|---|---|
+| 1 | Confirm the issue is labeled `Hardening` and describes the reliability, isolation, safety, or test-coverage gap. |
+| 2 | Add or extend tests, CI reliability, isolation, or safety changes. Do not add new product capability. |
+| 3 | Add a release fragment under `.agentic/releases/unreleased/<slug>.json` with `change_type: "hardening"`. |
+| 4 | Open a PR labeled `Hardening` targeting the correct integration base (from `gh plate release status`) with `Closes #N` in the body. |
+| 5 | After the PR is green (including feedback-resolution), **do not self-merge**; wait for human review/approval. Use `need:human-review` for escalation. |
+
 **Research**
 
 | Step | Required Behavior |
@@ -127,6 +139,7 @@ Every issue must close with a traceable artifact. For most issue types this is a
 |---|---|---|
 | `Feature` | Code change + per-feature change files in `.agentic/releases/` update | `Feature` |
 | `Bug` | Bug fix + regression test | `Bug` |
+| `Hardening` | Tests or reliability/safety change + release fragment (`change_type: "hardening"`) | `Hardening` |
 | `Research` | Findings committed to `docs/research/<slug>.md` or `SPEC.md` update | `Documentation` |
 | `Design` | Artifact committed to `docs/design/<slug>.md` or `docs/wiki/Features/<feature>.md` | `Documentation` |
 | `Question` | Answer artifact committed to `docs/research/<slug>.md` and process updates when guidance changes (`AGENTS.md`, `.agentic/skills.yml`) | `Documentation` |
@@ -179,8 +192,8 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 | Label Family | Usage |
 |---|---|
-| `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Task`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
-| `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
+| `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Task`, `Audit`, `Migration`, `Feedback Response`, `Hardening` | Exactly one required issue type label. |
+| `Bug`, `Feature`, `Documentation`, `Feedback Response`, `Hardening` | Exactly one required pull request type label. |
 | `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by `plates-address-pr-feedback.yml` in the inline response flow. No Epic milestone required. |
 | `Epic: short-name` | Legacy or supplemental Epic identity label. GitHub milestones are the canonical Epic container for Feature, Epic, and Release issues. |
 | `area:*` | Stable subsystem or ownership area. |

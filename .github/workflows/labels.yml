@@ -24,7 +24,7 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const prTypeLabels = ['Bug', 'Feature', 'Documentation', 'Feedback Response'];
+            const prTypeLabels = ['Bug', 'Feature', 'Documentation', 'Feedback Response', 'Hardening'];
             const allowedTierLabels = ['tier:T0', 'tier:T1', 'tier:T2', 'tier:T3'];
             const prTypeByLower = Object.fromEntries(
               prTypeLabels.map((name) => [name.toLowerCase(), name])

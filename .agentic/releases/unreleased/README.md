@@ -10,7 +10,7 @@ Both sources are aggregated identically when `cut_release.py` runs.
 ## Fragment contract
 
 **When to author a fragment:**
-Create a fragment for any Feature or Epic PR that changes PLATE process, templates,
+Create a fragment for any Feature, Hardening, or Epic PR that changes PLATE process, templates,
 agent surfaces, or tooling. Skip for pure documentation fixes or chores that don't affect
 downstream repos.
 
@@ -21,7 +21,7 @@ downstream repos.
 | Field | Description |
 |---|---|
 | `slug` | Kebab-case identifier, unique within this directory. |
-| `change_type` | `feature`, `fix`, `docs`, `process`, `breaking` |
+| `change_type` | `feature`, `fix`, `docs`, `process`, `breaking`, `hardening` |
 | `surface` | Affected template / workflow / docs surface |
 | `summary` | One-line description |
 | `migration_impact` | Prose: what a downstream repo must do |
@@ -87,3 +87,4 @@ This moves all fragments here (and in any `epic-*/` directories) into
 The version is determined automatically from:
 - the highest semver in `.agentic/releases/` (flat files, versioned dirs) or git tags, and
 - the fragment types (`breaking: true` → major, `feature` → minor, otherwise patch).
+  `hardening` alone does not bump to minor; it follows patch routing unless `breaking` is set.

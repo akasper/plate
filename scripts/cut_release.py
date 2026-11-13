@@ -23,7 +23,7 @@ Version auto-detection:
   The bump type is inferred from the pending fragments:
     * any  breaking: true          ->  major
     * any  change_type: "feature"  ->  minor  (when no breaking changes)
-    * otherwise                    ->  patch
+    * otherwise                    ->  patch  (including change_type: "hardening")
 
 Output layout:
     <releases-dir>/vX.Y.Z/

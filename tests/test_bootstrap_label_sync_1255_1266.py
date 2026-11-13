@@ -489,5 +489,42 @@ class BootstrapLabelAndCommitTests(unittest.TestCase):
         self.assertNotIn("Epic #", message)
 
 
+class HardeningLabelInventoryTests(unittest.TestCase):
+    def test_repo_and_payload_label_registries_include_hardening(self):
+        repo_labels = (Path(__file__).resolve().parent.parent / ".github/labels.yml")
+        payload_labels = _TEMPLATE_LABELS
+        for path in (repo_labels, payload_labels):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('name: "Hardening"', text, msg=f"{path} missing Hardening label")
+            self.assertIn(
+                "standalone tests, CI reliability, isolation, or safety",
+                text,
+                msg=f"{path} missing Hardening description",
+            )
+
+    def test_issue_templates_include_hardening(self):
+        root = Path(__file__).resolve().parent.parent
+        for path in (
+            root / ".github/ISSUE_TEMPLATE/hardening.yml",
+            root
+            / "src/plate_core/template_payload/.github/ISSUE_TEMPLATE/hardening.yml",
+        ):
+            self.assertTrue(path.is_file(), msg=f"{path} missing")
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("name: Hardening", text)
+            self.assertIn("  - Hardening", text)
+
+    def test_label_checks_accept_hardening_as_type(self):
+        root = Path(__file__).resolve().parent.parent
+        for path in (
+            root / ".github/workflows/label-check.yml",
+            root / ".github/workflows/labels.yml",
+            root / "src/plate_core/template_payload/.github/workflows/label-check.yml",
+            root / "src/plate_core/template_payload/.github/workflows/ci.yml",
+        ):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("'Hardening'", text, msg=f"{path} missing Hardening type")
+
+
 if __name__ == "__main__":
     unittest.main()

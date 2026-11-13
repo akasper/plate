@@ -282,8 +282,8 @@ def audit_spec(
         summary = str(frag.get("summary") or "")
         surface = str(frag.get("surface") or "")
         change_type = str(frag.get("change_type") or "")
-        # Only treat feature/process as strong implemented evidence for SPEC gaps
-        if change_type not in ("feature", "process", "breaking", "fix"):
+        # Only treat feature/process/hardening as strong implemented evidence for SPEC gaps
+        if change_type not in ("feature", "process", "breaking", "fix", "hardening"):
             continue
         modules = _surface_modules(surface)
         # Match if any distinctive module/path token appears in SPEC

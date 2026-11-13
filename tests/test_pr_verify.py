@@ -227,6 +227,40 @@ class TestVerifyPr(unittest.TestCase):
         fragment = next(c for c in report["checks"] if c["id"] == "release_fragment")
         self.assertFalse(fragment["passed"])
 
+    def test_hardening_requires_fragment_and_accepts_it(self):
+        client = _FakeClient(
+            _verify_pr_fixtures(
+                {
+                    "repos/o/r/pulls/9": _good_pull(
+                        labels=[{"name": "Hardening"}, {"name": "area:tests"}]
+                    ),
+                }
+            )
+        )
+        with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
+            report = verify_pr(9, repo="o/r", client=client)
+        self.assertTrue(report["passed"])
+        ids = [c["id"] for c in report["checks"]]
+        self.assertIn("release_fragment", ids)
+        type_check = next(c for c in report["checks"] if c["id"] == "pr_type_label")
+        self.assertTrue(type_check["passed"])
+
+    def test_hardening_without_fragment_fails(self):
+        client = _FakeClient(
+            _verify_pr_fixtures(
+                {
+                    "repos/o/r/pulls/9": _good_pull(
+                        labels=[{"name": "Hardening"}]
+                    ),
+                    "repos/o/r/pulls/9/files": [{"filename": "tests/test_x.py"}],
+                }
+            )
+        )
+        with patch("plate_core.pr_verify.fetch_required_check_contexts", return_value=frozenset()):
+            report = verify_pr(9, repo="o/r", client=client)
+        fragment = next(c for c in report["checks"] if c["id"] == "release_fragment")
+        self.assertFalse(fragment["passed"])
+
     def test_base_sync_fails_when_behind_by_positive(self):
         client = _FakeClient(
             _verify_pr_fixtures(

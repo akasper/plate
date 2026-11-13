@@ -1,0 +1,21 @@
+{
+  "slug": "hardening-issue-type-1456",
+  "change_type": "feature",
+  "surface": ".github/labels.yml, .github/ISSUE_TEMPLATE/hardening.yml, .github/workflows/label-check.yml, .github/workflows/labels.yml, .github/workflows/plate-pr-gates.yml, src/plate_core/pr_gates_checks.py, src/plate_core/pr_verify.py, src/plate_core/pr_gates_contract.py, src/plate_core/release.py, src/plate_core/integration_close.py, src/plate_core/health.py, AGENTS.md, CONTRIBUTING.md, docs/agents, .agentic/releases/README.md",
+  "summary": "Add Hardening as an issue type, an exclusive PR type label, and a release-fragment change_type for standalone tests, CI reliability, isolation, or safety work that adds no product capability.",
+  "migration_impact": "Downstream repos gain a Hardening label, issue template, and PR type. Hardening PRs require a release fragment with change_type \"hardening\". Hardening fragments route to patch unless marked breaking; they never auto-select minor the way feature fragments do. Real defect corrections remain Bug and new capabilities remain Feature.",
+  "migration_guidance": [
+    "1. Sync labels from .github/labels.yml (or let bootstrap create Hardening on next apply).",
+    "2. Copy .github/ISSUE_TEMPLATE/hardening.yml and the updated PULL_REQUEST_TEMPLATE.md into your repo.",
+    "3. Update any local label-check or PR-type gate lists to include Hardening.",
+    "4. Use change_type \"hardening\" for standalone test, CI reliability, isolation, or safety fragments; keep breaking changes marked breaking so they still route to major."
+  ],
+  "agent_notes": "Use Hardening only for standalone executable test coverage, CI reliability, isolation, or safety work with no new product capability. Real defect corrections stay Bug; new capabilities stay Feature; executable tests must never be classified as Documentation. Hardening PRs require a release fragment and a linked issue, and must not be self-merged.",
+  "breaking": false,
+  "links": [
+    "#1456"
+  ],
+  "requires": [
+    "0.10.0"
+  ]
+}

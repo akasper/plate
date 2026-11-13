@@ -189,5 +189,35 @@ class TestSpecAudit(unittest.TestCase):
         self.assertGreaterEqual(draft["items"], 1)
 
 
+    def test_hardening_fragment_counts_as_implemented_evidence(self):
+        from plate_core.spec_audit import audit_spec
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "SPEC.md").write_text("# Spec\n\n## Tests\n\nCoverage grows.\n", encoding="utf-8")
+            unrel = root / ".agentic" / "releases" / "unreleased"
+            unrel.mkdir(parents=True)
+            (unrel / "harden-widget.json").write_text(
+                json.dumps(
+                    {
+                        "slug": "harden-widget",
+                        "change_type": "hardening",
+                        "surface": "tests/widget/test_isolation.py",
+                        "summary": "Isolate widget tests",
+                        "migration_impact": "none",
+                        "agent_notes": "n/a",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            r = audit_spec(root)
+            self.assertTrue(r.ok)
+            undocumented = [f for f in r.findings if f.kind == "undocumented"]
+            self.assertTrue(
+                any(f.metadata.get("change_type") == "hardening" for f in undocumented)
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

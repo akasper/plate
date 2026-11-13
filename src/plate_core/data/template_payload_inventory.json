@@ -88,6 +88,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".github/ISSUE_TEMPLATE/hardening.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".github/ISSUE_TEMPLATE/migration-task.yml",
       "classification": "copy_to_downstream"
     },
