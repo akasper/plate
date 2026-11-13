@@ -25,7 +25,7 @@ from .pr_gates_contract import (
 from .procutil import run_hidden
 
 
-REQUIRED_LABELS = ["Bug", "Feature", "Epic", "Documentation", "Research", "Design", "Question", "Task"]
+REQUIRED_LABELS = ["Bug", "Feature", "Epic", "Documentation", "Hardening", "Research", "Design", "Question", "Task"]
 
 LABEL_COVERAGE_FIX_COMMAND = "gh plate bootstrap --apply"
 

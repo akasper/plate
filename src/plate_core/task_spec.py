@@ -29,6 +29,7 @@ ISSUE_KINDS = frozenset(
         "Migration",
         "Documentation",
         "Feedback Response",
+        "Hardening",
     }
 )
 

@@ -70,7 +70,7 @@ This repository is a PLATE template. The critical artifacts are:
 - Keep this file focused on routing and template-specific first steps; use `AGENTS.md` for the full process contract.
 - Run `gh plate release status` before opening integration-branch PRs.
 - Apply exactly one PR type label at PR creation time.
-- Feature changes to PLATE behavior, templates, or agent surfaces require a fragment under `.agentic/releases/unreleased/`.
+- Feature and Hardening changes to PLATE behavior, templates, or agent surfaces require a fragment under `.agentic/releases/unreleased/` (`change_type: "hardening"` for Hardening).
 - Start new repositories with `docs/bootstrap/new-repository-checklist.md` and the bootstrap scripts.
 
 ## Playwright E2E and recording

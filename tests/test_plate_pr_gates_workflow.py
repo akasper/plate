@@ -3,6 +3,8 @@ from pathlib import Path
 
 from plate_core.pr_gates_contract import (
     PLATE_PR_GATES_CHECK_NAME,
+    PLATE_PR_GATES_LABELS,
+    PLATE_PR_GATES_LABELS_JSON,
     PR_GATE_STEP_CONTRACTS,
     find_stale_required_check_contexts,
     missing_recommended_check_contexts,
@@ -83,6 +85,15 @@ class PlatePrGatesWorkflowTests(unittest.TestCase):
 
     def test_recommended_check_name_is_pr_gates(self):
         self.assertEqual(PLATE_PR_GATES_CHECK_NAME, "pr-gates")
+
+    def test_hardening_is_a_gating_label(self):
+        self.assertIn("Hardening", PLATE_PR_GATES_LABELS)
+        self.assertIn('"Hardening"', PLATE_PR_GATES_LABELS_JSON)
+        repo_path, payload_path = workflow_paths(REPO_ROOT)
+        for path in (repo_path, payload_path):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('"Hardening"', text, msg=f"{path} concurrency labels missing Hardening")
+            self.assertIn("labels.includes('Hardening')", text, msg=f"{path} fragment gate missing Hardening")
 
     def test_pr_gates_does_not_run_unused_runs_on_probe(self):
         repo_path, payload_path = workflow_paths(REPO_ROOT)

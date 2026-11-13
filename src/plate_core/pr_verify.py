@@ -29,8 +29,15 @@ from .pr_watch_guards import (
     observed_check_contexts,
 )
 
-PR_TYPE_LABELS: tuple[str, ...] = ("Bug", "Feature", "Documentation", "Feedback Response")
+PR_TYPE_LABELS: tuple[str, ...] = (
+    "Bug",
+    "Feature",
+    "Documentation",
+    "Feedback Response",
+    "Hardening",
+)
 PR_TYPE_BY_LOWER = {name.lower(): name for name in PR_TYPE_LABELS}
+FRAGMENT_REQUIRED_PR_TYPES: frozenset[str] = frozenset({"Feature", "Hardening"})
 AREA_LABEL_RE = re.compile(r"^area:", re.IGNORECASE)
 RELEASE_FRAGMENT_RE = re.compile(
     r"^\.agentic/releases/(?:unreleased|epic-\d+-[^/]+)/[^/]+\.json$",
@@ -473,6 +480,17 @@ def verify_pr(
                     "Feature PRs require at least one area:* label.",
                 )
             )
+    elif pr_type:
+        checks.append(
+            VerifyCheck(
+                "area_label",
+                True,
+                "area:* label not required for this PR type.",
+                {"skipped": True},
+            )
+        )
+
+    if pr_type in FRAGMENT_REQUIRED_PR_TYPES:
         paths = _fetch_changed_files(gh, target, pr_number)
         fragment_paths = [p for p in paths if RELEASE_FRAGMENT_RE.match(p)]
         if fragment_paths:
@@ -489,19 +507,11 @@ def verify_pr(
                 VerifyCheck(
                     "release_fragment",
                     False,
-                    "Feature PRs require a JSON fragment under .agentic/releases/unreleased/ "
+                    f"{pr_type} PRs require a JSON fragment under .agentic/releases/unreleased/ "
                     "or .agentic/releases/epic-<NNN>-<slug>/.",
                 )
             )
     elif pr_type:
-        checks.append(
-            VerifyCheck(
-                "area_label",
-                True,
-                "area:* label not required for this PR type.",
-                {"skipped": True},
-            )
-        )
         checks.append(
             VerifyCheck(
                 "release_fragment",
@@ -538,7 +548,7 @@ def verify_pr(
             )
         )
 
-    needs_closing = pr_type in ("Bug", "Feature", "Documentation") and not has_no_issue and pr_type != "Feedback Response"
+    needs_closing = pr_type in ("Bug", "Feature", "Documentation", "Hardening") and not has_no_issue and pr_type != "Feedback Response"
     if not needs_closing:
         checks.append(
             VerifyCheck(

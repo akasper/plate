@@ -28,6 +28,9 @@ from plate_core.release import (
     collect_closes_block,
     create_github_release,
     normalize_release_tag,
+    infer_bump_type,
+    validate_fragment,
+    ALLOWED_CHANGE_TYPES,
     plan_gh_plate_sync,
     perform_guarded_hard_reset,
     fast_forward_release_branches,
@@ -42,6 +45,51 @@ from plate_core.release import (
     NEXT_RELEASE_STARTER_ISSUE_REASON,
 )
 from plate_core.github_client import GhApiError
+
+
+class HardeningFragmentTests(unittest.TestCase):
+    def _fragment(self, **overrides):
+        fragment = {
+            "slug": "hardening-1456",
+            "change_type": "hardening",
+            "surface": "tests/",
+            "summary": "Add regression coverage without new capability.",
+            "migration_impact": "None.",
+            "agent_notes": "Run the tests.",
+        }
+        fragment.update(overrides)
+        return fragment
+
+    def test_hardening_is_an_allowed_change_type(self):
+        self.assertIn("hardening", ALLOWED_CHANGE_TYPES)
+        self.assertEqual(validate_fragment(self._fragment()), [])
+
+    def test_unknown_change_type_fails_validation(self):
+        errors = validate_fragment(self._fragment(change_type="hardening-plus"))
+        self.assertTrue(any("unknown change_type" in error for error in errors))
+
+    def test_missing_required_fields_fail_validation(self):
+        errors = validate_fragment({"slug": "x", "change_type": "hardening"})
+        self.assertTrue(any("migration_impact" in error for error in errors))
+
+    def test_hardening_alone_routes_to_patch(self):
+        self.assertEqual(infer_bump_type([self._fragment()]), "patch")
+
+    def test_hardening_does_not_force_minor(self):
+        self.assertEqual(
+            infer_bump_type(
+                [self._fragment(), {"change_type": "docs"}]
+            ),
+            "patch",
+        )
+
+    def test_breaking_hardening_still_routes_to_major(self):
+        self.assertEqual(
+            infer_bump_type([self._fragment(breaking=True)]), "major"
+        )
+
+    def test_feature_still_routes_to_minor(self):
+        self.assertEqual(infer_bump_type([{"change_type": "feature"}]), "minor")
 
 
 class ListVersionsTests(unittest.TestCase):

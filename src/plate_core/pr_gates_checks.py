@@ -16,8 +16,15 @@ from .release import (
     RELEASE_WINDOW_OVERRIDE_LABEL,
 )
 
-PR_TYPE_LABELS: tuple[str, ...] = ("Bug", "Feature", "Documentation", "Feedback Response")
+PR_TYPE_LABELS: tuple[str, ...] = (
+    "Bug",
+    "Feature",
+    "Documentation",
+    "Feedback Response",
+    "Hardening",
+)
 PR_TYPE_BY_LOWER = {name.lower(): name for name in PR_TYPE_LABELS}
+FRAGMENT_REQUIRED_PR_TYPES: frozenset[str] = frozenset({"Feature", "Hardening"})
 ALLOWED_TIER_LABELS = frozenset({"tier:T0", "tier:T1", "tier:T2", "tier:T3"})
 AREA_LABEL_RE = re.compile(r"^area:", re.IGNORECASE)
 LOOSE_ISSUE_REF_RE = re.compile(r"#(\d+)\b")
@@ -142,7 +149,7 @@ def has_feature_release_fragment(changed_paths: list[str]) -> bool:
 
 def check_feature_release_fragment(labels: list[str], changed_paths: list[str]) -> GateFailure | None:
     matches = pr_type_matches(normalize_label_list(labels))
-    if len(matches) != 1 or matches[0] != "Feature":
+    if len(matches) != 1 or matches[0] not in FRAGMENT_REQUIRED_PR_TYPES:
         return None
     if has_feature_release_fragment(changed_paths):
         return None
