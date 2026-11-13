@@ -1,0 +1,10 @@
+{
+  "slug": "ui-pr-image-check-nits-1466",
+  "change_type": "fix",
+  "surface": "src/plate_core/pr_ui_pr_image_check.py",
+  "summary": "UI PR image check accepts en/em/hyphen dashes in the visual-evidence escape hatch and warns (instead of failing open silently) when .agentic/ui-paths.yml is malformed.",
+  "migration_impact": "No action required; existing globs and escape-hatch bodies keep working. A malformed .agentic/ui-paths.yml now emits a warning and falls back to built-in defaults.",
+  "agent_notes": "`Visual evidence: not applicable <dash> <reason>` accepts em dash, en dash, or hyphen. Malformed ui-paths.yml warns on stderr and uses DEFAULT_UI_GLOBS.",
+  "breaking": false,
+  "links": ["#1466", "#1465", "#1052"]
+}

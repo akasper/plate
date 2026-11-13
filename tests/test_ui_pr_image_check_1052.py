@@ -39,6 +39,49 @@ class UiPathGlobTests(unittest.TestCase):
             )
             self.assertEqual(load_ui_globs(root), ["custom-ui/**", "*.tsx"])
 
+    def _write_ui_paths(self, root: Path, content: str) -> None:
+        agentic = root / ".agentic"
+        agentic.mkdir(exist_ok=True)
+        (agentic / "ui-paths.yml").write_text(content, encoding="utf-8")
+
+    def test_invalid_yaml_warns_and_uses_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_ui_paths(root, "globs: [unclosed\n  - broken: :\n")
+            err = io.StringIO()
+            with mock.patch("sys.stderr", new=err):
+                globs = load_ui_globs(root)
+            self.assertEqual(globs, list(DEFAULT_UI_GLOBS))
+            warning = err.getvalue()
+            self.assertIn("ui-paths.yml", warning)
+            self.assertIn("default", warning.lower())
+
+    def test_missing_or_invalid_globs_warns_and_uses_defaults(self):
+        cases = {
+            "not a mapping": "- one\n- two\n",
+            "missing globs": "other: value\n",
+            "globs not a list": "globs: 'not-a-list'\n",
+            "globs not strings": "globs:\n  - 1\n  - true\n",
+        }
+        for name, content in cases.items():
+            with self.subTest(case=name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    self._write_ui_paths(root, content)
+                    err = io.StringIO()
+                    with mock.patch("sys.stderr", new=err):
+                        globs = load_ui_globs(root)
+                    self.assertEqual(globs, list(DEFAULT_UI_GLOBS))
+                    self.assertIn("ui-paths.yml", err.getvalue())
+
+    def test_missing_file_stays_silent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            err = io.StringIO()
+            with mock.patch("sys.stderr", new=err):
+                globs = load_ui_globs(Path(tmp))
+            self.assertEqual(globs, list(DEFAULT_UI_GLOBS))
+            self.assertEqual(err.getvalue(), "")
+
     def test_touches_ui_path_by_glob(self):
         self.assertTrue(touches_ui_paths(["src/components/Button.tsx"]))
         self.assertTrue(touches_ui_paths(["web/index.html"]))
@@ -64,6 +107,22 @@ class VisualEvidenceEscapeTests(unittest.TestCase):
     def test_escape_hatch_detector(self):
         self.assertTrue(visual_evidence_not_applicable("Visual evidence: not applicable — reason"))
         self.assertFalse(visual_evidence_not_applicable("Visual evidence: attached below"))
+
+    def test_escape_hatch_accepts_em_en_and_hyphen_dashes(self):
+        for dash in ("—", "–", "-"):
+            with self.subTest(dash=dash):
+                body = f"Visual evidence: not applicable {dash} internal refactor only"
+                self.assertTrue(visual_evidence_not_applicable(body))
+                result = evaluate_ui_pr_image_check(body, ["src/components/x.tsx"])
+                self.assertTrue(result.skipped)
+                self.assertTrue(result.ok)
+
+    def test_body_without_escape_hatch_does_not_skip(self):
+        body = "Visual evidence: attached below"
+        self.assertFalse(visual_evidence_not_applicable(body))
+        result = evaluate_ui_pr_image_check(body, ["src/components/x.tsx"])
+        self.assertFalse(result.skipped)
+        self.assertFalse(result.ok)
 
 
 class ImageUrlTests(unittest.TestCase):
