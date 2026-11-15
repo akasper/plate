@@ -158,7 +158,7 @@ duration: <hh:mm:ss>
 === END USAGE REPORT ===
 ```
 
-`Feature` and `Question` issue closures are harvested by `.github/workflows/plates-on-issue-closed.yml` and appended to `.agentic/COSTS.md`.
+`Feature` and `Question` issue closures are harvested by `.github/workflows/plates-on-issue-closed.yml` (trusted author + strict field validation) and recorded as `PLATE-USAGE-COST-ROW` issue comments; aggregate with `gh plate costs` / `.agentic/COSTS.md` as needed.
 `Task` issues are exempt from the usage-report requirement and instead require the lightweight Task completion comment.
 
 ## Merge and feedback gates
