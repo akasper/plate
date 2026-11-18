@@ -47,7 +47,7 @@ _TYPE_HINTS: list[tuple[str, re.Pattern[str]]] = [
     ("Design", re.compile(r"\b(design|wireframe|ux|ui|architecture diagram)\b", re.I)),
     ("Question", re.compile(r"\b(should we|how (do|should)|what if|decide|question)\b", re.I)),
     ("Task", re.compile(r"\b(human (only|action)|credential|manual|task:)\b", re.I)),
-    ("Hardening", re.compile(r"\b(harden|hardening|flaky|reliab|isolation|safety|test coverage)\b", re.I)),
+    ("Hardening", re.compile(r"\b(harden|hardening|flaky|reliab\w*|isolation|safety|test coverage)\b", re.I)),
     ("Feature", re.compile(r"\b(feature|add|support|implement|enable|build)\b", re.I)),
 ]
 
