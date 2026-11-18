@@ -353,6 +353,47 @@ class TestRecommendWhatNext(unittest.TestCase):
         self.assertNotIn(999, nums)
         self.assertNotIn(634, nums)
 
+    def test_fetch_ready_issue_candidates_includes_hardening_without_status(self):
+        from urllib.parse import unquote_plus
+
+        from plate_core.what_next import fetch_ready_issue_candidates
+
+        class FakeGh:
+            def __init__(self):
+                self.queries = []
+
+            def api(self, endpoint, method="GET", fields=None, retries=3, base_backoff=0.5):
+                query = unquote_plus(endpoint)
+                self.queries.append(query)
+                if "status:ready-to-work" in query:
+                    return {"items": []}
+                if "label:Hardening" in query:
+                    return {
+                        "items": [
+                            {
+                                "number": 9001,
+                                "title": "Improve CI reliability",
+                                "labels": [{"name": "Hardening"}],
+                            },
+                            {
+                                "number": 9002,
+                                "title": "blocked hardening",
+                                "labels": [
+                                    {"name": "Hardening"},
+                                    {"name": "status:blocked"},
+                                ],
+                            },
+                        ]
+                    }
+                return {"items": []}
+
+        gh = FakeGh()
+        out = fetch_ready_issue_candidates("akasper/plate", limit=10, gh=gh)
+        nums = [i["number"] for i in out]
+        self.assertIn(9001, nums)
+        self.assertNotIn(9002, nums)
+        self.assertTrue(any("label:Hardening" in query for query in gh.queries))
+
 
 class TestWhatNextCLI(unittest.TestCase):
     def test_cmd_what_next_json(self):
