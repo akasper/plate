@@ -87,7 +87,7 @@ runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
 | `CI_RUNS_ON` | Legacy name used by early adopter repos; a single runner label (for example a third-party hosted pool). |
 | `PLATE_RUNS_ON` | PLATE name; same semantics. When both are set, `CI_RUNS_ON` wins. |
 
-Values may be a **plain label** (for example `ubicloud-standard-2`), a JSON string (`"ubuntu-24.04"`), or a JSON label array (`["self-hosted", "plate-local"]`) when passed into `plate-select-runs-on` (see [#1490](https://github.com/akasper/plate/issues/1490)).
+**Format:** Use a **single plain runner label** in `CI_RUNS_ON` / `PLATE_RUNS_ON` when workflows use the expression above (for example `ubicloud-standard-2`). Do not store JSON in those variables for lightweight jobs — GitHub does not parse JSON inside `runs-on` expressions. JSON strings, JSON arrays, and additional plain-label formats are parsed inside `plate-select-runs-on` (see [#1490](https://github.com/akasper/plate/issues/1490)); probe bootstrap jobs in `ci.yml` and `test-e2e.yml` stay on `ubuntu-latest` so idle-pool selection can fall back safely.
 
 **Force import:** `gh plate import-payload --strategy force` overwrites workflow files from the template. Set `CI_RUNS_ON` or `PLATE_RUNS_ON` on the repository so refreshed workflows keep your runner label instead of the default `ubuntu-latest`.
 

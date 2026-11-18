@@ -38,6 +38,10 @@ LINUX_RUNS_ON_VAR_EXPRESSION = (
 )
 RUNS_ON_VAR_EXPRESSION = LINUX_RUNS_ON_VAR_EXPRESSION
 
+# Probe/bootstrap jobs must stay on GitHub-hosted runners so idle-pool selection can fall back.
+PROBE_BOOTSTRAP_RUNS_ON = "ubuntu-latest"
+PLATE_RUNS_ON_INPUT_EXPRESSION = "${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON }}"
+
 
 def parse_runs_on_var(raw: str | None) -> list[str]:
     """Parse ``PLATE_RUNS_ON`` repository variable text into a label list."""

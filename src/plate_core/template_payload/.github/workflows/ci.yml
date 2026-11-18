@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   labels:
-    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     outputs:
       runs_on: ${{ steps.plate_runs_on.outputs.runs_on }}
     steps:
@@ -23,7 +23,7 @@ jobs:
       - id: plate_runs_on
         uses: ./.github/actions/plate-select-runs-on
         with:
-          plate-runs-on: ${{ vars.PLATE_RUNS_ON }}
+          plate-runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON }}
           github-token: ${{ secrets.PLATE_RUNNER_PROBE_PAT || github.token }}
 
       - name: Validate PR type label

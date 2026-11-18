@@ -26,6 +26,8 @@ CONFIGURABLE_MARKERS = (
     "vars.PLATE_RUNS_ON",
     "fromJSON(needs.",
 )
+# Bootstrap jobs run plate-select-runs-on and must stay on hosted Ubuntu (#1489).
+BOOTSTRAP_JOB_IDS = frozenset({"labels", "select-runs-on"})
 
 
 class PayloadWorkflowLinuxRunsOnTests(unittest.TestCase):
@@ -51,6 +53,8 @@ class PayloadWorkflowLinuxRunsOnTests(unittest.TestCase):
                     if raw in ALLOWED_HARDCODED:
                         continue
                     if raw == "ubuntu-latest":
+                        if job_id in BOOTSTRAP_JOB_IDS:
+                            continue
                         violations.append(f"{path.name} job {job_id}: hardcoded ubuntu-latest")
                         continue
                     if not any(marker in raw for marker in CONFIGURABLE_MARKERS):
