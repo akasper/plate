@@ -1,0 +1,9 @@
+{
+  "slug": "1490-plate-runs-on-plain-string",
+  "change_type": "bug",
+  "surface": "src/plate_core/workflow_runs_on.py, plate-select-runs-on action",
+  "summary": "Accept bare runner labels in PLATE_RUNS_ON (for example ubicloud-standard-2) without requiring JSON quoting. Invalid JSON values now emit core.warning before falling back to ubuntu-latest.",
+  "migration_impact": "Adopters who set PLATE_RUNS_ON to a plain label no longer silently run on ubuntu-latest.",
+  "breaking": false,
+  "links": ["#1490"]
+}
