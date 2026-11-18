@@ -49,6 +49,8 @@ def parse_runs_on_var(raw: str | None) -> list[str]:
         return [text]
     if isinstance(parsed, str):
         return [parsed] if parsed else list(DEFAULT_RUNS_ON)
+    if isinstance(parsed, (int, float)) and not isinstance(parsed, bool):
+        return [text]
     if isinstance(parsed, list) and all(isinstance(x, str) and x for x in parsed):
         return list(parsed)
     return list(DEFAULT_RUNS_ON)
@@ -157,6 +159,9 @@ function parseConfigured(raw) {
         `PLATE_RUNS_ON rejected empty JSON string; falling back to ${JSON.stringify(DEFAULT_RUNS_ON)}.`,
       );
       return [...DEFAULT_RUNS_ON];
+    }
+    if (typeof parsed === 'number' && Number.isFinite(parsed)) {
+      return [text];
     }
     if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string' && x)) {
       return parsed;

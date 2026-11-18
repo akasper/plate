@@ -47,6 +47,9 @@ runs:
                   );
                   return [...DEFAULT_RUNS_ON];
                 }
+                if (typeof parsed === 'number' && Number.isFinite(parsed)) {
+                  return [text];
+                }
                 if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string' && x)) {
                   return parsed;
                 }

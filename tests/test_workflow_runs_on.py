@@ -28,9 +28,13 @@ class WorkflowRunsOnTests(unittest.TestCase):
         )
         self.assertEqual(parse_runs_on_var('"windows-latest"'), ["windows-latest"])
 
+    def test_parse_numeric_plain_label(self):
+        self.assertEqual(parse_runs_on_var("123"), ["123"])
+        self.assertEqual(parse_runs_on_var("42"), ["42"])
+
     def test_parse_rejects_invalid_json_values(self):
         self.assertEqual(parse_runs_on_var("{}"), ["ubuntu-latest"])
-        self.assertEqual(parse_runs_on_var("42"), ["ubuntu-latest"])
+        self.assertEqual(parse_runs_on_var("true"), ["ubuntu-latest"])
         self.assertEqual(parse_runs_on_var('["ok", ""]'), ["ubuntu-latest"])
 
     def test_composite_action_parse_emits_warning_on_invalid_json(self):
