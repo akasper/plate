@@ -1,0 +1,10 @@
+{
+  "slug": "1052-ui-pr-image-check",
+  "change_type": "feature",
+  "surface": "plate_core.pr_ui_pr_image_check, .github/workflows/plate-ui-pr-image-check.yml, .agentic/ui-paths.yml",
+  "summary": "Optional warn-first CI check flags UI-touching PRs that lack embedded user-attachments images, names bad URLs, and documents PLATE_UI_PR_IMAGE_ENFORCE for fail mode.",
+  "migration_impact": "Adopters receive the optional ui-pr-image workflow and may customize UI globs in .agentic/ui-paths.yml; default mode warns only.",
+  "agent_notes": "Only https://github.com/user-attachments/assets/... counts. Use Visual evidence: not applicable — <reason> to skip. Third-party cloud agents should route UI screenshot work to Copilot.",
+  "breaking": false,
+  "links": ["#1052", "#1048"]
+}
