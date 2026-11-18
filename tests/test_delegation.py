@@ -220,6 +220,17 @@ class CliDelegationTests(unittest.TestCase):
         output = out.getvalue()
         self.assertIn("Designer", output)
 
+    def test_agents_delegate_human_readable_output_mentions_prompt_and_hints(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["agents", "delegate", "project-manager", "--task", "Plan the sprint"])
+        self.assertEqual(code, 0)
+        output = out.getvalue()
+        self.assertIn("Task:", output)
+        self.assertIn("Delegation prompt:", output)
+        self.assertIn("To use in Copilot:", output)
+        self.assertIn("To query via CLI:", output)
+
     def test_agents_delegate_task_preserved_in_json(self):
         task = "Define the release strategy for v2"
         out = io.StringIO()

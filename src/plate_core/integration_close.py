@@ -38,6 +38,7 @@ _PLATE_ISSUE_TYPE_LABELS = frozenset(
         "Feedback Response",
         "Spike",
         "Documentation",
+        "Hardening",
     }
 )
 
@@ -54,6 +55,7 @@ _CLOSABLE_TYPES = frozenset(
         "Feedback Response",
         "Spike",
         "Documentation",
+        "Hardening",
     }
 )
 

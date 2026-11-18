@@ -6,7 +6,7 @@
     gh pr create --label "Feature" ...
     gh pr edit NUMBER --add-label "Feature"
 
-  Valid PR type labels: Bug | Feature | Documentation
+  Valid PR type labels: Bug | Feature | Documentation | Feedback Response | Hardening
   Missing or multiple type labels fail PLATE Label Check CI.
 
   Copilot and Grok Build: PR titles are for humans. Keep titles clean and descriptive.
@@ -32,8 +32,8 @@
 ## Links
 
 - `Closes #N` (or `Fixes #N` / `Resolves #N`) when merge should close an issue — required for Feature, Bug, and issue-driven Documentation PRs unless `no-issue` applies
-- Apply exactly one PR type label: `Bug`, `Feature`, or `Documentation` (see comment at top of this file)
-- Feature PRs: add or update a per-feature change file under `.agentic/releases/` (unreleased fragment or version directory)
+- Apply exactly one PR type label: `Bug`, `Feature`, `Documentation`, `Feedback Response`, or `Hardening` (see comment at top of this file)
+- Feature and Hardening PRs: add or update a per-feature change file under `.agentic/releases/` (unreleased fragment or version directory)
 
 ## Visual evidence
 
