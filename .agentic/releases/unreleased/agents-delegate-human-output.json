@@ -1,0 +1,8 @@
+{
+  "slug": "agents-delegate-human-output",
+  "change_type": "fix",
+  "surface": "gh plate agents delegate",
+  "summary": "gh plate agents delegate prints the task, delegation prompt and invocation hints again in human-readable mode",
+  "migration_impact": "None.",
+  "agent_notes": "Human-readable gh plate agents delegate output once again includes the task, delegation prompt, and Copilot/CLI invocation hints after the 'Delegating to:' line."
+}
