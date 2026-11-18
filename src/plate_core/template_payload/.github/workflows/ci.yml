@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   labels:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     outputs:
       runs_on: ${{ steps.plate_runs_on.outputs.runs_on }}
     steps:

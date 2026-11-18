@@ -17,7 +17,7 @@ jobs:
         contains(join(github.event.issue.labels.*.name, ','), 'feature') ||
         contains(join(github.event.issue.labels.*.name, ','), 'question')
       )
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

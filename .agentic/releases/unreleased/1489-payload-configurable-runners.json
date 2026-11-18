@@ -1,0 +1,9 @@
+{
+  "slug": "1489-payload-configurable-runners",
+  "change_type": "feature",
+  "surface": "src/plate_core/template_payload/.github/workflows, workflow_runs_on.py",
+  "summary": "All shipped payload Linux workflows read runs-on from CI_RUNS_ON or PLATE_RUNS_ON with ubuntu-latest default. Third-party hosted ubicloud-* labels skip the self-hosted idle probe.",
+  "migration_impact": "Adopters can set CI_RUNS_ON or PLATE_RUNS_ON once; gh plate import-payload --strategy force no longer resets jobs to hardcoded ubuntu-latest.",
+  "breaking": false,
+  "links": ["#1489", "#1490"]
+}

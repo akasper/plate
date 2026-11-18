@@ -32,10 +32,11 @@ HOSTED_RUNNER_LABELS: frozenset[str] = frozenset(
 # Expression used when a job reads ``needs.<job>.outputs.runs_on`` after the probe step.
 RUNS_ON_FROM_NEEDS_OUTPUT = "${{ fromJSON(needs.{needs_job}.outputs.runs_on) }}"
 
-# Default override when no dynamic probe job ran (lightweight jobs only).
-RUNS_ON_VAR_EXPRESSION = (
-    '${{ fromJSON(vars.PLATE_RUNS_ON || \'["ubuntu-latest"]\') }}'
+# Default override when no dynamic probe job ran (lightweight Linux jobs).
+LINUX_RUNS_ON_VAR_EXPRESSION = (
+    "${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}"
 )
+RUNS_ON_VAR_EXPRESSION = LINUX_RUNS_ON_VAR_EXPRESSION
 
 
 def parse_runs_on_var(raw: str | None) -> list[str]:
@@ -53,8 +54,17 @@ def parse_runs_on_var(raw: str | None) -> list[str]:
     return list(DEFAULT_RUNS_ON)
 
 
+def is_hosted_runner_label(label: str) -> bool:
+    """Return whether *label* names a hosted runner (GitHub or known third-party pool)."""
+    if label in HOSTED_RUNNER_LABELS:
+        return True
+    if label.startswith("ubicloud-"):
+        return True
+    return False
+
+
 def is_hosted_only(labels: Sequence[str]) -> bool:
-    return bool(labels) and all(label in HOSTED_RUNNER_LABELS for label in labels)
+    return bool(labels) and all(is_hosted_runner_label(label) for label in labels)
 
 
 def runner_is_idle_match(
@@ -159,8 +169,12 @@ function parseConfigured(raw) {
   return [...DEFAULT_RUNS_ON];
 }
 
+function isHostedLabel(label) {
+  return HOSTED.has(label) || label.startsWith('ubicloud-');
+}
+
 function isHostedOnly(labels) {
-  return labels.length > 0 && labels.every((l) => HOSTED.has(l));
+  return labels.length > 0 && labels.every((l) => isHostedLabel(l));
 }
 
 function runnerMatches(runner, required) {

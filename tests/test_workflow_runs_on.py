@@ -2,10 +2,12 @@ import unittest
 
 from plate_core.workflow_runs_on import (
     DEFAULT_RUNS_ON,
+    LINUX_RUNS_ON_VAR_EXPRESSION,
     choose_runs_on,
     composite_action_yaml,
     has_idle_runner,
     is_hosted_only,
+    is_hosted_runner_label,
     parse_runs_on_var,
     runner_is_idle_match,
 )
@@ -26,7 +28,13 @@ class WorkflowRunsOnTests(unittest.TestCase):
 
     def test_hosted_only_detection(self):
         self.assertTrue(is_hosted_only(["ubuntu-latest"]))
+        self.assertTrue(is_hosted_runner_label("ubicloud-standard-2"))
+        self.assertTrue(is_hosted_only(["ubicloud-standard-2"]))
         self.assertFalse(is_hosted_only(["self-hosted", "plate-local"]))
+
+    def test_linux_runs_on_var_expression_documents_variables(self):
+        self.assertIn("vars.CI_RUNS_ON", LINUX_RUNS_ON_VAR_EXPRESSION)
+        self.assertIn("vars.PLATE_RUNS_ON", LINUX_RUNS_ON_VAR_EXPRESSION)
 
     def test_runner_idle_match_requires_online_not_busy(self):
         runner = {
@@ -120,6 +128,11 @@ class WorkflowRunsOnTests(unittest.TestCase):
         self.assertIn("catch (err)", yaml_text)
         self.assertIn("core.warning", yaml_text)
         self.assertIn("return null", yaml_text)
+
+    def test_composite_action_treats_ubicloud_as_hosted(self):
+        yaml_text = composite_action_yaml()
+        self.assertIn("ubicloud-", yaml_text)
+        self.assertIn("isHostedLabel", yaml_text)
 
 
 if __name__ == "__main__":

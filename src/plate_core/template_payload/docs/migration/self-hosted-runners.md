@@ -74,6 +74,25 @@ Design from [#1210](https://github.com/akasper/plate/issues/1210):
 
 No machine needs to be dedicated full-time; local runners are for **spare capacity**, not a replacement for hosted CI safety gates.
 
+## Repository variables (all payload Linux jobs)
+
+Every Linux job in the shipped template payload reads its `runs-on` from repository variables, defaulting to GitHub-hosted Ubuntu when unset:
+
+```yaml
+runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
+```
+
+| Variable | Purpose |
+|---|---|
+| `CI_RUNS_ON` | Legacy name used by early adopter repos; a single runner label (for example a third-party hosted pool). |
+| `PLATE_RUNS_ON` | PLATE name; same semantics. When both are set, `CI_RUNS_ON` wins. |
+
+Values may be a **plain label** (for example `ubicloud-standard-2`), a JSON string (`"ubuntu-24.04"`), or a JSON label array (`["self-hosted", "plate-local"]`) when passed into `plate-select-runs-on` (see [#1490](https://github.com/akasper/plate/issues/1490)).
+
+**Force import:** `gh plate import-payload --strategy force` overwrites workflow files from the template. Set `CI_RUNS_ON` or `PLATE_RUNS_ON` on the repository so refreshed workflows keep your runner label instead of the default `ubuntu-latest`.
+
+Heavy workflows (`ci.yml`, `test-e2e.yml`) additionally run `plate-select-runs-on` to probe real self-hosted runners before scheduling test jobs. Labels that name only hosted runners (including `ubuntu-latest` and `ubicloud-*`) skip the idle probe.
+
 ## Fallback to GitHub-hosted runners
 
 When **no** local runner is free, GitHub **queues** the job rather than automatically moving it to hosted runners.
@@ -92,7 +111,7 @@ To enable local runner selection, store a **classic PAT with `repo` scope** or a
     github-token: ${{ secrets.PLATE_RUNNER_PROBE_PAT || github.token }}
 ```
 
-Template `ci.yml` and `test-e2e.yml` wire this secret when present. Without a suitable PAT, self-hosted labels in `PLATE_RUNS_ON` still queue jobs on GitHub-hosted fallback runners.
+All template payload workflows honor `CI_RUNS_ON` / `PLATE_RUNS_ON` on lightweight jobs. Template `ci.yml` and `test-e2e.yml` wire the probe PAT when present. Without a suitable PAT, self-hosted labels in `PLATE_RUNS_ON` still queue jobs on GitHub-hosted fallback runners.
 <!-- PLATES-CORE:END self-hosted-runner-probe-permissions -->
 
 Set a **job timeout** so a queued job eventually runs on GitHub-hosted runners instead of waiting up to GitHub’s default queue horizon (on the order of a day).

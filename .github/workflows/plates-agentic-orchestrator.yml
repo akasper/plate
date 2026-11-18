@@ -13,7 +13,7 @@ jobs:
         (github.event.action == 'labeled' && contains(fromJSON('["status:ready-to-work","status:blocked"]'), github.event.label.name)) ||
         (github.event.action == 'unlabeled' && contains(fromJSON('["status:ready-to-work","status:blocked"]'), github.event.label.name))
       )
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     permissions:
       issues: write
       pull-requests: write
