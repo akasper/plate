@@ -550,6 +550,44 @@ class TestImportPayload(unittest.TestCase):
             formatted = format_import_payload_report(report)
             self.assertNotIn("config init", formatted.lower())
 
+    def test_installed_gitignore_ignores_pycache_and_pyc(self):
+        """#1460: payload .gitignore keeps __pycache__/*.pyc out of adopter commits."""
+        from plate_core.import_payload import import_payload
+        from plate_core.procutil import run_hidden
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            applied = import_payload(root, strategy="safe", apply=True)
+            self.assertIn(".gitignore", applied["created"])
+            self.assertTrue((root / ".gitignore").is_file())
+
+            run_hidden(["git", "init"], cwd=str(root), check=True)
+            cache = root / "src" / "pkg" / "__pycache__"
+            cache.mkdir(parents=True)
+            (cache / "module.cpython-312.pyc").write_bytes(b"\x00\x00")
+            venv_python = root / ".venv" / "bin" / "python"
+            venv_python.parent.mkdir(parents=True)
+            venv_python.write_text("", encoding="utf-8")
+            (root / ".env").write_text("SECRET=1\n", encoding="utf-8")
+
+            for rel in (
+                "src/pkg/__pycache__/module.cpython-312.pyc",
+                ".venv/bin/python",
+                ".env",
+            ):
+                result = run_hidden(
+                    ["git", "check-ignore", "--no-index", rel],
+                    cwd=str(root),
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(
+                    result.returncode,
+                    0,
+                    f"expected {rel!r} to be ignored by payload .gitignore: "
+                    f"{result.stdout}{result.stderr}",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

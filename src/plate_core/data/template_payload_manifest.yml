@@ -4,6 +4,7 @@ schema_version: 2
 include_globs:
   - ".agentic/**"
   - ".github/**"
+  - ".gitignore"
   - "docs/**"
   - "scripts/**"
   - "tests/e2e/**"

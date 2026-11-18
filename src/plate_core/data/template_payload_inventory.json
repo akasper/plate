@@ -204,6 +204,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".gitignore",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "AGENTS.md",
       "classification": "copy_to_downstream"
     },
