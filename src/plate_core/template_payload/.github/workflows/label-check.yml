@@ -17,7 +17,7 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Release', 'Research', 'Design', 'Question', 'Task', 'Audit', 'Migration', 'Feedback Response', 'Spike'];
+            const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Release', 'Research', 'Design', 'Question', 'Task', 'Audit', 'Migration', 'Feedback Response', 'Spike', 'Hardening'];
             const requiresMilestone = ['Feature', 'Epic', 'Release'];
             const allowedStatusLabels = ['status:stub', 'status:blocked', 'status:ready-to-work', 'status:implemented'];
             const allowedTierLabels = ['tier:T0', 'tier:T1', 'tier:T2', 'tier:T3'];

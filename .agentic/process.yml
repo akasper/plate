@@ -60,12 +60,14 @@ labels:
       - "Task"
       - "Audit"
       - "Migration"
+      - "Hardening"
   # Semver track labels (Major/Minor/Patch) are used on changing issues (Feature, Bug, Documentation, etc.) to declare target release track and drive landing on release-major/minor/patch branches. They are not a "type" but a stable planning signal for the release model (see release-ceremony-refinement design). They are registered in .github/labels.yml alongside area:/risk:/need: labels.
   pull_request_type_labels:
     required_exactly_one:
       - "Bug"
       - "Feature"
       - "Documentation"
+      - "Hardening"
   release_rules:
     branch_model:
       # Refined multi-track model (see docs/design/release-ceremony-refinement.md and AGENTS.md §Branch Model).
@@ -96,7 +98,7 @@ labels:
     fragment_contract:
       source_dir: ".agentic/releases/unreleased/"
       versioned_dir: ".agentic/releases/vX.Y.Z/"
-      required_for: "Feature PRs that change PLATE process, templates, or agent surfaces"
+      required_for: "Feature and Hardening PRs that change PLATE process, templates, or agent surfaces"
       aggregated_by: "gh plate release cut vX.Y.Z"
     extension_hook_surface:
       field: "release_checks"
@@ -166,12 +168,14 @@ pull_requests:
     - "Bug"
     - "Feature"
     - "Documentation"
+    - "Hardening"
   feature_pr_requires_current_md: false
   feature_pr_requires_release_change_file: true
   issue_link_required_for:
     - "Bug"
     - "Feature"
     - "Documentation"
+    - "Hardening"
   accepted_issue_link_methods:
     - "closing keyword in PR body"
     - "Development sidebar link"
@@ -181,6 +185,7 @@ pull_requests:
     - "Bug"
     - "Feature"
     - "Documentation"
+    - "Hardening"
   required_sections:
     - "Summary"
     - "Linked work"
