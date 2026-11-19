@@ -47,12 +47,15 @@ def parse_runs_on_var(raw: str | None) -> list[str]:
     """Parse ``PLATE_RUNS_ON`` repository variable text into a label list."""
     if raw is None or not str(raw).strip():
         return list(DEFAULT_RUNS_ON)
+    text = str(raw).strip()
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(text)
     except json.JSONDecodeError:
-        return list(DEFAULT_RUNS_ON)
+        return [text]
     if isinstance(parsed, str):
-        return [parsed]
+        return [parsed] if parsed else list(DEFAULT_RUNS_ON)
+    if isinstance(parsed, (int, float)) and not isinstance(parsed, bool):
+        return [text]
     if isinstance(parsed, list) and all(isinstance(x, str) and x for x in parsed):
         return list(parsed)
     return list(DEFAULT_RUNS_ON)
@@ -124,7 +127,7 @@ inputs:
     required: false
     default: '{DEFAULT_PROBE_TIMEOUT_SECONDS}'
   plate-runs-on:
-    description: Value of repository variable PLATE_RUNS_ON (JSON label array)
+    description: Value of repository variable PLATE_RUNS_ON (plain label, JSON string, or JSON array)
     required: false
     default: ''
   github-token:
@@ -161,16 +164,30 @@ const HOSTED = new Set(%s);
 
 function parseConfigured(raw) {
   if (!raw || !String(raw).trim()) return [...DEFAULT_RUNS_ON];
+  const text = String(raw).trim();
   try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === 'string') return [parsed];
+    const parsed = JSON.parse(text);
+    if (typeof parsed === 'string') {
+      if (parsed) return [parsed];
+      core.warning(
+        `PLATE_RUNS_ON rejected empty JSON string; falling back to ${JSON.stringify(DEFAULT_RUNS_ON)}.`,
+      );
+      return [...DEFAULT_RUNS_ON];
+    }
+    if (typeof parsed === 'number' && Number.isFinite(parsed)) {
+      return [text];
+    }
     if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string' && x)) {
       return parsed;
     }
+    core.warning(
+      `PLATE_RUNS_ON must be a runner label, a JSON string, or a JSON array of labels; ` +
+        `got ${JSON.stringify(parsed)}. Falling back to ${JSON.stringify(DEFAULT_RUNS_ON)}.`,
+    );
+    return [...DEFAULT_RUNS_ON];
   } catch (e) {
-    core.info(`PLATE_RUNS_ON parse failed: ${e.message}`);
+    return [text];
   }
-  return [...DEFAULT_RUNS_ON];
 }
 
 function isHostedLabel(label) {
