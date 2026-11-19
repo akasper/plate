@@ -7,6 +7,7 @@ wire this helper in a follow-up after owner approval.
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -122,9 +123,9 @@ def default_policy_config() -> dict[str, Any]:
     return {
         "version": "1",
         "enabled": True,
-        "cost_tiers": dict(DEFAULT_COST_TIERS),
+        "cost_tiers": copy.deepcopy(DEFAULT_COST_TIERS),
         "job_sizes": {},
-        "force_run": dict(DEFAULT_FORCE_RUN),
+        "force_run": copy.deepcopy(DEFAULT_FORCE_RUN),
     }
 
 
@@ -155,14 +156,14 @@ def load_ci_tiered_policy_config(
 def _merge_defaults(config: dict[str, Any]) -> dict[str, Any]:
     merged = default_policy_config()
     merged.update({k: v for k, v in config.items() if k != "cost_tiers" and k != "force_run"})
-    cost = dict(DEFAULT_COST_TIERS)
+    cost = copy.deepcopy(DEFAULT_COST_TIERS)
     if isinstance(config.get("cost_tiers"), dict):
         for tier, bounds in config["cost_tiers"].items():
             if isinstance(bounds, dict):
                 cost.setdefault(tier, {})
                 cost[tier].update(bounds)
     merged["cost_tiers"] = cost
-    force = dict(DEFAULT_FORCE_RUN)
+    force = copy.deepcopy(DEFAULT_FORCE_RUN)
     if isinstance(config.get("force_run"), dict):
         for key, val in config["force_run"].items():
             force[key] = val

@@ -185,8 +185,8 @@ def test_ci_and_merge_transitions_and_head_commit():
         {"head_sha": "bbb", "mergeable_state": "dirty", "ci_state": "failure"},
     )
     assert is_actionable(summary)
-    assert summary["ci_transition"] == {"from": "pending", "to": "failure"}
-    assert summary["merge_state_change"] == {"from": "clean", "to": "dirty"}
+    assert summary["ci_transition"] == {"from": "pending", "to": "failure", "head_sha": "bbb"}
+    assert summary["merge_state_change"] == {"from": "clean", "to": "dirty", "head_sha": "bbb"}
     assert summary["head_commit"] == {"sha": "bbb", "previous_sha": "aaa"}
     text = render_wake_summary(summary)
     assert "CI: pending -> failure" in text
