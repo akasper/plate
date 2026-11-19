@@ -79,9 +79,20 @@ def _read_json_version(path: Path) -> str:
     return value
 
 
+def _has_canonical_version_files(root: Path) -> bool:
+    """True when the plate-core tree markers (same as ``find_repo_root``) exist.
+
+    Adopter repositories have no ``src/plate_core`` or ``pyproject.toml`` and
+    therefore no repository version surfaces to read or sync.
+    """
+    return (root / "src" / "plate_core" / "__init__.py").exists() and (root / "pyproject.toml").exists()
+
+
 def read_repository_versions(repo_root: Path) -> dict[str, str]:
     """Read the current version from each canonical repository version file."""
     root = repo_root.resolve()
+    if not _has_canonical_version_files(root):
+        return {}
     targets = repository_version_targets(root)
     # Copilot marketplace (targets[4]) uses metadata + plugins[0]
     copilot_market = json.loads(targets[4].read_text(encoding="utf-8"))
@@ -125,6 +136,8 @@ def read_repository_versions(repo_root: Path) -> dict[str, str]:
 def sync_repository_version(version: str, repo_root: Path, *, dry_run: bool = False) -> list[Path]:
     """Sync repository version files to *version* and return updated paths."""
     root = repo_root.resolve()
+    if not _has_canonical_version_files(root):
+        return []
     targets = repository_version_targets(root)
     _replace_pattern(targets[0], _INIT_VERSION_RE, f'__version__ = "{version}"', dry_run=dry_run)
     _replace_pattern(targets[1], _PYPROJECT_VERSION_RE, f'version = "{version}"', dry_run=dry_run)
