@@ -11,7 +11,7 @@ permissions:
 jobs:
   batch-open-questions:
     if: contains(github.event.comment.body, '/question-batch') || contains(github.event.comment.body, '/QUESTION-BATCH')
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - name: Handle /question-batch slash command
         uses: actions/github-script@v7

@@ -15,7 +15,7 @@ jobs:
         github.event.action == 'closed' ||
         (github.event.action == 'labeled' && contains(fromJSON('["status:blocked","status:ready-to-work"]'), github.event.label.name))
       )
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - name: Promote unblocked Feature issues to ready
         uses: actions/github-script@v8

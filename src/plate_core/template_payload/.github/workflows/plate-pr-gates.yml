@@ -43,7 +43,7 @@ jobs:
       github.event_name == 'pull_request_review' ||
       github.event_name == 'pull_request_review_comment' ||
       (github.event_name == 'pull_request' && github.event.action != 'closed')
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -773,7 +773,7 @@ jobs:
         startsWith(github.event.pull_request.base.ref, 'epic/'))) ||
       (github.event_name == 'push' &&
        (startsWith(github.ref, 'refs/heads/release') || startsWith(github.ref, 'refs/heads/epic/')))
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     permissions:
       contents: read
       issues: write

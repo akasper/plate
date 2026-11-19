@@ -16,7 +16,7 @@ permissions:
 jobs:
   sync-wiki:
     if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - name: Determine whether wiki sync should run
         id: gate

@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   address-feedback:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     concurrency:
       group: plates-feedback-${{ github.event.inputs.pr_number }}
       cancel-in-progress: false

@@ -37,7 +37,7 @@ jobs:
       - id: plate_runs_on
         uses: ./.github/actions/plate-select-runs-on
         with:
-          plate-runs-on: ${{ vars.PLATE_RUNS_ON }}
+          plate-runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON }}
           github-token: ${{ secrets.PLATE_RUNNER_PROBE_PAT || github.token }}
 
   test-e2e:
@@ -220,7 +220,7 @@ jobs:
     name: Generate Demo GIFs
     needs: test-e2e
     if: success() && github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'demo')
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     permissions:
       pull-requests: write
 

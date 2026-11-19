@@ -49,8 +49,12 @@ runs:
               return [...DEFAULT_RUNS_ON];
             }
             
+            function isHostedLabel(label) {
+              return HOSTED.has(label) || label.startsWith('ubicloud-');
+            }
+            
             function isHostedOnly(labels) {
-              return labels.length > 0 && labels.every((l) => HOSTED.has(l));
+              return labels.length > 0 && labels.every((l) => isHostedLabel(l));
             }
             
             function runnerMatches(runner, required) {
