@@ -15,7 +15,11 @@ class WorkflowRunsOnTests(unittest.TestCase):
     def test_parse_defaults_to_ubuntu_latest(self):
         self.assertEqual(parse_runs_on_var(None), ["ubuntu-latest"])
         self.assertEqual(parse_runs_on_var(""), ["ubuntu-latest"])
-        self.assertEqual(parse_runs_on_var("not-json"), ["ubuntu-latest"])
+        self.assertEqual(parse_runs_on_var('""'), ["ubuntu-latest"])
+
+    def test_parse_plain_runner_label(self):
+        self.assertEqual(parse_runs_on_var("ubicloud-standard-2"), ["ubicloud-standard-2"])
+        self.assertEqual(parse_runs_on_var("self-hosted"), ["self-hosted"])
 
     def test_parse_json_array_and_string(self):
         self.assertEqual(
@@ -23,6 +27,21 @@ class WorkflowRunsOnTests(unittest.TestCase):
             ["self-hosted", "plate-local"],
         )
         self.assertEqual(parse_runs_on_var('"windows-latest"'), ["windows-latest"])
+
+    def test_parse_numeric_plain_label(self):
+        self.assertEqual(parse_runs_on_var("123"), ["123"])
+        self.assertEqual(parse_runs_on_var("42"), ["42"])
+
+    def test_parse_rejects_invalid_json_values(self):
+        self.assertEqual(parse_runs_on_var("{}"), ["ubuntu-latest"])
+        self.assertEqual(parse_runs_on_var("true"), ["ubuntu-latest"])
+        self.assertEqual(parse_runs_on_var('["ok", ""]'), ["ubuntu-latest"])
+
+    def test_composite_action_parse_emits_warning_on_invalid_json(self):
+        yaml_text = composite_action_yaml()
+        self.assertIn("core.warning", yaml_text)
+        self.assertIn("PLATE_RUNS_ON must be a runner label", yaml_text)
+        self.assertNotIn("PLATE_RUNS_ON parse failed", yaml_text)
 
     def test_hosted_only_detection(self):
         self.assertTrue(is_hosted_only(["ubuntu-latest"]))
