@@ -18,7 +18,7 @@ jobs:
   # extra hosted job (checkout + probe) before test starts; adopters keep plate-select-runs-on
   # in the template payload for private repos and PLATE_RUNS_ON.
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -113,7 +113,7 @@ jobs:
       github.head_ref == 'release' ||
       startsWith(github.head_ref, 'release-') ||
       startsWith(github.base_ref, 'release-')
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - name: Heavy release context detected

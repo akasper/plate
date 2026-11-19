@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   post-cost-summary:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     # Only run when issues are closed (not deleted)
     if: github.event.action == 'closed' && github.event.issue != null && !github.event.issue.pull_request
     steps:

@@ -27,7 +27,7 @@ jobs:
     if: |
       (github.event.action == 'labeled' && github.event.label.name == 'Feedback Response') ||
       (github.event.action == 'opened' && contains(github.event.pull_request.labels.*.name, 'Feedback Response'))
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     permissions:
       pull-requests: write
     steps:

@@ -11,7 +11,7 @@ permissions:
 jobs:
   start-ready-feature:
     if: github.event.label.name == 'status:ready-to-work'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - name: Trigger feature implementation kickoff
         uses: actions/github-script@v8
