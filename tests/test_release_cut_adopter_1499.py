@@ -9,6 +9,7 @@ called :func:`plate_core.version_sync.find_repo_root`, which raised
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -18,6 +19,10 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from plate_core import release as core_release  # noqa: E402
+from plate_core.version_sync import (  # noqa: E402
+    read_repository_versions,
+    sync_repository_version,
+)
 
 import cut_release as script_cut_release  # noqa: E402
 
@@ -122,6 +127,55 @@ class AdopterWithOnlyPyprojectTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertTrue((releases / "v1.0.0" / "release.json").exists())
             self.assertIn('version = "0.0.1"', pyproject.read_text(encoding="utf-8"))
+
+
+class PartialPlateTreeTests(unittest.TestCase):
+    """A plugin surface without the canonical pair is an incomplete PLATE tree."""
+
+    def test_sync_and_read_raise_for_partial_tree(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_dir = root / "plugin"
+            plugin_dir.mkdir(parents=True)
+            (plugin_dir / "plugin.json").write_text('{"version": "1.1.0"}', encoding="utf-8")
+
+            with self.assertRaises(RuntimeError) as sync_ctx:
+                sync_repository_version("1.2.0", root)
+            self.assertIn("Incomplete PLATE release tree", str(sync_ctx.exception))
+
+            with self.assertRaises(RuntimeError) as read_ctx:
+                read_repository_versions(root)
+            self.assertIn("Incomplete PLATE release tree", str(read_ctx.exception))
+
+
+class PythonAdopterVersionTests(unittest.TestCase):
+    """A bare pyproject.toml is not a PLATE signal; version helpers no-op."""
+
+    def test_sync_and_read_return_empty_for_python_adopter(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pyproject.toml").write_text('[project]\nversion = "0.1.0"\n', encoding="utf-8")
+
+            self.assertEqual(sync_repository_version("1.2.0", root), [])
+            self.assertEqual(read_repository_versions(root), {})
+
+
+class NestedPlateTreeVersionRootTests(unittest.TestCase):
+    """Version resolution prefers the nested plate-core tree over the outer git root."""
+
+    def test_version_root_prefers_nested_tree_while_release_root_stays_outer(self):
+        with TemporaryDirectory() as tmp:
+            outer = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=outer, check=True)
+            inner = outer / "inner"
+            (inner / "src" / "plate_core").mkdir(parents=True)
+            (inner / "pyproject.toml").write_text('[project]\nversion = "0.1.0"\n', encoding="utf-8")
+            (inner / "src" / "plate_core" / "__init__.py").write_text(
+                '__version__ = "0.1.0"\n', encoding="utf-8"
+            )
+
+            self.assertEqual(core_release._resolve_version_root(inner), inner.resolve())
+            self.assertEqual(core_release._resolve_repo_root_for_releases(inner), outer.resolve())
 
 
 if __name__ == "__main__":
