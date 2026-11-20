@@ -2,13 +2,16 @@ import unittest
 
 from plate_core.workflow_runs_on import (
     DEFAULT_RUNS_ON,
+    LINUX_RUNS_ON_UNTRUSTED_CONDITION,
     LINUX_RUNS_ON_VAR_EXPRESSION,
+    PLATE_RUNS_ON_INPUT_EXPRESSION,
     choose_runs_on,
     composite_action_yaml,
     has_idle_runner,
     is_hosted_only,
     is_hosted_runner_label,
     parse_runs_on_var,
+    resolve_linux_runs_on,
     runner_is_idle_match,
 )
 
@@ -54,6 +57,106 @@ class WorkflowRunsOnTests(unittest.TestCase):
     def test_linux_runs_on_var_expression_documents_variables(self):
         self.assertIn("vars.CI_RUNS_ON", LINUX_RUNS_ON_VAR_EXPRESSION)
         self.assertIn("vars.PLATE_RUNS_ON", LINUX_RUNS_ON_VAR_EXPRESSION)
+
+    def test_linux_runs_on_var_expression_has_json_and_fork_guard(self):
+        self.assertIn("github.event.repository.private", LINUX_RUNS_ON_VAR_EXPRESSION)
+        self.assertIn("startsWith(", LINUX_RUNS_ON_VAR_EXPRESSION)
+        self.assertIn("fromJSON(", LINUX_RUNS_ON_VAR_EXPRESSION)
+        self.assertIn(LINUX_RUNS_ON_UNTRUSTED_CONDITION, LINUX_RUNS_ON_VAR_EXPRESSION)
+        self.assertTrue(LINUX_RUNS_ON_VAR_EXPRESSION.startswith("${{ "))
+        self.assertTrue(LINUX_RUNS_ON_VAR_EXPRESSION.endswith(" }}"))
+        # The short probe input expression is intentionally different and unchanged.
+        self.assertEqual(
+            PLATE_RUNS_ON_INPUT_EXPRESSION,
+            "${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON }}",
+        )
+
+    def test_resolve_linux_runs_on_plain_label_passes_through(self):
+        self.assertEqual(
+            resolve_linux_runs_on(
+                "ubicloud-standard-2",
+                None,
+                repository_private=True,
+                pr_head_full_name=None,
+                repository="acme/app",
+            ),
+            "ubicloud-standard-2",
+        )
+        self.assertEqual(
+            resolve_linux_runs_on(
+                "plate-local",
+                None,
+                repository_private=True,
+                pr_head_full_name=None,
+                repository="acme/app",
+            ),
+            "plate-local",
+        )
+
+    def test_resolve_linux_runs_on_decodes_json(self):
+        self.assertEqual(
+            resolve_linux_runs_on(
+                None,
+                '["self-hosted", "plate-local"]',
+                repository_private=True,
+                pr_head_full_name=None,
+                repository="acme/app",
+            ),
+            ["self-hosted", "plate-local"],
+        )
+        self.assertEqual(
+            resolve_linux_runs_on(
+                '"ubuntu-24.04"',
+                None,
+                repository_private=True,
+                pr_head_full_name=None,
+                repository="acme/app",
+            ),
+            "ubuntu-24.04",
+        )
+
+    def test_resolve_linux_runs_on_fork_and_public_guard(self):
+        array = '["self-hosted", "plate-local"]'
+        self.assertEqual(
+            resolve_linux_runs_on(
+                None,
+                array,
+                repository_private=True,
+                pr_head_full_name="evil/plate",
+                repository="acme/app",
+            ),
+            "ubuntu-latest",
+        )
+        self.assertEqual(
+            resolve_linux_runs_on(
+                None,
+                array,
+                repository_private=False,
+                pr_head_full_name=None,
+                repository="acme/app",
+            ),
+            "ubuntu-latest",
+        )
+        self.assertEqual(
+            resolve_linux_runs_on(
+                None,
+                array,
+                repository_private=None,
+                pr_head_full_name=None,
+                repository="acme/app",
+            ),
+            "ubuntu-latest",
+        )
+        self.assertEqual(
+            resolve_linux_runs_on(
+                None,
+                array,
+                repository_private=True,
+                pr_head_full_name="acme/app",
+                repository="acme/app",
+            ),
+            ["self-hosted", "plate-local"],
+        )
 
     def test_runner_idle_match_requires_online_not_busy(self):
         runner = {
