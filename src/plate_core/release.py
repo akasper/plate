@@ -307,6 +307,14 @@ def _resolve_repo_root_for_releases(start: Path) -> Path:
         return find_repo_root(start).resolve()
 
 
+def _resolve_version_root(start: Path) -> Path:
+    """Version-surface root: nearest plate-core tree if any, else the adopter root."""
+    try:
+        return find_repo_root(start).resolve()
+    except RuntimeError:
+        return _resolve_repo_root_for_releases(start)
+
+
 def resolve_releases_dir(repo_root: Path, releases_dir: Path | None = None) -> Path:
     """Return an absolute releases directory path.
 
@@ -329,13 +337,16 @@ def validate_release_workspace(
     releases_dir: Path | None = None,
 ) -> ReleaseWorkspaceValidationReport:
     """Validate that the repository and release artifact agree on a single release version."""
-    root = find_repo_root(repo_root).resolve()
+    root = _resolve_version_root(repo_root)
     version_files = read_repository_versions(root)
     errors: list[str] = []
 
     discovered_versions = sorted(set(version_files.values()))
     release_version: str | None = None
-    if len(discovered_versions) == 1:
+    if not version_files:
+        # Adopter layout: no plate-core version surfaces to validate against.
+        pass
+    elif len(discovered_versions) == 1:
         release_version = discovered_versions[0]
     else:
         mismatch_summary = ", ".join(f"{path}={version}" for path, version in version_files.items())
@@ -1197,7 +1208,7 @@ def cut_release(
             f"v{fmt_version(current)}. Proceed with caution."
         )
 
-    repo_root = find_repo_root(releases_dir)
+    repo_root = _resolve_version_root(releases_dir)
     version_files = sync_repository_version(version, repo_root, dry_run=True)
     fragments_dir = versioned_dir / "fragments"
     release_data = build_release(version, fragments)
@@ -1517,7 +1528,7 @@ def post_release_fast_forward_comment(
 def _release_git_root(repo_root: Path | str | None) -> Path:
     if repo_root is not None:
         return Path(repo_root)
-    return find_repo_root(Path("."))
+    return _resolve_repo_root_for_releases(Path("."))
 
 
 def _remote_branch_exists(branch: str, *, cwd: str) -> bool:

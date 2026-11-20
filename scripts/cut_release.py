@@ -47,7 +47,8 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from plate_core.version_sync import find_repo_root, sync_repository_version
+from plate_core.release import _resolve_version_root
+from plate_core.version_sync import sync_repository_version
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +302,7 @@ def cut_release(
             f"v{fmt_version(current)}. Proceed with caution."
         )
 
-    repo_root = find_repo_root(releases_dir)
+    repo_root = _resolve_version_root(releases_dir)
     version_files = sync_repository_version(version, repo_root, dry_run=True)
     fragments_dir = versioned_dir / "fragments"
     release_data = build_release(version, fragments)

@@ -79,9 +79,43 @@ def _read_json_version(path: Path) -> str:
     return value
 
 
+def _has_canonical_version_files(root: Path) -> bool:
+    """Decide whether *root* is a PLATE tree with version surfaces to manage.
+
+    A complete PLATE development tree has both ``src/plate_core/__init__.py``
+    and ``pyproject.toml``; such a tree returns ``True`` so its version files
+    are read and synced.
+
+    Genuine adopter repositories have none of the PLATE-specific surfaces
+    (``src/plate_core/__init__.py`` plus the plugin manifests returned by
+    ``repository_version_targets(root)[2:]``) and return ``False`` so version
+    sync is a no-op. ``pyproject.toml`` alone is not a PLATE signal because
+    Python adopter repositories legitimately ship one.
+
+    Any other combination is a partial PLATE tree: some PLATE-specific surface
+    exists but the canonical pair is incomplete. That raises ``RuntimeError`` so
+    release validation fails loudly instead of silently passing with no version.
+    """
+    has_init = (root / "src" / "plate_core" / "__init__.py").exists()
+    has_pyproject = (root / "pyproject.toml").exists()
+    if has_init and has_pyproject:
+        return True
+    targets = repository_version_targets(root)
+    plate_specific = [targets[0], *targets[2:]]
+    if not any(path.exists() for path in plate_specific):
+        return False
+    missing = [path.relative_to(root).as_posix() for path in targets if not path.exists()]
+    present = [path.relative_to(root).as_posix() for path in targets if path.exists()]
+    raise RuntimeError(
+        f"Incomplete PLATE release tree at {root}: missing {missing}; present {present}"
+    )
+
+
 def read_repository_versions(repo_root: Path) -> dict[str, str]:
     """Read the current version from each canonical repository version file."""
     root = repo_root.resolve()
+    if not _has_canonical_version_files(root):
+        return {}
     targets = repository_version_targets(root)
     # Copilot marketplace (targets[4]) uses metadata + plugins[0]
     copilot_market = json.loads(targets[4].read_text(encoding="utf-8"))
@@ -125,6 +159,8 @@ def read_repository_versions(repo_root: Path) -> dict[str, str]:
 def sync_repository_version(version: str, repo_root: Path, *, dry_run: bool = False) -> list[Path]:
     """Sync repository version files to *version* and return updated paths."""
     root = repo_root.resolve()
+    if not _has_canonical_version_files(root):
+        return []
     targets = repository_version_targets(root)
     _replace_pattern(targets[0], _INIT_VERSION_RE, f'__version__ = "{version}"', dry_run=dry_run)
     _replace_pattern(targets[1], _PYPROJECT_VERSION_RE, f'version = "{version}"', dry_run=dry_run)
