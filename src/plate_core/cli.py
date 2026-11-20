@@ -165,8 +165,8 @@ from .fleet import (
     update_handoff,
 )
 from .monitoring import (
-    decide_proposal,
-    list_proposals,
+    decide_proposal as decide_monitor_proposal,
+    list_proposals as list_monitor_proposals,
     monitor_market_signals,
     monitoring_feed_items,
     review_discussions,
@@ -3699,7 +3699,7 @@ def cmd_stub(args: argparse.Namespace) -> int:
 def cmd_monitor(args: argparse.Namespace) -> int:
     """Scheduled discussion review + market monitoring (#642)."""
     if getattr(args, "list_proposals", False):
-        rows = list_proposals(
+        rows = list_monitor_proposals(
             status=str(getattr(args, "status", None) or "pending"),
             source=getattr(args, "source", None) or None,
             limit=int(getattr(args, "limit", 50) or 50),
@@ -3712,7 +3712,7 @@ def cmd_monitor(args: argparse.Namespace) -> int:
         return 0
 
     if getattr(args, "decide", None):
-        out = decide_proposal(
+        out = decide_monitor_proposal(
             str(args.decide),
             str(getattr(args, "decision", None) or "approve"),
             created_issue=getattr(args, "created_issue", None),

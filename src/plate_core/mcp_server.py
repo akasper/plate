@@ -114,8 +114,8 @@ from .fleet import (
     update_handoff,
 )
 from .monitoring import (
-    decide_proposal,
-    list_proposals,
+    decide_proposal as decide_monitor_proposal,
+    list_proposals as list_monitor_proposals,
     monitor_market_signals,
     monitoring_feed_items,
     review_discussions,
@@ -1177,14 +1177,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 )
         elif name == "plate_monitor_list":
             payload = {
-                "proposals": list_proposals(
+                "proposals": list_monitor_proposals(
                     status=str(args.get("status") or "pending"),
                     source=args.get("source"),
                     limit=int(args.get("limit") or 50),
                 )
             }
         elif name == "plate_monitor_decide":
-            payload = decide_proposal(
+            payload = decide_monitor_proposal(
                 str(args.get("proposal_id") or args.get("id") or ""),
                 str(args.get("decision") or "approve"),
                 created_issue=args.get("created_issue"),
