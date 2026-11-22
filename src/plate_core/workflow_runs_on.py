@@ -32,10 +32,39 @@ HOSTED_RUNNER_LABELS: frozenset[str] = frozenset(
 # Expression used when a job reads ``needs.<job>.outputs.runs_on`` after the probe step.
 RUNS_ON_FROM_NEEDS_OUTPUT = "${{ fromJSON(needs.{needs_job}.outputs.runs_on) }}"
 
-# Default override when no dynamic probe job ran (lightweight jobs only).
-RUNS_ON_VAR_EXPRESSION = (
-    '${{ fromJSON(vars.PLATE_RUNS_ON || \'["ubuntu-latest"]\') }}'
+# Default override when no dynamic probe job ran (lightweight Linux jobs).
+_RUNS_ON_VALUE = "(vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)"
+
+# GitHub expressions use short-circuit evaluation, so fromJSON only runs for values
+# that start with '[' or '"'. Plain labels pass through unchanged. Public repositories,
+# fork pull requests, and events without a repository payload fall back to
+# GitHub-hosted ubuntu-latest (parity with plate-select-runs-on isUnsafeForLocal).
+# A falsy JSON decode (for example ``""``) also falls back to ubuntu-latest. Values are
+# not trimmed: a leading space defeats JSON detection, so store variables without
+# surrounding whitespace.
+LINUX_RUNS_ON_UNTRUSTED_CONDITION = (
+    "(github.event.repository.private != true || "
+    "(github.event.pull_request && "
+    "github.event.pull_request.head.repo.full_name != github.repository))"
 )
+LINUX_RUNS_ON_VAR_EXPRESSION = (
+    "${{ "
+    + LINUX_RUNS_ON_UNTRUSTED_CONDITION
+    + " && 'ubuntu-latest' || ((startsWith("
+    + _RUNS_ON_VALUE
+    + ", '[') || startsWith("
+    + _RUNS_ON_VALUE
+    + ", '\"')) && (fromJSON("
+    + _RUNS_ON_VALUE
+    + ") || 'ubuntu-latest')) || "
+    + _RUNS_ON_VALUE
+    + " || 'ubuntu-latest' }}"
+)
+RUNS_ON_VAR_EXPRESSION = LINUX_RUNS_ON_VAR_EXPRESSION
+
+# Probe/bootstrap jobs must stay on GitHub-hosted runners so idle-pool selection can fall back.
+PROBE_BOOTSTRAP_RUNS_ON = "ubuntu-latest"
+PLATE_RUNS_ON_INPUT_EXPRESSION = "${{ vars.CI_RUNS_ON || vars.PLATE_RUNS_ON }}"
 
 
 def parse_runs_on_var(raw: str | None) -> list[str]:
@@ -56,8 +85,48 @@ def parse_runs_on_var(raw: str | None) -> list[str]:
     return list(DEFAULT_RUNS_ON)
 
 
+def resolve_linux_runs_on(
+    ci_runs_on: str | None,
+    plate_runs_on: str | None,
+    *,
+    repository_private: bool | None,
+    pr_head_full_name: str | None,
+    repository: str | None,
+) -> str | list[str]:
+    """Resolve lightweight-job ``runs-on`` exactly like ``LINUX_RUNS_ON_VAR_EXPRESSION``.
+
+    Returns a plain label, a JSON-decoded value (string or list of labels), or the
+    ``ubuntu-latest`` fallback. ``repository_private`` of ``None`` models a missing
+    repository payload and is treated as untrusted. ``pr_head_full_name`` of ``None``
+    means "not a pull_request event".
+    """
+    if repository_private is not True:
+        return DEFAULT_RUNS_ON[0]
+    if pr_head_full_name is not None and pr_head_full_name != repository:
+        return DEFAULT_RUNS_ON[0]
+
+    value = ci_runs_on if ci_runs_on else plate_runs_on
+    if value is None or value == "":
+        return DEFAULT_RUNS_ON[0]
+
+    text = str(value)
+    if text[:1] in ("[", '"'):
+        # Mirrors ``fromJSON(v) || 'ubuntu-latest'``: a falsy decode (``""``) falls back.
+        return json.loads(text) or DEFAULT_RUNS_ON[0]
+    return text
+
+
+def is_hosted_runner_label(label: str) -> bool:
+    """Return whether *label* names a hosted runner (GitHub or known third-party pool)."""
+    if label in HOSTED_RUNNER_LABELS:
+        return True
+    if label.startswith("ubicloud-"):
+        return True
+    return False
+
+
 def is_hosted_only(labels: Sequence[str]) -> bool:
-    return bool(labels) and all(label in HOSTED_RUNNER_LABELS for label in labels)
+    return bool(labels) and all(is_hosted_runner_label(label) for label in labels)
 
 
 def runner_is_idle_match(
@@ -176,8 +245,12 @@ function parseConfigured(raw) {
   }
 }
 
+function isHostedLabel(label) {
+  return HOSTED.has(label) || label.startsWith('ubicloud-');
+}
+
 function isHostedOnly(labels) {
-  return labels.length > 0 && labels.every((l) => HOSTED.has(l));
+  return labels.length > 0 && labels.every((l) => isHostedLabel(l));
 }
 
 function runnerMatches(runner, required) {
