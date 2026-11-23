@@ -32,7 +32,7 @@ DEFAULT_UI_GLOBS: tuple[str, ...] = (
 USER_ATTACHMENTS_PREFIX = "https://github.com/user-attachments/assets/"
 
 _VISUAL_EVIDENCE_NA = re.compile(
-    r"^Visual evidence:\s*not applicable\s*[—–\-]\s*.+",
+    r"^Visual evidence:[ \t]*not applicable[ \t]*[—–\-][ \t]*\S.*",
     re.MULTILINE | re.IGNORECASE,
 )
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
@@ -54,44 +54,57 @@ def default_ui_paths_file() -> Path:
     return Path(".agentic") / "ui-paths.yml"
 
 
+def _sanitize_warning_detail(detail: str) -> str:
+    return " ".join((detail or "").split())
+
+
 def _warn_malformed_ui_paths(config_path: Path, detail: str) -> None:
+    safe = _sanitize_warning_detail(detail)
     print(
         f"::warning title={WARNING_HEADING}::Malformed UI paths config {config_path}: "
-        f"{detail}; using built-in default UI globs.",
+        f"{safe}; using built-in default UI globs.",
         file=sys.stderr,
         flush=True,
     )
 
 
-def load_ui_globs(repo_root: Path | None = None) -> list[str]:
-    """Load UI path globs from ``.agentic/ui-paths.yml`` (``globs`` list) or built-in defaults.
-
-    A missing config file falls back silently to :data:`DEFAULT_UI_GLOBS`. When the
-    file exists but is malformed — unparsable YAML, not a mapping, missing ``globs``,
-    or ``globs`` not being a list of strings — a warning naming the path is written
-    to stderr and the built-in defaults are returned instead of failing open silently.
-    """
-    root = repo_root or Path.cwd()
-    config_path = root / default_ui_paths_file()
+def _load_globs_from_path(config_path: Path, *, warn: bool) -> list[str]:
     if not config_path.is_file():
         return list(DEFAULT_UI_GLOBS)
-
+    text = config_path.read_text(encoding="utf-8")
+    if not text.strip():
+        return list(DEFAULT_UI_GLOBS)
     try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
-        _warn_malformed_ui_paths(config_path, f"unparsable YAML ({exc})")
+        if warn:
+            _warn_malformed_ui_paths(config_path, f"unparsable YAML ({exc})")
         return list(DEFAULT_UI_GLOBS)
-
+    if data is None:
+        return list(DEFAULT_UI_GLOBS)
     if not isinstance(data, dict):
-        _warn_malformed_ui_paths(config_path, "top-level value is not a mapping")
+        if warn:
+            _warn_malformed_ui_paths(config_path, "top-level value is not a mapping")
         return list(DEFAULT_UI_GLOBS)
-
     globs = data.get("globs")
     if not isinstance(globs, list) or not all(isinstance(g, str) for g in globs):
-        _warn_malformed_ui_paths(config_path, "missing or invalid 'globs' list")
+        if warn:
+            _warn_malformed_ui_paths(config_path, "missing or invalid 'globs' list")
         return list(DEFAULT_UI_GLOBS)
-
     return [g.strip() for g in globs if g.strip()]
+
+
+def load_ui_globs(
+    repo_root: Path | None = None,
+    *,
+    ui_paths_file: Path | None = None,
+) -> list[str]:
+    """Load UI globs from a trusted config file, optional repo root (tests), or defaults."""
+    if ui_paths_file is not None:
+        return _load_globs_from_path(ui_paths_file, warn=True)
+    if repo_root is not None:
+        return _load_globs_from_path(repo_root / default_ui_paths_file(), warn=True)
+    return list(DEFAULT_UI_GLOBS)
 
 
 def touches_ui_paths(changed_paths: list[str], globs: list[str] | None = None) -> bool:
@@ -138,6 +151,8 @@ def classify_bad_image_url(url: str) -> str | None:
         return "raw.githubusercontent.com URL"
     if "blob/" in lower and "raw=true" in lower:
         return "blob/...?raw=true URL"
+    if lower.startswith("http://") or lower.startswith("https://"):
+        return "external URL (use user-attachments)"
     return None
 
 
@@ -161,9 +176,10 @@ def evaluate_ui_pr_image_check(
     changed_paths: list[str],
     *,
     repo_root: Path | None = None,
+    ui_paths_file: Path | None = None,
     pr_number: int | None = None,
 ) -> UiPrImageCheckResult:
-    globs = load_ui_globs(repo_root)
+    globs = load_ui_globs(repo_root, ui_paths_file=ui_paths_file)
     if not touches_ui_paths(changed_paths, globs):
         return UiPrImageCheckResult(skipped=True, ok=True, bad_urls=(), messages=())
 
@@ -176,7 +192,8 @@ def evaluate_ui_pr_image_check(
 
     bad: list[str] = []
     for url in urls:
-        if classify_bad_image_url(url) is not None:
+        kind = classify_bad_image_url(url)
+        if kind is not None:
             bad.append(url)
 
     messages: list[str] = [
@@ -206,6 +223,7 @@ def run_check(
     changed_paths: list[str],
     *,
     repo_root: Path | None = None,
+    ui_paths_file: Path | None = None,
     pr_number: int | None = None,
     enforce: bool = False,
     emit_warning: Callable[[str], None] | None = None,
@@ -214,6 +232,7 @@ def run_check(
         body,
         changed_paths,
         repo_root=repo_root,
+        ui_paths_file=ui_paths_file,
         pr_number=pr_number,
     )
     if result.skipped or result.ok:
@@ -245,7 +264,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--stdin", action="store_true", help="Read PR body from stdin")
     parser.add_argument("--files", help="Newline-separated list of changed file paths")
-    parser.add_argument("--repo-root", default=".", help="Repository root for ui-paths.yml")
+    parser.add_argument(
+        "--ui-paths-file",
+        default=None,
+        help="Trusted .agentic/ui-paths.yml from the PR base ref (CI); not the PR head checkout",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root for ui-paths.yml (local/tests only; omit in CI enforce mode)",
+    )
     parser.add_argument("--pr-number", type=int, default=None, help="PR number for fix hints")
     parser.add_argument(
         "--enforce",
@@ -266,10 +294,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.files:
         changed = _read_paths_file(Path(args.files))
 
+    repo_root = Path(args.repo_root) if args.repo_root else None
+    ui_paths_file = Path(args.ui_paths_file) if args.ui_paths_file else None
     return run_check(
         body,
         changed,
-        repo_root=Path(args.repo_root),
+        repo_root=repo_root,
+        ui_paths_file=ui_paths_file,
         pr_number=args.pr_number,
         enforce=_enforce_from_env(args.enforce),
     )
