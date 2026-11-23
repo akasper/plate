@@ -246,6 +246,14 @@ class InferBumpTypeTests(unittest.TestCase):
         frags = [{"change_type": "feature"}, {"change_type": "fix", "breaking": True}]
         self.assertEqual(infer_bump_type(frags), "major")
 
+    def test_hardening_alone_triggers_patch(self):
+        frags = [{"change_type": "hardening"}]
+        self.assertEqual(infer_bump_type(frags), "patch")
+
+    def test_breaking_hardening_triggers_major(self):
+        frags = [{"change_type": "hardening", "breaking": True}]
+        self.assertEqual(infer_bump_type(frags), "major")
+
 
 # ---------------------------------------------------------------------------
 # End-to-end cut_release()

@@ -168,7 +168,7 @@ class PlatformFilterTests(unittest.TestCase):
         self.assertIn("sudo apt-get install -y ffmpeg", rewritten)
         self.assertIn("Required GIF script is missing", rewritten)
         self.assertIn("name: Playwright E2E Tests", rewritten)
-        self.assertIn("runs-on: ubuntu-latest", rewritten)
+        self.assertIn("vars.CI_RUNS_ON", rewritten)
 
         namespaced = _lf(
             prepare_copied_text(
