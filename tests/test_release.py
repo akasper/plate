@@ -1688,6 +1688,12 @@ class FinalizeAutomationTests(unittest.TestCase):
                 capture_output=True,
             )
             subprocess.run(
+                ["git", "branch", "-M", "main"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
                 ["git", "checkout", "-b", "release-v0.10.0"],
                 cwd=root,
                 check=True,
