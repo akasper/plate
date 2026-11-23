@@ -66,6 +66,12 @@ class ValidatePolicyTests(unittest.TestCase):
     def test_defaults_merge_and_validate(self):
         validate_ci_tiered_policy_config(default_policy_config())
 
+    def test_default_policy_config_return_does_not_alias_module_defaults(self):
+        cfg = default_policy_config()
+        cfg["cost_tiers"]["small"]["max_usd"] = 999.0
+        fresh = default_policy_config()
+        self.assertNotEqual(fresh["cost_tiers"]["small"]["max_usd"], 999.0)
+
     def test_rejects_bad_job_size(self):
         cfg = _policy_config(job_sizes={"unit": "huge"})
         with self.assertRaises(CiTieredPolicyError):
