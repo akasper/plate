@@ -61,7 +61,7 @@ One code-owned issue lifecycle built from today's labels and machines. It was re
 | One holder per issue | Exclusivity comes from an atomic GitHub ref. Comments, labels and Lull never decide who holds an issue. |
 | GitHub's clock | Timeouts compare GitHub server timestamps. A local clock only measures durations inside one process. |
 | Transitions are data | One `state_store.Machine` table of (from, event, to) triples, plus a sidecar dict keyed by (from, event) for owner, gate key, timeout, event type and Lull class. No if/else. |
-| Idempotent, logged, reversible | Every transition has a `transition_id`, so a second run is a no-op. Each one appends an event before any GitHub write, and a human can reverse it with one comment command. |
+| Idempotent, logged, reversible | Every transition has a `transition_id`. The local outbox appends `transition_started` (with step cursor) before the first GitHub write. A retry with the same id resumes from the last completed step; only a fully finished transition is a no-op. A human can reverse a completed transition with one comment command. |
 | Autonomy by default | Agents move work on their own. Humans gate only what config says, and the PM's or another agent's say-so is never approval. |
 
 ## Lifecycle
@@ -131,7 +131,7 @@ Dashed edges are side paths. Every open state can also go to abandoned, and need
 | # | From → To | Human gate (balanced) | Event type | Lull class |
 |---|---|---|---|---|
 | 1 | text → intake | No | pm_decision | none |
-| 1b | human-filed → triage | Outside authors: yes, to reach ready | state_transition | none |
+| 1b | human-filed → refinement or ready | Outside authors: yes, to reach ready | state_transition | none |
 | 2 | intake → refinement | No (always-confirm: yes) | state_transition | none |
 | 3 | intake → ready | No (always-confirm: yes) | state_transition | none |
 | 4 | refinement → ready | Only risk:critical or Epic | state_transition | `llm-light` |
@@ -151,11 +151,11 @@ Lull class names (`agent-seat`, `gpu-local`, `llm-light`, `review`) are proposal
 
 ## Start protocol
 
-- **1. Transition id.** `transition_id` = hash(repo, issue, marker version, trigger event id). A duplicate wake computes the same id and becomes a no-op.
+- **1. Transition id.** `transition_id` = hash(repo, issue, marker version at wake, trigger event id). The same webhook delivery or manual wake with the same inputs yields the same id (idempotent retry). After the marker version advances, a new transition gets a new id; that is a new operation, not a duplicate of the prior one.
 - **2. Claim.** Create a commit object (main's tree, with a message that carries `writer_id`, `transition_id`, the target state and the marker comment id), then GraphQL `updateRefs` on `refs/plate/claims/<N>` with `beforeOid` all zeros. That fails if the ref exists, so the loser stops before spending anything.
 - **3. Tentative reserve.** A local fast-fail check against the cached pool (at most 60s old), keyed by `transition_id`, expiring after `reservation_ttl` (30m). It never touches the shared pool, so a dead clone's tentative reservation costs nothing.
 - **4. Lease.** Acquire through the lease adapter with `idempotency_key` = `transition_id`, so a retried acquire returns the same lease.
-- **5a. Pool commit.** Read `refs/plate/budget`, create a commit whose message holds the new committed total and open reservations by issue and `transition_id`, then `updateRefs` with `beforeOid` = the oid just read. If the compare-and-swap fails, re-read, re-check and retry up to 3 times, then undo and stay ready. Committed reservations can never exceed the grant.
+- **5a. Pool commit.** Read `refs/plate/budget`, create a commit whose message holds the new committed total and open reservations by issue and `transition_id`, then `updateRefs` with `beforeOid` = the oid just read. If the compare-and-swap fails, re-read, re-check and retry up to 5 times with jittered backoff (same policy as [GitHub write retries](#timeouts-and-stuck-work)), then undo and stay ready. Committed reservations can never exceed the grant.
 - **5b. Marker commit.** Edit the marker to in_progress with the claim oid, reservation, lease id and a `pending_write`, using the expected-version rule (Marker writes). This edit is the commit point for the issue.
 - **6. Project.** Add `status:in-progress`, remove `status:ready-to-work`, then clear `pending_write`. A failure here isn't rolled back, because `drift_scan` completes it.
 
@@ -164,12 +164,12 @@ Lull class names (`agent-seat`, `gpu-local`, `llm-light`, `review`) are proposal
 | 2 claim (ref exists) | Nothing | Stay ready; `start_aborted: claimed` |
 | 3 reserve (pressure, allocation, pool) | Release claim: `updateRefs` from our oid to zeros | Stay ready |
 | 4 lease (refused, Lull down, no capacity after wait) | Release reservation, release claim | Stay ready; the 6h lease-wait clock keeps running |
-| 5a pool compare-and-swap (3 tries) | Release lease, drop tentative, release claim | Stay ready |
+| 5a pool compare-and-swap (5 tries) | Release lease, drop tentative, release claim | Stay ready |
 | 5b marker write or version check | Pool compare-and-swap to remove the reservation, release lease, release claim | Retry per the GitHub write policy |
-| Crash before 5b | Watchdog: a claim whose `transition_id` isn't in the marker is an orphan, released after 15m of orphan time. A pool reservation whose `transition_id` isn't in the marker is removed by compare-and-swap after the same window. Tentative reservations expire on their own, and leases expire at TTL or are released by tags. | Stay ready |
+| Crash before 5b | Watchdog: a claim whose `transition_id` isn't in the marker is an orphan, released after 15m of orphan time. A pool reservation whose `transition_id` isn't in the marker is removed by compare-and-swap after the same window. Tentative reservations expire on their own, and leases expire at TTL or are released by tags. On restart, a `transition_started` row with the same `transition_id` resumes the start protocol from the recorded step cursor instead of treating the run as finished. | Stay ready |
 | Crash after 5b | Nothing to undo | Owner resumes, or the watchdog treats it as stale (Recovery and drift) |
 
-> **Verified in docs, not yet in practice.** GitHub's docs say REST `POST /git/refs` returns 422 when the ref exists, and GraphQL `updateRefs` is atomic: `beforeOid` is a precondition, and all zeros means the ref must not exist or, as `afterOid`, deletes it. Claims and the pool ref need Contents write. A start costs three writes on the claim path (commit object, `updateRefs`, marker commit) plus two for the pool (commit object, `updateRefs`). A release costs one claim write and two pool writes. All of these count against GitHub's secondary limits for content-creating requests (about 80 a minute and 500 an hour). Branch rulesets target branches and tags, so `refs/plate/*` should sit outside them, but that is unverified until the spike.
+> **Verified in docs, not yet in practice.** GitHub's docs say REST `POST /git/refs` returns 422 when the ref exists, and GraphQL `updateRefs` is atomic: `beforeOid` is a precondition, and all zeros means the ref must not exist or, as `afterOid`, deletes it. Claims and the pool ref need Contents write. A start costs three writes on the claim path (commit object, `updateRefs`, marker commit) plus two for the pool (commit object, `updateRefs`). A release costs one claim write and two pool writes. All of these count against GitHub's secondary limits for content-creating requests (documented on the order of 80/min and 500/hr for content-creating REST/GraphQL writes). Branch rulesets target branches and tags, so `refs/plate/*` should sit outside them, but that is unverified until the spike.
 
 ## Claim spike
 
@@ -186,7 +186,7 @@ This is mandatory before any claim or pool code is written. It runs on a private
 | Side effects | Claims stay out of the branch list and don't fire `push` or `create` workflows or webhooks |
 | Pool ref | The same compare-and-swap checks on `refs/plate/budget` |
 
-If `refs/plate/*` is refused, the claim moves to `refs/heads/plate-claims/*`, with the ruleset exclusion it needs documented. Whichever option isn't chosen is removed from the spec and code.
+If `refs/plate/*` is refused on a target repo, claims are blocked for that adopter until a new spike and design revision approve an alternate ref namespace. The `refs/heads/plate-claims/*` path is **rejected** for v1 (creation rulesets block it; see spike #4). No branch-ref fallback is specified.
 
 ## Claim spike results
 
@@ -205,14 +205,14 @@ Run on 2026-11-04 (about 9:20 PM ET) with the gh CLI OAuth token (`repo` scope) 
 | 5 | Burst: 50 concurrent contenders on one N | Pass | Exactly 1 winner, 49 losers, and the final ref equals the winner's commit. 6.1 s. |
 | 5a | Burst: 10 N × 5 contenders (50 concurrent) | Pass | Exactly 1 winner for each N. |
 | 5b | Burst: 50 distinct N concurrently | Pass | All 50 succeed. |
-| 5c | Rate limits | Not hit | About 250 content-creating requests (commit objects plus ref writes) in about 3 minutes, including about 100 in 6 s. No 403, 429 or `Retry-After`. The documented secondary limits weren't reached, so this doesn't show where they bite. |
+| 5c | Rate limits | Not hit | About 250 content-creating requests in ~3 minutes (~83/min average), including bursts of ~100 in 6 s. No 403, 429 or `Retry-After`. That run did not hit GitHub's documented secondary ceiling (~80/min); it shows headroom in this burst shape but not the limit itself. |
 | 6 | Preview or beta | Pass for github.com | `updateRefs` is in the live schema (`isDeprecated: false`) and works with no preview `Accept` header. GHES 3.0–3.4 docs list it under the "Update refs preview" (`application/vnd.github.update-refs-preview+json`). The current github.com schema-previews page does not list it. GHES adopters need a version check. |
 | 7 | Side effects: branch list | Pass | `GET /branches` lists only `main`. `GET /git/matching-refs/plate/` lists the claims. |
 | 7a | Side effects: workflows | Pass | A workflow on `push` (all branches and tags), `create` and `delete` ran only once, for the commit that added it. About 130 claim and pool ref writes started no run. |
 | 7b | Side effects: webhooks | Not tested | No public receiver. I didn't point a webhook at a third-party URL. The Events API returned 0 events, even for the `main` push, so it's inconclusive. |
 | 8 | Pool ref `refs/plate/budget`: create-if-absent and delete | Pass | Same behaviour as claims. |
 | 8a | Pool: 20 naive writers from the same base | Pass | Exactly 1 commit wins. |
-| 8b | Pool: 12 writers, re-read and retry, grant 8 | Pass, with a caveat | Final committed total = 8 = start (1) + 7 commits, and 5 were refused as full. It never exceeded the grant. Under 12-way contention, some writers needed up to 7 tries, so v3.1's "3 tries then stay ready" refuses starts under heavy contention. That fails safe but wastes work. |
+| 8b | Pool: 12 writers, re-read and retry, grant 8 | Pass, with a caveat | Final committed total = 8 = start (1) + 7 commits, and 5 were refused as full. It never exceeded the grant. Under 12-way contention, some writers needed up to 7 tries, motivating the normative **5** pool compare-and-swap retries (with backoff) folded into [Start protocol](#start-protocol). |
 
 Proposed deltas for slices 3 and 5 (not yet folded into the sections above):
 
@@ -229,7 +229,7 @@ Proposed deltas for slices 3 and 5 (not yet folded into the sections above):
 - Who may write: the claim holder; the watchdog, only after a steal; `drift_scan` and label-event or approver handling, only when no fresh claim is held, and then under a short claim taken with create-if-absent. Otherwise they skip the issue.
 - Expected version: every write carries the version it expects to replace. After writing, the writer re-reads. If the marker isn't exactly the previous version + 1 with its own `transition_id`, the write is treated as lost and the writer re-evaluates from what it read.
 - Heartbeat: the holder bumps a `heartbeat` field every 30m without changing the state version.
-- Deleted marker: if a claim exists, the issue goes to needs_human with its last known state from the claim commit. Pool reservations are rebuilt from `refs/plate/budget`. With no claim, the issue is rebuilt to ready or refinement.
+- Deleted marker: if a claim ref exists, the issue goes to `needs_human` with last known state from the claim commit; pool reservations are rebuilt from `refs/plate/budget`. With **no** claim ref, rebuild only to `ready` or `refinement` (never directly into a work state).
 - Transferred or deleted issue: GitHub redirects or 404s, so the watchdog releases the claim, settles the reservation from the ledger and drops the lease. In the new repo it enters as a human-filed issue.
 
 ## Labels
@@ -411,7 +411,7 @@ lifecycle:
 |---|---|
 | Project grant | A human sets `autonomy.project_budget` in `.plate` for a period. Agents can read it but never write it. |
 | Issue allocation | At ready, the PM sets one from the pool using an estimate by type and tier (#1124 when it exists) and records it in the issue's state marker. Humans may override it per issue with a `/plate budget N usd` comment. |
-| Single enforcement point | `lifecycle.reserve()` runs only on transitions into a work state (7, 9), as a two-phase reserve: tentative until the marker commit, then committed. Every refusal path releases it (Start protocol). Nothing launches without a committed reservation id. |
+| Single enforcement point | `lifecycle.reserve()` runs on transitions into a work state (7, 9) and on transition 14 when resuming from `needs_human` back into `in_progress` (rerun of the start protocol). Two-phase reserve: tentative until the marker commit, then committed. Every refusal path releases it (Start protocol). Nothing launches without a committed reservation id. |
 | Pool across clones | Every clone sees the same numbers because the pool derives from GitHub, never from the local `.agentic/budget/` files. `refs/plate/budget` holds the committed total and open reservations, and markers hold each issue's record. Clones cache the pool for at most 60s. A start costs one pool read plus two writes, with no scan of markers. |
 | Overshoot bound | Committed reservations never exceed the grant, because every commit is a compare-and-swap. A stale cache can only refuse a start that would have fit; it can't overshoot. Actual spend can exceed the grant only through in-flight overruns: up to 0.5× allocation plus one check interval of spend per active issue, under the hard cap. |
 | Audit | An opt-in pass sums the markers and compares them with `refs/plate/budget`. A mismatch goes to the digest, and the ref is never silently rewritten. |
@@ -466,7 +466,7 @@ PLATE adopts Commemorative's proposal with these terms. The contract is kept who
 
 - **Answer to its question:** PLATE assigns `seq` at append, per (repo, `writer_id`). Nothing assigns one today.
 - **One dedupe key:** `event_key`. For transition events it's `<transition_id>:<type>`. For any other event it's a ULID minted once at append and stored on the line, so a resend carries the same key. The content hash from v1 is dropped.
-- **Ordering:** Within a writer, by (`writer_id`, `seq`), and gaps are detected per writer. Within an issue, by the marker version inside `transition_id`, since the claim allows one writer per issue at a time. No global order across writers is claimed. Cross-issue views sort by GitHub server time and are labelled approximate, and `ts` is informational.
+- **Ordering:** Within a writer, by (`writer_id`, `seq`), and gaps are detected per writer. Within an issue, by the marker's integer `version` field (and the marker comment's GitHub server `updated_at` as a tie-break). `transition_id` is a hash and does not embed a recoverable version for sorting. The claim allows one writer per issue at a time. No global order across writers is claimed. Cross-issue views sort by GitHub server time and are labelled approximate, and `ts` is informational.
 - **Outbox merge:** Outboxes are never merged with each other. Each writer forwards its own stream, and Commemorative is the union by `event_key`. Until the forwarder exists, other clones' transitions are visible from the marker's last-20 history.
 - **writer_id:** A ULID per clone or cloud agent, kept in `.agentic/events/writer_id`.
 - **Concern: log location:** The outbox goes in `.agentic/events/`, git-ignored like the rest of `.agentic/` state, never committed, so there are no merge conflicts.
@@ -496,7 +496,7 @@ PLATE adopts Commemorative's proposal with these terms. The contract is kept who
 - Timeouts (2h, 72h, 24h, the 15m orphan window, the 30m reservation TTL) compare GitHub server timestamps: the marker's `updated_at`, issue-event `created_at`, and the API response `Date` header for now.
 - Local clocks only measure durations inside one process, such as renew intervals, using a monotonic clock.
 - Lease TTLs run on one clock: Lull's hub, or the single machine running the lockfile adapter.
-- Events are ordered by (`writer_id`, `seq`) within a writer and by marker version within an issue. Wall clocks are never compared across machines.
+- Events are ordered by (`writer_id`, `seq`) within a writer and by the marker's integer `version` within an issue. Wall clocks are never compared across machines for cross-writer ordering.
 
 ## Real usage
 
@@ -504,9 +504,9 @@ PLATE adopts Commemorative's proposal with these terms. The contract is kept who
 |---|---|
 | Bursty parallel issues | The PM files them all. Dispatch is capped by pressure level and lease capacity, and the rest wait in ready. |
 | Overnight runs | Autonomy continues under the preset. Human gates queue, and the morning digest lists what's waiting. |
-| Laptop goes offline | Its leases expire at TTL and its log waits. The claim stays until the watchdog sees no activity past the state timeout in GitHub time. Then it steals the claim with a compare-and-swap and retries, or goes to needs_human. |
+| Laptop goes offline | With the default `local` adapter, in-process leases are not TTL-reaped (see [Lull contract](#lull-contract)); the claim and marker watchdog still apply. With a hub adapter, leases expire at TTL. The offline clone's log waits. The claim stays until the watchdog sees no activity past the state timeout in GitHub time, then steals the claim or goes to needs_human. |
 | Stuck agent | No renew means the lease expires, and the watchdog sees no state change past the timeout. Retry, then needs_human. |
-| Duplicate wakes and webhooks | `transition_id` makes a second attempt a no-op. Webhooks are deduped by delivery id, and echoes of PLATE's own writes are ignored. |
+| Duplicate wakes and webhooks | The same trigger (same marker version at wake and same trigger event id) yields the same `transition_id`, so a true duplicate delivery is a no-op. After the marker version advances, a new wake is a new transition with a new id. Webhooks are deduped by delivery id, and echoes of PLATE's own writes are ignored. |
 | Two agents, one issue | The claim ref decides atomically, and the loser stops before reserving anything. |
 | Hostile issue text (public repo) | It's handled as a quoted data block with no authority, and outside authors stay in refinement until an approver accepts. |
 | Human edits mid-flight | The edit is reconciled as a request. A new `risk:critical` adds a gate at the next transition, and close by a human always wins. |
@@ -544,7 +544,7 @@ Every value is a config key, measured in GitHub server time. These are starting 
 | Lease with no matching marker | Release it |
 | Marker in a work state but no claim ref | Re-claim with create-if-absent, or go to needs_human if someone else holds it |
 
-The watchdog and `drift_scan` skip any issue with a fresh claim held by someone else. `drift_scan` runs on every issue touched in a wake. The daily pass over all open issues with a marker (one list call per 100 issues) is opt-in (`drift_scan.daily_pass`) until drift is observed. It compares labels with the marker's projection. An uncleared `pending_write` is PLATE's own partial write, and it's completed quietly with an event and no comment. A difference with no pending write that isn't an echo is a human request (Label events and attribution). A missing or corrupt marker is rebuilt from labels and the timeline, marked `rebuilt`, and noted in the digest. A rebuild only ever lands in ready or refinement, never in a work state.
+The watchdog and `drift_scan` skip any issue with a fresh claim held by someone else. `drift_scan` runs on every issue touched in a wake. The daily pass over all open issues with a marker (one list call per 100 issues) is opt-in (`drift_scan.daily_pass`) until drift is observed. It compares labels with the marker's projection. An uncleared `pending_write` is PLATE's own partial write, and it's completed quietly with an event and no comment. A difference with no pending write that isn't an echo is a human request (Label events and attribution). A missing or corrupt marker **with no claim ref** is rebuilt from labels and the timeline, marked `rebuilt`, and noted in the digest; rebuild lands only in `ready` or `refinement`. If a claim ref exists but the marker is missing, follow [Deleted marker](#marker-writes) (`needs_human`, not a silent rebuild).
 
 ## Adopter setup
 
@@ -555,7 +555,7 @@ The watchdog and `drift_scan` skip any issue with a fresh claim held by someone 
 | Not needed | Administration, Secrets, Workflows write. Editing `.github/workflows` needs a separate grant and approval. |
 | Classic token fallback | `repo` (or `public_repo` for public repos), which is broader than needed |
 | Labels and config | Label sync from `lifecycle.taxonomy`; gate overrides in `process.yml`; a human sets the project budget in `.plate` |
-| Approvers: written at init | `gh plate init` (or adoption setup) always writes `lifecycle.approvers: [login]` into `.agentic/process.yml` explicitly, so the list is visible and editable in a reviewed PR. For a user-owned repo (`owner.type` = User), the login is the user who runs init, which must equal `owner.login`. Otherwise init asks for confirmation. For an org repo (`owner.type` = Organization), init asks for approvers, or takes `--approvers a,b`, and writes nothing until one is given. The login is read from the token at setup (`GET /user`) and is never a literal in code. For Andrew's own projects this resolves to his login. |
+| Approvers: written at init | `gh plate init` (or adoption setup) always writes `lifecycle.approvers: [login]` into `.agentic/process.yml` explicitly, so the list is visible and editable in a reviewed PR. For a user-owned repo (`owner.type` = User), the authenticated login **must** equal `owner.login`; otherwise init **refuses** with an error (no silent confirmation path). For an org repo (`owner.type` = Organization), init requires `--approvers a,b` or an interactive list and writes nothing until at least one login is given. The login is read from the token at setup (`GET /user`) and is never a literal in code. |
 | Approvers: runtime fallback | Explicit config always wins. If the key is absent on a user-owned repo, PLATE uses `owner.login` from `GET /repos/OWNER/REPO`, re-read every wake so a transfer follows the new owner, and notes in the digest that the fallback is in use. If the key is absent on an org repo, or present but empty on any repo, every approval-class action is refused until it's set. |
 | Approvers: API limits | Verified in GitHub's REST docs: the repository object has `owner` (`login`, `type`) but no creator field. For a user-owned repo the owner is the creator, unless the repo was transferred. An org repo has no single creator in the repo API. The org audit log (`GET /orgs/ORG/audit-log`, phrase `action:repo.create`) does record the actor, but it's documented for GitHub Enterprise Cloud, needs an org owner and `read:audit_log`, and has limited retention, so PLATE doesn't rely on it. Org approvers come from init or config. |
 | Optional | The lockfile lease adapter needs nothing. The Commemorative endpoint and token come later, by env. |
@@ -571,7 +571,7 @@ The watchdog and `drift_scan` skip any issue with a fresh claim held by someone 
 |---|---|---|---|---|
 | 1 | `lifecycle.py` table, substate map, taxonomy, projection and `drift_scan` in shadow mode (report only), plus `gh plate issue state N` | M | #1385 | Cost-saving |
 | 2 | Local event log (`writer_id`, `seq`, `event_key`) with scrubber and `gh plate issue timeline N` | S | None yet (needs a child) | Cost-saving |
-| 0 | Claim spike (Claim spike section), after the scratch repo is approved | S | None yet (needs a child) | Capability |
+| 0 | Claim spike on `akasper/plate-claim-spike` ([Claim spike results](#claim-spike-results); repo approved and created 2026-11-04) | S | #1421 | Capability |
 | 3 | Claim, versioned marker writes, idempotent writes, echo attribution, watchdog | M | #1380, #1395 | Capability |
 | 4 | Gate engine: `lifecycle.gates`, approvers, gate-label rules, revocation | M | #1374, #1398 | Capability |
 | 5 | Two-phase reserve, `refs/plate/budget` pool, hard cap, `.plate` grant | M | #1379 | Cost-saving |
@@ -613,7 +613,7 @@ The watchdog and `drift_scan` skip any issue with a fresh claim held by someone 
 | Regex filter for injection patterns | Rejected | A regex can't catch injection. Replaced by structural data blocks and scoped tools. |
 | Remove `status:` from the disallowed prefixes | Rejected | The allowlist is narrower and keeps the ban for everyone else |
 | Failed renew on recovery goes straight to needs_human | Rejected | The claim stops a second clone holding the issue, so it's a lost lease: roll back and requeue |
-| Watchdog rolls back when the lease expired | Changed | Rollback keys off the marker commit and the claim, since the default adapter never expires |
+| Watchdog rolls back when the lease expired | Changed | Rollback keys off the marker commit and the claim. The default `local` adapter does not TTL-expire in-process leases; hub and lockfile adapters do, and the watchdog uses GitHub-side activity either way. |
 | Comment on every drift repair | Changed | Own partial writes are fixed quietly with an event. A comment only comes with a reverted human edit. |
 | Check spend only at stage end | Changed | One long stage can overrun, so there's an in-run check every 5m and a hard stop at 1.5× |
 | Label taxonomy is hardwired | Partly rejected | Type labels and area, risk and need prefixes are already config. Tier, state labels and gate keys weren't. |
@@ -662,7 +662,7 @@ Everything else in the first review was adopted as written or with small changes
 - [x] Q1–Q4 and Q6–Q8 defaults (new label, marker, allowlist, close at main, 50/80, ask-when-unsure, own dupes) (Settled 2026-11-04)
 - [x] Cuts: forwarder later, Lull hub later, presets, reason-label states, release tracking (Settled 2026-11-04)
 
-The settled list is status as of Nov 4, 2026. No design decisions are open. The spike deltas above need review on #1421.
+The settled list is lifecycle product defaults as of Nov 4, 2026. **Open on #1421:** re-run spike checks with fine-grained PAT and GitHub App tokens; confirm error classification without parsing GraphQL text; optional Commemorative forwarder timing. **Folded into this doc:** pool compare-and-swap retry count (5), drop `refs/heads/plate-claims/*` fallback, keep `refs/plate/*` only.
 
 ## Revision history
 
@@ -673,3 +673,4 @@ The settled list is status as of Nov 4, 2026. No design decisions are open. The 
 | v3 | 2026-11-04 | PLATE (Grok Bot) | Second review (Part A verified by the OpenRouter bot) and Andrew's approvals. Covers the claim spike, the pool compare-and-swap, versioned marker writes, marker authenticity and no hardcoded logins. Decisions settled except the scratch repo and filing. See What changed in v3. |
 | v3.1 | 2026-11-04 | PLATE (Grok Bot) | Andrew's decision: `approvers` defaults to the repo creator. `gh plate init` writes it explicitly (`--approvers` or a prompt for org repos). If the key is absent at runtime, a user-owned repo falls back to its owner and an org repo refuses. The API limit (no creator field; the org audit log is Enterprise-only) is stated. See Adopter setup. |
 | v3.2 (repo) | 2026-11-04 | PLATE (Grok Bot) | Committed to `docs/design/issue-lifecycle.md`. Adds the claim spike results, the slice issue map (#1420–#1431), and marks both filing decisions done. No design change. |
+| v3.3 (repo) | 2026-11-23 | PLATE | OpenRouter/Copilot pass: per-issue transition resume idempotency, pool retry=5, drop branch-ref fallback, budget on transition 14, marker version ordering, init refuses non-owner approver, local lease TTL clarification, missing-marker paths, duplicate-wake semantics, build-plan spike timing. |
