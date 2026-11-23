@@ -52,30 +52,49 @@ jobs:
             echo "Release merge commit parent_count=${parent_count}; merge-commit shape looks OK for release-branch fast-forward."
             exit 0
           fi
+          if [ "${parent_count}" -eq 1 ] && ! echo "${subject}" | grep -Eq '\(#[0-9]+\)[[:space:]]*$'; then
+            echo "Release merge commit parent_count=${parent_count}; fast-forward/linear shape looks OK (${subject})."
+            exit 0
+          fi
           echo "::warning::Release PR merge commit has parent_count=${parent_count} and does not look like a merge commit (${subject}). If this Release PR was squash- or rebase-merged, standing release branches cannot fast-forward to the tag without admin repair (#1455). Merge Release PRs with Create a merge commit (or fast-forward), not squash/rebase."
           exit 0
 
-      - name: Resolve release version
+      - name: Resolve release artifact version
         id: release-version
+        env:
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           set -euo pipefail
-          export PYTHONPATH="$GITHUB_WORKSPACE/src"
-          python - <<'PY'
+          parent_sha="$(git rev-parse "${MERGE_SHA}^1" 2>/dev/null || true)"
+          if [ -n "${parent_sha}" ]; then
+            release_files="$(git diff-tree --no-commit-id --name-only -r "${parent_sha}" "${MERGE_SHA}" | grep -E '^\.agentic/releases/v[0-9]+\.[0-9]+\.[0-9]+/release\.json$' || true)"
+          else
+            release_files="$(git diff-tree --no-commit-id --name-only -r "${MERGE_SHA}" | grep -E '^\.agentic/releases/v[0-9]+\.[0-9]+\.[0-9]+/release\.json$' || true)"
+          fi
+          release_file_count="$(printf '%s\n' "${release_files}" | sed '/^$/d' | wc -l | tr -d ' ')"
+          if [ "${release_file_count}" -ne 1 ]; then
+            echo "Expected exactly one versioned release artifact in merged Release commit ${MERGE_SHA}, found ${release_file_count}."
+            printf '%s\n' "${release_files}"
+            exit 1
+          fi
+
+          release_file="$(printf '%s\n' "${release_files}" | sed -n '1p')"
+          release_tag="$(python - "${release_file}" <<'PY'
           import json
-          import os
           import sys
-          from pathlib import Path
-          from plate_core.release import validate_release_workspace
 
-          report = validate_release_workspace(Path(os.environ["GITHUB_WORKSPACE"]))
-          print(json.dumps(report.to_dict(), indent=2))
-          if report.errors:
-              print("\n".join(report.errors), file=sys.stderr)
-              raise SystemExit(1)
+          with open(sys.argv[1], encoding="utf-8") as fh:
+              data = json.load(fh)
 
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write(f"release_tag={report.release_tag}\n")
+          version = data.get("version")
+          if not isinstance(version, str) or not version:
+              raise SystemExit("release.json must include a non-empty string version")
+
+          print(f"v{version}")
           PY
+          )"
+
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Create or verify release tag
         env:

@@ -1616,6 +1616,18 @@ class FinalizeAutomationTests(unittest.TestCase):
         self.assertFalse(squash_info.get("ok"))
         self.assertIn("squash", (squash_info.get("warning") or "").lower())
 
+        def ff_run(argv, **kwargs):
+            if argv[:3] == ["git", "rev-list", "--parents"]:
+                return type("P", (), {"stdout": "ffsha parent1", "returncode": 0})()
+            if argv[:2] == ["git", "log"] and "--format=%s" in argv:
+                return type("P", (), {"stdout": "Release v0.12.0", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = ff_run
+        ff_info = assess_release_pr_merge_commit("ffsha")
+        self.assertTrue(ff_info.get("ok"))
+        self.assertEqual(ff_info.get("method"), "fast_forward")
+
     def test_format_release_pr_merge_reminder_mentions_merge_not_squash(self):
         body = format_release_pr_merge_reminder()
         self.assertIn("--merge", body)

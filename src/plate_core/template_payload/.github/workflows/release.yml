@@ -52,6 +52,10 @@ jobs:
             echo "Release merge commit parent_count=${parent_count}; merge-commit shape looks OK for release-branch fast-forward."
             exit 0
           fi
+          if [ "${parent_count}" -eq 1 ] && ! echo "${subject}" | grep -Eq '\(#[0-9]+\)[[:space:]]*$'; then
+            echo "Release merge commit parent_count=${parent_count}; fast-forward/linear shape looks OK (${subject})."
+            exit 0
+          fi
           echo "::warning::Release PR merge commit has parent_count=${parent_count} and does not look like a merge commit (${subject}). If this Release PR was squash- or rebase-merged, standing release branches cannot fast-forward to the tag without admin repair (#1455). Merge Release PRs with Create a merge commit (or fast-forward), not squash/rebase."
           exit 0
 

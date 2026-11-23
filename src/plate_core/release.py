@@ -1750,6 +1750,13 @@ def assess_release_pr_merge_commit(
             "warning": None,
             "parent_count": parent_count,
         }
+    if parent_count == 1 and not re.search(r"\(#\d+\)\s*$", subject):
+        return {
+            "ok": True,
+            "method": "fast_forward",
+            "warning": None,
+            "parent_count": parent_count,
+        }
     warning = (
         "Release PR merge commit has a single parent and does not look like a merge commit. "
         "If this Release PR was squash- or rebase-merged, standing release branches cannot "
