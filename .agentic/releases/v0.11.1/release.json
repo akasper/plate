@@ -1,0 +1,33 @@
+{
+  "version": "0.11.1",
+  "summary": "PLATE 0.11.1 -- 1 change(s): 1490-plate-runs-on-plain-string.",
+  "cut_at": "2026-11-19T19:20:36Z",
+  "fragment_count": 1,
+  "fragment_slugs": [
+    "1490-plate-runs-on-plain-string"
+  ],
+  "entries": [
+    {
+      "change_type": "bug",
+      "surface": "src/plate_core/workflow_runs_on.py, plate-select-runs-on action",
+      "migration_impact": "Adopters who set PLATE_RUNS_ON to a plain label no longer silently run on ubuntu-latest.",
+      "agent_notes": "",
+      "links": [
+        "#1490"
+      ]
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": "",
+  "closes_block": "Closes #1490"
+}
