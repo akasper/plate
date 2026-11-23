@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 from plate_core.issue_closed_usage import workflow_github_script  # noqa: E402
+from plate_core.workflow_runs_on import LINUX_RUNS_ON_VAR_EXPRESSION  # noqa: E402
 
 
 def _yaml_script(script: str) -> str:
@@ -42,7 +43,9 @@ jobs:
         contains(format(',{0},', join(github.event.issue.labels.*.name, ',')), ',Feature,') ||
         contains(format(',{0},', join(github.event.issue.labels.*.name, ',')), ',Question,')
       )
-    runs-on: ubuntu-latest
+    runs-on: """
+        + LINUX_RUNS_ON_VAR_EXPRESSION
+        + """
     steps:
       - name: Extract trusted usage report from closing comment
         id: usage
