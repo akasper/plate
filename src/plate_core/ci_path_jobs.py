@@ -86,7 +86,8 @@ def _match_glob_segments(
     return _match_glob_segments(pattern_segments, path_segments, pattern_index + 1, path_index + 1)
 
 
-def _path_matches_pattern(pattern: str, path: str) -> bool:
+def path_matches_pattern(pattern: str, path: str) -> bool:
+    """Return whether ``path`` matches a glob-style ``pattern`` (supports ``**``)."""
     pattern = _normalize_path(pattern)
     path = _normalize_path(path)
     if not pattern:
@@ -95,6 +96,10 @@ def _path_matches_pattern(pattern: str, path: str) -> bool:
         name = Path(path).name
         return fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(path, pattern)
     return _match_glob_segments(_split_path_segments(pattern), _split_path_segments(path))
+
+
+# Back-compat for in-repo callers and tests.
+_path_matches_pattern = path_matches_pattern
 
 
 def _read_yaml_file(path: Path) -> dict[str, Any]:

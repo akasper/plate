@@ -1,0 +1,310 @@
+"""Warn when UI-touching PRs lack valid user-attachments images (#1052)."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import sys
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+import yaml
+
+from plate_core.ci_path_jobs import path_matches_pattern
+
+WARNING_HEADING = "UI PR visual evidence"
+
+DEFAULT_UI_GLOBS: tuple[str, ...] = (
+    "web/**",
+    "app/**",
+    "src/components/**",
+    "public/**",
+    "*.css",
+    "*.scss",
+    "*.tsx",
+    "*.jsx",
+    "*.vue",
+    "*.svelte",
+    "*.html",
+)
+
+USER_ATTACHMENTS_PREFIX = "https://github.com/user-attachments/assets/"
+
+_VISUAL_EVIDENCE_NA = re.compile(
+    r"^Visual evidence:[ \t]*not applicable[ \t]*[—–\-][ \t]*\S.*",
+    re.MULTILINE | re.IGNORECASE,
+)
+_MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
+_HTML_IMG = re.compile(
+    r"""<img\b[^>]*\ssrc\s*=\s*(?:["']([^"']+)["']|([^\s>]+))""",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class UiPrImageCheckResult:
+    skipped: bool
+    ok: bool
+    bad_urls: tuple[str, ...]
+    messages: tuple[str, ...]
+
+
+def default_ui_paths_file() -> Path:
+    return Path(".agentic") / "ui-paths.yml"
+
+
+def _sanitize_warning_detail(detail: str) -> str:
+    return " ".join((detail or "").split())
+
+
+def _warn_malformed_ui_paths(config_path: Path, detail: str) -> None:
+    safe = _sanitize_warning_detail(detail)
+    print(
+        f"::warning title={WARNING_HEADING}::Malformed UI paths config {config_path}: "
+        f"{safe}; using built-in default UI globs.",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def _load_globs_from_path(config_path: Path, *, warn: bool) -> list[str]:
+    if not config_path.is_file():
+        return list(DEFAULT_UI_GLOBS)
+    text = config_path.read_text(encoding="utf-8")
+    if not text.strip():
+        return list(DEFAULT_UI_GLOBS)
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        if warn:
+            _warn_malformed_ui_paths(config_path, f"unparsable YAML ({exc})")
+        return list(DEFAULT_UI_GLOBS)
+    if data is None:
+        return list(DEFAULT_UI_GLOBS)
+    if not isinstance(data, dict):
+        if warn:
+            _warn_malformed_ui_paths(config_path, "top-level value is not a mapping")
+        return list(DEFAULT_UI_GLOBS)
+    globs = data.get("globs")
+    if not isinstance(globs, list) or not all(isinstance(g, str) for g in globs):
+        if warn:
+            _warn_malformed_ui_paths(config_path, "missing or invalid 'globs' list")
+        return list(DEFAULT_UI_GLOBS)
+    return [g.strip() for g in globs if g.strip()]
+
+
+def load_ui_globs(
+    repo_root: Path | None = None,
+    *,
+    ui_paths_file: Path | None = None,
+) -> list[str]:
+    """Load UI globs from a trusted config file, optional repo root (tests), or defaults."""
+    if ui_paths_file is not None:
+        return _load_globs_from_path(ui_paths_file, warn=True)
+    if repo_root is not None:
+        return _load_globs_from_path(repo_root / default_ui_paths_file(), warn=True)
+    return list(DEFAULT_UI_GLOBS)
+
+
+def touches_ui_paths(changed_paths: list[str], globs: list[str] | None = None) -> bool:
+    patterns = globs if globs is not None else DEFAULT_UI_GLOBS
+    for path in changed_paths:
+        normalized = path.strip().replace("\\", "/")
+        if not normalized:
+            continue
+        if any(path_matches_pattern(pattern, normalized) for pattern in patterns):
+            return True
+    return False
+
+
+def visual_evidence_not_applicable(body: str) -> bool:
+    return _VISUAL_EVIDENCE_NA.search(body or "") is not None
+
+
+def extract_image_urls(body: str) -> list[str]:
+    text = body or ""
+    urls: list[str] = []
+    for match in _MD_IMAGE.finditer(text):
+        urls.append(match.group(1).strip())
+    for match in _HTML_IMG.finditer(text):
+        url = (match.group(1) or match.group(2) or "").strip()
+        if url:
+            urls.append(url)
+    return urls
+
+
+def is_valid_user_attachment(url: str) -> bool:
+    return url.startswith(USER_ATTACHMENTS_PREFIX)
+
+
+def classify_bad_image_url(url: str) -> str | None:
+    """Classify disallowed image URL kinds per #1052 (relative, raw host, blob ?raw=true)."""
+    if is_valid_user_attachment(url):
+        return None
+    lower = url.lower()
+    if url.startswith("./") or url.startswith("../") or (
+        not lower.startswith("http://") and not lower.startswith("https://")
+    ):
+        return "relative path"
+    if "raw.githubusercontent.com" in lower:
+        return "raw.githubusercontent.com URL"
+    if "blob/" in lower and "raw=true" in lower:
+        return "blob/...?raw=true URL"
+    if lower.startswith("http://") or lower.startswith("https://"):
+        return "external URL (use user-attachments)"
+    return None
+
+
+def _fix_lines(pr_number: int | None) -> list[str]:
+    edit_hint = (
+        f"Re-embed screenshots with `gh pr edit {pr_number} --body-file body.md --attach ./shot.png` "
+        "(requires gh >= 2.99)."
+        if pr_number is not None
+        else "Re-embed screenshots with `gh pr edit <PR> --body-file body.md --attach ./shot.png` "
+        "(requires gh >= 2.99)."
+    )
+    return [
+        edit_hint,
+        "Third-party cloud agents without a user PAT cannot upload attachments — assign the issue "
+        "to GitHub Copilot's cloud coding agent (or a human with local `gh` and a PAT) for UI screenshot work.",
+    ]
+
+
+def evaluate_ui_pr_image_check(
+    body: str,
+    changed_paths: list[str],
+    *,
+    repo_root: Path | None = None,
+    ui_paths_file: Path | None = None,
+    pr_number: int | None = None,
+) -> UiPrImageCheckResult:
+    globs = load_ui_globs(repo_root, ui_paths_file=ui_paths_file)
+    if not touches_ui_paths(changed_paths, globs):
+        return UiPrImageCheckResult(skipped=True, ok=True, bad_urls=(), messages=())
+
+    if visual_evidence_not_applicable(body):
+        return UiPrImageCheckResult(skipped=True, ok=True, bad_urls=(), messages=())
+
+    urls = extract_image_urls(body)
+    if any(is_valid_user_attachment(u) for u in urls):
+        return UiPrImageCheckResult(skipped=False, ok=True, bad_urls=(), messages=())
+
+    bad: list[str] = []
+    for url in urls:
+        kind = classify_bad_image_url(url)
+        if kind is not None:
+            bad.append(url)
+
+    messages: list[str] = [
+        "This PR touches UI paths but has no valid `https://github.com/user-attachments/assets/...` images "
+        "embedded in the PR description.",
+    ]
+    if bad:
+        messages.append("Invalid image URLs:")
+        for url in bad:
+            kind = classify_bad_image_url(url) or "invalid"
+            messages.append(f"- `{url}` ({kind})")
+    elif not urls:
+        messages.append("No markdown or HTML images were found in the PR body.")
+
+    messages.extend(_fix_lines(pr_number))
+    return UiPrImageCheckResult(skipped=False, ok=False, bad_urls=tuple(bad), messages=tuple(messages))
+
+
+def _enforce_from_env(cli_enforce: bool) -> bool:
+    if cli_enforce:
+        return True
+    return os.environ.get("PLATE_UI_PR_IMAGE_ENFORCE", "").lower() in {"1", "true", "yes"}
+
+
+def run_check(
+    body: str,
+    changed_paths: list[str],
+    *,
+    repo_root: Path | None = None,
+    ui_paths_file: Path | None = None,
+    pr_number: int | None = None,
+    enforce: bool = False,
+    emit_warning: Callable[[str], None] | None = None,
+) -> int:
+    result = evaluate_ui_pr_image_check(
+        body,
+        changed_paths,
+        repo_root=repo_root,
+        ui_paths_file=ui_paths_file,
+        pr_number=pr_number,
+    )
+    if result.skipped or result.ok:
+        return 0
+
+    def default_warn(msg: str) -> None:
+        print(f"::warning title={WARNING_HEADING}::{msg}", flush=True)
+
+    warn = emit_warning or default_warn
+    for msg in result.messages:
+        if enforce:
+            print(msg, file=sys.stderr)
+        else:
+            warn(msg)
+    if enforce:
+        print(f"## ⚠️ {WARNING_HEADING}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _read_paths_file(path: Path) -> list[str]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [line.strip() for line in lines if line.strip()]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Warn when UI-touching PRs lack user-attachments visual evidence (#1052)",
+    )
+    parser.add_argument("--stdin", action="store_true", help="Read PR body from stdin")
+    parser.add_argument("--files", help="Newline-separated list of changed file paths")
+    parser.add_argument(
+        "--ui-paths-file",
+        default=None,
+        help="Trusted .agentic/ui-paths.yml from the PR base ref (CI); not the PR head checkout",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root for ui-paths.yml (local/tests only; omit in CI enforce mode)",
+    )
+    parser.add_argument("--pr-number", type=int, default=None, help="PR number for fix hints")
+    parser.add_argument(
+        "--enforce",
+        action="store_true",
+        help="Fail the job instead of emitting warnings (also set PLATE_UI_PR_IMAGE_ENFORCE=1)",
+    )
+    parser.add_argument("path", nargs="?", help="File containing PR body (alternative to --stdin)")
+    args = parser.parse_args(argv)
+
+    if args.stdin:
+        body = sys.stdin.read()
+    elif args.path:
+        body = Path(args.path).read_text(encoding="utf-8")
+    else:
+        parser.error("provide --stdin or a path argument")
+
+    changed: list[str] = []
+    if args.files:
+        changed = _read_paths_file(Path(args.files))
+
+    repo_root = Path(args.repo_root) if args.repo_root else None
+    ui_paths_file = Path(args.ui_paths_file) if args.ui_paths_file else None
+    return run_check(
+        body,
+        changed,
+        repo_root=repo_root,
+        ui_paths_file=ui_paths_file,
+        pr_number=args.pr_number,
+        enforce=_enforce_from_env(args.enforce),
+    )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

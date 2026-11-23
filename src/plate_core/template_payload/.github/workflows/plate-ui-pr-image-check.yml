@@ -1,0 +1,70 @@
+# Optional warn-first check: UI-touching PRs should embed user-attachments images (#1052).
+# Not a required merge gate. Set repository variable PLATE_UI_PR_IMAGE_ENFORCE=true to fail.
+name: PLATE UI PR image check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: plate-ui-pr-image-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  ui-pr-image:
+    name: ui-pr-image
+    runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch trusted UI paths from base ref
+        id: trusted_ui_paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          dest="/tmp/ui-paths-base.yml"
+          url="$(gh api "repos/${GITHUB_REPOSITORY}/contents/.agentic/ui-paths.yml?ref=${BASE_SHA}" --jq -r .download_url 2>/dev/null || true)"
+          if [ -n "${url}" ] && [ "${url}" != "null" ]; then
+            curl -fsSL "${url}" -o "${dest}"
+            echo "file=${dest}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "file=" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install check dependencies
+        run: python -m pip install --quiet pyyaml
+
+      - name: UI PR image check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLATE_UI_PR_IMAGE_ENFORCE: ${{ vars.PLATE_UI_PR_IMAGE_ENFORCE }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          pr_number="${{ github.event.pull_request.number }}"
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .body)"
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files" --paginate --jq '.[].filename' > /tmp/pr-files.txt
+          enforce_args=()
+          if [ "${PLATE_UI_PR_IMAGE_ENFORCE:-}" = "1" ] || [ "${PLATE_UI_PR_IMAGE_ENFORCE:-}" = "true" ] || [ "${PLATE_UI_PR_IMAGE_ENFORCE:-}" = "yes" ]; then
+            enforce_args+=(--enforce)
+          fi
+          trusted_args=()
+          if [ -n "${{ steps.trusted_ui_paths.outputs.file }}" ]; then
+            trusted_args+=(--ui-paths-file "${{ steps.trusted_ui_paths.outputs.file }}")
+          fi
+          printf '%s' "${body}" | python3 -m plate_core.pr_ui_pr_image_check \
+            --stdin \
+            --pr-number "${pr_number}" \
+            --files /tmp/pr-files.txt \
+            "${trusted_args[@]}" \
+            "${enforce_args[@]}"
