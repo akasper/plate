@@ -1,0 +1,8 @@
+{
+    "slug": "mcp-test-coverage-audit-repo-arg",
+    "change_type": "fix",
+    "surface": "plate-mcp",
+    "summary": "plate_perform_test_coverage_audit MCP tool no longer fails with NameError; it reads repo from the tool arguments",
+    "migration_impact": "None.",
+    "agent_notes": "The tool branch now reads repo from args.get(\"repo\") matching the pattern used by all other tool branches in _handle_tools_call."
+}

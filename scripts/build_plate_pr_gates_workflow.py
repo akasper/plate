@@ -8,6 +8,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+import sys
+
+sys.path.insert(0, str(ROOT / "src"))
+from plate_core.workflow_runs_on import LINUX_RUNS_ON_VAR_EXPRESSION  # noqa: E402
+
 
 def _plate_core_pip_version() -> str:
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
@@ -72,8 +77,8 @@ on:
 concurrency:
   # Non-gating label events use an isolated group and must not cancel real gate runs (#1228).
   # Review events use a separate group so they never cancel in-flight pull_request gate runs (#1258).
-  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') && 'review' || github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override","release-window-override","release-window:open"]'), github.event.label.name) && 'label-noop' || 'gate' }}
-  cancel-in-progress: ${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') || !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override","release-window-override","release-window:open"]'), github.event.label.name)) }}
+  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') && 'review' || github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","Hardening","no-issue","Release","main-source-override","release-window-override","release-window:open"]'), github.event.label.name) && 'label-noop' || 'gate' }}
+  cancel-in-progress: ${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') || !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","Hardening","no-issue","Release","main-source-override","release-window-override","release-window:open"]'), github.event.label.name)) }}
 
 permissions:
   contents: read
@@ -88,7 +93,7 @@ jobs:
       github.event_name == 'pull_request_review' ||
       github.event_name == 'pull_request_review_comment' ||
       (github.event_name == 'pull_request' && github.event.action != 'closed')
-    runs-on: ubuntu-latest
+    runs-on: @@LINUX_RUNS_ON@@
     steps:
       - uses: actions/checkout@v4
         with:
@@ -406,7 +411,7 @@ MARK_IMPLEMENTED_PLATE = """
         startsWith(github.event.pull_request.base.ref, 'epic/'))) ||
       (github.event_name == 'push' &&
        (startsWith(github.ref, 'refs/heads/release') || startsWith(github.ref, 'refs/heads/epic/')))
-    runs-on: ubuntu-latest
+    runs-on: @@LINUX_RUNS_ON@@
     permissions:
       contents: read
       issues: write
@@ -436,7 +441,7 @@ MARK_IMPLEMENTED_TEMPLATE = """
         startsWith(github.event.pull_request.base.ref, 'epic/'))) ||
       (github.event_name == 'push' &&
        (startsWith(github.ref, 'refs/heads/release') || startsWith(github.ref, 'refs/heads/epic/')))
-    runs-on: ubuntu-latest
+    runs-on: @@LINUX_RUNS_ON@@
     permissions:
       contents: read
       issues: write
@@ -506,7 +511,8 @@ def build(variant: str) -> str:
         if variant == "plate"
         else REVIEWER_MODEL_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
     )
-    body = HEADER.replace("@@TITLE_SCRIPT@@", title_script)
+    body = HEADER.replace("@@LINUX_RUNS_ON@@", LINUX_RUNS_ON_VAR_EXPRESSION)
+    body = body.replace("@@TITLE_SCRIPT@@", title_script)
     body = body.replace("@@ISSUE_LINK_SCRIPT@@", issue_link_script)
     body = body.replace("@@MAIN_SOURCE_RUN@@", main_source_run.lstrip("\n").rstrip())
     body = body.replace("@@REVIEWER_MODEL_RUN@@", reviewer_run.lstrip("\n").rstrip())
@@ -523,7 +529,7 @@ def build(variant: str) -> str:
         body += MARK_IMPLEMENTED_TEMPLATE.replace(
             "@@PLATE_CORE_VERSION@@", _plate_core_pip_version()
         )
-    return body
+    return body.replace("@@LINUX_RUNS_ON@@", LINUX_RUNS_ON_VAR_EXPRESSION)
 
 
 def main() -> None:

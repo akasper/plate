@@ -19,6 +19,7 @@ PLATE_PR_GATES_LABELS: frozenset[str] = frozenset(
         "Bug",
         "Documentation",
         "Feedback Response",
+        "Hardening",
         "no-issue",
         "Release",
         "main-source-override",
@@ -27,7 +28,7 @@ PLATE_PR_GATES_LABELS: frozenset[str] = frozenset(
     }
 )
 
-PLATE_PR_GATES_LABELS_JSON = '["Feature","Bug","Documentation","Feedback Response","no-issue","Release","main-source-override","release-window-override","release-window:open"]'
+PLATE_PR_GATES_LABELS_JSON = '["Feature","Bug","Documentation","Feedback Response","Hardening","no-issue","Release","main-source-override","release-window-override","release-window:open"]'
 
 # Status check contexts superseded by PLATE_PR_GATES_CHECK_NAME.
 DEPRECATED_PR_GATE_CHECK_CONTEXTS: frozenset[str] = frozenset(

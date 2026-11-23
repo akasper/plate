@@ -1019,8 +1019,8 @@ def fetch_ready_issue_candidates(
                 "status:blocked",
             }:
                 continue
-            # Prefer Feature/Bug; allow bare status:ready-to-work without type
-            type_ok = bool(labs & {"feature", "bug", "documentation", "feedback response"})
+            # Prefer typed work items; allow bare status:ready-to-work without type
+            type_ok = bool(labs & {"feature", "bug", "documentation", "feedback response", "hardening"})
             if not require_ready_label and not type_ok:
                 continue
             if require_ready_label and not type_ok and "status:ready-to-work" not in labs:
@@ -1038,7 +1038,7 @@ def fetch_ready_issue_candidates(
     except Exception:
         pass
 
-    # 2) Fallback: open Feature / Bug / Documentation without refinement/stub/implemented.
+    # 2) Fallback: open Feature / Bug / Documentation / Hardening without refinement/stub/implemented.
     # Run separate label queries — GitHub search often returns 0 hits for parenthesized
     # OR groups of label: qualifiers, which starved ready candidates (#654/#660).
     if len(out) < limit:
@@ -1046,7 +1046,7 @@ def fetch_ready_issue_candidates(
             "-label:status:implemented -label:status:stub "
             "-label:need:refinement -label:need:human-review -label:status:blocked"
         )
-        for type_label in ("Feature", "Bug", "Documentation"):
+        for type_label in ("Feature", "Bug", "Documentation", "Hardening"):
             if len(out) >= limit:
                 break
             try:

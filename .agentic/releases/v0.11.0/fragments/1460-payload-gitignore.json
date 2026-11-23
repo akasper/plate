@@ -1,0 +1,10 @@
+{
+  "slug": "1460-payload-gitignore",
+  "change_type": "fix",
+  "surface": "src/plate_core/template_payload/.gitignore, src/plate_core/data/template_payload_manifest.yml, src/plate_core/data/template_payload_inventory.json",
+  "summary": "Ship a modest adopter .gitignore in the template payload so greenfield bootstrap/import leaves new repositories with standard Python/Node/secrets ignore rules instead of no ignore file (#1460).",
+  "migration_impact": "New repositories created via `gh plate bootstrap` or `gh plate import-payload` now receive a root `.gitignore`. Existing adopters without one can copy it in; existing `.gitignore` files are left unchanged by conservative/safe strategies and can be merged by hand.",
+  "agent_notes": "The payload `.gitignore` is intentionally modest, not a copy of plate-core's 217-line root ignore file. It must include `__pycache__/`, `*.pyc`, `.venv/`, and `.env`. The separate payload __pycache__ copy-filter is #1459 and is not handled here.",
+  "breaking": false,
+  "links": ["#1460"]
+}

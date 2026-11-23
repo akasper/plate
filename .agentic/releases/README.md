@@ -46,7 +46,7 @@ The tool determines the next version by:
 2. Inferring the bump type from the pending fragments:
    - Any `breaking: true` → **major**
    - Any `change_type: "feature"` → **minor** (when no breaking changes)
-   - Otherwise → **patch**
+   - Otherwise → **patch** (`hardening` alone does not bump to minor)
 
 ### Explicit version
 
@@ -78,7 +78,7 @@ Every fragment file must include:
 | Field | Required | Description |
 |---|---|---|
 | `slug` | ✅ | Kebab-case identifier, unique within its source directory |
-| `change_type` | ✅ | `feature`, `fix`, `docs`, `process`, or `breaking` |
+| `change_type` | ✅ | `feature`, `fix`, `docs`, `process`, `breaking`, or `hardening` |
 | `surface` | ✅ | Affected template / workflow / docs surface |
 | `summary` | ✅ | One-line description of the change |
 | `migration_impact` | ✅ | Prose: what a downstream repo must do |
