@@ -14,7 +14,7 @@ duration: <hh:mm:ss>
 
 `Task` issues are exempt from the usage-report block; they close with a completion comment containing `<!-- PLATE-TASK-CLOSED -->` instead.
 
-When `.github/workflows/plates-on-issue-closed.yml` is enabled, closing comments on `Feature` and `Question` issues are harvested and appended as rows below. Do not edit rows manually unless correcting a bad harvest; prefer fixing the workflow or the closing comment format.
+When `.github/workflows/plates-on-issue-closed.yml` is enabled, trusted closing comments on `Feature` and `Question` issues are parsed and recorded as `<!-- PLATE-USAGE-COST-ROW -->` comments on the closed issue (no direct default-branch git writes). Use `gh plate costs` to aggregate live usage data; do not edit harvested rows manually unless correcting a bad harvest.
 
 | Date (UTC) | Issue | Type | Tokens | Cost | Duration | Source |
 |---|---|---|---|---|---|---|
