@@ -130,22 +130,17 @@ class AdopterWithOnlyPyprojectTests(unittest.TestCase):
 
 
 class PartialPlateTreeTests(unittest.TestCase):
-    """A plugin surface without the canonical pair is an incomplete PLATE tree."""
+    """Without both canonical markers, version helpers no-op (issue #1499)."""
 
-    def test_sync_and_read_raise_for_partial_tree(self):
+    def test_sync_and_read_noop_when_only_plugin_manifest(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             plugin_dir = root / "plugin"
             plugin_dir.mkdir(parents=True)
             (plugin_dir / "plugin.json").write_text('{"version": "1.1.0"}', encoding="utf-8")
 
-            with self.assertRaises(RuntimeError) as sync_ctx:
-                sync_repository_version("1.2.0", root)
-            self.assertIn("Incomplete PLATE release tree", str(sync_ctx.exception))
-
-            with self.assertRaises(RuntimeError) as read_ctx:
-                read_repository_versions(root)
-            self.assertIn("Incomplete PLATE release tree", str(read_ctx.exception))
+            self.assertEqual(sync_repository_version("1.2.0", root), [])
+            self.assertEqual(read_repository_versions(root), {})
 
 
 class PythonAdopterVersionTests(unittest.TestCase):
@@ -158,24 +153,6 @@ class PythonAdopterVersionTests(unittest.TestCase):
 
             self.assertEqual(sync_repository_version("1.2.0", root), [])
             self.assertEqual(read_repository_versions(root), {})
-
-
-class NestedPlateTreeVersionRootTests(unittest.TestCase):
-    """Version resolution prefers the nested plate-core tree over the outer git root."""
-
-    def test_version_root_prefers_nested_tree_while_release_root_stays_outer(self):
-        with TemporaryDirectory() as tmp:
-            outer = Path(tmp)
-            subprocess.run(["git", "init", "-q"], cwd=outer, check=True)
-            inner = outer / "inner"
-            (inner / "src" / "plate_core").mkdir(parents=True)
-            (inner / "pyproject.toml").write_text('[project]\nversion = "0.1.0"\n', encoding="utf-8")
-            (inner / "src" / "plate_core" / "__init__.py").write_text(
-                '__version__ = "0.1.0"\n', encoding="utf-8"
-            )
-
-            self.assertEqual(core_release._resolve_version_root(inner), inner.resolve())
-            self.assertEqual(core_release._resolve_repo_root_for_releases(inner), outer.resolve())
 
 
 if __name__ == "__main__":

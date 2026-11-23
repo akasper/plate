@@ -307,14 +307,6 @@ def _resolve_repo_root_for_releases(start: Path) -> Path:
         return find_repo_root(start).resolve()
 
 
-def _resolve_version_root(start: Path) -> Path:
-    """Version-surface root: nearest plate-core tree if any, else the adopter root."""
-    try:
-        return find_repo_root(start).resolve()
-    except RuntimeError:
-        return _resolve_repo_root_for_releases(start)
-
-
 def resolve_releases_dir(repo_root: Path, releases_dir: Path | None = None) -> Path:
     """Return an absolute releases directory path.
 
@@ -337,7 +329,7 @@ def validate_release_workspace(
     releases_dir: Path | None = None,
 ) -> ReleaseWorkspaceValidationReport:
     """Validate that the repository and release artifact agree on a single release version."""
-    root = _resolve_version_root(repo_root)
+    root = _resolve_repo_root_for_releases(repo_root)
     version_files = read_repository_versions(root)
     errors: list[str] = []
 
@@ -1208,7 +1200,7 @@ def cut_release(
             f"v{fmt_version(current)}. Proceed with caution."
         )
 
-    repo_root = _resolve_version_root(releases_dir)
+    repo_root = _resolve_repo_root_for_releases(releases_dir)
     version_files = sync_repository_version(version, repo_root, dry_run=True)
     fragments_dir = versioned_dir / "fragments"
     release_data = build_release(version, fragments)
