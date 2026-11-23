@@ -54,13 +54,43 @@ def default_ui_paths_file() -> Path:
     return Path(".agentic") / "ui-paths.yml"
 
 
-def _globs_from_yaml_text(text: str) -> list[str] | None:
-    data = yaml.safe_load(text)
+def _sanitize_warning_detail(detail: str) -> str:
+    return " ".join((detail or "").split())
+
+
+def _warn_malformed_ui_paths(config_path: Path, detail: str) -> None:
+    safe = _sanitize_warning_detail(detail)
+    print(
+        f"::warning title={WARNING_HEADING}::Malformed UI paths config {config_path}: "
+        f"{safe}; using built-in default UI globs.",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def _load_globs_from_path(config_path: Path, *, warn: bool) -> list[str]:
+    if not config_path.is_file():
+        return list(DEFAULT_UI_GLOBS)
+    text = config_path.read_text(encoding="utf-8")
+    if not text.strip():
+        return list(DEFAULT_UI_GLOBS)
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        if warn:
+            _warn_malformed_ui_paths(config_path, f"unparsable YAML ({exc})")
+        return list(DEFAULT_UI_GLOBS)
+    if data is None:
+        return list(DEFAULT_UI_GLOBS)
     if not isinstance(data, dict):
-        return None
+        if warn:
+            _warn_malformed_ui_paths(config_path, "top-level value is not a mapping")
+        return list(DEFAULT_UI_GLOBS)
     globs = data.get("globs")
     if not isinstance(globs, list) or not all(isinstance(g, str) for g in globs):
-        return None
+        if warn:
+            _warn_malformed_ui_paths(config_path, "missing or invalid 'globs' list")
+        return list(DEFAULT_UI_GLOBS)
     return [g.strip() for g in globs if g.strip()]
 
 
@@ -71,17 +101,9 @@ def load_ui_globs(
 ) -> list[str]:
     """Load UI globs from a trusted config file, optional repo root (tests), or defaults."""
     if ui_paths_file is not None:
-        if ui_paths_file.is_file():
-            parsed = _globs_from_yaml_text(ui_paths_file.read_text(encoding="utf-8"))
-            if parsed is not None:
-                return parsed
-        return list(DEFAULT_UI_GLOBS)
+        return _load_globs_from_path(ui_paths_file, warn=True)
     if repo_root is not None:
-        config_path = repo_root / default_ui_paths_file()
-        if config_path.is_file():
-            parsed = _globs_from_yaml_text(config_path.read_text(encoding="utf-8"))
-            if parsed is not None:
-                return parsed
+        return _load_globs_from_path(repo_root / default_ui_paths_file(), warn=True)
     return list(DEFAULT_UI_GLOBS)
 
 
