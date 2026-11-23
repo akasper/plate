@@ -39,6 +39,9 @@ DURATION_VALUE_RE = re.compile(r"^\d{2}:\d{2}:\d{2}$")
 
 COST_ROW_MARKER = "<!-- PLATE-USAGE-COST-ROW -->"
 
+# Only this login may post the mirrored COST_ROW_MARKER row (#1480).
+RECORDED_COST_ROW_BOT = "github-actions[bot]"
+
 
 def normalize_label_names(labels: list[Any]) -> list[str]:
     out: list[str] = []
@@ -142,6 +145,19 @@ class UsageCostRow:
                 self.markdown_table_row(),
             ]
         )
+
+
+def is_trusted_recorded_cost_row_comment(
+    comment: dict[str, Any],
+    *,
+    source_comment_url: str,
+) -> bool:
+    """True when github-actions posted the automation row for this source comment."""
+    body = comment.get("body") or ""
+    if COST_ROW_MARKER not in body or source_comment_url not in body:
+        return False
+    user = comment.get("user") or {}
+    return user.get("login") == RECORDED_COST_ROW_BOT
 
 
 def select_trusted_usage_report_comment(
@@ -263,7 +279,13 @@ const recordBody = [
   row
 ].join('\\n');
 
-const alreadyRecorded = comments.some((c) => (c.body || '').includes(COST_ROW_MARKER) && (c.body || '').includes(reportComment.html_url));
+const isRecordedCostRow = (comment, reportUrl) => {{
+  const body = comment.body || '';
+  if (!body.includes(COST_ROW_MARKER) || !body.includes(reportUrl)) return false;
+  const login = (comment.user && comment.user.login) || '';
+  return login === {RECORDED_COST_ROW_BOT!r};
+}};
+const alreadyRecorded = comments.some((c) => isRecordedCostRow(c, reportComment.html_url));
 core.setOutput('has_report', 'true');
 core.setOutput('tokens', parsed.tokens);
 core.setOutput('cost', parsed.cost);

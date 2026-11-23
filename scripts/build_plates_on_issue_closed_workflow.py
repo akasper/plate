@@ -26,9 +26,9 @@ on:
   issues:
     types: [closed]
 
-# Serialize harvest so parallel closes do not race (#1472).
+# One in-flight harvest per issue; parallel closes on different issues stay queued (#1480).
 concurrency:
-  group: plates-on-issue-closed-${{ github.repository }}
+  group: plates-on-issue-closed-${{ github.repository }}-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 permissions:

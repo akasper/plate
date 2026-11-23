@@ -7,8 +7,10 @@ import unittest
 from pathlib import Path
 
 from plate_core.issue_closed_usage import (
+    COST_ROW_MARKER,
     UsageCostRow,
     issue_has_harvest_type_label,
+    is_trusted_recorded_cost_row_comment,
     is_trusted_usage_report_author,
     parse_validated_usage_fields,
     resolve_harvest_issue_type,
@@ -86,6 +88,25 @@ class IssueClosedUsageTrustTests(unittest.TestCase):
         )
         self.assertFalse(
             is_trusted_usage_report_author(author_association="NONE", login="evil-bot")
+        )
+
+    def test_forged_cost_row_marker_ignored_for_already_recorded(self):
+        source = "https://github.com/o/r/issues/1#issuecomment-2"
+        forged = _comment(
+            f"{COST_ROW_MARKER}\n{source}",
+            login="evil-user",
+            association="NONE",
+        )
+        trusted = _comment(
+            f"{COST_ROW_MARKER}\n{source}",
+            login="github-actions[bot]",
+            association="NONE",
+        )
+        self.assertFalse(
+            is_trusted_recorded_cost_row_comment(forged, source_comment_url=source)
+        )
+        self.assertTrue(
+            is_trusted_recorded_cost_row_comment(trusted, source_comment_url=source)
         )
 
 

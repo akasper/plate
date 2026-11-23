@@ -4,9 +4,9 @@ on:
   issues:
     types: [closed]
 
-# Serialize harvest so parallel closes do not race (#1472).
+# One in-flight harvest per issue; parallel closes on different issues stay queued (#1480).
 concurrency:
-  group: plates-on-issue-closed-${{ github.repository }}
+  group: plates-on-issue-closed-${{ github.repository }}-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 permissions:
@@ -20,7 +20,7 @@ jobs:
         contains(format(',{0},', join(github.event.issue.labels.*.name, ',')), ',Feature,') ||
         contains(format(',{0},', join(github.event.issue.labels.*.name, ',')), ',Question,')
       )
-    runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - name: Extract trusted usage report from closing comment
         id: usage
@@ -119,7 +119,13 @@ jobs:
               row
             ].join('\n');
             
-            const alreadyRecorded = comments.some((c) => (c.body || '').includes(COST_ROW_MARKER) && (c.body || '').includes(reportComment.html_url));
+            const isRecordedCostRow = (comment, reportUrl) => {
+              const body = comment.body || '';
+              if (!body.includes(COST_ROW_MARKER) || !body.includes(reportUrl)) return false;
+              const login = (comment.user && comment.user.login) || '';
+              return login === 'github-actions[bot]';
+            };
+            const alreadyRecorded = comments.some((c) => isRecordedCostRow(c, reportComment.html_url));
             core.setOutput('has_report', 'true');
             core.setOutput('tokens', parsed.tokens);
             core.setOutput('cost', parsed.cost);
