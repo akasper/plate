@@ -536,6 +536,44 @@ class CliTests(unittest.TestCase):
         self.assertFalse(kwargs.get("apply", False))
         mock_reset.assert_not_called()
 
+    @patch("plate_core.release.validate_release_workspace")
+    @patch("plate_core.release._load_release")
+    @patch("plate_core.release.create_github_release")
+    @patch("plate_core.release.fast_forward_release_branches")
+    @patch("plate_core.release.perform_guarded_hard_reset")
+    @patch("plate_core.release.ensure_next_release_issue")
+    @patch("plate_core.release.set_next_release_release_window_open")
+    @patch("plate_core.release.plan_gh_plate_sync")
+    def test_release_finalize_squash_blocked_prints_recovery(
+        self,
+        mock_plan,
+        mock_set_rw,
+        mock_ensure,
+        mock_reset,
+        mock_ff,
+        mock_create,
+        mock_load_release,
+        mock_validate,
+    ):
+        """#1455: squash-detected fast-forward failure prints exact admin recovery command."""
+        mock_validate.return_value = type("R", (), {"errors": []})()
+        mock_load_release.return_value = {}
+        mock_create.return_value = {"tag": "v0.10.0", "exists": True}
+        mock_ff.return_value = {
+            "ok": False,
+            "squash_merged_suspected": True,
+            "recovery_command": "gh plate release finalize 0.10.0 --force-hard-reset --apply",
+        }
+        mock_set_rw.return_value = {"ok": True}
+        mock_ensure.return_value = {"exists": True}
+        mock_plan.return_value = {"ok": True}
+        err = io.StringIO()
+        out = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(["release", "finalize", "0.10.0", "--apply"])
+        self.assertEqual(code, 1)
+        self.assertIn("--force-hard-reset --apply", err.getvalue())
+
     @patch("plate_core.cli.get_autonomy_status")
     def test_autonomy_status_prints_pressure_and_pause(self, mock_status):
         """#634/#653: human-readable status surfaces pressure + next-cycle gate."""

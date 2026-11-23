@@ -59,6 +59,7 @@ body:
         - [ ] Versioned packaging branch (`release-vX.Y.Z`) has been created from the selected integration state.
         - [ ] `gh plate release status` shows the expected fragments, targeted epics, and no unexpected on-hold work.
         - [ ] Heavy Release PR validation has run for the packaging PR to `main`, including release-artifact and remote tag-conflict checks.
+        - [ ] Release PR to `main` merged with a merge commit (`gh pr merge <N> --merge`) or fast-forward — not squash/rebase (#1455).
         - [ ] Extension release_checks / `.plate` release triggers are satisfied or explicitly waived.
         - [ ] The merge-triggered release workflow created and pushed `vX.Y.Z` from the merged Release PR commit.
         - [ ] GitHub Release created (auto-populated from release notes).
