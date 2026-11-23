@@ -9,7 +9,6 @@ called :func:`plate_core.version_sync.find_repo_root`, which raised
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import unittest
 from pathlib import Path
