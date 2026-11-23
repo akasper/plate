@@ -118,7 +118,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 - **Budgeted autonomy:** operator sets `.plate` `autonomy.risk_tolerance` + budgets; agent or scheduler runs `gh plate autonomy --status` then `run` / `--loop` (or MCP `plate_autonomy_run_cycle`). Risk `off` disables engine autopilot only — ordinary Feature/Bug/Doc implementation still proceeds under human review rules.
 - **Safety path:** high-impact actions use `plate_autonomy_simulate` / shadow reports; open checkpoints pause cycles until decide/approve; ledger records decisions for audit.
 - **Feed + planning:** `plate_feed` ranks open Questions/Tasks; Q&A planning builds Feature/Epic/Release stubs with approval prompts.
-- **PR green loop:** `gh plate pr babysit N --act` (scope default `all`) with **local-rebase** as the default branch-update strategy; use `copilot-request` only when explicitly opted in; feedback-resolution gate for agent threads; human approval still required for Bug/Feature/Documentation merges unless autonomous eligibility is met.
+- **PR green loop:** `gh plate pr babysit N --act` (scope default `all`) with **local-rebase** as the default branch-update strategy; use `copilot-request` only when explicitly opted in; feedback-resolution gate for agent threads; human approval still required for Bug/Feature/Hardening/Documentation merges unless autonomous eligibility is met.
 - Agents self-correct low-risk issues; escalate via Issues / `need:human-review` for human judgment. Long-running runs stay quiet (terse bullets; GitHub comments only on real progress or exempt markers).
 
 ---

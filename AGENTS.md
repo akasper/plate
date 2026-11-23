@@ -64,6 +64,18 @@ Reproduce the failure or document why reproduction is not yet possible. Add a re
 
 After making the PR green (including feedback-resolution for any agent threads), **do not self-merge**. Wait for human review/approval (at minimum one `Approved` review from a human, or explicit human `gh pr merge`). Epics and Releases require at least one review as well. Use `need:human-review` for escalation. See [autopilot-doctrine.md](agents/autopilot-doctrine.md) human checkpoints and [autonomous-mode.md](agents/autonomous-mode.md).
 
+**Hardening**
+
+Use Hardening for standalone executable test coverage, CI reliability, isolation, or safety work that adds no product capability. Real defect corrections stay Bug; new capabilities stay Feature; executable tests must never be classified as Documentation.
+
+| Step | Required Behavior |
+|---|---|
+| 1 | Confirm the issue is labeled `Hardening` and describes the reliability, isolation, safety, or test-coverage gap. |
+| 2 | Add or extend tests, CI reliability, isolation, or safety changes. Do not add new product capability. |
+| 3 | Add a release fragment under `.agentic/releases/unreleased/<slug>.json` with `change_type: "hardening"`. |
+| 4 | Open a PR labeled `Hardening` targeting the correct integration base (from `gh plate release status`) with `Closes #N` in the body. |
+| 5 | After the PR is green (including feedback-resolution), **do not self-merge**; wait for human review/approval. Use `need:human-review` for escalation. |
+
 **Research**
 
 | Step | Required Behavior |
@@ -137,6 +149,7 @@ Every issue must close with a traceable artifact. For most issue types this is a
 |---|---|---|
 | `Feature` | Code change + per-feature change file update in `.agentic/releases/` | `Feature` |
 | `Bug` | Bug fix + regression test | `Bug` |
+| `Hardening` | Tests or reliability/safety change + release fragment (`change_type: "hardening"`) | `Hardening` |
 | `Research` | Findings committed to `docs/research/<slug>.md` or `SPEC.md` update | `Documentation` |
 | `Design` | Artifact committed to `docs/design/<slug>.md` or `docs/wiki/Features/<feature>.md` | `Documentation` |
 | `Question` | Answer artifact committed to `docs/research/<slug>.md` and process updates when guidance changes (`AGENTS.md`, `.agentic/skills.yml`) | `Documentation` |
@@ -163,7 +176,7 @@ duration: <hh:mm:ss>
 
 ## Merge and feedback gates
 
-- After a Bug, Feature, or Documentation PR is green (including agent-thread **feedback-resolution**), **do not self-merge** — wait for human review/approval (minimum one `Approved` review or explicit human merge). Epics and Releases require at least one review as well. Use `need:human-review` to escalate.
+- After a Bug, Feature, Hardening, or Documentation PR is green (including agent-thread **feedback-resolution**), **do not self-merge** — wait for human review/approval (minimum one `Approved` review or explicit human merge). Epics and Releases require at least one review as well. Use `need:human-review` to escalate.
 - The **feedback-resolution** check (third-party agent review threads) is separate from the human approval requirement; both apply where relevant. Full loop, babysit tooling, and pre-merge recheck: [pr-feedback-and-babysit.md](agents/pr-feedback-and-babysit.md).
 
 ## UI screenshots in pull requests (#1050)
@@ -202,8 +215,8 @@ Use labels as stable process metadata. Do not create ad hoc labels unless they c
 
 | Label Family | Usage |
 |---|---|
-| `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Task`, `Audit`, `Migration`, `Feedback Response` | Exactly one required issue type label. |
-| `Bug`, `Feature`, `Documentation`, `Feedback Response` | Exactly one required pull request type label. |
+| `Bug`, `Feature`, `Epic`, `Release`, `Research`, `Design`, `Question`, `Task`, `Audit`, `Migration`, `Feedback Response`, `Hardening` | Exactly one required issue type label. |
+| `Bug`, `Feature`, `Documentation`, `Feedback Response`, `Hardening` | Exactly one required pull request type label. |
 | `Feedback Response` | Combined issue + PR type for feedback-response process work when needed. Not auto-created by the deprecated legacy workflow; no Epic milestone required. |
 | `Epic: short-name` | Legacy/supplemental Epic identity label (optional). GitHub Milestones are the canonical Epic container (see Epic #100 / native GitHub PR integration). Feature, Epic, and Release issues require milestone assignment instead. |
 | `area:*` | Stable subsystem or ownership area. |

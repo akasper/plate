@@ -33,7 +33,7 @@ Autonomous mode is the default operating posture for unattended sessions (overni
 - Does not carry `need:human-review` or `need:security-review`
 - Does not change public-facing claims in `README.md` or marketing documentation
 - Feedback-resolution check passes; base in sync (babysit handles via copilot-request/local-rebase/none)
-- For Bug/Feature/Documentation PRs: human review/approval is obtained (per the explicit requirement clarified in this fix; the check is separate from feedback-resolution for agent threads)
+- For Bug/Feature/Hardening/Documentation PRs: human review/approval is obtained (per the explicit requirement clarified in this fix; the check is separate from feedback-resolution for agent threads)
 
 **How to auto-merge an eligible PR in autonomous mode:**
 

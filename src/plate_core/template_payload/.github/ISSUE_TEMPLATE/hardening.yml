@@ -1,0 +1,57 @@
+name: Hardening
+description: Standalone tests, CI reliability, isolation, or safety work that adds no product capability.
+title: "[Hardening]: "
+labels:
+  - Hardening
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use Hardening for executable test coverage, CI reliability, isolation, or safety work that adds no product capability. Real defect corrections stay Bug; new capabilities stay Feature. Executable tests must never be classified as Documentation.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What reliability, isolation, safety, or test-coverage gap does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Which tests, workflows, fixtures, or safety mechanisms change? Confirm this adds no new product capability.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Verification evidence
+      description: Describe the tests, CI checks, or manual evidence that will prove the hardening works.
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk level
+      description: Select the closest `risk:*` label to apply.
+      options:
+        - risk:low
+        - risk:medium
+        - risk:high
+        - risk:critical
+    validations:
+      required: true
+  - type: textarea
+    id: release_fragment
+    attributes:
+      label: Release fragment
+      description: Hardening PRs require a fragment under `.agentic/releases/unreleased/<slug>.json` with `change_type: "hardening"`.
+    validations:
+      required: true
+  - type: textarea
+    id: links
+    attributes:
+      label: Related links
+      description: Link related issues, PRs, failing runs, or documentation.
+    validations:
+      required: false

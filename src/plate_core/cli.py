@@ -4749,6 +4749,14 @@ def cmd_agent_delegate(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Delegating to: {result.agent_name} ({result.agent_id})")
+    print(f"Task: {result.task_description}")
+    print()
+    print("Delegation prompt:")
+    for line in result.delegation_prompt.splitlines():
+        print(f"  {line}")
+    print()
+    print(f"To use in Copilot: {result.invocation_hints['copilot_plugin']}")
+    print(f"To query via CLI:  {result.invocation_hints['gh_plate']}")
     return 0
 
 
@@ -4900,15 +4908,6 @@ def cmd_payload(args: argparse.Namespace) -> int:
         else:
             print(json.dumps(out, indent=2, sort_keys=True))
     return 0 if out.get("ok", True) else 1
-    print(f"Task: {result.task_description}")
-    print()
-    print("Delegation prompt:")
-    for line in result.delegation_prompt.splitlines():
-        print(f"  {line}")
-    print()
-    print(f"To use in Copilot: {result.invocation_hints['copilot_plugin']}")
-    print(f"To query via CLI:  {result.invocation_hints['gh_plate']}")
-    return 0
 
 
 def cmd_agents_list(args: argparse.Namespace) -> int:

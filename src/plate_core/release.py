@@ -329,13 +329,16 @@ def validate_release_workspace(
     releases_dir: Path | None = None,
 ) -> ReleaseWorkspaceValidationReport:
     """Validate that the repository and release artifact agree on a single release version."""
-    root = find_repo_root(repo_root).resolve()
+    root = _resolve_repo_root_for_releases(repo_root)
     version_files = read_repository_versions(root)
     errors: list[str] = []
 
     discovered_versions = sorted(set(version_files.values()))
     release_version: str | None = None
-    if len(discovered_versions) == 1:
+    if not version_files:
+        # Adopter layout: no plate-core version surfaces to validate against.
+        pass
+    elif len(discovered_versions) == 1:
         release_version = discovered_versions[0]
     else:
         mismatch_summary = ", ".join(f"{path}={version}" for path, version in version_files.items())
@@ -1042,6 +1045,40 @@ def infer_bump_type(fragments: list[dict]) -> str:
     return "patch"
 
 
+ALLOWED_CHANGE_TYPES: frozenset[str] = frozenset(
+    {"feature", "fix", "docs", "process", "breaking", "hardening"}
+)
+REQUIRED_FRAGMENT_FIELDS: tuple[str, ...] = (
+    "slug",
+    "change_type",
+    "surface",
+    "summary",
+    "migration_impact",
+    "agent_notes",
+)
+
+
+def validate_fragment(fragment: dict) -> list[str]:
+    """Return human-readable errors for a release fragment.
+
+    ``hardening`` is a valid change type. Unknown change types fail so a
+    breaking change cannot be hidden behind an unrecognized label.
+    """
+    errors: list[str] = []
+    for field in REQUIRED_FRAGMENT_FIELDS:
+        value = fragment.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"missing required field: {field}")
+    change_type = fragment.get("change_type")
+    if isinstance(change_type, str) and change_type.strip():
+        if change_type not in ALLOWED_CHANGE_TYPES:
+            allowed = ", ".join(sorted(ALLOWED_CHANGE_TYPES))
+            errors.append(
+                f"unknown change_type: {change_type!r} (allowed: {allowed})"
+            )
+    return errors
+
+
 def fragment_to_entry(fragment: dict) -> dict:
     entry: dict = {
         "change_type": fragment.get("change_type", "docs"),
@@ -1163,7 +1200,7 @@ def cut_release(
             f"v{fmt_version(current)}. Proceed with caution."
         )
 
-    repo_root = find_repo_root(releases_dir)
+    repo_root = _resolve_repo_root_for_releases(releases_dir)
     version_files = sync_repository_version(version, repo_root, dry_run=True)
     fragments_dir = versioned_dir / "fragments"
     release_data = build_release(version, fragments)
@@ -1483,7 +1520,7 @@ def post_release_fast_forward_comment(
 def _release_git_root(repo_root: Path | str | None) -> Path:
     if repo_root is not None:
         return Path(repo_root)
-    return find_repo_root(Path("."))
+    return _resolve_repo_root_for_releases(Path("."))
 
 
 def _remote_branch_exists(branch: str, *, cwd: str) -> bool:

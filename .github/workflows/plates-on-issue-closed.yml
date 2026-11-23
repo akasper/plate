@@ -20,7 +20,7 @@ jobs:
         contains(format(',{0},', join(github.event.issue.labels.*.name, ',')), ',Feature,') ||
         contains(format(',{0},', join(github.event.issue.labels.*.name, ',')), ',Question,')
       )
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
     steps:
       - name: Extract trusted usage report from closing comment
         id: usage

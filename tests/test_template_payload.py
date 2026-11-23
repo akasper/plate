@@ -238,6 +238,27 @@ class TemplatePayloadInventoryTests(unittest.TestCase):
             self.assertEqual(item.get("classification"), "copy_to_downstream")
 
 
+class TemplatePayloadGitignoreTests(unittest.TestCase):
+    """#1460: greenfield payload ships an adopter .gitignore."""
+
+    REQUIRED_PATTERNS = ("__pycache__/", "*.pyc", ".venv/", ".env")
+
+    def test_payload_ships_gitignore_with_required_patterns(self):
+        gitignore = payload_root() / ".gitignore"
+        self.assertTrue(
+            gitignore.is_file(),
+            "template payload must ship a root .gitignore for greenfield adopters",
+        )
+        text = gitignore.read_text(encoding="utf-8")
+        for pattern in self.REQUIRED_PATTERNS:
+            self.assertIn(pattern, text, f"payload .gitignore missing {pattern!r}")
+
+    def test_manifest_includes_gitignore(self):
+        manifest = load_template_payload_manifest()
+        self.assertIn(".gitignore", manifest.include_globs)
+        self.assertTrue(should_include_template_file(".gitignore", manifest))
+
+
 class TemplatePayloadWorkflowStaticTests(unittest.TestCase):
     """#1329: static checks on shipped template workflows."""
 
