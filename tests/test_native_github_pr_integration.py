@@ -133,7 +133,7 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn("CONNECTED_EVENT", workflow)
         self.assertIn("timelineItems", workflow)
         self.assertIn("Development sidebar", workflow)
-        self.assertIn("['Feature', 'Bug', 'Documentation']", workflow)
+        self.assertIn("['Feature', 'Bug', 'Documentation', 'Hardening']", workflow)
         self.assertIn("Warning-only rollout", workflow)
         self.assertIn("gh pr edit", workflow)
 

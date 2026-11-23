@@ -310,7 +310,7 @@ def create_task(
     )
 
     # Exactly one issue type: Task (plus optional area/risk extras, never other types)
-    type_labels = {"Bug", "Feature", "Epic", "Release", "Research", "Design", "Question", "Audit", "Migration", "Feedback Response", "Documentation"}
+    type_labels = {"Bug", "Feature", "Epic", "Release", "Research", "Design", "Question", "Audit", "Migration", "Feedback Response", "Documentation", "Hardening"}
     extra = [l for l in (labels or []) if l and l != "Task" and l not in type_labels]
     issue_labels = ["Task", *extra]
 

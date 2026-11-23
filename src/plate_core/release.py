@@ -1042,6 +1042,40 @@ def infer_bump_type(fragments: list[dict]) -> str:
     return "patch"
 
 
+ALLOWED_CHANGE_TYPES: frozenset[str] = frozenset(
+    {"feature", "fix", "docs", "process", "breaking", "hardening"}
+)
+REQUIRED_FRAGMENT_FIELDS: tuple[str, ...] = (
+    "slug",
+    "change_type",
+    "surface",
+    "summary",
+    "migration_impact",
+    "agent_notes",
+)
+
+
+def validate_fragment(fragment: dict) -> list[str]:
+    """Return human-readable errors for a release fragment.
+
+    ``hardening`` is a valid change type. Unknown change types fail so a
+    breaking change cannot be hidden behind an unrecognized label.
+    """
+    errors: list[str] = []
+    for field in REQUIRED_FRAGMENT_FIELDS:
+        value = fragment.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"missing required field: {field}")
+    change_type = fragment.get("change_type")
+    if isinstance(change_type, str) and change_type.strip():
+        if change_type not in ALLOWED_CHANGE_TYPES:
+            allowed = ", ".join(sorted(ALLOWED_CHANGE_TYPES))
+            errors.append(
+                f"unknown change_type: {change_type!r} (allowed: {allowed})"
+            )
+    return errors
+
+
 def fragment_to_entry(fragment: dict) -> dict:
     entry: dict = {
         "change_type": fragment.get("change_type", "docs"),

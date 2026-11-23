@@ -1,0 +1,87 @@
+{
+  "version": "0.11.0",
+  "summary": "PLATE 0.11.0 -- 6 change(s): 1459-payload-omit-pycache, 1460-payload-gitignore, 1461-payload-unreleased-layout, agents-delegate-human-output, hardening-issue-type-1456....",
+  "cut_at": "2026-11-18T12:23:27Z",
+  "fragment_count": 6,
+  "fragment_slugs": [
+    "1459-payload-omit-pycache",
+    "1460-payload-gitignore",
+    "1461-payload-unreleased-layout",
+    "agents-delegate-human-output",
+    "hardening-issue-type-1456",
+    "mcp-test-coverage-audit-repo-arg"
+  ],
+  "entries": [
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/data/template_payload_manifest.yml, src/plate_core/template_payload.py (should_include_template_file)",
+      "migration_impact": "New bootstraps and import-payload runs omit bytecode. Repos that already committed scripts/plate/__pycache__/ may delete those paths and add local gitignore rules (#1460).",
+      "agent_notes": "After upgrading plate-core, re-run import-payload only if you need refreshed scaffolding; remove any previously copied __pycache__ under scripts/plate/ from git history if present.",
+      "links": [
+        "#1459"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/template_payload/.gitignore, src/plate_core/data/template_payload_manifest.yml, src/plate_core/data/template_payload_inventory.json",
+      "migration_impact": "New repositories created via `gh plate bootstrap` or `gh plate import-payload` now receive a root `.gitignore`. Existing adopters without one can copy it in; existing `.gitignore` files are left unchanged by conservative/safe strategies and can be merged by hand.",
+      "agent_notes": "The payload `.gitignore` is intentionally modest, not a copy of plate-core's 217-line root ignore file. It must include `__pycache__/`, `*.pyc`, `.venv/`, and `.env`. The separate payload __pycache__ copy-filter is #1459 and is not handled here.",
+      "links": [
+        "#1460"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "src/plate_core/template_payload/.agentic/releases/unreleased/README.md",
+      "migration_impact": "New greenfield bootstraps receive the same unreleased README as the #996 import seed. `conservative` and `safe` import skip an existing file at that path (including #996-seeded or custom text) instead of raising a payload conflict or escape hatch. Older template payloads without this file still get the adoption seed on import.",
+      "agent_notes": "Template README must stay byte-identical to `MINIMAL_UNRELEASED_README` in import_payload so identical seeded copies skip under conservative. `_seed_releases_layout_if_missing` is a no-op for the README when the payload manifest includes the path; it still mkdir-backfills pre-#1461 templates.",
+      "links": [
+        "#1461",
+        "#996"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "gh plate agents delegate",
+      "migration_impact": "None.",
+      "agent_notes": "Human-readable gh plate agents delegate output once again includes the task, delegation prompt, and Copilot/CLI invocation hints after the 'Delegating to:' line."
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/labels.yml, .github/ISSUE_TEMPLATE/hardening.yml, .github/workflows/label-check.yml, .github/workflows/labels.yml, .github/workflows/plate-pr-gates.yml, src/plate_core/pr_gates_checks.py, src/plate_core/pr_verify.py, src/plate_core/pr_gates_contract.py, src/plate_core/release.py, src/plate_core/integration_close.py, src/plate_core/health.py, AGENTS.md, CONTRIBUTING.md, docs/agents, .agentic/releases/README.md",
+      "migration_impact": "Downstream repos gain a Hardening label, issue template, and PR type. Hardening PRs require a release fragment with change_type \"hardening\". Hardening fragments route to patch unless marked breaking; they never auto-select minor the way feature fragments do. Real defect corrections remain Bug and new capabilities remain Feature.",
+      "agent_notes": "Use Hardening only for standalone executable test coverage, CI reliability, isolation, or safety work with no new product capability. Real defect corrections stay Bug; new capabilities stay Feature; executable tests must never be classified as Documentation. Hardening PRs require a release fragment and a linked issue, and must not be self-merged.",
+      "migration_guidance": [
+        "1. Sync labels from .github/labels.yml (or let bootstrap create Hardening on next apply).",
+        "2. Copy .github/ISSUE_TEMPLATE/hardening.yml and the updated PULL_REQUEST_TEMPLATE.md into your repo.",
+        "3. Update any local label-check or PR-type gate lists to include Hardening.",
+        "4. Use change_type \"hardening\" for standalone test, CI reliability, isolation, or safety fragments; keep breaking changes marked breaking so they still route to major."
+      ],
+      "links": [
+        "#1456"
+      ],
+      "requires": [
+        "0.10.0"
+      ]
+    },
+    {
+      "change_type": "fix",
+      "surface": "plate-mcp",
+      "migration_impact": "None.",
+      "agent_notes": "The tool branch now reads repo from args.get(\"repo\") matching the pattern used by all other tool branches in _handle_tools_call."
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": "",
+  "closes_block": "Closes #1459, #1460, #1461, #996, #1456"
+}
