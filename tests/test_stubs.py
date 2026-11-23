@@ -26,6 +26,8 @@ class TestDetectType(unittest.TestCase):
         self.assertEqual(detect_issue_type("add marketplace packaging support"), "Feature")
         self.assertEqual(detect_issue_type("roadmap epic for autonomy"), "Epic")
         self.assertEqual(detect_issue_type("anything", hint="Task"), "Task")
+        self.assertEqual(detect_issue_type("Improve CI reliability"), "Hardening")
+        self.assertEqual(detect_issue_type("Make CI reliable"), "Hardening")
 
 
 class TestAuthorRefine(unittest.TestCase):

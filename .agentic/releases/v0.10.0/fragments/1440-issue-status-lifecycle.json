@@ -1,0 +1,10 @@
+{
+  "slug": "1440-issue-status-lifecycle",
+  "change_type": "feature",
+  "surface": "src/plate_core/issue_status_lifecycle.py, .github/workflows/label-check.yml, plate-pr-gates mark-implemented job, plates-unblock-features",
+  "summary": "Code-owned issue status:* lifecycle table (#1385): exclusivity in label-check, Epic/Task/Release skip implemented labeling, integration merge uses strict Closes parsing + remove/replace status labels; push-only integration events skip (no PR body).",
+  "migration_impact": "Downstream repos: expect stricter issue label-check (at most one status:*). Unblock workflow no longer promotes Features that already violate multi-status. Integration merge no longer adds status:implemented to Epic/Task/Release issues referenced by Closes; ensure those types use their ceremony or rely on GitHub default-branch close. Pure-push merges to release branches no longer trigger mark-implemented (merge the PR instead).",
+  "agent_notes": "Import shared rules from plate_core.issue_status_lifecycle in tools/tests; integration behavior is documented in AGENTS.md Label Rules.",
+  "breaking": false,
+  "links": ["#1440", "#1385"]
+}

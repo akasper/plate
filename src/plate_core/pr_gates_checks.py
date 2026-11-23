@@ -10,14 +10,32 @@ from dataclasses import dataclass
 from typing import Any
 
 from .pr_gates_closing import body_has_strict_closing_keyword, parse_strict_closing_issue_numbers
+from .release import (
+    RELEASE_INTEGRATION_BRANCHES,
+    RELEASE_WINDOW_OPEN_LABEL,
+    RELEASE_WINDOW_OVERRIDE_LABEL,
+)
 
-PR_TYPE_LABELS: tuple[str, ...] = ("Bug", "Feature", "Documentation", "Feedback Response")
+PR_TYPE_LABELS: tuple[str, ...] = (
+    "Bug",
+    "Feature",
+    "Documentation",
+    "Feedback Response",
+    "Hardening",
+)
 PR_TYPE_BY_LOWER = {name.lower(): name for name in PR_TYPE_LABELS}
+FRAGMENT_REQUIRED_PR_TYPES: frozenset[str] = frozenset({"Feature", "Hardening"})
 ALLOWED_TIER_LABELS = frozenset({"tier:T0", "tier:T1", "tier:T2", "tier:T3"})
 AREA_LABEL_RE = re.compile(r"^area:", re.IGNORECASE)
 LOOSE_ISSUE_REF_RE = re.compile(r"#(\d+)\b")
 REFS_ISSUE_RE = re.compile(r"\bRefs\s+#(\d+)\b", re.IGNORECASE)
 TRACK_LABEL_TO_BRANCH = {"Major": "release-major", "Minor": "release-minor", "Patch": "release-patch"}
+MAIN_SOURCE_OVERRIDE_LABEL = "main-source-override"
+ALLOWED_MAIN_SOURCE_HEAD_BRANCHES = frozenset(
+    {"release", "release-patch", "release-minor", "release-major"}
+)
+MAIN_SOURCE_FAILURE_HEADING = "main-source"
+RELEASE_WINDOW_FAILURE_HEADING = "release-window"
 
 
 @dataclass(frozen=True)
@@ -131,7 +149,7 @@ def has_feature_release_fragment(changed_paths: list[str]) -> bool:
 
 def check_feature_release_fragment(labels: list[str], changed_paths: list[str]) -> GateFailure | None:
     matches = pr_type_matches(normalize_label_list(labels))
-    if len(matches) != 1 or matches[0] != "Feature":
+    if len(matches) != 1 or matches[0] not in FRAGMENT_REQUIRED_PR_TYPES:
         return None
     if has_feature_release_fragment(changed_paths):
         return None
@@ -186,6 +204,79 @@ def resolve_expected_integration_base(
     return "main"
 
 
+def is_allowed_main_source_head(head: str | None) -> bool:
+    """Return True when ``head`` may merge into ``main`` without override (#1435)."""
+    branch = (head or "").strip()
+    if not branch:
+        return False
+    if branch in ALLOWED_MAIN_SOURCE_HEAD_BRANCHES:
+        return True
+    return branch.startswith("release-v")
+
+
+def has_main_source_override(labels: list[str]) -> bool:
+    """``main-source-override`` on the PR bypasses the gate (#1435).
+
+    Approver-only application is enforced by lifecycle config (#1425) when present;
+    until then any PR carrying the label is accepted.
+    """
+    return MAIN_SOURCE_OVERRIDE_LABEL in normalize_label_list(labels)
+
+
+def check_main_source(
+    base: str | None,
+    head: str | None,
+    labels: list[str],
+) -> GateFailure | None:
+    """Fail PRs into ``main`` unless head is an allowed release branch (#1435)."""
+    base_ref = (base or "").strip()
+    if base_ref != "main":
+        return None
+    if has_main_source_override(labels):
+        return None
+    head_ref = (head or "").strip()
+    if is_allowed_main_source_head(head_ref):
+        return None
+    allowed = "release, release-patch, release-minor, release-major, or release-v*"
+    return GateFailure(
+        "main_source",
+        f"PRs into `main` must come from {allowed} (found head {head_ref!r}). "
+        f"Target a release integration branch instead (`gh plate release status`), "
+        f"or have an approver apply the `{MAIN_SOURCE_OVERRIDE_LABEL}` label for a one-off exception.",
+    )
+
+
+def has_release_window_override(labels: list[str]) -> bool:
+    """``release-window-override`` on the PR bypasses the release-window gate (#1439)."""
+    return RELEASE_WINDOW_OVERRIDE_LABEL in normalize_label_list(labels)
+
+
+def check_release_window(
+    base: str | None,
+    labels: list[str],
+    *,
+    release_window_open: bool,
+) -> GateFailure | None:
+    """Block merges into release integration branches while the Next Release window is open (#1439).
+
+    Window state comes from the standing Next Release issue (``release-window:open`` label).
+    No active Next Release is treated as closed (do not block). Override via ``release-window-override`` on the PR.
+    """
+    base_ref = (base or "").strip()
+    if base_ref not in RELEASE_INTEGRATION_BRANCHES:
+        return None
+    if has_release_window_override(labels):
+        return None
+    if not release_window_open:
+        return None
+    return GateFailure(
+        "release_window",
+        f"The active Next Release issue has `{RELEASE_WINDOW_OPEN_LABEL}` (packaging / merge freeze). "
+        f"Wait until finalization clears the window, or have an approver apply `{RELEASE_WINDOW_OVERRIDE_LABEL}` "
+        f"for a one-off exception.",
+    )
+
+
 def check_integration_base_branch(
     base: str | None,
     *,
@@ -212,12 +303,14 @@ def run_preflight_gate_checks(
     body: str | None,
     labels: list[str],
     base: str | None,
+    head: str | None = None,
     changed_paths: list[str],
     owner: str | None,
     repo: str | None,
     release_branch_mode: str,
     release_track_branches: dict[str, bool] | None,
     issue_labels: list[str] | None = None,
+    release_window_open: bool = False,
 ) -> list[GateFailure]:
     failures: list[GateFailure] = []
     for check in (
@@ -241,6 +334,16 @@ def run_preflight_gate_checks(
     )
     if base_fail:
         failures.append(base_fail)
+    main_fail = check_main_source(base, head, labels)
+    if main_fail:
+        failures.append(main_fail)
+    rw_fail = check_release_window(
+        base,
+        labels,
+        release_window_open=release_window_open,
+    )
+    if rw_fail:
+        failures.append(rw_fail)
     return failures
 
 

@@ -33,6 +33,7 @@ MARKER_END = "<!-- PLATE-DECISION:END -->"
 RECORD_TYPE_DECISION = "decision"
 RECORD_TYPE_SPEND_INTERVAL = "spend_interval"
 VALID_TIERS = frozenset({"T0", "T1", "T2", "T3"})
+VALID_TIER_STEPS = frozenset({"start", "escalated"})
 VALID_ROUTE_CLARITY = frozenset({"clear", "ambiguous"})
 HANDOFF_PACKET_UNITS = frozenset({"tokens", "bytes"})
 
@@ -193,8 +194,22 @@ def validate_ledger_entry(data: dict[str, Any]) -> tuple[dict[str, Any] | None, 
         errors.append(f"jev_route_clarity must be one of {sorted(VALID_ROUTE_CLARITY)}")
     if not str(data.get("id") or "").strip():
         errors.append("spend_interval entries require id")
+    metadata = data.get("metadata")
+    if isinstance(metadata, dict):
+        tier_step = metadata.get("tier_step")
+        if tier_step is not None and str(tier_step).strip():
+            normalized_step = str(tier_step).strip().lower()
+            if normalized_step not in VALID_TIER_STEPS:
+                errors.append(
+                    f"metadata.tier_step must be one of {sorted(VALID_TIER_STEPS)}"
+                )
     if errors:
         return None, errors
+
+    meta_out = dict(metadata) if isinstance(metadata, dict) else {}
+    tier_step_raw = meta_out.get("tier_step")
+    if tier_step_raw is not None and str(tier_step_raw).strip():
+        meta_out["tier_step"] = str(tier_step_raw).strip().lower()
 
     normalized = SpendIntervalRecord.from_dict(
         {
@@ -222,6 +237,7 @@ def validate_ledger_entry(data: dict[str, Any]) -> tuple[dict[str, Any] | None, 
             "jev_route_clarity": (
                 str(jev_route).lower() if jev_route not in (None, "") else None
             ),
+            "metadata": meta_out,
         }
     ).to_dict()
     return normalized, []

@@ -1,0 +1,10 @@
+{
+  "slug": "main-source-gate-1435",
+  "change_type": "feature",
+  "surface": "plate-pr-gates main-source check, plate_core.pr_gates_checks, gh plate pr preflight",
+  "summary": "PRs into main must come from release branches unless main-source-override is applied; enforced in pr-gates and local preflight.",
+  "migration_impact": "After upgrade, Feature/Bug/Documentation PRs must target a release integration branch (see gh plate release status). Regenerate or import plate-pr-gates.yml. Add the main-source-override label for rare exceptions.",
+  "agent_notes": "Run gh plate pr preflight before gh pr create --base main. Release PRs use release or release-v* heads. Infrastructure PRs to main need an approver to apply main-source-override until lifecycle approvers (#1425) restrict the label.",
+  "breaking": false,
+  "links": ["#1435", "#1433", "#1383"]
+}

@@ -11,13 +11,13 @@ permissions:
 jobs:
   check-labels:
     if: github.event.issue != null && !github.event.issue.pull_request
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
     steps:
       - name: Validate PLATE issue label rules
         uses: actions/github-script@v8
         with:
           script: |
-            const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Release', 'Research', 'Design', 'Question', 'Task', 'Audit', 'Migration', 'Feedback Response', 'Spike'];
+            const issueTypeLabels = ['Bug', 'Feature', 'Epic', 'Release', 'Research', 'Design', 'Question', 'Task', 'Audit', 'Migration', 'Feedback Response', 'Spike', 'Hardening'];
             const requiresMilestone = ['Feature', 'Epic', 'Release'];
             const allowedStatusLabels = ['status:stub', 'status:blocked', 'status:ready-to-work', 'status:implemented'];
             const allowedTierLabels = ['tier:T0', 'tier:T1', 'tier:T2', 'tier:T3'];
@@ -44,6 +44,14 @@ jobs:
 
             if (forbiddenPlanningLabels.length > 0) {
               core.setFailed(`PLATE repositories should use GitHub Projects fields for planning state, not labels: ${forbiddenPlanningLabels.join(', ')}.`);
+              return;
+            }
+
+            const statusMatches = labels.filter((label) => allowedStatusLabels.includes(label));
+            if (statusMatches.length > 1) {
+              core.setFailed(
+                `At most one PLATE status label is allowed (${allowedStatusLabels.join(', ')}). Found: ${[...new Set(statusMatches)].sort().join(', ')}.`
+              );
               return;
             }
 

@@ -1,0 +1,15 @@
+{
+  "slug": "1451-database-migration-naming",
+  "change_type": "process",
+  "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, docs/agents/database-migration-naming.md",
+  "summary": "Agent guidance: name new database migrations with UTC timestamp + slug (e.g. 20261109T111800Z_residue_baseline.sql); use sequential numbers only when the migration tool requires it.",
+  "migration_impact": "Adopters receive the new on-demand page via import-payload or self-migrate. No renames of existing migrations; no CI enforcement.",
+  "agent_notes": "Before adding a schema migration, load docs/agents/database-migration-naming.md. Default to YYYYMMDDTHHMMSSZ_short_slug.ext at creation time. Keep sequential numbering only when the toolchain forces it and document that exception in the repo. Never rename existing migration files.",
+  "migration_guidance": [
+    "1. Refresh AGENTS.md and docs/agents/ from PLATE import-payload or self-migrate when convenient.",
+    "2. Teach agents (and humans) the timestamp slug convention for all new migrations.",
+    "3. If your migration tool requires numeric ordering, state that in README, SPEC.md, or docs/migration/ instead of silently using sequential names."
+  ],
+  "breaking": false,
+  "links": ["#1451"]
+}

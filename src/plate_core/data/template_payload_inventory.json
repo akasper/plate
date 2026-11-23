@@ -36,6 +36,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".agentic/releases/unreleased/README.md",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".agentic/skills.yml",
       "classification": "copy_to_downstream"
     },
@@ -85,6 +89,10 @@
     },
     {
       "path": ".github/ISSUE_TEMPLATE/feature.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/hardening.yml",
       "classification": "copy_to_downstream"
     },
     {
@@ -204,6 +212,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".gitignore",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "AGENTS.md",
       "classification": "copy_to_downstream"
     },
@@ -245,6 +257,10 @@
     },
     {
       "path": "docs/agents/cli-body-patterns.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/agents/database-migration-naming.md",
       "classification": "copy_to_downstream"
     },
     {

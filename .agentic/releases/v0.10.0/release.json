@@ -1,0 +1,172 @@
+{
+  "version": "0.10.0",
+  "summary": "PLATE 0.10.0 -- 11 change(s): 1368-state-store-foundation, 1381-task-spec-tier-escalation, 1422-issue-lifecycle-jsonl, 1427-lease-adapters, 1434-release-branch-fast-forward....",
+  "cut_at": "2026-11-10T01:20:20Z",
+  "fragment_count": 11,
+  "fragment_slugs": [
+    "1368-state-store-foundation",
+    "1381-task-spec-tier-escalation",
+    "1422-issue-lifecycle-jsonl",
+    "1427-lease-adapters",
+    "1434-release-branch-fast-forward",
+    "1438-release-ff-github-app-token",
+    "1439-release-window-gate",
+    "1440-issue-status-lifecycle",
+    "1451-database-migration-naming",
+    "main-source-gate-1435",
+    "pr-preflight-1418"
+  ],
+  "entries": [
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/state_store.py, src/plate_core/pm.py, src/plate_core/fleet.py, src/plate_core/scheduled_ops.py, tests/test_state_store.py",
+      "migration_impact": "Corrupt or truncated JSON under .agentic/pm/queue.json, .agentic/fleet/handoffs.json, or .agentic/scheduled_ops/runs.json now raises CorruptStateError instead of being silently reset; repair or remove the file before resuming writes.",
+      "agent_notes": "Use plate_core.state_store.locked_json for new durable JSON stores; do not swallow JSONDecodeError on load. Epic #1383 / issue #1368 remaining modules migrate separately.",
+      "migration_guidance": [
+        "1. Upgrade plate_core.",
+        "2. If CLI or MCP errors with CorruptStateError on these paths, inspect the JSON file and restore from backup or delete to recreate an empty store.",
+        "3. Follow-up PRs will migrate remaining .agentic writers listed in issue #1368."
+      ],
+      "links": [
+        "#1368",
+        "#1383"
+      ],
+      "requires": [
+        "0.8.1"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate_core.task_spec, plate_core.ledger, docs/design/agent-crews-task-spec.md",
+      "migration_impact": "Task YAML with multi-step or mismatched escalation.from must be corrected before validate passes. Hosts may call next_run_state and persist run state before each model invocation.",
+      "agent_notes": "Validate .agentic/tasks with gh plate tasks validate; escalation.to must be exactly one tier above start_tier. Use next_run_state human_escalation_approved for the T3 gate; terminal states are idempotent. Record tier_step start|escalated on spend intervals when piloting crews.",
+      "links": [
+        "#1381"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/issue_lifecycle_events.py, src/plate_core/gh_actions_mark_implemented.py, .gitignore",
+      "migration_impact": "Repositories may accumulate ignored .agentic/events/ files locally; no template migration required.",
+      "agent_notes": "Uses state_store.locked_json (#1368) for seq; concurrent appends use dedicated .jsonl.lock. Part of epic #1383.",
+      "links": [
+        "#1422",
+        "#1383"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/leases/, src/plate_core/process_config.py, .agentic/process.yml, template_payload process.yml, tests/test_lease_adapters_contract.py",
+      "migration_impact": "Optional new ``leases:`` block in ``.agentic/process.yml``; omitting it is fine \u2014 code merges the same defaults (adapter local, ttl_s 600, grace_s 60, no_capacity_deadline 6h, revocations_before_human 3).",
+      "agent_notes": "Lull hub adapter remains out of scope (#1431). Max overrun after failed renew documented as ttl/3 + grace_s via max_lease_runover_seconds.",
+      "links": [
+        "#1427",
+        "#1383"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/release.py, .github/workflows/release.yml, gh plate release finalize",
+      "migration_impact": "Release finalization and release.yml now move standing release branches via non-force fast-forward. Admin force-with-lease reset requires gh plate release finalize --force-hard-reset --apply.",
+      "agent_notes": "Automatic path never force-pushes release branches. Stop-on-first-block when a branch diverged from the tag; inspect blocked.unshipped_commits in the helper result.",
+      "migration_guidance": [
+        "1. Upgrade plate_core and sync release.yml from upstream.",
+        "2. If branch rulesets block direct pushes to standing release branches, add your lifecycle GitHub App (secrets PLATE_APP_ID + PLATE_APP_PRIVATE_KEY) as a ruleset bypass actor with Always allow, or grant github-actions bypass on org repos where policy allows.",
+        "3. Re-run gh plate release finalize <ver> --apply to repair a missed fast-forward; use --force-hard-reset --apply only for explicit admin recovery."
+      ],
+      "links": [
+        "#1434",
+        "#1433",
+        "#1383"
+      ],
+      "requires": [
+        "0.9.0"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": ".github/workflows/release.yml, src/plate_core/template_payload/.github/workflows/release.yml, docs/agents/branch-model-and-ceremonies.md",
+      "migration_impact": "Adopters need both App secrets and ruleset bypass for automated FF on user-owned repos, or accept manual/admin finalize; org repos may use github-actions bypass instead.",
+      "agent_notes": "Unit tests parse release.yml (repo + template_payload) for the FF job. End-to-end App token minting is not exercised in CI.",
+      "migration_guidance": [
+        "1. Install a GitHub App on the repo with Contents, Issues, Pull requests, Actions, and Checks permissions; add PLATE_APP_ID and PLATE_APP_PRIVATE_KEY repository secrets.",
+        "2. Add the App as an Always-allow bypass actor on the standing release-branch ruleset (or grant github-actions bypass where policy allows).",
+        "3. Without both secrets the workflow warns and skips the push; use gh plate release finalize or manual git fast-forward."
+      ],
+      "links": [
+        "#1438",
+        "#1437"
+      ],
+      "requires": [
+        "0.9.0"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate-pr-gates, plate_core.pr_gates_checks, release cut/finalize, gh plate release status",
+      "migration_impact": "Regenerate or import plate-pr-gates.yml. Sync labels including release-window:open and release-window-override. Release cut (non-dry-run) applies release-window:open on the Next Release issue; finalize runs set_next_release_release_window_open(False) before ensure_next_release_issue so the new standing issue starts with Release only.",
+      "agent_notes": "gh plate release status reports release_window_open. Use release-window-override only for approver-sanctioned exceptions (#1439).",
+      "links": [
+        "#1439"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "src/plate_core/issue_status_lifecycle.py, .github/workflows/label-check.yml, plate-pr-gates mark-implemented job, plates-unblock-features",
+      "migration_impact": "Downstream repos: expect stricter issue label-check (at most one status:*). Unblock workflow no longer promotes Features that already violate multi-status. Integration merge no longer adds status:implemented to Epic/Task/Release issues referenced by Closes; ensure those types use their ceremony or rely on GitHub default-branch close. Pure-push merges to release branches no longer trigger mark-implemented (merge the PR instead).",
+      "agent_notes": "Import shared rules from plate_core.issue_status_lifecycle in tools/tests; integration behavior is documented in AGENTS.md Label Rules.",
+      "links": [
+        "#1440",
+        "#1385"
+      ]
+    },
+    {
+      "change_type": "process",
+      "surface": "AGENTS.md, src/plate_core/template_payload/AGENTS.md, docs/agents/database-migration-naming.md",
+      "migration_impact": "Adopters receive the new on-demand page via import-payload or self-migrate. No renames of existing migrations; no CI enforcement.",
+      "agent_notes": "Before adding a schema migration, load docs/agents/database-migration-naming.md. Default to YYYYMMDDTHHMMSSZ_short_slug.ext at creation time. Keep sequential numbering only when the toolchain forces it and document that exception in the repo. Never rename existing migration files.",
+      "migration_guidance": [
+        "1. Refresh AGENTS.md and docs/agents/ from PLATE import-payload or self-migrate when convenient.",
+        "2. Teach agents (and humans) the timestamp slug convention for all new migrations.",
+        "3. If your migration tool requires numeric ordering, state that in README, SPEC.md, or docs/migration/ instead of silently using sequential names."
+      ],
+      "links": [
+        "#1451"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "plate-pr-gates main-source check, plate_core.pr_gates_checks, gh plate pr preflight",
+      "migration_impact": "After upgrade, Feature/Bug/Documentation PRs must target a release integration branch (see gh plate release status). Regenerate or import plate-pr-gates.yml. Add the main-source-override label for rare exceptions.",
+      "agent_notes": "Run gh plate pr preflight before gh pr create --base main. Release PRs use release or release-v* heads. Infrastructure PRs to main need an approver to apply main-source-override until lifecycle approvers (#1425) restrict the label.",
+      "links": [
+        "#1435",
+        "#1433",
+        "#1383"
+      ]
+    },
+    {
+      "change_type": "feature",
+      "surface": "gh plate pr preflight/create, plate_core.pr_gates_checks, plate-pr-gates failure text",
+      "migration_impact": "Agents should prefer `gh plate pr create` or run `gh plate pr preflight` before opening PRs. Adopters import regenerated plate-pr-gates.yml when syncing payload.",
+      "agent_notes": "Run `gh plate pr preflight --body-file body.md --base release --labels Feature,area:cli` (or `gh plate pr create -- \u2026`) before spending tokens on CI fix-ups. Shared checks live in plate_core.pr_gates_checks.",
+      "links": [
+        "#1418",
+        "#391"
+      ]
+    }
+  ],
+  "media": [],
+  "media_summary": {
+    "n_total": 0,
+    "n_pending": 0,
+    "n_approved": 0,
+    "n_rejected": 0,
+    "ready_for_release": false,
+    "has_media": false,
+    "pending": [],
+    "approved": []
+  },
+  "media_markdown": "",
+  "closes_block": "Closes #1368, #1383, #1381, #1422, #1427, #1434, #1433, #1438, #1437, #1439, #1440, #1385, #1451, #1435, #1418, #391"
+}

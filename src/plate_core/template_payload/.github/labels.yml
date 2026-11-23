@@ -17,6 +17,9 @@
 - name: "Documentation"
   color: "0075ca"
   description: "PR type: documentation-only change."
+- name: "Hardening"
+  color: "1d76db"
+  description: "Issue or PR type: standalone tests, CI reliability, isolation, or safety; no new product capability."
 - name: "Research"
   color: "fbca04"
   description: "Issue type: research, comparison, decision preparation, or ADR input."
@@ -116,6 +119,18 @@
 - name: "no-issue"
   color: "ededed"
   description: "PR does not close a tracked issue (chore, bump, hotfix). Silences issue-link check."
+
+- name: "main-source-override"
+  color: "fbca04"
+  description: "Bypass main-source pr-gates check for one PR (#1435); approvers when lifecycle config exists."
+
+- name: "release-window:open"
+  color: "b60205"
+  description: "Standing Next Release issue: merge freeze into release integration branches (#1439)."
+
+- name: "release-window-override"
+  color: "fbca04"
+  description: "Bypass release-window pr-gates check for one PR (#1439); approvers when lifecycle config exists."
 
 - name: "status:blocked"
   color: "b60205"

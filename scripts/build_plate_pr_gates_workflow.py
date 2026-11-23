@@ -8,6 +8,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+import sys
+
+sys.path.insert(0, str(ROOT / "src"))
+from plate_core.workflow_runs_on import LINUX_RUNS_ON_VAR_EXPRESSION  # noqa: E402
+
 
 def _plate_core_pip_version() -> str:
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
@@ -72,8 +77,8 @@ on:
 concurrency:
   # Non-gating label events use an isolated group and must not cancel real gate runs (#1228).
   # Review events use a separate group so they never cancel in-flight pull_request gate runs (#1258).
-  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') && 'review' || github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name) && 'label-noop' || 'gate' }}
-  cancel-in-progress: ${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') || !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","no-issue","Release"]'), github.event.label.name)) }}
+  group: plate-pr-gates-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') && 'review' || github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","Hardening","no-issue","Release","main-source-override","release-window-override","release-window:open"]'), github.event.label.name) && 'label-noop' || 'gate' }}
+  cancel-in-progress: ${{ (github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') || !(github.event_name == 'pull_request' && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["Feature","Bug","Documentation","Feedback Response","Hardening","no-issue","Release","main-source-override","release-window-override","release-window:open"]'), github.event.label.name)) }}
 
 permissions:
   contents: read
@@ -88,7 +93,7 @@ jobs:
       github.event_name == 'pull_request_review' ||
       github.event_name == 'pull_request_review_comment' ||
       (github.event_name == 'pull_request' && github.event.action != 'closed')
-    runs-on: ubuntu-latest
+    runs-on: @@LINUX_RUNS_ON@@
     steps:
       - uses: actions/checkout@v4
         with:
@@ -112,6 +117,8 @@ jobs:
         uses: actions/github-script@v8
         with:
 @@ISSUE_LINK_SCRIPT@@
+
+@@MAIN_SOURCE_RUN@@
 
 @@REVIEWER_MODEL_RUN@@
 
@@ -241,6 +248,110 @@ VALIDATE_TEMPLATE = """
           fi
 """
 
+MAIN_SOURCE_PLATE = """
+      - name: Gate — main source
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: main-source
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          python3 -m plate_core.pr_main_source_gate --base "${base_ref}" --head "${head_ref}" --labels "${labels}"
+"""
+
+RELEASE_WINDOW_PLATE = """
+      - name: Gate — release window
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: release-window
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          python3 -m plate_core.pr_release_window_gate --base "${base_ref}" --labels "${labels}"
+"""
+
+MAIN_SOURCE_TEMPLATE = """
+      - name: Gate — main source
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: main-source
+          set -euo pipefail
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          head_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .head.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          run_main_source_gate() {
+            python3 -m plate_core.pr_main_source_gate --base "${base_ref}" --head "${head_ref}" --labels "${labels}"
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            run_main_source_gate
+          elif python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
+            run_main_source_gate
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
+            if python3 -c "import plate_core.pr_main_source_gate" 2>/dev/null; then
+              run_main_source_gate
+            else
+              echo "::warning title=Main source (warn-only)::plate-core runtime unavailable; skipping main-source gate until plate-core is installed."
+            fi
+          fi
+"""
+
+RELEASE_WINDOW_TEMPLATE = """
+      - name: Gate — release window
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: release-window
+          set -euo pipefail
+          pr_number="${{ github.event.pull_request.number }}"
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq .base.ref)"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          run_release_window_gate() {
+            python3 -m plate_core.pr_release_window_gate --base "${base_ref}" --labels "${labels}"
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            run_release_window_gate
+          elif python3 -c "import plate_core.pr_release_window_gate" 2>/dev/null; then
+            run_release_window_gate
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
+            if python3 -c "import plate_core.pr_release_window_gate" 2>/dev/null; then
+              run_release_window_gate
+            else
+              echo "::warning title=Release window (warn-only)::plate-core runtime unavailable; skipping release-window gate until plate-core is installed."
+            fi
+          fi
+"""
+
 REVIEWER_MODEL_PLATE = """
       - name: Gate — reviewer model
         if: |
@@ -289,7 +400,7 @@ REVIEWER_MODEL_TEMPLATE = """
           fi
 """
 
-MARK_IMPLEMENTED = """
+MARK_IMPLEMENTED_PLATE = """
   mark-implemented-on-release-merge:
     if: |
       (github.event_name == 'pull_request' &&
@@ -300,16 +411,67 @@ MARK_IMPLEMENTED = """
         startsWith(github.event.pull_request.base.ref, 'epic/'))) ||
       (github.event_name == 'push' &&
        (startsWith(github.ref, 'refs/heads/release') || startsWith(github.ref, 'refs/heads/epic/')))
-    runs-on: ubuntu-latest
+    runs-on: @@LINUX_RUNS_ON@@
     permissions:
       contents: read
       issues: write
       pull-requests: read
     steps:
-      - name: Mark implemented + auto-close linked issues (integration merge)
-        uses: actions/github-script@v8
+      - uses: actions/checkout@v4
         with:
-@@MARK_SCRIPT@@
+          fetch-depth: 1
+
+      - name: Mark implemented + auto-close linked issues (integration merge)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          python3 -m plate_core.gh_actions_mark_implemented
+"""
+
+MARK_IMPLEMENTED_TEMPLATE = """
+  mark-implemented-on-release-merge:
+    if: |
+      (github.event_name == 'pull_request' &&
+       github.event.action == 'closed' &&
+       github.event.pull_request.merged == true &&
+       (startsWith(github.event.pull_request.base.ref, 'release') ||
+        github.event.pull_request.base.ref == 'release' ||
+        startsWith(github.event.pull_request.base.ref, 'epic/'))) ||
+      (github.event_name == 'push' &&
+       (startsWith(github.ref, 'refs/heads/release') || startsWith(github.ref, 'refs/heads/epic/')))
+    runs-on: @@LINUX_RUNS_ON@@
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Mark implemented + auto-close linked issues (integration merge)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          run_mark_implemented() {
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            python3 -m plate_core.gh_actions_mark_implemented
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            run_mark_implemented
+          elif python3 -c "import plate_core.gh_actions_mark_implemented" 2>/dev/null; then
+            run_mark_implemented
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
+            if python3 -c "import plate_core.gh_actions_mark_implemented" 2>/dev/null; then
+              run_mark_implemented
+            else
+              echo "::warning title=Integration merge (warn-only)::plate-core runtime unavailable; skipping mark-implemented until plate-core is installed."
+            fi
+          fi
 """
 
 
@@ -336,17 +498,23 @@ def build(variant: str) -> str:
     feedback_script = _yaml_script(
         _extract_script_block(gates_src, "Gate — feedback resolution")
     )
-    mark_script = _yaml_script(
-        _extract_script_block(gates_src, "Mark implemented")
-    )
     validate_run = VALIDATE_PLATE if variant == "plate" else VALIDATE_TEMPLATE
+    main_source_run = (
+        (MAIN_SOURCE_PLATE + RELEASE_WINDOW_PLATE)
+        if variant == "plate"
+        else (MAIN_SOURCE_TEMPLATE + RELEASE_WINDOW_TEMPLATE).replace(
+            "@@PLATE_CORE_VERSION@@", _plate_core_pip_version()
+        )
+    )
     reviewer_run = (
         REVIEWER_MODEL_PLATE
         if variant == "plate"
         else REVIEWER_MODEL_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
     )
-    body = HEADER.replace("@@TITLE_SCRIPT@@", title_script)
+    body = HEADER.replace("@@LINUX_RUNS_ON@@", LINUX_RUNS_ON_VAR_EXPRESSION)
+    body = body.replace("@@TITLE_SCRIPT@@", title_script)
     body = body.replace("@@ISSUE_LINK_SCRIPT@@", issue_link_script)
+    body = body.replace("@@MAIN_SOURCE_RUN@@", main_source_run.lstrip("\n").rstrip())
     body = body.replace("@@REVIEWER_MODEL_RUN@@", reviewer_run.lstrip("\n").rstrip())
     body = body.replace("@@FEATURE_LABELS_SCRIPT@@", feature_labels_script)
     body = body.replace("@@FEATURE_FRAGMENT_SCRIPT@@", feature_fragment_script)
@@ -355,8 +523,13 @@ def build(variant: str) -> str:
     body = body.replace(
         "@@VALIDATE_RELEASE_RUN@@", validate_run.lstrip("\n").rstrip() + "\n"
     )
-    body += MARK_IMPLEMENTED.replace("@@MARK_SCRIPT@@", mark_script)
-    return body
+    if variant == "plate":
+        body += MARK_IMPLEMENTED_PLATE
+    else:
+        body += MARK_IMPLEMENTED_TEMPLATE.replace(
+            "@@PLATE_CORE_VERSION@@", _plate_core_pip_version()
+        )
+    return body.replace("@@LINUX_RUNS_ON@@", LINUX_RUNS_ON_VAR_EXPRESSION)
 
 
 def main() -> None:
