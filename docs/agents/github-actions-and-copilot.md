@@ -10,6 +10,10 @@ Automatic **Copilot coding-agent** kickoff (`@copilot start` comments, legacy fe
 
 Downstream rollout for private adopters: `docs/migration/actions-cost-rollout.md`.
 
+### UI PR image check (#1052)
+
+Optional workflow `.github/workflows/plate-ui-pr-image-check.yml` (check context `ui-pr-image`) warns when a pull request touches UI paths (see `.agentic/ui-paths.yml`) but the PR body has no `https://github.com/user-attachments/assets/...` images. It does not block merges by default. Set repository variable `PLATE_UI_PR_IMAGE_ENFORCE` to `true` or `1` to fail the job instead of emitting warnings. Escape hatch: `Visual evidence: not applicable — <reason>` in the PR body.
+
 ## Copilot code review (human and agent policy)
 
 Nothing in this repository should **auto-request Copilot code review on every push**. Do **not** request Copilot review by default; use a local model or other first-pass review for routine PR work. Request Copilot review **once per PR when a human explicitly asks** (or when labels, scope, and gates are satisfied and a human has chosen Copilot for that PR). Request **re-review only when a human or process explicitly asks**—not on each `synchronize` event. This pairs with babysit guidance (#496), default `local-rebase` branch sync (#1300), and triage/wake work tracked in #1136 and #1137 (Epic #1129).
