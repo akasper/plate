@@ -27,7 +27,9 @@ on:
   issues:
     types: [closed]
 
-# One in-flight harvest per issue; parallel closes on different issues stay queued (#1480).
+# GitHub keeps one running + one pending run per concurrency group; a repository-wide
+# group drops harvests when many issues close together (#1480). Scope the group per issue
+# so each close gets its own slot; different issues may harvest in parallel.
 concurrency:
   group: plates-on-issue-closed-${{ github.repository }}-${{ github.event.issue.number }}
   cancel-in-progress: false

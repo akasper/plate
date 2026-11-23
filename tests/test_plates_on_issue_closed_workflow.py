@@ -15,6 +15,7 @@ from plate_core.issue_closed_usage import (
     parse_validated_usage_fields,
     resolve_harvest_issue_type,
     select_trusted_usage_report_comment,
+    workflow_github_script,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -121,7 +122,7 @@ class IssueClosedUsageLabelAndRowTests(unittest.TestCase):
             "Feature",
         )
 
-    def test_title_not_in_row(self):
+    def test_markdown_row_uses_issue_link_only(self):
         row = UsageCostRow(
             closed_at_iso="2026-11-15T00:00:00.000Z",
             issue_number=1472,
@@ -133,8 +134,8 @@ class IssueClosedUsageLabelAndRowTests(unittest.TestCase):
             source_comment_url="https://github.com/akasper/plate/issues/1472#issuecomment-9",
         )
         line = row.markdown_table_row()
-        self.assertIn("[#1472]", line)
-        self.assertNotIn("Require trusted authors", line)
+        self.assertIn("[#1472](https://github.com/akasper/plate/issues/1472)", line)
+        self.assertNotIn("Untrusted issue title", line)
 
 
 class PlatesOnIssueClosedWorkflowCodegenTests(unittest.TestCase):
@@ -156,7 +157,24 @@ class PlatesOnIssueClosedWorkflowCodegenTests(unittest.TestCase):
         )
         text = REPO_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("contains(format(',{0},'", text)
-        self.assertNotIn("', 'feature')", text.lower())
+        self.assertNotIn(
+            "join(github.event.issue.labels.*.name, ','), 'Feature'",
+            text,
+            "label gate must use delimiter-padded match, not substring join",
+        )
+        self.assertIn(
+            "github.event.issue.number",
+            text,
+            "per-issue concurrency group avoids dropped harvests",
+        )
+
+    def test_workflow_github_script_guards(self):
+        script = workflow_github_script()
+        self.assertIn("const issueCell = ", script)
+        self.assertIn("issue.html_url", script)
+        self.assertNotIn("issue.title", script)
+        self.assertIn("isRecordedCostRow", script)
+        self.assertIn("github-actions[bot]", script)
 
 
 if __name__ == "__main__":
