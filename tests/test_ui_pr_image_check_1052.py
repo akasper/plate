@@ -64,6 +64,12 @@ class VisualEvidenceEscapeTests(unittest.TestCase):
     def test_escape_hatch_detector(self):
         self.assertTrue(visual_evidence_not_applicable("Visual evidence: not applicable — reason"))
         self.assertFalse(visual_evidence_not_applicable("Visual evidence: attached below"))
+        self.assertFalse(
+            visual_evidence_not_applicable(
+                "Visual evidence: not applicable —\n- screenshot on next line"
+            )
+        )
+        self.assertFalse(visual_evidence_not_applicable("Visual evidence: not applicable —   "))
 
 
 class ImageUrlTests(unittest.TestCase):
@@ -73,6 +79,23 @@ class ImageUrlTests(unittest.TestCase):
         result = evaluate_ui_pr_image_check(body, ["app/page.tsx"])
         self.assertTrue(result.ok)
         self.assertFalse(result.skipped)
+
+    def test_trusted_ui_paths_file_not_head_globs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trusted = root / "trusted.yml"
+            trusted.write_text("globs:\n  - src/**\n", encoding="utf-8")
+            head = root / "head"
+            agentic = head / ".agentic"
+            agentic.mkdir(parents=True)
+            (agentic / "ui-paths.yml").write_text("globs: []\n", encoding="utf-8")
+            result = evaluate_ui_pr_image_check(
+                "no images",
+                ["src/plate_core/cli.py"],
+                repo_root=root / "head",
+                ui_paths_file=trusted,
+            )
+            self.assertFalse(result.ok)
 
     def test_warns_with_no_images_on_ui_pr(self):
         result = evaluate_ui_pr_image_check("## Summary\nText only.", ["public/logo.svg"])
@@ -102,9 +125,22 @@ class ImageUrlTests(unittest.TestCase):
         self.assertIsNone(classify_bad_image_url(f"{USER_ATTACHMENTS_PREFIX}x"))
         self.assertEqual(classify_bad_image_url("./a.png"), "relative path")
         self.assertIn("raw", classify_bad_image_url("https://raw.githubusercontent.com/a/b/c.png") or "")
-        self.assertIsNone(classify_bad_image_url("https://github.com/o/r/blob/main/x.png"))
+        self.assertEqual(
+            classify_bad_image_url("https://github.com/o/r/blob/main/x.png"),
+            "external URL (use user-attachments)",
+        )
+
+    def test_external_https_images_counted_as_bad(self):
+        body = "![x](https://example.com/evidence.png)"
+        result = evaluate_ui_pr_image_check(body, ["app/page.tsx"])
+        self.assertFalse(result.ok)
+        self.assertIn("https://example.com/evidence.png", result.bad_urls)
         self.assertIsNotNone(
             classify_bad_image_url("https://github.com/o/r/blob/main/x.png?raw=true")
+        )
+        self.assertEqual(
+            classify_bad_image_url("https://example.com/x.png"),
+            "external URL (use user-attachments)",
         )
 
     def test_extract_markdown_and_html_images(self):
