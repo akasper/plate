@@ -10,12 +10,15 @@ from pathlib import Path
 from plate_core import __version__
 from plate_core.import_payload import import_payload
 from plate_core.plate_config import CURRENT_CONFIG_VERSION, upgrade_plate_config_dict
+from plate_core.plate_config import apply_plate_config_upgrade
 from plate_core.process_docs import (
+    PROCESS_SUMMARY_GENERATED_MARKER,
     PROCESS_SUMMARY_REL,
     build_process_summary_markdown,
     default_process_docs_config,
     detect_legacy_copied_plate_guides,
     installed_plate_release_tag,
+    reconcile_process_docs_artifacts,
     sync_process_docs_in_plate,
 )
 
@@ -69,12 +72,59 @@ class TestProcessDocsPointer(unittest.TestCase):
             plate = json.loads(plate_path.read_text(encoding="utf-8"))
             self.assertEqual(plate["process_docs"]["base_url"], custom_url)
             self.assertEqual(plate["process_docs"]["mcp_url"], f"{custom_url}/mcp")
-            self.assertEqual(
-                plate["process_docs"]["version"],
-                installed_plate_release_tag(),
-            )
+            self.assertEqual(plate["process_docs"]["version"], "v9.9.9-custom")
             text = (root / PROCESS_SUMMARY_REL).read_text(encoding="utf-8")
             self.assertIn(custom_url, text)
+            self.assertIn("v9.9.9-custom", text)
+
+    def test_safe_reimport_preserves_edited_process_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import_payload(root, strategy="safe", apply=True)
+            summary = root / PROCESS_SUMMARY_REL
+            summary.write_text(
+                summary.read_text(encoding="utf-8")
+                + "\n## Air-gapped operations\nKeep local copies.\n",
+                encoding="utf-8",
+            )
+            report = import_payload(root, strategy="safe", apply=True)
+            self.assertIn("Air-gapped operations", summary.read_text(encoding="utf-8"))
+            self.assertIn(PROCESS_SUMMARY_REL, report["would_skip"])
+            self.assertTrue(
+                any("Preserved local edits" in n for n in report.get("process_docs_notes") or [])
+            )
+
+    def test_default_host_bumps_version_on_reimport(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plate_path = Path(tmp) / ".plate"
+            plate_path.write_text(
+                json.dumps(
+                    {
+                        "version": "1.4",
+                        "platform": "posix",
+                        "process_docs": default_process_docs_config(),
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (plate_path.parent / "docs" / "plate").mkdir(parents=True)
+            sync_process_docs_in_plate(plate_path, apply=True)
+            data = json.loads(plate_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["process_docs"]["version"], installed_plate_release_tag())
+
+    def test_config_upgrade_apply_seeds_process_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".plate").write_text(
+                json.dumps({"version": "1.3", "platform": "posix"}) + "\n",
+                encoding="utf-8",
+            )
+            report = apply_plate_config_upgrade(root, apply=True)
+            self.assertTrue(report.applied)
+            self.assertTrue((root / PROCESS_SUMMARY_REL).is_file())
+            self.assertIn(PROCESS_SUMMARY_GENERATED_MARKER, (root / PROCESS_SUMMARY_REL).read_text())
+            self.assertIn(PROCESS_SUMMARY_REL, report.process_docs_written)
 
     def test_upgrade_bumps_docs_version_in_pointer(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,6 +155,12 @@ class TestProcessDocsPointer(unittest.TestCase):
             self.assertTrue((agents / "pre-push-hook.md").is_file())
             self.assertTrue(report.get("process_docs_notes"))
             self.assertIn("Legacy copied PLATE guides", report["process_docs_notes"][0])
+
+    def test_payload_doc_filter_keeps_goals_only(self):
+        from plate_core.process_docs import GOALS_WIKI_PAYLOAD_REL, is_plate_payload_doc_path
+
+        self.assertFalse(is_plate_payload_doc_path(GOALS_WIKI_PAYLOAD_REL))
+        self.assertTrue(is_plate_payload_doc_path("docs/agents/autonomous-mode.md"))
 
     def test_build_process_summary_contains_mcp_hints(self):
         md = build_process_summary_markdown(

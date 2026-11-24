@@ -569,11 +569,7 @@ def plan_import_payload(
             report.error = str(exc)
             return report
 
-    from .process_docs import (
-        detect_legacy_copied_plate_guides,
-        is_plate_payload_doc_path,
-        seed_process_docs_artifacts,
-    )
+    from .process_docs import is_plate_payload_doc_path
 
     for rel in rel_paths:
         if is_plate_payload_doc_path(rel):
@@ -726,33 +722,19 @@ def plan_import_payload(
         platform=resolved_platform,
     )
 
-    legacy_dirs = detect_legacy_copied_plate_guides(target)
-    from .process_docs import default_process_docs_config, sync_process_docs_in_plate
-
-    plate_path = target / ".plate"
-    sync_process_docs_in_plate(plate_path, apply=bool(apply))
-    process_docs = default_process_docs_config()
-    if plate_path.is_file():
-        try:
-            plate_data = json.loads(plate_path.read_text(encoding="utf-8"))
-            section = plate_data.get("process_docs")
-            if isinstance(section, dict):
-                process_docs = {**process_docs, **section}
-        except json.JSONDecodeError:
-            pass
+    from .process_docs import default_process_docs_config, reconcile_process_docs_artifacts
 
     _seed_goals_wiki_if_missing(target, template_root, report, apply=bool(apply), namespaced_docs=nd)
 
-    pd_would, pd_done, pd_notes = seed_process_docs_artifacts(
-        target,
-        apply=bool(apply),
-        process_docs=process_docs,
-        legacy_guide_dirs=legacy_dirs,
+    pd_would, pd_done, pd_notes, pd_preserved = reconcile_process_docs_artifacts(
+        target, apply=bool(apply)
     )
     for item in pd_would:
         report.would_create.append(item)
     for item in pd_done:
         report.created.append(item)
+    for item in pd_preserved:
+        report.would_skip.append(item)
     report.process_docs_notes.extend(pd_notes)
 
     report.next_command = _next_command(report, repo_root=target)

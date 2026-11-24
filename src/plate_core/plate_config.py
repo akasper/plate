@@ -167,11 +167,21 @@ class PlateConfigUpgradeReport:
     current_version: str
     config: dict[str, Any]
     migration_guidance: list[str] = field(default_factory=list)
+    process_docs_written: list[str] = field(default_factory=list)
+    process_docs_preserved: list[str] = field(default_factory=list)
+    process_docs_notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         if not payload.get("migration_guidance"):
             payload.pop("migration_guidance", None)
+        for optional in (
+            "process_docs_written",
+            "process_docs_preserved",
+            "process_docs_notes",
+        ):
+            if not payload.get(optional):
+                payload.pop(optional, None)
         return payload
 
 
@@ -755,14 +765,25 @@ def apply_plate_config_upgrade(
     if apply and changed:
         save_plate_config(upgraded, path.parent, overwrite=True)
 
+    from .process_docs import reconcile_process_docs_artifacts
+
+    pd_would, pd_done, pd_notes, pd_preserved = reconcile_process_docs_artifacts(
+        path.parent, apply=apply
+    )
+    artifact_activity = bool(pd_would or pd_done or pd_preserved)
+    overall_changed = changed or artifact_activity
+
     return PlateConfigUpgradeReport(
         repo_root=str(path.parent.resolve()),
         path=str(path.resolve()),
         present=True,
-        changed=changed,
-        applied=bool(apply and changed),
+        changed=overall_changed,
+        applied=bool(apply and overall_changed),
         previous_version=previous_version,
         current_version=upgraded["version"],
         config=upgraded,
         migration_guidance=guidance,
+        process_docs_written=list(pd_done),
+        process_docs_preserved=list(pd_preserved),
+        process_docs_notes=list(pd_notes),
     )
