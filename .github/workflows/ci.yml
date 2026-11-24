@@ -80,7 +80,18 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: tests/e2e/package.json
+          cache-dependency-path: |
+            tests/e2e/package.json
+            services/process-docs/package-lock.json
+
+      - name: Process docs service (unit tests + link check)
+        run: |
+          set -euo pipefail
+          cd services/process-docs
+          npm ci
+          npm run bundle
+          npm test
+          npm run check:links
 
       - name: Install Playwright and dependencies
         run: npm install

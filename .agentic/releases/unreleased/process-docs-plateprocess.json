@@ -1,0 +1,10 @@
+{
+  "slug": "process-docs-plateprocess",
+  "change_type": "feature",
+  "surface": "services/process-docs",
+  "summary": "Cloudflare Worker plate-docs at plateprocess.dev serves docs bundled from a release-tagged checkout and exposes read-only MCP list_docs, get_doc, and search_docs; manual wrangler deploy only.",
+  "migration_impact": "No adopter repo changes in this slice; operators deploy by hand from a release tag checkout.",
+  "agent_notes": "No version URL prefixes; release tag is chosen at npm run bundle time. No CI deploy workflow or Cloudflare secrets in repo.",
+  "breaking": false,
+  "links": ["#1508", "#1509", "#1510"]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@plate/process-docs",
+  "private": true,
+  "version": "0.0.1",
+  "description": "plateprocess.dev — PLATE process docs website and read-only MCP (Worker)",
+  "type": "module",
+  "scripts": {
+    "pretest": "test -f generated/bundle.json || cp generated/bundle.stub.json generated/bundle.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bundle": "tsx scripts/bundle-docs.ts",
+    "check:links": "tsx scripts/check-doc-links.ts",
+    "dev": "npm run bundle && wrangler dev",
+    "deploy": "npm run bundle && wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250320.0",
+    "marked": "^15.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "wrangler": "^3.114.0",
+    "zod": "^3.24.0"
+  }
+}
