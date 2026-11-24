@@ -194,6 +194,19 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn("issues: write", job_block)
         self.assertIn("contents: write", job_block)
 
+    def test_release_workflow_fast_forward_installs_plate_core_before_python(self):
+        """#1501: FF job installs pinned plate-core before plate_core.release on adopter checkouts."""
+        for rel in (
+            ".github/workflows/release.yml",
+            "src/plate_core/template_payload/.github/workflows/release.yml",
+        ):
+            block = _fast_forward_release_job_block(read_text(rel))
+            self.assertIn("Install pinned plate-core for fast-forward", block)
+            self.assertIn('plate-core==0.12.0', block)
+            install_idx = block.index("Install pinned plate-core for fast-forward")
+            ff_idx = block.index("Fast-forward release branches to tag")
+            self.assertLess(install_idx, ff_idx)
+
     def test_release_workflow_fast_forward_uses_app_token_and_missing_secret_fallback(self):
         """#1438: FF job uses create-github-app-token; warns and skips push without secrets."""
         repo = read_text(".github/workflows/release.yml")

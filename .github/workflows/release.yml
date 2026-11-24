@@ -172,6 +172,19 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.plate-app-token.outputs.token || github.token }}
 
+      - name: Install pinned plate-core for fast-forward
+        if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}
+        run: |
+          set -euo pipefail
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            echo "Using monorepo src/plate_core (PYTHONPATH in fast-forward step)."
+          elif python3 -c "import plate_core.release" 2>/dev/null; then
+            echo "plate_core already installed."
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.12.0"
+            python3 -c "import plate_core.release"
+          fi
+
       - name: Fast-forward release branches to tag (no force push)
         if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}
         env:

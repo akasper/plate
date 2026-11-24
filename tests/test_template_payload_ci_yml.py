@@ -30,6 +30,26 @@ class TemplatePayloadCiWorkflowTests(unittest.TestCase):
         self.assertIn("shell: bash", snippet)
         self.assertIn("set -euo pipefail", snippet)
 
+    def test_pr_type_label_check_requires_exact_label_names(self):
+        text = PAYLOAD_CI.read_text(encoding="utf-8")
+        self.assertNotIn("prTypeByLower", text)
+        self.assertIn("prTypeLabels.includes(label)", text)
+
+    def test_pr_type_label_check_rejects_lowercase_labels(self):
+        pr_type_labels = [
+            "Bug",
+            "Feature",
+            "Documentation",
+            "Feedback Response",
+            "Hardening",
+        ]
+
+        def matches(labels: list[str]) -> list[str]:
+            return [label for label in labels if label in pr_type_labels]
+
+        self.assertEqual(matches(["feature"]), [])
+        self.assertEqual(matches(["Feature", "area:agent"]), ["Feature"])
+
 
 if __name__ == "__main__":
     unittest.main()
