@@ -12,7 +12,7 @@ routes = [
 
 [vars]
 # Overridden at build time in generated/bundle.json; placeholder for local wrangler dev.
-RELEASE_TAG = "dev"
+RELEASE_TAG = "v0.12.0-fixture"
 
 [dev]
 port = 8787

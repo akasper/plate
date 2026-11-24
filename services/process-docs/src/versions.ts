@@ -1,4 +1,5 @@
-const TAG_PATTERN = /^v?\d+\.\d+\.\d+/;
+/** Full semver release tag only (no trailing junk). */
+export const TAG_PATTERN = /^v?\d+\.\d+\.\d+$/;
 
 export function normalizeVersionParam(version: string | undefined): string {
   const v = (version ?? "latest").trim();
@@ -9,17 +10,20 @@ export function normalizeVersionParam(version: string | undefined): string {
 export function tagFromVersion(version: string): string {
   if (version === "latest") return "latest";
   const trimmed = version.replace(/^\/+|\/+$/g, "");
+  if (!TAG_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
   if (trimmed.startsWith("v")) return trimmed;
-  if (TAG_PATTERN.test(trimmed)) return `v${trimmed.replace(/^v/, "")}`;
-  return trimmed;
+  return `v${trimmed}`;
 }
 
 /** Accept only the deployed release tag (or latest / omitted). */
 export function versionMatchesRelease(version: string | undefined, releaseTag: string): boolean {
   const v = normalizeVersionParam(version);
-  if (v === "latest") return true;
+  if (v.toLowerCase() === "latest") return true;
   const wanted = tagFromVersion(v);
   const deployed = tagFromVersion(releaseTag);
+  if (!TAG_PATTERN.test(wanted) && wanted !== deployed) return false;
   return wanted === deployed || v === releaseTag;
 }
 

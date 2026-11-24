@@ -33,6 +33,21 @@ describe("fixture doc store", () => {
     });
   });
 
+  it("rejects path traversal", async () => {
+    await expect(store.getDoc("%2e%2e/wiki/Home.md", "latest")).rejects.toMatchObject({
+      code: "not_found",
+    });
+  });
+
+  it("__proto__ is not a doc", async () => {
+    await expect(store.getDoc("__proto__", "latest")).rejects.toMatchObject({
+      code: "not_found",
+    });
+    await expect(store.getDoc("constructor", "latest")).rejects.toMatchObject({
+      code: "not_found",
+    });
+  });
+
   it("search finds token", async () => {
     const hits = await store.searchDocs("PLATEPROCESS_FIXTURE_TOKEN", "latest");
     expect(hits.some((h) => h.path === "research/README.md")).toBe(true);

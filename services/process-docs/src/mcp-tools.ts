@@ -17,43 +17,47 @@ export const searchDocsSchema = z.object({
   version: z.string().optional(),
 });
 
-export async function mcpListDocs(store: DocStore, args: z.infer<typeof listDocsSchema>): Promise<unknown> {
+export type ToolCallOutcome =
+  | { kind: "ok"; value: Record<string, unknown> }
+  | { kind: "err"; error: string; code: string };
+
+export async function mcpListDocs(store: DocStore, args: z.infer<typeof listDocsSchema>): Promise<ToolCallOutcome> {
   const version = normalizeVersionParam(args.version);
   try {
     const tag = await store.resolveTag(version);
     const docs = await store.listDocs(version);
-    return { version, resolved_tag: tag, docs };
+    return { kind: "ok", value: { version, resolved_tag: tag, docs } };
   } catch (e) {
     if (e instanceof DocStoreError) {
-      return { error: e.message, code: e.code };
+      return { kind: "err", error: e.message, code: e.code };
     }
     throw e;
   }
 }
 
-export async function mcpGetDoc(store: DocStore, args: z.infer<typeof getDocSchema>): Promise<unknown> {
+export async function mcpGetDoc(store: DocStore, args: z.infer<typeof getDocSchema>): Promise<ToolCallOutcome> {
   const version = normalizeVersionParam(args.version);
   try {
     const tag = await store.resolveTag(version);
     const content = await store.getDoc(args.path, version);
-    return { version, resolved_tag: tag, path: args.path, content };
+    return { kind: "ok", value: { version, resolved_tag: tag, path: args.path, content } };
   } catch (e) {
     if (e instanceof DocStoreError) {
-      return { error: e.message, code: e.code };
+      return { kind: "err", error: e.message, code: e.code };
     }
     throw e;
   }
 }
 
-export async function mcpSearchDocs(store: DocStore, args: z.infer<typeof searchDocsSchema>): Promise<unknown> {
+export async function mcpSearchDocs(store: DocStore, args: z.infer<typeof searchDocsSchema>): Promise<ToolCallOutcome> {
   const version = normalizeVersionParam(args.version);
   try {
     const tag = await store.resolveTag(version);
     const results = await store.searchDocs(args.query, version);
-    return { version, resolved_tag: tag, query: args.query, results };
+    return { kind: "ok", value: { version, resolved_tag: tag, query: args.query, results } };
   } catch (e) {
     if (e instanceof DocStoreError) {
-      return { error: e.message, code: e.code };
+      return { kind: "err", error: e.message, code: e.code };
     }
     throw e;
   }

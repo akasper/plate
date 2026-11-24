@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { InvalidDocPathError, normalizeDocPath } from "./doc-path";
 import { tagFromVersion, versionMatchesRelease } from "./versions";
 import { FIXTURE_INDEX, FIXTURE_DOCS } from "./fixture-data";
 import bundle from "../generated/bundle.json";
@@ -39,7 +40,14 @@ export function createDocStore(env: Env): DocStore {
   return new BundledDocStore(env);
 }
 
+function lookupDoc(docs: Record<string, string>, key: string): string | undefined {
+  if (!Object.hasOwn(docs, key)) return undefined;
+  return docs[key];
+}
+
 class FixtureDocStore implements DocStore {
+  private readonly docs = new Map(Object.entries(FIXTURE_DOCS));
+
   releaseTag(): string {
     return "v0.12.0-fixture";
   }
@@ -56,8 +64,14 @@ class FixtureDocStore implements DocStore {
   }
 
   async getDoc(path: string, _version: string): Promise<string> {
-    const key = path.replace(/^\/+/, "");
-    const content = FIXTURE_DOCS[key];
+    let key: string;
+    try {
+      key = normalizeDocPath(path);
+    } catch (e) {
+      if (e instanceof InvalidDocPathError) throw new DocStoreError(e.message, "not_found");
+      throw e;
+    }
+    const content = this.docs.get(key);
     if (content === undefined) {
       throw new DocStoreError(`No doc at path: ${path}`, "not_found");
     }
@@ -111,11 +125,14 @@ class BundledDocStore implements DocStore {
 
   async getDoc(path: string, version: string): Promise<string> {
     await this.resolveTag(version);
-    const rel = path.replace(/^\/+/, "").replace(/^\.\//, "");
-    if (rel.includes("..")) {
-      throw new DocStoreError(`Invalid path: ${path}`, "not_found");
+    let rel: string;
+    try {
+      rel = normalizeDocPath(path);
+    } catch (e) {
+      if (e instanceof InvalidDocPathError) throw new DocStoreError(e.message, "not_found");
+      throw e;
     }
-    const content = this.data.docs[rel];
+    const content = lookupDoc(this.data.docs, rel);
     if (content === undefined) {
       throw new DocStoreError(`No doc at path: ${path}`, "not_found");
     }
@@ -130,7 +147,7 @@ class BundledDocStore implements DocStore {
     const limit = 25;
     for (const entry of this.data.index) {
       if (hits.length >= limit) break;
-      const body = this.data.docs[entry.path] ?? "";
+      const body = lookupDoc(this.data.docs, entry.path) ?? "";
       const idx = body.toLowerCase().indexOf(q);
       const pathMatch = entry.path.toLowerCase().includes(q);
       const titleMatch = entry.title.toLowerCase().includes(q);
