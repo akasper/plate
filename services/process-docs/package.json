@@ -9,9 +9,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "bundle": "tsx scripts/bundle-docs.ts",
+    "bundle:release": "REQUIRE_EXACT_TAG=1 tsx scripts/bundle-docs.ts",
     "check:links": "tsx scripts/check-doc-links.ts",
     "dev": "npm run bundle && wrangler dev",
-    "deploy": "npm run bundle && wrangler deploy"
+    "deploy": "npm run bundle:release && wrangler deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250320.0",

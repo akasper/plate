@@ -9,17 +9,25 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serviceRoot = path.resolve(here, "..");
-const docsRoot = path.resolve(serviceRoot, "../../docs");
+const repoRoot = path.resolve(serviceRoot, "../..");
+const docsRoot = path.join(repoRoot, "docs");
 const outDir = path.join(serviceRoot, "generated");
 const outFile = path.join(outDir, "bundle.json");
 
 function releaseTag(): string {
+  const requireExact = process.env.REQUIRE_EXACT_TAG === "1";
   if (process.env.RELEASE_TAG?.trim()) return process.env.RELEASE_TAG.trim();
   try {
-    return execSync("git describe --tags --exact-match", { encoding: "utf8", cwd: serviceRoot }).trim();
+    return execSync("git describe --tags --exact-match", { encoding: "utf8", cwd: repoRoot }).trim();
   } catch {
+    if (requireExact) {
+      console.error(
+        "REQUIRE_EXACT_TAG=1: checkout must be on an exact release tag (git describe --tags --exact-match).",
+      );
+      process.exit(1);
+    }
     try {
-      return execSync("git describe --tags --abbrev=0", { encoding: "utf8", cwd: serviceRoot }).trim();
+      return execSync("git describe --tags --abbrev=0", { encoding: "utf8", cwd: repoRoot }).trim();
     } catch {
       return "untagged";
     }
@@ -59,6 +67,16 @@ const index = paths.map((p) => {
   docs[p] = content;
   return { path: p, title: titleFromPath(p) };
 });
+
+const agentsMd = path.join(repoRoot, "AGENTS.md");
+if (fs.existsSync(agentsMd)) {
+  docs["AGENTS.md"] = fs.readFileSync(agentsMd, "utf8");
+  if (!index.some((e) => e.path === "AGENTS.md")) {
+    index.unshift({ path: "AGENTS.md", title: "AGENTS" });
+  }
+}
+
+index.sort((a, b) => a.path.localeCompare(b.path));
 
 fs.mkdirSync(outDir, { recursive: true });
 const bundle = { releaseTag: tag, index, docs };

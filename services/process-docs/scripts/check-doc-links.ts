@@ -7,7 +7,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const docsRoot = path.resolve(here, "../../../docs");
+const repoRoot = path.resolve(here, "../../..");
+const docsRoot = path.join(repoRoot, "docs");
+
+const BUNDLE_ROOT_FILES = new Set(["AGENTS.md"]);
 
 const LINK_RE = /\[[^\]]*\]\(([^)]+)\)/g;
 
@@ -27,6 +30,21 @@ function isExternal(target: string): boolean {
   return false;
 }
 
+function resolveSitePath(_fromDocFile: string, target: string): string | null {
+  const base = target.split("#")[0]?.trim() ?? "";
+  if (base === "../AGENTS.md" || base === "../../AGENTS.md" || base === "AGENTS.md") {
+    return "AGENTS.md";
+  }
+  const resolved = path.normalize(path.join(path.dirname(_fromDocFile), target));
+  const relToDocs = path.relative(docsRoot, resolved);
+  if (!relToDocs.startsWith("..") && !path.isAbsolute(relToDocs)) {
+    return relToDocs.split(path.sep).join("/");
+  }
+  const relToRepo = path.relative(repoRoot, resolved).split(path.sep).join("/");
+  if (BUNDLE_ROOT_FILES.has(relToRepo)) return relToRepo;
+  return null;
+}
+
 const files = collectMdFiles(docsRoot);
 const errors: string[] = [];
 
@@ -36,16 +54,19 @@ for (const file of files) {
   let m: RegExpExecArray | null;
   while ((m = LINK_RE.exec(text))) {
     let target = m[1].trim();
-    if (!target || isExternal(target) || target.startsWith("#") || target.includes("..")) continue;
+    if (!target || isExternal(target) || target.startsWith("#")) continue;
     target = target.split("#")[0] ?? "";
     if (!target) continue;
-    const resolved = path.normalize(path.join(path.dirname(file), target));
-    const relToDocs = path.relative(docsRoot, resolved);
-    if (relToDocs.startsWith("..") || path.isAbsolute(relToDocs)) {
+    const sitePath = resolveSitePath(file, target);
+    if (!sitePath) {
       continue;
     }
-    if (!fs.existsSync(resolved)) {
-      errors.push(`${relFile}: broken link → ${target}`);
+    const onDisk =
+      sitePath === "AGENTS.md"
+        ? fs.existsSync(path.join(repoRoot, "AGENTS.md"))
+        : fs.existsSync(path.join(docsRoot, sitePath));
+    if (!onDisk) {
+      errors.push(`${relFile}: broken link → ${target} (missing bundled target ${sitePath})`);
     }
   }
 }

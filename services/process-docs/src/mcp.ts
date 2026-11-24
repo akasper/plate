@@ -73,14 +73,25 @@ export async function handleMcpRequest(request: Request, env: Env): Promise<Resp
   });
 }
 
+const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
+
+function negotiateProtocolVersion(offered: string | undefined): string {
+  if (offered && (SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(offered)) {
+    return offered;
+  }
+  return "2025-03-26";
+}
+
 async function dispatchMethod(method: string, params: unknown, store: ReturnType<typeof createDocStore>): Promise<unknown> {
   switch (method) {
-    case "initialize":
+    case "initialize": {
+      const p = params as { protocolVersion?: string } | undefined;
       return {
-        protocolVersion: "2024-11-05",
+        protocolVersion: negotiateProtocolVersion(p?.protocolVersion),
         capabilities: { tools: {} },
         serverInfo: { name: "plate-docs", version: "0.0.1" },
       };
+    }
     case "notifications/initialized":
       return null;
     case "tools/list":
@@ -106,9 +117,11 @@ async function dispatchMethod(method: string, params: unknown, store: ReturnType
 }
 
 function toolCallResult(structured: unknown) {
+  const isError = typeof structured === "object" && structured !== null && "error" in structured;
   return {
     content: [{ type: "text", text: JSON.stringify(structured, null, 2) }],
     structuredContent: structured,
+    isError,
   };
 }
 

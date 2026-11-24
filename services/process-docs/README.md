@@ -20,16 +20,17 @@ To publish docs for a new PLATE release, check out that tag, bundle, and deploy 
 git checkout vX.Y.Z    # exact release tag
 cd services/process-docs
 npm ci
-npm run bundle         # writes generated/bundle.json from ../../docs/
+npm run bundle:release # requires exact release tag; writes generated/bundle.json
 npm test
 ```
 
 ## Manual deploy
 
-From the same tagged checkout (after `npm run bundle`):
+From the same tagged checkout (after `npm run bundle:release`):
 
 ```bash
 cd services/process-docs
+npm run bundle:release
 npx wrangler deploy
 ```
 

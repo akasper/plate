@@ -20,6 +20,22 @@ describe("mcp http", () => {
     expect(names).toEqual(["list_docs", "get_doc", "search_docs"]);
   });
 
+  it("initialize negotiates streamable HTTP protocol", async () => {
+    const req = new Request("http://localhost/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "initialize",
+        params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } },
+      }),
+    });
+    const res = await handleMcpRequest(req, fixtureEnv);
+    const json = (await res.json()) as { result: { protocolVersion: string } };
+    expect(json.result.protocolVersion).toBe("2025-06-18");
+  });
+
   it("tools/call get_doc", async () => {
     const req = new Request("http://localhost/mcp", {
       method: "POST",
@@ -34,5 +50,22 @@ describe("mcp http", () => {
     const res = await handleMcpRequest(req, fixtureEnv);
     const json = (await res.json()) as { result: { structuredContent: { content: string } } };
     expect(json.result.structuredContent.content).toContain("fixture");
+    expect(json.result.isError).toBeFalsy();
+  });
+
+  it("tools/call surfaces isError on failures", async () => {
+    const req = new Request("http://localhost/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: { name: "get_doc", arguments: { path: "nope.md" } },
+      }),
+    });
+    const res = await handleMcpRequest(req, fixtureEnv);
+    const json = (await res.json()) as { result: { isError: boolean } };
+    expect(json.result.isError).toBe(true);
   });
 });

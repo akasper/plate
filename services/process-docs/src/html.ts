@@ -2,6 +2,24 @@ import { marked } from "marked";
 
 marked.setOptions({ gfm: true, async: false });
 
+function headingSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/<[^>]+>/g, "")
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+marked.use({
+  renderer: {
+    heading({ text, depth }) {
+      const slug = headingSlug(text);
+      return `<h${depth} id="${slug}">${text}</h${depth}>\n`;
+    },
+  },
+});
+
 export function markdownToHtml(markdown: string): string {
   return marked.parse(markdown, { async: false }) as string;
 }
@@ -87,3 +105,5 @@ function escapeHtml(s: string): string {
 function escapeAttr(s: string): string {
   return escapeHtml(s);
 }
+
+export { headingSlug };
