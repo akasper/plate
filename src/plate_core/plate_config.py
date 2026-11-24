@@ -479,15 +479,10 @@ def _migrate_1_3_to_1_4(config: dict[str, Any]) -> dict[str, Any]:
     from .process_docs import default_process_docs_config
 
     upgraded = copy.deepcopy(config)
-    if "process_docs" not in upgraded or not upgraded.get("process_docs"):
-        upgraded["process_docs"] = default_process_docs_config()
-    else:
-        section = upgraded.get("process_docs")
-        if isinstance(section, dict):
-            upgraded["process_docs"] = {
-                **default_process_docs_config(),
-                **{k: v for k, v in section.items() if k in ("base_url", "mcp_url", "version")},
-            }
+    section = upgraded.get("process_docs")
+    if not isinstance(section, dict):
+        section = {}
+    upgraded["process_docs"] = {**default_process_docs_config(), **section}
     upgraded["version"] = "1.4"
     return upgraded
 

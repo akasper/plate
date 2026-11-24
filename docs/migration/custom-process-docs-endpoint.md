@@ -73,12 +73,17 @@ Edit `.plate` (JSON):
 | `mcp_url` | MCP HTTP endpoint |
 | `version` | Doc bundle tag adopters and agents should request |
 
-After `gh plate import-payload --apply` or `gh plate config upgrade --apply`, PLATE
-refreshes `process_docs.version` to the **installed plate-core** release tag unless
-you override these keys.
+After `gh plate import-payload --apply` or `gh plate config upgrade --apply`:
 
-Re-run import or upgrade when you bump plate-core to pick up a new default tag, then
-adjust overrides if you stay on a custom host.
+- **Default endpoint** (`https://plateprocess.dev`): `process_docs.version` is replaced
+  by the **installed plate-core** release tag on each reconcile (import, upgrade, or
+  repair). Re-run after you upgrade plate-core to pick up the matching docs tag.
+- **Custom endpoint**: an explicit `version` pin is kept; only unset `version` gets
+  the installed tag. Custom keys under `process_docs` (beyond `base_url`, `mcp_url`,
+  `version`) are preserved across schema upgrade.
+
+Re-run import or upgrade when you bump plate-core, then adjust overrides if you stay on
+a custom host.
 
 ## 4. Versions and `latest`
 

@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from plate_core import __version__
-from plate_core.import_payload import import_payload
+from plate_core.import_payload import import_payload, list_payload_relative_paths
 from plate_core.plate_config import CURRENT_CONFIG_VERSION, upgrade_plate_config_dict
 from plate_core.plate_config import apply_plate_config_upgrade
 from plate_core.process_docs import (
@@ -102,14 +102,19 @@ class TestProcessDocsPointer(unittest.TestCase):
                     {
                         "version": "1.4",
                         "platform": "posix",
-                        "process_docs": default_process_docs_config(),
+                        "process_docs": {
+                            **default_process_docs_config(),
+                            "version": "v0.11.0",
+                        },
                     }
                 )
                 + "\n",
                 encoding="utf-8",
             )
             (plate_path.parent / "docs" / "plate").mkdir(parents=True)
-            sync_process_docs_in_plate(plate_path, apply=True)
+            old_ver = json.loads(plate_path.read_text())["process_docs"]["version"]
+            _changed, _merged, _written = sync_process_docs_in_plate(plate_path, apply=True)
+            self.assertNotEqual(old_ver, installed_plate_release_tag())
             data = json.loads(plate_path.read_text(encoding="utf-8"))
             self.assertEqual(data["process_docs"]["version"], installed_plate_release_tag())
 
@@ -139,8 +144,9 @@ class TestProcessDocsPointer(unittest.TestCase):
             self.assertEqual(upgraded["version"], "1.4")
             self.assertIn("process_docs", upgraded)
             self.assertTrue(any("plateprocess.dev" in g for g in guidance))
-            changed, merged = sync_process_docs_in_plate(plate_path, apply=True)
-            self.assertTrue(changed or merged["version"] == installed_plate_release_tag())
+            changed, merged, written = sync_process_docs_in_plate(plate_path, apply=True)
+            self.assertTrue(written or changed)
+            self.assertEqual(merged["version"], installed_plate_release_tag())
             data = json.loads(plate_path.read_text(encoding="utf-8"))
             self.assertEqual(data["process_docs"]["version"], installed_plate_release_tag())
 
@@ -155,6 +161,54 @@ class TestProcessDocsPointer(unittest.TestCase):
             self.assertTrue((agents / "pre-push-hook.md").is_file())
             self.assertTrue(report.get("process_docs_notes"))
             self.assertIn("Legacy copied PLATE guides", report["process_docs_notes"][0])
+
+    def test_import_apply_reports_plate_process_docs_created(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = import_payload(root, strategy="safe", apply=True)
+            self.assertIn(".plate process_docs", report["created"])
+
+    def test_reconcile_apply_creates_plate_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            would, done, _notes, _preserved = reconcile_process_docs_artifacts(
+                root, apply=False
+            )
+            self.assertIn(".plate process_docs", would)
+            self.assertFalse((root / ".plate").exists())
+            would2, done2, _n2, _p2 = reconcile_process_docs_artifacts(root, apply=True)
+            self.assertTrue((root / ".plate").is_file())
+            self.assertIn(".plate process_docs", done2)
+
+    def test_schema_upgrade_preserves_extra_process_docs_keys(self):
+        cfg = {
+            "version": "1.3",
+            "process_docs": {
+                "base_url": "https://docs.example.com",
+                "mcp_url": "https://docs.example.com/mcp",
+                "version": "v9.9.9-acme",
+                "notes": "team-owned metadata",
+            },
+        }
+        upgraded, _guidance, _ = upgrade_plate_config_dict(cfg)
+        self.assertEqual(upgraded["process_docs"]["notes"], "team-owned metadata")
+        self.assertEqual(upgraded["process_docs"]["version"], "v9.9.9-acme")
+
+    def test_import_skips_every_payload_doc_except_goals(self):
+        from plate_core.process_docs import GOALS_WIKI_PAYLOAD_REL, is_plate_payload_doc_path
+
+        doc_paths = [p for p in list_payload_relative_paths() if p.startswith("docs/")]
+        self.assertGreater(len(doc_paths), 5)
+        goals_only = [p for p in doc_paths if not is_plate_payload_doc_path(p)]
+        self.assertEqual(goals_only, [GOALS_WIKI_PAYLOAD_REL])
+        with tempfile.TemporaryDirectory() as tmp:
+            dry = import_payload(tmp, strategy="safe", dry_run=True)
+            skipped = set(dry.get("would_skip") or [])
+            for rel in doc_paths:
+                if rel == GOALS_WIKI_PAYLOAD_REL:
+                    self.assertNotIn(rel, skipped, "Goals wiki should still be planned")
+                else:
+                    self.assertIn(rel, skipped, msg=f"expected skip for {rel}")
 
     def test_payload_doc_filter_keeps_goals_only(self):
         from plate_core.process_docs import GOALS_WIKI_PAYLOAD_REL, is_plate_payload_doc_path

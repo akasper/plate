@@ -53,11 +53,6 @@ def validate_process_docs_config(section: Any) -> None:
         return
     if not isinstance(section, dict):
         raise PlateConfigError("'process_docs' must be an object if present")
-    unknown = sorted(set(section) - ALLOWED_PROCESS_DOCS_KEYS)
-    if unknown:
-        raise PlateConfigError(
-            f"unknown process_docs keys: {', '.join(unknown)}"
-        )
     for key in ("base_url", "mcp_url", "version"):
         val = section.get(key)
         if val is None:
@@ -168,6 +163,26 @@ def _read_plate_json(path: Path) -> dict[str, Any]:
     return raw
 
 
+def merge_process_docs_section(
+    section: dict[str, Any] | None,
+    *,
+    installed_tag: str | None = None,
+) -> dict[str, Any]:
+    """Fill defaults, preserve unknown keys, apply version bump rules."""
+    tag = installed_tag or installed_plate_release_tag()
+    defaults = default_process_docs_config()
+    defaults["version"] = tag
+    base_section = section if isinstance(section, dict) else {}
+    merged: dict[str, Any] = {**defaults, **base_section}
+    stored_version = base_section.get("version")
+    explicit_version = isinstance(stored_version, str) and bool(stored_version.strip())
+    if is_default_process_docs_endpoint(merged) or not explicit_version:
+        merged["version"] = tag
+    elif explicit_version:
+        merged["version"] = stored_version.strip()
+    return merged
+
+
 def sync_process_docs_in_plate(
     plate_path: Path,
     *,
@@ -176,35 +191,37 @@ def sync_process_docs_in_plate(
 ) -> tuple[bool, dict[str, str]]:
     """Merge ``process_docs`` defaults and bump ``version`` when apply is true.
 
-    Returns ``(changed, merged_process_docs)``.
+    Returns ``(changed, merged_process_docs, written)`` where ``written`` is true when
+    the ``.plate`` file was created or updated on apply.
     """
     tag = installed_tag or installed_plate_release_tag()
-    defaults = default_process_docs_config()
-    defaults["version"] = tag
+    merged = merge_process_docs_section(None, installed_tag=tag)
 
     if not plate_path.is_file():
-        return False, defaults
+        if not apply:
+            return False, merged, False
+        from .plate_config import CURRENT_CONFIG_VERSION
+
+        data = {"version": CURRENT_CONFIG_VERSION, "process_docs": merged}
+        plate_path.parent.mkdir(parents=True, exist_ok=True)
+        plate_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        return True, merged, True
 
     data = _read_plate_json(plate_path)
     before = json.dumps(data.get("process_docs"), sort_keys=True)
     section = data.get("process_docs")
-    if not isinstance(section, dict):
-        section = {}
-    merged = {**defaults, **{k: v for k, v in section.items() if k in ALLOWED_PROCESS_DOCS_KEYS}}
-    stored_version = section.get("version")
-    explicit_version = (
-        isinstance(stored_version, str) and bool(stored_version.strip())
+    merged = merge_process_docs_section(
+        section if isinstance(section, dict) else None,
+        installed_tag=tag,
     )
-    if is_default_process_docs_endpoint(merged) or not explicit_version:
-        merged["version"] = tag
-    else:
-        merged["version"] = stored_version.strip()
     data["process_docs"] = merged
     after = json.dumps(merged, sort_keys=True)
     changed = before != after
+    written = False
     if apply and changed:
         plate_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    return changed, merged
+        written = True
+    return changed, merged, written
 
 
 def seed_process_docs_artifacts(
@@ -224,8 +241,12 @@ def seed_process_docs_artifacts(
     preserved: list[str] = []
 
     plate_path = target / ".plate"
-    plate_changed, merged = sync_process_docs_in_plate(plate_path, apply=apply)
-    process_docs = {**process_docs, **merged}
+    plate_changed, merged, plate_written = sync_process_docs_in_plate(
+        plate_path, apply=apply
+    )
+    for key in ("base_url", "mcp_url", "version"):
+        if key in merged and isinstance(merged[key], str):
+            process_docs[key] = merged[key]
 
     summary_path = target / PROCESS_SUMMARY_REL
     summary_text = build_process_summary_markdown(
@@ -254,10 +275,19 @@ def seed_process_docs_artifacts(
             summary_path.parent.mkdir(parents=True, exist_ok=True)
             summary_path.write_text(summary_text, encoding="utf-8")
             done.append(PROCESS_SUMMARY_REL)
-    if plate_changed or not plate_path.is_file():
-        would.append(".plate process_docs")
-        if apply and plate_path.is_file() and plate_changed:
-            done.append(".plate process_docs")
+    plate_label = ".plate process_docs"
+    if apply:
+        if plate_written or plate_changed:
+            done.append(plate_label)
+        elif plate_path.is_file() and PROCESS_SUMMARY_REL in done:
+            try:
+                section = _read_plate_json(plate_path).get("process_docs")
+            except (OSError, json.JSONDecodeError, ValueError):
+                section = None
+            if isinstance(section, dict) and section:
+                done.append(plate_label)
+    elif plate_changed or not plate_path.is_file():
+        would.append(plate_label)
 
     if legacy_guide_dirs:
         joined = ", ".join(legacy_guide_dirs[:5])
@@ -279,12 +309,10 @@ def reconcile_process_docs_artifacts(
     """Sync pointer and fallback on disk (import, upgrade, or explicit repair)."""
     root = Path(repo_root)
     legacy_dirs = detect_legacy_copied_plate_guides(root)
-    plate_path = root / ".plate"
-    _, merged = sync_process_docs_in_plate(plate_path, apply=apply)
     return seed_process_docs_artifacts(
         root,
         apply=apply,
-        process_docs=merged,
+        process_docs=default_process_docs_config(),
         legacy_guide_dirs=legacy_dirs,
     )
 
