@@ -7,7 +7,7 @@ Part of the PLATE agent operating rules (formerly in `AGENTS.md`). The always-lo
 <!-- PLATES-CORE:BEGIN upstream-template-sync -->
 Downstream PLATE repositories often customize baseline files such as `AGENTS.md`, `.agentic/skills.yml`, and workflow definitions.
 
-**Do not create, clone, fork, or `gh repo create --template` from `akasper/plate_template` or any template repository.** That GitHub template is retired. Never hand-copy files from `src/plate_core/template_payload/` into a target repo. Start new repositories only via **[docs/bootstrap/starting-a-new-repository.md](docs/bootstrap/starting-a-new-repository.md)** (`gh plate bootstrap` / `gh plate import-payload`).
+**Do not create, clone, fork, or `gh repo create --template` from `akasper/plate_template` or any template repository.** That GitHub template is retired. Never hand-copy files from `src/plate_core/template_payload/` into a target repo. Start new repositories only via **[../bootstrap/starting-a-new-repository.md](../bootstrap/starting-a-new-repository.md)** (`gh plate bootstrap` / `gh plate import-payload`).
 
 Upgrade and sync scaffold behavior through **`plate-core`** (`gh plate import-payload`, `gh plate self-migrate`, and related surfaces)—not a `plate_template` git remote.
 

@@ -1,0 +1,18 @@
+name = "plate-docs"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+
+account_id = "e8cf9521650f2573d54d27dd21dc87be"
+workers_dev = false
+preview_urls = false
+
+routes = [
+  { pattern = "plateprocess.dev", custom_domain = true }
+]
+
+[vars]
+# Overridden at build time in generated/bundle.json; placeholder for local wrangler dev.
+RELEASE_TAG = "v0.12.0-fixture"
+
+[dev]
+port = 8787
