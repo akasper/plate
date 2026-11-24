@@ -110,6 +110,7 @@ class ImportPayloadReport:
     namespace_docs: bool = False
     platform: str = "posix"
     omitted_for_platform: list[str] = field(default_factory=list)
+    process_docs_notes: list[str] = field(default_factory=list)
     ok: bool = True
     error: str | None = None
 
@@ -149,6 +150,7 @@ class ImportPayloadReport:
             "files": [f.to_dict() for f in self.files],
             "next_steps": list(self.next_steps),
             "next_command": self.next_command or _next_command(self),
+            "process_docs_notes": list(self.process_docs_notes),
         }
 
 
@@ -567,7 +569,27 @@ def plan_import_payload(
             report.error = str(exc)
             return report
 
+    from .process_docs import (
+        detect_legacy_copied_plate_guides,
+        is_plate_payload_doc_path,
+        seed_process_docs_artifacts,
+    )
+
     for rel in rel_paths:
+        if is_plate_payload_doc_path(rel):
+            report.files.append(
+                PayloadFileDecision(
+                    path=rel,
+                    action="skip",
+                    classification=classify_template_file(rel, manifest),
+                    detail="PLATE guides not copied; use process_docs remote endpoint (#1511)",
+                    target_path=rel,
+                )
+            )
+            report.would_skip.append(rel)
+            if apply:
+                report.skipped.append(rel)
+            continue
         if rel == ROOT_PAYLOAD_README:
             report.files.append(
                 PayloadFileDecision(
@@ -704,6 +726,35 @@ def plan_import_payload(
         platform=resolved_platform,
     )
 
+    legacy_dirs = detect_legacy_copied_plate_guides(target)
+    from .process_docs import default_process_docs_config, sync_process_docs_in_plate
+
+    plate_path = target / ".plate"
+    sync_process_docs_in_plate(plate_path, apply=bool(apply))
+    process_docs = default_process_docs_config()
+    if plate_path.is_file():
+        try:
+            plate_data = json.loads(plate_path.read_text(encoding="utf-8"))
+            section = plate_data.get("process_docs")
+            if isinstance(section, dict):
+                process_docs = {**process_docs, **section}
+        except json.JSONDecodeError:
+            pass
+
+    _seed_goals_wiki_if_missing(target, template_root, report, apply=bool(apply), namespaced_docs=nd)
+
+    pd_would, pd_done, pd_notes = seed_process_docs_artifacts(
+        target,
+        apply=bool(apply),
+        process_docs=process_docs,
+        legacy_guide_dirs=legacy_dirs,
+    )
+    for item in pd_would:
+        report.would_create.append(item)
+    for item in pd_done:
+        report.created.append(item)
+    report.process_docs_notes.extend(pd_notes)
+
     report.next_command = _next_command(report, repo_root=target)
     report.next_steps = _next_steps(report)
     if ns:
@@ -711,11 +762,13 @@ def plan_import_payload(
             0,
             "PLATE scripts install under scripts/plate/; workflows rewritten to match (#621).",
         )
-    if nd:
-        report.next_steps.insert(
-            0,
-            "PLATE docs install under docs/plate/; references rewritten to match (#1015).",
-        )
+    report.next_steps.insert(
+        0,
+        f"PLATE process guides are remote ({default_process_docs_config()['base_url']}); "
+        f"local fallback: docs/plate/PROCESS_SUMMARY.md (#1511).",
+    )
+    for note in pd_notes:
+        report.next_steps.insert(1, note)
     if omitted:
         report.next_steps.insert(
             0,
@@ -1017,6 +1070,35 @@ def _set_plate_platform(path: Path, platform: str) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _seed_goals_wiki_if_missing(
+    target: Path,
+    template_root: Path,
+    report: ImportPayloadReport,
+    *,
+    apply: bool,
+    namespaced_docs: bool,
+) -> None:
+    """Seed Goals wiki convention page when absent (#1022); not a full PLATE guide tree."""
+    from .payload_surface import namespace_docs_path
+
+    rel = "docs/wiki/Goals.md"
+    preferred = namespace_docs_path(rel) if namespaced_docs else rel
+    dest = target / preferred
+    if dest.is_file():
+        report.would_skip.append(preferred)
+        if apply:
+            report.skipped.append(preferred)
+        return
+    source = template_root / rel
+    if not source.is_file():
+        return
+    report.would_create.append(preferred)
+    if apply:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(source.read_bytes())
+        report.created.append(preferred)
+
+
 def _seed_plate_config_if_missing(
     target: Path,
     report: ImportPayloadReport,
@@ -1053,8 +1135,10 @@ def _seed_plate_config_if_missing(
     import copy
 
     from .plate_config import DEFAULT_CONFIG
+    from .process_docs import default_process_docs_config
 
     seeded = copy.deepcopy(DEFAULT_CONFIG)
+    seeded["process_docs"] = default_process_docs_config()
     if platform:
         seeded["platform"] = platform
     payload = json.dumps(seeded, indent=2) + "\n"

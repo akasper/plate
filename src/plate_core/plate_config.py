@@ -12,7 +12,7 @@ from typing import Any
 import yaml
 
 
-CURRENT_CONFIG_VERSION = "1.3"
+CURRENT_CONFIG_VERSION = "1.4"
 PLATFORM_POSIX = "posix"
 PLATFORM_POSIX_AND_WINDOWS = "posix-and-windows"
 PLATFORM_WINDOWS = "windows"
@@ -28,6 +28,7 @@ ALLOWED_CONFIG_TOP_LEVEL_KEYS = {
     "autonomy",
     "platform",
     "hooks",
+    "process_docs",
 }
 ALLOWED_EXTENSION_CONTRIBUTION_KEYS = {"methodology", "overrides", "release", "autonomy"}
 
@@ -84,6 +85,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "lint": "",
             "typecheck": "",
         },
+    },
+    "process_docs": {
+        "base_url": "https://plateprocess.dev",
+        "mcp_url": "https://plateprocess.dev/mcp",
+        "version": "v0.12.0",
     },
 }
 
@@ -344,13 +350,15 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
         if unknown:
             raise PlateConfigError(f"unknown top-level keys: {', '.join(unknown)}")
 
-    for key in ("methodology", "extensions", "overrides", "release", "autonomy", "hooks"):
+    for key in ("methodology", "extensions", "overrides", "release", "autonomy", "hooks", "process_docs"):
         if key in config and not isinstance(config[key], dict):
             raise PlateConfigError(f"'{key}' must be an object if present")
 
     from .git_hooks import validate_hooks_config
+    from .process_docs import validate_process_docs_config
 
     validate_hooks_config(config.get("hooks"))
+    validate_process_docs_config(config.get("process_docs"))
 
     # Autonomy-specific validation (v1.2 schema; rejects invalid risk, non-numeric budget, unknown keys per test and reviews)
     auto = config.get("autonomy", {})
@@ -457,6 +465,23 @@ def _migrate_1_2_to_1_3(config: dict[str, Any]) -> dict[str, Any]:
     return upgraded
 
 
+def _migrate_1_3_to_1_4(config: dict[str, Any]) -> dict[str, Any]:
+    from .process_docs import default_process_docs_config
+
+    upgraded = copy.deepcopy(config)
+    if "process_docs" not in upgraded or not upgraded.get("process_docs"):
+        upgraded["process_docs"] = default_process_docs_config()
+    else:
+        section = upgraded.get("process_docs")
+        if isinstance(section, dict):
+            upgraded["process_docs"] = {
+                **default_process_docs_config(),
+                **{k: v for k, v in section.items() if k in ("base_url", "mcp_url", "version")},
+            }
+    upgraded["version"] = "1.4"
+    return upgraded
+
+
 MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
     "1.0": (
         "1.1",
@@ -480,6 +505,15 @@ MIGRATION_STEPS: dict[str, tuple[str, Any, list[str]]] = {
         [
             "Add top-level 'platform' (posix | posix-and-windows | windows). A missing key migrates to posix: import and bootstrap copy PLATE-owned .sh scripts and omit PLATE-owned .ps1 twins.",
             "Set platform to posix-and-windows to keep both script flavors, or windows to copy PLATE-owned .ps1 scripts and omit .sh twins. Do not infer the value from the operator machine.",
+        ],
+    ),
+    "1.3": (
+        "1.4",
+        _migrate_1_3_to_1_4,
+        [
+            "Add process_docs (base_url, mcp_url, version) pointing at https://plateprocess.dev by default.",
+            "Import/upgrade no longer copies PLATE guides into docs/; use the hosted site or MCP. Legacy copies are left in place until you remove them.",
+            "Local offline fallback: docs/plate/PROCESS_SUMMARY.md",
         ],
     ),
 }
