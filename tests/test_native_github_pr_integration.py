@@ -202,7 +202,11 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         ):
             block = _fast_forward_release_job_block(read_text(rel))
             self.assertIn("Install pinned plate-core for fast-forward", block)
+            self.assertIn("id: plate-core-ff", block)
+            self.assertIn("${RUNNER_TEMP}/plate-core-ff-venv", block)
             self.assertIn('plate-core==0.12.0', block)
+            self.assertIn("steps.plate-core-ff.outputs.ff_python", block)
+            self.assertIn("fast_forward_release_branches", block)
             install_idx = block.index("Install pinned plate-core for fast-forward")
             ff_idx = block.index("Fast-forward release branches to tag")
             self.assertLess(install_idx, ff_idx)
