@@ -113,7 +113,9 @@ class HealthTests(unittest.TestCase):
         self.assertTrue(report.plate_config_present)
         self.assertTrue(report.plate_config_valid)
         self.assertEqual(report.plate_config_file_version, "1.0")
-        self.assertEqual(report.plate_config_resolved_version, "1.3")
+        from plate_core.plate_config import CURRENT_CONFIG_VERSION
+
+        self.assertEqual(report.plate_config_resolved_version, CURRENT_CONFIG_VERSION)
         self.assertTrue(report.plate_config_upgrade_available)
         self.assertIn(".plate/config present", report.plate_repo_signals)  # #459 / #464 detection for default persona
         # #634 budget fields present (best-effort; values depend on local/config)

@@ -1,0 +1,7 @@
+{
+  "slug": "process-docs-pointer-import-1511",
+  "change_type": "feature",
+  "surface": "import-payload",
+  "summary": "Adopter import and upgrade write process_docs pointer in .plate and docs/plate/PROCESS_SUMMARY.md instead of copying PLATE guide trees; legacy copies are preserved with a clear note. Closes #1511 and resolves #1503.",
+  "links": ["#1511", "#1503", "#1508", "#1512"]
+}

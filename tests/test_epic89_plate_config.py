@@ -563,7 +563,9 @@ class TestAutonomySchemaDefaultsAndMigration(unittest.TestCase):
         else:
             data = upgraded
         self.assertIn("autonomy", data)
-        self.assertEqual(data.get("version"), "1.3")
+        from plate_core.plate_config import CURRENT_CONFIG_VERSION
+
+        self.assertEqual(data.get("version"), CURRENT_CONFIG_VERSION)
         self.assertEqual(data.get("platform"), "posix")
 
 if __name__ == "__main__":

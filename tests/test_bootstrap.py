@@ -444,8 +444,11 @@ class BootstrapTests(unittest.TestCase):
         tree_paths = {entry.get("path") for entry in tree_entries if isinstance(entry, dict)}
         self.assertIn("AGENTS.md", tree_paths)
         self.assertIn("docs/wiki/Goals.md", tree_paths)
+        self.assertIn("docs/plate/PROCESS_SUMMARY.md", tree_paths)
         self.assertIn(".plate", tree_paths)
         self.assertNotIn("README.md", tree_paths)
+        self.assertFalse(any(p.startswith("docs/agents/") for p in tree_paths))
+        self.assertFalse(any(p.startswith("docs/bootstrap/") for p in tree_paths))
 
         plate_puts = [
             call for call in client.api.call_args_list

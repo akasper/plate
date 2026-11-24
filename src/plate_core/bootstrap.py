@@ -834,7 +834,11 @@ def _process_template_payload(
     if not rel_paths:
         raise RuntimeError(f"No template payload files found under {template_root}")
 
+    from .process_docs import is_plate_payload_doc_path
+
     for rel in rel_paths:
+        if is_plate_payload_doc_path(rel):
+            continue
         source = template_root / rel
         if not source.is_file():
             raise RuntimeError(f"Template payload file missing: {source}")
@@ -912,6 +916,33 @@ def _bootstrap_playwright_detected(
     if parent_ref and not _remote_repo_path_missing(repo, gh, "tests/e2e", parent_ref):
         return True
     return False
+
+
+def _maybe_queue_bootstrap_process_summary(
+    repo: str,
+    gh: GhClient,
+    parent_ref: str | None,
+    pending_writes: list[tuple[str, bytes]],
+) -> bool:
+    """Queue offline process summary when absent (#1511); never overwrite remote edits."""
+    from .process_docs import (
+        PROCESS_SUMMARY_REL,
+        build_process_summary_markdown,
+        default_process_docs_config,
+    )
+
+    if any(queued_rel == PROCESS_SUMMARY_REL for queued_rel, _ in pending_writes):
+        return False
+    if not _remote_repo_path_missing(repo, gh, PROCESS_SUMMARY_REL, parent_ref):
+        return False
+    cfg = default_process_docs_config()
+    summary = build_process_summary_markdown(
+        base_url=cfg["base_url"],
+        mcp_url=cfg["mcp_url"],
+        version=cfg["version"],
+    )
+    pending_writes.append((PROCESS_SUMMARY_REL, summary.encode("utf-8")))
+    return True
 
 
 def _maybe_queue_bootstrap_current_md(
@@ -1088,6 +1119,8 @@ def run_bootstrap(
             template_root,
             platform=resolved_platform,
         ):
+            copied_count += 1
+        if _maybe_queue_bootstrap_process_summary(target, gh, parent_sha, bootstrap_writes):
             copied_count += 1
         if bootstrap_writes:
             _commit_repository_files(

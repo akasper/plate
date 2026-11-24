@@ -10,9 +10,8 @@ routes = [
   { pattern = "plateprocess.dev", custom_domain = true }
 ]
 
-[vars]
-# Overridden at build time in generated/bundle.json; placeholder for local wrangler dev.
-RELEASE_TAG = "v0.12.0-fixture"
+[observability]
+enabled = true
 
 [dev]
 port = 8787

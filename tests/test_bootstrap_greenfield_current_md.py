@@ -20,6 +20,7 @@ from plate_core.github_client import GhApiError
 from plate_core.health import HealthReport
 from plate_core.import_payload import import_payload, list_payload_relative_paths
 from plate_core.payload_surface import filter_plate_scripts
+from plate_core.process_docs import is_plate_payload_doc_path
 from plate_core.template_payload import payload_root, resolve_template_source
 
 
@@ -111,7 +112,8 @@ class BootstrapGreenfieldCurrentMdTests(unittest.TestCase):
             list_payload_relative_paths(template_root),
             "posix",
         )
-        expected_would_copy = len(rel_paths) + 1  # template payload + CURRENT.md
+        copyable = [p for p in rel_paths if not is_plate_payload_doc_path(p)]
+        expected_would_copy = len(copyable) + 1  # template payload (no PLATE guides) + CURRENT.md
 
         def api_side(endpoint, *a, **k):
             endpoint = str(endpoint)

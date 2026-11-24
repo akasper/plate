@@ -222,7 +222,9 @@ class McpTests(unittest.TestCase):
             _handle_tools_call(14, {"name": "plate_config_upgrade", "arguments": {"repo_root": tmp}})
             payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
             self.assertTrue(payload["changed"])
-            self.assertEqual(payload["current_version"], "1.3")
+            from plate_core.plate_config import CURRENT_CONFIG_VERSION
+
+            self.assertEqual(payload["current_version"], CURRENT_CONFIG_VERSION)
 
     @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_plan_epic(self, mock_write):

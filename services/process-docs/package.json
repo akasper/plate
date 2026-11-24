@@ -15,12 +15,12 @@
     "deploy": "npm run bundle:release && wrangler deploy"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250320.0",
+    "@cloudflare/workers-types": "^5.20261123.1",
     "marked": "^15.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0",
-    "wrangler": "^3.114.0",
+    "wrangler": "^4.168.0",
     "zod": "^3.24.0"
   }
 }
