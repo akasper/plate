@@ -320,7 +320,7 @@ class PlatformFilterTests(unittest.TestCase):
             }
         )
         self.assertEqual(kept["platform"], "posix-and-windows")
-        self.assertEqual(kept["version"], "1.3")
+        self.assertEqual(kept["version"], CURRENT_CONFIG_VERSION)
 
     def test_invalid_platform_fails_closed(self):
         with self.assertRaises(PlateConfigError):
