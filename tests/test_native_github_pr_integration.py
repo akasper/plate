@@ -14,6 +14,26 @@ def _fast_forward_release_job_block(workflow: str) -> str:
     return workflow.split("fast-forward-release-branches:", 1)[1].split("\n  deploy:", 1)[0]
 
 
+FF_SECRET_GATE_IF = (
+    "${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}"
+)
+
+
+def _fast_forward_step_if(relative_path: str, step_name: str) -> str | None:
+    """Return a fast-forward job step's ``if`` expression (None when the step omits ``if``)."""
+    doc = yaml.safe_load(read_text(relative_path))
+    job = (doc.get("jobs") or {}).get("fast-forward-release-branches")
+    if not isinstance(job, dict):
+        raise AssertionError(f"{relative_path}: missing fast-forward-release-branches job")
+    for step in job.get("steps") or []:
+        if isinstance(step, dict) and step.get("name") == step_name:
+            cond = step.get("if")
+            return str(cond).strip() if cond is not None else None
+    raise AssertionError(
+        f"{relative_path}: fast-forward job has no step named {step_name!r}"
+    )
+
+
 def _step_if_secrets_violations(relative_path: str) -> list[str]:
     """GitHub rejects `secrets.*` in step-level `if:` expressions; map secrets to job env instead (#1444)."""
     text = read_text(relative_path)
@@ -207,9 +227,34 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
             self.assertIn('plate-core==0.12.0', block)
             self.assertIn("steps.plate-core-ff.outputs.ff_python", block)
             self.assertIn("fast_forward_release_branches", block)
-            install_idx = block.index("Install pinned plate-core for fast-forward")
-            ff_idx = block.index("Fast-forward release branches to tag")
+            install_marker = "Install pinned plate-core for fast-forward"
+            ff_marker = "Fast-forward release branches to tag (no force push)"
+            self.assertIn(install_marker, block, msg=f"missing install step in {rel}")
+            self.assertIn(ff_marker, block, msg=f"missing fast-forward step in {rel}")
+            install_idx = block.index(install_marker)
+            ff_idx = block.index(ff_marker)
             self.assertLess(install_idx, ff_idx)
+
+    def test_release_workflow_ff_install_shares_secret_gate_with_plate_core_step(self):
+        """Install and plate_core.release fast-forward steps use the same secrets gate (#1507 review)."""
+        install_name = "Install pinned plate-core for fast-forward"
+        ff_name = "Fast-forward release branches to tag (no force push)"
+        for rel in (
+            ".github/workflows/release.yml",
+            "src/plate_core/template_payload/.github/workflows/release.yml",
+        ):
+            install_if = _fast_forward_step_if(rel, install_name)
+            ff_if = _fast_forward_step_if(rel, ff_name)
+            self.assertEqual(
+                install_if,
+                ff_if,
+                msg=f"{rel}: install and fast-forward step if: must match",
+            )
+            self.assertEqual(install_if, FF_SECRET_GATE_IF, msg=rel)
+            text = read_text(rel)
+            job_block = _fast_forward_release_job_block(text)
+            self.assertIn("PLATE_FF_APP_ID: ${{ secrets.PLATE_APP_ID }}", job_block)
+            self.assertIn("PLATE_FF_APP_PRIVATE_KEY: ${{ secrets.PLATE_APP_PRIVATE_KEY }}", job_block)
 
     def test_release_workflow_fast_forward_uses_app_token_and_missing_secret_fallback(self):
         """#1438: FF job uses create-github-app-token; warns and skips push without secrets."""
