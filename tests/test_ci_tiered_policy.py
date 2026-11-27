@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import copy
 import unittest
 
 from plate_core.ci_tiered_policy import (
+    DEFAULT_COST_TIERS,
+    DEFAULT_FORCE_RUN,
     CiTieredPolicyError,
     default_policy_config,
     forced_jobs_for_changes,
@@ -63,6 +66,12 @@ class ValidatePolicyTests(unittest.TestCase):
     def test_defaults_merge_and_validate(self):
         validate_ci_tiered_policy_config(default_policy_config())
 
+    def test_default_policy_config_return_does_not_alias_module_defaults(self):
+        cfg = default_policy_config()
+        cfg["cost_tiers"]["small"]["max_usd"] = 999.0
+        fresh = default_policy_config()
+        self.assertNotEqual(fresh["cost_tiers"]["small"]["max_usd"], 999.0)
+
     def test_rejects_bad_job_size(self):
         cfg = _policy_config(job_sizes={"unit": "huge"})
         with self.assertRaises(CiTieredPolicyError):
@@ -83,6 +92,21 @@ class ValidatePolicyTests(unittest.TestCase):
         )
         with self.assertRaises(CiTieredPolicyError):
             validate_ci_tiered_policy_config(cfg)
+
+    def test_invalid_config_does_not_mutate_module_defaults(self):
+        cost_snapshot = copy.deepcopy(DEFAULT_COST_TIERS)
+        force_snapshot = copy.deepcopy(DEFAULT_FORCE_RUN)
+        cfg = _policy_config(
+            cost_tiers={
+                "small": {"max_usd": 5.0},
+                "medium": {"min_usd": 0.10, "max_usd": 2.00},
+                "large": {"min_usd": 2.00},
+            }
+        )
+        with self.assertRaises(CiTieredPolicyError):
+            validate_ci_tiered_policy_config(cfg)
+        self.assertEqual(DEFAULT_COST_TIERS, cost_snapshot)
+        self.assertEqual(DEFAULT_FORCE_RUN, force_snapshot)
 
 
 class TierCapTests(unittest.TestCase):
