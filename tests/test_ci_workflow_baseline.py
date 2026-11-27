@@ -50,10 +50,18 @@ class CiWorkflowBaselineTests(unittest.TestCase):
 
     def test_actions_are_sha_pinned_not_floating_tags(self):
         text = read_ci()
-        self.assertRegex(text, r"ACTIONS_CHECKOUT_SHA: [0-9a-f]{40}")
-        self.assertRegex(text, r"ACTIONS_SETUP_PYTHON_SHA: [0-9a-f]{40}")
+        uses_lines = [line.strip() for line in text.splitlines() if line.strip().startswith("- uses: actions/")]
+        self.assertGreaterEqual(len(uses_lines), 3)
+        for line in uses_lines:
+            self.assertRegex(line, r"@[0-9a-f]{40}", msg=line)
+        nested_uses = [
+            line.strip()
+            for line in text.splitlines()
+            if line.strip().startswith("uses: actions/")
+        ]
+        for line in nested_uses:
+            self.assertRegex(line, r"@[0-9a-f]{40}", msg=line)
         self.assertNotRegex(text, re.compile(r"uses:\s+actions/checkout@v"))
-        self.assertNotRegex(text, re.compile(r"uses:\s+actions/setup-python@v"))
 
     def test_e2e_uses_npm_ci(self):
         text = read_ci()

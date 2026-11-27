@@ -13,11 +13,9 @@ permissions:
   contents: read
   actions: read
 
-# Mutable action pins (see .github/dependabot.yml for scheduled updates).
+# Action pins: literal SHAs in `uses:` (GitHub does not allow expressions there).
+# Dependabot github-actions updates these (see .github/dependabot.yml).
 env:
-  ACTIONS_CHECKOUT_SHA: 11d5960a326750d5838078e36cf38b85af677262 # actions/checkout@v4
-  ACTIONS_SETUP_PYTHON_SHA: a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
-  ACTIONS_SETUP_NODE_SHA: 49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node@v4
   # github/copilot-cli v1.0.60 linux x64 release asset (verified in CI before extract).
   COPILOT_CLI_VERSION: "1.0.60"
   COPILOT_CLI_TARBALL_SHA256: bcbc762b86b3997586883a92995ee0cc1ae35fb80c1f62250b7eb15f02b1bcc3
@@ -37,10 +35,10 @@ jobs:
           - python-version: "3.12"
             with_node: true
     steps:
-      - uses: actions/checkout@${{ env.ACTIONS_CHECKOUT_SHA }}
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@${{ env.ACTIONS_SETUP_PYTHON_SHA }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -79,7 +77,7 @@ jobs:
 
       - name: Set up Node.js
         if: matrix.with_node == true
-        uses: actions/setup-node@${{ env.ACTIONS_SETUP_NODE_SHA }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: npm
@@ -113,7 +111,7 @@ jobs:
   copilot-marketplace-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@${{ env.ACTIONS_CHECKOUT_SHA }}
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Copilot CLI (checksum-verified)
         run: |
@@ -160,7 +158,7 @@ jobs:
       startsWith(github.base_ref, 'release-')
     runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@${{ env.ACTIONS_CHECKOUT_SHA }}
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Heavy release context detected
         run: |
@@ -175,7 +173,7 @@ jobs:
 
       - name: Set up Python
         if: ${{ ! (contains(github.event.pull_request.labels.*.name, 'stabilization') || contains(github.event.pull_request.labels.*.name, 'Documentation')) }}
-        uses: actions/setup-python@${{ env.ACTIONS_SETUP_PYTHON_SHA }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
           cache: pip
