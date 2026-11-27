@@ -26,7 +26,7 @@ from .procutil import run_hidden
 from .epics import get_epic_status
 from .health import get_health
 from .plate_config import load_plate_config, get_plate_config_report
-from .state_store import CorruptStateError, locked_json
+from .state_store import CorruptStateError, locked_json, save_refused
 
 # Durable shadow previews (#645 harden): survive process restarts so shadow_ack works
 # across MCP/CLI sessions. Mirrors .agentic/checkpoints and .agentic/ledger layout.
@@ -275,6 +275,24 @@ def _budget_spend_path(base_dir: Path | None = None) -> Path:
     return (base_dir or BUDGET_DIR) / BUDGET_SPEND_FILE
 
 
+def budget_spend_is_corrupt(*, base_dir: Path | None = None) -> bool:
+    """True when durable spend is marked corrupt and must not be read or written (#1476)."""
+    return save_refused(_budget_spend_path(base_dir))
+
+
+def _archive_corrupt_budget_spend(path: Path) -> None:
+    """Preserve corrupt spend bytes for operator inspection (original path unchanged)."""
+    if not path.is_file():
+        return
+    archive = path.with_name(path.name + ".corrupt")
+    if archive.exists():
+        return
+    try:
+        archive.write_bytes(path.read_bytes())
+    except OSError:
+        pass
+
+
 def load_budget_spend(*, base_dir: Path | None = None) -> dict[str, Any]:
     """Load durable spend counters for #634 (empty dict if missing).
 
@@ -283,15 +301,23 @@ def load_budget_spend(*, base_dir: Path | None = None) -> dict[str, Any]:
     from .state_store import load_strict
 
     path = _budget_spend_path(base_dir)
+    if budget_spend_is_corrupt(base_dir=base_dir):
+        raise CorruptStateError(f"refusing load for corrupt budget spend at {path}")
     if not path.is_file():
         return {}
-    data = load_strict(path)
+    try:
+        data = load_strict(path)
+    except CorruptStateError:
+        _archive_corrupt_budget_spend(path)
+        raise
     return data if isinstance(data, dict) else {}
 
 
 def save_budget_spend(data: dict[str, Any], *, base_dir: Path | None = None) -> Path:
     """Persist durable spend counters under .agentic/budget/spend.json (locked, atomic)."""
     path = _budget_spend_path(base_dir)
+    if budget_spend_is_corrupt(base_dir=base_dir):
+        raise CorruptStateError(f"refusing save for corrupt budget spend at {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(data)
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -322,6 +348,15 @@ def record_budget_spend(
     tok = max(0, int(tokens or 0))
     today = datetime.now(timezone.utc).date().isoformat()
     path = _budget_spend_path(base_dir)
+    if budget_spend_is_corrupt(base_dir=base_dir):
+        return {
+            "ok": False,
+            "error": f"refusing charge for corrupt budget spend at {path}",
+            "corrupt_spend": True,
+            "charged_tokens": 0,
+            "reason": reason,
+            "action_kind": action_kind,
+        }
     try:
         with locked_json(path, missing_factory=lambda: {"date": today}) as data:
             stored_day = str(data.get("date") or data.get("day") or "")
@@ -400,11 +435,16 @@ def reset_budget_spend(
     change ``.plate`` token_budget limits or risk_tolerance. Safe if file missing.
     """
     today = datetime.now(timezone.utc).date().isoformat()
+    if budget_spend_is_corrupt(base_dir=base_dir):
+        path = _budget_spend_path(base_dir)
+        return {
+            "ok": False,
+            "corrupt_spend": True,
+            "error": f"refusing reset for corrupt budget spend at {path}",
+            "path": str(path),
+        }
     try:
-        try:
-            prior = load_budget_spend(base_dir=base_dir) or {}
-        except CorruptStateError:
-            prior = {}
+        prior = load_budget_spend(base_dir=base_dir) or {}
         prior_spent = 0
         try:
             prior_spent = int(prior.get("spent_today") or 0)
@@ -779,6 +819,7 @@ class AutonomyEngine:
         self.checkpoint_base_dir: Path | None = None  # tests override for #648 bridge
         self.budget_base_dir: Path | None = None  # tests override; default BUDGET_DIR
         self.ledger_base_dir: Path | None = None  # tests override; default LEDGER_DIR
+        self._spend_file_corrupt: bool = False
         self._load_durable_spend()
 
     def _ledger_record(
@@ -819,10 +860,17 @@ class AutonomyEngine:
 
     def _load_durable_spend(self) -> None:
         """Hydrate spend counters from .agentic/budget/spend.json for process-safe #634 enforcement."""
+        path = _budget_spend_path(self.budget_base_dir)
+        if budget_spend_is_corrupt(base_dir=self.budget_base_dir):
+            self._spend_file_corrupt = True
+            return
         try:
             data = load_budget_spend(base_dir=self.budget_base_dir)
         except CorruptStateError:
+            self._spend_file_corrupt = True
+            _archive_corrupt_budget_spend(path)
             return
+        self._spend_file_corrupt = False
         if not data:
             return
         today = datetime.now(timezone.utc).date().isoformat()
@@ -840,6 +888,8 @@ class AutonomyEngine:
 
     def _persist_spend(self) -> None:
         """Best-effort durable write after budget mutations."""
+        if self._spend_file_corrupt or budget_spend_is_corrupt(base_dir=self.budget_base_dir):
+            return
         try:
             save_budget_spend(
                 {
@@ -851,7 +901,7 @@ class AutonomyEngine:
                 },
                 base_dir=self.budget_base_dir,
             )
-        except OSError:
+        except (OSError, CorruptStateError):
             pass
 
     def _persist_shadow(self, report: ShadowReport) -> None:
@@ -1426,6 +1476,9 @@ class AutonomyEngine:
         """
         if not self.enabled or self.risk_tolerance == "off":
             return Decision.PROCEED  # explicit off or disabled: no autonomous budget enforcement
+
+        if self._spend_file_corrupt or budget_spend_is_corrupt(base_dir=self.budget_base_dir):
+            return Decision.PAUSE
 
         usd_rate = usd_per_1k_tokens(self.autonomy_config)
 

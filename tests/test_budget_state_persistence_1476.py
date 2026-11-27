@@ -11,13 +11,16 @@ from unittest.mock import patch
 
 from plate_core.autonomy import (
     AutonomyEngine,
+    budget_spend_is_corrupt,
     get_budget_snapshot,
     load_budget_spend,
     record_budget_spend,
+    reset_budget_spend,
     save_budget_spend,
     tokens_to_usd,
     usd_per_1k_tokens,
 )
+from plate_core.state_store import clear_save_refusal
 from plate_core.checkpoint import autonomy_is_paused_by_checkpoints, list_checkpoints
 from plate_core.state_store import CorruptStateError, atomic_write_json, mutate_json
 
@@ -35,6 +38,43 @@ class BudgetPersistence1476Tests(unittest.TestCase):
             self.assertTrue(snap.get("corrupt_spend"))
             self.assertTrue(snap.get("would_pause_next_cycle"))
             self.assertEqual(snap.get("budget_pressure"), "critical")
+
+    def test_corrupt_spend_blocks_charge_and_preserves_bytes(self):
+        with TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            path = bdir / "spend.json"
+            path.parent.mkdir(parents=True)
+            corrupt_bytes = b'{"spent_today": 999, "broken"'
+            path.write_bytes(corrupt_bytes)
+
+            with self.assertRaises(CorruptStateError):
+                load_budget_spend(base_dir=bdir)
+            self.assertTrue(budget_spend_is_corrupt(base_dir=bdir))
+            self.assertTrue(path.with_name("spend.json.corrupt").exists())
+
+            charge = record_budget_spend(50, base_dir=bdir)
+            self.assertFalse(charge.get("ok"))
+            self.assertTrue(charge.get("corrupt_spend"))
+
+            reset = reset_budget_spend(base_dir=bdir)
+            self.assertFalse(reset.get("ok"))
+            self.assertTrue(reset.get("corrupt_spend"))
+
+            eng = AutonomyEngine(repo=None)
+            eng.budget_base_dir = bdir
+            eng.enabled = True
+            eng.risk_tolerance = "medium"
+            eng._load_durable_spend()
+            self.assertTrue(eng._spend_file_corrupt)
+            dec = eng.enforce_budget(100, "probe", commit=True)
+            self.assertEqual(dec.value, "pause")
+
+            eng._persist_spend()
+            with self.assertRaises(CorruptStateError):
+                save_budget_spend({"date": "2099-01-01"}, base_dir=bdir)
+
+            self.assertEqual(path.read_bytes(), corrupt_bytes)
+            clear_save_refusal(path)
 
     def test_dry_run_does_not_persist_spend(self):
         with TemporaryDirectory() as tmp:
