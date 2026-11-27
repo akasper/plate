@@ -34,6 +34,8 @@ class CiWorkflowBaselineTests(unittest.TestCase):
         self.assertIn("python -m ruff check src tests", test_job)
         self.assertIn("python -m build -w", test_job)
         self.assertIn("dist/*.whl", test_job)
+        self.assertIn("import plate_core", test_job)
+        self.assertIn("PYTHONPATH", test_job)
 
     def test_marketplace_smoke_is_separate_job(self):
         text = read_ci()

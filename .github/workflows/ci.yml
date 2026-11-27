@@ -58,8 +58,13 @@ jobs:
           set -euo pipefail
           python -m build -w
           python -m pip install --quiet --force-reinstall dist/*.whl
+          python -c "import plate_core; print('installed plate_core', plate_core.__version__)"
 
       - name: Run unit tests
+        env:
+          # In-tree sources for tests that read repo workflows; wheel import verified above.
+          PYTHONPATH: ${{ github.workspace }}/src
+          PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
           python -m unittest discover -s tests -p "test_*.py"
