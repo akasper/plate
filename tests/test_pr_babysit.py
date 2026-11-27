@@ -818,7 +818,7 @@ class PrBabysitTests(unittest.TestCase):
 
         def _run_side(args, **_kwargs):
             argv = list(args)
-            if "rev-parse" in argv or "merge-base" in argv:
+            if "rev-parse" in argv:
                 return type("R", (), {"returncode": 0, "stdout": head_oid + "\n", "stderr": ""})()
             # rebase fails (conflict)
             return type("R", (), {"returncode": 1, "stdout": "conflict!", "stderr": ""})()
@@ -1418,8 +1418,6 @@ class BabysitActHarden1474Tests(unittest.TestCase):
                                 return type("R", (), {"returncode": 0, "stdout": stale + "\n", "stderr": ""})()
                             if "rev-parse" in argv:
                                 return type("R", (), {"returncode": 0, "stdout": live + "\n", "stderr": ""})()
-                            if "merge-base" in argv:
-                                return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
                             return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
                         mock_run.side_effect = _run_side
@@ -1432,6 +1430,67 @@ class BabysitActHarden1474Tests(unittest.TestCase):
                         )
         self.assertFalse(res["success"])
         self.assertIn("stale origin tracking ref", res.get("error") or "")
+
+    def test_perform_local_rebase_refuses_unresolvable_origin_head_ref(self):
+        live = "a" * 40
+        with patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo"):
+            with patch("plate_core.pr_babysit.cleanup_git_locks"):
+                with patch("plate_core.pr_babysit.check_call_hidden"):
+                    with patch("plate_core.pr_babysit.run_hidden") as mock_run:
+
+                        def _run_side(args, **_kwargs):
+                            argv = list(args)
+                            if "rev-parse" in argv and "refs/remotes/origin/feat" in " ".join(argv):
+                                return type("R", (), {"returncode": 1, "stdout": "", "stderr": "unknown"})()
+                            if "rev-parse" in argv:
+                                return type("R", (), {"returncode": 0, "stdout": live + "\n", "stderr": ""})()
+                            return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+                        mock_run.side_effect = _run_side
+                        res = _perform_local_rebase(
+                            "main",
+                            "feat",
+                            "/tmp/repo",
+                            head_ref_oid=live,
+                            pr_number=99,
+                        )
+        self.assertFalse(res["success"])
+        self.assertIn("cannot resolve origin tracking ref", res.get("error") or "")
+
+    def test_perform_local_rebase_succeeds_when_behind_base(self):
+        """BEHIND merge state: rebase must proceed (no is-ancestor gate on base vs head)."""
+        live = "a" * 40
+        with patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo"):
+            with patch("plate_core.pr_babysit.cleanup_git_locks"):
+                with patch("plate_core.pr_babysit.check_call_hidden"):
+                    with patch("plate_core.pr_babysit.tempfile.mkdtemp", return_value="/tmp/wt"):
+                        with patch("plate_core.pr_babysit.run_hidden") as mock_run:
+
+                            def _run_side(args, **_kwargs):
+                                argv = list(args)
+                                if "rev-parse" in argv:
+                                    return type(
+                                        "R", (), {"returncode": 0, "stdout": live + "\n", "stderr": ""}
+                                    )()
+                                if "rebase" in argv:
+                                    return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+                                if "push" in argv:
+                                    self.assertIn(
+                                        f"--force-with-lease=refs/heads/feat:{live}",
+                                        argv,
+                                    )
+                                    return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+                                return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+                            mock_run.side_effect = _run_side
+                            res = _perform_local_rebase(
+                                "main",
+                                "feat",
+                                "/tmp/repo",
+                                head_ref_oid=live,
+                                pr_number=1,
+                            )
+        self.assertTrue(res["success"])
 
     def test_enrich_rest_fallback_preserves_driver_human_label(self):
         pr_data = {

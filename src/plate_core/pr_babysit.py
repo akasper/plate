@@ -1039,33 +1039,18 @@ def _perform_local_rebase(
             text=True,
             check=False,
         )
-        if tracked_head.returncode == 0 and tracked_head.stdout.strip() != head_ref_oid:
+        if tracked_head.returncode != 0:
+            return {
+                "success": False,
+                "conflict": False,
+                "error": "cannot resolve origin tracking ref for PR head; refuse rebase",
+                "output": None,
+            }
+        if tracked_head.stdout.strip() != head_ref_oid:
             return {
                 "success": False,
                 "conflict": False,
                 "error": "stale origin tracking ref for PR head; refuse rebase",
-                "output": None,
-            }
-
-        ancestor = run_hidden(
-            [
-                "git",
-                "-C",
-                repo_dir,
-                "merge-base",
-                "--is-ancestor",
-                f"refs/remotes/origin/{base_ref}",
-                head_ref_oid,
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if ancestor.returncode != 0:
-            return {
-                "success": False,
-                "conflict": False,
-                "error": "PR head is not based on origin base ref; refuse rebase",
                 "output": None,
             }
 
