@@ -735,16 +735,53 @@ def _enrich_pr_push_safety_fields(
     return out
 
 
-def _origin_slug_for_repo_dir(repo_dir: str) -> str | None:
+def _git_config_get(repo_dir: str, key: str) -> str | None:
     proc = run_hidden(
-        ["git", "-C", repo_dir, "config", "--get", "remote.origin.url"],
+        ["git", "-C", repo_dir, "config", "--get", key],
         capture_output=True,
         text=True,
         check=False,
     )
     if proc.returncode != 0:
         return None
-    return _slug_from_github_remote_url((proc.stdout or "").strip())
+    value = (proc.stdout or "").strip()
+    return value or None
+
+
+def _origin_slug_for_repo_dir(repo_dir: str) -> str | None:
+    url = _git_config_get(repo_dir, "remote.origin.url")
+    if not url:
+        return None
+    return _slug_from_github_remote_url(url)
+
+
+def _validate_push_remotes_match_target(target_repo: str, repo_dir: str) -> str | None:
+    """Fail closed: origin.url must resolve and match; pushurl when set must match too (#1474)."""
+    url = _git_config_get(repo_dir, "remote.origin.url")
+    if not url:
+        return "missing git remote.origin.url; refuse force-push"
+    origin_slug = _slug_from_github_remote_url(url)
+    if not origin_slug:
+        return "cannot resolve git remote.origin.url to a GitHub owner/repo; refuse force-push"
+    if origin_slug.lower() != target_repo.lower():
+        return (
+            f"git remote.origin.url {origin_slug!r} does not match PR repository {target_repo!r}; "
+            "refuse force-push"
+        )
+    pushurl = _git_config_get(repo_dir, "remote.origin.pushurl")
+    if pushurl:
+        push_slug = _slug_from_github_remote_url(pushurl)
+        if not push_slug:
+            return (
+                "git remote.origin.pushurl is set but cannot resolve to a GitHub owner/repo; "
+                "refuse force-push"
+            )
+        if push_slug.lower() != target_repo.lower():
+            return (
+                f"git remote.origin.pushurl {push_slug!r} does not match PR repository "
+                f"{target_repo!r}; refuse force-push"
+            )
+    return None
 
 
 def _validate_local_rebase_preconditions(target_repo: str, pr_data: dict, repo_dir: str) -> str | None:
@@ -754,12 +791,9 @@ def _validate_local_rebase_preconditions(target_repo: str, pr_data: dict, repo_d
     head_repo = (pr_data.get("head_repo") or "").strip()
     if head_repo and head_repo.lower() != target_repo.lower():
         return f"PR head repository {head_repo!r} does not match target {target_repo!r}"
-    origin = _origin_slug_for_repo_dir(repo_dir)
-    if origin and origin.lower() != target_repo.lower():
-        return (
-            f"git remote origin {origin!r} does not match PR repository {target_repo!r}; "
-            "refuse force-push"
-        )
+    remote_err = _validate_push_remotes_match_target(target_repo, repo_dir)
+    if remote_err:
+        return remote_err
     if not (pr_data.get("headRefOid") or "").strip():
         return "missing headRefOid; refuse push without pinned force-with-lease"
     return None

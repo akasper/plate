@@ -18,6 +18,7 @@ from plate_core.pr_babysit import (
     _git_index_lock_is_stale,
     _perform_local_rebase,
     _validate_local_rebase_preconditions,
+    _validate_push_remotes_match_target,
     babysit_pr,
     cleanup_git_locks,
     extract_suggestion_blocks,
@@ -677,14 +678,14 @@ class PrBabysitTests(unittest.TestCase):
         post_calls = [c for c in fake.calls if c[1] == "POST" and "/comments" in c[0] and "graphql" not in c[0]]
         self.assertEqual(len(post_calls), 0)
 
-    @patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="akasper/plate")
+    @patch("plate_core.pr_babysit._validate_push_remotes_match_target", return_value=None)
     @patch("plate_core.pr_babysit.check_output_hidden")
     @patch("plate_core.pr_babysit.check_call_hidden")
     @patch("plate_core.pr_babysit.run_hidden")
     @patch("plate_core.pr_babysit.tempfile.mkdtemp")
     @patch("plate_core.pr_babysit.shutil.rmtree")
     def test_babysit_pr_local_rebase_success(
-        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output, _mock_origin
+        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output, _mock_remotes
     ):
         """Test local-rebase strategy performs rebase and push when out of sync."""
         repo = "akasper/plate"
@@ -729,14 +730,14 @@ class PrBabysitTests(unittest.TestCase):
             push_argv,
         )
 
-    @patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="akasper/plate")
+    @patch("plate_core.pr_babysit._validate_push_remotes_match_target", return_value=None)
     @patch("plate_core.pr_babysit.check_output_hidden")
     @patch("plate_core.pr_babysit.check_call_hidden")
     @patch("plate_core.pr_babysit.run_hidden")
     @patch("plate_core.pr_babysit.tempfile.mkdtemp")
     @patch("plate_core.pr_babysit.shutil.rmtree")
     def test_babysit_pr_default_strategy_uses_local_rebase_not_copilot(
-        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output, _mock_origin
+        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output, _mock_remotes
     ):
         """When branch_update_strategy is omitted, out-of-sync PRs use local-rebase (#1300)."""
         repo = "akasper/plate"
@@ -764,14 +765,14 @@ class PrBabysitTests(unittest.TestCase):
         post_calls = [c for c in fake.calls if c[1] == "POST" and "/comments" in c[0] and "graphql" not in c[0]]
         self.assertEqual(len(post_calls), 0)
 
-    @patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="akasper/plate")
+    @patch("plate_core.pr_babysit._validate_push_remotes_match_target", return_value=None)
     @patch("plate_core.pr_babysit.check_output_hidden")
     @patch("plate_core.pr_babysit.check_call_hidden")
     @patch("plate_core.pr_babysit.run_hidden")
     @patch("plate_core.pr_babysit.tempfile.mkdtemp")
     @patch("plate_core.pr_babysit.shutil.rmtree")
     def test_babysit_pr_local_rebase_conflict(
-        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output, _mock_origin
+        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output, _mock_remotes
     ):
         """Test local-rebase reports conflict without crashing."""
         repo = "akasper/plate"
@@ -1250,9 +1251,58 @@ class BabysitActHarden1474Tests(unittest.TestCase):
             "head_repo": "akasper/plate",
             "headRefOid": "deadbeef",
         }
-        with patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="other/plate"):
+        with patch(
+            "plate_core.pr_babysit._validate_push_remotes_match_target",
+            return_value="git remote.origin.url 'other/plate' does not match",
+        ):
             err2 = _validate_local_rebase_preconditions("akasper/plate", same_repo, "/tmp/r")
         self.assertIn("origin", (err2 or "").lower())
+
+    def test_push_remotes_fail_closed_on_missing_or_bad_origin(self):
+        with patch("plate_core.pr_babysit._git_config_get", return_value=None):
+            err = _validate_push_remotes_match_target("akasper/plate", "/tmp/r")
+        self.assertIn("missing", (err or "").lower())
+
+        def config_get(_repo_dir, key):
+            if key == "remote.origin.url":
+                return "git@not-github.example:foo/bar.git"
+            return None
+
+        with patch("plate_core.pr_babysit._git_config_get", side_effect=config_get):
+            err2 = _validate_push_remotes_match_target("akasper/plate", "/tmp/r")
+        self.assertIn("cannot resolve", (err2 or "").lower())
+
+    def test_push_remotes_rejects_mismatched_pushurl(self):
+        def config_get(_repo_dir, key):
+            if key == "remote.origin.url":
+                return "https://github.com/akasper/plate.git"
+            if key == "remote.origin.pushurl":
+                return "https://github.com/evil-hoster/plate.git"
+            return None
+
+        with patch("plate_core.pr_babysit._git_config_get", side_effect=config_get):
+            err = _validate_push_remotes_match_target("akasper/plate", "/tmp/r")
+        self.assertIn("pushurl", (err or "").lower())
+        self.assertIn("evil-hoster", err or "")
+
+    def test_push_remotes_happy_path_url_only_and_with_pushurl(self):
+        def url_only(_repo_dir, key):
+            if key == "remote.origin.url":
+                return "git@github.com:akasper/plate.git"
+            return None
+
+        with patch("plate_core.pr_babysit._git_config_get", side_effect=url_only):
+            self.assertIsNone(_validate_push_remotes_match_target("akasper/plate", "/tmp/r"))
+
+        def url_and_push(_repo_dir, key):
+            if key == "remote.origin.url":
+                return "https://github.com/akasper/plate.git"
+            if key == "remote.origin.pushurl":
+                return "https://github.com/akasper/plate.git"
+            return None
+
+        with patch("plate_core.pr_babysit._git_config_get", side_effect=url_and_push):
+            self.assertIsNone(_validate_push_remotes_match_target("akasper/plate", "/tmp/r"))
 
     def test_perform_local_rebase_requires_head_oid_for_push(self):
         with patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo"):
@@ -1267,9 +1317,9 @@ class BabysitActHarden1474Tests(unittest.TestCase):
         self.assertFalse(res["success"])
         self.assertIn("headRefOid", res.get("error") or "")
 
-    @patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="akasper/plate")
+    @patch("plate_core.pr_babysit._validate_push_remotes_match_target", return_value=None)
     @patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo\n")
-    def test_babysit_refuses_fork_pr_on_act(self, _mock_out, _mock_origin):
+    def test_babysit_refuses_fork_pr_on_act(self, _mock_out, _mock_remotes):
         repo = "akasper/plate"
         pr = 1474
         payload = _behind_pr_graphql(head_repo="forkuser/plate", cross=True)
