@@ -157,6 +157,74 @@ class StateStoreMutateTests(unittest.TestCase):
             self.assertEqual(loaded["rows"], ["x", "x"])
 
 
+class FleetScheduledOpsConcurrencyTests(unittest.TestCase):
+    def test_concurrent_fleet_handoff_appends(self):
+        import threading
+
+        from plate_core import fleet
+
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp) / "fleet"
+            errors: list[BaseException] = []
+            n_threads = 10
+
+            def worker(i: int) -> None:
+                try:
+                    fleet.create_handoff(
+                        from_agent="orchestrator",
+                        to_agent="implementer",
+                        task=f"concurrent-handoff-{i}",
+                        base_dir=base,
+                        record_ledger=False,
+                        use_live_budget=False,
+                        open_checkpoint=False,
+                    )
+                except BaseException as exc:
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=worker, args=(i,)) for i in range(n_threads)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertEqual(errors, [])
+            store = fleet._load(base)
+            ids = {h.get("handoff_id") for h in store.get("handoffs") or []}
+            self.assertEqual(len(ids), n_threads)
+
+    def test_concurrent_scheduled_op_run_appends(self):
+        import threading
+
+        from plate_core.scheduled_ops import _load, run_scheduled_op
+
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp) / "scheduled_ops"
+            errors: list[BaseException] = []
+            n_threads = 8
+
+            def worker(i: int) -> None:
+                try:
+                    run_scheduled_op(
+                        "scheduled-refactor",
+                        dry_run=True,
+                        base_dir=base,
+                        record_ledger=False,
+                        use_live_budget=False,
+                    )
+                except BaseException as exc:
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=worker, args=(i,)) for i in range(n_threads)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertEqual(errors, [])
+            store = _load(base)
+            run_ids = {r.get("id") for r in store.get("runs") or []}
+            self.assertEqual(len(run_ids), n_threads)
+
+
 class CheckpointUnreadableTests(unittest.TestCase):
     def test_unreadable_checkpoint_pauses_autonomy(self):
         with TemporaryDirectory() as tmp:
