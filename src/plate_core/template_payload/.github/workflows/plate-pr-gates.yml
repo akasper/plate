@@ -60,7 +60,17 @@ jobs:
           set -euo pipefail
           pr_number="${{ github.event.pull_request.number }}"
           gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files" --paginate \
-            --jq '.[] | select(.status != "removed") | .filename' > /tmp/pr-changed-paths.txt
+            --jq '.[] | [.filename, .status] | @tsv' > /tmp/pr-scope-paths.tsv
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files" --paginate \
+            --jq '.[] | select(.status != "removed") | .filename' > /tmp/pr-active-paths.txt
+      - name: Checkout trusted gate runtime (base ref)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: gate-runtime
+          sparse-checkout: |
+            src/plate_core
+          sparse-checkout-cone-mode: true
 
       - name: Gate — PR title
         if: |
@@ -503,25 +513,27 @@ jobs:
           github.event_name == 'pull_request' ||
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # pr-gates failure marker: stdlib unittest policy
           set -euo pipefail
-          run_unittest_policy_gate() {
-            python3 -m plate_core.pr_unittest_policy_gate --paths-file /tmp/pr-changed-paths.txt
-          }
-          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
-            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
-            run_unittest_policy_gate
-          elif python3 -c "import plate_core.pr_unittest_policy_gate" 2>/dev/null; then
-            run_unittest_policy_gate
+          if [ -d "${GITHUB_WORKSPACE}/gate-runtime/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/gate-runtime/src"
+          elif python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" 2>/dev/null; then
+            :
           else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.12.0" || true
-            if python3 -c "import plate_core.pr_unittest_policy_gate" 2>/dev/null; then
-              run_unittest_policy_gate
-            else
-              echo "::warning title=Unittest policy (warn-only)::plate-core runtime unavailable; skipping unittest policy gate until plate-core is installed."
-            fi
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.12.0"
+            python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" || {
+              echo "plate-core==0.12.0 does not provide plate_core gate modules; publish or pin a compatible version." >&2
+              exit 1
+            }
           fi
+
+          python3 -m plate_core.pr_unittest_policy_gate \
+            --paths-file /tmp/pr-active-paths.txt \
+            --head-sha "${HEAD_SHA}" \
+            --repo-root "${GITHUB_WORKSPACE}"
 
       - name: Gate — Feature release fragment (labels)
         if: |
@@ -566,24 +578,24 @@ jobs:
         run: |
           # pr-gates failure marker: per-feature change files
           set -euo pipefail
+          if [ -d "${GITHUB_WORKSPACE}/gate-runtime/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/gate-runtime/src"
+          elif python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" 2>/dev/null; then
+            :
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.12.0"
+            python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" || {
+              echo "plate-core==0.12.0 does not provide plate_core gate modules; publish or pin a compatible version." >&2
+              exit 1
+            }
+          fi
+
           pr_number="${{ github.event.pull_request.number }}"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
-          run_release_fragment_gate() {
-            python3 -m plate_core.pr_release_fragment_gate --labels "${labels}" --paths-file /tmp/pr-changed-paths.txt
-          }
-          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
-            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
-            run_release_fragment_gate
-          elif python3 -c "import plate_core.pr_release_fragment_gate" 2>/dev/null; then
-            run_release_fragment_gate
-          else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.12.0" || true
-            if python3 -c "import plate_core.pr_release_fragment_gate" 2>/dev/null; then
-              run_release_fragment_gate
-            else
-              echo "::warning title=Release fragment (warn-only)::plate-core runtime unavailable; skipping release fragment gate until plate-core is installed."
-            fi
-          fi
+          python3 -m plate_core.pr_release_fragment_gate \
+            --labels "${labels}" \
+            --scope-paths-file /tmp/pr-scope-paths.tsv \
+            --active-paths-file /tmp/pr-active-paths.txt
 
       - name: Gate — Feature release fragment (skip notice)
         if: |

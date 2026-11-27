@@ -104,6 +104,7 @@ jobs:
           fetch-depth: 0
 
 @@COLLECT_CHANGED_PATHS@@
+@@CHECKOUT_GATE_RUNTIME@@
 
       - name: Gate — PR title
         if: |
@@ -369,6 +370,17 @@ REVIEWER_MODEL_PLATE = """
           printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
 """
 
+CHECKOUT_GATE_RUNTIME = """
+      - name: Checkout trusted gate runtime (base ref)
+        uses: @@ACTION_CHECKOUT@@
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: gate-runtime
+          sparse-checkout: |
+            src/plate_core
+          sparse-checkout-cone-mode: true
+"""
+
 COLLECT_CHANGED_PATHS = """
       - name: Collect changed paths for release fragment
         if: |
@@ -381,7 +393,29 @@ COLLECT_CHANGED_PATHS = """
           set -euo pipefail
           pr_number="${{ github.event.pull_request.number }}"
           gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files" --paginate \\
-            --jq '.[] | select(.status != "removed") | .filename' > /tmp/pr-changed-paths.txt
+            --jq '.[] | [.filename, .status] | @tsv' > /tmp/pr-scope-paths.tsv
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files" --paginate \\
+            --jq '.[] | select(.status != "removed") | .filename' > /tmp/pr-active-paths.txt
+"""
+
+_GATE_RUNTIME_PLATE = """          export PYTHONPATH="${GITHUB_WORKSPACE}/gate-runtime/src"
+          if ! python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" 2>/dev/null; then
+            echo "Trusted gate runtime missing on base ref ${{ github.event.pull_request.base.sha }}; merge base must include plate_core gate modules." >&2
+            exit 1
+          fi
+"""
+
+_GATE_RUNTIME_TEMPLATE = """          if [ -d "${GITHUB_WORKSPACE}/gate-runtime/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/gate-runtime/src"
+          elif python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" 2>/dev/null; then
+            :
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@"
+            python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" || {
+              echo "plate-core==@@PLATE_CORE_VERSION@@ does not provide plate_core gate modules; publish or pin a compatible version." >&2
+              exit 1
+            }
+          fi
 """
 
 UNITTEST_POLICY_PLATE = """
@@ -390,11 +424,16 @@ UNITTEST_POLICY_PLATE = """
           github.event_name == 'pull_request' ||
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # pr-gates failure marker: stdlib unittest policy
           set -euo pipefail
-          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
-          python3 -m plate_core.pr_unittest_policy_gate --paths-file /tmp/pr-changed-paths.txt
+@@GATE_RUNTIME@@
+          python3 -m plate_core.pr_unittest_policy_gate \\
+            --paths-file /tmp/pr-active-paths.txt \\
+            --head-sha "${HEAD_SHA}" \\
+            --repo-root "${GITHUB_WORKSPACE}"
 """
 
 UNITTEST_POLICY_TEMPLATE = """
@@ -403,25 +442,16 @@ UNITTEST_POLICY_TEMPLATE = """
           github.event_name == 'pull_request' ||
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # pr-gates failure marker: stdlib unittest policy
           set -euo pipefail
-          run_unittest_policy_gate() {
-            python3 -m plate_core.pr_unittest_policy_gate --paths-file /tmp/pr-changed-paths.txt
-          }
-          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
-            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
-            run_unittest_policy_gate
-          elif python3 -c "import plate_core.pr_unittest_policy_gate" 2>/dev/null; then
-            run_unittest_policy_gate
-          else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
-            if python3 -c "import plate_core.pr_unittest_policy_gate" 2>/dev/null; then
-              run_unittest_policy_gate
-            else
-              echo "::warning title=Unittest policy (warn-only)::plate-core runtime unavailable; skipping unittest policy gate until plate-core is installed."
-            fi
-          fi
+@@GATE_RUNTIME@@
+          python3 -m plate_core.pr_unittest_policy_gate \\
+            --paths-file /tmp/pr-active-paths.txt \\
+            --head-sha "${HEAD_SHA}" \\
+            --repo-root "${GITHUB_WORKSPACE}"
 """
 
 FEATURE_FRAGMENT_PLATE = """
@@ -436,10 +466,13 @@ FEATURE_FRAGMENT_PLATE = """
         run: |
           # pr-gates failure marker: per-feature change files
           set -euo pipefail
-          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+@@GATE_RUNTIME@@
           pr_number="${{ github.event.pull_request.number }}"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
-          python3 -m plate_core.pr_release_fragment_gate --labels "${labels}" --paths-file /tmp/pr-changed-paths.txt
+          python3 -m plate_core.pr_release_fragment_gate \\
+            --labels "${labels}" \\
+            --scope-paths-file /tmp/pr-scope-paths.tsv \\
+            --active-paths-file /tmp/pr-active-paths.txt
 """
 
 FEATURE_FRAGMENT_TEMPLATE = """
@@ -454,24 +487,13 @@ FEATURE_FRAGMENT_TEMPLATE = """
         run: |
           # pr-gates failure marker: per-feature change files
           set -euo pipefail
+@@GATE_RUNTIME@@
           pr_number="${{ github.event.pull_request.number }}"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
-          run_release_fragment_gate() {
-            python3 -m plate_core.pr_release_fragment_gate --labels "${labels}" --paths-file /tmp/pr-changed-paths.txt
-          }
-          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
-            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
-            run_release_fragment_gate
-          elif python3 -c "import plate_core.pr_release_fragment_gate" 2>/dev/null; then
-            run_release_fragment_gate
-          else
-            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
-            if python3 -c "import plate_core.pr_release_fragment_gate" 2>/dev/null; then
-              run_release_fragment_gate
-            else
-              echo "::warning title=Release fragment (warn-only)::plate-core runtime unavailable; skipping release fragment gate until plate-core is installed."
-            fi
-          fi
+          python3 -m plate_core.pr_release_fragment_gate \\
+            --labels "${labels}" \\
+            --scope-paths-file /tmp/pr-scope-paths.tsv \\
+            --active-paths-file /tmp/pr-active-paths.txt
 """
 
 REVIEWER_MODEL_TEMPLATE = """
@@ -610,20 +632,24 @@ def build(variant: str) -> str:
         if variant == "plate"
         else REVIEWER_MODEL_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
     )
-    unittest_run = (
-        UNITTEST_POLICY_PLATE
+    gate_runtime = (
+        _GATE_RUNTIME_PLATE
         if variant == "plate"
-        else UNITTEST_POLICY_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
+        else _GATE_RUNTIME_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
+    )
+    unittest_run = (
+        (UNITTEST_POLICY_PLATE if variant == "plate" else UNITTEST_POLICY_TEMPLATE)
+        .replace("@@GATE_RUNTIME@@", gate_runtime)
     )
     fragment_run = (
-        FEATURE_FRAGMENT_PLATE
-        if variant == "plate"
-        else FEATURE_FRAGMENT_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
+        (FEATURE_FRAGMENT_PLATE if variant == "plate" else FEATURE_FRAGMENT_TEMPLATE)
+        .replace("@@GATE_RUNTIME@@", gate_runtime)
     )
     body = HEADER.replace("@@LINUX_RUNS_ON@@", LINUX_RUNS_ON_VAR_EXPRESSION)
     body = body.replace("@@ACTION_CHECKOUT@@", ACTION_CHECKOUT)
     body = body.replace("@@ACTION_GITHUB_SCRIPT@@", ACTION_GITHUB_SCRIPT)
     body = body.replace("@@COLLECT_CHANGED_PATHS@@", COLLECT_CHANGED_PATHS.lstrip("\n").rstrip())
+    body = body.replace("@@CHECKOUT_GATE_RUNTIME@@", CHECKOUT_GATE_RUNTIME.lstrip("\n").rstrip())
     body = body.replace("@@TITLE_SCRIPT@@", title_script)
     body = body.replace("@@ISSUE_LINK_SCRIPT@@", issue_link_script)
     body = body.replace("@@MAIN_SOURCE_RUN@@", main_source_run.lstrip("\n").rstrip())

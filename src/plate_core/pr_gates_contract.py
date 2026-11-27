@@ -346,9 +346,8 @@ def validate_feature_fragment_ignores_removed_files(text: str) -> list[str]:
         errors.append(
             "Feature fragment gate must delegate to plate_core.pr_release_fragment_gate"
         )
-    paths_idx = text.find("pr-changed-paths.txt")
-    if paths_idx < 0:
-        errors.append("missing pr-changed-paths.txt wiring for fragment gate paths file")
+    if "pr-scope-paths.tsv" not in text or "pr-active-paths.txt" not in text:
+        errors.append("missing pr-scope-paths.tsv / pr-active-paths.txt path manifest wiring")
     collect_idx = text.find("Collect changed paths for release fragment")
     if collect_idx < 0:
         errors.append("missing Collect changed paths for release fragment step")
@@ -359,10 +358,14 @@ def validate_feature_fragment_ignores_removed_files(text: str) -> list[str]:
         or 'status != "removed"' in collect_block
         or "status != 'removed'" in collect_block
     )
+    if "pr-scope-paths.tsv" not in collect_block:
+        errors.append("changed-path collection must write pr-scope-paths.tsv with status")
     if not removed_filter:
         errors.append(
-            'changed-path collection must filter out removed files (status ==/!= "removed")'
+            'changed-path collection must filter removed files when building active path list'
         )
+    if "gate-runtime" not in text or "Checkout trusted gate runtime" not in text:
+        errors.append("missing trusted base-ref gate-runtime checkout")
     return errors
 
 
