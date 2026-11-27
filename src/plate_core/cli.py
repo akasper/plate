@@ -4391,7 +4391,7 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
 
     # Basic validation + release.json load (reuse existing machinery)
     try:
-        from plate_core.release import validate_release_workspace, _load_release
+        from plate_core.release import validate_release_workspace, _load_release, resolve_releases_dir
         report = validate_release_workspace(Path("."), releases_dir=releases_dir)
         if report.errors:
             print("Validation errors:", report.errors)
@@ -4403,6 +4403,7 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
+        releases_dir = resolve_releases_dir(Path(report.repo_root), releases_dir)
         release_data = _load_release(releases_dir, bare_version) or {}
         if not release_data:
             print(f"Error: no release artifact for v{bare_version}.", file=sys.stderr)
@@ -4473,7 +4474,15 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     )
     print(f"Next Release release-window label: {rw_close}")
 
-    next_info = ensure_next_release_issue(dry_run=mutate)
+    predecessor_issue: int | None = None
+    if isinstance(cut_cycle_issue, int):
+        predecessor_issue = cut_cycle_issue
+    elif isinstance(cut_cycle_issue, str) and cut_cycle_issue.isdigit():
+        predecessor_issue = int(cut_cycle_issue)
+    next_info = ensure_next_release_issue(
+        dry_run=mutate,
+        predecessor_issue_number=predecessor_issue,
+    )
     print(f"Next Release issue: {next_info}")
 
     gh_plate_plan = plan_gh_plate_sync(version)

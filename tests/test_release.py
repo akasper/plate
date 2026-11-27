@@ -1435,6 +1435,48 @@ class FinalizeAutomationTests(unittest.TestCase):
 
     @patch("plate_core.release._release_git_root")
     @patch("plate_core.release.run_hidden")
+    def test_fast_forward_plan_mode_skips_fetch_in_user_checkout(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+        tag_commit = "a" * 40
+        release_tip = "b" * 40
+        fetch_calls: list[list[str]] = []
+
+        def fake_run(argv, **kwargs):
+            cwd = kwargs.get("cwd")
+            if argv[:2] == ["git", "fetch"]:
+                if cwd == "/tmp/repo" or cwd == str(Path("/tmp/repo")):
+                    fetch_calls.append(list(argv))
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "ls-remote", "--tags"]:
+                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v0.9.0", "returncode": 0})()
+            if argv[:3] == ["git", "ls-remote", "--heads"]:
+                branch = argv[4]
+                if branch == "release":
+                    return type("P", (), {"stdout": f"{release_tip} refs/heads/release", "returncode": 0})()
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "remote"]:
+                return type("P", (), {"stdout": "https://github.com/o/r.git", "returncode": 0})()
+            if argv[:2] == ["git", "init"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "remote", "add"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        info = fast_forward_release_branches(
+            "v0.9.0",
+            dry_run=True,
+            apply=False,
+            branches=("release",),
+        )
+        self.assertTrue(info.get("ok"))
+        self.assertEqual(fetch_calls, [])
+        self.assertEqual(info["results"][0]["status"], "would_fast_forward")
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
     def test_fast_forward_idempotent_noop(self, mock_run, mock_root):
         mock_root.return_value = Path("/tmp/repo")
         sha = "samecommit"
@@ -1557,6 +1599,37 @@ class FinalizeAutomationTests(unittest.TestCase):
             ]
         }
         self.assertEqual(inherit_next_release_milestone_number(client=mock_client), 7)
+
+    @patch("plate_core.release.resolve_repo", return_value="owner/repo")
+    @patch("plate_core.release.GhClient")
+    def test_inherit_milestone_from_renamed_predecessor_issue(self, mock_client_cls, _repo):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = [
+            {"milestone": {"number": 11}, "title": "v0.13.0"},
+        ]
+        self.assertEqual(
+            inherit_next_release_milestone_number(client=mock_client, from_issue_number=200),
+            11,
+        )
+        mock_client.api.assert_called_once_with("repos/owner/repo/issues/200")
+
+    @patch("plate_core.release.resolve_repo", return_value="owner/repo")
+    @patch("plate_core.release.GhClient")
+    def test_ensure_next_release_uses_predecessor_milestone(self, mock_client_cls, _repo):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = [
+            {"items": []},
+            {"milestone": {"number": 9}, "title": "v0.12.0"},
+            {"number": 300, "html_url": "https://ex/300"},
+        ]
+        info = ensure_next_release_issue(
+            client=mock_client,
+            predecessor_issue_number=200,
+        )
+        self.assertTrue(info.get("created"))
+        create_call = mock_client.api.call_args_list[-1]
+        self.assertEqual(create_call[0][0], "repos/owner/repo/issues")
+        self.assertEqual(create_call[1]["fields"]["milestone"], 9)
 
     @patch("plate_core.release.GhClient")
     def test_release_window_cleared_on_cut_cycle_closed_issue(self, mock_client_cls):

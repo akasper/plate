@@ -214,8 +214,14 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         ):
             workflow = read_text(rel)
             self.assertIn("Require lifecycle App token for tag push on official repo", workflow)
-            self.assertIn("x-access-token:${PLATE_APP_TOKEN}", workflow)
             self.assertIn("id: plate-app-token", workflow)
+            self.assertIn(
+                "token: ${{ steps.plate-app-token.outputs.token || github.token }}",
+                workflow,
+            )
+            checkout_idx = workflow.index("uses: actions/checkout@v4")
+            token_step_idx = workflow.index("id: plate-app-token")
+            self.assertLess(token_step_idx, checkout_idx, msg=rel)
 
     def test_release_workflow_waits_for_publishers_after_tag_push(self):
         workflow = read_text(".github/workflows/release.yml")

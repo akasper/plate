@@ -30,11 +30,6 @@ jobs:
       PLATE_FF_APP_ID: ${{ secrets.PLATE_APP_ID }}
       PLATE_FF_APP_PRIVATE_KEY: ${{ secrets.PLATE_APP_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
-
       - name: Require lifecycle App token for tag push on official repo
         if: ${{ github.repository == 'akasper/plate' && (env.PLATE_FF_APP_ID == '' || env.PLATE_FF_APP_PRIVATE_KEY == '') }}
         run: |
@@ -50,6 +45,12 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: |
             ${{ github.event.repository.name }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          token: ${{ steps.plate-app-token.outputs.token || github.token }}
 
       - name: Resolve release artifact version
         id: release-version
@@ -104,9 +105,6 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git tag "${RELEASE_TAG}" "${MERGE_SHA}"
-            if [ -n "${PLATE_APP_TOKEN:-}" ]; then
-              git remote set-url origin "https://x-access-token:${PLATE_APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-            fi
             git push origin "refs/tags/${RELEASE_TAG}"
             echo "Created ${RELEASE_TAG} at ${MERGE_SHA}."
             exit 0

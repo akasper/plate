@@ -1449,13 +1449,34 @@ def find_standing_next_release_issue(
     return None
 
 
+def _issue_milestone_number(
+    issue_number: int,
+    *,
+    repo: str,
+    client: GhClient,
+) -> int | None:
+    try:
+        detail = client.api(f"repos/{repo}/issues/{issue_number}") or {}
+    except Exception:
+        return None
+    milestone = detail.get("milestone") or {}
+    number = milestone.get("number")
+    return int(number) if number is not None else None
+
+
 def inherit_next_release_milestone_number(
     repo: str | None = None,
     client: GhClient | None = None,
+    *,
+    from_issue_number: int | None = None,
 ) -> int | None:
     """Return the milestone number from the most recent Next Release issue, if any (#1488)."""
     gh = client or GhClient()
     target = resolve_repo(repo)
+    if from_issue_number is not None:
+        number = _issue_milestone_number(from_issue_number, repo=target, client=gh)
+        if number is not None:
+            return number
     q = quote_plus(f'repo:{target} is:issue label:Release "Next Release"')
     try:
         search = gh.api(f"search/issues?q={q}") or {}
@@ -1624,6 +1645,83 @@ def _remote_branch_exists(branch: str, *, cwd: str) -> bool:
     return bool((proc.stdout or "").strip())
 
 
+def _parse_ls_remote_first_sha(stdout: str) -> str | None:
+    for line in (stdout or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        sha = stripped.split(maxsplit=1)[0]
+        if len(sha) >= 7:
+            return sha
+    return None
+
+
+def _ls_remote_sha(*, kind: str, name: str, cwd: str) -> str | None:
+    flag = "--tags" if kind == "tags" else "--heads"
+    proc = run_hidden(
+        ["git", "ls-remote", flag, "origin", name],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return _parse_ls_remote_first_sha(proc.stdout or "")
+
+
+def _is_git_ancestor_ephemeral(ancestor: str, descendant: str, *, cwd: str) -> bool:
+    """Ancestry check in a disposable repo so plan-only finalize does not fetch into the user checkout."""
+    import tempfile
+
+    url_proc = run_hidden(
+        ["git", "remote", "get-url", "origin"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if url_proc.returncode != 0:
+        return False
+    remote_url = (url_proc.stdout or "").strip()
+    if not remote_url:
+        return False
+    with tempfile.TemporaryDirectory(prefix="plate-ff-plan-") as tmp:
+        init_proc = run_hidden(["git", "init"], cwd=tmp, capture_output=True, text=True, check=False)
+        if init_proc.returncode != 0:
+            return False
+        remote_proc = run_hidden(
+            ["git", "remote", "add", "origin", remote_url],
+            cwd=tmp,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if remote_proc.returncode != 0:
+            return False
+        fetch_proc = run_hidden(
+            ["git", "fetch", "--quiet", "--depth", "500", "origin", ancestor, descendant],
+            cwd=tmp,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if fetch_proc.returncode != 0:
+            return False
+        proc = run_hidden(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            cwd=tmp,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return proc.returncode == 0
+
+
+def _is_git_ancestor_for_plan(ancestor: str, descendant: str, *, cwd: str) -> bool:
+    if _is_git_ancestor(ancestor, descendant, cwd=cwd):
+        return True
+    return _is_git_ancestor_ephemeral(ancestor, descendant, cwd=cwd)
+
+
 def _resolve_local_ref(ref: str, *, cwd: str) -> str | None:
     proc = run_hidden(
         ["git", "rev-parse", ref],
@@ -1715,26 +1813,43 @@ def fast_forward_release_branches(
     except Exception as exc:
         return {"ok": False, "error": f"tag_check_failed: {exc}", "tag": tag_name}
 
+    plan_only = dry_run or not apply
     try:
         root = _release_git_root(repo_root)
         cwd = str(root)
-        fetch_refs = [tag_name, *branch_list]
-        fetch_proc = run_hidden(
-            ["git", "fetch", "origin", *fetch_refs],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if fetch_proc.returncode != 0:
-            return {
-                "ok": False,
-                "error": "fetch_failed",
-                "tag": tag_name,
-                "stderr": fetch_proc.stderr or fetch_proc.stdout,
-            }
+        if plan_only:
+            tag_commit = _ls_remote_sha(kind="tags", name=tag_name, cwd=cwd)
+            if not tag_commit:
+                tag_commit = _parse_ls_remote_first_sha(
+                    run_hidden(
+                        ["git", "ls-remote", "--tags", "origin", tag_name],
+                        cwd=cwd,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    ).stdout
+                    or ""
+                )
+        else:
+            fetch_refs = [tag_name, *branch_list]
+            fetch_proc = run_hidden(
+                ["git", "fetch", "origin", *fetch_refs],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if fetch_proc.returncode != 0:
+                return {
+                    "ok": False,
+                    "error": "fetch_failed",
+                    "tag": tag_name,
+                    "stderr": fetch_proc.stderr or fetch_proc.stdout,
+                }
+            tag_commit = _resolve_local_ref(f"refs/tags/{tag_name}", cwd=cwd) or _resolve_local_ref(
+                tag_name, cwd=cwd
+            )
 
-        tag_commit = _resolve_local_ref(f"refs/tags/{tag_name}", cwd=cwd) or _resolve_local_ref(tag_name, cwd=cwd)
         if not tag_commit:
             return {"ok": False, "error": "tag_commit_unresolved", "tag": tag_name}
 
@@ -1744,7 +1859,10 @@ def fast_forward_release_branches(
                 results.append({"branch": branch, "status": "skipped_missing"})
                 continue
 
-            branch_tip = _resolve_local_ref(f"origin/{branch}", cwd=cwd)
+            if plan_only:
+                branch_tip = _ls_remote_sha(kind="heads", name=branch, cwd=cwd)
+            else:
+                branch_tip = _resolve_local_ref(f"origin/{branch}", cwd=cwd)
             if not branch_tip:
                 return {
                     "ok": False,
@@ -1759,12 +1877,13 @@ def fast_forward_release_branches(
                 results.append({"branch": branch, "status": "noop", "commit": branch_tip})
                 continue
 
-            if not _is_git_ancestor(branch_tip, tag_commit, cwd=cwd):
+            ancestor_check = _is_git_ancestor_for_plan if plan_only else _is_git_ancestor
+            if not ancestor_check(branch_tip, tag_commit, cwd=cwd):
                 blocked = {
                     "branch": branch,
                     "branch_tip": branch_tip,
                     "tag_commit": tag_commit,
-                    "unshipped_commits": _unshipped_commit_summaries(tag_commit, branch, cwd=cwd),
+                    "unshipped_commits": [] if plan_only else _unshipped_commit_summaries(tag_commit, branch, cwd=cwd),
                 }
                 return {
                     "ok": False,
@@ -1776,7 +1895,7 @@ def fast_forward_release_branches(
                 }
 
             push_ref = f"{tag_commit}:refs/heads/{branch}"
-            if dry_run or not apply:
+            if plan_only:
                 results.append(
                     {
                         "branch": branch,
@@ -2036,6 +2155,7 @@ def ensure_next_release_issue(
     client: GhClient | None = None,
     *,
     dry_run: bool = False,
+    predecessor_issue_number: int | None = None,
 ) -> dict:
     """Ensure a standing 'Next Release' issue (label: Release, title containing Next) exists.
     Low-risk; used by finalize for ceremony completeness.
@@ -2054,7 +2174,11 @@ def ensure_next_release_issue(
                 "exists": True,
                 "issue": {"number": item.get("number"), "url": item.get("html_url")},
             }
-    milestone_number = inherit_next_release_milestone_number(repo=target, client=gh)
+    milestone_number = inherit_next_release_milestone_number(
+        repo=target,
+        client=gh,
+        from_issue_number=predecessor_issue_number,
+    )
     if dry_run:
         return {
             "ok": True,

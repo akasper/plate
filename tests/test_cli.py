@@ -485,8 +485,9 @@ class CliTests(unittest.TestCase):
         mock_plan_sync,
     ):
         """#1439: close release window on the cut-cycle issue before creating the next standing Next Release."""
+        repo_root = str(Path(__file__).resolve().parents[1])
         mock_validate.return_value = type(
-            "R", (), {"errors": [], "release_version": "0.7.1"}
+            "R", (), {"errors": [], "release_version": "0.7.1", "repo_root": repo_root}
         )()
         mock_load_release.return_value = {
             "version": "0.7.1",
@@ -523,6 +524,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(_rw_kwargs.get("extra_issue_numbers"), [1454])
         mock_ensure.assert_called_once()
         self.assertTrue(mock_ensure.call_args.kwargs.get("dry_run"))
+        self.assertEqual(mock_ensure.call_args.kwargs.get("predecessor_issue_number"), 1454)
 
     @patch("plate_core.release.validate_release_workspace")
     @patch("plate_core.release._load_release")
@@ -534,8 +536,9 @@ class CliTests(unittest.TestCase):
         self, mock_ensure, mock_reset, mock_ff, mock_create, mock_load, mock_validate
     ):
         """#592/#1434: finalize dry-run simulates; fast-forward on --apply; hard reset only with --force-hard-reset."""
+        repo_root = str(Path(__file__).resolve().parents[1])
         mock_validate.return_value = type(
-            "R", (), {"errors": [], "release_version": "0.7.1"}
+            "R", (), {"errors": [], "release_version": "0.7.1", "repo_root": repo_root}
         )()
         mock_load.return_value = {"version": "0.7.1"}
         mock_create.return_value = {"tag": "v0.7.1", "exists": True, "created": False}
