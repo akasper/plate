@@ -755,6 +755,41 @@ def _origin_slug_for_repo_dir(repo_dir: str) -> str | None:
     return _slug_from_github_remote_url(url)
 
 
+_RE_HTTP_URL = re.compile(r"https?://[^\s'\"]+", re.IGNORECASE)
+
+
+def _redact_url_userinfo(url: str) -> str:
+    """Strip embedded credentials from an HTTP(S) remote URL (#1474)."""
+    text = (url or "").strip()
+    if not text:
+        return text
+    return re.sub(
+        r"(?P<scheme>https?)://(?:[^@/\s]+@)",
+        r"\g<scheme>://",
+        text,
+        count=1,
+    )
+
+
+def _scrub_git_remote_text(text: str) -> str:
+    """Remove userinfo from any HTTP(S) URLs embedded in git command output."""
+    if not text:
+        return text
+
+    def repl(match: re.Match[str]) -> str:
+        return _redact_url_userinfo(match.group(0))
+
+    return _RE_HTTP_URL.sub(repl, text)
+
+
+def _push_remote_display_label(url: str) -> str:
+    """Safe label for errors: owner/repo slug when possible, else redacted URL."""
+    slug = _slug_from_github_remote_url(url)
+    if slug:
+        return slug
+    return _redact_url_userinfo(url) or "<redacted remote url>"
+
+
 def _git_effective_push_urls(repo_dir: str) -> tuple[list[str], str | None]:
     """Push destination URLs for ``origin``, including multi-valued and url.* rewrites (#1474)."""
     proc = run_hidden(
@@ -776,18 +811,20 @@ def _validate_push_remotes_match_target(target_repo: str, repo_dir: str) -> str 
     """Fail closed unless every git-resolved push URL for origin matches the PR repo (#1474)."""
     urls, cmd_err = _git_effective_push_urls(repo_dir)
     if cmd_err:
-        detail = cmd_err.lower()
+        safe_err = _scrub_git_remote_text(cmd_err)
+        detail = safe_err.lower()
         if "no such remote" in detail:
-            return f"missing git remote origin for push ({cmd_err}); refuse force-push"
-        return f"cannot resolve git push remotes for origin ({cmd_err}); refuse force-push"
+            return f"missing git remote origin for push ({safe_err}); refuse force-push"
+        return f"cannot resolve git push remotes for origin ({safe_err}); refuse force-push"
     if not urls:
         return "missing git push URLs for origin; refuse force-push"
     target_l = target_repo.lower()
     for raw in urls:
         slug = _slug_from_github_remote_url(raw)
         if not slug:
+            label = _push_remote_display_label(raw)
             return (
-                f"push remote URL does not resolve to GitHub owner/repo ({raw!r}); "
+                f"push remote URL does not resolve to GitHub owner/repo ({label!r}); "
                 "refuse force-push"
             )
         if slug.lower() != target_l:

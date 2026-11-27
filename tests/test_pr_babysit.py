@@ -20,6 +20,7 @@ from plate_core.pr_babysit import (
     _git_index_lock_is_stale,
     _perform_local_rebase,
     _validate_local_rebase_preconditions,
+    _redact_url_userinfo,
     _validate_push_remotes_match_target,
     babysit_pr,
     cleanup_git_locks,
@@ -1260,6 +1261,29 @@ class BabysitActHarden1474Tests(unittest.TestCase):
             err2 = _validate_local_rebase_preconditions("akasper/plate", same_repo, "/tmp/r")
         self.assertIn("origin", (err2 or "").lower())
 
+    def test_push_remotes_refuses_empty_url_list(self):
+        with patch(
+            "plate_core.pr_babysit._git_effective_push_urls",
+            return_value=([], None),
+        ):
+            err = _validate_push_remotes_match_target("akasper/plate", "/tmp/r")
+        self.assertEqual(err, "missing git push URLs for origin; refuse force-push")
+
+    def test_push_remotes_error_redacts_embedded_credentials(self):
+        secret_url = "https://x-access-token:SECRET_TOKEN@github.com/evil/plate.git"
+        with patch(
+            "plate_core.pr_babysit._git_effective_push_urls",
+            return_value=([secret_url], None),
+        ):
+            err = _validate_push_remotes_match_target("akasper/plate", "/tmp/r")
+        self.assertIn("evil/plate", err or "")
+        self.assertNotIn("SECRET_TOKEN", err or "")
+        self.assertNotIn("x-access-token", err or "")
+        self.assertEqual(
+            _redact_url_userinfo(secret_url),
+            "https://github.com/evil/plate.git",
+        )
+
     def test_push_remotes_fail_closed_on_missing_or_bad_origin(self):
         with patch(
             "plate_core.pr_babysit._git_effective_push_urls",
@@ -1270,10 +1294,11 @@ class BabysitActHarden1474Tests(unittest.TestCase):
 
         with patch(
             "plate_core.pr_babysit._git_effective_push_urls",
-            return_value=(["git@not-github.example:foo/bar.git"], None),
+            return_value=(["https://user:pass@not-github.example/foo/bar.git"], None),
         ):
             err2 = _validate_push_remotes_match_target("akasper/plate", "/tmp/r")
         self.assertIn("does not resolve", (err2 or "").lower())
+        self.assertNotIn("pass", err2 or "")
 
     def test_push_remotes_rejects_multi_valued_push_urls_if_any_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:
