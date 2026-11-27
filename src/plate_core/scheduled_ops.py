@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .state_store import CorruptStateError, load_strict, locked_json
+from .state_store import CorruptStateError, load_strict, locked_json, mutate_json
 
 OPS_DIR = Path(".agentic/scheduled_ops")
 RUNS_FILE = "runs.json"
@@ -247,6 +247,17 @@ def _save(data: dict[str, Any], base: Path | None = None) -> Path:
         stored.clear()
         stored.update(_normalize_store(dict(data)))
     return path
+
+
+def _mutate_store(base: Path | None, mutator) -> dict[str, Any]:
+    """Locked read-modify-write for scheduled op runs (#1476)."""
+    path = _store_path(base)
+
+    def _wrap(data: dict[str, Any]) -> None:
+        _normalize_store(data)
+        mutator(data)
+
+    return mutate_json(path, _wrap, missing_factory=_empty_store)
 
 
 def render_op_marker(payload: dict[str, Any]) -> str:
@@ -692,16 +703,17 @@ def run_scheduled_op(
             run.notes.append(f"shadow preview {shadow_id} attached")
         run.status = "done"
 
-    data = _load(base_dir)
-    data["runs"].append(run.to_dict())
-    if not blocked:
-        data["last_run_by_op"][op_id] = {
-            "run_id": run.id,
-            "at": ts,
-            "dry_run": dry_run,
-            "status": run.status,
-        }
-    _save(data, base_dir)
+    def _append_run(data: dict[str, Any]) -> None:
+        data["runs"].append(run.to_dict())
+        if not blocked:
+            data["last_run_by_op"][op_id] = {
+                "run_id": run.id,
+                "at": ts,
+                "dry_run": dry_run,
+                "status": run.status,
+            }
+
+    _mutate_store(base_dir, _append_run)
 
     out: dict[str, Any] = {
         "ok": not blocked,

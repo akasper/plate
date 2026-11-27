@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .state_store import CorruptStateError, load_strict, locked_json
+from .state_store import CorruptStateError, load_strict, locked_json, mutate_json
 
 FLEET_DIR = Path(".agentic/fleet")
 HANDOFFS_FILE = "handoffs.json"
@@ -157,6 +157,15 @@ def _save(data: dict[str, Any], base: Path | None = None) -> Path:
         stored.clear()
         stored.update(_normalize_store(dict(data)))
     return path
+
+
+def _mutate_store(base: Path | None, mutator) -> dict[str, Any]:
+    """Locked read-modify-write for fleet handoffs (#1476)."""
+    path = _store_path(base)
+    def _wrap(data: dict[str, Any]) -> None:
+        _normalize_store(data)
+        mutator(data)
+    return mutate_json(path, _wrap, missing_factory=_empty_store)
 
 
 def list_fleet_roles() -> list[dict[str, Any]]:
@@ -402,9 +411,7 @@ def create_handoff(
             "block_reason", "requires_human_or_high_risk_until_accepted"
         )
 
-    data = _load(base_dir)
-    data["handoffs"].append(packet.to_dict())
-    _save(data, base_dir)
+    _mutate_store(base_dir, lambda data: data["handoffs"].append(packet.to_dict()))
 
     out: dict[str, Any] = {
         "ok": True,
@@ -465,13 +472,15 @@ def create_handoff(
             if isinstance(cp, dict) and cp.get("id"):
                 out["checkpoint_id"] = cp["id"]
                 # store on packet
-                for h in data["handoffs"]:
-                    if h.get("handoff_id") == packet.handoff_id:
-                        h.setdefault("context", {})["checkpoint_id"] = cp["id"]
-                        h["updated_at"] = _now()
-                        out["handoff"] = h
-                        break
-                _save(data, base_dir)
+                def _attach_cp(data: dict[str, Any]) -> None:
+                    for h in data["handoffs"]:
+                        if h.get("handoff_id") == packet.handoff_id:
+                            h.setdefault("context", {})["checkpoint_id"] = cp["id"]
+                            h["updated_at"] = _now()
+                            out["handoff"] = h
+                            break
+
+                _mutate_store(base_dir, _attach_cp)
         except Exception:
             pass
 

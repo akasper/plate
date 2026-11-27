@@ -30,7 +30,7 @@ class StateStoreFoundationTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "probe.json"
             path.write_text('{"before": true}\n', encoding="utf-8")
-            with patch("plate_core.pr_watch_guards.os.replace", side_effect=OSError("boom")):
+            with patch("plate_core.state_store.os.replace", side_effect=OSError("boom")):
                 with self.assertRaises(OSError):
                     atomic_write_json(path, {"after": True})
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"before": True})
@@ -101,7 +101,6 @@ class StateStoreFoundationTests(unittest.TestCase):
             with locked_json(path, missing_factory=lambda: {"ok": True}) as data:
                 data["ok"] = True
             self.assertTrue(path.is_file())
-            self.assertFalse(lock_path.exists())
 
     def test_stale_lock_is_reclaimed(self):
         with TemporaryDirectory() as tmp:
@@ -111,7 +110,6 @@ class StateStoreFoundationTests(unittest.TestCase):
             with locked_json(path, missing_factory=lambda: {"ok": True}) as data:
                 data["ok"] = True
             self.assertTrue(path.is_file())
-            self.assertFalse(lock_path.exists())
 
     def test_machine_rejects_unknown_state_and_event(self):
         machine = Machine(

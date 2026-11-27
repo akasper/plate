@@ -26,6 +26,7 @@ from .procutil import run_hidden
 from .epics import get_epic_status
 from .health import get_health
 from .plate_config import load_plate_config, get_plate_config_report
+from .state_store import CorruptStateError, locked_json
 
 # Durable shadow previews (#645 harden): survive process restarts so shadow_ack works
 # across MCP/CLI sessions. Mirrors .agentic/checkpoints and .agentic/ledger layout.
@@ -275,24 +276,29 @@ def _budget_spend_path(base_dir: Path | None = None) -> Path:
 
 
 def load_budget_spend(*, base_dir: Path | None = None) -> dict[str, Any]:
-    """Load durable spend counters for #634 (empty dict if missing)."""
+    """Load durable spend counters for #634 (empty dict if missing).
+
+    Corrupt spend files raise ``CorruptStateError`` (fail-closed; #1476).
+    """
+    from .state_store import load_strict
+
     path = _budget_spend_path(base_dir)
     if not path.is_file():
         return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+    data = load_strict(path)
+    return data if isinstance(data, dict) else {}
 
 
 def save_budget_spend(data: dict[str, Any], *, base_dir: Path | None = None) -> Path:
-    """Persist durable spend counters under .agentic/budget/spend.json."""
+    """Persist durable spend counters under .agentic/budget/spend.json (locked, atomic)."""
     path = _budget_spend_path(base_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(data)
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    snap = dict(payload)
+    with locked_json(path, missing_factory=lambda: dict(snap)) as stored:
+        stored.clear()
+        stored.update(payload)
     return path
 
 
@@ -315,58 +321,63 @@ def record_budget_spend(
     """
     tok = max(0, int(tokens or 0))
     today = datetime.now(timezone.utc).date().isoformat()
+    path = _budget_spend_path(base_dir)
     try:
-        data = load_budget_spend(base_dir=base_dir) or {}
-        stored_day = str(data.get("date") or data.get("day") or "")
-        if stored_day != today:
-            data = {
-                "date": today,
-                "spent_today": 0,
-                "spent_this_cycle": 0,
-                "spent_usd_today": 0.0,
-                "throttled_actions": int(data.get("throttled_actions") or 0),
-            }
-        else:
-            data = dict(data)
-            data["date"] = today
-        try:
-            spent_today = int(data.get("spent_today") or 0)
-        except (TypeError, ValueError):
-            spent_today = 0
-        try:
-            spent_cycle = int(data.get("spent_this_cycle") or 0)
-        except (TypeError, ValueError):
-            spent_cycle = 0
-        try:
-            spent_usd = float(data.get("spent_usd_today") or 0.0)
-        except (TypeError, ValueError):
-            spent_usd = 0.0
+        with locked_json(path, missing_factory=lambda: {"date": today}) as data:
+            stored_day = str(data.get("date") or data.get("day") or "")
+            if stored_day != today:
+                throttled = int(data.get("throttled_actions") or 0)
+                data.clear()
+                data.update(
+                    {
+                        "date": today,
+                        "spent_today": 0,
+                        "spent_this_cycle": 0,
+                        "spent_usd_today": 0.0,
+                        "throttled_actions": throttled,
+                    }
+                )
+            else:
+                data["date"] = today
+            try:
+                spent_today = int(data.get("spent_today") or 0)
+            except (TypeError, ValueError):
+                spent_today = 0
+            try:
+                spent_cycle = int(data.get("spent_this_cycle") or 0)
+            except (TypeError, ValueError):
+                spent_cycle = 0
+            try:
+                spent_usd = float(data.get("spent_usd_today") or 0.0)
+            except (TypeError, ValueError):
+                spent_usd = 0.0
 
-        spent_today += tok
-        if charge_cycle:
-            spent_cycle += tok
-        spent_usd += tokens_to_usd(tok)
+            spent_today += tok
+            if charge_cycle:
+                spent_cycle += tok
+            spent_usd += tokens_to_usd(tok)
 
-        data["spent_today"] = spent_today
-        data["spent_this_cycle"] = spent_cycle
-        data["spent_usd_today"] = round(spent_usd, 6)
-        if reason:
-            data["last_reason"] = str(reason)[:200]
-        if action_kind:
-            data["last_action_kind"] = str(action_kind)[:80]
-        path = save_budget_spend(data, base_dir=base_dir)
+            data["spent_today"] = spent_today
+            data["spent_this_cycle"] = spent_cycle
+            data["spent_usd_today"] = round(spent_usd, 6)
+            if reason:
+                data["last_reason"] = str(reason)[:200]
+            if action_kind:
+                data["last_action_kind"] = str(action_kind)[:80]
+            result_path = path
+            spent_out = dict(data)
         return {
             "ok": True,
             "charged_tokens": tok,
-            "spent_today": spent_today,
-            "spent_this_cycle": spent_cycle,
-            "spent_usd_today": data["spent_usd_today"],
-            "path": str(path),
+            "spent_today": int(spent_out.get("spent_today") or 0),
+            "spent_this_cycle": int(spent_out.get("spent_this_cycle") or 0),
+            "spent_usd_today": spent_out.get("spent_usd_today"),
+            "path": str(result_path),
             "date": today,
             "reason": reason,
             "action_kind": action_kind,
         }
-    except OSError as exc:
+    except (OSError, CorruptStateError) as exc:
         return {
             "ok": False,
             "error": str(exc),
@@ -390,7 +401,10 @@ def reset_budget_spend(
     """
     today = datetime.now(timezone.utc).date().isoformat()
     try:
-        prior = load_budget_spend(base_dir=base_dir) or {}
+        try:
+            prior = load_budget_spend(base_dir=base_dir) or {}
+        except CorruptStateError:
+            prior = {}
         prior_spent = 0
         try:
             prior_spent = int(prior.get("spent_today") or 0)
@@ -472,9 +486,41 @@ def apply_live_budget_charge(
     return out
 
 
-def tokens_to_usd(tokens: int) -> float:
+def usd_per_1k_tokens(autonomy_config: dict[str, Any] | None = None) -> float:
+    """Configurable heuristic USD rate per 1k tokens (#1476)."""
+    cfg = autonomy_config or {}
+    raw = cfg.get("usd_per_1k_tokens")
+    if raw is None:
+        tb = cfg.get("token_budget")
+        if isinstance(tb, dict):
+            raw = tb.get("usd_per_1k_tokens")
+    try:
+        rate = float(raw) if raw is not None else _USD_PER_1K_TOKENS
+    except (TypeError, ValueError):
+        rate = _USD_PER_1K_TOKENS
+    return rate if rate >= 0 else _USD_PER_1K_TOKENS
+
+
+def tokens_to_usd(tokens: int, *, rate_per_1k: float | None = None) -> float:
     """Heuristic USD projection for cost_ceiling enforcement (#634)."""
-    return round((max(0, int(tokens)) / 1000.0) * _USD_PER_1K_TOKENS, 6)
+    rate = _USD_PER_1K_TOKENS if rate_per_1k is None else rate_per_1k
+    return round((max(0, int(tokens)) / 1000.0) * rate, 6)
+
+
+def _budget_int_cap(raw: Any, default: int) -> int:
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _budget_action_policy(tb: dict[str, Any], *, default: str = "pause") -> str:
+    policy = str(tb.get("action") or default).lower()
+    if policy not in ("pause", "throttle", "warn"):
+        return "pause"
+    return policy
 
 
 @dataclass
@@ -773,7 +819,10 @@ class AutonomyEngine:
 
     def _load_durable_spend(self) -> None:
         """Hydrate spend counters from .agentic/budget/spend.json for process-safe #634 enforcement."""
-        data = load_budget_spend(base_dir=self.budget_base_dir)
+        try:
+            data = load_budget_spend(base_dir=self.budget_base_dir)
+        except CorruptStateError:
+            return
         if not data:
             return
         today = datetime.now(timezone.utc).date().isoformat()
@@ -1170,7 +1219,10 @@ class AutonomyEngine:
         est = int(est * 1.20)  # +20% buffer
 
         # cap relative to per_cycle (leave headroom, never propose >90% of cycle alone)
-        cap = self.autonomy_config.get("token_budget", {}).get("per_cycle", 8000) or 8000
+        tb_cap = self.autonomy_config.get("token_budget") or {}
+        cap = _budget_int_cap(
+            tb_cap.get("per_cycle") if isinstance(tb_cap, dict) else None, 8000
+        )
         est = min(est, int(cap * 0.9))
         return max(100, est)
 
@@ -1226,7 +1278,10 @@ class AutonomyEngine:
         # References design #472 + research #471. Uses available signals (no full 30d GH history here; health/epics/costs provide proxies).
         risk_rank = self._risk_rank(self.risk_tolerance)
         base = 25 + (risk_rank * 12)  # 25-61 from risk (high tolerance enables more auto)
-        daily = self.autonomy_config.get("token_budget", {}).get("daily", 50000) or 50000
+        tb_daily = self.autonomy_config.get("token_budget") or {}
+        daily = _budget_int_cap(
+            tb_daily.get("daily") if isinstance(tb_daily, dict) else None, 50000
+        )
         budget_adherence = 50
         burn_rate = 0.0
         if daily > 0:
@@ -1354,17 +1409,25 @@ class AutonomyEngine:
             timestamp=ts,
         )
 
-    def enforce_budget(self, estimated: int, action_kind: str) -> Decision:
+    def enforce_budget(
+        self,
+        estimated: int,
+        action_kind: str,
+        *,
+        commit: bool = True,
+    ) -> Decision:
         """Core governor per #471/#472/#474/#634. Returns Decision (not bool).
 
         estimate_cost (wired #471 heuristics) is called by caller (decide_next/run_cycle) and passed here.
         On breach: throttle (partial spend + continue), pause (stop), warn (continue full).
         Daily UTC reset + per_cycle/daily caps + optional per_action + cost_ceiling_usd.
         Spend is durable under .agentic/budget/spend.json so long /loop runs stay safe across processes.
-        Always respects risk_tolerance=='off'.
+        Always respects risk_tolerance=='off'. When ``commit`` is False, checks only (#1476 dry_run).
         """
         if not self.enabled or self.risk_tolerance == "off":
             return Decision.PROCEED  # explicit off or disabled: no autonomous budget enforcement
+
+        usd_rate = usd_per_1k_tokens(self.autonomy_config)
 
         # Daily reset (UTC date) for _spent_today; _spent_this_cycle reset on day rollover
         today = datetime.now(timezone.utc).date()
@@ -1373,14 +1436,15 @@ class AutonomyEngine:
             self._spent_today = 0
             self._spent_usd_today = 0.0
             self._last_reset = today
-            self._persist_spend()
+            if commit:
+                self._persist_spend()
 
         tb = self.autonomy_config.get("token_budget") or {}
         if not isinstance(tb, dict):
             tb = {}
-        cap = tb.get("per_cycle", 8000) or 8000
-        daily_cap = tb.get("daily", 50000) or 50000
-        policy = tb.get("action", "throttle")
+        cap = _budget_int_cap(tb.get("per_cycle"), 8000)
+        daily_cap = _budget_int_cap(tb.get("daily"), 50000)
+        policy = _budget_action_policy(tb, default="throttle")
         # Optional single-action ceiling (#634); unset/None = unlimited
         per_action_raw = tb.get("per_action")
         try:
@@ -1395,7 +1459,7 @@ class AutonomyEngine:
         except (TypeError, ValueError):
             cost_ceiling_f = None
 
-        est_usd = tokens_to_usd(estimated)
+        est_usd = tokens_to_usd(estimated, rate_per_1k=usd_rate)
         projected_cycle = self._spent_this_cycle + estimated
         projected_daily = self._spent_today + estimated
         projected_usd = self._spent_usd_today + est_usd
@@ -1405,9 +1469,11 @@ class AutonomyEngine:
         usd_breach = cost_ceiling_f is not None and projected_usd > cost_ceiling_f
 
         def _charge(tokens: int) -> None:
+            if not commit:
+                return
             self._spent_this_cycle += tokens
             self._spent_today += tokens
-            self._spent_usd_today += tokens_to_usd(tokens)
+            self._spent_usd_today += tokens_to_usd(tokens, rate_per_1k=usd_rate)
             self._persist_spend()
 
         if not token_breach and not usd_breach:
@@ -1425,13 +1491,19 @@ class AutonomyEngine:
             if per_action_breach and per_action_cap is not None:
                 half = min(half, max(1, per_action_cap))
             _charge(half)
-            self.throttled_actions += 1
+            if commit:
+                self.throttled_actions += 1
             return Decision.THROTTLE
         # warn (or throttle+usd already handled): charge full and flag
         _charge(estimated)
         return Decision.WARN
 
-    def decide_next(self, snapshot: ProjectSnapshot) -> list[dict[str, Any]]:
+    def decide_next(
+        self,
+        snapshot: ProjectSnapshot,
+        *,
+        commit_spend: bool = True,
+    ) -> list[dict[str, Any]]:
         """Decide actions for the cycle (what_next + risk-filtered procedures + budget-aware).
 
         Wires #471: call estimate_cost (with scope from snapshot) before append; check enforce_budget Decision.
@@ -1449,7 +1521,7 @@ class AutonomyEngine:
         }
         # what_next always proposed first (cheap) but still est for governor
         est = self.estimate_cost("what_next", scope)
-        dec = self.enforce_budget(est, "what_next")
+        dec = self.enforce_budget(est, "what_next", commit=commit_spend)
         if dec != Decision.PAUSE:
             act = {"type": "what_next", "prompt_segment": "Use plate_what_next + autonomy status; make progress on next open child of #470 (one at a time).", "est": est, "decision": dec.value}
             if dec == Decision.THROTTLE:
@@ -1460,7 +1532,7 @@ class AutonomyEngine:
         for proc in snapshot.due_procedures:
             if self._risk_rank(proc.get("risk_level", "medium")) <= self._risk_rank(self.risk_tolerance):
                 est = self.estimate_cost("run_procedure", {**scope, "id": proc.get("id")})
-                dec = self.enforce_budget(est, "run_procedure")
+                dec = self.enforce_budget(est, "run_procedure", commit=commit_spend)
                 if dec != Decision.PAUSE:
                     pact = {"type": "run_procedure", "id": proc.get("id"), "est": est, "decision": dec.value}
                     if dec == Decision.THROTTLE:
@@ -1561,11 +1633,12 @@ class AutonomyEngine:
             pass
 
         self._spent_this_cycle = 0  # fresh per cycle
-        decided = self.decide_next(snap)
+        commit_spend = not dry_run
+        decided = self.decide_next(snap, commit_spend=commit_spend)
         if not decided:
             # decide filtered all (PAUSE from est/enforce on tiny budget); probe to set paused state for report
             probe_est = self.estimate_cost("what_next", {})
-            dec = self.enforce_budget(probe_est, "what_next")
+            dec = self.enforce_budget(probe_est, "what_next", commit=commit_spend)
             if dec == Decision.PAUSE:
                 paused = True
                 budget_dec = dec.value
@@ -1611,24 +1684,34 @@ class AutonomyEngine:
             if dry_run:
                 actions.append(f"dry-run: {kind} est={est}")
                 continue
-            # Execute or delegate (support plate_delegate_to_agent + trigger comments per #472)
-            executed_desc = f"executed: {kind}"
-            try:
-                if "delegate" in kind or "delegate_to_agent" in str(act):
-                    # wire delegation (from baseline_catalog; narrow packet per design)
-                    from .baseline_catalog import delegate_to_agent
-                    # scope from act/snap; real would pass focused packet. Here best-effort marker + call (safe no-op if no agent match)
-                    _ = delegate_to_agent(agent_id="plate", prompt_segment=act.get("prompt_segment", "autonomous progress"), context={"autonomy_cycle": ts, "risk": self.risk_tolerance})
-                    executed_desc = f"delegated: {kind} (plate_delegate_to_agent triggered)"
-            except Exception:
-                pass  # delegation optional; fall to executed marker
+            # Execute or delegate (plate_delegate_to_agent); never fabricate execution (#1476 C3)
+            executed_desc = f"planned: {kind}"
+            dispatch_kind = str(act.get("type") or kind)
+            if "delegate" in dispatch_kind or "delegate_to_agent" in str(act):
+                from .baseline_catalog import delegate_to_agent
+
+                task_description = str(
+                    act.get("prompt_segment") or act.get("task_description") or kind
+                )
+                agent_id = str(act.get("agent_id") or "plate")
+                try:
+                    delegate_to_agent(agent_id=agent_id, task_description=task_description)
+                    executed_desc = (
+                        f"delegated: {kind} (plate_delegate_to_agent agent={agent_id})"
+                    )
+                except Exception as exc:
+                    executed_desc = f"planned: {kind} (delegation failed: {exc})"
             actions.append(executed_desc)
-            # Full logging: PLATE-AUTONOMY-CYCLE marker + USAGE REPORT block (per #474 AC + AGENTS)
-            marker = f"<!-- PLATE-AUTONOMY-CYCLE: ts={ts} kind={kind} est={est} decision={dec.value} budget_remaining~{max(0, (self.autonomy_config.get('token_budget',{}).get('per_cycle',8000)-self._spent_this_cycle))} -->"
+            tb = self.autonomy_config.get("token_budget") or {}
+            per_cycle_cap = _budget_int_cap(
+                tb.get("per_cycle") if isinstance(tb, dict) else None, 8000
+            )
+            marker = (
+                f"<!-- PLATE-AUTONOMY-CYCLE: ts={ts} kind={kind} est={est} "
+                f"decision={dec.value} budget_remaining~"
+                f"{max(0, per_cycle_cap - self._spent_this_cycle)} -->"
+            )
             actions.append(marker)
-            # USAGE style for traceability (even for engine cycles; harvested where Feature/Question close)
-            if not dry_run:
-                actions.append("=== USAGE REPORT ===\ntokens: " + str(est) + "\ncost: $0.00\n duration: 00:00:10 (autonomy est)\n=== END USAGE REPORT ===")
 
         report = CycleReport(
             status="completed" if not paused else "paused",
@@ -1942,7 +2025,13 @@ def get_budget_snapshot(
     risk = str(auto.get("risk_tolerance") or "off").lower()
     enabled = bool(auto.get("enabled", False)) and risk != "off"
 
-    spend = load_budget_spend(base_dir=base_dir) or {}
+    usd_rate = usd_per_1k_tokens(auto)
+    spend_corrupt = False
+    try:
+        spend = load_budget_spend(base_dir=base_dir) or {}
+    except CorruptStateError:
+        spend_corrupt = True
+        spend = {}
     today = datetime.now(timezone.utc).date().isoformat()
     # Match AutonomyEngine._load_durable_spend + record_budget_spend: ignore prior UTC day.
     stored_day = str(spend.get("date") or spend.get("day") or "")
@@ -1967,7 +2056,27 @@ def get_budget_snapshot(
         spent_usd_today = 0.0
     # Prefer recomputed USD when token spend present (keeps heuristic consistent)
     if spent_usd_today <= 0 and spent_today > 0:
-        spent_usd_today = tokens_to_usd(spent_today)
+        spent_usd_today = tokens_to_usd(spent_today, rate_per_1k=usd_rate)
+
+    if spend_corrupt:
+        return {
+            "corrupt_spend": True,
+            "spend_path": str(_budget_spend_path(base_dir)),
+            "daily_limit": daily,
+            "per_cycle_limit": per_cycle,
+            "spent_today": None,
+            "spent_this_cycle": None,
+            "remaining_tokens": 0,
+            "remaining_cycle_tokens": 0,
+            "budget_pressure": "critical",
+            "would_pause_next_cycle": True,
+            "would_throttle_next_cycle": False,
+            "gate_reason": "corrupt budget spend file (fail-closed pause)",
+            "action_policy": action_policy,
+            "cost_ceiling_usd": cost_ceiling_usd,
+            "enabled": enabled,
+            "risk_tolerance": risk,
+        }
 
     remaining_tokens = max(0, daily - spent_today)
     remaining_cycle = max(0, per_cycle - spent_this_cycle)
@@ -1989,7 +2098,8 @@ def get_budget_snapshot(
         over_per_action = per_action is not None and est > per_action
         over_usd = (
             cost_ceiling_usd is not None
-            and (spent_usd_today + tokens_to_usd(est)) > cost_ceiling_usd
+            and (spent_usd_today + tokens_to_usd(est, rate_per_1k=usd_rate))
+            > cost_ceiling_usd
         )
         breach = over_daily or over_cycle or over_per_action or over_usd
         if breach:

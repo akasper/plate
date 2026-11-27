@@ -471,11 +471,9 @@ def load_pr_data_rest_fallback(client: GhClient, repo: str, pr_number: int) -> d
 
 def atomic_write_json(path: Path | str, payload: Mapping[str, Any]) -> None:
     """Write JSON atomically (temp file + ``os.replace``) for Windows-safe persistence."""
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, target)
+    from .state_store import atomic_write_json as _atomic_write_json
+
+    _atomic_write_json(path, payload)
 
 
 def _parse_github_ts(value: str | None) -> datetime | None:

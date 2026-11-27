@@ -1,0 +1,7 @@
+{
+  "slug": "budget-state-persistence-1476",
+  "title": "Locked budget spend and honest autonomy/PM delegation reporting",
+  "change_type": "fix",
+  "summary": "Budget spend uses locked atomic persistence with corrupt-state fail-closed; dry_run cycles do not persist charges; autonomy and PM stop fabricating executed work or synthetic USAGE REPORTs when delegation fails; state_store gains flock-based lock deadlines and mutate_json.",
+  "verification": "tests/test_budget_state_persistence_1476.py and tests/test_state_store.py"
+}
