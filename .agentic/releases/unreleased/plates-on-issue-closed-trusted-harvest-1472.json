@@ -1,0 +1,10 @@
+{
+  "slug": "plates-on-issue-closed-trusted-harvest-1472",
+  "change_type": "fix",
+  "surface": ".github/workflows/plates-on-issue-closed.yml",
+  "summary": "Harden issue-close usage harvest: trusted authors, strict fields, per-issue concurrency (parallel across issues), issue comments instead of default-branch push.",
+  "migration_impact": "Downstream repos that relied on automatic `.agentic/COSTS.md` commits from this workflow should aggregate costs via `gh plate costs` or copy rows from `PLATE-USAGE-COST-ROW` comments. Re-import or sync the updated workflow from plate_core template payload.",
+  "agent_notes": "After upgrading, closing Feature/Question issues still requires a USAGE REPORT block from OWNER/MEMBER/COLLABORATOR (or allow-listed bots). Workflow no longer needs contents:write.",
+  "links": ["#1472"],
+  "breaking": false
+}
