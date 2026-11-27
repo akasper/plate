@@ -220,9 +220,17 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
     def test_release_workflow_waits_for_publishers_after_tag_push(self):
         workflow = read_text(".github/workflows/release.yml")
         self.assertIn("verify-release-publishers:", workflow)
-        self.assertIn("publish-pypi.yml", workflow)
-        self.assertIn("publish-gh-plate-extension.yml", workflow)
-        self.assertIn("tag_pushed", workflow)
+        self.assertIn("verify_publishers", workflow)
+        self.assertIn(
+            "needs.tag-release-merge.outputs.verify_publishers == 'true'",
+            workflow,
+        )
+        self.assertNotIn(
+            "needs.tag-release-merge.outputs.tag_pushed == 'true'",
+            workflow,
+        )
+        self.assertIn("plate_core.release_publish_gate", workflow)
+        self.assertIn("verify_publishers=true", workflow)
 
     def test_release_workflow_fast_forward_job_can_comment_on_issues(self):
         workflow = read_text(".github/workflows/release.yml")
