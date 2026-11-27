@@ -87,8 +87,42 @@ def _normalize_api_run(run: dict[str, Any]) -> dict[str, Any]:
 def _workflow_path_matches(run: dict[str, Any], workflow_file: str) -> bool:
     path = (run.get("workflowPath") or run.get("path") or "").strip()
     if not path:
-        return True
+        return False
     return path == workflow_file or path.endswith(f"/{workflow_file}")
+
+
+def decode_gh_api_paginated_stdout(raw: str) -> list[dict[str, Any]]:
+    """Decode stdout from ``gh api --paginate`` (one JSON object per page, concatenated)."""
+    text = (raw or "").strip()
+    if not text:
+        return []
+    decoder = json.JSONDecoder()
+    pages: list[dict[str, Any]] = []
+    idx = 0
+    length = len(text)
+    while idx < length:
+        while idx < length and text[idx].isspace():
+            idx += 1
+        if idx >= length:
+            break
+        value, end = decoder.raw_decode(text, idx)
+        if isinstance(value, dict):
+            pages.append(value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    pages.append(item)
+        idx = end
+    return pages
+
+
+def workflow_runs_from_api_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    runs: list[dict[str, Any]] = []
+    for page in pages:
+        for run in page.get("workflow_runs") or []:
+            if isinstance(run, dict):
+                runs.append(run)
+    return runs
 
 
 def _gh_api_paginated(endpoint: str) -> list[dict[str, Any]]:
@@ -100,28 +134,8 @@ def _gh_api_paginated(endpoint: str) -> list[dict[str, Any]]:
     )
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr or proc.stdout or f"gh api failed: {endpoint}")
-    raw = (proc.stdout or "").strip()
-    if not raw:
-        return []
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        # gh --paginate may emit one JSON object per page; accept a single page object.
-        lines = [line for line in raw.splitlines() if line.strip()]
-        if not lines:
-            return []
-        payload = json.loads(lines[0])
-    if isinstance(payload, list):
-        items: list[dict[str, Any]] = []
-        for entry in payload:
-            if isinstance(entry, dict) and "workflow_runs" in entry:
-                items.extend(entry.get("workflow_runs") or [])
-            elif isinstance(entry, dict) and entry.get("id") is not None:
-                items.append(entry)
-        return items
-    if isinstance(payload, dict):
-        return list(payload.get("workflow_runs") or [])
-    raise RuntimeError(f"unexpected gh api payload for {endpoint}")
+    pages = decode_gh_api_paginated_stdout(proc.stdout or "")
+    return workflow_runs_from_api_pages(pages)
 
 
 def list_workflow_runs_for_publisher(

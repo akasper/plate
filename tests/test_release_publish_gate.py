@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from unittest.mock import patch
 
 from plate_core.release_publish_gate import (
     MISSING_RUN_ERROR,
+    _workflow_path_matches,
+    decode_gh_api_paginated_stdout,
     filter_workflow_runs_for_release,
     list_workflow_runs_for_publisher,
     pick_publisher_workflow_run,
     publisher_run_succeeded,
     should_verify_publishers_for_tag,
     wait_for_publisher_workflow,
+    workflow_runs_from_api_pages,
 )
 
 
@@ -63,6 +67,95 @@ class ReleasePublishGateTests(unittest.TestCase):
         picked = pick_publisher_workflow_run(runs, release_tag="v0.13.0", head_sha="new")
         self.assertEqual(picked["databaseId"], 2)
         self.assertTrue(publisher_run_succeeded(picked))
+
+    def test_decode_concatenated_pages_finds_run_on_page_two(self):
+        page_one = {
+            "total_count": 2,
+            "workflow_runs": [
+                {
+                    "id": 10,
+                    "head_branch": "v0.13.0",
+                    "head_sha": "deadbeef",
+                    "path": ".github/workflows/other.yml",
+                    "created_at": "2026-01-01T00:00:00Z",
+                }
+            ],
+        }
+        page_two = {
+            "total_count": 2,
+            "workflow_runs": [
+                {
+                    "id": 99,
+                    "head_branch": "v0.13.0",
+                    "head_sha": "deadbeef",
+                    "path": ".github/workflows/publish-pypi.yml",
+                    "created_at": "2026-01-02T00:00:00Z",
+                }
+            ],
+        }
+        raw = json.dumps(page_one, separators=(",", ":")) + json.dumps(
+            page_two, separators=(",", ":")
+        )
+        pages = decode_gh_api_paginated_stdout(raw)
+        runs = workflow_runs_from_api_pages(pages)
+        self.assertEqual(len(pages), 2)
+        self.assertEqual(len(runs), 2)
+        matched = [run for run in runs if _workflow_path_matches(run, "publish-pypi.yml")]
+        self.assertEqual(len(matched), 1)
+        self.assertEqual(matched[0]["id"], 99)
+
+    @patch("plate_core.release_publish_gate.subprocess.run")
+    def test_list_workflow_runs_reads_second_paginated_page(self, mock_run):
+        page_one = {"workflow_runs": []}
+        page_two = {
+            "workflow_runs": [
+                {
+                    "id": 88,
+                    "head_branch": "v0.13.0",
+                    "head_sha": "deadbeef",
+                    "path": ".github/workflows/publish-pypi.yml",
+                    "created_at": "2026-01-02T00:00:00Z",
+                }
+            ]
+        }
+        payload = json.dumps(page_one, separators=(",", ":")) + json.dumps(
+            page_two, separators=(",", ":")
+        )
+        mock_run.return_value = type(
+            "P",
+            (),
+            {"returncode": 0, "stdout": payload, "stderr": ""},
+        )()
+        runs = list_workflow_runs_for_publisher(
+            "akasper/plate",
+            "publish-pypi.yml",
+            release_tag="v0.13.0",
+            head_sha="deadbeef",
+        )
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["databaseId"], 88)
+
+    def test_workflow_path_missing_fail_closed(self):
+        run = {"id": 7, "head_sha": "deadbeef", "head_branch": "v0.13.0"}
+        self.assertFalse(_workflow_path_matches(run, "publish-pypi.yml"))
+
+    @patch("plate_core.release_publish_gate._gh_api_paginated")
+    def test_list_workflow_runs_excludes_runs_without_path(self, mock_api):
+        mock_api.return_value = [
+            {
+                "id": 7,
+                "head_branch": "v0.13.0",
+                "head_sha": "deadbeef",
+                "created_at": "2026-01-02T00:00:00Z",
+            }
+        ]
+        runs = list_workflow_runs_for_publisher(
+            "akasper/plate",
+            "publish-pypi.yml",
+            release_tag="v0.13.0",
+            head_sha="deadbeef",
+        )
+        self.assertEqual(runs, [])
 
     @patch("plate_core.release_publish_gate._gh_api_paginated")
     def test_list_workflow_runs_paginates_head_sha_and_branch(self, mock_api):
