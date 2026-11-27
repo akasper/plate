@@ -7,10 +7,8 @@ Task specs and crew routing can reference profile names in ``tool_allow_profiles
 from __future__ import annotations
 
 import os
-import re
 import sys
 from functools import lru_cache
-from pathlib import Path
 from typing import Iterable
 
 ENV_TOOL_PROFILES = "PLATE_MCP_TOOL_PROFILES"
@@ -104,6 +102,8 @@ def profiles_for_tool(name: str) -> frozenset[str]:
         "plate_contemplate",
     ):
         profiles.add("qanda")
+    elif name.startswith("plate_release_media_"):
+        profiles.add("release_media")
     elif name.startswith("plate_release_"):
         profiles.add("release")
     elif (
@@ -134,8 +134,6 @@ def profiles_for_tool(name: str) -> frozenset[str]:
         profiles.add("feature_loop")
     elif name.startswith("plate_design_contract_"):
         profiles.add("design")
-    elif name.startswith("plate_release_media_"):
-        profiles.add("release_media")
     elif name.startswith("plate_hybrid_"):
         profiles.add("hybrid")
     elif name.startswith("plate_packaging_"):
@@ -272,21 +270,9 @@ def assert_tool_allowed(name: str) -> None:
 @lru_cache(maxsize=1)
 def list_mcp_tool_names() -> frozenset[str]:
     """Every tool name registered in plate-mcp ``tools/list`` (for task-spec validation)."""
-    server_path = Path(__file__).resolve().parent.parent / "mcp_server.py"
-    text = server_path.read_text(encoding="utf-8")
-    names: list[str] = []
-    in_list = False
-    for line in text.splitlines():
-        if 'elif method == "tools/list":' in line:
-            in_list = True
-            continue
-        if in_list and "visible_tools" in line:
-            break
-        if in_list:
-            match = re.search(r'"name": "([^"]+)"', line)
-            if match:
-                names.append(match.group(1))
-    return frozenset(names)
+    from .registry import listed_tool_names
+
+    return listed_tool_names()
 
 
 def tools_for_named_profiles(profile_names: Iterable[str]) -> frozenset[str]:

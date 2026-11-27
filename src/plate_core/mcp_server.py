@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import sys
 from dataclasses import asdict
@@ -243,6 +245,8 @@ from .mcp.curiosity_tools import (
     RecordAnswerTool,
     SynthesizePrioritiesTool,
 )
+from .mcp.path_confinement import confined, session_repo_root
+from .mcp.registry import register_tool_executor
 from .mcp.tool_profiles import (
     assert_tool_allowed,
     configure_mcp_tool_profiles,
@@ -317,17 +321,17 @@ def _what_next(repo: str | None, agent_type: str | None = None) -> dict:
         return {"next_action": "inspect with plate_health + plate_epic_status", "error": str(exc)}
 
 
-def _handle_tools_call(req_id: object, params: dict) -> None:
-    name = params.get("name")
-    args = params.get("arguments", {}) or {}
-
-    try:
-        if name:
-            assert_tool_allowed(str(name))
+def _execute_mcp_tool(name: str | None, args: dict) -> object:
+    if name:
+        assert_tool_allowed(str(name))
         if name == "plate_health":
+            root = session_repo_root()
+            repo_root_arg = args.get("repo_root")
+            if repo_root_arg is not None:
+                repo_root_arg = str(confined(repo_root_arg, root))
             report = get_health(
                 args.get("repo"),
-                repo_root=args.get("repo_root"),
+                repo_root=repo_root_arg or str(root),
                 include_spec_audit=not bool(args.get("no_spec_audit", False)),
             )
             payload = report.to_dict()
@@ -335,22 +339,42 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             report = get_epic_status(args.get("repo"))
             payload = report.to_dict()
         elif name == "init_playwright":
+            root = session_repo_root()
+            repo_path = str(confined(args.get("repo_path", "."), root))
+            template_repo = args.get("template_repo")
+            if template_repo is not None:
+                template_repo = str(confined(template_repo, root))
             payload = InitPlaywrightTool.execute(
-                args.get("repo_path", "."),
-                args.get("template_repo"),
+                repo_path,
+                template_repo,
                 bool(args.get("force", False)),
+                repo_root=root,
+                confine_template=template_repo is not None,
             )
         elif name == "record_e2e_gif":
             test_name = args.get("test_name")
             if not test_name:
                 raise ValueError("test_name is required")
+            root = session_repo_root()
+            allowed_quality = {"low", "medium", "high"}
+            quality = str(args.get("quality", "medium"))
+            if quality not in allowed_quality:
+                raise ValueError(f"quality must be one of {sorted(allowed_quality)}")
+            repo_path = str(confined(args.get("repo_path", "."), root))
             payload = RecordE2eGifTool.execute(
-                args.get("repo_path", "."),
+                repo_path,
                 test_name,
-                args.get("quality", "medium"),
+                quality,
+                start=args.get("start"),
+                duration=args.get("duration"),
+                repo_root=root,
             )
         elif name == "validate_e2e_tests":
-            payload = ValidateE2eTestsTool.execute(args.get("repo_path", "."))
+            root = session_repo_root()
+            payload = ValidateE2eTestsTool.execute(
+                str(confined(args.get("repo_path", "."), root)),
+                repo_root=root,
+            )
         elif name == "plate_agents":
             payload = {"agents": [agent.to_dict() for agent in list_agents()]}
         elif name == "plate_agent":
@@ -775,11 +799,12 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             pr_number = int(pr_number)
             if pr_number <= 0:
                 raise ValueError("pr_number must be > 0")
+            root = session_repo_root()
             payload = verify_pr(
                 pr_number=pr_number,
                 repo=args.get("repo"),
                 run_tests=bool(args.get("run_tests", False)),
-                repo_root=args.get("repo_root"),
+                repo_root=str(root) if bool(args.get("run_tests", False)) else None,
             )
         elif name == "plate_resolve_review_thread":
             thread_id = args.get("thread_id")
@@ -1528,21 +1553,27 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_hybrid_detect":
             from pathlib import Path as _P
 
-            payload = detect_project_kind(_P(str(args.get("repo_root") or ".")))
+            root = session_repo_root()
+            payload = detect_project_kind(_P(str(confined(args.get("repo_root") or ".", root))))
         elif name == "plate_hybrid_set_kind":
             from pathlib import Path as _P
 
+            root = session_repo_root()
+            base_dir = _P(str(confined(args.get("base_dir") or ".agentic/hybrid", root)))
             payload = set_project_kind(
                 str(args.get("kind") or ""),
-                base_dir=_P(str(args.get("base_dir") or ".agentic/hybrid")),
+                base_dir=base_dir,
                 note=str(args.get("note") or ""),
             )
         elif name == "plate_hybrid_profile":
             from pathlib import Path as _P
 
+            root = session_repo_root()
+            base_dir = _P(str(confined(args.get("base_dir") or ".agentic/hybrid", root)))
+            repo_root = _P(str(confined(args.get("repo_root") or ".", root)))
             payload = load_project_profile(
-                base_dir=_P(str(args.get("base_dir") or ".agentic/hybrid")),
-                repo_root=_P(str(args.get("repo_root") or ".")),
+                base_dir=base_dir,
+                repo_root=repo_root,
             )
         elif name == "plate_hybrid_contract":
             c = get_kind_contract(str(args.get("kind") or ""))
@@ -2083,7 +2114,8 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload = {"results": results, "dry_run": dry}
         elif name == "plate_migrate_docs_namespace":
             apply_mode = bool(args.get("apply", False))
-            target_dir = args.get("target_dir") or "."
+            root = session_repo_root()
+            target_dir = str(confined(args.get("target_dir") or ".", root))
             plan = migrate_docs_namespace(target_dir=target_dir, apply=apply_mode)
             payload = plan.to_dict()
         elif name == "plate_import_payload":
@@ -2099,15 +2131,22 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             nd = args.get("namespace_docs")
             if nd is not None:
                 nd = bool(nd)
+            root = session_repo_root()
+            target_dir = str(
+                confined(args.get("target_dir") or args.get("target") or ".", root)
+            )
+            escape_hatch = args.get("escape_hatch_dir") or args.get("escape_hatch")
+            if escape_hatch:
+                escape_hatch = str(confined(escape_hatch, root))
             payload = import_payload(
-                target_dir=args.get("target_dir") or args.get("target") or ".",
+                target_dir=target_dir,
                 strategy=str(args.get("strategy") or "safe"),
                 template_repo=args.get("template_repo"),
                 dry_run=dry,
                 apply=apply_mode,
                 namespace_scripts=ns,
                 namespace_docs=nd,
-                escape_hatch_dir=args.get("escape_hatch_dir") or args.get("escape_hatch"),
+                escape_hatch_dir=escape_hatch,
                 escape_hatch_on_conflict=bool(args.get("escape_hatch_on_conflict", False)),
                 platform=args.get("platform"),
             )
@@ -2136,18 +2175,34 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         elif name == "plate_spec_audit":
             from .spec_audit import audit_spec
 
+            root = session_repo_root()
+            repo_root = str(confined(args.get("repo_root") or ".", root))
+            releases_dir = args.get("releases_dir")
+            if releases_dir:
+                releases_dir = str(confined(releases_dir, root))
+            spec_path = args.get("spec_path") or args.get("spec")
+            if spec_path:
+                spec_path = str(confined(spec_path, root))
             payload = audit_spec(
-                args.get("repo_root") or ".",
-                releases_dir=args.get("releases_dir"),
-                spec_path=args.get("spec_path") or args.get("spec"),
+                repo_root,
+                releases_dir=releases_dir,
+                spec_path=spec_path,
             ).to_dict()
         elif name == "plate_spec_audit_followups":
             from .spec_audit import apply_audit_followups, audit_spec
 
+            root = session_repo_root()
+            repo_root = str(confined(args.get("repo_root") or ".", root))
+            releases_dir = args.get("releases_dir")
+            if releases_dir:
+                releases_dir = str(confined(releases_dir, root))
+            spec_path = args.get("spec_path") or args.get("spec")
+            if spec_path:
+                spec_path = str(confined(spec_path, root))
             report = audit_spec(
-                args.get("repo_root") or ".",
-                releases_dir=args.get("releases_dir"),
-                spec_path=args.get("spec_path") or args.get("spec"),
+                repo_root,
+                releases_dir=releases_dir,
+                spec_path=spec_path,
             )
             payload = apply_audit_followups(
                 report,
@@ -2158,17 +2213,97 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             payload["audit_counts"] = report.counts
         elif name == "plate_perform_test_coverage_audit":
             from .mcp.audit_tools import PerformTestCoverageAuditTool
-            payload = PerformTestCoverageAuditTool.execute(repo=args.get("repo"), dry_run=args.get("dry_run", True))
-        else:
-            _write(
-                {
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "error": {"code": -32601, "message": f"Unknown tool: {name}"},
-                }
+            payload = PerformTestCoverageAuditTool.execute(
+                repo=args.get("repo"), dry_run=args.get("dry_run", True)
             )
-            return
+        elif name == "plate_perform_information_audit":
+            from .mcp.audit_tools import PerformInformationAuditTool
 
+            payload = PerformInformationAuditTool.execute(
+                repo=args.get("repo"),
+                scope=str(args.get("scope") or "repo"),
+                agent_type=str(args.get("agent_type") or "general"),
+                max_questions=int(args.get("max_questions") or 5),
+                dry_run=bool(args.get("dry_run", False)),
+                include_defaults=bool(args.get("include_defaults", True)),
+            )
+        elif name == "plate_list_discussions":
+            from .discussions import list_discussions
+
+            payload = [
+                d.to_dict()
+                for d in list_discussions(
+                    repo=args.get("repo"),
+                    category=args.get("category"),
+                    state=args.get("state"),
+                    per_page=int(args.get("per_page") or 30),
+                    page=int(args.get("page") or 1),
+                )
+            ]
+        elif name == "plate_get_discussion":
+            from .discussions import get_discussion
+
+            num = args.get("number")
+            if num is None:
+                raise ValueError("number is required")
+            payload = get_discussion(repo=args.get("repo"), number=int(num)).to_dict()
+        elif name == "plate_list_discussion_comments":
+            from .discussions import list_discussion_comments
+
+            num = args.get("number")
+            if num is None:
+                raise ValueError("number is required")
+            payload = [
+                c.to_dict()
+                for c in list_discussion_comments(
+                    repo=args.get("repo"),
+                    number=int(num),
+                    per_page=int(args.get("per_page") or 30),
+                )
+            ]
+        elif name == "plate_add_discussion_comment":
+            from .discussions import add_discussion_comment
+
+            num = args.get("number")
+            body = args.get("body")
+            if num is None or not body:
+                raise ValueError("number and body are required")
+            payload = add_discussion_comment(
+                repo=args.get("repo"), number=int(num), body=str(body)
+            ).to_dict()
+        elif name == "plate_create_discussion":
+            from .discussions import create_discussion
+
+            title = args.get("title")
+            body = args.get("body")
+            if not title or not body:
+                raise ValueError("title and body are required")
+            payload = create_discussion(
+                repo=args.get("repo"),
+                category_slug=args.get("category_slug"),
+                category_id=args.get("category_id"),
+                title=str(title),
+                body=str(body),
+            ).to_dict()
+        elif name == "plate_list_discussion_categories":
+            from .discussions import list_discussion_categories
+
+            payload = list_discussion_categories(repo=args.get("repo"))
+        elif name == "plate_list_open_ideas":
+            from .discussions import list_open_ideas
+
+            payload = [d.to_dict() for d in list_open_ideas(repo=args.get("repo"))]
+        else:
+            raise KeyError(f"Unknown tool: {name}")
+        return payload
+
+
+
+def _handle_tools_call(req_id: object, params: dict) -> None:
+    name = params.get("name")
+    args = params.get("arguments", {}) or {}
+    try:
+        payload = _execute_mcp_tool(name, args)
         _write(
             {
                 "jsonrpc": "2.0",
@@ -2177,6 +2312,14 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                     "content": [{"type": "text", "text": json.dumps(payload)}],
                     "isError": False,
                 },
+            }
+        )
+    except KeyError as exc:
+        _write(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32601, "message": str(exc)},
             }
         )
     except Exception as exc:
@@ -2192,15 +2335,49 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
         )
 
 
+
 def run() -> None:
     configure_mcp_tool_profiles()
-    for line in sys.stdin:
-        line = line.strip()
+    for raw_line in sys.stdin:
+        line = raw_line.strip()
         if not line:
             continue
-        req = json.loads(line)
+        try:
+            req = json.loads(line)
+        except json.JSONDecodeError as exc:
+            _write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": -32700, "message": f"Parse error: {exc}"},
+                }
+            )
+            continue
+        if not isinstance(req, dict):
+            _write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": -32600, "message": "Invalid Request"},
+                }
+            )
+            continue
         req_id = req.get("id")
         method = req.get("method")
+        if not method:
+            if req_id is not None:
+                _write(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "error": {"code": -32600, "message": "Invalid Request"},
+                    }
+                )
+            continue
+
+        if method == "ping":
+            _write({"jsonrpc": "2.0", "id": req_id, "result": {}})
+            continue
 
         if method == "initialize":
             _write(
@@ -2215,3278 +2392,9 @@ def run() -> None:
                 }
             )
         elif method == "tools/list":
-            all_tools = [
-                            {
-                                "name": "plate_health",
-                                "description": (
-                                    "Return PLATE health summary for a repository, "
-                                    "including local SPEC audit drift signals (#340)."
-                                ),
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": (
-                                                "Local checkout root for SPEC audit filesystem "
-                                                "signals. Defaults to current working directory."
-                                            ),
-                                        },
-                                        "no_spec_audit": {
-                                            "type": "boolean",
-                                            "description": "When true, skip local SPEC audit summary.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_epic_status",
-                                "description": "Return Epic and child issue summary for a repository.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        }
-                                    },
-                                },
-                            },
-                            {
-                                "name": "init_playwright",
-                                "description": "Initialize Playwright E2E testing in a repository.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_path": {
-                                            "type": "string",
-                                            "description": "Path to target repository. Defaults to current directory.",
-                                        },
-                                        "template_repo": {
-                                            "type": "string",
-                                            "description": "Path to template source override. Defaults to plate payload in this repository.",
-                                        },
-                                        "force": {
-                                            "type": "boolean",
-                                            "description": "Overwrite existing tests/e2e/ directory. Defaults to false.",
-                                        },
-                                    },
-                                    "required": [],
-                                },
-                            },
-                            {
-                                "name": "record_e2e_gif",
-                                "description": "Record and generate a demo GIF from a Playwright E2E test.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_path": {
-                                            "type": "string",
-                                            "description": "Path to repository with Playwright setup.",
-                                        },
-                                        "test_name": {
-                                            "type": "string",
-                                            "description": "Name of test to record (e.g., 'login', 'feature-flow').",
-                                        },
-                                        "quality": {
-                                            "type": "string",
-                                            "description": "Quality: 'low' (10fps), 'medium' (15fps), 'high' (30fps). Defaults to 'medium'.",
-                                        },
-                                    },
-                                    "required": ["repo_path", "test_name"],
-                                },
-                            },
-                            {
-                                "name": "validate_e2e_tests",
-                                "description": "Validate Playwright E2E setup and detect missing configuration.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_path": {
-                                            "type": "string",
-                                            "description": "Path to repository. Defaults to current directory.",
-                                        }
-                                    },
-                                    "required": [],
-                                },
-                            },
-                            {
-                                "name": "plate_agents",
-                                "description": "Return the baseline agent catalog.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {},
-                                    "required": [],
-                                },
-                            },
-                            {
-                                "name": "plate_agent",
-                                "description": "Return one baseline agent by id.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "agent_id": {
-                                            "type": "string",
-                                            "description": "Baseline agent id.",
-                                        }
-                                    },
-                                    "required": ["agent_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_skills",
-                                "description": "Return the baseline skill catalog.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {},
-                                    "required": [],
-                                },
-                            },
-                            {
-                                "name": "plate_skill",
-                                "description": "Return one baseline skill by id.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "skill_id": {
-                                            "type": "string",
-                                            "description": "Baseline skill id.",
-                                        }
-                                    },
-                                    "required": ["skill_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_contexts",
-                                "description": "Return the canonical PLATE context-map routes used to decide where authoritative truth lives for a task.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {},
-                                    "required": [],
-                                },
-                            },
-                            {
-                                "name": "plate_context",
-                                "description": "Return one canonical PLATE context-map route by id.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "context_id": {
-                                            "type": "string",
-                                            "description": "Context route id.",
-                                        }
-                                    },
-                                    "required": ["context_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_features",
-                                "description": "Return optional PLATE capability detection for a repository.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        }
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_bootstrap",
-                                "description": "Plan or apply baseline PLATE bootstrap actions. Supports adoption mode (#619) via adopt=true for existing/mature repos.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "apply": {
-                                            "type": "boolean",
-                                            "description": "When true, apply supported actions; default false (dry-run).",
-                                        },
-                                        "adopt": {
-                                            "type": "boolean",
-                                            "description": "Force adoption mode (true) or leave null for auto-detect; false forces greenfield.",
-                                        },
-                                        "existing_repo": {
-                                            "type": "boolean",
-                                            "description": "Alias for adopt=true.",
-                                        },
-                                        "local_root": {
-                                            "type": "string",
-                                            "description": "Local checkout path for adoption heuristics (default cwd).",
-                                        },
-                                        "platform": {
-                                            "type": "string",
-                                            "enum": ["posix", "posix-and-windows", "windows"],
-                                            "description": "Script platform for this run. Overrides remote .plate and is written when apply=true. Omit to use remote .plate, or posix when absent.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_adoption_status",
-                                "description": "Local adoption readiness checklist for <30m onboarding (#935/#633). Status only — no apply.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Local checkout root (default cwd).",
-                                        },
-                                        "no_optional": {
-                                            "type": "boolean",
-                                            "description": "When true, skip optional SPEC.md/CURRENT.md checks.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_adoption_first_qa_plan",
-                                "description": "First Q&A seed plan after adoption core_ready (#949/#633). Dry-run default; apply needs injectable runner.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Local checkout root (default cwd).",
-                                        },
-                                        "apply": {
-                                            "type": "boolean",
-                                            "description": "Attempt live seed (requires runner; default false).",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_adoption_session",
-                                "description": "Adoption wall-clock session timer for <30m proof (#955/#633). action=start|complete|status; local only.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Local checkout root (default cwd).",
-                                        },
-                                        "action": {
-                                            "type": "string",
-                                            "description": "start | complete | status (default status).",
-                                        },
-                                        "force": {
-                                            "type": "boolean",
-                                            "description": "Force restart when action=start.",
-                                        },
-                                        "require_core_ready": {
-                                            "type": "boolean",
-                                            "description": "When action=complete, refuse if core_ready is false.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_self_migrate_plan",
-                                "description": "Dry-run self-migrate plan for plate-core pin/payload drift (#939/#945/#649). No apply; network only if resolve_upstream+allow_network.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Local checkout root (default cwd).",
-                                        },
-                                        "target_version": {
-                                            "type": "string",
-                                            "description": "Optional target plate-core semver; default installed version.",
-                                        },
-                                        "no_payload": {
-                                            "type": "boolean",
-                                            "description": "When true, omit import-payload step from the plan.",
-                                        },
-                                        "resolve_upstream": {
-                                            "type": "boolean",
-                                            "description": "Attempt upstream version resolve (#945). Offline unless allow_network.",
-                                        },
-                                        "allow_network": {
-                                            "type": "boolean",
-                                            "description": "Permit live PyPI JSON fetch for resolve_upstream. Default false.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_self_migrate_merge_markers",
-                                "description": "Plan/apply PLATES-CORE marker sectional merge vs upstream files (#943/#649). Dry-run unless apply=true; no network.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Local checkout root (default cwd).",
-                                        },
-                                        "upstream_root": {
-                                            "type": "string",
-                                            "description": "Directory of upstream files mirroring relative paths.",
-                                        },
-                                        "paths": {
-                                            "type": "array",
-                                            "items": {"type": "string"},
-                                            "description": "Relative paths to merge; default marker-bearing refresh files.",
-                                        },
-                                        "apply": {
-                                            "type": "boolean",
-                                            "description": "When true, write merged content. Default false (dry-run).",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_self_migrate_pr_plan",
-                                "description": "Low-risk self-migrate migration PR plan (#947/#649). Dry-run by default; apply needs injectable runner and low-risk pin-only eligibility.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Local checkout root (default cwd).",
-                                        },
-                                        "target_version": {
-                                            "type": "string",
-                                            "description": "Optional target plate-core semver.",
-                                        },
-                                        "base": {
-                                            "type": "string",
-                                            "description": "PR base branch (default release).",
-                                        },
-                                        "closes": {
-                                            "type": "string",
-                                            "description": "Optional issue ref for PR body.",
-                                        },
-                                        "no_payload": {
-                                            "type": "boolean",
-                                            "description": "Omit payload step from underlying migrate plan.",
-                                        },
-                                        "resolve_upstream": {
-                                            "type": "boolean",
-                                            "description": "Resolve upstream version for target.",
-                                        },
-                                        "allow_network": {
-                                            "type": "boolean",
-                                            "description": "Permit network for resolve_upstream.",
-                                        },
-                                        "apply": {
-                                            "type": "boolean",
-                                            "description": "Attempt live apply (requires runner; default false).",
-                                        },
-                                        "allow_high_risk": {
-                                            "type": "boolean",
-                                            "description": "Permit non-low-risk apply when runner provided.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_self_migrate_verify",
-                                "description": "Offline post-migrate verify: pin/payload drift + adoption core_ready + .plate validity (#965/#649). No writes, no network by default.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Local checkout root (default cwd).",
-                                        },
-                                        "target_version": {
-                                            "type": "string",
-                                            "description": "Optional target plate-core semver.",
-                                        },
-                                        "no_payload": {
-                                            "type": "boolean",
-                                            "description": "Omit payload from underlying migrate plan when checking drift.",
-                                        },
-                                        "resolve_upstream": {
-                                            "type": "boolean",
-                                            "description": "Resolve upstream version for target.",
-                                        },
-                                        "allow_network": {
-                                            "type": "boolean",
-                                            "description": "Permit network for resolve_upstream. Default false.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_config_get",
-                                "description": "Return effective local .plate configuration state for the current repository or repo_root.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Optional local repository root path. Defaults to current directory.",
-                                        }
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_config_validate",
-                                "description": "Validate local .plate configuration and return the effective report shape.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Optional local repository root path. Defaults to current directory.",
-                                        }
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_config_init",
-                                "description": "Create a baseline root .plate configuration file if missing (or overwrite with force).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Optional local repository root path. Defaults to current directory.",
-                                        },
-                                        "force": {
-                                            "type": "boolean",
-                                            "description": "Overwrite an existing .plate file when true.",
-                                        }
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_config_upgrade",
-                                "description": "Upgrade an existing local .plate file to the current schema version, optionally writing it back to disk.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Optional local repository root path. Defaults to current directory.",
-                                        },
-                                        "apply": {
-                                            "type": "boolean",
-                                            "description": "When true, write the upgraded .plate file back to disk.",
-                                        }
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_hooks_install",
-                                "description": "Install the PLATE pre-push or pre-commit git hook template (#1281/#1302). Prefer this over shelling out to gh plate hooks install.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Optional local repository root path. Defaults to current directory.",
-                                        },
-                                        "hook": {
-                                            "type": "string",
-                                            "enum": ["pre-push", "pre-commit"],
-                                            "description": "Hook to install (default pre-push).",
-                                        },
-                                        "force": {
-                                            "type": "boolean",
-                                            "description": "Replace an existing non-PLATE hook when true.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_hooks_status",
-                                "description": "Report install state and configured commands for PLATE pre-push and pre-commit hooks (#1302).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Optional local repository root path. Defaults to current directory.",
-                                        }
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_plan_epic",
-                                "description": "Risk-aware epic planning (replaces stub). Returns plan + proposed children (more at high autonomy.risk_tolerance, with need:refinement labels). Host performs creation/linking. Per #477 / Epic #470.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "session_state": {
-                                            "type": "object",
-                                            "description": "Optional resumption state from a prior planning session.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_planning_start",
-                                "description": "Start Q&A-driven feature (#630) or product (#628) planning session. Returns first question for ask_user_question. #634 budget gate.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {"type": "string", "description": "feature | product"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_planning_answer",
-                                "description": "Record one planning answer and return next question or complete session (#628/#630).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "session": {"type": "object", "description": "Session dict from start/answer."},
-                                        "answer": {"type": "string"},
-                                        "question_id": {"type": "string"},
-                                    },
-                                    "required": ["session", "answer"],
-                                },
-                            },
-                            {
-                                "name": "plate_planning_build",
-                                "description": "Build Feature or product Epic stub plan from completed session answers for human approval (#628/#630). #634 budget gate.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "session": {"type": "object"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                    "required": ["session"],
-                                },
-                            },
-                            {
-                                "name": "plate_planning_script",
-                                "description": "Return the ordered planning question script for feature or product kind.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_planning_decide",
-                                "description": "Approve/revise/reject a pending Q&A plan stub (#628/#630). Revise stays actionable until resubmit. Does not auto-create GitHub issues.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "plan_id": {"type": "string", "description": "Pending plan id"},
-                                        "decision": {
-                                            "type": "string",
-                                            "description": "approve | revise | reject",
-                                        },
-                                        "note": {"type": "string"},
-                                        "decided_by": {"type": "string"},
-                                    },
-                                    "required": ["plan_id", "decision"],
-                                },
-                            },
-                            {
-                                "name": "plate_planning_resubmit",
-                                "description": "Resubmit a revise_requested plan for re-approval (#630; parity with artifact resubmit).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "plan_id": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "body": {"type": "string"},
-                                        "note": {"type": "string"},
-                                        "resubmitted_by": {"type": "string"},
-                                    },
-                                    "required": ["plan_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_planning_history",
-                                "description": "Decision/resubmit history for a Q&A plan id (#630).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "plan_id": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                    "required": ["plan_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_planning_list_pending",
-                                "description": "List pending plan stubs, actionable (pending+revise), or planning feed items.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "feed": {
-                                            "type": "boolean",
-                                            "description": "If true, return planning_feed_items shape",
-                                        },
-                                        "actionable": {
-                                            "type": "boolean",
-                                            "description": "If true, pending + revise_requested plans",
-                                        },
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_er_planning_start",
-                                "description": "Start Q&A epic (#640) or release (#629) planning session. Returns first ask_user_question prompt. #634 budget gate.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {"type": "string", "description": "epic | release"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                },
-                            },
-{
-                                "name": "plate_er_planning_answer",
-                                "description": "Record one epic/release planning answer; return next question or complete.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "session": {"type": "object"},
-                                        "answer": {"type": "string"},
-                                        "question_id": {"type": "string"},
-                                    },
-                                    "required": ["session", "answer"],
-                                },
-                            },
-{
-                                "name": "plate_er_planning_build",
-                                "description": "Build Epic tree or Release plan from session for human approval (#640/#629). #634 budget gate.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "session": {"type": "object"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                    "required": ["session"],
-                                },
-                            },
-{
-                                "name": "plate_er_planning_script",
-                                "description": "Return ordered epic or release planning questions.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_er_planning_decide",
-                                "description": "Approve/revise/reject a pending epic/release plan (#640/#629). Revise stays actionable until resubmit. Does not create issues or cut releases.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "plan_id": {"type": "string"},
-                                        "decision": {
-                                            "type": "string",
-                                            "description": "approve | revise | reject",
-                                        },
-                                        "note": {"type": "string"},
-                                        "decided_by": {"type": "string"},
-                                    },
-                                    "required": ["plan_id", "decision"],
-                                },
-                            },
-                            {
-                                "name": "plate_er_planning_resubmit",
-                                "description": "Resubmit a revise_requested epic/release plan for re-approval (#640/#629; shared ledger with #630).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "plan_id": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "body": {"type": "string"},
-                                        "note": {"type": "string"},
-                                        "resubmitted_by": {"type": "string"},
-                                    },
-                                    "required": ["plan_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_er_planning_list_pending",
-                                "description": "List pending/revise epic/release plans and incomplete ER sessions for the feed.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_artifact_propose",
-                                "description": "Propose a Design or Research artifact for human approval (#632). #634 budget gate. Durable under .agentic/approvals/.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {"type": "string", "description": "design | research"},
-                                        "title": {"type": "string"},
-                                        "summary": {"type": "string"},
-                                        "content_path": {"type": "string"},
-                                        "content_excerpt": {"type": "string"},
-                                        "related_issue": {"type": "integer"},
-                                        "related_epic": {"type": "integer"},
-                                        "originating_question": {"type": "integer"},
-                                        "media_links": {"type": "array", "items": {"type": "string"}},
-                                        "actor": {"type": "string"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                    "required": ["kind", "title", "summary"],
-                                },
-                            },
-{
-                                "name": "plate_artifact_decide",
-                                "description": "Approve, revise, or reject a Design/Research proposal (#632).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "proposal_id": {"type": "string"},
-                                        "decision": {"type": "string", "description": "approve|revise|reject"},
-                                        "decided_by": {"type": "string"},
-                                        "note": {"type": "string"},
-                                        "open_checkpoint": {
-                                            "type": "boolean",
-                                            "description": "On revise, open #648 checkpoint if related_issue set",
-                                        },
-                                    },
-                                    "required": ["proposal_id", "decision"],
-                                },
-                            },
-                            {
-                                "name": "plate_artifact_resubmit",
-                                "description": "Resubmit a revised Design/Research proposal after content update (#632). #634 budget gate.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "proposal_id": {"type": "string"},
-                                        "summary": {"type": "string"},
-                                        "content_path": {"type": "string"},
-                                        "content_excerpt": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "media_links": {"type": "array", "items": {"type": "string"}},
-                                        "actor": {"type": "string"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                    "required": ["proposal_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_artifact_history",
-                                "description": "Decision history for a Design/Research proposal (#632).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "proposal_id": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                    "required": ["proposal_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_artifact_list",
-                                "description": "List pending/actionable/authoritative Design/Research approval proposals (#632).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "description": "pending|revised|approved|rejected|actionable|all",
-                                        },
-                                        "kind": {"type": "string"},
-                                        "authoritative": {"type": "boolean"},
-                                        "actionable": {
-                                            "type": "boolean",
-                                            "description": "If true, list pending+revised",
-                                        },
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_artifact_get",
-                                "description": "Get one artifact approval proposal by id (#632).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "proposal_id": {"type": "string"},
-                                    },
-                                    "required": ["proposal_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_pr_babysit",
-                                "description": (
-                                    "Inspect a pull request for unresolved review feedback (scope: all|bot-only|human-only per #496) "
-                                    "and base branch sync state. Optionally post trigger comments and auto-resolve outdated threads (--act / act=true)."
-                                ),
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "pr_number": {
-                                            "type": "integer",
-                                            "description": "Pull request number.",
-                                        },
-                                        "agents": {
-                                            "type": "string",
-                                            "description": "Optional comma-separated login allowlist (overrides scope).",
-                                        },
-                                        "scope": {
-                                            "type": "string",
-                                            "enum": ["all", "bot-only", "human-only"],
-                                            "description": "pr_review_scope (#496). Default all (from .plate or built-in).",
-                                        },
-                                        "act": {
-                                            "type": "boolean",
-                                            "description": "When true, post trigger comments if issues detected and auto-resolve outdated threads.",
-                                        },
-                                        "branch_update_strategy": {
-                                            "type": "string",
-                                            "enum": ["copilot-request", "local-rebase", "none"],
-                                            "description": (
-                                                "How to handle out-of-sync base branch: local-rebase (default, local worktree rebase+push), "
-                                                "copilot-request (opt-in, triggers Copilot merge assist), or none (detect only)."
-                                            ),
-                                        },
-                                    },
-                                    "required": ["pr_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_get_pr_merge_gates",
-                                "description": "Get comprehensive merge gates status for a PR using the get_pr_merge_gates helper (merge state, threads, note with checklist). Complements plate_pr_babysit for full 'make mergeable' ownership per #526.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "pr_number": {
-                                            "type": "integer",
-                                            "description": "Pull request number.",
-                                        },
-                                    },
-                                    "required": ["pr_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_pr_verify",
-                                "description": (
-                                    "Run scripted pre-merge checks for a PR (base main, labels, fragment, milestone, "
-                                    "closing keyword, CI, review threads). Read-only; never merges. Optional run_tests."
-                                ),
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "pr_number": {
-                                            "type": "integer",
-                                            "description": "Pull request number.",
-                                        },
-                                        "run_tests": {
-                                            "type": "boolean",
-                                            "description": (
-                                                "When true, run PYTHONPATH=src python3 -m unittest discover -s tests "
-                                                "locally and include the count (warns on stale-base signatures)."
-                                            ),
-                                        },
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Repository root for run_tests (default: .).",
-                                        },
-                                    },
-                                    "required": ["pr_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_resolve_review_thread",
-                                "description": "Resolve a pull request review thread via GitHub GraphQL resolveReviewThread.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "thread_id": {
-                                            "type": "string",
-                                            "description": "GraphQL node ID of the review thread to resolve.",
-                                        },
-                                    },
-                                    "required": ["thread_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_get_unresolved_review_threads",
-                                "description": "List all unresolved review threads (isResolved: false, including outdated) for address-pr-feedback fetch and done gate (#1155). Use plate_get_actionable_review_threads for scoped actionable work only.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "pr_number": {
-                                            "type": "integer",
-                                            "description": "Pull request number.",
-                                        },
-                                    },
-                                    "required": ["pr_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_get_actionable_review_threads",
-                                "description": "List actionable (unresolved, non-outdated) review threads for a PR under pr_review_scope (#496: all|bot-only|human-only; default all includes Copilot). High-level helper: GraphQL reviewThreads, databaseId, suggestion metadata. Use with plate_resolve_review_thread / plate_pr_babysit. Addresses #516/#496.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "pr_number": {
-                                            "type": "integer",
-                                            "description": "Pull request number.",
-                                        },
-                                        "agent_logins": {
-                                            "type": "string",
-                                            "description": "Comma-separated login allowlist (optional; overrides scope).",
-                                        },
-                                        "scope": {
-                                            "type": "string",
-                                            "enum": ["all", "bot-only", "human-only"],
-                                            "description": "pr_review_scope (#496). Default all.",
-                                        },
-                                    },
-                                    "required": ["pr_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_pr_packet",
-                                "description": "Compact JSON evidence packet for PR review feedback (#1364): threads, failing check excerpts, PR facts, probe deltas. Prefer over re-reading raw bot comments.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "pr_number": {
-                                            "type": "integer",
-                                            "description": "Pull request number.",
-                                        },
-                                        "max_bytes": {
-                                            "type": "integer",
-                                            "description": "UTF-8 size cap before truncation (default 6144).",
-                                        },
-                                        "record_ledger": {
-                                            "type": "boolean",
-                                            "description": "Record handoff_packet_size (+ optional turns) to spend ledger.",
-                                        },
-                                        "turns": {"type": "integer"},
-                                        "run_id": {"type": "string"},
-                                        "cloud_agent_id": {"type": "string"},
-                                    },
-                                    "required": ["pr_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_what_next",
-                                "description": "Returns the next recommended PLATE process step and a short prompt segment, based on live health/epics/labels/fragments/Goals. Use first for autonomous or looped flows; follow quiet turn-summary rules for long-running use.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "agent_type": {
-                                            "type": "string",
-                                            "description": "Optional hint for specialized guidance (general, coding, docs, etc.).",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_feed",
-                                "description": "Ranked endless feed of open Questions + Tasks (plus process/autonomy signals) for native TUI/CLI presentation (#631). Prefer this for user-facing Q&A/Task surfacing.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "limit": {"type": "integer", "description": "Max items (default 10)."},
-                                        "include_process": {"type": "boolean", "description": "Include plate_what_next process item (default true)."},
-                                        "include_autonomy": {"type": "boolean", "description": "Include open autonomy checkpoints (default true)."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_contemplate",
-                                "description": "Run Contemplation on a Question answer: evaluates Answer signal checklist against cited evidence, appends audit log, and reports PR-ready state (or follow-ups). Engine always produces traceable markers; agents follow quiet comment rules for any additional prose.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "question_number": {"type": "integer", "description": "The Question being answered."},
-                                        "answer_text": {"type": "string", "description": "The answer text (full transcript captured)."},
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "session": {"type": "string", "description": "Session/turn for provenance."},
-                                        "source": {"type": "string", "description": "qanda | agent-contemplation | blocking", "default": "contemplation"},
-                                        "answered_by": {"type": "string", "description": "Actor. Defaults to 'engine'."},
-                                    },
-                                    "required": ["question_number", "answer_text"],
-                                },
-                            },
-                            {
-                                "name": "plate_delegate_to_agent",
-                                "description": "Route a task to a baseline agent (by id) and return a narrow delegation packet (details, skills, constraints, short prompt). Always call with a short task_description per the plate persona. Packets include retrieval hints; keep responses scoped and quiet per guidance.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "agent_id": {
-                                            "type": "string",
-                                            "description": "Baseline agent id to delegate the task to.",
-                                        },
-                                        "task_description": {
-                                            "type": "string",
-                                            "description": "Free-text description of the task to delegate.",
-                                        },
-                                    },
-                                    "required": ["agent_id", "task_description"],
-                                },
-                            },
-                            # === Curiosity / Q&A Mode tools (Epic #139, Feature #154) ===
-                            # See docs/design/qanda-mcp-cli-surfaces.md and docs/design/curiosity-answer-model.md
-                            {
-                                "name": "plate_list_questions",
-                                "description": "List open Question issues (informational goals) with answer_signal hints. Use with synthesize_priorities before native Q&A presentation. When surfacing, use minimal front matter per quiet_operations guidance.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "state": {
-                                            "type": "string",
-                                            "description": "open or closed. Defaults to open.",
-                                            "default": "open",
-                                        },
-                                        "limit": {
-                                            "type": "integer",
-                                            "description": "Max results (default 20).",
-                                            "default": 20,
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_get_question",
-                                "description": "Fetch full details + recent comments + detected PLATE-ANSWER blocks for one Question issue. Powers answer lookup and blocking Question resumption flows.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "question_number": {
-                                            "type": "integer",
-                                            "description": "The GitHub issue number of the Question.",
-                                        },
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional.",
-                                        },
-                                        "include_comments": {
-                                            "type": "boolean",
-                                            "description": "Include recent comments and answer block detection (default true).",
-                                            "default": True,
-                                        },
-                                    },
-                                    "required": ["question_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_record_answer",
-                                "description": "Persist an answer to a Question as a structured PLATE-ANSWER comment block (per Answer Model). This is the primary ingestion hook for Contemplation Engine (#149) and blocking Question resumption (#148). Returns the posted comment + block for logging.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "question_number": {"type": "integer", "description": "Target Question issue number."},
-                                        "answer_text": {"type": "string", "description": "The user's or agent's answer text (never lost)."},
-                                        "answered_by": {"type": "string", "description": "Username or agent id. Defaults to 'agent'."},
-                                        "session": {"type": "string", "description": "Optional session/turn id for provenance."},
-                                        "source": {"type": "string", "description": "qanda | agent-contemplation | manual | blocking", "default": "qanda"},
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "agent_actions": {
-                                            "type": "array",
-                                            "items": {"type": "string"},
-                                            "description": "E.g. ['Created: #147', 'Updated wiki'] for Contemplation log.",
-                                        },
-                                    },
-                                    "required": ["question_number", "answer_text"],
-                                },
-                            },
-                            {
-                                "name": "plate_get_answers",
-                                "description": "Return answers for a Question. Prefers the fast committed docs/curiosity/answers.yml index (Answer Model #150); falls back to scanning PLATE-ANSWER comment blocks on the issue.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "question_number": {"type": "integer", "description": "The Question issue number."},
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                    },
-                                    "required": ["question_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_synthesize_priorities",
-                                "description": "Return a ranked list of open Questions with rationale (heuristic v1). Use before native Q&A presentation or gh plate qanda. Prefer minimal framing when surfacing questions (see quiet_operations guidance).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "max_results": {"type": "integer", "description": "Top N to return (default 5).", "default": 5},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_create_blocking_question",
-                                "description": "Create a blocking Question (last resort only) when stuck on hard informational ambiguity on another Issue. Performs structured dump + pause status on the original; returns the new Question #. Agent must have exhausted other tools/reasoning first, then pause work. Follow quiet comment rules for any additional updates.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "original_issue_number": {"type": "integer", "description": "The Issue (any type) that is blocked."},
-                                        "blockage_point": {"type": "string", "description": "Exact point where safe progress stopped."},
-                                        "missing_info": {"type": "string", "description": "What information is missing or ambiguous."},
-                                        "suggested_questions": {"type": "array", "items": {"type": "string"}, "description": "Specific questions to ask the human (recommended)."},
-                                        "partial_work": {"type": "string", "description": "What the agent has done/understood so far (to avoid loss)."},
-                                        "extra_context": {"type": "string", "description": "Any additional artifacts or context."},
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                    },
-                                    "required": ["original_issue_number", "blockage_point", "missing_info"],
-                                },
-                            },
-                            {
-                                "name": "plate_release_repair",
-                                "description": "Init/repair standing release tracks (release-major/minor/patch + legacy release) and ensure exactly one Next Release issue (#320). Default dry-run; set apply=true to create missing artifacts.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "apply": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_release_status",
-                                "description": "Return the current PLATE release status: release branch existence, open Release issues, active Next Release visibility, linked/on-hold Epics, track summary, pending unreleased fragments, and extension release checks.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "releases_dir": {
-                                            "type": "string",
-                                            "description": "Path to the releases directory. Defaults to .agentic/releases.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_release_cleanup_branches",
-                                "description": "Find dead remote branches (merged into base and no open PR) and optionally delete them as a fallback cleanup tool.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "base_branch": {
-                                            "type": "string",
-                                            "description": "Base branch to compare merge state against. Defaults to repository default branch.",
-                                        },
-                                        "apply": {
-                                            "type": "boolean",
-                                            "description": "When true, delete candidate branches. Defaults to false (dry-run).",
-                                        },
-                                        "limit": {
-                                            "type": "integer",
-                                            "description": "Optional max number of candidate branches to process.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_release_target_epic",
-                                "description": "Validate an Epic against the active Next Release and return the manual issue-linking guidance required because GitHub does not expose a public API to create the issue-to-issue sidebar link directly.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "epic_number": {
-                                            "type": "integer",
-                                            "description": "Epic issue number to validate against the active Next Release.",
-                                        },
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                    },
-                                    "required": ["epic_number"],
-                                },
-                            },
-                            {
-                                "name": "plate_release_notes",
-                                "description": "Return a structured diff of PLATE release notes between two versions, including migration steps. Use to understand what changed between your current PLATE version and the latest.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "from_version": {
-                                            "type": "string",
-                                            "description": "Start version (exclusive, e.g. '0.1.2'). Omit for all versions from beginning.",
-                                        },
-                                        "to_version": {
-                                            "type": "string",
-                                            "description": "End version (inclusive, e.g. '0.2.0'). Omit for latest.",
-                                        },
-                                        "releases_dir": {
-                                            "type": "string",
-                                            "description": "Path to the releases directory. Defaults to .agentic/releases.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_costs",
-                                "description": "Harvest USAGE REPORT blocks from closed issues (per AGENTS.md), aggregate tokens/cost/duration for observability (Epic #265). Set dashboard=true for cost+risk dashboard with budgets, burn rate, drift signals, ranked feed items (#653/#634).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name. Optional if running inside repo clone.",
-                                        },
-                                        "epic_label": {
-                                            "type": "string",
-                                            "description": "Optional 'Epic: foo' label to scope aggregation.",
-                                        },
-                                        "dashboard": {
-                                            "type": "boolean",
-                                            "description": "When true, return cost+risk dashboard (#653/#634) instead of raw aggregate.",
-                                        },
-                                        "spend_report": {
-                                            "type": "boolean",
-                                            "description": "When true, return spend attribution from .agentic/ledger spend_interval rows (#1352).",
-                                        },
-                                        "run_cost": {
-                                            "type": "boolean",
-                                            "description": "When true, compute all-in cost for run_id or cloud_agent_id from ledger intervals (#1352).",
-                                        },
-                                        "run_id": {"type": "string"},
-                                        "cloud_agent_id": {"type": "string"},
-                                        "ledger_base_dir": {
-                                            "type": "string",
-                                            "description": "Optional ledger root (defaults to .agentic/ledger).",
-                                        },
-                                        "limit": {"type": "integer"},
-                                    },
-                                    "required": [],
-                                },
-                            },
-                            {
-                                "name": "plate_autonomy_status",
-                                "description": "Return AutonomyStatus (risk_tolerance, budget remaining, autopilot_score, due procedures, human checkpoints) for Epic #470 engine. Integrates health/costs/config.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_autonomy_budget",
-                                "description": "Durable #634 budget snapshot: limits, spend.json counters, remaining tokens/USD, pressure, optional estimate would_pause/throttle. Set reset=true to zero today's spend counters (operator hygiene; does not change .plate limits).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "estimated_tokens": {
-                                            "type": "integer",
-                                            "description": "Optional estimate to project would_pause/throttle.",
-                                        },
-                                        "estimate_tokens": {
-                                            "type": "integer",
-                                            "description": "Alias for estimated_tokens.",
-                                        },
-                                        "reset": {
-                                            "type": "boolean",
-                                            "description": "When true, zero durable spend.json for the current UTC day and return post-reset snapshot fields.",
-                                        },
-                                        "reset_reason": {
-                                            "type": "string",
-                                            "description": "Optional note stored on spend.json when reset=true.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_pm_status",
-                                "description": "Project Manager orchestrator status: budget, team size, open assignments/checkpoints (#660).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"repo": {"type": "string"}},
-                                },
-                            },
-                            {
-                                "name": "plate_pm_team",
-                                "description": "List pre-defined PM sub-agent personas (dev/design/research/release) (#660).",
-                                "inputSchema": {"type": "object", "properties": {}},
-                            },
-                            {
-                                "name": "plate_pm_assign",
-                                "description": "Budget-aware assignment of one work item to a persona (#660).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "item": {"type": "object"},
-                                    },
-                                    "required": ["item"],
-                                },
-                            },
-                            {
-                                "name": "plate_pm_run_cycle",
-                                "description": "Run one PM orchestration cycle: collect work, assign personas, respect budget/checkpoints; may dispatch fleet/loops and tick delegated #638/#639 loops (#660). Default dry_run=true.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                        "max_assignments": {"type": "integer"},
-                                        "dispatch_fleet": {"type": "boolean"},
-                                        "dispatch_loops": {"type": "boolean"},
-                                        "tick_loops": {
-                                            "type": "boolean",
-                                            "description": "Sync loop stages and complete assignments when loops done (default true).",
-                                        },
-                                        "fetch_loop_gates": {
-                                            "type": "boolean",
-                                            "description": "When apply (dry_run=false), fetch PR gates on babysit ticks.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_pm_run_loop",
-                                "description": "Multi-cycle PM orchestrator loop with stop on checkpoints/budget/idle (#660). Default dry_run=true.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                        "max_cycles": {"type": "integer"},
-                                        "max_assignments": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_pm_queue",
-                                "description": "List durable PM assignment queue (.agentic/pm/queue.json) with ask_user_question payloads (#660).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "status": {
-                                            "type": "string",
-                                            "description": "proposed|delegated|blocked|done|cancelled|all",
-                                        },
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_pm_complete",
-                                "description": "Mark a PM assignment done/cancelled, or Approve & run (status=run|approve) to promote proposed→delegated with fleet/loop dispatch under explicit human consent (#660). Works when risk=off.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "assignment_id": {"type": "string"},
-                                        "status": {
-                                            "type": "string",
-                                            "description": "done|cancelled|run|approve|delegated|proposed|blocked",
-                                        },
-                                        "note": {"type": "string"},
-                                    },
-                                    "required": ["assignment_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_pm_tick_loops",
-                                "description": "Tick delegated #638/#639 loops only (sync stages, auto-advance estimate_cost, optional babysit gates, complete-on-done) without new PM assigns (#660).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                        "fetch_gates": {"type": "boolean"},
-                                        "fetch_loop_gates": {"type": "boolean"},
-                                        "limit": {"type": "integer"},
-                                        "complete_when_done": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_fleet_status",
-                                "description": "Multi-agent fleet status: roles, active handoffs, budget allocation (#644).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "budget_tokens": {"type": "integer"},
-                                        "risk_tolerance": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_fleet_roles",
-                                "description": "List fleet agent roles (planner/implementer/reviewer/researcher/deployer/market) (#644).",
-                                "inputSchema": {"type": "object", "properties": {}},
-                            },
-                            {
-                                "name": "plate_fleet_handoff",
-                                "description": "Create explicit agent→agent handoff packet with narrow context; #634 live budget gate (#644).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "from_agent": {"type": "string"},
-                                        "to_agent": {"type": "string"},
-                                        "task": {"type": "string"},
-                                        "context": {"type": "object"},
-                                        "artifacts": {"type": "array", "items": {"type": "string"}},
-                                        "constraints": {"type": "array", "items": {"type": "string"}},
-                                        "budget_tokens": {"type": "integer"},
-                                        "budget_remaining": {
-                                            "type": "integer",
-                                            "description": "Explicit remaining tokens; blocks when est exceeds remaining (#634).",
-                                        },
-                                        "use_live_budget": {
-                                            "type": "boolean",
-                                            "description": "Hydrate remaining from durable spend when budget_remaining omitted (default true).",
-                                        },
-                                        "risk": {"type": "string"},
-                                        "related_issue": {"type": "integer"},
-                                        "related_pr": {"type": "integer"},
-                                        "parent_handoff_id": {"type": "string"},
-                                        "requires_human": {"type": "boolean"},
-                                    },
-                                    "required": ["to_agent", "task"],
-                                },
-                            },
-                            {
-                                "name": "plate_fleet_update",
-                                "description": "Update handoff status (accepted|done|blocked|cancelled); high/critical accept needs shadow_ack + approved (#644/#645).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "handoff_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "status": {"type": "string"},
-                                        "notes": {"type": "string"},
-                                        "artifacts": {"type": "array", "items": {"type": "string"}},
-                                        "context": {"type": "object"},
-                                        "shadow_ack": {
-                                            "type": "string",
-                                            "description": "shadow_id for high/critical accept (#645/#883).",
-                                        },
-                                        "approved": {
-                                            "type": "boolean",
-                                            "description": "Human approval for high/critical accept.",
-                                        },
-                                        "checkpoint_id": {
-                                            "type": "string",
-                                            "description": "Approved #648 checkpoint id supplying shadow/approval.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_fleet_complete",
-                                "description": "Mark a fleet handoff done (#644).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "handoff_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "notes": {"type": "string"},
-                                        "artifacts": {"type": "array", "items": {"type": "string"}},
-                                    },
-                                    "required": ["handoff_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_fleet_list",
-                                "description": "List fleet handoffs (default active) (#644).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {"type": "string"},
-                                        "to_agent": {"type": "string"},
-                                        "from_agent": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_fleet_allocate",
-                                "description": "Allocate token budget across concurrent fleet agents (#644).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "budget_tokens": {"type": "integer"},
-                                        "active_roles": {"type": "array", "items": {"type": "string"}},
-                                        "risk_tolerance": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_fleet_plan",
-                                "description": "Plan multi-agent handoffs from high-level intent; optional create; #634 live budget hydrate (#644).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "intent": {"type": "string"},
-                                        "task": {"type": "string"},
-                                        "budget_tokens": {
-                                            "type": "integer",
-                                            "description": "Explicit total pool; when omitted hydrates from durable remaining (#634).",
-                                        },
-                                        "use_live_budget": {
-                                            "type": "boolean",
-                                            "description": "Hydrate pool from spend.json when budget_tokens omitted (default true).",
-                                        },
-                                        "risk_tolerance": {"type": "string"},
-                                        "related_issue": {"type": "integer"},
-                                        "create": {"type": "boolean"},
-                                        "apply": {"type": "boolean"},
-                                    },
-                                    "required": ["intent"],
-                                },
-                            },
-                            {
-                                "name": "plate_fleet_feed",
-                                "description": "Feed presentation items for active fleet handoffs (#644).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"limit": {"type": "integer"}},
-                                },
-                            },
-                            {
-                                "name": "plate_monitor_discussions",
-                                "description": "Review Discussions/Ideas into ranked stub issue proposals (#642). #634 budget gate. dry_run default true.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "discussions": {"type": "array", "items": {"type": "object"}},
-                                        "dry_run": {"type": "boolean"},
-                                        "fetch_live": {"type": "boolean"},
-                                        "persist": {"type": "boolean"},
-                                        "min_score": {"type": "number"},
-                                        "limit": {"type": "integer"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_monitor_market",
-                                "description": "Synthesize host-injected market signals into Question proposals (#642). #634 budget gate. No outbound network.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "signals": {"type": "array", "items": {"type": "object"}},
-                                        "dry_run": {"type": "boolean"},
-                                        "persist": {"type": "boolean"},
-                                        "min_score": {"type": "number"},
-                                        "limit": {"type": "integer"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_monitor_list",
-                                "description": "List monitoring proposals (default pending) (#642).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {"type": "string"},
-                                        "source": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_monitor_decide",
-                                "description": "Approve/reject/created a monitoring proposal (#642).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "proposal_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "decision": {"type": "string"},
-                                        "created_issue": {"type": "integer"},
-                                    },
-                                    "required": ["proposal_id", "decision"],
-                                },
-                            },
-                            {
-                                "name": "plate_monitor_feed",
-                                "description": "Feed presentation for pending monitoring proposals (#642).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"limit": {"type": "integer"}},
-                                },
-                            },
-                            {
-                                "name": "plate_stub_author",
-                                "description": "Author a local stub Issue draft of any PLATE type from intent/Q&A (#637). #634 budget gate.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "intent": {"type": "string"},
-                                        "task": {"type": "string"},
-                                        "issue_type": {"type": "string"},
-                                        "type": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "summary": {"type": "string"},
-                                        "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
-                                        "parent_epic": {},
-                                        "milestone": {},
-                                        "related_links": {"type": "array", "items": {"type": "string"}},
-                                        "source": {"type": "string"},
-                                        "labels": {"type": "array", "items": {"type": "string"}},
-                                        "persist": {"type": "boolean"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                    "required": ["intent"],
-                                },
-                            },
-                            {
-                                "name": "plate_stub_refine",
-                                "description": "Refine a stub draft with Q&A answers / AC / type changes (#637).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "draft_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "answers": {"type": "object"},
-                                        "add_acceptance": {"type": "array", "items": {"type": "string"}},
-                                        "summary_append": {"type": "string"},
-                                        "issue_type": {"type": "string"},
-                                        "note": {"type": "string"},
-                                        "mark_ready": {"type": "boolean"},
-                                    },
-                                    "required": ["draft_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_stub_create",
-                                "description": "Create GitHub issue from stub draft (dry_run default true) (#637). #634 budget gate.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "draft_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "repo": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_stub_list",
-                                "description": "List local stub drafts (#637).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {"type": "string"},
-                                        "issue_type": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_stub_get",
-                                "description": "Get one stub draft by id (#637).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "draft_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                    },
-                                    "required": ["draft_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_stub_author_create",
-                                "description": "Author stub then dry-run/create GitHub issue in one call (#637). #634 budget gate.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "intent": {"type": "string"},
-                                        "issue_type": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "summary": {"type": "string"},
-                                        "repo": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                        "source": {"type": "string"},
-                                        "parent_epic": {},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                    "required": ["intent"],
-                                },
-                            },
-                            {
-                                "name": "plate_stub_feed",
-                                "description": "Feed presentation for stub drafts awaiting create/refine (#637).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"limit": {"type": "integer"}},
-                                },
-                            },
-                            {
-                                "name": "plate_bug_loop_start",
-                                "description": "Start autonomous bug resolution loop run (#638): plan→TDD→PR→babysit→merge-eligible; budget estimate + live hydrate (#634).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "bug_number": {"type": "integer"},
-                                        "bug": {"type": "integer"},
-                                        "bug_title": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "risk": {"type": "string"},
-                                        "size": {
-                                            "type": "string",
-                                            "description": "trivial|small|medium|large for cost estimate",
-                                        },
-                                        "labels": {"type": "array", "items": {"type": "string"}},
-                                        "paths": {"type": "array", "items": {"type": "string"}},
-                                        "risk_tolerance": {"type": "string"},
-                                        "pr_number": {"type": "integer"},
-                                        "pr": {"type": "integer"},
-                                        "branch": {"type": "string"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {
-                                            "type": "boolean",
-                                            "description": "Hydrate remaining tokens from durable spend when budget_remaining omitted (default true).",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_bug_loop_advance",
-                                "description": "Advance bug loop one stage; babysit stage honors optional merge gates (#638).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "pr_number": {"type": "integer"},
-                                        "branch": {"type": "string"},
-                                        "note": {"type": "string"},
-                                        "force_skip_checkpoint": {"type": "boolean"},
-                                        "gates": {"type": "object"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_bug_loop_tick",
-                                "description": "One bug-loop tick: emit stage packet; optional gate fetch; auto-advance only if dry_run=false (#638).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                        "fetch_gates": {"type": "boolean"},
-                                        "repo": {"type": "string"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_bug_loop_list",
-                                "description": "List bug resolution loop runs (#638).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_bug_loop_get",
-                                "description": "Get one bug loop run (#638).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_bug_loop_cancel",
-                                "description": "Cancel a bug loop run (#638).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "note": {"type": "string"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_bug_loop_update",
-                                "description": "Update bug loop fields (stage, pr, branch, checkpoint) (#638).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "stage": {"type": "string"},
-                                        "status": {"type": "string"},
-                                        "pr_number": {"type": "integer"},
-                                        "branch": {"type": "string"},
-                                        "note": {"type": "string"},
-                                        "checkpoint_id": {"type": "string"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_bug_loop_feed",
-                                "description": "Feed presentation for active bug resolution loops (#638).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"limit": {"type": "integer"}},
-                                },
-                            },
-                            {
-                                "name": "plate_feature_loop_estimate",
-                                "description": "Upfront cost estimate for a Feature implementation loop (#639).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "size": {"type": "string"},
-                                        "needs_design_validation": {"type": "boolean"},
-                                        "design": {"type": "boolean"},
-                                        "needs_media": {"type": "boolean"},
-                                        "e2e": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_feature_loop_start",
-                                "description": "Start Feature loop: estimate→plan→TDD→docs→media→babysit→merge-eligible (#639).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "feature_number": {"type": "integer"},
-                                        "feature": {"type": "integer"},
-                                        "feature_title": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "risk": {"type": "string"},
-                                        "size": {"type": "string"},
-                                        "labels": {"type": "array", "items": {"type": "string"}},
-                                        "paths": {"type": "array", "items": {"type": "string"}},
-                                        "risk_tolerance": {"type": "string"},
-                                        "needs_design_validation": {"type": "boolean"},
-                                        "needs_media_approval": {"type": "boolean"},
-                                        "e2e": {"type": "boolean"},
-                                        "pr_number": {"type": "integer"},
-                                        "branch": {"type": "string"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {
-                                            "type": "boolean",
-                                            "description": "When true (default), hydrate remaining tokens from durable #634 snapshot if budget_remaining omitted.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_feature_loop_advance",
-                                "description": "Advance Feature loop one stage; babysit honors optional merge gates (#639).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "pr_number": {"type": "integer"},
-                                        "branch": {"type": "string"},
-                                        "note": {"type": "string"},
-                                        "force_skip_checkpoint": {"type": "boolean"},
-                                        "skip_media": {"type": "boolean"},
-                                        "gates": {"type": "object"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_loop_tick",
-                                "description": "One Feature-loop tick with optional gate fetch (#639).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                        "fetch_gates": {"type": "boolean"},
-                                        "repo": {"type": "string"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_loop_list",
-                                "description": "List Feature implementation loop runs (#639).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_feature_loop_get",
-                                "description": "Get one Feature loop run (#639).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"run_id": {"type": "string"}},
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_loop_cancel",
-                                "description": "Cancel a Feature loop run (#639).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "note": {"type": "string"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_loop_update",
-                                "description": "Update Feature loop fields (#639).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "stage": {"type": "string"},
-                                        "status": {"type": "string"},
-                                        "pr_number": {"type": "integer"},
-                                        "branch": {"type": "string"},
-                                        "note": {"type": "string"},
-                                        "checkpoint_id": {"type": "string"},
-                                        "cost_estimate_tokens": {"type": "integer"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_loop_feed",
-                                "description": "Feed presentation for active Feature loops (#639).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"limit": {"type": "integer"}},
-                                },
-                            },
-                            {
-                                "name": "plate_design_contract_propose",
-                                "description": "Propose visual/interaction design contract for a Feature with failing-test scaffold (#646). #634 budget gate.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "feature_number": {"type": "integer"},
-                                        "feature_title": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "visual_specs": {"type": "array", "items": {"type": "string"}},
-                                        "interaction_criteria": {"type": "array", "items": {"type": "string"}},
-                                        "a11y_criteria": {"type": "array", "items": {"type": "string"}},
-                                        "artifact_paths": {"type": "array", "items": {"type": "string"}},
-                                        "has_playwright": {"type": "boolean"},
-                                        "submit_for_approval": {"type": "boolean"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_design_contract_list",
-                                "description": "List design contracts (#646).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {"type": "string"},
-                                        "feature_number": {"type": "integer"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_design_contract_get",
-                                "description": "Get one design contract (#646).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"contract_id": {"type": "string"}},
-                                    "required": ["contract_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_design_contract_decide",
-                                "description": "Approve/reject/revise a design contract (#646).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "contract_id": {"type": "string"},
-                                        "decision": {"type": "string"},
-                                        "decided_by": {"type": "string"},
-                                        "note": {"type": "string"},
-                                    },
-                                    "required": ["contract_id", "decision"],
-                                },
-                            },
-                            {
-                                "name": "plate_design_contract_update",
-                                "description": "Update design contract criteria (#646).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "contract_id": {"type": "string"},
-                                        "visual_specs": {"type": "array", "items": {"type": "string"}},
-                                        "interaction_criteria": {"type": "array", "items": {"type": "string"}},
-                                        "a11y_criteria": {"type": "array", "items": {"type": "string"}},
-                                        "artifact_paths": {"type": "array", "items": {"type": "string"}},
-                                        "status": {"type": "string"},
-                                    },
-                                    "required": ["contract_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_design_contract_validate",
-                                "description": "Check if design contract is ready for Feature implementation (#646).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"contract_id": {"type": "string"}},
-                                    "required": ["contract_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_design_contract_scaffold",
-                                "description": "Generate failing design-contract test scaffold (python|typescript) (#646).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "contract_id": {"type": "string"},
-                                        "language": {"type": "string"},
-                                    },
-                                    "required": ["contract_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_design_contract_feed",
-                                "description": "Feed presentation for pending design contracts (#646).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"limit": {"type": "integer"}},
-                                },
-                            },
-                            {
-                                "name": "plate_release_media_manifest",
-                                "description": "Aggregate GIF/video media from unreleased fragments for release notes (#635).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "releases_dir": {"type": "string"},
-                                        "version": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_release_media_render",
-                                "description": "Render release media markdown from fragments (#635).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "releases_dir": {"type": "string"},
-                                        "only_approved": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_release_media_feed",
-                                "description": "Feed items for pending release media approval (#635).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"releases_dir": {"type": "string"}},
-                                },
-                            },
-                            {
-                                "name": "plate_release_media_validate_paths",
-                                "description": "Check that fragment media paths exist on disk (#635).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"releases_dir": {"type": "string"}},
-                                },
-                            },
-                            {
-                                "name": "plate_release_media_decide",
-                                "description": "Approve/reject a media item in-memory (persist by editing fragment) (#635).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "releases_dir": {"type": "string"},
-                                        "index": {"type": "integer"},
-                                        "path": {"type": "string"},
-                                        "url": {"type": "string"},
-                                        "decision": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_hybrid_list_kinds",
-                                "description": "List hybrid/non-code project kinds (software, docs, marketing, infra, …) (#650).",
-                                "inputSchema": {"type": "object", "properties": {}},
-                            },
-                            {
-                                "name": "plate_hybrid_list_artifacts",
-                                "description": "List generalized artifact types for hybrid projects (#650).",
-                                "inputSchema": {"type": "object", "properties": {}},
-                            },
-                            {
-                                "name": "plate_hybrid_list_validation",
-                                "description": "List validation strategies (link check, content lint, visual, IaC plan, …) (#650).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"kind": {"type": "string"}},
-                                },
-                            },
-                            {
-                                "name": "plate_hybrid_detect",
-                                "description": "Detect project kind from filesystem signals (#650).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"repo_root": {"type": "string"}},
-                                },
-                            },
-                            {
-                                "name": "plate_hybrid_set_kind",
-                                "description": "Persist explicit project kind override (#650).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {"type": "string"},
-                                        "base_dir": {"type": "string"},
-                                        "note": {"type": "string"},
-                                    },
-                                    "required": ["kind"],
-                                },
-                            },
-                            {
-                                "name": "plate_hybrid_profile",
-                                "description": "Load persisted or detected hybrid project profile (#650).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "base_dir": {"type": "string"},
-                                        "repo_root": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_hybrid_contract",
-                                "description": "Full contract for a project kind: artifacts, validation, deploy targets (#650).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"kind": {"type": "string"}},
-                                    "required": ["kind"],
-                                },
-                            },
-                            {
-                                "name": "plate_hybrid_planning_template",
-                                "description": "Q&A planning template tuned to project kind (#650/#628).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"kind": {"type": "string"}},
-                                },
-                            },
-                            {
-                                "name": "plate_hybrid_validation_plan",
-                                "description": "Feature-level validation plan for non-code or hybrid work (#650).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {"type": "string"},
-                                        "feature_title": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "artifact_types": {
-                                            "type": "array",
-                                            "items": {"type": "string"},
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_hybrid_feed",
-                                "description": "Feed items for hybrid project profile detection/confirmation (#650).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "base_dir": {"type": "string"},
-                                        "repo_root": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_packaging_build",
-                                "description": "Build marketplace/release package with media, user narratives, onboarding proof, and planning links (#652). #634 budget gate. Never publishes.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "version": {"type": "string"},
-                                        "releases_dir": {"type": "string"},
-                                        "base_dir": {"type": "string"},
-                                        "require_approved_media": {"type": "boolean"},
-                                        "no_persist": {"type": "boolean"},
-                                        "budget_remaining": {
-                                            "type": "integer",
-                                            "description": "Explicit remaining tokens; blocks when est exceeds remaining (#634).",
-                                        },
-                                        "use_live_budget": {
-                                            "type": "boolean",
-                                            "description": "Hydrate remaining from durable spend when budget_remaining omitted (default true).",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_packaging_list",
-                                "description": "List persisted marketplace package builds (#652).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "base_dir": {"type": "string"},
-                                        "status": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_packaging_get",
-                                "description": "Get one marketplace package build by id (#652).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "package_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "base_dir": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_packaging_render",
-                                "description": "Render marketplace package markdown (media + narratives + onboarding) (#652).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "package_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "version": {"type": "string"},
-                                        "releases_dir": {"type": "string"},
-                                        "base_dir": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_packaging_decide",
-                                "description": "Approve package for human publish or reject (#652). Never publishes credentials/secrets.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "package_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "decision": {"type": "string"},
-                                        "decided_by": {"type": "string"},
-                                        "note": {"type": "string"},
-                                        "base_dir": {"type": "string"},
-                                    },
-                                    "required": ["package_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_packaging_feed",
-                                "description": "Feed items for marketplace packages awaiting review/publish Tasks (#652).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "base_dir": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_packaging_plan",
-                                "description": "Agent packet for marketplace-package scheduled op (#641/#652).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "version": {"type": "string"},
-                                        "releases_dir": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_feature_media_estimate_cost",
-                                "description": "Advisory token estimate for Feature media plan/register (#634/#636).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "phase": {
-                                            "type": "string",
-                                            "description": "plan|register",
-                                        },
-                                        "quality": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_feature_media_plan",
-                                "description": "Plan per-Feature demo GIF capture (test_name + path + steps) (#636). Gates on live #634 budget when use_live_budget.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "feature_number": {"type": "integer"},
-                                        "feature_title": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "test_name": {"type": "string"},
-                                        "caption": {"type": "string"},
-                                        "fragment_slug": {"type": "string"},
-                                        "quality": {"type": "string"},
-                                        "budget_remaining": {"type": "integer"},
-                                        "use_live_budget": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_feature_media_register",
-                                "description": "Register record_e2e_gif result for a Feature media plan (#636).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "record_id": {"type": "string"},
-                                        "gif_path": {"type": "string"},
-                                        "video_path": {"type": "string"},
-                                        "size_bytes": {"type": "integer"},
-                                        "quality": {"type": "string"},
-                                        "capture_result": {"type": "object"},
-                                        "submit_for_approval": {"type": "boolean"},
-                                    },
-                                    "required": ["record_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_media_list",
-                                "description": "List Feature media registry records (#636).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {"type": "string"},
-                                        "feature_number": {"type": "integer"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_feature_media_get",
-                                "description": "Get one Feature media record (#636).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"record_id": {"type": "string"}},
-                                    "required": ["record_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_media_decide",
-                                "description": "Approve/reject Feature demo media (#636).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "record_id": {"type": "string"},
-                                        "decision": {"type": "string"},
-                                        "decided_by": {"type": "string"},
-                                        "note": {"type": "string"},
-                                    },
-                                    "required": ["record_id", "decision"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_media_skip",
-                                "description": "Skip media requirement for a Feature (#636).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "record_id": {"type": "string"},
-                                        "note": {"type": "string"},
-                                    },
-                                    "required": ["record_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_media_attach_fragment",
-                                "description": "Append approved media to unreleased fragment media[] (#636/#635).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "record_id": {"type": "string"},
-                                        "fragment_path": {"type": "string"},
-                                        "fragment": {"type": "string"},
-                                    },
-                                    "required": ["record_id", "fragment_path"],
-                                },
-                            },
-                            {
-                                "name": "plate_feature_media_feed",
-                                "description": "Feed presentation for planned/pending Feature media (#636).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"limit": {"type": "integer"}},
-                                },
-                            },
-                            {
-                                "name": "plate_scheduled_ops_list",
-                                "description": "List scheduled autonomous ops catalog (#641).",
-                                "inputSchema": {"type": "object", "properties": {}},
-                            },
-                            {
-                                "name": "plate_scheduled_ops_status",
-                                "description": "Runnable vs gated scheduled ops at current risk_tolerance (#641).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"risk_tolerance": {"type": "string"}},
-                                },
-                            },
-                            {
-                                "name": "plate_scheduled_op_plan",
-                                "description": "Emit agent step packet for a scheduled op (#641).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "op_id": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                    },
-                                    "required": ["op_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_scheduled_op_run",
-                                "description": "Run/record scheduled op (dry_run default; live high/critical need approved + shadow_ack; #634 budget gate) (#641/#645).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "op_id": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                        "risk_tolerance": {"type": "string"},
-                                        "approved": {"type": "boolean"},
-                                        "checkpoint_id": {"type": "string"},
-                                        "shadow_ack": {
-                                            "type": "string",
-                                            "description": "shadow_id from prior dry-run or plate_autonomy_simulate for live high/critical (#645/#879).",
-                                        },
-                                        "note": {"type": "string"},
-                                        "budget_remaining": {
-                                            "type": "integer",
-                                            "description": "Explicit remaining tokens; blocks when est exceeds remaining (#634).",
-                                        },
-                                        "use_live_budget": {
-                                            "type": "boolean",
-                                            "description": "Hydrate remaining from durable spend.json when budget_remaining omitted (default true).",
-                                        },
-                                    },
-                                    "required": ["op_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_scheduled_op_runs",
-                                "description": "List scheduled op runs (#641).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "op_id": {"type": "string"},
-                                        "status": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_scheduled_op_complete",
-                                "description": "Mark a scheduled op run done/cancelled (#641).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "run_id": {"type": "string"},
-                                        "status": {"type": "string"},
-                                        "note": {"type": "string"},
-                                    },
-                                    "required": ["run_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_scheduled_ops_feed",
-                                "description": "Feed items for gated scheduled ops needing human (#641).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "risk_tolerance": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_task_create",
-                                "description": "Create a human-only Task issue with the 6-field contract (#359). Redacts secret-looking text. Agents never complete the human work.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "title": {"type": "string"},
-                                        "human_action": {"type": "string"},
-                                        "why_agent_cannot": {"type": "string"},
-                                        "context": {"type": "string"},
-                                        "instructions": {"type": "string"},
-                                        "done_signal": {"type": "string"},
-                                        "related_links": {"type": "string"},
-                                        "milestone": {"type": "string"},
-                                        "epic_milestone": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                    },
-                                    "required": ["title", "human_action", "why_agent_cannot", "context", "instructions"],
-                                },
-                            },
-                            {
-                                "name": "plate_task_close",
-                                "description": "Close a Task with <!-- PLATE-TASK-CLOSED --> after human completion (#359). Do not invent completion.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "number": {"type": "integer"},
-                                        "comment": {"type": "string"},
-                                        "dry_run": {"type": "boolean"},
-                                    },
-                                    "required": ["number"],
-                                },
-                            },
-                            {
-                                "name": "plate_task_detect",
-                                "description": "Detect human-only blockers (credentials, PyPI, billing, marketplace, external accounts) and optionally create Task issues (#360). Default detect-only (create=false, dry_run=true).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string"},
-                                        "text": {"type": "string"},
-                                        "signal": {"type": "string"},
-                                        "signals": {"type": "array", "items": {"type": "string"}},
-                                        "context": {"type": "string"},
-                                        "create": {"type": "boolean"},
-                                        "dry_run": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_collab_check",
-                                "description": "Human/agent co-existence policy check (#643/#651): gate actions against driver:* labels, authorship mix, path/branch ownership, and worktree etiquette.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "action": {"type": "string"},
-                                        "labels": {"type": "array", "items": {"type": "string"}},
-                                        "author_login": {"type": "string"},
-                                        "pr_number": {"type": "integer"},
-                                        "commits": {"type": "array", "items": {"type": "object"}},
-                                        "paths": {"type": "array", "items": {"type": "string"}},
-                                        "branch": {"type": "string"},
-                                        "worktree_root": {"type": "string"},
-                                        "repo_root": {"type": "string"},
-                                    },
-                                    "required": ["action"],
-                                },
-                            },
-                            {
-                                "name": "plate_collab_issue_status",
-                                "description": "Summarize driver:* / pause-delegation state for an issue (#643).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "issue": {"type": "object"},
-                                        "labels": {"type": "array", "items": {"type": "string"}},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_collab_ownership_claim",
-                                "description": "Claim path or branch ownership to pause agent autonomy on that surface (#651). Durable under .agentic/collab/ownership.json.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {"type": "string", "description": "path|branch"},
-                                        "target": {"type": "string"},
-                                        "owner": {"type": "string", "description": "human|agent|collaborative"},
-                                        "reason": {"type": "string"},
-                                        "related_issue": {"type": "integer"},
-                                        "actor": {"type": "string"},
-                                    },
-                                    "required": ["target"],
-                                },
-                            },
-                            {
-                                "name": "plate_collab_ownership_release",
-                                "description": "Release a path/branch ownership claim by id or kind+target (#651).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "claim_id": {"type": "string"},
-                                        "id": {"type": "string"},
-                                        "kind": {"type": "string"},
-                                        "target": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_collab_ownership_list",
-                                "description": "List ownership claims (default open) (#651).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {"type": "string"},
-                                        "kind": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_collab_etiquette",
-                                "description": "Branch/worktree etiquette check for agents (#651): integration branch + isolation.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "branch": {"type": "string"},
-                                        "worktree_root": {"type": "string"},
-                                        "repo_root": {"type": "string"},
-                                    },
-                                    "required": ["branch"],
-                                },
-                            },
-                            {
-                                "name": "plate_collab_concurrent",
-                                "description": "Predict concurrent-edit risk from open ownership claims for given paths (#651).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "paths": {"type": "array", "items": {"type": "string"}},
-                                    },
-                                    "required": ["paths"],
-                                },
-                            },
-                            {
-                                "name": "plate_collab_ownership_feed",
-                                "description": "Feed presentation items for open human/collaborative ownership pauses (#651).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_ledger_record",
-                                "description": "Append an inspectable PLATE-DECISION provenance entry for an autonomous action (#647). Durable under .agentic/ledger/.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "action_kind": {"type": "string"},
-                                        "decision": {"type": "string", "description": "proceed|throttle|pause|warn|skip|approve|reject|..."},
-                                        "reason": {"type": "string"},
-                                        "sources": {"type": "array", "items": {"type": "string"}},
-                                        "cost_estimate_tokens": {"type": "integer"},
-                                        "risk_tolerance": {"type": "string"},
-                                        "impact": {"type": "string"},
-                                        "related_issue": {"type": "integer"},
-                                        "related_pr": {"type": "integer"},
-                                        "shadow_id": {"type": "string"},
-                                        "checkpoint_id": {"type": "string"},
-                                        "artifact_links": {"type": "array", "items": {"type": "string"}},
-                                        "actor": {"type": "string"},
-                                        "session": {"type": "string"},
-                                        "metadata": {"type": "object"},
-                                    },
-                                    "required": ["action_kind", "decision", "reason"],
-                                },
-                            },
-                            {
-                                "name": "plate_ledger_record_spend",
-                                "description": "Append a spend_interval ledger row with tokens, routing inputs, and outcome (#1352). Durable under .agentic/ledger/.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "cloud_agent_id": {"type": "string"},
-                                        "parent_run_id": {"type": "string"},
-                                        "run_id": {"type": "string"},
-                                        "lifecycle_task_type": {"type": "string"},
-                                        "model": {"type": "string"},
-                                        "tier": {"type": "string", "description": "T0|T1|T2|T3"},
-                                        "effort": {"type": "string"},
-                                        "hardware": {"type": "string", "description": "Optional Lull resource id"},
-                                        "route_clarity": {"type": "string", "description": "clear|ambiguous"},
-                                        "input_tokens": {"type": "integer"},
-                                        "output_tokens": {"type": "integer"},
-                                        "cached_read_tokens": {"type": "integer"},
-                                        "cache_write_tokens": {"type": "integer"},
-                                        "tool_output_tokens": {"type": "integer"},
-                                        "turns": {"type": "integer"},
-                                        "handoff_packet_size": {"type": "integer"},
-                                        "handoff_packet_unit": {"type": "string", "description": "tokens|bytes"},
-                                        "rediscovery_count": {"type": "integer"},
-                                        "outcome_accepted": {"type": "boolean"},
-                                        "cost_usd": {"type": "number"},
-                                        "jev_score": {"type": "number", "description": "Shadow Jev score (#1356); not used for routing"},
-                                        "jev_suggested_tier": {"type": "string", "description": "T0|T1|T2|T3 suggested by Jev"},
-                                        "jev_model": {"type": "string", "description": "Model id Jev suggests"},
-                                        "jev_route_clarity": {"type": "string", "description": "clear|ambiguous per Jev"},
-                                        "related_issue": {"type": "integer"},
-                                        "related_pr": {"type": "integer"},
-                                        "session": {"type": "string"},
-                                        "metadata": {"type": "object"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_ledger_record_jev",
-                                "description": "Append Jev shadow scores on a spend_interval ledger row (#1356). Records parallel routing opinion alongside fixed-table execution; nothing reads this for routing until 60+ labeled runs.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "jev_score": {"type": "number", "description": "Required shadow score"},
-                                        "run_id": {"type": "string"},
-                                        "cloud_agent_id": {"type": "string"},
-                                        "lifecycle_task_type": {
-                                            "type": "string",
-                                            "description": "e.g. marketing_copy, support_triage, feature_impl",
-                                        },
-                                        "jev_suggested_tier": {"type": "string", "description": "T0|T1|T2|T3"},
-                                        "jev_model": {"type": "string"},
-                                        "jev_route_clarity": {"type": "string", "description": "clear|ambiguous"},
-                                        "tier": {"type": "string", "description": "Applied fixed-table tier for comparison"},
-                                        "model": {"type": "string", "description": "Applied model for comparison"},
-                                        "route_clarity": {"type": "string", "description": "Applied route clarity"},
-                                        "hardware": {"type": "string"},
-                                        "effort": {"type": "string"},
-                                        "outcome_accepted": {"type": "boolean"},
-                                        "related_issue": {"type": "integer"},
-                                        "related_pr": {"type": "integer"},
-                                        "session": {"type": "string"},
-                                        "metadata": {"type": "object"},
-                                    },
-                                    "required": ["jev_score"],
-                                },
-                            },
-                            {
-                                "name": "plate_ledger_list",
-                                "description": "List recent decision ledger entries (#647), optional filters.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "action_kind": {"type": "string"},
-                                        "decision": {"type": "string"},
-                                        "related_issue": {"type": "integer"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_ledger_query",
-                                "description": "Substring search over decision ledger reason/sources/metadata (#647).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "query": {"type": "string"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                    "required": ["query"],
-                                },
-                            },
-                            {
-                                "name": "plate_ledger_get",
-                                "description": "Get one decision ledger entry by id (#647).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "decision_id": {"type": "string"},
-                                    },
-                                    "required": ["decision_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_ledger_summary",
-                                "description": "Compact decision ledger summary counts (#647).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_autonomy_run_cycle",
-                                "description": "Run one AutonomyEngine cycle (introspect, enforce_budget, decide_next, execute/delegate). Supports dry_run and max_steps. For scheduled loops per #470.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "dry_run": {"type": "boolean", "description": "Default false."},
-                                        "max_steps": {"type": "integer", "description": "Cap actions this cycle."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_autonomy_list_procedures",
-                                "description": "List loaded procedures (from .agentic/procedures/*.json + built-ins), filtered by current risk_tolerance.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_autonomy_run_procedure",
-                                "description": "Run a specific procedure by id (risk and budget checked). Supports dry_run. High-risk procedures may return shadow_required (#645) unless approved after plate_autonomy_simulate or an approved #648 checkpoint_id.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "proc_id": {"type": "string", "description": "Procedure id e.g. nightly-drift-detection"},
-                                        "dry_run": {"type": "boolean", "description": "Default false."},
-                                        "shadow_ack": {"type": "string", "description": "shadow_id from plate_autonomy_simulate (#645)."},
-                                        "approved": {"type": "boolean", "description": "Explicit human approval after shadow preview (#645)."},
-                                        "checkpoint_id": {"type": "string", "description": "Approved #648 checkpoint id; supplies approval (+ shadow_id when present)."},
-                                    },
-                                    "required": ["proc_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_autonomy_simulate",
-                                "description": "Shadow/simulate a high-impact autonomous action without side effects (#645). Returns impact, cost/duration estimates, predicted side effects, gate preview, requires_approval, and shadow_id for later approval + execute.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "action_kind": {
-                                            "type": "string",
-                                            "description": "Action to simulate e.g. release_cut, deploy, auto_merge, run_procedure, plan_epic.",
-                                        },
-                                        "scope": {
-                                            "type": "object",
-                                            "description": "Optional context (version, pr_number, risk_level, etc.).",
-                                        },
-                                    },
-                                    "required": ["action_kind"],
-                                },
-                            },
-                            {
-                                "name": "plate_checkpoint_create",
-                                "description": "Create a unified human checkpoint/approval request (#648). Durable under .agentic/checkpoints/; returns marker for GitHub comments. Can auto-approve low impact at medium+ risk_tolerance.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "title": {"type": "string", "description": "Short checkpoint title for the feed."},
-                                        "reason": {"type": "string", "description": "Why human judgment is required."},
-                                        "impact": {"type": "string", "description": "low|medium|high|critical"},
-                                        "action_kind": {"type": "string", "description": "Gated action e.g. release_cut, deploy, design_approve."},
-                                        "scope": {"type": "object", "description": "Optional context payload."},
-                                        "shadow_id": {"type": "string", "description": "Optional #645 shadow_id to attach."},
-                                        "related_issue": {"type": "integer"},
-                                        "related_pr": {"type": "integer"},
-                                        "created_by": {"type": "string"},
-                                    },
-                                    "required": ["title", "reason"],
-                                },
-                            },
-                            {
-                                "name": "plate_checkpoint_decide",
-                                "description": "Record approve|revise|reject|cancel on a checkpoint (#648). Clears pause_autonomy when decided.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "checkpoint_id": {"type": "string"},
-                                        "decision": {"type": "string", "description": "approve|revise|reject|cancel"},
-                                        "decided_by": {"type": "string"},
-                                        "note": {"type": "string"},
-                                    },
-                                    "required": ["checkpoint_id", "decision"],
-                                },
-                            },
-                            {
-                                "name": "plate_checkpoint_list",
-                                "description": "List checkpoints (#648). Default status=pending; open_only=true returns pausing ones.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "status": {"type": "string", "description": "pending|approved|rejected|auto_approved|all"},
-                                        "open_only": {"type": "boolean"},
-                                        "limit": {"type": "integer"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_checkpoint_get",
-                                "description": "Get one checkpoint by id (#648).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "checkpoint_id": {"type": "string"},
-                                    },
-                                    "required": ["checkpoint_id"],
-                                },
-                            },
-                            {
-                                "name": "plate_migrate_plan",
-                                "description": "Generate dry-run migration plan for template-to-plate cutover using current inventory and .plate state.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_migrate_apply",
-                                "description": "Apply migration steps (with checkpoint/rollback support). Use after reviewing plan.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "dry_run": {"type": "boolean", "description": "Simulate only (default true for safety)."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_migrate_docs_namespace",
-                                "description": (
-                                    "Migrate PLATE docs from docs/ root to docs/plate/ namespace (#1027). "
-                                    "Uses git mv to move PLATE-owned doc directories (adr, audits, bootstrap, design, "
-                                    "marketing, migration, research, wiki) and PLATE root doc files. "
-                                    "Preserves AGENTS.md, SPEC.md, CURRENT.md and all product docs. "
-                                    "Rewrites references in repository files. Idempotent (safe to re-run). "
-                                    "Dry-run by default; set apply=true to perform the migration."
-                                ),
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "target_dir": {
-                                            "type": "string",
-                                            "description": "Repository root directory (default: current directory)",
-                                        },
-                                        "apply": {
-                                            "type": "boolean",
-                                            "description": "Apply the migration (default: false for dry-run)",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_import_payload",
-                                "description": (
-                                    "Import PLATE template payload into a local checkout (#616). "
-                                    "Dry-run by default; set apply=true to write. Strategies: safe|conservative|force. "
-                                    "namespace_scripts installs under scripts/plate/ when product scripts/ exists (#621). "
-                                    "namespace_docs installs under docs/plate/ when product docs/ exists (#1015); "
-                                    "omit for auto-detect, false to keep docs/ root. "
-                                    "platform is posix (default), posix-and-windows, or windows; "
-                                    "it filters PLATE-owned script twins and is written on apply. "
-                                    "escape_hatch_dir writes plan.json+PLAN.md+DRAFT_PR_BODY.md for hard merges (#622); "
-                                    "never force-overwrite high-value paths without human approval."
-                                ),
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "target_dir": {
-                                            "type": "string",
-                                            "description": "Local target directory (default .).",
-                                        },
-                                        "strategy": {
-                                            "type": "string",
-                                            "description": "safe | conservative | force (default safe).",
-                                        },
-                                        "template_repo": {
-                                            "type": "string",
-                                            "description": "Optional explicit template root path.",
-                                        },
-                                        "dry_run": {
-                                            "type": "boolean",
-                                            "description": "Plan only (default true).",
-                                            "default": True,
-                                        },
-                                        "apply": {
-                                            "type": "boolean",
-                                            "description": "Write files (default false).",
-                                            "default": False,
-                                        },
-                                        "namespace_scripts": {
-                                            "type": "boolean",
-                                            "description": "Force scripts/plate/ install; omit for auto-detect.",
-                                        },
-                                        "namespace_docs": {
-                                            "type": "boolean",
-                                            "description": "Force docs/plate/ install; omit for auto-detect; false keeps docs/ root (#1015).",
-                                        },
-                                        "platform": {
-                                            "type": "string",
-                                            "enum": ["posix", "posix-and-windows", "windows"],
-                                            "description": "Script platform for this run. Overrides target .plate and is written when apply=true. Omit to use target .plate, or posix when absent.",
-                                        },
-                                        "escape_hatch_dir": {
-                                            "type": "string",
-                                            "description": "Write #622 escape-hatch bundle under this directory.",
-                                        },
-                                        "escape_hatch_on_conflict": {
-                                            "type": "boolean",
-                                            "description": "Auto-write escape hatch under target/.agentic/import-escape-hatch when conflicts exist.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_payload_list",
-                                "description": "List PLATE template payload files with classification and path_rules (#621).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "template_repo": {"type": "string"},
-                                        "include_excluded": {"type": "boolean"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_payload_root",
-                                "description": "Resolve package payload root path and source kind (#621).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {"template_repo": {"type": "string"}},
-                                },
-                            },
-                            {
-                                "name": "plate_payload_manifest",
-                                "description": "Show template payload manifest including path_rules (#621).",
-                                "inputSchema": {"type": "object", "properties": {}},
-                            },
-                            {
-                                "name": "plate_payload_classify",
-                                "description": "Classify a relative path against the payload manifest (#621).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "path": {"type": "string"},
-                                        "template_repo": {"type": "string"},
-                                    },
-                                    "required": ["path"],
-                                },
-                            },
-                            {
-                                "name": "plate_spec_audit",
-                                "description": "Audit SPEC.md against unreleased fragments and path citations (#338). Returns structured findings (aligned/undocumented/stale_evidence/future_ok).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {
-                                            "type": "string",
-                                            "description": "Local repo root (default .).",
-                                        },
-                                        "spec_path": {
-                                            "type": "string",
-                                            "description": "Optional path to SPEC.md.",
-                                        },
-                                        "releases_dir": {
-                                            "type": "string",
-                                            "description": "Optional .agentic/releases path.",
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_spec_audit_followups",
-                                "description": "From SPEC audit findings, plan (default) or create follow-up issues and a SPEC draft table (#339). Never writes SPEC.md. apply=true creates GitHub issues with human-checkpoint bodies.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo_root": {"type": "string"},
-                                        "repo": {
-                                            "type": "string",
-                                            "description": "owner/name for issue creation",
-                                        },
-                                        "apply": {
-                                            "type": "boolean",
-                                            "description": "Create issues when true (default false dry-run).",
-                                            "default": False,
-                                        },
-                                        "max_issues": {
-                                            "type": "integer",
-                                            "description": "Cap actionable issues (default 10).",
-                                        },
-                                        "spec_path": {"type": "string"},
-                                        "releases_dir": {"type": "string"},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_perform_information_audit",
-                                "description": "Perform an Information Audit (Epic #218). Scans the Wiki Goals page + code/issues/PRs/discussions to surface Informational Goals and propose well-formed Question issues (per model in #220 and 10-rule contract in #223). Supports dry_run, scope, agent_type (general/marketing/engineering), max_questions, and include_defaults. Output feeds Curiosity/Q&A and Contemplation. v1 uses Goals signals + heuristics; full open-ended + refinement in follow-ups for #221.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "scope": {"type": "string", "description": "repo | epic:<n> | label:<name> | surface:... (default: repo)"},
-                                        "agent_type": {"type": "string", "description": "general | marketing | engineering (default: general) for specialized scoping/heuristics"},
-                                        "max_questions": {"type": "integer", "description": "Cap on proposals (default 5)", "default": 5},
-                                        "dry_run": {"type": "boolean", "description": "Propose only; do not create Issues (default false)", "default": False},
-                                        "include_defaults": {"type": "boolean", "description": "Include platform + extension default informational goals (default true)", "default": True},
-                                    },
-                                },
-                            },
-                            # Discussions MCP surface (Feature #329). plate_* naming for consistency with other github/process tools.
-                            # Supports Ideas category use cases, inter-agent comms, logs (Ideas #287, #292, #293; enables #282 orchestrator vision).
-                            {
-                                "name": "plate_list_discussions",
-                                "description": "List discussions (filter by category e.g. 'ideas', state 'open'). Returns normalized records with number/title/url/body_preview.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional if inside clone."},
-                                        "category": {"type": "string", "description": "Filter by category slug or name (e.g. 'ideas')."},
-                                        "state": {"type": "string", "description": "open or closed (client filtered for reliability)."},
-                                        "per_page": {"type": "integer", "description": "Max results (default 30)."},
-                                        "page": {"type": "integer", "description": "Page (default 1)."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_get_discussion",
-                                "description": "Get full discussion by number (includes body, category, etc.).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "number": {"type": "integer", "description": "Discussion number."},
-                                    },
-                                    "required": ["number"],
-                                },
-                            },
-                            {
-                                "name": "plate_list_discussion_comments",
-                                "description": "List comments on a discussion.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "number": {"type": "integer", "description": "Discussion number."},
-                                        "per_page": {"type": "integer", "description": "Max comments (default 30)."},
-                                    },
-                                    "required": ["number"],
-                                },
-                            },
-                            {
-                                "name": "plate_add_discussion_comment",
-                                "description": "Add a comment to an existing discussion.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "number": {"type": "integer", "description": "Discussion number."},
-                                        "body": {"type": "string", "description": "Comment markdown content."},
-                                    },
-                                    "required": ["number", "body"],
-                                },
-                            },
-                            {
-                                "name": "plate_create_discussion",
-                                "description": "Create a new discussion. Provide category_slug (e.g. 'ideas') or category_id (node ID).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                        "category_slug": {"type": "string", "description": "Category slug or name (resolved via list)."},
-                                        "category_id": {"type": "string", "description": "Direct category node ID (from GraphQL)."},
-                                        "title": {"type": "string", "description": "Discussion title."},
-                                        "body": {"type": "string", "description": "Discussion body (markdown)."},
-                                    },
-                                    "required": ["title", "body"],
-                                },
-                            },
-                            {
-                                "name": "plate_list_discussion_categories",
-                                "description": "List available discussion categories (id, name, slug, description) for the repo.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                    },
-                                },
-                            },
-                            {
-                                "name": "plate_list_open_ideas",
-                                "description": "Convenience: list open discussions in the 'ideas' category (common for process/idea capture).",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "repo": {"type": "string", "description": "owner/name. Optional."},
-                                    },
-                                },
-                            },
-                        ]
+            from .mcp.registry import tool_definitions_for_list
+
+            all_tools = tool_definitions_for_list()
             visible_tools = filter_tool_definitions(all_tools, get_active_mcp_tool_profiles())
             _write(
                 {
@@ -5496,7 +2404,8 @@ def run() -> None:
                 }
             )
         elif method == "tools/call":
-            _handle_tools_call(req_id, req.get("params", {}) or {})
+            with contextlib.redirect_stdout(sys.stderr):
+                _handle_tools_call(req_id, req.get("params", {}) or {})
         elif method == "notifications/initialized":
             continue
         elif req_id is None:
@@ -5510,6 +2419,8 @@ def run() -> None:
                 }
             )
 
+
+register_tool_executor(_execute_mcp_tool)
 
 if __name__ == "__main__":
     run()

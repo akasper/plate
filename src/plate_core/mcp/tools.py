@@ -18,7 +18,14 @@ class InitPlaywrightTool:
     """Initialize Playwright E2E testing in a repo."""
 
     @staticmethod
-    def execute(repo_path: str, template_repo: str | None = None, force: bool = False) -> dict:
+    def execute(
+        repo_path: str,
+        template_repo: str | None = None,
+        force: bool = False,
+        *,
+        repo_root: Path | None = None,
+        confine_template: bool = False,
+    ) -> dict:
         """
         Copy Playwright config, example specs, and GIF scripts from template payload.
 
@@ -34,12 +41,24 @@ class InitPlaywrightTool:
                 'next_steps': [...]
             }
         """
-        repo = Path(repo_path).resolve()
+        if repo_root is not None:
+            from .path_confinement import confined
+
+            try:
+                repo = confined(repo_path, repo_root)
+            except ValueError as exc:
+                return {"status": "error", "message": str(exc)}
+        else:
+            repo = Path(repo_path).resolve()
         if not repo.exists():
             return {"status": "error", "message": f"Repository not found: {repo_path}"}
 
         try:
             template = resolve_template_source_root(template_repo)
+            if confine_template and template_repo is not None and repo_root is not None:
+                from .path_confinement import confined
+
+                template = confined(template, repo_root)
 
             if not template.exists():
                 return {"status": "error", "message": f"Template not found: {template}"}
@@ -122,7 +141,15 @@ class RecordE2eGifTool:
     """Record and generate a demo GIF from E2E test. Per #263: supports trimming hints, better output info, size suitability checks."""
 
     @staticmethod
-    def execute(repo_path: str, test_name: str, quality: str = "medium", start: str | None = None, duration: int | None = None) -> dict:
+    def execute(
+        repo_path: str,
+        test_name: str,
+        quality: str = "medium",
+        start: str | None = None,
+        duration: int | None = None,
+        *,
+        repo_root: Path | None = None,
+    ) -> dict:
         """
         Record and generate a demo GIF from E2E test.
 
@@ -136,7 +163,15 @@ class RecordE2eGifTool:
         Returns:
             {'status': 'success' or 'error' or 'warning', 'gif_path': '...', 'size_bytes': ..., 'quality': ..., 'recommendations': [...] }
         """
-        repo = Path(repo_path).resolve()
+        if repo_root is not None:
+            from .path_confinement import confined
+
+            try:
+                repo = confined(repo_path, repo_root)
+            except ValueError as exc:
+                return {"status": "error", "message": str(exc)}
+        else:
+            repo = Path(repo_path).resolve()
         if not repo.exists():
             return {"status": "error", "message": f"Repository not found: {repo_path}"}
 
@@ -225,7 +260,7 @@ class ValidateE2eTestsTool:
     """Validate Playwright E2E setup. Per #263: clearer status + actionable next-steps, CI/evidence checks."""
 
     @staticmethod
-    def execute(repo_path: str) -> dict:
+    def execute(repo_path: str, *, repo_root: Path | None = None) -> dict:
         """
         Check playwright.config.ts, specs, deps, CI, evidence assets, scripts.
 
@@ -238,7 +273,21 @@ class ValidateE2eTestsTool:
                 'next_steps': [...]
             }
         """
-        repo = Path(repo_path).resolve()
+        if repo_root is not None:
+            from .path_confinement import confined
+
+            try:
+                repo = confined(repo_path, repo_root)
+            except ValueError as exc:
+                return {
+                    "status": "fail",
+                    "valid": False,
+                    "issues": [str(exc)],
+                    "recommendations": [],
+                    "next_steps": [],
+                }
+        else:
+            repo = Path(repo_path).resolve()
         if not repo.exists():
             return {
                 "status": "fail",

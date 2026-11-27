@@ -21,22 +21,9 @@ from plate_core.mcp_server import run
 
 class McpToolProfileMappingTests(unittest.TestCase):
     def test_every_listed_tool_has_profiles(self):
-        import re
-        from pathlib import Path
+        from plate_core.mcp.registry import listed_tool_names
 
-        text = Path("src/plate_core/mcp_server.py").read_text()
-        names: list[str] = []
-        in_list = False
-        for line in text.splitlines():
-            if 'elif method == "tools/list":' in line:
-                in_list = True
-                continue
-            if in_list and "visible_tools" in line:
-                break
-            if in_list:
-                m = re.search(r'"name": "([^"]+)"', line)
-                if m:
-                    names.append(m.group(1))
+        names = sorted(listed_tool_names())
         self.assertGreaterEqual(len(names), 180)
         for name in names:
             with self.subTest(name=name):

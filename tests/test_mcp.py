@@ -351,15 +351,18 @@ class McpTests(unittest.TestCase):
         expected = {"ok": True, "apply_mode": True, "actions": []}
         mock_migrate.return_value.to_dict.return_value = expected
 
+        repo_root = Path(".").resolve()
+        target = str(repo_root)
+
         _handle_tools_call(
             22,
             {
                 "name": "plate_migrate_docs_namespace",
-                "arguments": {"target_dir": "/tmp/repo", "apply": True},
+                "arguments": {"target_dir": target, "apply": True},
             },
         )
 
-        mock_migrate.assert_called_once_with(target_dir="/tmp/repo", apply=True)
+        mock_migrate.assert_called_once_with(target_dir=target, apply=True)
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
         self.assertEqual(payload, expected)
 
@@ -463,7 +466,10 @@ class McpTests(unittest.TestCase):
         res = ValidateE2eTestsTool.execute("/non/existent/path/12345")
         self.assertEqual(res["status"], "fail")
         self.assertFalse(res["valid"])
-        self.assertIn("Repository not found", res["issues"][0])
+        self.assertTrue(
+            "Repository not found" in res["issues"][0]
+            or "outside confined root" in res["issues"][0]
+        )
         self.assertTrue(any("next_steps" in k or "next" in str(v).lower() for k, v in res.items() if isinstance(v, (list, str))))
 
         # Empty temp dir -> fail (missing core)

@@ -2,14 +2,30 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+from plate_core.mcp.tool_profiles import (
+    ENV_TOOL_PROFILES,
+    PROFILE_ALL,
+    configure_mcp_tool_profiles,
+    reset_mcp_tool_profile_session,
+)
 from plate_core.mcp_server import _handle_tools_call
 
 
 class McpTestCoverageAuditTests(unittest.TestCase):
     """plate_perform_test_coverage_audit MCP tool must not raise NameError."""
+
+    def setUp(self) -> None:
+        os.environ[ENV_TOOL_PROFILES] = PROFILE_ALL
+        reset_mcp_tool_profile_session()
+        configure_mcp_tool_profiles(PROFILE_ALL)
+
+    def tearDown(self) -> None:
+        os.environ.pop(ENV_TOOL_PROFILES, None)
+        reset_mcp_tool_profile_session()
 
     @patch("plate_core.mcp_server._write")
     def test_call_returns_result_without_error(self, mock_write):
