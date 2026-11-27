@@ -164,10 +164,11 @@ adopter customization protected
         self.assertNotIn("adopter customization protected", base or "")
 
     def test_import_then_customize_then_merge_keeps_marker_edit(self):
-        """Import seeds upstream base; later merge must not clobber adopter marker edits."""
+        """Import seeds upstream base; upstream marker edit must not clobber adopter text."""
         rel = "docs/agents/upstream-template-sync.md"
         marker_token = "ADOPTER_MARKER_EDIT_1477"
-        upstream_token = "UPSTREAM_MARKER_REPLACE_1477"
+        upstream_line = "UPSTREAM_REPLACED_WHOLE_UPGRADES_LINE_1477"
+        inside_marker = "Do not overwrite customized files wholesale during upgrades."
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             import_payload(root, strategy="safe", apply=True)
@@ -176,6 +177,7 @@ adopter customization protected
                 self.skipTest(f"{rel} missing from import payload")
             base_v1 = load_persisted_marker_base(root, rel)
             self.assertIsNotNone(base_v1)
+            self.assertIn(inside_marker, base_v1)
             local = doc.read_text(encoding="utf-8")
             local = local.replace(
                 "<!-- PLATES-CORE:BEGIN upstream-template-sync -->",
@@ -183,15 +185,9 @@ adopter customization protected
                 1,
             )
             doc.write_text(local, encoding="utf-8")
-            upstream_v2 = (base_v1 or "").replace(
-                marker_token, upstream_token
-            )
-            if upstream_v2 == base_v1:
-                upstream_v2 = (
-                    "# Upstream-only preamble change\n"
-                    + upstream_v2.replace(marker_token, upstream_token, 1)
-                )
-            upstream_v2 = upstream_v2.replace(marker_token, upstream_token)
+            upstream_v2 = base_v1.replace(inside_marker, upstream_line)
+            self.assertNotEqual(upstream_v2, base_v1)
+            self.assertNotIn(marker_token, upstream_v2)
             report = plan_marker_merge(
                 root,
                 paths=[rel],
@@ -201,7 +197,12 @@ adopter customization protected
             final = doc.read_text(encoding="utf-8")
         self.assertTrue(report["ok"])
         self.assertIn(marker_token, final)
-        self.assertNotIn(upstream_token, final)
+        self.assertIn(inside_marker, final)
+        self.assertNotIn(upstream_line, final)
+        self.assertIn(
+            "upstream-template-sync",
+            report["files"][0]["preserved_local_sections"],
+        )
 
     def test_import_payload_seeds_marker_base(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -212,8 +213,8 @@ adopter customization protected
             self.assertIn("PLATES-CORE", base or "")
 
     def test_two_blocks_second_apply_same_upstream_preserves_custom(self):
-        """Persisted base must stay upstream; repeat apply must not clobber edits."""
-        upstream = """<!-- PLATES-CORE:BEGIN block-a -->
+        """Upstream-only block-b refresh must not clobber customized block-a on repeat apply."""
+        upstream_v1 = """<!-- PLATES-CORE:BEGIN block-a -->
 upstream a v1
 <!-- PLATES-CORE:END block-a -->
 
@@ -221,8 +222,16 @@ upstream a v1
 upstream b v1
 <!-- PLATES-CORE:END block-b -->
 """
+        upstream_v2 = """<!-- PLATES-CORE:BEGIN block-a -->
+upstream a v1
+<!-- PLATES-CORE:END block-a -->
+
+<!-- PLATES-CORE:BEGIN block-b -->
+upstream b v2 RELEASE
+<!-- PLATES-CORE:END block-b -->
+"""
         local_custom = """<!-- PLATES-CORE:BEGIN block-a -->
-adopter custom a
+adopter custom a MUST STAY
 <!-- PLATES-CORE:END block-a -->
 
 <!-- PLATES-CORE:BEGIN block-b -->
@@ -232,45 +241,68 @@ upstream b v1
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             doc = root / "sync.md"
-            doc.write_text(upstream, encoding="utf-8")
-            save_persisted_marker_base(root, "sync.md", upstream)
+            doc.write_text(local_custom, encoding="utf-8")
+            save_persisted_marker_base(root, "sync.md", upstream_v1)
             report1 = plan_marker_merge(
                 root,
                 paths=["sync.md"],
-                upstream_texts={"sync.md": upstream},
+                upstream_texts={"sync.md": upstream_v2},
                 apply=True,
             )
-            doc.write_text(local_custom, encoding="utf-8")
+            after_first = doc.read_text(encoding="utf-8")
             report2 = plan_marker_merge(
                 root,
                 paths=["sync.md"],
-                upstream_texts={"sync.md": upstream},
+                upstream_texts={"sync.md": upstream_v2},
                 apply=True,
             )
             final = doc.read_text(encoding="utf-8")
-        self.assertTrue(report1["ok"])
-        self.assertTrue(report2["ok"])
-        self.assertIn("adopter custom a", final)
-        self.assertIn("upstream b v1", final)
-
-    def test_identical_reimport_seeds_marker_base(self):
-        rel = "docs/agents/upstream-template-sync.md"
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            import_payload(root, strategy="safe", apply=True)
-            self.assertIsNotNone(load_persisted_marker_base(root, rel))
-            import_payload(root, strategy="safe", apply=True)
-            self.assertIsNotNone(load_persisted_marker_base(root, rel))
-            doc = root / rel
-            self.assertTrue(doc.is_file())
-            report = plan_marker_merge(
+            poisoned_base = load_persisted_marker_base(root, "sync.md")
+            save_persisted_marker_base(root, "sync.md", after_first)
+            report_poisoned = plan_marker_merge(
                 root,
-                paths=[rel],
-                upstream_texts={rel: doc.read_text(encoding="utf-8")},
+                paths=["sync.md"],
+                upstream_texts={"sync.md": upstream_v2},
                 apply=True,
             )
-        self.assertTrue(report["ok"])
-        self.assertNotEqual(report["files"][0]["action"], "missing_base")
+            if report_poisoned["ok"]:
+                poisoned_final = doc.read_text(encoding="utf-8")
+            else:
+                poisoned_final = after_first
+        self.assertTrue(report1["ok"])
+        self.assertEqual(report1["written"], 1)
+        self.assertIn("adopter custom a MUST STAY", after_first)
+        self.assertIn("upstream b v2 RELEASE", after_first)
+        self.assertNotIn("upstream b v1", after_first)
+        self.assertEqual(poisoned_base, upstream_v2)
+        self.assertTrue(report2["ok"])
+        self.assertIn("adopter custom a MUST STAY", final)
+        self.assertIn("upstream b v2 RELEASE", final)
+        if report_poisoned["ok"]:
+            self.assertNotIn(
+                "adopter custom a MUST STAY",
+                poisoned_final,
+                "merged-as-base would clobber customized block on repeat apply",
+            )
+
+    def test_identical_reimport_seeds_marker_base_via_skip_path(self):
+        """Second apply must re-seed base via skip path, not recreate."""
+        rel = "docs/agents/upstream-template-sync.md"
+        base_path = Path(".agentic/marker-merge/bases") / rel
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = import_payload(root, strategy="safe", apply=True)
+            self.assertTrue(first["ok"])
+            base_after_first = load_persisted_marker_base(root, rel)
+            self.assertIsNotNone(base_after_first)
+            (root / base_path).unlink()
+            self.assertIsNone(load_persisted_marker_base(root, rel))
+            second = import_payload(root, strategy="safe", apply=True)
+            self.assertTrue(second["ok"])
+            self.assertIn(rel, second["skipped"])
+            reseeded = load_persisted_marker_base(root, rel)
+            self.assertIsNotNone(reseeded)
+            self.assertEqual(reseeded, base_after_first)
 
     def test_namespaced_docs_records_marker_base_at_installed_path(self):
         rel = "docs/agents/upstream-template-sync.md"
@@ -322,6 +354,46 @@ class SafeImportOverwriteTests(unittest.TestCase):
             root.joinpath(".agentic").joinpath("import-payload").symlink_to("/tmp")
             with self.assertRaises(OSError):
                 record_payload_content_hash(root, ".github/labels.yml", b"x")
+
+    def test_hash_ledger_load_refuses_symlink_path(self):
+        from plate_core.import_payload import _load_payload_hash_ledger
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            root.joinpath(".agentic").mkdir()
+            root.joinpath(".agentic").joinpath("import-payload").symlink_to("/tmp")
+            self.assertEqual(_load_payload_hash_ledger(root), {})
+
+    def test_hash_ledger_load_refuses_corrupt_json(self):
+        from plate_core.import_payload import _load_payload_hash_ledger
+
+        rel = ".agentic/import-payload/content-hashes.json"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger = root / rel
+            ledger.parent.mkdir(parents=True)
+            ledger.write_text("{not-valid-json", encoding="utf-8")
+            self.assertEqual(_load_payload_hash_ledger(root), {})
+
+    def test_safe_import_skips_overwrite_when_ledger_unreadable(self):
+        """Unreadable ledger must not unlock manifest safe overwrites."""
+        rel = ".github/labels.yml"
+        ledger_rel = ".agentic/import-payload/content-hashes.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import_payload(root, strategy="safe", apply=True)
+            dest = root / rel
+            dest.write_text(
+                "# adopter customized labels\n" + dest.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / ledger_rel).write_text("{bad", encoding="utf-8")
+            report = import_payload(root, strategy="safe", apply=True)
+            self.assertTrue(report["ok"])
+            self.assertIn(rel, report["skipped"])
+            self.assertNotIn(rel, report["overwritten"])
+            self.assertIn("# adopter customized labels", dest.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
