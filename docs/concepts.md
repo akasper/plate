@@ -99,7 +99,7 @@ Pure documentation that does not change PLATE behavior or templates typically do
 
 1. **Branch** from the correct integration base (`gh plate release status`).
 2. **Label** the PR with exactly one PR type: `Bug`, `Feature`, `Documentation`, `Hardening`, or `Feedback Response`.
-3. **Link** the issue with `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body (warning gate if missing).
+3. **Link** the tracked issue with a strict `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body (outside fenced code), or link the issue in the GitHub Development sidebar when merge should **not** close it. For `Feature`, `Bug`, `Documentation`, and `Hardening` PRs, `plate-pr-gates` **fails** the issue-link / `closing_keyword` check when neither is present (`requires_strict_closing_keyword` in `pr_gates_checks.py`). `Refs #N` alone does not pass `gh plate pr preflight` or `gh plate pr verify`. Use `no-issue` only for chores that do not resolve tracked work.
 4. **Implement** with tests alongside code where the work loop requires them.
 5. **Green CI** including **feedback-resolution** for unresolved third-party agent review threads.
 6. **Human approval** for Bug, Feature, Hardening, and Documentation merges unless autonomous eligibility is fully met ([autonomous-mode.md](agents/autonomous-mode.md)).
