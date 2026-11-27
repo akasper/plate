@@ -1,10 +1,9 @@
 name: Auto-merge lightweight PRs
 
 # Triggered when a PR receives the 'auto-merge' label.
-# Requires the opt-in .github/AUTONOMOUS_MODE marker on the default branch and
-# exactly risk:low on the PR (#1262 item 7; template AGENTS.md Autonomous Mode).
-# The PR must still satisfy all branch protection rules before GitHub
-# will complete the merge.
+# Reads `.plate` autonomy on the default branch (legacy marker only when no autonomy section).
+# Enforces eligibility from docs/agents/autonomous-mode.md (#1471).
+# The PR must still satisfy all branch protection rules before GitHub will complete the merge.
 
 on:
   pull_request:
@@ -15,48 +14,317 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  auto-merge:
+  auto-merge-check:
     if: github.event.label.name == 'auto-merge'
     runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
     permissions:
-      pull-requests: write
-      contents: write
+      pull-requests: read
+      contents: read
+    outputs:
+      active: ${{ steps.check.outputs.active }}
     steps:
-      - name: Check autonomous mode marker and risk:low
+      - name: Check .plate autonomy and PR eligibility
         id: check
         uses: actions/github-script@v8
         with:
           script: |
+            const RISK_RANK = { low: 1, medium: 2, high: 3, critical: 4 };
+            const DENY_EXACT = new Set([
+              'AGENTS.md',
+              'SPEC.md',
+              '.github/CODEOWNERS',
+              'README.md',
+              '.plate',
+            ]);
+            const DENY_PREFIXES = ['.github/workflows/'];
+            const BLOCKED_NEED_LABELS = new Set(['need:human-review', 'need:security-review']);
+
+            function pathBlocked(filename) {
+              if (!filename) return false;
+              if (DENY_EXACT.has(filename)) return true;
+              for (const prefix of DENY_PREFIXES) {
+                if (filename.startsWith(prefix)) return true;
+              }
+              return false;
+            }
+
+            function parsePlateConfig(raw) {
+              if (!raw || !String(raw).trim()) return null;
+              try {
+                return JSON.parse(raw);
+              } catch (jsonErr) {
+                try {
+                  const lines = String(raw).split(/\r?\n/);
+                  const out = {};
+                  let inAutonomy = false;
+                  let autonomy = {};
+                  for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed === 'autonomy:' || trimmed.startsWith('autonomy:')) {
+                      inAutonomy = true;
+                      continue;
+                    }
+                    if (inAutonomy) {
+                      if (/^\w/.test(line) && !line.startsWith(' ')) {
+                        inAutonomy = false;
+                      } else {
+                        const m = trimmed.match(/^([a-z_]+):\s*(.+)$/i);
+                        if (m) {
+                          let val = m[2].replace(/^["']|["']$/g, '');
+                          if (val === 'true') val = true;
+                          if (val === 'false') val = false;
+                          autonomy[m[1]] = val;
+                        }
+                      }
+                    }
+                  }
+                  if (Object.keys(autonomy).length) {
+                    return { autonomy };
+                  }
+                } catch (yamlErr) {
+                  /* fall through */
+                }
+                return null;
+              }
+            }
+
+            function resolveAutonomy(plate, hasLegacyMarker, plateFilePresent) {
+              const hasAutonomySection =
+                plate &&
+                plate.autonomy &&
+                typeof plate.autonomy === 'object' &&
+                !Array.isArray(plate.autonomy);
+              if (plateFilePresent && !hasAutonomySection) {
+                return {
+                  active: false,
+                  tolerance: 'off',
+                  source: 'plate',
+                  reason: '`.plate` present but autonomy section missing or invalid',
+                };
+              }
+              if (hasAutonomySection) {
+                const aut = plate.autonomy;
+                const enabled = aut.enabled === true;
+                const tolerance = String(aut.risk_tolerance || 'off').toLowerCase();
+                if (!enabled || tolerance === 'off') {
+                  return {
+                    active: false,
+                    tolerance,
+                    source: 'plate',
+                    reason: '`.plate` autonomy disabled or risk_tolerance=off',
+                  };
+                }
+                return { active: true, tolerance, source: 'plate', reason: '' };
+              }
+              if (hasLegacyMarker) {
+                return {
+                  active: true,
+                  tolerance: 'low',
+                  source: 'legacy_marker',
+                  reason: '',
+                };
+              }
+              return {
+                active: false,
+                tolerance: 'off',
+                source: 'none',
+                reason: 'no `.plate` autonomy section and no legacy marker',
+              };
+            }
+
+            function prRiskAllowed(prRiskLabel, tolerance) {
+              const prName = String(prRiskLabel || '').toLowerCase();
+              const prLevel = prName.replace(/^risk:/, '');
+              if (!prLevel || !(prLevel in RISK_RANK)) {
+                return { ok: false, reason: `unrecognized risk label ${prRiskLabel}` };
+              }
+              if (prLevel === 'critical') {
+                return { ok: false, reason: 'risk:critical never auto-merge eligible' };
+              }
+              const tolRank = RISK_RANK[tolerance] || 0;
+              const prRank = RISK_RANK[prLevel];
+              if (tolRank < 1) {
+                return { ok: false, reason: `autonomy inactive (tolerance=${tolerance})` };
+              }
+              if (prRank > tolRank) {
+                return {
+                  ok: false,
+                  reason: `PR risk ${prRiskLabel} exceeds tolerance ${tolerance}`,
+                };
+              }
+              return { ok: true, reason: '' };
+            }
+
             let active = false;
+            const warnings = [];
+
+            const TRUSTED_LABEL_BOTS = new Set([
+              'github-actions[bot]',
+              'github-actions',
+              'dependabot[bot]',
+            ]);
+            const sender = context.payload.sender;
+            const senderLogin = sender?.login || '';
+            if (TRUSTED_LABEL_BOTS.has(senderLogin)) {
+              core.info(`Label applied by trusted platform bot ${senderLogin}.`);
+            } else if (sender?.type === 'Bot' || senderLogin.endsWith('[bot]')) {
+              try {
+                const perm = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: senderLogin,
+                });
+                const level = perm.data.permission;
+                if (!['admin', 'write', 'maintain'].includes(level)) {
+                  warnings.push(
+                    `Blocking auto-merge: bot ${senderLogin} lacks write access (${level}).`
+                  );
+                } else {
+                  core.info(`Label applied by trusted bot ${senderLogin} (${level}).`);
+                }
+              } catch (e) {
+                if (e.status === 404) {
+                  warnings.push(`Blocking auto-merge: untrusted bot ${senderLogin} is not a collaborator.`);
+                } else {
+                  warnings.push(`Could not verify bot sender: ${e.message}`);
+                }
+              }
+            } else {
+              try {
+                const perm = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: sender.login,
+                });
+                const level = perm.data.permission;
+                if (!['admin', 'write', 'maintain', 'triage'].includes(level)) {
+                  warnings.push(
+                    `Blocking auto-merge: label applied by ${sender.login} without write/maintain access (${level}).`
+                  );
+                } else {
+                  core.info(`Label applied by collaborator ${sender.login} (${level}).`);
+                }
+              } catch (e) {
+                if (e.status === 404) {
+                  warnings.push(
+                    `Blocking auto-merge: label applied by non-collaborator ${sender?.login || 'unknown'}.`
+                  );
+                } else {
+                  warnings.push(`Could not verify label sender: ${e.message}`);
+                }
+              }
+            }
+
+            let plate = null;
+            let plateFilePresent = false;
+            let hasLegacyMarker = false;
+            const defaultBranch = context.payload.repository.default_branch;
+            try {
+              const plateResp = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: '.plate',
+                ref: defaultBranch,
+              });
+              plateFilePresent = true;
+              const plateRaw = Buffer.from(plateResp.data.content, 'base64').toString('utf8');
+              plate = parsePlateConfig(plateRaw);
+            } catch (e) {
+              if (e.status !== 404) {
+                warnings.push(`Could not read .plate on ${defaultBranch}: ${e.message}`);
+              }
+            }
             try {
               await github.rest.repos.getContent({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 path: '.github/AUTONOMOUS_MODE',
-                ref: context.payload.repository.default_branch,
+                ref: defaultBranch,
               });
-              active = true;
+              hasLegacyMarker = true;
             } catch (e) {
-              core.warning('Autonomous mode is not active (missing .github/AUTONOMOUS_MODE on the default branch). Skipping auto-merge.');
+              if (e.status !== 404) {
+                warnings.push(`Could not read legacy AUTONOMOUS_MODE marker: ${e.message}`);
+              }
             }
-            try {
-              const prLabels = (context.payload.pull_request && context.payload.pull_request.labels) || [];
-              const riskLabels = prLabels.filter(l => l.name && l.name.toLowerCase().startsWith('risk:'));
-              if (active) {
-                if (riskLabels.length !== 1 || riskLabels[0].name.toLowerCase() !== 'risk:low') {
-                  active = false;
-                  const found = riskLabels.map(l => l.name).join(', ') || '(none)';
-                  core.warning(`Blocking auto-merge: requires exactly risk:low; found ${found}.`);
+
+            const mode = resolveAutonomy(plate, hasLegacyMarker, plateFilePresent);
+            if (!mode.active) {
+              warnings.push(
+                `Autonomous mode inactive (${mode.reason || mode.source}). Skipping auto-merge.`
+              );
+            } else if (mode.source === 'legacy_marker') {
+              core.warning(
+                'Legacy .github/AUTONOMOUS_MODE marker detected; prefer configuring `.plate` autonomy and removing the marker.'
+              );
+            }
+
+            const pr = context.payload.pull_request;
+            const prLabels = (pr && pr.labels) || [];
+            const labelNames = prLabels.map((l) => String(l.name || ''));
+
+            for (const name of labelNames) {
+              const lower = name.toLowerCase();
+              if (BLOCKED_NEED_LABELS.has(lower)) {
+                warnings.push(`Blocking auto-merge: PR carries ${name}.`);
+              }
+            }
+
+            const riskLabels = labelNames.filter((n) => n.toLowerCase().startsWith('risk:'));
+            if (mode.active && warnings.length === 0) {
+              if (riskLabels.length !== 1) {
+                const found = riskLabels.join(', ') || '(none)';
+                warnings.push(`Blocking auto-merge: requires exactly one risk:* label; found ${found}.`);
+              } else {
+                const riskCheck = prRiskAllowed(riskLabels[0], mode.tolerance);
+                if (!riskCheck.ok) {
+                  warnings.push(`Blocking auto-merge: ${riskCheck.reason}`);
                 }
               }
-            } catch (e) {
-              active = false;
-              core.warning('Could not validate PR risk label: ' + e.message);
             }
+
+            if (mode.active && warnings.length === 0 && pr) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+              const blocked = [];
+              for (const f of files) {
+                const paths = [f.filename, f.previous_filename].filter(Boolean);
+                for (const p of paths) {
+                  if (pathBlocked(p)) {
+                    blocked.push(p);
+                  }
+                }
+              }
+              if (blocked.length) {
+                warnings.push(
+                  `Blocking auto-merge: PR touches protected paths: ${blocked.join(', ')}`
+                );
+              }
+            }
+
+            if (warnings.length) {
+              for (const w of warnings) {
+                core.warning(w);
+              }
+            } else if (mode.active) {
+              active = true;
+            }
+
             core.setOutput('active', active ? 'true' : 'false');
 
+  auto-merge-enable:
+    needs: auto-merge-check
+    if: needs.auto-merge-check.outputs.active == 'true'
+    runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
       - name: Enable auto-merge
-        if: steps.check.outputs.active == 'true'
         run: gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

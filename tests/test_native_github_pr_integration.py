@@ -107,17 +107,17 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
             self.assertIn("'tier:T3'", workflow)
             self.assertIn("At most one optional tier label", workflow)
 
-    def test_auto_merge_requires_marker_and_risk_low(self):
-        """#1262 item 7: auto-merge stays on AUTONOMOUS_MODE + risk:low only."""
+    def test_auto_merge_reads_plate_and_enforces_eligibility(self):
+        """#1471 / #1262: auto-merge reads .plate; legacy marker fallback when no autonomy section."""
         repo_workflow = read_text(".github/workflows/auto-merge.yml")
         payload_workflow = read_text(
             "src/plate_core/template_payload/.github/workflows/auto-merge.yml"
         )
         self.assertEqual(repo_workflow, payload_workflow)
         for workflow in (repo_workflow, payload_workflow):
-            self.assertIn(".github/AUTONOMOUS_MODE", workflow)
-            self.assertIn("'risk:low'", workflow)
-            self.assertNotIn("risk_tolerance", workflow)
+            self.assertIn("path: '.plate'", workflow)
+            self.assertIn("resolveAutonomy", workflow)
+            self.assertIn("need:human-review", workflow)
 
     def test_bootstrap_exits_when_label_sync_failed(self):
         """#1262 item 8: bootstrap must fail when label sync errors occur."""
