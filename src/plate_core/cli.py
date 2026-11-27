@@ -1877,6 +1877,51 @@ def cmd_hooks(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_evidence(args: argparse.Namespace) -> int:
+    """Attach PR body images via gh --attach (#1051)."""
+    import subprocess
+    from pathlib import Path
+
+    from .plate_evidence import bundled_evidence_script, run_plate_evidence
+
+    images = list(getattr(args, "images", None) or [])
+    if not images:
+        print("At least one image path is required", file=sys.stderr)
+        return 1
+
+    if getattr(args, "use_python", False):
+        result = run_plate_evidence(
+            int(args.pr_number),
+            args.body_file,
+            images,
+            gh=getattr(args, "gh", None),
+        )
+        if args.json:
+            print(json.dumps(result.to_dict(), indent=2))
+            return 0 if result.ok else 1
+        if result.ok:
+            print(f"Attached {len(result.images)} image(s) to PR #{result.pr_number}.")
+            for url in result.user_attachment_urls:
+                print(url)
+            return 0
+        print(result.error or "plate evidence failed", file=sys.stderr)
+        return 1
+
+    script = bundled_evidence_script()
+    if not script.is_file():
+        print(f"plate evidence script not found: {script}", file=sys.stderr)
+        return 1
+
+    argv = [str(script), str(args.pr_number), "--body-file", str(args.body_file), *images]
+    if getattr(args, "gh", None):
+        argv.extend(["--gh", str(args.gh)])
+    if args.json:
+        argv.append("--json")
+
+    proc = subprocess.run(argv, check=False)
+    return int(proc.returncode)
+
+
 def cmd_costs(args: argparse.Namespace) -> int:
     from .costs import (
         compute_run_all_in_cost,
@@ -6679,6 +6724,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_cls.add_argument("--json", action="store_true")
     p_cls.set_defaults(func=cmd_payload, payload_command="classify")
     payload.set_defaults(func=cmd_payload, payload_command="list")
+
+    evidence = sub.add_parser(
+        "evidence",
+        help="Attach images to a PR body with gh pr edit --attach (#1051)",
+    )
+    evidence.add_argument("pr_number", type=int, help="Pull request number")
+    evidence.add_argument(
+        "--body-file",
+        required=True,
+        help="Markdown file for the PR body (references are prepared; file is not overwritten)",
+    )
+    evidence.add_argument("images", nargs="+", help="Image paths to attach")
+    evidence.add_argument("--json", action="store_true", help="Output JSON")
+    evidence.add_argument("--gh", help="gh executable (default: $GH or gh)")
+    evidence.add_argument(
+        "--use-python",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    evidence.set_defaults(func=cmd_evidence)
 
     qanda = sub.add_parser("qanda", help="Curiosity / Q&A Mode (list, view, record answers on Question issues; Epic #139)")
     qanda.add_argument("--repo", help="owner/name; defaults to git remote origin")

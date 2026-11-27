@@ -973,6 +973,37 @@ MCP_TOOL_DEFINITIONS: list[dict] = [
                                 },
                             },
                             {
+                                "name": "plate_pr_evidence",
+                                "description": "Attach one or more images to a PR body via gh pr edit --body-file and --attach (#1051). Ensures non-empty image alt text, requires gh >= 2.99, verifies user-attachments URLs, and explains Copilot routing when upload is refused.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "pr_number": {
+                                            "type": "integer",
+                                            "description": "Pull request number.",
+                                        },
+                                        "body_file": {
+                                            "type": "string",
+                                            "description": "Path to the markdown PR body file.",
+                                        },
+                                        "images": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "One or more local image file paths to attach.",
+                                        },
+                                        "repo_root": {
+                                            "type": "string",
+                                            "description": "Optional local repository root for relative paths.",
+                                        },
+                                        "gh": {
+                                            "type": "string",
+                                            "description": "Optional gh executable path (default: $GH or gh).",
+                                        },
+                                    },
+                                    "required": ["pr_number", "body_file", "images"],
+                                },
+                            },
+                            {
                                 "name": "plate_pr_packet",
                                 "description": "Compact JSON evidence packet for PR review feedback (#1364): threads, failing check excerpts, PR facts, probe deltas. Prefer over re-reading raw bot comments.",
                                 "inputSchema": {

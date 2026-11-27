@@ -35,6 +35,7 @@ PLATE_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "e2e-record.ps1",
         "gif-from-video.sh",
         "gif-from-video.ps1",
+        "plate_evidence.sh",
         "dev-server.js",
         "README.md",
     }

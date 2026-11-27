@@ -826,6 +826,26 @@ def _execute_mcp_tool(name: str | None, args: dict) -> object:
                 pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
             ),
         }
+    elif name == "plate_pr_evidence":
+        from .plate_evidence import run_plate_evidence
+
+        pr_number = args.get("pr_number")
+        if pr_number is None:
+            raise ValueError("pr_number is required")
+        pr_number = int(pr_number)
+        body_file = args.get("body_file")
+        if not body_file:
+            raise ValueError("body_file is required")
+        images = args.get("images") or []
+        if not isinstance(images, list) or not images:
+            raise ValueError("images must be a non-empty array")
+        result = run_plate_evidence(
+            pr_number,
+            str(body_file),
+            [str(p) for p in images],
+            gh=args.get("gh"),
+        )
+        payload = result.to_dict()
     elif name == "plate_pr_packet":
         pr_number = args.get("pr_number")
         if pr_number is None:

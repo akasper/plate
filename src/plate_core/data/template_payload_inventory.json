@@ -1,7 +1,5 @@
 {
   "schema_version": 1,
-  "source_repository": "akasper/plate",
-  "selection_manifest": "src/plate_core/data/template_payload_manifest.yml",
   "files": [
     {
       "path": ".agentic/COSTS.md",
@@ -40,10 +38,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": ".agentic/skills.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": ".agentic/skills/address-pr-feedback/SKILL.md",
       "classification": "copy_to_downstream"
     },
@@ -60,7 +54,15 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": ".agentic/skills.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": ".agentic/traceability.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".agentic/ui-paths.yml",
       "classification": "copy_to_downstream"
     },
     {
@@ -169,6 +171,10 @@
     },
     {
       "path": ".github/workflows/plate-pr-gates.yml",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": ".github/workflows/plate-ui-pr-image-check.yml",
       "classification": "copy_to_downstream"
     },
     {
@@ -384,10 +390,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": "docs/marketing/ai-discoverability-review-checklist.md",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": "docs/marketing/ai-discoverability/baseline-log.md",
       "classification": "copy_to_downstream"
     },
@@ -397,6 +399,10 @@
     },
     {
       "path": "docs/marketing/ai-discoverability/prompt-set.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/marketing/ai-discoverability-review-checklist.md",
       "classification": "copy_to_downstream"
     },
     {
@@ -428,10 +434,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": "docs/migration/tiered-ci-policy.md",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": "docs/migration/ci-speed-checklist.md",
       "classification": "copy_to_downstream"
     },
@@ -457,6 +459,10 @@
     },
     {
       "path": "docs/migration/self-hosted-runners.md",
+      "classification": "copy_to_downstream"
+    },
+    {
+      "path": "docs/migration/tiered-ci-policy.md",
       "classification": "copy_to_downstream"
     },
     {
@@ -596,6 +602,10 @@
       "classification": "copy_to_downstream"
     },
     {
+      "path": "scripts/plate_evidence.sh",
+      "classification": "copy_to_downstream"
+    },
+    {
       "path": "scripts/question_batch.sh",
       "classification": "copy_to_downstream"
     },
@@ -637,14 +647,6 @@
     },
     {
       "path": "tests/e2e/specs/failing-example.spec.ts",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": ".agentic/ui-paths.yml",
-      "classification": "copy_to_downstream"
-    },
-    {
-      "path": ".github/workflows/plate-ui-pr-image-check.yml",
       "classification": "copy_to_downstream"
     }
   ]

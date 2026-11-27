@@ -47,6 +47,7 @@ class McpRegistryDispatchTests(unittest.TestCase):
             "plate_add_discussion_comment": {"number": 1, "body": "hi"},
             "plate_create_discussion": {"title": "t", "body": "b"},
             "plate_pr_verify": {"pr_number": 1},
+            "plate_pr_evidence": {"pr_number": 1, "body_file": "body.md", "images": ["shot.png"]},
             "record_e2e_gif": {"repo_path": ".", "test_name": "login"},
             "plate_perform_test_coverage_audit": {"dry_run": True},
         }
