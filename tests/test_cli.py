@@ -42,6 +42,29 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["repo"], "akasper/plate_core")
         self.assertEqual(payload["status"], "pass")
 
+    @patch("plate_core.cli.get_health")
+    def test_health_json_exits_one_when_adoption_incomplete(self, mock_get_health):
+        mock_get_health.return_value = HealthReport(
+            repo="akasper/plate_core",
+            label_coverage_ok=True,
+            missing_labels=[],
+            binary_artifacts_tracked=0,
+            branch_protection_enabled=True,
+            open_epic_count=1,
+            status="fail",
+            goals_page_present=True,
+            open_question_count=3,
+            plate_config_present=True,
+            plate_config_valid=True,
+            adoption_complete=False,
+        )
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["health", "--repo", "akasper/plate_core", "--json"])
+        self.assertEqual(code, 1)
+        payload = json.loads(out.getvalue().strip())
+        self.assertFalse(payload["adoption_complete"])
+
     @patch("plate_core.cli.get_epic_status")
     def test_epic_status_json_output(self, mock_get_epic_status):
         mock_get_epic_status.return_value = EpicStatusReport(

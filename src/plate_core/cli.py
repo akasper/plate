@@ -23,7 +23,7 @@ from .context_map import ContextMapError, get_context_route, list_context_routes
 from .epics import get_epic_status
 from .features import detect_playwright_e2e_local, get_features
 from .github_client import GhApiError, GhClient
-from .health import get_health, label_coverage_fix_command, resolve_repo
+from .health import HealthReport, get_health, label_coverage_fix_command, resolve_repo
 from .pr_verify import format_pr_verify_text, verify_pr
 from .pr_preflight import (
     create_pr_with_preflight,
@@ -284,6 +284,14 @@ from .plate_config import (
 )
 
 
+def _health_exit_code(report: HealthReport) -> int:
+    if report.plate_config_layout_error:
+        return 1
+    if report.adoption_complete is False:
+        return 1
+    return 0 if report.status != "fail" else 1
+
+
 def cmd_health(args: argparse.Namespace) -> int:
     report = get_health(
         args.repo,
@@ -292,9 +300,7 @@ def cmd_health(args: argparse.Namespace) -> int:
     )
     if args.json:
         print(json.dumps(report.to_dict()))
-        if report.plate_config_layout_error:
-            return 1
-        return 0
+        return _health_exit_code(report)
 
     print(f"Repo: {report.repo}")
     print(f"Status: {report.status.upper()}")
@@ -400,11 +406,7 @@ def cmd_health(args: argparse.Namespace) -> int:
         )
         if report.self_migrate_next_command:
             print(f"Self-migrate next: {report.self_migrate_next_command}")
-    if report.plate_config_layout_error:
-        return 1
-    if report.adoption_complete is False:
-        return 1
-    return 0 if report.status != "fail" else 1
+    return _health_exit_code(report)
 
 
 def cmd_ci_audit(args: argparse.Namespace) -> int:

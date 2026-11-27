@@ -10,7 +10,9 @@ from plate_core.health import (
     HealthReport,
     _repo_from_git_remote,
     assess_adoption_complete,
+    adoption_messaging_content_gaps,
     bootstrap_adopt_apply_command,
+    branch_protection_requires_pull_requests,
     expected_labels_from_registry,
     get_health,
     label_coverage_fix_command,
@@ -38,22 +40,29 @@ class FakeClient:
             return _registry_label_api_objects()
         if endpoint == "repos/akasper/plate_core":
             return {"default_branch": "main"}
-        if endpoint == "repos/akasper/plate_core/branches/main/protection":
+        if "/branches/" in endpoint and endpoint.endswith("/protection"):
             return {
                 "required_status_checks": {
                     "contexts": ["labels", "test", "pr-gates"],
                 },
                 "required_pull_request_reviews": {"required_approving_review_count": 1},
             }
+        if endpoint.endswith("/rulesets?per_page=100"):
+            return []
         if endpoint.startswith("repos/") and "/branches/" in endpoint:
             return {"name": endpoint.rsplit("/", 1)[-1]}
         if endpoint.startswith("search/issues"):
-            if "label" in endpoint and "Release" in endpoint:
+            if "Release" in endpoint:
                 return {
                     "total_count": 1,
                     "items": [{"number": 50, "title": "Next Release"}],
                 }
-            if "label:Question" in endpoint:
+            if "Epic" in endpoint:
+                return {
+                    "total_count": 1,
+                    "items": [{"number": 1, "title": "Epic: initial-plate-epic"}],
+                }
+            if "Question" in endpoint:
                 return {"total_count": 3}
             return {"total_count": 3}
         if "contents/docs/wiki/Goals.md" in endpoint:
@@ -114,7 +123,7 @@ class HealthTests(unittest.TestCase):
         self.assertTrue(report.label_coverage_ok)
         self.assertEqual(report.missing_labels, [])
         self.assertTrue(report.branch_protection_enabled)
-        self.assertEqual(report.open_epic_count, 3)
+        self.assertEqual(report.open_epic_count, 1)
         self.assertEqual(report.binary_artifacts_tracked, 0)  # hygiene regression guard for #90
         self.assertEqual(report.status, "pass")
         self.assertEqual(report.errors, [])  # no partial errors
@@ -527,10 +536,8 @@ class AdoptionCompleteVerdictTests(unittest.TestCase):
                 repo="acme/widget",
                 repo_root=tmp,
                 gh=FakeClient(),
+                default_branch="main",
                 label_coverage_ok=True,
-                first_qa_seeded=True,
-                open_epic_count=2,
-                open_question_count=3,
                 branch_protection_enabled=True,
                 branch_protection_payload={
                     "required_pull_request_reviews": {"required_approving_review_count": 1},
@@ -539,25 +546,117 @@ class AdoptionCompleteVerdictTests(unittest.TestCase):
         self.assertFalse(complete)
         self.assertTrue(any(g.startswith("local_payload:") for g in gaps))
         self.assertIn("import-payload --apply", fix or "")
+        self.assertIn("--repo-root", fix or "")
 
     def test_missing_labels_points_at_bootstrap_adopt(self):
         complete, gaps, fix, _, _ = assess_adoption_complete(
             repo="acme/widget",
             repo_root=str(REPO_ROOT),
             gh=FakeClient(),
+            default_branch="main",
             label_coverage_ok=False,
-            first_qa_seeded=True,
-            open_epic_count=1,
-            open_question_count=3,
             branch_protection_enabled=True,
             branch_protection_payload={
                 "required_pull_request_reviews": {"required_approving_review_count": 1},
             },
         )
         self.assertFalse(complete)
-        self.assertIn("remote_labels", gaps[0])
+        self.assertTrue(any("remote_labels" in g for g in gaps))
         self.assertIn("bootstrap --repo", fix or "")
         self.assertIn("--adopt --apply", fix or "")
+
+    def test_open_counts_without_seed_artifacts_are_incomplete(self):
+        class WrongEpicClient(FakeClient):
+            def api(self, endpoint, **kwargs):
+                if endpoint.startswith("search/issues") and "Epic" in endpoint:
+                    return {
+                        "total_count": 1,
+                        "items": [{"number": 9, "title": "Epic: product-roadmap"}],
+                    }
+                return super().api(endpoint, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for rel in (
+                ".github/labels.yml",
+                ".github/PULL_REQUEST_TEMPLATE.md",
+                ".github/workflows/plate-pr-gates.yml",
+                ".github/workflows/label-check.yml",
+                ".agentic/process.yml",
+                ".agentic/skills.yml",
+            ):
+                path = root / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# stub\n", encoding="utf-8")
+            (root / "README.md").write_text(
+                "\n".join(
+                    [
+                        "# x",
+                        "Adopting PLATE",
+                        "import-payload",
+                        "--adopt --apply",
+                        "adoption_complete",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (root / "AGENTS.md").write_text(
+                "adoption_complete not optional import-payload bootstrap\n",
+                encoding="utf-8",
+            )
+            complete, gaps, _, _, _ = assess_adoption_complete(
+                repo="acme/widget",
+                repo_root=root,
+                gh=WrongEpicClient(),
+                default_branch="main",
+                label_coverage_ok=True,
+                branch_protection_enabled=True,
+                branch_protection_payload={
+                    "required_pull_request_reviews": {"required_approving_review_count": 1},
+                },
+            )
+        self.assertFalse(complete)
+        self.assertTrue(any(g.startswith("seed_epic:") for g in gaps))
+
+    def test_zero_required_review_count_is_not_protected(self):
+        self.assertFalse(
+            branch_protection_requires_pull_requests(
+                {"required_pull_request_reviews": {"required_approving_review_count": 0}}
+            )
+        )
+
+    def test_assess_fails_closed_on_exception(self):
+        with patch(
+            "plate_core.release.diagnose_release_standing_state",
+            side_effect=RuntimeError("boom"),
+        ):
+            complete, gaps, _, _, _ = assess_adoption_complete(
+                repo="acme/widget",
+                repo_root=str(REPO_ROOT),
+                gh=FakeClient(),
+                default_branch="main",
+                label_coverage_ok=True,
+                branch_protection_enabled=True,
+                branch_protection_payload={
+                    "required_pull_request_reviews": {"required_approving_review_count": 1},
+                },
+            )
+        self.assertFalse(complete)
+        self.assertTrue(any("release_standing" in g for g in gaps))
+
+    def test_get_health_fails_closed_when_assess_raises(self):
+        with patch(
+            "plate_core.health.assess_adoption_complete",
+            side_effect=RuntimeError("assess failed"),
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+                repo_root=str(REPO_ROOT),
+            )
+        self.assertFalse(report.adoption_complete)
+        self.assertTrue(any("adoption_complete" in e for e in report.errors))
 
     def test_health_surfaces_adoption_complete_fields(self):
         with patch(
