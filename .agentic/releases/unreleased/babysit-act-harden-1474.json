@@ -1,0 +1,10 @@
+{
+  "slug": "babysit-act-harden-1474",
+  "change_type": "fix",
+  "surface": "src/plate_core/pr_babysit.py",
+  "summary": "Harden babysit --act local-rebase: refuse cross-repo/fork heads and origin mismatches, pin force-with-lease to headRefOid, apply collab force-push policy, and remove only stale index.lock files.",
+  "migration_impact": "Agents running babysit --act against fork PRs or the wrong checkout now get a clear refusal instead of a risky unpinned force-push.",
+  "agent_notes": "Cross-repo PRs, missing headRefOid, origin slug mismatch, and collab force_push blocks skip git push. Push uses --force-with-lease=refs/heads/<branch>:<oid>.",
+  "links": ["#1474"],
+  "breaking": false
+}

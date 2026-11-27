@@ -15,11 +15,42 @@ from plate_core.pr_babysit import (
     _extract_actionable_threads,
     _extract_outdated_unresolved_threads,
     _detect_base_branch_out_of_sync,
+    _git_index_lock_is_stale,
+    _perform_local_rebase,
+    _validate_local_rebase_preconditions,
     babysit_pr,
+    cleanup_git_locks,
     extract_suggestion_blocks,
     resolve_pr_review_scope,
     resolve_review_thread,
 )
+
+
+def _behind_pr_graphql(
+    *,
+    head_ref: str = "feature-branch",
+    merge_state: str = "BEHIND",
+    head_oid: str = "abc123def4567890abc123def4567890abc12345",
+    head_repo: str = "akasper/plate",
+    cross: bool = False,
+):
+    return {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "mergeStateStatus": merge_state,
+                    "baseRefName": "main",
+                    "headRefName": head_ref,
+                    "headRefOid": head_oid,
+                    "isCrossRepository": cross,
+                    "headRepository": {"nameWithOwner": head_repo},
+                    "author": {"login": "cursor[bot]"},
+                    "labels": {"nodes": []},
+                    "reviewThreads": {"nodes": []},
+                }
+            }
+        }
+    }
 
 
 class _FakeClient:
@@ -646,34 +677,27 @@ class PrBabysitTests(unittest.TestCase):
         post_calls = [c for c in fake.calls if c[1] == "POST" and "/comments" in c[0] and "graphql" not in c[0]]
         self.assertEqual(len(post_calls), 0)
 
+    @patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="akasper/plate")
     @patch("plate_core.pr_babysit.check_output_hidden")
     @patch("plate_core.pr_babysit.check_call_hidden")
     @patch("plate_core.pr_babysit.run_hidden")
     @patch("plate_core.pr_babysit.tempfile.mkdtemp")
     @patch("plate_core.pr_babysit.shutil.rmtree")
-    def test_babysit_pr_local_rebase_success(self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output):
+    def test_babysit_pr_local_rebase_success(
+        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output, _mock_origin
+    ):
         """Test local-rebase strategy performs rebase and push when out of sync."""
         repo = "akasper/plate"
         pr = 112
         graphql_endpoint = "graphql"
-
-        pr_data_payload = {
-            "data": {
-                "repository": {
-                    "pullRequest": {
-                        "mergeStateStatus": "BEHIND",
-                        "baseRefName": "main",
-                        "headRefName": "feature-branch",
-                        "reviewThreads": {"nodes": []},
-                    }
-                }
-            }
-        }
+        head_oid = "abc123def4567890abc123def4567890abc12345"
+        pr_data_payload = _behind_pr_graphql(head_oid=head_oid)
 
         fake = _FakeClient(
             responses={
                 (graphql_endpoint, "POST"): pr_data_payload,
                 (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+                (f"repos/{repo}/pulls/{pr}/commits", "GET"): [],
             }
         )
 
@@ -695,36 +719,36 @@ class PrBabysitTests(unittest.TestCase):
         # no copilot trigger for local-rebase
         self.assertFalse(report.merge_trigger_posted)
 
+        push_calls = [
+            c for c in mock_run.call_args_list if c.args and "push" in c.args[0]
+        ]
+        self.assertTrue(push_calls)
+        push_argv = push_calls[-1].args[0]
+        self.assertIn(
+            f"--force-with-lease=refs/heads/feature-branch:{head_oid}",
+            push_argv,
+        )
+
+    @patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="akasper/plate")
     @patch("plate_core.pr_babysit.check_output_hidden")
     @patch("plate_core.pr_babysit.check_call_hidden")
     @patch("plate_core.pr_babysit.run_hidden")
     @patch("plate_core.pr_babysit.tempfile.mkdtemp")
     @patch("plate_core.pr_babysit.shutil.rmtree")
     def test_babysit_pr_default_strategy_uses_local_rebase_not_copilot(
-        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output
+        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output, _mock_origin
     ):
         """When branch_update_strategy is omitted, out-of-sync PRs use local-rebase (#1300)."""
         repo = "akasper/plate"
         pr = 112
         graphql_endpoint = "graphql"
-
-        pr_data_payload = {
-            "data": {
-                "repository": {
-                    "pullRequest": {
-                        "mergeStateStatus": "BEHIND",
-                        "baseRefName": "main",
-                        "headRefName": "feature-branch",
-                        "reviewThreads": {"nodes": []},
-                    }
-                }
-            }
-        }
+        pr_data_payload = _behind_pr_graphql()
 
         fake = _FakeClient(
             responses={
                 (graphql_endpoint, "POST"): pr_data_payload,
                 (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+                (f"repos/{repo}/pulls/{pr}/commits", "GET"): [],
             }
         )
 
@@ -740,34 +764,26 @@ class PrBabysitTests(unittest.TestCase):
         post_calls = [c for c in fake.calls if c[1] == "POST" and "/comments" in c[0] and "graphql" not in c[0]]
         self.assertEqual(len(post_calls), 0)
 
+    @patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="akasper/plate")
     @patch("plate_core.pr_babysit.check_output_hidden")
     @patch("plate_core.pr_babysit.check_call_hidden")
     @patch("plate_core.pr_babysit.run_hidden")
     @patch("plate_core.pr_babysit.tempfile.mkdtemp")
     @patch("plate_core.pr_babysit.shutil.rmtree")
-    def test_babysit_pr_local_rebase_conflict(self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output):
+    def test_babysit_pr_local_rebase_conflict(
+        self, mock_rmtree, mock_mkdtemp, mock_run, mock_check_call, mock_check_output, _mock_origin
+    ):
         """Test local-rebase reports conflict without crashing."""
         repo = "akasper/plate"
         pr = 112
         graphql_endpoint = "graphql"
-
-        pr_data_payload = {
-            "data": {
-                "repository": {
-                    "pullRequest": {
-                        "mergeStateStatus": "CONFLICTING",
-                        "baseRefName": "main",
-                        "headRefName": "feature-branch",
-                        "reviewThreads": {"nodes": []},
-                    }
-                }
-            }
-        }
+        pr_data_payload = _behind_pr_graphql(merge_state="CONFLICTING")
 
         fake = _FakeClient(
             responses={
                 (graphql_endpoint, "POST"): pr_data_payload,
                 (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+                (f"repos/{repo}/pulls/{pr}/commits", "GET"): [],
             }
         )
 
@@ -1215,6 +1231,82 @@ class PrBabysitTests(unittest.TestCase):
         persona = Path("plugin/agents/plate.agent.md").read_text(encoding="utf-8")
         self.assertIn("#510", persona)
         self.assertIn("one-pass Full PR Green", persona)
+
+
+class BabysitActHarden1474Tests(unittest.TestCase):
+    """Regression tests for #1474: fork refusal, origin match, pinned lease, stale locks only."""
+
+    def test_validate_rejects_cross_repo_and_origin_mismatch(self):
+        pr_data = {
+            "isCrossRepository": True,
+            "head_repo": "fork/plate",
+            "headRefOid": "deadbeef",
+        }
+        err = _validate_local_rebase_preconditions("akasper/plate", pr_data, "/tmp/r")
+        self.assertIn("cross-repository", err or "")
+
+        same_repo = {
+            "isCrossRepository": False,
+            "head_repo": "akasper/plate",
+            "headRefOid": "deadbeef",
+        }
+        with patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="other/plate"):
+            err2 = _validate_local_rebase_preconditions("akasper/plate", same_repo, "/tmp/r")
+        self.assertIn("origin", (err2 or "").lower())
+
+    def test_perform_local_rebase_requires_head_oid_for_push(self):
+        with patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo"):
+            with patch("plate_core.pr_babysit.cleanup_git_locks"):
+                with patch("plate_core.pr_babysit.check_call_hidden"):
+                    with patch("plate_core.pr_babysit.tempfile.mkdtemp", return_value="/tmp/wt"):
+                        with patch("plate_core.pr_babysit.run_hidden") as mock_run:
+                            mock_run.return_value = type(
+                                "R", (), {"returncode": 0, "stdout": "", "stderr": ""}
+                            )()
+                            res = _perform_local_rebase("main", "feat", "/tmp/repo", head_ref_oid=None)
+        self.assertFalse(res["success"])
+        self.assertIn("headRefOid", res.get("error") or "")
+
+    @patch("plate_core.pr_babysit._origin_slug_for_repo_dir", return_value="akasper/plate")
+    @patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo\n")
+    def test_babysit_refuses_fork_pr_on_act(self, _mock_out, _mock_origin):
+        repo = "akasper/plate"
+        pr = 1474
+        payload = _behind_pr_graphql(head_repo="forkuser/plate", cross=True)
+        fake = _FakeClient(
+            responses={
+                ("graphql", "POST"): payload,
+                (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+            }
+        )
+        report = babysit_pr(
+            repo=repo,
+            pr_number=pr,
+            act=True,
+            branch_update_strategy="local-rebase",
+            client=fake,
+        )
+        self.assertTrue(report.local_rebase_performed)
+        self.assertFalse(report.local_rebase_success)
+        self.assertIn("cross-repository", (report.local_rebase_error or "").lower())
+
+    def test_cleanup_skips_fresh_index_lock(self):
+        import os
+        import tempfile
+        import time
+
+        with tempfile.TemporaryDirectory() as tmp:
+            git_dir = os.path.join(tmp, ".git")
+            os.makedirs(git_dir)
+            lock_path = os.path.join(git_dir, "index.lock")
+            with open(lock_path, "w", encoding="utf-8") as fh:
+                fh.write(f"{os.getpid()}\n")
+            os.utime(lock_path, (time.time(), time.time()))
+            self.assertFalse(_git_index_lock_is_stale(lock_path))
+            result = cleanup_git_locks(tmp)
+            self.assertFalse(result["cleaned"])
+            self.assertTrue(result["skipped"])
+            self.assertTrue(os.path.exists(lock_path))
 
 
 if __name__ == "__main__":

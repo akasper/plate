@@ -40,8 +40,9 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .collab import analyze_pr_authorship, collab_policy_check
 from .github_client import GhApiError, GhClient
-from .health import resolve_repo
+from .health import _slug_from_github_remote_url, resolve_repo
 from .pr_watch_guards import is_graphql_rate_limited, load_pr_data_rest_fallback
 from .procutil import check_call_hidden, check_output_hidden, run_hidden
 
@@ -68,6 +69,8 @@ _MERGE_TRIGGER_MARKER = "<!-- plate-pr-merge-trigger -->"
 # Valid branch update strategies
 _VALID_STRATEGIES = ["copilot-request", "local-rebase", "none"]
 _DEFAULT_STRATEGY = "local-rebase"
+# Git index.lock files older than this with no live holder are treated as stale (#1474).
+_STALE_GIT_INDEX_LOCK_MAX_AGE_SEC = 600.0
 
 # #496: who counts as actionable review feedback
 PR_REVIEW_SCOPES = ("all", "bot-only", "human-only")
@@ -187,6 +190,7 @@ def _detect_base_branch_out_of_sync(pr_data: dict) -> dict:
         "state": merge_state,
         "base_ref": pr_data.get("baseRefName", ""),
         "head_ref": pr_data.get("headRefName", ""),
+        "head_ref_oid": pr_data.get("headRefOid") or "",
     }
 
 
@@ -520,6 +524,11 @@ query($owner: String!, $repo: String!, $number: Int!) {
       mergeStateStatus
       baseRefName
       headRefName
+      headRefOid
+      isCrossRepository
+      author { login }
+      labels(first: 30) { nodes { name } }
+      headRepository { nameWithOwner }
       reviewDecision
       statusCheckRollup {
         state
@@ -568,11 +577,25 @@ query($owner: String!, $repo: String!, $number: Int!) {
     )
     if not pr:
         raise GhApiError("graphql pullRequest missing")
+    head_repo = pr.get("headRepository") or {}
+    labels_block = pr.get("labels") or {}
+    label_nodes = labels_block.get("nodes") if isinstance(labels_block, dict) else None
+    labels = [
+        n.get("name")
+        for n in (label_nodes or [])
+        if isinstance(n, dict) and n.get("name")
+    ]
+    author = pr.get("author") or {}
     return {
         "reviewThreads": (pr.get("reviewThreads", {}) or {}).get("nodes", []),
         "mergeStateStatus": pr.get("mergeStateStatus", "UNKNOWN"),
         "baseRefName": pr.get("baseRefName", ""),
         "headRefName": pr.get("headRefName", ""),
+        "headRefOid": pr.get("headRefOid") or "",
+        "isCrossRepository": bool(pr.get("isCrossRepository")),
+        "head_repo": head_repo.get("nameWithOwner") or "",
+        "labels": labels,
+        "author_login": (author.get("login") if isinstance(author, dict) else None) or "",
         "reviewDecision": pr.get("reviewDecision"),
         "statusCheckRollup": pr.get("statusCheckRollup"),
     }
@@ -668,7 +691,147 @@ def _post_merge_trigger(client: GhClient, repo: str, pr_number: int, sync_info: 
     return (response or {}).get("html_url")
 
 
-def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = None) -> dict:
+def _split_repo(repo: str) -> tuple[str, str]:
+    owner, name = repo.split("/", 1)
+    return owner, name
+
+
+def _enrich_pr_push_safety_fields(
+    client: GhClient,
+    repo: str,
+    pr_number: int,
+    pr_data: dict,
+) -> dict:
+    """Ensure cross-repo / head oid / head repo are present (REST when GraphQL fell back)."""
+    if (
+        pr_data.get("headRefOid")
+        and pr_data.get("head_repo")
+        and "isCrossRepository" in pr_data
+    ):
+        return pr_data
+    owner, name = _split_repo(repo)
+    pull = client.api(f"repos/{owner}/{name}/pulls/{pr_number}") or {}
+    if not isinstance(pull, dict):
+        return pr_data
+    head = pull.get("head") or {}
+    base = pull.get("base") or {}
+    head_repo_info = head.get("repo") or {}
+    base_repo_info = base.get("repo") or {}
+    head_full = head_repo_info.get("full_name") or ""
+    base_full = base_repo_info.get("full_name") or ""
+    is_cross = False
+    if head_full and base_full:
+        is_cross = head_full.lower() != base_full.lower()
+    elif head_repo_info.get("fork"):
+        is_cross = True
+    elif not pr_data.get("head_repo") and head_full:
+        is_cross = head_full.lower() != repo.lower()
+    out = dict(pr_data)
+    if head.get("sha") and not out.get("headRefOid"):
+        out["headRefOid"] = head.get("sha")
+    if head_full and not out.get("head_repo"):
+        out["head_repo"] = head_full
+    out["isCrossRepository"] = bool(out.get("isCrossRepository")) or is_cross
+    return out
+
+
+def _origin_slug_for_repo_dir(repo_dir: str) -> str | None:
+    proc = run_hidden(
+        ["git", "-C", repo_dir, "config", "--get", "remote.origin.url"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    return _slug_from_github_remote_url((proc.stdout or "").strip())
+
+
+def _validate_local_rebase_preconditions(target_repo: str, pr_data: dict, repo_dir: str) -> str | None:
+    """Return an error message when local-rebase must not run (#1474)."""
+    if pr_data.get("isCrossRepository"):
+        return "cross-repository PR: babysit local-rebase refused (fork head)"
+    head_repo = (pr_data.get("head_repo") or "").strip()
+    if head_repo and head_repo.lower() != target_repo.lower():
+        return f"PR head repository {head_repo!r} does not match target {target_repo!r}"
+    origin = _origin_slug_for_repo_dir(repo_dir)
+    if origin and origin.lower() != target_repo.lower():
+        return (
+            f"git remote origin {origin!r} does not match PR repository {target_repo!r}; "
+            "refuse force-push"
+        )
+    if not (pr_data.get("headRefOid") or "").strip():
+        return "missing headRefOid; refuse push without pinned force-with-lease"
+    return None
+
+
+def _authorship_for_local_rebase(
+    client: GhClient,
+    repo: str,
+    pr_number: int,
+    pr_data: dict,
+) -> dict:
+    owner, name = _split_repo(repo)
+    commits: list[dict] = []
+    try:
+        page = 1
+        while True:
+            batch = (
+                client.api(
+                    f"repos/{owner}/{name}/pulls/{pr_number}/commits",
+                    fields={"per_page": 100, "page": page},
+                )
+                or []
+            )
+            if not isinstance(batch, list) or not batch:
+                break
+            commits.extend(item for item in batch if isinstance(item, dict))
+            if len(batch) < 100:
+                break
+            page += 1
+    except GhApiError:
+        commits = []
+    report = analyze_pr_authorship(
+        pr_number=pr_number,
+        author_login=pr_data.get("author_login") or None,
+        commits=commits,
+    )
+    return report.to_dict()
+
+
+def _git_index_lock_is_stale(lock_path: str) -> bool:
+    """True when index.lock is safe to remove (dead holder or very old) (#1474)."""
+    try:
+        stat = os.stat(lock_path)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+    age = max(0.0, time.time() - stat.st_mtime)
+    try:
+        raw = Path(lock_path).read_text(encoding="utf-8", errors="replace").strip()
+        if not raw:
+            return age > _STALE_GIT_INDEX_LOCK_MAX_AGE_SEC
+        pid = int(raw.split()[0])
+    except (OSError, ValueError, IndexError):
+        return age > _STALE_GIT_INDEX_LOCK_MAX_AGE_SEC
+    if _pid_is_alive_git_lock(pid):
+        return False
+    return True
+
+
+def _pid_is_alive_git_lock(pid: int) -> bool:
+    """Reuse babysit watch pid check (same platform semantics)."""
+    return pid_is_alive(pid)
+
+
+def _perform_local_rebase(
+    base_ref: str,
+    head_ref: str,
+    repo_dir: str | None = None,
+    *,
+    head_ref_oid: str | None = None,
+) -> dict:
     """Perform a local rebase of head_ref onto base_ref using an isolated git worktree.
 
     Returns a dict with:
@@ -724,10 +887,26 @@ def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = N
                 "output": (rebase_res.stdout or "") + (rebase_res.stderr or ""),
             }
 
-        # push back (force-with-lease for safety)
+        if not head_ref_oid:
+            return {
+                "success": False,
+                "conflict": False,
+                "error": "missing headRefOid for pinned force-with-lease",
+                "output": None,
+            }
+        lease_ref = f"refs/heads/{head_ref}"
         push_res = run_hidden(
-            ["git", "-C", worktree_path, "push", "origin", f"HEAD:{head_ref}", "--force-with-lease"],
-            capture_output=True, text=True
+            [
+                "git",
+                "-C",
+                worktree_path,
+                "push",
+                "origin",
+                f"HEAD:{head_ref}",
+                f"--force-with-lease={lease_ref}:{head_ref_oid}",
+            ],
+            capture_output=True,
+            text=True,
         )
         if push_res.returncode != 0:
             return {
@@ -754,13 +933,11 @@ def _perform_local_rebase(base_ref: str, head_ref: str, repo_dir: str | None = N
 
 
 def cleanup_git_locks(repo_dir: str | None = None) -> dict:
-    """Remove common git lock files (index.lock etc.) that block rebase/push/worktree ops after prior failures, unclean exits, or main/worktree collisions (addresses #514 incidents).
+    """Remove *stale* git lock files (e.g. index.lock) that block rebase/push after crashes (#514, #1474).
 
-    Call before git operations in babysit local-rebase or any PR fix flow.
+    Live or fresh locks are left in place so we do not tear down an in-progress git command.
 
-    Returns: {"cleaned": [removed paths], "errors": [error msgs]}
-
-    Robust: safe if no locks or no repo.
+    Returns: {"cleaned": [removed paths], "errors": [error msgs], "skipped": [left in place]}
     """
     if repo_dir is None:
         try:
@@ -773,14 +950,19 @@ def cleanup_git_locks(repo_dir: str | None = None) -> dict:
     locks = [os.path.join(repo_dir, ".git", "index.lock")]
     cleaned: list[str] = []
     errors: list[str] = []
+    skipped: list[str] = []
     for lock_path in locks:
-        if os.path.exists(lock_path):
-            try:
-                os.unlink(lock_path)
-                cleaned.append(lock_path)
-            except Exception as e:
-                errors.append(f"{lock_path}: {e}")
-    return {"cleaned": cleaned, "errors": errors}
+        if not os.path.exists(lock_path):
+            continue
+        if not _git_index_lock_is_stale(lock_path):
+            skipped.append(lock_path)
+            continue
+        try:
+            os.unlink(lock_path)
+            cleaned.append(lock_path)
+        except Exception as e:
+            errors.append(f"{lock_path}: {e}")
+    return {"cleaned": cleaned, "errors": errors, "skipped": skipped}
 
 
 def verify_worktree_is_isolated() -> dict:
@@ -1092,14 +1274,42 @@ def babysit_pr(
             merge_trigger_url = _post_merge_trigger(gh, target, pr_number, sync_info)
             merge_trigger_posted = True
     elif act and sync_info["out_of_sync"] and strategy == "local-rebase":
-        # Pre-clean locks and verify isolation for robustness (#514)
-        cleanup_git_locks()
-        v = verify_worktree_is_isolated()
-        rebase_res = _perform_local_rebase(sync_info.get("base_ref"), sync_info.get("head_ref"))
+        pr_data = _enrich_pr_push_safety_fields(gh, target, pr_number, pr_data)
         local_rebase_performed = True
-        local_rebase_success = rebase_res.get("success", False)
-        local_rebase_conflict = rebase_res.get("conflict", False)
-        local_rebase_error = rebase_res.get("error")
+        try:
+            repo_dir = check_output_hidden(
+                ["git", "rev-parse", "--show-toplevel"], text=True, cwd="."
+            ).strip()
+        except Exception as exc:
+            local_rebase_success = False
+            local_rebase_error = f"not in git repo: {exc}"
+        else:
+            cleanup_git_locks(repo_dir)
+            preflight_err = _validate_local_rebase_preconditions(target, pr_data, repo_dir)
+            if preflight_err:
+                local_rebase_success = False
+                local_rebase_error = preflight_err
+            else:
+                authorship = _authorship_for_local_rebase(gh, target, pr_number, pr_data)
+                policy = collab_policy_check(
+                    "force_push",
+                    labels=pr_data.get("labels") or [],
+                    authorship=authorship,
+                    branch=sync_info.get("head_ref"),
+                )
+                if not policy.get("allowed"):
+                    local_rebase_success = False
+                    local_rebase_error = policy.get("reason") or "force-push blocked by collab policy"
+                else:
+                    rebase_res = _perform_local_rebase(
+                        sync_info.get("base_ref"),
+                        sync_info.get("head_ref"),
+                        repo_dir,
+                        head_ref_oid=pr_data.get("headRefOid"),
+                    )
+                    local_rebase_success = rebase_res.get("success", False)
+                    local_rebase_conflict = rebase_res.get("conflict", False)
+                    local_rebase_error = rebase_res.get("error")
         # Note: we do not post copilot trigger when local-rebase is chosen
 
     suggestion_n = sum(1 for a in actionable if a.get("has_suggestion"))
