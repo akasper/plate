@@ -97,6 +97,70 @@ class BudgetPersistence1476Tests(unittest.TestCase):
                 save_budget_spend({"date": "2099-01-01"}, base_dir=bdir)
             self.assertEqual(path.read_bytes(), corrupt_bytes)
 
+    def test_clear_save_refusal_after_repair_allows_writes(self):
+        with TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            path = bdir / "spend.json"
+            path.parent.mkdir(parents=True)
+            path.write_text('{"spent_today": 1', encoding="utf-8")
+
+            with self.assertRaises(CorruptStateError):
+                load_budget_spend(base_dir=bdir)
+
+            today = __import__("datetime").datetime.now(
+                __import__("datetime").timezone.utc
+            ).date().isoformat()
+            path.write_text(
+                json.dumps(
+                    {
+                        "date": today,
+                        "spent_today": 10,
+                        "spent_this_cycle": 0,
+                        "spent_usd_today": 0.0,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertTrue(clear_save_refusal(path))
+            self.assertFalse(budget_spend_is_corrupt(base_dir=bdir))
+
+            charge = record_budget_spend(5, base_dir=bdir)
+            self.assertTrue(charge.get("ok"))
+            loaded = load_budget_spend(base_dir=bdir)
+            self.assertEqual(int(loaded.get("spent_today") or 0), 15)
+
+    def test_clear_save_refusal_when_file_missing_clears_refusal(self):
+        with TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            path = bdir / "spend.json"
+            path.parent.mkdir(parents=True)
+            path.write_text('{"torn": ', encoding="utf-8")
+
+            with self.assertRaises(CorruptStateError):
+                load_budget_spend(base_dir=bdir)
+            self.assertTrue(budget_spend_is_corrupt(base_dir=bdir))
+
+            path.unlink()
+            self.assertTrue(clear_save_refusal(path))
+            self.assertFalse(budget_spend_is_corrupt(base_dir=bdir))
+
+            today = __import__("datetime").datetime.now(
+                __import__("datetime").timezone.utc
+            ).date().isoformat()
+            save_budget_spend(
+                {
+                    "date": today,
+                    "spent_today": 0,
+                    "spent_this_cycle": 0,
+                    "spent_usd_today": 0.0,
+                },
+                base_dir=bdir,
+            )
+            self.assertTrue(path.is_file())
+            loaded = load_budget_spend(base_dir=bdir)
+            self.assertEqual(loaded.get("date"), today)
+
     def test_dry_run_does_not_persist_spend(self):
         with TemporaryDirectory() as tmp:
             bdir = Path(tmp) / "budget"
