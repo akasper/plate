@@ -80,7 +80,8 @@ def redact_absolute_paths(text: str, root: Path | None = None) -> str:
     home_s = str(home.resolve())
     if home_s:
         redacted = redacted.replace(home_s, "<home>")
-    redacted = re.sub(r"~(?:/[^\s\"']*)?", "<home>", redacted)
+    redacted = re.sub(r"~(?:/[^\s\"']+)+", "<home>", redacted)
+    redacted = re.sub(r"\$HOME(?:/[^\s\"']*)?", "<home>", redacted)
     redacted = re.sub(r"/(?:agent|tmp|var|home|Users)/[^\s\"']+", "<path>", redacted)
     redacted = _ABSOLUTE_PATH_PATTERN.sub("<path>", redacted)
     return redacted

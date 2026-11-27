@@ -8,9 +8,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.mcp.arg_confinement import (
+    _OR_ALIAS_PATTERN,
+    _dispatch_tool_blocks,
     all_registered_path_parameters,
     build_path_parameter_index,
     confine_tool_arguments,
+    discover_handler_or_arg_aliases,
     uncovered_handler_path_aliases,
 )
 from plate_core.mcp.path_confinement import PathConfinementError, session_repo_root
@@ -38,6 +41,25 @@ class McpAllToolsPathConfinementTests(unittest.TestCase):
 
     def test_handler_path_aliases_are_registered(self):
         self.assertEqual(uncovered_handler_path_aliases(), [])
+
+    def test_alias_scan_covers_first_if_branch_and_all_or_fallbacks(self):
+        blocks = _dispatch_tool_blocks()
+        self.assertGreaterEqual(len(blocks), 50)
+        self.assertEqual(blocks[0][0], "plate_health")
+        aliases_by_tool = discover_handler_or_arg_aliases()
+        scanned_tools = {tool for tool, _left, _right in aliases_by_tool}
+        for tool_name, source in blocks:
+            if not _OR_ALIAS_PATTERN.search(source):
+                continue
+            self.assertIn(
+                tool_name,
+                scanned_tools,
+                msg=f"{tool_name} has args.get-or-args.get fallback but was not scanned",
+            )
+        self.assertTrue(
+            any(left == "fragment_path" and right == "fragment" for _t, left, right in aliases_by_tool),
+            "expected fragment_path/fragment pair from attach_fragment branch",
+        )
 
     def _escape_values(self) -> list[object]:
         outside = self.repo_root.parent / "mcp-escape-outside"

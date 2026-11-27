@@ -47,6 +47,17 @@ class McpErrorRedactionTests(unittest.TestCase):
         self.assertNotIn("~/other", redacted)
         self.assertIn("<home>", redacted)
 
+    def test_bare_tilde_not_redacted(self):
+        self.assertEqual(
+            redact_absolute_paths("approx ~100% done"),
+            "approx ~100% done",
+        )
+
+    def test_dollar_home_env_literal_redacted(self):
+        redacted = redact_absolute_paths("missing $HOME/secrets/x")
+        self.assertNotIn("$HOME", redacted)
+        self.assertIn("<home>", redacted)
+
     @patch("plate_core.mcp_server._execute_mcp_tool")
     @patch("plate_core.mcp_server._write")
     def test_non_confinement_error_redacts_paths(self, mock_write, mock_exec):

@@ -23,8 +23,8 @@ _CANONICAL_PATH_ALIASES: dict[str, str] = {
 _OR_ALIAS_PATTERN = re.compile(
     r"args\.get\(\s*[\"'](\w+)[\"']\s*\)\s+or\s+args\.get\(\s*[\"'](\w+)[\"']\s*\)"
 )
-_TOOL_BRANCH_PATTERN = re.compile(
-    r'elif name == "([^"]+)":'
+_DISPATCH_BRANCH_SPLIT = re.compile(
+    r'(?=(?:if|elif) name == "[^"]+":)'
 )
 
 NON_PATH_PARAMETERS = frozenset(
@@ -147,16 +147,26 @@ def all_registered_path_parameters() -> list[tuple[str, str]]:
     return rows
 
 
-def discover_handler_or_arg_aliases() -> list[tuple[str, str, str]]:
-    """Scan dispatch for ``args.get(a) or args.get(b)`` fallback pairs per tool branch."""
+def _dispatch_tool_blocks() -> list[tuple[str, str]]:
+    """Return ``(tool_name, branch_source)`` for every ``if``/``elif`` branch in dispatch."""
     text = _MCP_SERVER_PATH.read_text(encoding="utf-8")
-    parts = re.split(r'(?=elif name == "[^"]+":)', text)
-    pairs: list[tuple[str, str, str]] = []
-    for part in parts:
-        head = re.match(r'elif name == "([^"]+)":', part)
+    marker = "def _execute_mcp_tool"
+    start = text.index(marker)
+    end = text.index("\ndef _handle_tools_call", start)
+    dispatch = text[start:end]
+    blocks: list[tuple[str, str]] = []
+    for part in _DISPATCH_BRANCH_SPLIT.split(dispatch):
+        head = re.match(r'(?:if|elif) name == "([^"]+)":', part)
         if not head:
             continue
-        tool_name = head.group(1)
+        blocks.append((head.group(1), part))
+    return blocks
+
+
+def discover_handler_or_arg_aliases() -> list[tuple[str, str, str]]:
+    """Scan dispatch for ``args.get(a) or args.get(b)`` fallback pairs per tool branch."""
+    pairs: list[tuple[str, str, str]] = []
+    for tool_name, part in _dispatch_tool_blocks():
         for match in _OR_ALIAS_PATTERN.finditer(part):
             pairs.append((tool_name, match.group(1), match.group(2)))
     return pairs
