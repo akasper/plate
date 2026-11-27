@@ -2,11 +2,30 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 from .path_confinement import PathConfinementError, confined, session_repo_root
 from .tool_definitions import MCP_TOOL_DEFINITIONS
+
+_MCP_SERVER_PATH = Path(__file__).resolve().parent.parent / "mcp_server.py"
+
+# Schema path keys -> handler fallback keys confined alongside the canonical name.
+_CANONICAL_PATH_ALIASES: dict[str, str] = {
+    "spec_path": "spec",
+    "target_dir": "target",
+    "escape_hatch_dir": "escape_hatch",
+    "fragment_path": "fragment",
+    "upstream_root": "upstream_dir",
+}
+
+_OR_ALIAS_PATTERN = re.compile(
+    r"args\.get\(\s*[\"'](\w+)[\"']\s*\)\s+or\s+args\.get\(\s*[\"'](\w+)[\"']\s*\)"
+)
+_TOOL_BRANCH_PATTERN = re.compile(
+    r'elif name == "([^"]+)":'
+)
 
 NON_PATH_PARAMETERS = frozenset(
     {
@@ -49,6 +68,7 @@ _EXACT_PATH_PARAMETERS = frozenset(
         "upstream_dir",
         "content_path",
         "fragment_path",
+        "fragment",
         "gif_path",
         "video_path",
     }
@@ -97,6 +117,14 @@ def path_parameters_for_tool(tool_name: str) -> frozenset[str]:
     return frozenset()
 
 
+def effective_path_parameters(tool_name: str) -> frozenset[str]:
+    params = set(path_parameters_for_tool(tool_name))
+    for canonical, alias in _CANONICAL_PATH_ALIASES.items():
+        if canonical in params:
+            params.add(alias)
+    return frozenset(params)
+
+
 def build_path_parameter_index() -> dict[str, frozenset[str]]:
     global _REGISTRY
     if _REGISTRY is not None:
@@ -104,7 +132,7 @@ def build_path_parameter_index() -> dict[str, frozenset[str]]:
     index: dict[str, frozenset[str]] = {}
     for definition in MCP_TOOL_DEFINITIONS:
         name = str(definition["name"])
-        params = path_parameters_for_tool(name)
+        params = effective_path_parameters(name)
         if params:
             index[name] = params
     _REGISTRY = index
@@ -117,6 +145,33 @@ def all_registered_path_parameters() -> list[tuple[str, str]]:
         for param in sorted(params):
             rows.append((tool_name, param))
     return rows
+
+
+def discover_handler_or_arg_aliases() -> list[tuple[str, str, str]]:
+    """Scan dispatch for ``args.get(a) or args.get(b)`` fallback pairs per tool branch."""
+    text = _MCP_SERVER_PATH.read_text(encoding="utf-8")
+    parts = re.split(r'(?=elif name == "[^"]+":)', text)
+    pairs: list[tuple[str, str, str]] = []
+    for part in parts:
+        head = re.match(r'elif name == "([^"]+)":', part)
+        if not head:
+            continue
+        tool_name = head.group(1)
+        for match in _OR_ALIAS_PATTERN.finditer(part):
+            pairs.append((tool_name, match.group(1), match.group(2)))
+    return pairs
+
+
+def uncovered_handler_path_aliases() -> list[tuple[str, str]]:
+    """Return path-like handler fallback keys not in effective_path_parameters."""
+    gaps: list[tuple[str, str]] = []
+    for tool_name, left, right in discover_handler_or_arg_aliases():
+        effective = effective_path_parameters(tool_name)
+        for param in (left, right):
+            if _param_is_path_like(param, tool_name) and param not in effective:
+                gaps.append((tool_name, param))
+    # De-duplicate
+    return sorted(set(gaps))
 
 
 def _confine_single(value: Any, root: Path, param: str) -> Any:
@@ -136,7 +191,7 @@ def confine_tool_arguments(
 ) -> dict[str, Any]:
     """Return a copy of ``args`` with path-like values confined to ``root``."""
     base = (root or session_repo_root()).resolve()
-    params = path_parameters_for_tool(tool_name)
+    params = effective_path_parameters(tool_name)
     if not params:
         return dict(args)
     out = dict(args)
@@ -147,6 +202,10 @@ def confine_tool_arguments(
         out["target_dir"] = out["target"]
     if "escape_hatch_dir" in params and "escape_hatch" in out and "escape_hatch_dir" not in out:
         out["escape_hatch_dir"] = out["escape_hatch"]
+    if "fragment_path" in params and "fragment" in out and not out.get("fragment_path"):
+        out["fragment_path"] = out["fragment"]
+    if "upstream_root" in params and "upstream_dir" in out and not out.get("upstream_root"):
+        out["upstream_root"] = out["upstream_dir"]
     for param in params:
         if param not in out:
             continue

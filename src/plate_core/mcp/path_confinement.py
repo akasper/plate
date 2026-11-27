@@ -50,7 +50,11 @@ def redact_absolute_paths(text: str, root: Path | None = None) -> str:
     base = (root or session_repo_root()).resolve()
     base_s = str(base)
     redacted = text.replace(base_s, "<repo>")
-    # Common temp / agent paths
+    home = Path.home()
+    home_s = str(home.resolve())
+    if home_s:
+        redacted = redacted.replace(home_s, "<home>")
+    redacted = re.sub(r"~(?:/[^\s\"']*)?", "<home>", redacted)
     redacted = re.sub(r"/(?:agent|tmp|var|home|Users)/[^\s\"']+", "<path>", redacted)
     redacted = _ABSOLUTE_PATH_PATTERN.sub("<path>", redacted)
     return redacted

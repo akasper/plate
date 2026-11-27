@@ -11,6 +11,7 @@ from plate_core.mcp.arg_confinement import (
     all_registered_path_parameters,
     build_path_parameter_index,
     confine_tool_arguments,
+    uncovered_handler_path_aliases,
 )
 from plate_core.mcp.path_confinement import PathConfinementError, session_repo_root
 from plate_core.mcp.tool_profiles import PROFILE_ALL, configure_mcp_tool_profiles, reset_mcp_tool_profile_session
@@ -31,6 +32,12 @@ class McpAllToolsPathConfinementTests(unittest.TestCase):
         index = build_path_parameter_index()
         self.assertGreaterEqual(len(index), 50)
         self.assertGreaterEqual(len(all_registered_path_parameters()), 70)
+        rows = set(all_registered_path_parameters())
+        self.assertIn(("plate_feature_media_attach_fragment", "fragment"), rows)
+        self.assertIn(("plate_self_migrate_merge_markers", "upstream_dir"), rows)
+
+    def test_handler_path_aliases_are_registered(self):
+        self.assertEqual(uncovered_handler_path_aliases(), [])
 
     def _escape_values(self) -> list[object]:
         outside = self.repo_root.parent / "mcp-escape-outside"
@@ -73,6 +80,12 @@ class McpAllToolsPathConfinementTests(unittest.TestCase):
             "plate_collab_ownership_release",
         ):
             return {"kind": "path", param: value}
+        if tool_name == "plate_feature_media_attach_fragment":
+            args = {"record_id": "r1", "fragment_path": "."}
+            args[param] = value
+            return args
+        if tool_name == "plate_self_migrate_merge_markers":
+            return {"repo_root": ".", param: value}
         return {param: value}
 
 

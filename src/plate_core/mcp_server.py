@@ -2321,7 +2321,10 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
             {
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "error": {"code": -32601, "message": str(exc)},
+                "error": {
+                    "code": -32601,
+                    "message": client_safe_error_message(exc),
+                },
             }
         )
     except Exception as exc:
@@ -2330,7 +2333,12 @@ def _handle_tools_call(req_id: object, params: dict) -> None:
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {
-                    "content": [{"type": "text", "text": str(exc)}],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": client_safe_error_message(exc),
+                        }
+                    ],
                     "isError": True,
                 },
             }
