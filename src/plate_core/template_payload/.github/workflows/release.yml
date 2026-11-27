@@ -137,6 +137,24 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.plate-app-token.outputs.token || github.token }}
 
+      - name: Install pinned plate-core for fast-forward
+        id: plate-core-ff
+        if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}
+        run: |
+          set -euo pipefail
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            echo "ff_python=python3" >> "${GITHUB_OUTPUT}"
+            echo "use_monorepo_src=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          VENV="${RUNNER_TEMP}/plate-core-ff-venv"
+          python3 -m venv "${VENV}"
+          FF_PY="${VENV}/bin/python"
+          "${FF_PY}" -m pip install --quiet --disable-pip-version-check "plate-core==0.12.0"
+          "${FF_PY}" -c "from plate_core.release import fast_forward_release_branches, format_fast_forward_failure_comment, post_release_fast_forward_comment"
+          echo "ff_python=${FF_PY}" >> "${GITHUB_OUTPUT}"
+          echo "use_monorepo_src=false" >> "${GITHUB_OUTPUT}"
+
       - name: Fast-forward release branches to tag (no force push)
         if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}
         env:
@@ -144,8 +162,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          export PYTHONPATH="$GITHUB_WORKSPACE/src"
-          python - <<'PY'
+          FF_PY="${{ steps.plate-core-ff.outputs.ff_python }}"
+          if [ "${{ steps.plate-core-ff.outputs.use_monorepo_src }}" = "true" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          fi
+          "${FF_PY}" - <<'PY'
           import json
           import os
           import sys
