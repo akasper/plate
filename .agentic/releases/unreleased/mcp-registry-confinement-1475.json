@@ -1,8 +1,8 @@
 {
   "slug": "mcp-registry-confinement-1475",
   "change_type": "feature",
-  "surface": "plate_core.mcp_server, plate_core.mcp.registry, plate_core.mcp.path_confinement, plate_core.mcp.tool_definitions, plate_core.mcp.tools, plate_core.mcp.tool_profiles, plate_core.gh_actions_mark_implemented",
-  "summary": "Unify MCP tools/list metadata in one registry module, dispatch the eight previously orphaned tools, confine path arguments to the session repo root (including symlinks), harden the stdio JSON-RPC loop (parse errors, ping, stdout redirect during tools/call), and add registry/confinement/mark-implemented tests.",
+  "surface": "plate_core.mcp_server, plate_core.mcp.registry, plate_core.mcp.arg_confinement, plate_core.mcp.path_confinement, plate_core.mcp.tool_definitions, plate_core.mcp.tools, plate_core.mcp.tool_profiles, plate_core.gh_actions_mark_implemented",
+  "summary": "Unify MCP tools/list metadata in one registry module, dispatch the eight previously orphaned tools, confine every schema-discovered path-like argument at dispatch (including lists and symlinks), redact absolute paths in JSON-RPC errors, harden the stdio loop, and add table-driven confinement tests.",
   "migration_impact": "MCP hosts using plate_pr_verify repo_root must rely on the confined server checkout when run_tests is true; tools/list schema drops that parameter.",
   "agent_notes": "Use PLATE_MCP_TOOL_PROFILES=all for full registry tests. Path escapes outside .git root are rejected with PathConfinementError.",
   "breaking": false,

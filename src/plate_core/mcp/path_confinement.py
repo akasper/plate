@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+import re
 from pathlib import Path
 
 
@@ -31,10 +31,33 @@ def confined(path: str | Path | None, root: Path | None = None) -> Path:
         candidate.relative_to(base)
     except ValueError as exc:
         raise PathConfinementError(
-            f"Path {candidate!s} is outside confined root {base!s}"
+            "Path escapes the repository root"
         ) from exc
     return candidate
 
 
 def confined_or_default(path: str | Path | None, root: Path | None = None) -> Path:
     return confined(path, root)
+
+
+_ABSOLUTE_PATH_PATTERN = re.compile(r"(?<![\w.-])/(?:[\w.-]+/)+[\w.-]+")
+
+
+def redact_absolute_paths(text: str, root: Path | None = None) -> str:
+    """Remove or relativize absolute filesystem paths for JSON-RPC clients."""
+    if not text:
+        return text
+    base = (root or session_repo_root()).resolve()
+    base_s = str(base)
+    redacted = text.replace(base_s, "<repo>")
+    # Common temp / agent paths
+    redacted = re.sub(r"/(?:agent|tmp|var|home|Users)/[^\s\"']+", "<path>", redacted)
+    redacted = _ABSOLUTE_PATH_PATTERN.sub("<path>", redacted)
+    return redacted
+
+
+def client_safe_error_message(exc: BaseException, root: Path | None = None) -> str:
+    """Format an exception for tools/call error payloads without leaking host paths."""
+    if isinstance(exc, PathConfinementError):
+        return str(exc) or "Path escapes the repository root"
+    return redact_absolute_paths(str(exc), root)

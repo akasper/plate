@@ -14,6 +14,7 @@ from plate_core.mcp.registry import (
     listed_tool_names,
 )
 from plate_core.mcp.tool_profiles import PROFILE_ALL, reset_mcp_tool_profile_session
+import plate_core.mcp_server  # noqa: F401 — registers tool executor
 from plate_core.mcp_server import _execute_mcp_tool
 
 

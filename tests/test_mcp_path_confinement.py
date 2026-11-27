@@ -30,8 +30,10 @@ class McpPathConfinementTests(unittest.TestCase):
             root = Path(tmp)
             outside = Path(tmp).parent / "outside-plate-mcp"
             outside.mkdir(exist_ok=True)
-            with self.assertRaises(PathConfinementError):
+            with self.assertRaises(PathConfinementError) as ctx:
                 confined(outside, root)
+            self.assertNotIn(str(root), str(ctx.exception))
+            self.assertNotIn(str(outside), str(ctx.exception))
 
     def test_symlink_escape_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
