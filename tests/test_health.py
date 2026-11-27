@@ -11,8 +11,12 @@ from plate_core.health import (
     _repo_from_git_remote,
     assess_adoption_complete,
     adoption_messaging_content_gaps,
+    adoption_release_standing_ok,
     bootstrap_adopt_apply_command,
     branch_protection_requires_pull_requests,
+    effective_pull_request_reviews_required,
+    _ruleset_applies_to_default_branch,
+    _rulesets_require_pull_request_reviews,
     expected_labels_from_registry,
     get_health,
     label_coverage_fix_command,
@@ -679,6 +683,182 @@ class AdoptionCompleteVerdictTests(unittest.TestCase):
         d = report.to_dict()
         self.assertIn("adoption_complete", d)
         self.assertEqual(report.status, "pass")
+
+
+class RulesetProtectionMatchingTests(unittest.TestCase):
+    """#1528: ruleset-aware PR review gate (read-only reporting)."""
+
+    def _active_main_ruleset(self, *, rule_types: list[str]) -> tuple[dict, dict]:
+        meta = {
+            "id": 1,
+            "enforcement": "active",
+            "target": "branch",
+        }
+        detail = {
+            "target": "branch",
+            "conditions": {
+                "ref_name": {"include": ["~DEFAULT_BRANCH", "main"], "exclude": []}
+            },
+            "rules": [{"type": t} for t in rule_types],
+        }
+        return meta, detail
+
+    def test_ruleset_applies_respects_enforcement_and_ref_patterns(self):
+        active_meta, active_detail = self._active_main_ruleset(rule_types=["pull_request"])
+        self.assertTrue(
+            _ruleset_applies_to_default_branch(active_meta, active_detail, "main")
+        )
+        inactive = {**active_meta, "enforcement": "disabled"}
+        self.assertFalse(
+            _ruleset_applies_to_default_branch(inactive, active_detail, "main")
+        )
+        non_matching_detail = {
+            **active_detail,
+            "conditions": {
+                "ref_name": {"include": ["release"], "exclude": []}
+            },
+        }
+        self.assertFalse(
+            _ruleset_applies_to_default_branch(
+                active_meta, non_matching_detail, "main"
+            )
+        )
+
+    def test_active_matching_pull_request_ruleset_counts_as_protected(self):
+        class RulesetClient:
+            def api(self, endpoint, **kwargs):
+                if endpoint.endswith("/rulesets?per_page=100"):
+                    return [{"id": 7, "enforcement": "active", "target": "branch"}]
+                if endpoint.endswith("/rulesets/7"):
+                    _meta, detail = self_outer._active_main_ruleset(
+                        rule_types=["pull_request"]
+                    )
+                    return detail
+                raise AssertionError(endpoint)
+
+        self_outer = self
+        self.assertTrue(
+            _rulesets_require_pull_request_reviews(
+                RulesetClient(), "acme/widget", "main"
+            )
+        )
+
+    def test_inactive_or_nonmatching_ruleset_does_not_count(self):
+        class InactiveClient:
+            def api(self, endpoint, **kwargs):
+                if endpoint.endswith("/rulesets?per_page=100"):
+                    return [{"id": 2, "enforcement": "disabled", "target": "branch"}]
+                if endpoint.endswith("/rulesets/2"):
+                    return {
+                        "target": "branch",
+                        "conditions": {
+                            "ref_name": {"include": ["main"], "exclude": []}
+                        },
+                        "rules": [{"type": "pull_request"}],
+                    }
+                raise AssertionError(endpoint)
+
+        class NonMatchingClient:
+            def api(self, endpoint, **kwargs):
+                if endpoint.endswith("/rulesets?per_page=100"):
+                    return [{"id": 3, "enforcement": "active", "target": "branch"}]
+                if endpoint.endswith("/rulesets/3"):
+                    return {
+                        "target": "branch",
+                        "conditions": {
+                            "ref_name": {"include": ["release"], "exclude": []}
+                        },
+                        "rules": [{"type": "pull_request"}],
+                    }
+                raise AssertionError(endpoint)
+
+        self.assertFalse(
+            _rulesets_require_pull_request_reviews(
+                InactiveClient(), "acme/widget", "main"
+            )
+        )
+        self.assertFalse(
+            _rulesets_require_pull_request_reviews(
+                NonMatchingClient(), "acme/widget", "main"
+            )
+        )
+
+    def test_effective_gate_without_classic_protection_uses_ruleset(self):
+        class RulesetClient:
+            def api(self, endpoint, **kwargs):
+                if endpoint.endswith("/rulesets?per_page=100"):
+                    return [{"id": 9, "enforcement": "active", "target": "branch"}]
+                if endpoint.endswith("/rulesets/9"):
+                    return {
+                        "target": "branch",
+                        "conditions": {
+                            "ref_name": {"include": ["main"], "exclude": []}
+                        },
+                        "rules": [{"type": "pull_request"}],
+                    }
+                raise AssertionError(endpoint)
+
+        self.assertTrue(
+            effective_pull_request_reviews_required(
+                gh=RulesetClient(),
+                repo="acme/widget",
+                default_branch="main",
+                branch_protection_enabled=False,
+                branch_protection_payload=None,
+            )
+        )
+
+
+class AdoptionReleaseStandingModelTests(unittest.TestCase):
+    """#1528: adoption release standing accepts 3-track or legacy `release`."""
+
+    def _standing(self, branches: dict[str, bool], *, next_count: int = 1) -> dict:
+        return {
+            "branches": branches,
+            "next_release_count": next_count,
+            "needs_next_issue": next_count == 0,
+            "needs_dedupe_next": next_count > 1,
+        }
+
+    def test_modern_three_track_without_legacy_release_is_ok(self):
+        standing = self._standing(
+            {
+                "release-major": True,
+                "release-minor": True,
+                "release-patch": True,
+                "release": False,
+            }
+        )
+        self.assertTrue(adoption_release_standing_ok(standing))
+
+    def test_legacy_release_only_is_ok(self):
+        standing = self._standing(
+            {
+                "release-major": False,
+                "release-minor": False,
+                "release-patch": False,
+                "release": True,
+            }
+        )
+        self.assertTrue(adoption_release_standing_ok(standing))
+
+    def test_neither_model_fails(self):
+        standing = self._standing(
+            {
+                "release-major": False,
+                "release-minor": True,
+                "release-patch": False,
+                "release": False,
+            }
+        )
+        self.assertFalse(adoption_release_standing_ok(standing))
+
+    def test_missing_next_release_issue_fails(self):
+        standing = self._standing(
+            {"release-major": True, "release-minor": True, "release-patch": True},
+            next_count=0,
+        )
+        self.assertFalse(adoption_release_standing_ok(standing))
 
 
 class AdoptionBootstrapRepoResolutionTests(unittest.TestCase):
