@@ -755,31 +755,45 @@ def _origin_slug_for_repo_dir(repo_dir: str) -> str | None:
     return _slug_from_github_remote_url(url)
 
 
+def _git_effective_push_urls(repo_dir: str) -> tuple[list[str], str | None]:
+    """Push destination URLs for ``origin``, including multi-valued and url.* rewrites (#1474)."""
+    proc = run_hidden(
+        ["git", "-C", repo_dir, "remote", "get-url", "--push", "--all", "origin"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()
+        if not detail:
+            detail = f"exit status {proc.returncode}"
+        return [], detail
+    urls = [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+    return urls, None
+
+
 def _validate_push_remotes_match_target(target_repo: str, repo_dir: str) -> str | None:
-    """Fail closed: origin.url must resolve and match; pushurl when set must match too (#1474)."""
-    url = _git_config_get(repo_dir, "remote.origin.url")
-    if not url:
-        return "missing git remote.origin.url; refuse force-push"
-    origin_slug = _slug_from_github_remote_url(url)
-    if not origin_slug:
-        return "cannot resolve git remote.origin.url to a GitHub owner/repo; refuse force-push"
-    if origin_slug.lower() != target_repo.lower():
-        return (
-            f"git remote.origin.url {origin_slug!r} does not match PR repository {target_repo!r}; "
-            "refuse force-push"
-        )
-    pushurl = _git_config_get(repo_dir, "remote.origin.pushurl")
-    if pushurl:
-        push_slug = _slug_from_github_remote_url(pushurl)
-        if not push_slug:
+    """Fail closed unless every git-resolved push URL for origin matches the PR repo (#1474)."""
+    urls, cmd_err = _git_effective_push_urls(repo_dir)
+    if cmd_err:
+        detail = cmd_err.lower()
+        if "no such remote" in detail:
+            return f"missing git remote origin for push ({cmd_err}); refuse force-push"
+        return f"cannot resolve git push remotes for origin ({cmd_err}); refuse force-push"
+    if not urls:
+        return "missing git push URLs for origin; refuse force-push"
+    target_l = target_repo.lower()
+    for raw in urls:
+        slug = _slug_from_github_remote_url(raw)
+        if not slug:
             return (
-                "git remote.origin.pushurl is set but cannot resolve to a GitHub owner/repo; "
+                f"push remote URL does not resolve to GitHub owner/repo ({raw!r}); "
                 "refuse force-push"
             )
-        if push_slug.lower() != target_repo.lower():
+        if slug.lower() != target_l:
             return (
-                f"git remote.origin.pushurl {push_slug!r} does not match PR repository "
-                f"{target_repo!r}; refuse force-push"
+                f"push remote URL {slug!r} does not match PR repository {target_repo!r}; "
+                "refuse force-push"
             )
     return None
 

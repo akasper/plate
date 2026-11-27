@@ -1,3 +1,5 @@
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -1259,50 +1261,82 @@ class BabysitActHarden1474Tests(unittest.TestCase):
         self.assertIn("origin", (err2 or "").lower())
 
     def test_push_remotes_fail_closed_on_missing_or_bad_origin(self):
-        with patch("plate_core.pr_babysit._git_config_get", return_value=None):
+        with patch(
+            "plate_core.pr_babysit._git_effective_push_urls",
+            return_value=([], "error: No such remote 'origin'"),
+        ):
             err = _validate_push_remotes_match_target("akasper/plate", "/tmp/r")
         self.assertIn("missing", (err or "").lower())
 
-        def config_get(_repo_dir, key):
-            if key == "remote.origin.url":
-                return "git@not-github.example:foo/bar.git"
-            return None
-
-        with patch("plate_core.pr_babysit._git_config_get", side_effect=config_get):
+        with patch(
+            "plate_core.pr_babysit._git_effective_push_urls",
+            return_value=(["git@not-github.example:foo/bar.git"], None),
+        ):
             err2 = _validate_push_remotes_match_target("akasper/plate", "/tmp/r")
-        self.assertIn("cannot resolve", (err2 or "").lower())
+        self.assertIn("does not resolve", (err2 or "").lower())
 
-    def test_push_remotes_rejects_mismatched_pushurl(self):
-        def config_get(_repo_dir, key):
-            if key == "remote.origin.url":
-                return "https://github.com/akasper/plate.git"
-            if key == "remote.origin.pushurl":
-                return "https://github.com/evil-hoster/plate.git"
-            return None
-
-        with patch("plate_core.pr_babysit._git_config_get", side_effect=config_get):
-            err = _validate_push_remotes_match_target("akasper/plate", "/tmp/r")
-        self.assertIn("pushurl", (err or "").lower())
+    def test_push_remotes_rejects_multi_valued_push_urls_if_any_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init"], cwd=tmp, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "https://github.com/akasper/plate.git"],
+                cwd=tmp,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "--add", "remote.origin.pushurl", "https://github.com/akasper/plate.git"],
+                cwd=tmp,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "--add", "remote.origin.pushurl", "https://github.com/evil-hoster/plate.git"],
+                cwd=tmp,
+                capture_output=True,
+                check=True,
+            )
+            err = _validate_push_remotes_match_target("akasper/plate", tmp)
         self.assertIn("evil-hoster", err or "")
 
-    def test_push_remotes_happy_path_url_only_and_with_pushurl(self):
-        def url_only(_repo_dir, key):
-            if key == "remote.origin.url":
-                return "git@github.com:akasper/plate.git"
-            return None
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init"], cwd=tmp, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "git@github.com:akasper/plate.git"],
+                cwd=tmp,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "url.https://github.com/.insteadOf", "git@github.com:"],
+                cwd=tmp,
+                capture_output=True,
+                check=True,
+            )
+            self.assertIsNone(_validate_push_remotes_match_target("akasper/plate", tmp))
 
-        with patch("plate_core.pr_babysit._git_config_get", side_effect=url_only):
-            self.assertIsNone(_validate_push_remotes_match_target("akasper/plate", "/tmp/r"))
-
-        def url_and_push(_repo_dir, key):
-            if key == "remote.origin.url":
-                return "https://github.com/akasper/plate.git"
-            if key == "remote.origin.pushurl":
-                return "https://github.com/akasper/plate.git"
-            return None
-
-        with patch("plate_core.pr_babysit._git_config_get", side_effect=url_and_push):
-            self.assertIsNone(_validate_push_remotes_match_target("akasper/plate", "/tmp/r"))
+    def test_push_remotes_rejects_insteadof_push_rewrite_to_wrong_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init"], cwd=tmp, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "git@github.com:akasper/plate.git"],
+                cwd=tmp,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "config",
+                    "url.https://github.com/evil-hoster/.pushInsteadOf",
+                    "git@github.com:",
+                ],
+                cwd=tmp,
+                capture_output=True,
+                check=True,
+            )
+            err = _validate_push_remotes_match_target("akasper/plate", tmp)
+        self.assertIn("evil-hoster", err or "")
 
     def test_perform_local_rebase_requires_head_oid_for_push(self):
         with patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo"):
