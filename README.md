@@ -102,7 +102,9 @@ The `gh plate` extension is published from a dedicated thin repository (`akasper
 ```sh
 # In a supported CLI agent session (e.g. Copilot CLI):
 /mcp connect /absolute/path/to/plate/plate-mcp
-# Then call tools: plate_health, plate_epic_status, plate_features, plate_bootstrap, plate_plan_epic, plate_pr_babysit, plate_resolve_review_thread, plate_agents, plate_agent, plate_skills, plate_skill
+# plate-mcp uses tool profiles: only the default lean set (~20 tools) is listed unless you opt in.
+# See docs/mcp.md — e.g. PLATE_MCP_TOOL_PROFILES=default,release,qanda plate-mcp or plate-mcp --tool-profiles=all
+# Default-profile examples: plate_health, plate_epic_status, plate_pr_babysit, plate_delegate_to_agent, plate_what_next
 ```
 
 ### As a CLI agent plugin (Copilot CLI, Grok Build, and other standards-compliant CLIs)

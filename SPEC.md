@@ -30,7 +30,7 @@ The project ships in three primary forms from one codebase:
 | Surface              | Install command                          | Target user                  | Invocation style                          |
 |----------------------|------------------------------------------|------------------------------|-------------------------------------------|
 | `gh plate` extension | `gh extension install akasper/gh-plate`    | Human developers & scripts   | Terminal commands (`gh plate health`, `gh plate autonomy`) |
-| `plate-mcp` server   | Binary or `npx plate-mcp`                | AI agents                    | Structured MCP tool calls (`plate-mcp`)   |
+| `plate-mcp` server   | `pip install plate-core` then `plate-mcp` | AI agents                    | Structured MCP tool calls (`plate-mcp` or `python -m plate_core.mcp_server`) |
 | Copilot CLI plugin   | `copilot plugin install akasper/plate`   | Conversational users         | Agent chat (`/agent plate`)               |
 
 **plate_core** provides shared logic (health engine, AutonomyEngine, epic/feature queries, bootstrap, baseline catalog, agent guidance, feed/planning/PM surfaces, SPEC audit). The plugin surface bundles `plate.agent.md` (proactive context gathering, default plate persona) and `plugin/.mcp.json` wiring. Future surfaces (VS Code, Raycast, CI actions) are additive.
@@ -65,7 +65,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
   - **Core runtime:** `AutonomyEngine` in `plate_core` introspects health/epics/costs/config/procedures; enforces budgets via `Decision` (`PROCEED` / `THROTTLE` / `PAUSE` / `WARN`); decides next actions; executes or delegates; records markers (`PLATE-AUTONOMY-CYCLE`, `PLATE-PROCEDURE-RUN`) and USAGE REPORTs; exposes observability (`autopilot_score`, `burn_rate`, due procedures, open human checkpoints).
   - **Config single source:** `.plate` `autonomy` section (risk_tolerance, token_budget, cost_ceiling_usd, schedules_enabled, loop, pr_review_scope). Replaces legacy `.github/AUTONOMOUS_MODE` marker (supported only for transition/migration guidance).
   - **Procedures:** data-driven definitions under `.agentic/procedures/` (cadence, risk_level, allow-listed steps).
-  - **Surfaces:** MCP `plate_autonomy_status` / `run_cycle` / `run_procedure` / `list_procedures` / `simulate`; CLI `gh plate autonomy status|run|loop|--simulate|--dashboard`.
+  - **Surfaces:** MCP `plate_autonomy_status` / `run_cycle` / `run_procedure` / `list_procedures` / `simulate`; CLI `gh plate autonomy --status`, `--run`, `--loop`, and `--simulate` (see `gh plate autonomy --help`).
   - **Safety stack (v1.0 path):** shadow/simulation for high-impact actions (#645), unified checkpoint/approval primitive (#648), provenance/decision ledger (#647), cost+risk dashboard (#653/#634). Engine pauses on open checkpoints; high/critical actions require shadow_ack + approval when gates apply.
   - **Coordination:** Q+Task feed (#631), Q&A planning surfaces (#628/#630/#629/#640), Project Manager orchestrator (#660) assign work above AutonomyEngine without replacing it. Architecture/personas/API sketch: `docs/design/pm-orchestrator-architecture-and-browser.md` (#662). Browser surface (#661) is future; TUI feed is current.
   - See Epic #470 + children #471–482, design `docs/design/autonomous-plate-engine.md`, and AGENTS.md §Autonomous Mode + Project Manager guidance.
@@ -91,7 +91,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 - **Recommended stack**: TypeScript (preferred for SDKs and Copilot alignment) or Go (single binaries). Python is the current rapid-validation implementation (see `docs/research/stack-selection.md`); distribution targets remain multi-surface from one codebase.
 - **Core files** (enforced via bootstrap/health):
   - `SPEC.md` (intent)
-  - `CURRENT.md` (verified reality)
+  - `CURRENT.md` (optional short index of verified reality; **`.agentic/releases/` fragments are the canonical shipped change record**)
   - `AGENTS.md` (authority, rules, autonomy levels, quiet operations)
   - `.plate` (JSON root config: versioned schema with `autonomy` section — `enabled`, `risk_tolerance`, `token_budget` {daily, per_cycle, action}, `cost_ceiling_usd`, `schedules_enabled`, `loop`, `pr_review_scope` — plus methodology/release/extensions; **single source** for autonomy, replacing legacy `AUTONOMOUS_MODE` marker)
 - **AutonomyEngine runtime** (`src/plate_core/autonomy.py` and related modules):
@@ -126,7 +126,7 @@ PLATE follows a **Ruby on Rails** philosophy: strong conventions (labels, workfl
 ## Constraints
 
 - GitHub API only (REST + GraphQL); stateless beyond minimal config and repo-local `.agentic/` artifacts (fragments, procedures, checkpoints, ledger, costs).
-- Zero runtime dependencies for binaries (packaging goal).
+- The **`plate-core` wheel** declares `pyyaml` for manifest/template parsing today; a future **standalone binary** packaging goal remains minimal runtime dependencies.
 - Rate-limit aware and secret-safe; no secrets in comments/commits.
 - GitHub Milestones for Epic tracking; PLATE label taxonomy assumed (degraded gracefully otherwise).
 - AutonomyEngine never self-escalates risk, weakens branch protection, or bypasses human Tasks (external accounts, credentials, marketplace publish).
@@ -237,8 +237,8 @@ Completion of #470 core plus Phase 1–3 of #654 (with human refinements and pro
 
 
 
-**Update from velocity polish (fragments + Q&A #580/#569/#556):** Added minimal support for PLATE Issue states (status:implemented on release-branch merge before final to main; see #556, #582, workflow in pr-issue-link-check, label in labels.yml). Ceremony polish (Closes block, agent-only gate, CI stabilization, finalize enhancements) landed; see children #535/#583 etc and fragments. Update this section and epic guidance when new Epics created (per #537).
+**Update from velocity polish (fragments + Q&A #580/#569/#556):** Added minimal support for PLATE Issue states (`status:implemented` on integration-branch merge before final ship to `main`; see #556, #582, enforced via `plate-pr-gates` / `labels.yml`). Ceremony polish (Closes block, agent-only gate, CI stabilization, finalize enhancements) landed; see children #535/#583 etc and fragments. Update this section and epic guidance when new Epics created (per #537).
 
 ---
 
-**Agent Instruction**: Always align work against this SPEC.md. Proactively update `CURRENT.md` to reflect reality. This document serves as the guiding vision. Use it ruthlessly to drive decisions.
+**Agent Instruction**: Always align work against this SPEC.md. Keep `.agentic/releases/` fragments accurate for shipped behavior; update `CURRENT.md` when the repo still maintains that index. This document serves as the guiding vision. Use it ruthlessly to drive decisions.
