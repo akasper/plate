@@ -29,6 +29,22 @@ REQUIRED_LABELS = ["Bug", "Feature", "Epic", "Documentation", "Hardening", "Rese
 
 LABEL_COVERAGE_FIX_COMMAND = "gh plate bootstrap --apply"
 
+# Hidden payload paths PyPI wheels omit; adopters need import-payload (#1115 / #1193).
+ADOPTION_LOCAL_PAYLOAD_FILES: tuple[str, ...] = (
+    ".github/labels.yml",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/workflows/plate-pr-gates.yml",
+    ".github/workflows/label-check.yml",
+    ".agentic/process.yml",
+    ".agentic/skills.yml",
+)
+
+ADOPTION_BRANCH_PROTECTION_HUMAN_HINT = (
+    "Enable PR-required branch protection on the default branch "
+    "(human configuration; see docs/bootstrap/starting-a-new-repository.md). "
+    "Health only reports protection state — it does not apply rulesets."
+)
+
 
 def expected_labels_from_registry(repo_root: str | Path = ".") -> list[str]:
     """Label names declared in ``.github/labels.yml`` (fallback: ``REQUIRED_LABELS``)."""
@@ -164,6 +180,12 @@ class HealthReport:
     stale_required_check_contexts: list[str] = field(default_factory=list)
     missing_recommended_check_contexts: list[str] = field(default_factory=list)
     label_case_mismatches: list[str] = field(default_factory=list)
+    # #1193 mandatory adoption completeness (fails health when gaps remain)
+    adoption_complete: bool | None = None
+    adoption_complete_gaps: list[str] = field(default_factory=list)
+    adoption_complete_fix_command: str | None = None
+    branch_protection_pr_reviews_required: bool | None = None
+    release_standing_health: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -406,6 +428,102 @@ def resolve_adoption_bootstrap_repo(
     return _ADOPTION_BOOTSTRAP_PLACEHOLDER, True
 
 
+def missing_local_adoption_payload_paths(repo_root: str | Path = ".") -> list[str]:
+    """Return payload paths required for PLATE adoption that are absent locally."""
+    root = Path(repo_root)
+    missing: list[str] = []
+    for rel in ADOPTION_LOCAL_PAYLOAD_FILES:
+        if not (root / rel).is_file():
+            missing.append(rel)
+    workflows = root / ".github" / "workflows"
+    if not workflows.is_dir():
+        missing.append(".github/workflows/")
+    return missing
+
+
+def branch_protection_requires_pull_requests(protection: dict | None) -> bool:
+    """True when default-branch protection requires pull-request reviews (read-only signal)."""
+    if not isinstance(protection, dict):
+        return False
+    reviews = protection.get("required_pull_request_reviews")
+    return reviews is not None
+
+
+def assess_adoption_complete(
+    *,
+    repo: str,
+    repo_root: str | Path,
+    gh: GhClient,
+    label_coverage_ok: bool,
+    first_qa_seeded: bool | None,
+    open_epic_count: int,
+    open_question_count: int,
+    branch_protection_enabled: bool,
+    branch_protection_payload: dict | None,
+) -> tuple[bool, list[str], str | None, str | None, bool | None]:
+    """Return adoption_complete verdict, gaps, fix command, release standing, PR-review gate."""
+    from .release import diagnose_release_standing_state
+
+    gaps: list[str] = []
+    root = Path(repo_root)
+
+    local_missing = missing_local_adoption_payload_paths(root)
+    if local_missing:
+        gaps.append("local_payload:" + ", ".join(local_missing[:6]))
+        if len(local_missing) > 6:
+            gaps[-1] += f" (+{len(local_missing) - 6} more)"
+
+    if not label_coverage_ok:
+        gaps.append("remote_labels: canonical label registry not fully applied")
+
+    if open_epic_count < 1:
+        gaps.append("seed_epic: no open Epic issue")
+
+    starter_qa_ok = bool(first_qa_seeded) or open_question_count >= 3
+    if not starter_qa_ok:
+        gaps.append("starter_questions: first_qa_seeded marker or starter Questions missing")
+
+    standing: dict = {}
+    release_health: str | None = None
+    try:
+        standing = diagnose_release_standing_state(repo, client=gh)
+        release_health = str(standing.get("health") or "")
+        if release_health != "healthy":
+            parts: list[str] = []
+            if standing.get("missing_branches"):
+                parts.append(
+                    "branches=" + ", ".join(standing.get("missing_branches") or [])
+                )
+            if standing.get("needs_next_issue"):
+                parts.append("next_release_issue=missing")
+            if standing.get("needs_dedupe_next"):
+                parts.append("next_release_issue=duplicate")
+            detail = "; ".join(parts) if parts else release_health
+            gaps.append(f"release_standing:{detail}")
+    except Exception as exc:
+        gaps.append(f"release_standing:unverified ({exc})")
+        release_health = "error"
+
+    pr_required = branch_protection_requires_pull_requests(branch_protection_payload)
+    if branch_protection_enabled and not pr_required:
+        gaps.append("branch_protection:default branch lacks required pull request reviews")
+    if not branch_protection_enabled:
+        gaps.append("branch_protection:disabled on default branch")
+
+    fix: str | None = None
+    if local_missing:
+        fix = "gh plate import-payload --apply --strategy conservative"
+    elif not label_coverage_ok or open_epic_count < 1 or not starter_qa_ok:
+        fix = bootstrap_adopt_apply_command(repo, repo_root=root).split("  #")[0]
+    elif release_health and release_health != "healthy":
+        fix = "gh plate release repair --apply"
+    elif gaps:
+        fix = ADOPTION_BRANCH_PROTECTION_HUMAN_HINT
+
+    complete = len(gaps) == 0
+    return complete, gaps, fix, release_health, pr_required if branch_protection_enabled else False
+
+
 def bootstrap_adopt_apply_command(
     explicit_repo: str | None = None,
     *,
@@ -457,11 +575,13 @@ def get_health(
     branch_protection_required_contexts: list[str] = []
     stale_required_check_contexts: list[str] = []
     missing_recommended_check_contexts: list[str] = []
+    branch_protection_payload: dict | None = None
     default_branch = "main"
     try:
         repo_obj = gh.api(f"repos/{target}")
         default_branch = repo_obj["default_branch"]
         protection = gh.api(f"repos/{target}/branches/{default_branch}/protection")
+        branch_protection_payload = protection if isinstance(protection, dict) else None
         protected = True
         contexts = protection.get("required_status_checks") or {}
         if isinstance(contexts, dict):
@@ -755,6 +875,39 @@ def get_health(
     except Exception as e:
         errors.append(f"self_migrate: {e}")
 
+    adoption_complete: bool | None = None
+    adoption_complete_gaps: list[str] = []
+    adoption_complete_fix_command: str | None = None
+    release_standing_health: str | None = None
+    branch_protection_pr_reviews_required: bool | None = None
+    try:
+        (
+            adoption_complete,
+            adoption_complete_gaps,
+            adoption_complete_fix_command,
+            release_standing_health,
+            branch_protection_pr_reviews_required,
+        ) = assess_adoption_complete(
+            repo=target,
+            repo_root=root,
+            gh=gh,
+            label_coverage_ok=label_ok,
+            first_qa_seeded=first_qa_seeded,
+            open_epic_count=open_epics,
+            open_question_count=open_question_count,
+            branch_protection_enabled=protected,
+            branch_protection_payload=branch_protection_payload,
+        )
+        if adoption_complete is False:
+            status = "fail"
+            if adoption_complete_gaps:
+                errors.append(
+                    "adoption_complete: " + "; ".join(adoption_complete_gaps[:4])
+                )
+    except Exception as e:
+        errors.append(f"adoption_complete: {e}")
+        adoption_complete = None
+
     report = HealthReport(
         repo=target,
         label_coverage_ok=label_ok,
@@ -801,5 +954,10 @@ def get_health(
         self_migrate_ready=self_migrate_ready,
         self_migrate_target=self_migrate_target,
         self_migrate_next_command=self_migrate_next_command,
+        adoption_complete=adoption_complete,
+        adoption_complete_gaps=list(adoption_complete_gaps),
+        adoption_complete_fix_command=adoption_complete_fix_command,
+        release_standing_health=release_standing_health,
+        branch_protection_pr_reviews_required=branch_protection_pr_reviews_required,
     )
     return report

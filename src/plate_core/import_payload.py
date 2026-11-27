@@ -343,32 +343,18 @@ def _should_suggest_config_init(report: ImportPayloadReport) -> bool:
 
 
 def _next_steps(report: ImportPayloadReport) -> list[str]:
-    from .plate_config import local_root_plate_present
-
-    next_cmd = _next_command(report)
+    next_cmd = _next_command(report, repo_root=report.target_dir)
     target = Path(report.target_dir)
-    has_plate = local_root_plate_present(target)
-    if has_plate:
-        bootstrap_hint = (
-            "After local apply: commit scaffolding, run `gh plate bootstrap --repo OWNER/REPO "
-            "--adopt --apply` for labels/wiki and other GitHub-side baseline (local `.plate` is present)."
+    mandatory = bootstrap_adopt_apply_command(repo_root=target).split("  #")[0]
+    steps = [f"Next command: `{next_cmd}`"]
+    if not report.apply_mode:
+        steps.append(
+            "Review would_create / would_conflict lists before --apply on real repositories."
         )
-    else:
-        bootstrap_hint = (
-            "After local apply: commit scaffolding, run `gh plate bootstrap --repo OWNER/REPO "
-            "--adopt --apply` for labels/wiki and other GitHub-side baseline."
-        )
-    steps = [
-        f"Next command: `{next_cmd}`",
-        "Review would_create / would_conflict lists before --apply on real repos.",
-        bootstrap_hint,
-        "Run `gh plate health` and open the first Curiosity Q&A session when healthy.",
-        "Prefer `.agentic/releases/unreleased/` fragments for durable implemented-state; keep CURRENT.md as a short index (#618).",
-    ]
     if _should_suggest_config_init(report):
-        steps.insert(
-            2,
-            "Create root `.plate`: run `gh plate config init --apply` (or `import-payload --apply` to seed DEFAULT_CONFIG).",
+        steps.append(
+            "Create root `.plate`: run `gh plate config init --apply` "
+            "(or `import-payload --apply` to seed DEFAULT_CONFIG)."
         )
     if report.would_conflict or report.conflicts:
         steps.insert(
@@ -388,6 +374,23 @@ def _next_steps(report: ImportPayloadReport) -> list[str]:
             1,
             "Fill CURRENT.md capability rows (or deprecate to fragments) once real features land.",
         )
+    if "bootstrap" not in next_cmd:
+        steps.append(
+            f"Required after local payload: `{mandatory}` "
+            "(labels, seed Epic, starter Questions, release tracks — not optional; #1193)."
+        )
+    else:
+        steps.append(
+            "Required: bootstrap applies labels, seed Epic, starter Questions, and release tracks (#1193)."
+        )
+    steps.append(
+        "Verify: `gh plate health` until `adoption_complete` passes; "
+        "then open the first Curiosity Q&A session."
+    )
+    steps.append(
+        "Prefer `.agentic/releases/unreleased/` fragments for durable implemented-state; "
+        "keep CURRENT.md as a short index (#618)."
+    )
     return steps
 
 

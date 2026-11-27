@@ -4,6 +4,17 @@ This repository follows the **Product Lifecycle Automation Toolkit and Engine (P
 
 Agents working here should treat repository artifacts as durable project memory, not as optional narrative. Issues, labels, tests, pull requests, per-feature change files in `.agentic/releases/`, wiki pages, release notes, audit outputs, and traceability records are the inspectable record of the project.
 
+## Mandatory PLATE adoption (not optional)
+
+Until `gh plate health` reports **`adoption_complete`**, this repository is not fully on PLATE process. **Do not** tell the user or operator to skip import-payload or bootstrap, and do not treat labels, seed Epic/Questions, release tracks, or the Next Release issue as optional.
+
+Required operator path for existing codebases:
+
+1. `gh plate import-payload --apply --strategy conservative` (after a clean dry-run) — seeds hidden payload folders such as `.github/` and `.agentic/*.yml` missing from PyPI-only installs (#1115).
+2. `gh plate bootstrap --repo OWNER/REPO --adopt --apply` — syncs labels, seeds the Epic and starter Questions, and establishes standing release tracks.
+
+When automation reports incomplete adoption, surface the fix command from `gh plate health` and execute the remaining steps before routing new feature work.
+
 ## On-demand agent rules
 
 These pages hold the full rule text moved out of the always-loaded core. Open by name when the task needs ceremony detail, feedback handling, autonomy, scripts, E2E demos, or similar.

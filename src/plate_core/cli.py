@@ -378,6 +378,20 @@ def cmd_health(args: argparse.Namespace) -> int:
         )
         if report.adoption_next_command:
             print(f"Adoption next: {report.adoption_next_command}")
+    if report.adoption_complete is not None:
+        verdict = "COMPLETE" if report.adoption_complete else "INCOMPLETE"
+        print(f"Adoption complete (#1193): {verdict}")
+        if report.release_standing_health:
+            print(f"Release standing: {report.release_standing_health}")
+        if report.branch_protection_pr_reviews_required is not None:
+            print(
+                "Branch protection PR reviews required: "
+                f"{'YES' if report.branch_protection_pr_reviews_required else 'NO'}"
+            )
+        if report.adoption_complete_gaps:
+            print(f"Adoption gaps: {'; '.join(report.adoption_complete_gaps)}")
+        if report.adoption_complete_fix_command:
+            print(f"Adoption fix: {report.adoption_complete_fix_command}")
     if report.self_migrate_ready is not None or report.self_migrate_drift is not None:
         print(
             f"Self-migrate (#967/#649): ready={report.self_migrate_ready} "
@@ -387,6 +401,8 @@ def cmd_health(args: argparse.Namespace) -> int:
         if report.self_migrate_next_command:
             print(f"Self-migrate next: {report.self_migrate_next_command}")
     if report.plate_config_layout_error:
+        return 1
+    if report.adoption_complete is False:
         return 1
     return 0 if report.status != "fail" else 1
 

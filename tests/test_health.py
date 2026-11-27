@@ -9,10 +9,12 @@ from plate_core.github_labels import load_labels_from_yaml
 from plate_core.health import (
     HealthReport,
     _repo_from_git_remote,
+    assess_adoption_complete,
     bootstrap_adopt_apply_command,
     expected_labels_from_registry,
     get_health,
     label_coverage_fix_command,
+    missing_local_adoption_payload_paths,
     resolve_adoption_bootstrap_repo,
     resolve_repo,
     summarize_spec_audit_for_health,
@@ -40,11 +42,19 @@ class FakeClient:
             return {
                 "required_status_checks": {
                     "contexts": ["labels", "test", "pr-gates"],
-                }
+                },
+                "required_pull_request_reviews": {"required_approving_review_count": 1},
             }
+        if endpoint.startswith("repos/") and "/branches/" in endpoint:
+            return {"name": endpoint.rsplit("/", 1)[-1]}
         if endpoint.startswith("search/issues"):
+            if "label" in endpoint and "Release" in endpoint:
+                return {
+                    "total_count": 1,
+                    "items": [{"number": 50, "title": "Next Release"}],
+                }
             if "label:Question" in endpoint:
-                return {"total_count": 2}
+                return {"total_count": 3}
             return {"total_count": 3}
         if "contents/docs/wiki/Goals.md" in endpoint:
             return {"name": "Goals.md", "type": "file"}
@@ -109,7 +119,7 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.status, "pass")
         self.assertEqual(report.errors, [])  # no partial errors
         self.assertTrue(report.goals_page_present)
-        self.assertEqual(report.open_question_count, 2)
+        self.assertEqual(report.open_question_count, 3)
         self.assertTrue(report.plate_config_present)
         self.assertTrue(report.plate_config_valid)
         self.assertEqual(report.plate_config_file_version, "1.0")
@@ -383,7 +393,8 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.open_epic_count, 0)  # failed search
         self.assertTrue(len(report.errors) >= 2)  # at least protection + search
         self.assertIn("rate limit", " ".join(report.errors))
-        self.assertEqual(report.status, "warn")  # some ok (labels partial succeeded)
+        self.assertEqual(report.status, "fail")  # adoption_complete fails when partial (#1193)
+        self.assertFalse(report.adoption_complete)
         # to_dict omits empty errors
         d = report.to_dict()
         self.assertIn("errors", d)
@@ -505,6 +516,70 @@ class HealthTests(unittest.TestCase):
                 self.assertEqual(resolve_repo(None), expected)
                 # also ensure resolve_repo passthrough still works
                 self.assertEqual(resolve_repo("explicit/owner"), "explicit/owner")
+
+
+class AdoptionCompleteVerdictTests(unittest.TestCase):
+    """#1193: adoption_complete fails with actionable fix when baseline is missing."""
+
+    def test_missing_local_payload_reports_import_fix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            complete, gaps, fix, standing, _ = assess_adoption_complete(
+                repo="acme/widget",
+                repo_root=tmp,
+                gh=FakeClient(),
+                label_coverage_ok=True,
+                first_qa_seeded=True,
+                open_epic_count=2,
+                open_question_count=3,
+                branch_protection_enabled=True,
+                branch_protection_payload={
+                    "required_pull_request_reviews": {"required_approving_review_count": 1},
+                },
+            )
+        self.assertFalse(complete)
+        self.assertTrue(any(g.startswith("local_payload:") for g in gaps))
+        self.assertIn("import-payload --apply", fix or "")
+
+    def test_missing_labels_points_at_bootstrap_adopt(self):
+        complete, gaps, fix, _, _ = assess_adoption_complete(
+            repo="acme/widget",
+            repo_root=str(REPO_ROOT),
+            gh=FakeClient(),
+            label_coverage_ok=False,
+            first_qa_seeded=True,
+            open_epic_count=1,
+            open_question_count=3,
+            branch_protection_enabled=True,
+            branch_protection_payload={
+                "required_pull_request_reviews": {"required_approving_review_count": 1},
+            },
+        )
+        self.assertFalse(complete)
+        self.assertIn("remote_labels", gaps[0])
+        self.assertIn("bootstrap --repo", fix or "")
+        self.assertIn("--adopt --apply", fix or "")
+
+    def test_health_surfaces_adoption_complete_fields(self):
+        with patch(
+            "plate_core.adoption.assess_adoption_readiness",
+            return_value={
+                "ok": True,
+                "core_ready": True,
+                "first_qa": {"seeded": True},
+                "estimated_minutes_remaining": 0,
+                "next_command": "gh plate health",
+            },
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+                repo_root=str(REPO_ROOT),
+            )
+        self.assertTrue(report.adoption_complete)
+        d = report.to_dict()
+        self.assertIn("adoption_complete", d)
+        self.assertEqual(report.status, "pass")
 
 
 class AdoptionBootstrapRepoResolutionTests(unittest.TestCase):
