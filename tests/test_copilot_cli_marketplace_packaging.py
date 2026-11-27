@@ -124,13 +124,14 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
     def test_ci_uses_repo_marketplace_as_prelaunch_surface(self):
         workflow = read_text(".github/workflows/ci.yml")
 
+        self.assertIn("copilot-marketplace-smoke:", workflow)
         self.assertIn("Plugin install smoke test (pre-launch marketplace surface)", workflow)
-        # Note: the conditional if (only on main push) was removed in #375 to run the
-        # supported marketplace smoke unconditionally on all PRs (prevents hangs from
-        # deprecated direct installs and provides early validation).
         self.assertIn("copilot plugin marketplace add akasper/plate", workflow)
         self.assertIn("copilot plugin install plate-core@plate-marketplace", workflow)
         self.assertIn("copilot plugin marketplace remove plate-marketplace --force", workflow)
+        # Required test job: no network marketplace install (#1478).
+        test_job = workflow.split("\n  test:", 1)[1].split("\n  copilot-marketplace-smoke:", 1)[0]
+        self.assertNotIn("copilot plugin marketplace add akasper/plate", test_job)
         # Grok packaging is validated via the committed generator + --check (no public binary
         # download yet; the generator + unit tests cover the .grok-plugin/ surface for #570).
         self.assertIn("Grok marketplace packaging check (generator + committed index)", workflow)
