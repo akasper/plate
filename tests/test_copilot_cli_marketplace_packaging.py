@@ -130,8 +130,8 @@ class CopilotCliMarketplacePackagingTests(unittest.TestCase):
         self.assertIn("copilot plugin install plate-core@plate-marketplace", workflow)
         self.assertIn("copilot plugin marketplace remove plate-marketplace --force", workflow)
         # Required test job: no network marketplace install (#1478).
-        test_job = workflow.split("\n  test:", 1)[1].split("\n  copilot-marketplace-smoke:", 1)[0]
-        self.assertNotIn("copilot plugin marketplace add akasper/plate", test_job)
+        matrix_job = workflow.split("\n  python-matrix:", 1)[1].split("\n  test:", 1)[0]
+        self.assertNotIn("copilot plugin marketplace add akasper/plate", matrix_job)
         # Grok packaging is validated via the committed generator + --check (no public binary
         # download yet; the generator + unit tests cover the .grok-plugin/ surface for #570).
         self.assertIn("Grok marketplace packaging check (generator + committed index)", workflow)

@@ -25,30 +25,40 @@ class CiWorkflowBaselineTests(unittest.TestCase):
     def test_python_version_matrix(self):
         text = read_ci()
         self.assertIn('python-version: ["3.10", "3.11", "3.12", "3.13"]', text)
+        self.assertIn("\n  python-matrix:\n", text)
+
+    def test_required_test_context_aggregates_matrix(self):
+        text = read_ci()
+        gate_idx = text.index("\n  test:\n")
+        gate_job = text[gate_idx : text.index("\n  copilot-marketplace-smoke:")]
+        self.assertIn("needs: python-matrix", gate_job)
+        self.assertIn("needs.python-matrix.result", gate_job)
 
     def test_ruff_and_wheel_install_in_test_job(self):
         text = read_ci()
-        test_idx = text.index("\n  test:")
-        heavy_idx = text.index("\n  copilot-marketplace-smoke:")
-        test_job = text[test_idx:heavy_idx]
-        self.assertIn("python -m ruff check src tests", test_job)
-        self.assertIn("python -m build -w", test_job)
-        self.assertIn("dist/*.whl", test_job)
-        self.assertIn("import plate_core", test_job)
-        self.assertIn("PYTHONPATH", test_job)
+        matrix_idx = text.index("\n  python-matrix:")
+        gate_idx = text.index("\n  test:\n")
+        matrix_job = text[matrix_idx:gate_idx]
+        self.assertIn("python -m ruff check src tests", matrix_job)
+        self.assertIn("python -m build -w", matrix_job)
+        self.assertIn("dist/*.whl", matrix_job)
+        self.assertIn("import plate_core", matrix_job)
+        self.assertIn("PYTHONPATH", matrix_job)
 
     def test_marketplace_smoke_is_separate_job(self):
         text = read_ci()
         self.assertIn("\n  copilot-marketplace-smoke:\n", text)
         smoke_job = text.split("copilot-marketplace-smoke:", 1)[1].split("\n  heavy-release:", 1)[0]
         self.assertIn("copilot plugin marketplace add akasper/plate", smoke_job)
-        self.assertNotIn("copilot plugin marketplace add akasper/plate", text.split("\n  test:")[1].split("copilot-marketplace-smoke:")[0])
+        matrix_job = text.split("\n  python-matrix:", 1)[1].split("\n  test:", 1)[0]
+        self.assertNotIn("copilot plugin marketplace add akasper/plate", matrix_job)
 
     def test_heavy_release_builds_wheel(self):
         text = read_ci()
         heavy = text.split("heavy-release:", 1)[1]
         self.assertIn("python -m build", heavy)
         self.assertIn("import plate_core", heavy)
+        self.assertIn("'Release'", heavy)
 
     def test_actions_are_sha_pinned_not_floating_tags(self):
         text = read_ci()

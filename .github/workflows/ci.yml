@@ -18,13 +18,14 @@ permissions:
 env:
   # github/copilot-cli v1.0.60 linux x64 release asset (verified in CI before extract).
   COPILOT_CLI_VERSION: "1.0.60"
-  COPILOT_CLI_TARBALL_SHA256: bcbc762b86b3997586883a92995ee0cc1ae35fb80c1f62250b7eb15f02b1bcc3
+  COPILOT_CLI_TARBALL_SHA256: bcbc762b86b3997586883a92995ee0cc1ae35fa80c1f62250b7eb15f02b1bcc3
 
 jobs:
   # Public akasper/plate: no self-hosted runners (#1284). Skipping select-runs-on removes an
   # extra hosted job (checkout + probe) before test starts; adopters keep plate-select-runs-on
   # in the template payload for private repos and PLATE_RUNS_ON.
-  test:
+  python-matrix:
+    name: python-${{ matrix.python-version }}
     runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -112,6 +113,21 @@ jobs:
         env:
           WORKSPACE: ${{ github.workspace }}
 
+  # Branch protection requires the exact check context name `test` (not matrix suffixes).
+  test:
+    needs: python-matrix
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all Python matrix legs
+        run: |
+          set -euo pipefail
+          if [[ "${{ needs.python-matrix.result }}" != "success" ]]; then
+            echo "::error::python-matrix result was ${{ needs.python-matrix.result }}"
+            exit 1
+          fi
+          echo "All Python matrix legs passed."
+
   # Optional network smoke (#1478 T3): not listed in branch protection required checks.
   copilot-marketplace-smoke:
     runs-on: ubuntu-latest
@@ -172,12 +188,12 @@ jobs:
           echo "Remember common gateway fast-fails earlier in the job or previous jobs."
 
       - name: Skip full heavy for stabilization/review responses (if labeled)
-        if: contains(github.event.pull_request.labels.*.name, 'stabilization') || contains(github.event.pull_request.labels.*.name, 'Documentation')
+        if: contains(github.event.pull_request.labels.*.name, 'stabilization') || (contains(github.event.pull_request.labels.*.name, 'Documentation') && !contains(github.event.pull_request.labels.*.name, 'Release'))
         run: |
           echo "Stabilization or Documentation-only push on release context: skipping expensive steps to reduce CI waste (#569)."
 
       - name: Set up Python
-        if: ${{ ! (contains(github.event.pull_request.labels.*.name, 'stabilization') || contains(github.event.pull_request.labels.*.name, 'Documentation')) }}
+        if: ${{ ! (contains(github.event.pull_request.labels.*.name, 'stabilization') || (contains(github.event.pull_request.labels.*.name, 'Documentation') && !contains(github.event.pull_request.labels.*.name, 'Release'))) }}
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
@@ -185,7 +201,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Build sdist and wheel; install and import smoke
-        if: ${{ ! (contains(github.event.pull_request.labels.*.name, 'stabilization') || contains(github.event.pull_request.labels.*.name, 'Documentation')) }}
+        if: ${{ ! (contains(github.event.pull_request.labels.*.name, 'stabilization') || (contains(github.event.pull_request.labels.*.name, 'Documentation') && !contains(github.event.pull_request.labels.*.name, 'Release'))) }}
         run: |
           set -euo pipefail
           python -m pip install --quiet --upgrade pip build
