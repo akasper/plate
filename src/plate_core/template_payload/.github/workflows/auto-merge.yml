@@ -14,12 +14,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  auto-merge:
+  auto-merge-check:
     if: github.event.label.name == 'auto-merge'
     runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
     permissions:
-      pull-requests: write
+      pull-requests: read
       contents: read
+    outputs:
+      active: ${{ steps.check.outputs.active }}
     steps:
       - name: Check .plate autonomy and PR eligibility
         id: check
@@ -86,12 +88,20 @@ jobs:
               }
             }
 
-            function resolveAutonomy(plate, hasLegacyMarker) {
+            function resolveAutonomy(plate, hasLegacyMarker, plateFilePresent) {
               const hasAutonomySection =
                 plate &&
                 plate.autonomy &&
                 typeof plate.autonomy === 'object' &&
                 !Array.isArray(plate.autonomy);
+              if (plateFilePresent && !hasAutonomySection) {
+                return {
+                  active: false,
+                  tolerance: 'off',
+                  source: 'plate',
+                  reason: '`.plate` present but autonomy section missing or invalid',
+                };
+              }
               if (hasAutonomySection) {
                 const aut = plate.autonomy;
                 const enabled = aut.enabled === true;
@@ -148,11 +158,38 @@ jobs:
             let active = false;
             const warnings = [];
 
+            const TRUSTED_LABEL_BOTS = new Set([
+              'github-actions[bot]',
+              'github-actions',
+              'dependabot[bot]',
+            ]);
             const sender = context.payload.sender;
-            if (sender?.type === 'Bot' || (sender?.login || '').endsWith('[bot]')) {
-              core.info(`Label applied by trusted bot ${sender?.login || 'unknown'}.`);
+            const senderLogin = sender?.login || '';
+            if (TRUSTED_LABEL_BOTS.has(senderLogin)) {
+              core.info(`Label applied by trusted platform bot ${senderLogin}.`);
+            } else if (sender?.type === 'Bot' || senderLogin.endsWith('[bot]')) {
+              try {
+                const perm = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: senderLogin,
+                });
+                const level = perm.data.permission;
+                if (!['admin', 'write', 'maintain'].includes(level)) {
+                  warnings.push(
+                    `Blocking auto-merge: bot ${senderLogin} lacks write access (${level}).`
+                  );
+                } else {
+                  core.info(`Label applied by trusted bot ${senderLogin} (${level}).`);
+                }
+              } catch (e) {
+                if (e.status === 404) {
+                  warnings.push(`Blocking auto-merge: untrusted bot ${senderLogin} is not a collaborator.`);
+                } else {
+                  warnings.push(`Could not verify bot sender: ${e.message}`);
+                }
+              }
             } else {
-              let assoc = '';
               try {
                 const perm = await github.rest.repos.getCollaboratorPermissionLevel({
                   owner: context.repo.owner,
@@ -179,6 +216,7 @@ jobs:
             }
 
             let plate = null;
+            let plateFilePresent = false;
             let hasLegacyMarker = false;
             const defaultBranch = context.payload.repository.default_branch;
             try {
@@ -188,6 +226,7 @@ jobs:
                 path: '.plate',
                 ref: defaultBranch,
               });
+              plateFilePresent = true;
               const plateRaw = Buffer.from(plateResp.data.content, 'base64').toString('utf8');
               plate = parsePlateConfig(plateRaw);
             } catch (e) {
@@ -209,7 +248,7 @@ jobs:
               }
             }
 
-            const mode = resolveAutonomy(plate, hasLegacyMarker);
+            const mode = resolveAutonomy(plate, hasLegacyMarker, plateFilePresent);
             if (!mode.active) {
               warnings.push(
                 `Autonomous mode inactive (${mode.reason || mode.source}). Skipping auto-merge.`
@@ -251,9 +290,15 @@ jobs:
                 pull_number: pr.number,
                 per_page: 100,
               });
-              const blocked = files
-                .map((f) => f.filename)
-                .filter((f) => pathBlocked(f));
+              const blocked = [];
+              for (const f of files) {
+                const paths = [f.filename, f.previous_filename].filter(Boolean);
+                for (const p of paths) {
+                  if (pathBlocked(p)) {
+                    blocked.push(p);
+                  }
+                }
+              }
               if (blocked.length) {
                 warnings.push(
                   `Blocking auto-merge: PR touches protected paths: ${blocked.join(', ')}`
@@ -271,8 +316,15 @@ jobs:
 
             core.setOutput('active', active ? 'true' : 'false');
 
+  auto-merge-enable:
+    needs: auto-merge-check
+    if: needs.auto-merge-check.outputs.active == 'true'
+    runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
       - name: Enable auto-merge
-        if: steps.check.outputs.active == 'true'
         run: gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

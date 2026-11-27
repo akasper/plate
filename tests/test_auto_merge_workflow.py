@@ -65,12 +65,16 @@ def path_blocked(filename: str) -> bool:
     return any(filename.startswith(p) for p in DENY_PREFIXES)
 
 
-def resolve_autonomy(plate: dict | None, has_legacy_marker: bool) -> dict:
+def resolve_autonomy(
+    plate: dict | None, has_legacy_marker: bool, plate_file_present: bool
+) -> dict:
     has_section = (
         plate
         and isinstance(plate.get("autonomy"), dict)
         and not isinstance(plate.get("autonomy"), list)
     )
+    if plate_file_present and not has_section:
+        return {"active": False, "tolerance": "off", "source": "plate"}
     if has_section:
         aut = plate["autonomy"]
         enabled = aut.get("enabled") is True
@@ -95,11 +99,12 @@ def evaluate_pr(
     *,
     plate: dict | None,
     has_legacy_marker: bool,
+    plate_file_present: bool = False,
     risk_labels: list[str],
     need_labels: list[str],
     changed_files: list[str],
 ) -> bool:
-    mode = resolve_autonomy(plate, has_legacy_marker)
+    mode = resolve_autonomy(plate, has_legacy_marker, plate_file_present)
     if not mode["active"]:
         return False
     if any(n.lower() in BLOCKED_NEED for n in need_labels):
@@ -118,7 +123,8 @@ class AutoMergeWorkflowTests(unittest.TestCase):
         self.assertIn("resolveAutonomy", workflow)
         self.assertIn("need:human-review", workflow)
         self.assertIn("listFiles", workflow)
-        self.assertNotIn("contents: write", workflow)
+        self.assertIn("auto-merge-enable:", workflow)
+        self.assertRegex(workflow, r"auto-merge-enable:[\s\S]*contents: write")
 
     def test_marker_not_shipped_in_repo_or_inventory(self):
         for rel in (
@@ -135,6 +141,19 @@ class AutoMergeWorkflowTests(unittest.TestCase):
             evaluate_pr(
                 plate=plate,
                 has_legacy_marker=True,
+                plate_file_present=True,
+                risk_labels=["risk:low"],
+                need_labels=[],
+                changed_files=["src/foo.py"],
+            )
+        )
+
+    def test_plate_present_invalid_blocks_legacy_marker(self):
+        self.assertFalse(
+            evaluate_pr(
+                plate=None,
+                has_legacy_marker=True,
+                plate_file_present=True,
                 risk_labels=["risk:low"],
                 need_labels=[],
                 changed_files=["src/foo.py"],
