@@ -1889,12 +1889,17 @@ def cmd_evidence(args: argparse.Namespace) -> int:
         print("At least one image path is required", file=sys.stderr)
         return 1
 
+    from plate_core.mcp.path_confinement import session_repo_root
+
+    repo_root = session_repo_root()
+
     if getattr(args, "use_python", False):
         result = run_plate_evidence(
             int(args.pr_number),
             args.body_file,
             images,
             gh=getattr(args, "gh", None),
+            repo_root=repo_root,
         )
         if args.json:
             print(json.dumps(result.to_dict(), indent=2))

@@ -10,14 +10,20 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from plate_core.mcp.path_confinement import PathConfinementError, session_repo_root
 from plate_core.plate_evidence import (
     COPILOT_ROUTE_MESSAGE,
     USER_ATTACHMENTS_PREFIX,
+    confine_evidence_paths,
+    gh_subprocess_env,
     prepare_body_with_images,
+    resolve_gh_executable,
     run_plate_evidence,
     parse_gh_version,
     gh_version_ok,
 )
+
+
 class PlateEvidenceUnitTests(unittest.TestCase):
     def test_parse_gh_version(self):
         self.assertEqual(parse_gh_version("gh version 2.99.0 (2025-01-01)"), (2, 99, 0))
@@ -45,6 +51,85 @@ class PlateEvidenceUnitTests(unittest.TestCase):
             self.assertIsNone(err)
             self.assertIn("![mobile 320](mobile-320.png)", prepared)
 
+    def test_gh_subprocess_env_omits_tokens(self):
+        with mock.patch.dict(
+            os.environ,
+            {"PATH": "/bin", "GH_TOKEN": "secret", "GITHUB_TOKEN": "secret2", "HOME": "/home/x"},
+            clear=True,
+        ):
+            env = gh_subprocess_env()
+        self.assertIn("PATH", env)
+        self.assertNotIn("GH_TOKEN", env)
+        self.assertNotIn("GITHUB_TOKEN", env)
+        self.assertEqual(env.get("HOME"), "/home/x")
+
+
+class PlateEvidenceConfinementTests(unittest.TestCase):
+    def test_traversal_outside_root_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "body.md").write_text("x", encoding="utf-8")
+            (root / "shot.png").write_bytes(b"x")
+            outside = str(Path(tmp).parent / "outside-evidence.png")
+            _, _, err = confine_evidence_paths("body.md", [outside], root)
+            self.assertEqual(err, "Path escapes the repository root")
+
+    def test_absolute_path_outside_root_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            err_path = confine_evidence_paths("/etc/passwd", ["shot.png"], root)[2]
+            self.assertEqual(err_path, "Path escapes the repository root")
+
+    def test_symlink_escape_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            secret = Path(tmp).parent / "evidence-secret-out"
+            secret.mkdir(exist_ok=True)
+            (secret / "leak.png").write_bytes(b"x")
+            link = root / "link.png"
+            try:
+                link.symlink_to(secret / "leak.png")
+            except OSError as exc:
+                self.skipTest(f"symlink not permitted: {exc}")
+            _, _, err = confine_evidence_paths("body.md", [link], root)
+            self.assertEqual(err, "Path escapes the repository root")
+
+    def test_resolve_gh_confined_under_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gh = root / "fake-gh"
+            gh.write_text("#!/bin/sh\n", encoding="utf-8")
+            got, err = resolve_gh_executable(str(gh), root)
+            self.assertIsNone(err)
+            self.assertEqual(got, str(gh.resolve()))
+
+    def test_resolve_gh_outside_repo_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outside = Path(tmp).parent / "evil-gh"
+            outside.write_text("#!/bin/sh\n", encoding="utf-8")
+            got, err = resolve_gh_executable(str(outside), root, mcp_mode=True)
+            self.assertIsNone(got)
+            self.assertEqual(err, "Path escapes the repository root")
+
+    def test_to_client_dict_redacts_paths(self):
+        from plate_core.plate_evidence import PlateEvidenceResult
+
+        root = session_repo_root()
+        secret = str(root / "docs" / "body.md")
+        result = PlateEvidenceResult(
+            ok=False,
+            pr_number=1,
+            body_file=secret,
+            images=(str(root / "shot.png"),),
+            user_attachment_urls=(),
+            error=f"failed at {secret}",
+        )
+        client = result.to_client_dict(root)
+        self.assertNotIn(str(root), client["body_file"])
+        self.assertNotIn(str(root), client["images"][0])
+        self.assertNotIn(str(root), client["error"])
+
 
 class FakeGhPlateEvidenceTests(unittest.TestCase):
     def _write_fake_gh(self, gh_path: Path, script: str) -> None:
@@ -71,7 +156,9 @@ class FakeGhPlateEvidenceTests(unittest.TestCase):
                     stderr="",
                 )
 
-            result = run_plate_evidence(1, body, [img], gh=str(gh), runner=runner)
+            result = run_plate_evidence(
+                1, body, [img], gh=str(gh), repo_root=tmp_path, runner=runner
+            )
             self.assertFalse(result.ok)
             self.assertIn("2.99", result.error or "")
 
@@ -80,6 +167,8 @@ class FakeGhPlateEvidenceTests(unittest.TestCase):
         calls: list[list[str]] = []
 
         def runner(argv, **kwargs):
+            env = kwargs.get("env") or {}
+            self.assertNotIn("GH_TOKEN", env)
             calls.append(list(argv))
             if len(argv) >= 2 and argv[1] == "--version":
                 return mock.Mock(returncode=0, stdout="gh version 2.99.0\n", stderr="")
@@ -99,13 +188,15 @@ class FakeGhPlateEvidenceTests(unittest.TestCase):
             img = tmp_path / "after.png"
             img.write_bytes(b"png")
 
-            result = run_plate_evidence(42, body, [img], gh=str(gh), runner=runner)
+            result = run_plate_evidence(
+                42, body, [img], gh=str(gh), repo_root=tmp_path, runner=runner
+            )
             self.assertTrue(result.ok, result.error)
             self.assertIn(asset, result.user_attachment_urls)
             edit_calls = [c for c in calls if len(c) >= 3 and c[1:3] == ["pr", "edit"]]
             self.assertEqual(len(edit_calls), 1)
             self.assertIn("--attach", edit_calls[0])
-            self.assertIn(str(img), edit_calls[0])
+            self.assertIn(str(img.resolve()), edit_calls[0])
 
     def test_refused_upload_prints_copilot_route(self):
         def runner(argv, **kwargs):
@@ -115,34 +206,38 @@ class FakeGhPlateEvidenceTests(unittest.TestCase):
                 return mock.Mock(
                     returncode=1,
                     stdout="",
-                    stderr="HTTP 404: upload attachment requires write access",
+                    stderr="HTTP 404: unsupported authentication type",
                 )
             return mock.Mock(returncode=1, stdout="", stderr="")
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             gh = tmp_path / "gh"
+            gh.write_text("#!/bin/sh\n", encoding="utf-8")
             body = tmp_path / "body.md"
             body.write_text("x", encoding="utf-8")
             img = tmp_path / "shot.png"
             img.write_bytes(b"x")
 
-            result = run_plate_evidence(7, body, [img], gh=str(gh), runner=runner)
+            result = run_plate_evidence(
+                7, body, [img], gh=str(gh), repo_root=tmp_path, runner=runner
+            )
             self.assertFalse(result.ok)
             self.assertTrue(result.refused_upload)
             self.assertEqual(result.error, COPILOT_ROUTE_MESSAGE)
 
 
 class PlateEvidenceMcpTests(unittest.TestCase):
-    def test_mcp_tool_delegates_to_runner(self):
+    def test_mcp_tool_delegates_with_repo_root_and_redaction(self):
         from plate_core.mcp_server import _execute_mcp_tool
         from plate_core.plate_evidence import PlateEvidenceResult
 
+        root = session_repo_root()
         expected = PlateEvidenceResult(
             ok=True,
             pr_number=99,
-            body_file="/tmp/body.md",
-            images=("/tmp/a.png",),
+            body_file=str(root / "body.md"),
+            images=(str(root / "a.png"),),
             user_attachment_urls=(f"{USER_ATTACHMENTS_PREFIX}abc",),
         )
         with mock.patch.dict(os.environ, {"PLATE_MCP_TOOL_PROFILES": "all"}, clear=False):
@@ -157,4 +252,33 @@ class PlateEvidenceMcpTests(unittest.TestCase):
                 )
         self.assertTrue(payload["ok"])
         mocked.assert_called_once()
-        self.assertEqual(mocked.call_args.args[0], 99)
+        kwargs = mocked.call_args.kwargs
+        self.assertTrue(kwargs.get("mcp_mode"))
+        self.assertIn("repo_root", kwargs)
+        self.assertNotIn(str(root), payload["body_file"])
+
+
+class PlateEvidenceLibraryConfinementIntegration(unittest.TestCase):
+    def test_run_without_repo_root_uses_session_root_for_attach_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prev = os.getcwd()
+            try:
+                os.chdir(root)
+                outside = Path(tmp).parent / "mcp-evidence-outside"
+                outside.mkdir(exist_ok=True)
+                result = run_plate_evidence(
+                    1,
+                    str(outside / "body.md"),
+                    [str(outside / "x.png")],
+                    gh="gh",
+                    repo_root=root,
+                )
+            finally:
+                os.chdir(prev)
+            self.assertFalse(result.ok)
+            self.assertEqual(result.error, "Path escapes the repository root")
+
+
+if __name__ == "__main__":
+    unittest.main()

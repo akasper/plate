@@ -5,12 +5,21 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+from plate_core.mcp.path_confinement import (
+    PathConfinementError,
+    confined,
+    confined_write_path,
+    redact_absolute_paths,
+    session_repo_root,
+)
 
 USER_ATTACHMENTS_PREFIX = "https://github.com/user-attachments/assets/"
 MIN_GH_VERSION = (2, 99)
@@ -45,6 +54,20 @@ class PlateEvidenceResult:
             "error": self.error,
             "refused_upload": self.refused_upload,
         }
+
+    def to_client_dict(self, root: Path | None = None) -> dict:
+        """JSON-safe payload for MCP clients with absolute paths redacted."""
+        boundary = (root or session_repo_root()).resolve()
+        payload = self.to_dict()
+        payload["body_file"] = redact_absolute_paths(str(payload["body_file"]), boundary)
+        payload["images"] = [
+            redact_absolute_paths(str(item), boundary) for item in payload["images"]
+        ]
+        if payload.get("error"):
+            payload["error"] = redact_absolute_paths(str(payload["error"]), boundary)
+        if payload.get("gh_version"):
+            payload["gh_version"] = redact_absolute_paths(str(payload["gh_version"]), boundary)
+        return payload
 
 
 def parse_gh_version(text: str) -> tuple[int, int, int] | None:
@@ -146,13 +169,90 @@ def extract_user_attachment_urls(body: str) -> list[str]:
 
 def looks_like_refused_upload(output: str) -> bool:
     lower = (output or "").lower()
-    if "requires write access" in lower:
+    if "requires write access" in lower or "unsupported authentication type" in lower:
         return True
     if "upload" in lower and ("403" in lower or "404" in lower or "refused" in lower):
         return True
     if "attachment" in lower and "not supported" in lower:
         return True
     return False
+
+
+_GH_SUBPROCESS_ENV_KEYS = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TZ",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "USERPROFILE",
+        "SystemRoot",
+        "WINDIR",
+        "GH_HOST",
+    }
+)
+
+
+def gh_subprocess_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Minimal environment for gh subprocesses (no GH_TOKEN / GITHUB_TOKEN inheritance)."""
+    env: dict[str, str] = {k: os.environ[k] for k in _GH_SUBPROCESS_ENV_KEYS if k in os.environ}
+    if extra:
+        for key, value in extra.items():
+            upper = key.upper()
+            if upper in ("GH_TOKEN", "GITHUB_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_ENTERPRISE_TOKEN"):
+                continue
+            env[key] = value
+    return env
+
+
+def resolve_gh_executable(
+    gh: str | None,
+    boundary: Path,
+    *,
+    mcp_mode: bool = False,
+) -> tuple[str | None, str | None]:
+    """Resolve gh binary: PATH lookup for bare names; repo-confined paths for overrides."""
+    token = (gh or ("gh" if mcp_mode else os.environ.get("GH") or "gh")).strip()
+    if not token:
+        token = "gh"
+    if "/" not in token and "\\" not in token:
+        resolved = shutil.which(token)
+        if resolved:
+            return resolved, None
+        return None, f"GitHub CLI ({token!r}) not found on PATH"
+    try:
+        candidate = confined(token, boundary, cwd_relative=True)
+    except PathConfinementError:
+        return None, "Path escapes the repository root"
+    if not candidate.is_file():
+        return None, f"gh executable not found: {candidate.name}"
+    return str(candidate), None
+
+
+def confine_evidence_paths(
+    body_file: str | Path,
+    images: Sequence[str | Path],
+    boundary: Path,
+) -> tuple[Path | None, list[Path], str | None]:
+    """Confine body file and image paths to ``boundary`` (#1475 / #1051)."""
+    try:
+        body_path = confined(body_file, boundary, cwd_relative=True)
+    except PathConfinementError:
+        return None, [], "Path escapes the repository root"
+    image_paths: list[Path] = []
+    for raw in images:
+        try:
+            image_paths.append(confined(raw, boundary, cwd_relative=True))
+        except PathConfinementError:
+            return None, [], "Path escapes the repository root"
+    return body_path, image_paths, None
 
 
 def bundled_evidence_script() -> Path:
@@ -192,11 +292,32 @@ def run_plate_evidence(
     *,
     gh: str | None = None,
     env: dict[str, str] | None = None,
+    repo_root: str | Path | None = None,
+    mcp_mode: bool = False,
     runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
 ) -> PlateEvidenceResult:
-    gh_bin = gh or os.environ.get("GH", "gh")
-    body_path = Path(body_file).resolve()
-    image_paths = [Path(p).resolve() for p in images]
+    boundary = Path(repo_root).resolve() if repo_root is not None else session_repo_root()
+    gh_bin, gh_err = resolve_gh_executable(gh, boundary, mcp_mode=mcp_mode)
+    if gh_err or not gh_bin:
+        return PlateEvidenceResult(
+            ok=False,
+            pr_number=pr_number,
+            body_file=str(body_file),
+            images=tuple(str(p) for p in images),
+            user_attachment_urls=(),
+            error=gh_err or "GitHub CLI (gh) not available",
+        )
+
+    body_path, image_paths, confine_err = confine_evidence_paths(body_file, images, boundary)
+    if confine_err or body_path is None:
+        return PlateEvidenceResult(
+            ok=False,
+            pr_number=pr_number,
+            body_file=str(body_file),
+            images=tuple(str(p) for p in images),
+            user_attachment_urls=(),
+            error=confine_err or "Path escapes the repository root",
+        )
 
     if not body_path.is_file():
         return PlateEvidenceResult(
@@ -219,11 +340,14 @@ def run_plate_evidence(
                 error=f"image not found: {image_path}",
             )
 
-    merged_env = os.environ.copy()
-    if env:
-        merged_env.update(env)
+    merged_env = gh_subprocess_env(env)
 
-    ver_proc = _run_cmd([gh_bin, "--version"], env=merged_env, runner=runner)
+    ver_proc = _run_cmd(
+        [gh_bin, "--version"],
+        env=merged_env,
+        runner=runner,
+        cwd=boundary,
+    )
     ver_text = (ver_proc.stdout or "") + (ver_proc.stderr or "")
     parsed = parse_gh_version(ver_text)
     if not gh_version_ok(parsed):
@@ -252,17 +376,32 @@ def run_plate_evidence(
             error=prep_err,
         )
 
+    staging_dir = boundary / ".agentic"
+    staging_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
         suffix=".md",
         delete=False,
         prefix="plate-evidence-body-",
+        dir=staging_dir,
     ) as tmp:
         tmp.write(prepared)
         prepared_path = tmp.name
 
     try:
+        try:
+            confined_write_path(Path(prepared_path), boundary)
+        except PathConfinementError:
+            return PlateEvidenceResult(
+                ok=False,
+                pr_number=pr_number,
+                body_file=str(body_path),
+                images=tuple(str(p) for p in image_paths),
+                user_attachment_urls=(),
+                error="Path escapes the repository root",
+            )
+
         edit_argv = [
             gh_bin,
             "pr",
@@ -274,7 +413,7 @@ def run_plate_evidence(
         for image_path in image_paths:
             edit_argv.extend(["--attach", str(image_path)])
 
-        edit_proc = _run_cmd(edit_argv, env=merged_env, runner=runner)
+        edit_proc = _run_cmd(edit_argv, env=merged_env, runner=runner, cwd=boundary)
         combined = (edit_proc.stdout or "") + (edit_proc.stderr or "")
         if edit_proc.returncode != 0:
             refused = looks_like_refused_upload(combined)
@@ -294,6 +433,7 @@ def run_plate_evidence(
             [gh_bin, "pr", "view", str(pr_number), "--json", "body"],
             env=merged_env,
             runner=runner,
+            cwd=boundary,
         )
         view_out = (view_proc.stdout or "") + (view_proc.stderr or "")
         if view_proc.returncode != 0:
@@ -378,6 +518,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.body_file,
         args.images,
         gh=args.gh,
+        repo_root=session_repo_root(),
     )
     if args.json:
         import json

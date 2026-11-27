@@ -827,6 +827,8 @@ def _execute_mcp_tool(name: str | None, args: dict) -> object:
             ),
         }
     elif name == "plate_pr_evidence":
+        from pathlib import Path
+
         from .plate_evidence import run_plate_evidence
 
         pr_number = args.get("pr_number")
@@ -839,13 +841,16 @@ def _execute_mcp_tool(name: str | None, args: dict) -> object:
         images = args.get("images") or []
         if not isinstance(images, list) or not images:
             raise ValueError("images must be a non-empty array")
+        tool_root = Path(resolve_mcp_path(args, "repo_root", ".", root))
         result = run_plate_evidence(
             pr_number,
             str(body_file),
             [str(p) for p in images],
             gh=args.get("gh"),
+            repo_root=tool_root,
+            mcp_mode=True,
         )
-        payload = result.to_dict()
+        payload = result.to_client_dict(tool_root)
     elif name == "plate_pr_packet":
         pr_number = args.get("pr_number")
         if pr_number is None:

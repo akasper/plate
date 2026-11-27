@@ -71,6 +71,7 @@ _EXACT_PATH_PARAMETERS = frozenset(
         "fragment",
         "gif_path",
         "video_path",
+        "gh",
     }
 )
 
