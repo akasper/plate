@@ -178,8 +178,26 @@ def _file_sha256(path: Path) -> str:
 _PAYLOAD_HASH_LEDGER_REL = ".agentic/import-payload/content-hashes.json"
 
 
+def _payload_hash_ledger_path(repo_root: Path) -> Path:
+    """Resolve ledger path; refuse symlink escape outside ``repo_root`` (#1477)."""
+    root = repo_root.resolve()
+    cursor = repo_root
+    for part in Path(_PAYLOAD_HASH_LEDGER_REL).parts:
+        child = cursor / part
+        if child.is_symlink():
+            raise OSError(f"refusing symlink while resolving {_PAYLOAD_HASH_LEDGER_REL}")
+        cursor = child
+    resolved = (root / _PAYLOAD_HASH_LEDGER_REL).resolve()
+    if resolved != root and root not in resolved.parents:
+        raise OSError(f"refusing import-payload ledger outside repo: {_PAYLOAD_HASH_LEDGER_REL}")
+    return resolved
+
+
 def _load_payload_hash_ledger(repo_root: Path) -> dict[str, str]:
-    path = repo_root / _PAYLOAD_HASH_LEDGER_REL
+    try:
+        path = _payload_hash_ledger_path(repo_root)
+    except OSError:
+        return {}
     if not path.is_file():
         return {}
     try:
@@ -196,7 +214,7 @@ def _load_payload_hash_ledger(repo_root: Path) -> dict[str, str]:
 
 
 def _save_payload_hash_ledger(repo_root: Path, ledger: dict[str, str]) -> None:
-    path = repo_root / _PAYLOAD_HASH_LEDGER_REL
+    path = _payload_hash_ledger_path(repo_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(dict(sorted(ledger.items())), indent=2) + "\n", encoding="utf-8")
 
@@ -208,7 +226,37 @@ def record_payload_content_hash(repo_root: Path, rel: str, content: bytes) -> No
     _save_payload_hash_ledger(repo_root, ledger)
 
 
-def _record_marker_base_from_bytes(repo_root: Path, rel: str, data: bytes) -> None:
+def _seed_marker_base_when_unchanged_payload(
+    target: Path,
+    *,
+    source: Path,
+    rel: str,
+    write_dest: Path,
+    write_rel: str,
+    platform: str,
+    namespaced_scripts: bool,
+    namespaced_docs: bool,
+) -> None:
+    """On apply skip, seed merge base/hash when checkout still matches payload (#1477)."""
+    if not write_dest.is_file():
+        return
+    try:
+        rendered = _render_payload_bytes(
+            source,
+            rel,
+            platform=platform,
+            namespaced_scripts=namespaced_scripts,
+            namespaced_docs=namespaced_docs,
+        )
+        if _file_sha256(write_dest) != hashlib.sha256(rendered).hexdigest():
+            return
+    except OSError:
+        return
+    record_payload_content_hash(target, rel, rendered)
+    _record_marker_base_from_bytes(target, write_rel, rendered)
+
+
+def _record_marker_base_from_bytes(repo_root: Path, storage_rel: str, data: bytes) -> None:
     if b"PLATES-CORE" not in data:
         return
     try:
@@ -217,7 +265,7 @@ def _record_marker_base_from_bytes(repo_root: Path, rel: str, data: bytes) -> No
         return
     from .self_migrate import save_persisted_marker_base
 
-    save_persisted_marker_base(repo_root, rel, text)
+    save_persisted_marker_base(repo_root, storage_rel, text)
 
 
 def _should_rewrite_docs_refs(rel: str) -> bool:
@@ -716,7 +764,7 @@ def plan_import_payload(
                     )
                     write_dest.write_bytes(data)
                     record_payload_content_hash(target, rel, data)
-                    _record_marker_base_from_bytes(target, rel, data)
+                    _record_marker_base_from_bytes(target, write_rel, data)
                     report.created.append(label)
         elif decision.action == "overwrite":
             label = f"{rel} -> {write_rel}" if write_rel != rel else rel
@@ -732,7 +780,7 @@ def plan_import_payload(
                 )
                 write_dest.write_bytes(data)
                 record_payload_content_hash(target, rel, data)
-                _record_marker_base_from_bytes(target, rel, data)
+                _record_marker_base_from_bytes(target, write_rel, data)
                 report.overwritten.append(label)
         elif decision.action == "conflict":
             report.would_conflict.append(rel)
@@ -742,6 +790,16 @@ def plan_import_payload(
             report.would_skip.append(rel if write_rel == rel else f"{rel} -> {write_rel}")
             if apply:
                 report.skipped.append(rel)
+                _seed_marker_base_when_unchanged_payload(
+                    target,
+                    source=source,
+                    rel=rel,
+                    write_dest=write_dest,
+                    write_rel=write_rel,
+                    platform=resolved_platform,
+                    namespaced_scripts=ns,
+                    namespaced_docs=nd,
+                )
 
     # #618: CURRENT.md is repo-specific (not in payload globs) but required by
     # validate_plate_repo + feature detection — seed when missing.

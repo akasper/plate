@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from plate_core.import_payload import import_payload
+from plate_core.payload_surface import namespace_docs_path
 from plate_core.self_migrate import (
     load_persisted_marker_base,
     plan_marker_merge,
@@ -210,6 +211,79 @@ adopter customization protected
             self.assertIsNotNone(base)
             self.assertIn("PLATES-CORE", base or "")
 
+    def test_two_blocks_second_apply_same_upstream_preserves_custom(self):
+        """Persisted base must stay upstream; repeat apply must not clobber edits."""
+        upstream = """<!-- PLATES-CORE:BEGIN block-a -->
+upstream a v1
+<!-- PLATES-CORE:END block-a -->
+
+<!-- PLATES-CORE:BEGIN block-b -->
+upstream b v1
+<!-- PLATES-CORE:END block-b -->
+"""
+        local_custom = """<!-- PLATES-CORE:BEGIN block-a -->
+adopter custom a
+<!-- PLATES-CORE:END block-a -->
+
+<!-- PLATES-CORE:BEGIN block-b -->
+upstream b v1
+<!-- PLATES-CORE:END block-b -->
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc = root / "sync.md"
+            doc.write_text(upstream, encoding="utf-8")
+            save_persisted_marker_base(root, "sync.md", upstream)
+            report1 = plan_marker_merge(
+                root,
+                paths=["sync.md"],
+                upstream_texts={"sync.md": upstream},
+                apply=True,
+            )
+            doc.write_text(local_custom, encoding="utf-8")
+            report2 = plan_marker_merge(
+                root,
+                paths=["sync.md"],
+                upstream_texts={"sync.md": upstream},
+                apply=True,
+            )
+            final = doc.read_text(encoding="utf-8")
+        self.assertTrue(report1["ok"])
+        self.assertTrue(report2["ok"])
+        self.assertIn("adopter custom a", final)
+        self.assertIn("upstream b v1", final)
+
+    def test_identical_reimport_seeds_marker_base(self):
+        rel = "docs/agents/upstream-template-sync.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import_payload(root, strategy="safe", apply=True)
+            self.assertIsNotNone(load_persisted_marker_base(root, rel))
+            import_payload(root, strategy="safe", apply=True)
+            self.assertIsNotNone(load_persisted_marker_base(root, rel))
+            doc = root / rel
+            self.assertTrue(doc.is_file())
+            report = plan_marker_merge(
+                root,
+                paths=[rel],
+                upstream_texts={rel: doc.read_text(encoding="utf-8")},
+                apply=True,
+            )
+        self.assertTrue(report["ok"])
+        self.assertNotEqual(report["files"][0]["action"], "missing_base")
+
+    def test_namespaced_docs_records_marker_base_at_installed_path(self):
+        rel = "docs/agents/upstream-template-sync.md"
+        namespaced = namespace_docs_path(rel)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs").mkdir()
+            (root / "docs" / "product.md").write_text("# product\n", encoding="utf-8")
+            import_payload(root, strategy="safe", apply=True, namespace_docs=True)
+            self.assertTrue((root / namespaced).is_file())
+            self.assertIsNotNone(load_persisted_marker_base(root, namespaced))
+            self.assertIsNone(load_persisted_marker_base(root, rel))
+
 
 class SafeImportOverwriteTests(unittest.TestCase):
     def test_safe_skips_taxonomy_when_adopter_edited_since_import(self):
@@ -238,6 +312,16 @@ class SafeImportOverwriteTests(unittest.TestCase):
             for rel in taxonomy_paths:
                 self.assertNotIn(rel, applied.get("overwritten") or [])
                 self.assertIn("# adopter customized", (root / rel).read_text(encoding="utf-8"))
+
+    def test_hash_ledger_refuses_symlink_escape(self):
+        from plate_core.import_payload import record_payload_content_hash
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            root.joinpath(".agentic").mkdir()
+            root.joinpath(".agentic").joinpath("import-payload").symlink_to("/tmp")
+            with self.assertRaises(OSError):
+                record_payload_content_hash(root, ".github/labels.yml", b"x")
 
 
 if __name__ == "__main__":
