@@ -222,6 +222,8 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
             checkout_idx = workflow.index("uses: actions/checkout@v4")
             token_step_idx = workflow.index("id: plate-app-token")
             self.assertLess(token_step_idx, checkout_idx, msg=rel)
+            tag_job = workflow.split("fast-forward-release-branches:")[0]
+            self.assertIn("permission-contents: write", tag_job, msg=rel)
 
     def test_release_workflow_waits_for_publishers_after_tag_push(self):
         workflow = read_text(".github/workflows/release.yml")

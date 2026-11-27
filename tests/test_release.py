@@ -1351,15 +1351,21 @@ class FinalizeAutomationTests(unittest.TestCase):
     @patch("plate_core.release.run_hidden")
     def test_fast_forward_all_branches_legacy_release_only(self, mock_run, mock_root):
         mock_root.return_value = Path("/tmp/repo")
-        tag_commit = "tagsha"
-        release_tip = "releasesha"
+        tag_commit = "a" * 40
+        release_tip = "b" * 40
 
         def fake_run(argv, **kwargs):
             cmd = argv
             if cmd[:3] == ["git", "ls-remote", "--tags"]:
-                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v0.9.0", "returncode": 0})()
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_commit} refs/tags/v0.9.0\n"
+                        f"{tag_commit} refs/tags/v0.9.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
             if cmd[:3] == ["git", "ls-remote", "--heads"]:
-                branch = cmd[4]
+                branch = cmd[4].removeprefix("refs/heads/")
                 if branch == "release":
                     return type("P", (), {"stdout": f"{release_tip} refs/heads/release", "returncode": 0})()
                 return type("P", (), {"stdout": "", "returncode": 0})()
@@ -1393,14 +1399,20 @@ class FinalizeAutomationTests(unittest.TestCase):
     @patch("plate_core.release.run_hidden")
     def test_fast_forward_stop_on_first_block(self, mock_run, mock_root):
         mock_root.return_value = Path("/tmp/repo")
-        tag_commit = "tagsha"
-        tips = {"release-major": "majorsha", "release-minor": "minorsha"}
+        tag_commit = "c" * 40
+        tips = {"release-major": "d" * 40, "release-minor": "e" * 40}
 
         def fake_run(argv, **kwargs):
             if argv[:3] == ["git", "ls-remote", "--tags"]:
-                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v1.0.0", "returncode": 0})()
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_commit} refs/tags/v1.0.0\n"
+                        f"{tag_commit} refs/tags/v1.0.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
             if argv[:3] == ["git", "ls-remote", "--heads"]:
-                branch = argv[4]
+                branch = argv[4].removeprefix("refs/heads/")
                 if branch in tips:
                     return type("P", (), {"stdout": f"{tips[branch]} refs/heads/{branch}", "returncode": 0})()
                 return type("P", (), {"stdout": "", "returncode": 0})()
@@ -1448,9 +1460,15 @@ class FinalizeAutomationTests(unittest.TestCase):
                     fetch_calls.append(list(argv))
                 return type("P", (), {"stdout": "", "returncode": 0})()
             if argv[:3] == ["git", "ls-remote", "--tags"]:
-                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v0.9.0", "returncode": 0})()
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_commit} refs/tags/v0.9.0\n"
+                        f"{tag_commit} refs/tags/v0.9.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
             if argv[:3] == ["git", "ls-remote", "--heads"]:
-                branch = argv[4]
+                branch = argv[4].removeprefix("refs/heads/")
                 if branch == "release":
                     return type("P", (), {"stdout": f"{release_tip} refs/heads/release", "returncode": 0})()
                 return type("P", (), {"stdout": "", "returncode": 0})()
@@ -1479,11 +1497,14 @@ class FinalizeAutomationTests(unittest.TestCase):
     @patch("plate_core.release.run_hidden")
     def test_fast_forward_idempotent_noop(self, mock_run, mock_root):
         mock_root.return_value = Path("/tmp/repo")
-        sha = "samecommit"
+        sha = "f" * 40
 
         def fake_run(argv, **kwargs):
             if argv[:3] == ["git", "ls-remote", "--tags"]:
-                return type("P", (), {"stdout": f"{sha} refs/tags/v0.9.1", "returncode": 0})()
+                return type("P", (), {
+                    "stdout": f"{sha} refs/tags/v0.9.1\n{sha} refs/tags/v0.9.1^{{}}",
+                    "returncode": 0,
+                })()
             if argv[:3] == ["git", "ls-remote", "--heads"]:
                 return type("P", (), {"stdout": f"{sha} refs/heads/release", "returncode": 0})()
             if argv[:2] == ["git", "fetch"]:
@@ -1504,14 +1525,20 @@ class FinalizeAutomationTests(unittest.TestCase):
     @patch("plate_core.release.run_hidden")
     def test_fast_forward_multi_track_skips_missing(self, mock_run, mock_root):
         mock_root.return_value = Path("/tmp/repo")
-        tag_commit = "tagsha"
-        tip = "branchsha"
+        tag_commit = "1" * 40
+        tip = "2" * 40
 
         def fake_run(argv, **kwargs):
             if argv[:3] == ["git", "ls-remote", "--tags"]:
-                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v2.0.0", "returncode": 0})()
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_commit} refs/tags/v2.0.0\n"
+                        f"{tag_commit} refs/tags/v2.0.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
             if argv[:3] == ["git", "ls-remote", "--heads"]:
-                branch = argv[4]
+                branch = argv[4].removeprefix("refs/heads/")
                 if branch == "release-patch":
                     return type("P", (), {"stdout": f"{tip} refs/heads/{branch}", "returncode": 0})()
                 return type("P", (), {"stdout": "", "returncode": 0})()
@@ -1537,6 +1564,66 @@ class FinalizeAutomationTests(unittest.TestCase):
         self.assertEqual(by_branch["release-minor"], "skipped_missing")
         self.assertEqual(by_branch["release-patch"], "fast_forwarded")
         self.assertEqual(by_branch["release"], "skipped_missing")
+
+    def test_parse_ls_remote_tag_commit_sha_prefers_peeled_annotated_tag(self):
+        from plate_core.release import _parse_ls_remote_tag_commit_sha
+
+        tag_object = "1" * 40
+        peeled = "2" * 40
+        stdout = f"{tag_object} refs/tags/v1.0.0\n{peeled} refs/tags/v1.0.0^{{}}"
+        self.assertEqual(_parse_ls_remote_tag_commit_sha(stdout, "v1.0.0"), peeled)
+
+    def test_parse_ls_remote_tag_commit_sha_lightweight_tag(self):
+        from plate_core.release import _parse_ls_remote_tag_commit_sha
+
+        commit = "3" * 40
+        stdout = f"{commit} refs/tags/v0.1.0"
+        self.assertEqual(_parse_ls_remote_tag_commit_sha(stdout, "v0.1.0"), commit)
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
+    def test_fast_forward_plan_uses_peeled_sha_for_annotated_tag(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+        tag_object = "1" * 40
+        peeled = "2" * 40
+        release_tip = "b" * 40
+
+        def fake_run(argv, **kwargs):
+            if argv[:3] == ["git", "ls-remote", "--tags"]:
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_object} refs/tags/v0.9.0\n"
+                        f"{peeled} refs/tags/v0.9.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
+            if argv[:3] == ["git", "ls-remote", "--heads"]:
+                branch = argv[4].removeprefix("refs/heads/")
+                if branch == "release":
+                    return type("P", (), {"stdout": f"{release_tip} refs/heads/release", "returncode": 0})()
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "remote"]:
+                return type("P", (), {"stdout": "https://github.com/o/r.git", "returncode": 0})()
+            if argv[:2] == ["git", "init"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "remote", "add"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "fetch"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        info = fast_forward_release_branches(
+            "v0.9.0",
+            dry_run=True,
+            apply=False,
+            branches=("release",),
+        )
+        self.assertTrue(info.get("ok"))
+        self.assertEqual(info["tag_commit"], peeled)
+        self.assertEqual(info["results"][0]["status"], "would_fast_forward")
 
     def test_format_fast_forward_failure_comment_includes_blocked_branch(self):
         body = format_fast_forward_failure_comment(

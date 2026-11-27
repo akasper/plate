@@ -1645,27 +1645,71 @@ def _remote_branch_exists(branch: str, *, cwd: str) -> bool:
     return bool((proc.stdout or "").strip())
 
 
-def _parse_ls_remote_first_sha(stdout: str) -> str | None:
+def _parse_ls_remote_tag_commit_sha(stdout: str, tag_name: str) -> str | None:
+    """Return the commit a tag points at (peeled SHA for annotated tags)."""
+    peeled_ref = f"refs/tags/{tag_name}^{{}}"
+    tag_ref = f"refs/tags/{tag_name}"
+    peeled: str | None = None
+    lightweight: str | None = None
     for line in (stdout or "").splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        sha = stripped.split(maxsplit=1)[0]
-        if len(sha) >= 7:
+        parts = stripped.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        sha, ref = parts[0], parts[1]
+        if len(sha) < 7:
+            continue
+        if ref == peeled_ref:
+            peeled = sha
+        elif ref == tag_ref:
+            lightweight = sha
+    return peeled or lightweight
+
+
+def _parse_ls_remote_exact_ref_sha(stdout: str, expected_ref: str) -> str | None:
+    for line in (stdout or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        sha, ref = parts[0], parts[1]
+        if len(sha) < 7:
+            continue
+        if ref == expected_ref:
             return sha
     return None
 
 
 def _ls_remote_sha(*, kind: str, name: str, cwd: str) -> str | None:
-    flag = "--tags" if kind == "tags" else "--heads"
+    if kind == "tags":
+        proc = run_hidden(
+            [
+                "git",
+                "ls-remote",
+                "--tags",
+                "origin",
+                f"refs/tags/{name}",
+                f"refs/tags/{name}^{{}}",
+            ],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return _parse_ls_remote_tag_commit_sha(proc.stdout or "", name)
+    head_ref = f"refs/heads/{name}"
     proc = run_hidden(
-        ["git", "ls-remote", flag, "origin", name],
+        ["git", "ls-remote", "--heads", "origin", head_ref],
         cwd=cwd,
         capture_output=True,
         text=True,
         check=False,
     )
-    return _parse_ls_remote_first_sha(proc.stdout or "")
+    return _parse_ls_remote_exact_ref_sha(proc.stdout or "", head_ref)
 
 
 def _is_git_ancestor_ephemeral(ancestor: str, descendant: str, *, cwd: str) -> bool:
@@ -1798,12 +1842,19 @@ def fast_forward_release_branches(
 
     try:
         ls = run_hidden(
-            ["git", "ls-remote", "--tags", "origin", tag_name],
+            [
+                "git",
+                "ls-remote",
+                "--tags",
+                "origin",
+                f"refs/tags/{tag_name}",
+                f"refs/tags/{tag_name}^{{}}",
+            ],
             capture_output=True,
             text=True,
             check=False,
         )
-        if not (ls.stdout or "").strip():
+        if not _parse_ls_remote_tag_commit_sha(ls.stdout or "", tag_name):
             return {
                 "ok": False,
                 "error": "tag_not_found_on_origin",
@@ -1819,17 +1870,6 @@ def fast_forward_release_branches(
         cwd = str(root)
         if plan_only:
             tag_commit = _ls_remote_sha(kind="tags", name=tag_name, cwd=cwd)
-            if not tag_commit:
-                tag_commit = _parse_ls_remote_first_sha(
-                    run_hidden(
-                        ["git", "ls-remote", "--tags", "origin", tag_name],
-                        cwd=cwd,
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    ).stdout
-                    or ""
-                )
         else:
             fetch_refs = [tag_name, *branch_list]
             fetch_proc = run_hidden(

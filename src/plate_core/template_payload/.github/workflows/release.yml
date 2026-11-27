@@ -45,6 +45,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: |
             ${{ github.event.repository.name }}
+          permission-contents: write
 
       - uses: actions/checkout@v4
         with:
