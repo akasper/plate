@@ -277,7 +277,7 @@ def _rewrite_windows_gif_job(text: str, *, namespaced: bool) -> str:
         "          name: playwright-videos\n"
         "\n"
         "      - name: Install ffmpeg\n"
-        "        run: sudo apt-get update && sudo apt-get install -y ffmpeg\n"
+        "        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg\n"
         "\n"
         "      - name: Convert videos to GIFs\n"
     )

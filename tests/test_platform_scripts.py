@@ -165,7 +165,10 @@ class PlatformFilterTests(unittest.TestCase):
         self.assertNotIn("gif-from-video.sh", rewritten)
         self.assertIn('gif_script="./scripts/gif-from-video.ps1"', rewritten)
         self.assertIn('pwsh -File "$gif_script"', rewritten)
-        self.assertIn("sudo apt-get install -y ffmpeg", rewritten)
+        self.assertIn(
+            "sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg",
+            rewritten,
+        )
         self.assertIn("Required GIF script is missing", rewritten)
         self.assertIn("name: Playwright E2E Tests", rewritten)
         self.assertIn("vars.CI_RUNS_ON", rewritten)
