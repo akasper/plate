@@ -11,13 +11,17 @@ def _read_repo_file(rel: str) -> str:
     return (REPO_ROOT / rel).read_text(encoding="utf-8")
 
 
+from plate_core.github_client import GhApiError
 from plate_core.pr_babysit import (
     _DEFAULT_STRATEGY,
+    _authorship_for_local_rebase,
     _default_agent_match,
+    _enrich_pr_push_safety_fields,
     _extract_actionable_threads,
     _extract_outdated_unresolved_threads,
     _detect_base_branch_out_of_sync,
     _git_index_lock_is_stale,
+    _labels_gate_for_local_rebase,
     _perform_local_rebase,
     _validate_local_rebase_preconditions,
     _redact_url_userinfo,
@@ -709,7 +713,16 @@ class PrBabysitTests(unittest.TestCase):
         mock_mkdtemp.return_value = "/tmp/fake-worktree"
         mock_check_output.return_value = "/tmp/repo\n"
         mock_check_call.return_value = 0
-        mock_run.return_value = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        def _run_side(args, **_kwargs):
+            argv = list(args)
+            if "rev-parse" in argv and any("origin/" in a for a in argv):
+                return type("R", (), {"returncode": 0, "stdout": head_oid + "\n", "stderr": ""})()
+            if "rev-parse" in argv:
+                return type("R", (), {"returncode": 0, "stdout": head_oid + "\n", "stderr": ""})()
+            return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        mock_run.side_effect = _run_side
 
         report = babysit_pr(
             repo=repo, pr_number=pr, act=True, branch_update_strategy="local-rebase", client=fake
@@ -746,7 +759,8 @@ class PrBabysitTests(unittest.TestCase):
         repo = "akasper/plate"
         pr = 112
         graphql_endpoint = "graphql"
-        pr_data_payload = _behind_pr_graphql()
+        head_oid = "abc123def4567890abc123def4567890abc12345"
+        pr_data_payload = _behind_pr_graphql(head_oid=head_oid)
 
         fake = _FakeClient(
             responses={
@@ -755,11 +769,17 @@ class PrBabysitTests(unittest.TestCase):
                 (f"repos/{repo}/pulls/{pr}/commits", "GET"): [],
             }
         )
-
         mock_mkdtemp.return_value = "/tmp/fake-worktree"
         mock_check_output.return_value = "/tmp/repo\n"
         mock_check_call.return_value = 0
-        mock_run.return_value = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        def _run_side(args, **_kwargs):
+            argv = list(args)
+            if "rev-parse" in argv:
+                return type("R", (), {"returncode": 0, "stdout": head_oid + "\n", "stderr": ""})()
+            return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        mock_run.side_effect = _run_side
 
         report = babysit_pr(repo=repo, pr_number=pr, act=True, client=fake)
 
@@ -781,7 +801,8 @@ class PrBabysitTests(unittest.TestCase):
         repo = "akasper/plate"
         pr = 112
         graphql_endpoint = "graphql"
-        pr_data_payload = _behind_pr_graphql(merge_state="CONFLICTING")
+        head_oid = "abc123def4567890abc123def4567890abc12345"
+        pr_data_payload = _behind_pr_graphql(merge_state="CONFLICTING", head_oid=head_oid)
 
         fake = _FakeClient(
             responses={
@@ -794,8 +815,15 @@ class PrBabysitTests(unittest.TestCase):
         mock_mkdtemp.return_value = "/tmp/fake-worktree"
         mock_check_output.return_value = "/tmp/repo\n"
         mock_check_call.return_value = 0
-        # rebase fails (conflict); abort and worktree remove use the same helper
-        mock_run.return_value = type("R", (), {"returncode": 1, "stdout": "conflict!", "stderr": ""})()
+
+        def _run_side(args, **_kwargs):
+            argv = list(args)
+            if "rev-parse" in argv or "merge-base" in argv:
+                return type("R", (), {"returncode": 0, "stdout": head_oid + "\n", "stderr": ""})()
+            # rebase fails (conflict)
+            return type("R", (), {"returncode": 1, "stdout": "conflict!", "stderr": ""})()
+
+        mock_run.side_effect = _run_side
 
         report = babysit_pr(
             repo=repo, pr_number=pr, act=True, branch_update_strategy="local-rebase", client=fake
@@ -1375,6 +1403,108 @@ class BabysitActHarden1474Tests(unittest.TestCase):
                             res = _perform_local_rebase("main", "feat", "/tmp/repo", head_ref_oid=None)
         self.assertFalse(res["success"])
         self.assertIn("headRefOid", res.get("error") or "")
+
+    def test_perform_local_rebase_refuses_stale_origin_tracking_ref(self):
+        live = "a" * 40
+        stale = "b" * 40
+        with patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo"):
+            with patch("plate_core.pr_babysit.cleanup_git_locks"):
+                with patch("plate_core.pr_babysit.check_call_hidden"):
+                    with patch("plate_core.pr_babysit.run_hidden") as mock_run:
+
+                        def _run_side(args, **_kwargs):
+                            argv = list(args)
+                            if "rev-parse" in argv and "refs/remotes/origin/feat" in " ".join(argv):
+                                return type("R", (), {"returncode": 0, "stdout": stale + "\n", "stderr": ""})()
+                            if "rev-parse" in argv:
+                                return type("R", (), {"returncode": 0, "stdout": live + "\n", "stderr": ""})()
+                            if "merge-base" in argv:
+                                return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+                            return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+                        mock_run.side_effect = _run_side
+                        res = _perform_local_rebase(
+                            "main",
+                            "feat",
+                            "/tmp/repo",
+                            head_ref_oid=live,
+                            pr_number=99,
+                        )
+        self.assertFalse(res["success"])
+        self.assertIn("stale origin tracking ref", res.get("error") or "")
+
+    def test_enrich_rest_fallback_preserves_driver_human_label(self):
+        pr_data = {
+            "rest_fallback": True,
+            "headRefName": "feat",
+            "mergeStateStatus": "BEHIND",
+        }
+        fake = _FakeClient(
+            responses={
+                (
+                    "repos/akasper/plate/pulls/12",
+                    "GET",
+                ): {
+                    "head": {
+                        "sha": "c" * 40,
+                        "ref": "feat",
+                        "repo": {"full_name": "akasper/plate"},
+                    },
+                    "base": {"repo": {"full_name": "akasper/plate"}},
+                    "labels": [{"name": "driver:human"}],
+                    "user": {"login": "octocat"},
+                }
+            }
+        )
+        out = _enrich_pr_push_safety_fields(fake, "akasper/plate", 12, pr_data)
+        self.assertIn("driver:human", out.get("labels") or [])
+        self.assertIsNone(_labels_gate_for_local_rebase(out))
+
+    def test_enrich_marks_labels_unavailable_when_pull_missing(self):
+        pr_data = {"rest_fallback": True, "mergeStateStatus": "BEHIND"}
+        fake = _FakeClient(responses={("repos/akasper/plate/pulls/12", "GET"): {}})
+        out = _enrich_pr_push_safety_fields(fake, "akasper/plate", 12, pr_data)
+        self.assertTrue(out.get("labels_unavailable"))
+        self.assertIn("fail-closed", _labels_gate_for_local_rebase(out) or "")
+
+    @patch("plate_core.pr_babysit._validate_push_remotes_match_target", return_value=None)
+    @patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo\n")
+    def test_babysit_refuses_when_commit_list_unavailable(self, _mock_out, _mock_remotes):
+        repo = "akasper/plate"
+        pr = 1519
+        payload = _behind_pr_graphql()
+        base_responses = {
+            ("graphql", "POST"): payload,
+            (f"repos/{repo}/issues/{pr}/comments?per_page=100&sort=created&direction=desc", "GET"): [],
+        }
+
+        class _CommitsFailClient(_FakeClient):
+            def api(self, endpoint, method="GET", fields=None):
+                if endpoint.endswith("/commits"):
+                    raise GhApiError("rate limited")
+                return super().api(endpoint, method, fields)
+
+        fake = _CommitsFailClient(responses=base_responses)
+
+        report = babysit_pr(
+            repo=repo,
+            pr_number=pr,
+            act=True,
+            branch_update_strategy="local-rebase",
+            client=fake,
+        )
+        self.assertTrue(report.local_rebase_performed)
+        self.assertFalse(report.local_rebase_success)
+        self.assertIn("authorship unavailable", (report.local_rebase_error or "").lower())
+
+    def test_authorship_for_local_rebase_fails_closed_on_api_error(self):
+        class _FailClient:
+            def api(self, *_a, **_k):
+                raise GhApiError("nope")
+
+        auth, err = _authorship_for_local_rebase(_FailClient(), "akasper/plate", 1, {"author_login": "bot[bot]"})
+        self.assertIsNone(auth)
+        self.assertIn("authorship unavailable", (err or "").lower())
 
     @patch("plate_core.pr_babysit._validate_push_remotes_match_target", return_value=None)
     @patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo\n")

@@ -702,17 +702,27 @@ def _enrich_pr_push_safety_fields(
     pr_number: int,
     pr_data: dict,
 ) -> dict:
-    """Ensure cross-repo / head oid / head repo are present (REST when GraphQL fell back)."""
-    if (
-        pr_data.get("headRefOid")
-        and pr_data.get("head_repo")
-        and "isCrossRepository" in pr_data
-    ):
-        return pr_data
+    """Ensure cross-repo / head oid / head repo / labels / author (REST when GraphQL incomplete)."""
+    out = dict(pr_data)
+    head_complete = (
+        out.get("headRefOid")
+        and out.get("head_repo")
+        and "isCrossRepository" in out
+    )
+    labels_complete = isinstance(out.get("labels"), list) and not out.get("rest_fallback")
+    author_complete = bool((out.get("author_login") or "").strip())
+    if head_complete and labels_complete and author_complete:
+        return out
+
     owner, name = _split_repo(repo)
-    pull = client.api(f"repos/{owner}/{name}/pulls/{pr_number}") or {}
-    if not isinstance(pull, dict):
-        return pr_data
+    try:
+        pull = client.api(f"repos/{owner}/{name}/pulls/{pr_number}") or {}
+    except GhApiError:
+        pull = {}
+    if not isinstance(pull, dict) or not pull:
+        if out.get("rest_fallback") or not labels_complete:
+            out["labels_unavailable"] = True
+        return out
     head = pull.get("head") or {}
     base = pull.get("base") or {}
     head_repo_info = head.get("repo") or {}
@@ -724,14 +734,26 @@ def _enrich_pr_push_safety_fields(
         is_cross = head_full.lower() != base_full.lower()
     elif head_repo_info.get("fork"):
         is_cross = True
-    elif not pr_data.get("head_repo") and head_full:
+    elif not out.get("head_repo") and head_full:
         is_cross = head_full.lower() != repo.lower()
-    out = dict(pr_data)
     if head.get("sha") and not out.get("headRefOid"):
         out["headRefOid"] = head.get("sha")
     if head_full and not out.get("head_repo"):
         out["head_repo"] = head_full
     out["isCrossRepository"] = bool(out.get("isCrossRepository")) or is_cross
+    labels_raw = pull.get("labels")
+    if isinstance(labels_raw, list):
+        out["labels"] = [
+            n.get("name")
+            for n in labels_raw
+            if isinstance(n, dict) and n.get("name")
+        ]
+        out.pop("labels_unavailable", None)
+    elif out.get("rest_fallback") or not labels_complete:
+        out["labels_unavailable"] = True
+    user = pull.get("user") or {}
+    if isinstance(user, dict) and user.get("login"):
+        out["author_login"] = str(user.get("login"))
     return out
 
 
@@ -855,7 +877,8 @@ def _authorship_for_local_rebase(
     repo: str,
     pr_number: int,
     pr_data: dict,
-) -> dict:
+) -> tuple[dict | None, str | None]:
+    """Return (authorship dict, error). Fail closed when commit list is unavailable."""
     owner, name = _split_repo(repo)
     commits: list[dict] = []
     try:
@@ -868,20 +891,28 @@ def _authorship_for_local_rebase(
                 )
                 or []
             )
-            if not isinstance(batch, list) or not batch:
+            if not isinstance(batch, list):
+                return None, "PR commit authorship unavailable; refuse force-push"
+            if not batch:
                 break
             commits.extend(item for item in batch if isinstance(item, dict))
             if len(batch) < 100:
                 break
             page += 1
     except GhApiError:
-        commits = []
+        return None, "PR commit authorship unavailable; refuse force-push"
     report = analyze_pr_authorship(
         pr_number=pr_number,
         author_login=pr_data.get("author_login") or None,
         commits=commits,
     )
-    return report.to_dict()
+    return report.to_dict(), None
+
+
+def _labels_gate_for_local_rebase(pr_data: dict) -> str | None:
+    if pr_data.get("labels_unavailable"):
+        return "PR labels unavailable; refuse local-rebase (fail-closed human-driven)"
+    return None
 
 
 def _git_index_lock_is_stale(lock_path: str) -> bool:
@@ -916,6 +947,7 @@ def _perform_local_rebase(
     repo_dir: str | None = None,
     *,
     head_ref_oid: str | None = None,
+    pr_number: int | None = None,
 ) -> dict:
     """Perform a local rebase of head_ref onto base_ref using an isolated git worktree.
 
@@ -947,14 +979,102 @@ def _perform_local_rebase(
         if not v["is_isolated"]:
             # still proceed for rebase (which creates its own worktree) but surface warning
             pass
-        # fresh fetch
-        check_call_hidden(["git", "-C", repo_dir, "fetch", "origin", base_ref, head_ref], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if not head_ref_oid:
+            return {
+                "success": False,
+                "conflict": False,
+                "error": "missing headRefOid for pinned force-with-lease",
+                "output": None,
+            }
+
+        # Fetch explicit refs (do not rely on stale origin/{head_ref} tracking).
+        check_call_hidden(
+            [
+                "git",
+                "-C",
+                repo_dir,
+                "fetch",
+                "origin",
+                f"+refs/heads/{base_ref}:refs/remotes/origin/{base_ref}",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        check_call_hidden(
+            ["git", "-C", repo_dir, "fetch", "origin", head_ref_oid],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if pr_number is not None:
+            pr_fetch_ref = f"refs/remotes/plate-babysit/pr-{int(pr_number)}-head"
+            check_call_hidden(
+                [
+                    "git",
+                    "-C",
+                    repo_dir,
+                    "fetch",
+                    "origin",
+                    f"refs/pull/{int(pr_number)}/head:{pr_fetch_ref}",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            pr_head = run_hidden(
+                ["git", "-C", repo_dir, "rev-parse", pr_fetch_ref],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if pr_head.returncode == 0 and pr_head.stdout.strip() != head_ref_oid:
+                return {
+                    "success": False,
+                    "conflict": False,
+                    "error": "live PR head SHA does not match leased headRefOid; refuse rebase",
+                    "output": None,
+                }
+
+        tracked_head = run_hidden(
+            ["git", "-C", repo_dir, "rev-parse", f"refs/remotes/origin/{head_ref}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tracked_head.returncode == 0 and tracked_head.stdout.strip() != head_ref_oid:
+            return {
+                "success": False,
+                "conflict": False,
+                "error": "stale origin tracking ref for PR head; refuse rebase",
+                "output": None,
+            }
+
+        ancestor = run_hidden(
+            [
+                "git",
+                "-C",
+                repo_dir,
+                "merge-base",
+                "--is-ancestor",
+                f"refs/remotes/origin/{base_ref}",
+                head_ref_oid,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if ancestor.returncode != 0:
+            return {
+                "success": False,
+                "conflict": False,
+                "error": "PR head is not based on origin base ref; refuse rebase",
+                "output": None,
+            }
 
         worktree_path = tempfile.mkdtemp(prefix="plate-babysit-rebase-")
-        # add worktree at the head_ref tip
+        # Worktree at exact leased OID (not origin/{head_ref}).
         check_call_hidden(
-            ["git", "-C", repo_dir, "worktree", "add", "--detach", worktree_path, f"origin/{head_ref}"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ["git", "-C", repo_dir, "worktree", "add", "--detach", worktree_path, head_ref_oid],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
         # rebase in the worktree
@@ -972,13 +1092,6 @@ def _perform_local_rebase(
                 "output": (rebase_res.stdout or "") + (rebase_res.stderr or ""),
             }
 
-        if not head_ref_oid:
-            return {
-                "success": False,
-                "conflict": False,
-                "error": "missing headRefOid for pinned force-with-lease",
-                "output": None,
-            }
         lease_ref = f"refs/heads/{head_ref}"
         push_res = run_hidden(
             [
@@ -1371,30 +1484,39 @@ def babysit_pr(
         else:
             cleanup_git_locks(repo_dir)
             preflight_err = _validate_local_rebase_preconditions(target, pr_data, repo_dir)
+            labels_err = _labels_gate_for_local_rebase(pr_data)
             if preflight_err:
                 local_rebase_success = False
                 local_rebase_error = preflight_err
+            elif labels_err:
+                local_rebase_success = False
+                local_rebase_error = labels_err
             else:
-                authorship = _authorship_for_local_rebase(gh, target, pr_number, pr_data)
-                policy = collab_policy_check(
-                    "force_push",
-                    labels=pr_data.get("labels") or [],
-                    authorship=authorship,
-                    branch=sync_info.get("head_ref"),
-                )
-                if not policy.get("allowed"):
+                authorship, auth_err = _authorship_for_local_rebase(gh, target, pr_number, pr_data)
+                if auth_err:
                     local_rebase_success = False
-                    local_rebase_error = policy.get("reason") or "force-push blocked by collab policy"
+                    local_rebase_error = auth_err
                 else:
-                    rebase_res = _perform_local_rebase(
-                        sync_info.get("base_ref"),
-                        sync_info.get("head_ref"),
-                        repo_dir,
-                        head_ref_oid=pr_data.get("headRefOid"),
+                    policy = collab_policy_check(
+                        "force_push",
+                        labels=pr_data.get("labels") or [],
+                        authorship=authorship,
+                        branch=sync_info.get("head_ref"),
                     )
-                    local_rebase_success = rebase_res.get("success", False)
-                    local_rebase_conflict = rebase_res.get("conflict", False)
-                    local_rebase_error = rebase_res.get("error")
+                    if not policy.get("allowed"):
+                        local_rebase_success = False
+                        local_rebase_error = policy.get("reason") or "force-push blocked by collab policy"
+                    else:
+                        rebase_res = _perform_local_rebase(
+                            sync_info.get("base_ref"),
+                            sync_info.get("head_ref"),
+                            repo_dir,
+                            head_ref_oid=pr_data.get("headRefOid"),
+                            pr_number=pr_number,
+                        )
+                        local_rebase_success = rebase_res.get("success", False)
+                        local_rebase_conflict = rebase_res.get("conflict", False)
+                        local_rebase_error = rebase_res.get("error")
         # Note: we do not post copilot trigger when local-rebase is chosen
 
     suggestion_n = sum(1 for a in actionable if a.get("has_suggestion"))
