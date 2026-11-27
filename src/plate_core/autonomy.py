@@ -298,7 +298,7 @@ def load_budget_spend(*, base_dir: Path | None = None) -> dict[str, Any]:
 
     Corrupt spend files raise ``CorruptStateError`` (fail-closed; #1476).
     """
-    from .state_store import load_strict
+    from .state_store import _mark_corrupt, load_strict
 
     path = _budget_spend_path(base_dir)
     if budget_spend_is_corrupt(base_dir=base_dir):
@@ -310,7 +310,11 @@ def load_budget_spend(*, base_dir: Path | None = None) -> dict[str, Any]:
     except CorruptStateError:
         _archive_corrupt_budget_spend(path)
         raise
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        _mark_corrupt(path)
+        _archive_corrupt_budget_spend(path)
+        raise CorruptStateError(f"expected JSON object at {path}")
+    return data
 
 
 def save_budget_spend(data: dict[str, Any], *, base_dir: Path | None = None) -> Path:

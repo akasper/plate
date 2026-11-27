@@ -20,12 +20,26 @@ from plate_core.autonomy import (
     tokens_to_usd,
     usd_per_1k_tokens,
 )
+from plate_core.plate_config import load_plate_config, validate_plate_config, PlateConfigError
 from plate_core.state_store import clear_save_refusal
 from plate_core.checkpoint import autonomy_is_paused_by_checkpoints, list_checkpoints
 from plate_core.state_store import CorruptStateError, atomic_write_json, mutate_json
 
 
 class BudgetPersistence1476Tests(unittest.TestCase):
+    def test_non_object_spend_fail_closed_snapshot(self):
+        with TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            path = bdir / "spend.json"
+            path.parent.mkdir(parents=True)
+            path.write_text("[]\n", encoding="utf-8")
+            with self.assertRaises(CorruptStateError):
+                load_budget_spend(base_dir=bdir)
+            self.assertTrue(budget_spend_is_corrupt(base_dir=bdir))
+            snap = get_budget_snapshot(base_dir=bdir)
+            self.assertTrue(snap.get("corrupt_spend"))
+            self.assertTrue(snap.get("would_pause_next_cycle"))
+
     def test_corrupt_spend_fail_closed_snapshot(self):
         with TemporaryDirectory() as tmp:
             bdir = Path(tmp) / "budget"
@@ -203,6 +217,54 @@ class BudgetPersistence1476Tests(unittest.TestCase):
         rate = usd_per_1k_tokens({"usd_per_1k_tokens": 0.01})
         self.assertAlmostEqual(rate, 0.01)
         self.assertAlmostEqual(tokens_to_usd(1000, rate_per_1k=0.01), 0.01)
+
+    def test_usd_per_1k_tokens_validate_plate_config(self):
+        validate_plate_config(
+            {
+                "version": "1.2",
+                "autonomy": {
+                    "enabled": False,
+                    "risk_tolerance": "off",
+                    "usd_per_1k_tokens": 0.01,
+                },
+            },
+            strict=True,
+        )
+        validate_plate_config(
+            {
+                "version": "1.2",
+                "autonomy": {
+                    "token_budget": {"daily": 1000, "usd_per_1k_tokens": 0.005},
+                },
+            },
+            strict=True,
+        )
+        with self.assertRaises(PlateConfigError):
+            validate_plate_config(
+                {"version": "1.2", "autonomy": {"usd_per_1k_tokens": -1}},
+                strict=True,
+            )
+
+    def test_usd_per_1k_tokens_load_plate_config(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plate = root / ".plate"
+            plate.write_text(
+                json.dumps(
+                    {
+                        "version": "1.2",
+                        "autonomy": {
+                            "enabled": True,
+                            "risk_tolerance": "low",
+                            "usd_per_1k_tokens": 0.01,
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            cfg = load_plate_config(root)
+            self.assertAlmostEqual(usd_per_1k_tokens(cfg.autonomy), 0.01)
 
     def test_locked_concurrent_budget_spend(self):
         with TemporaryDirectory() as tmp:
