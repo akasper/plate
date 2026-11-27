@@ -53,6 +53,36 @@ class McpPathConfinementTests(unittest.TestCase):
             root = Path(tmp)
             self.assertEqual(confined(".", root), root.resolve())
 
+    def test_cwd_relative_dot_uses_server_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = root / "apps" / "web"
+            nested.mkdir(parents=True)
+            prev = os.getcwd()
+            try:
+                os.chdir(nested)
+                self.assertEqual(
+                    confined(".", root, cwd_relative=True),
+                    nested.resolve(),
+                )
+            finally:
+                os.chdir(prev)
+
+    def test_confined_write_path_rejects_outbound_symlink(self):
+        from plate_core.mcp.path_confinement import confined_write_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outside = Path(tmp).parent / "mcp-pw-outside"
+            outside.mkdir(exist_ok=True)
+            target = root / "playwright.config.ts"
+            try:
+                target.symlink_to(outside / "leak.ts")
+            except OSError as exc:
+                self.skipTest(f"symlink not permitted: {exc}")
+            with self.assertRaises(PathConfinementError):
+                confined_write_path(target, root)
+
 
 if __name__ == "__main__":
     unittest.main()

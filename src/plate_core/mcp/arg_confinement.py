@@ -178,10 +178,10 @@ def _confine_single(value: Any, root: Path, param: str) -> Any:
     if value is None:
         return None
     if isinstance(value, list):
-        return [str(confined(item, root)) for item in value]
+        return [str(confined(item, root, cwd_relative=True)) for item in value]
     if isinstance(value, str) and not value.strip():
-        return str(confined(".", root))
-    return str(confined(value, root))
+        return str(confined(".", root, cwd_relative=True))
+    return str(confined(value, root, cwd_relative=True))
 
 
 def confine_tool_arguments(
@@ -232,4 +232,4 @@ def resolve_mcp_path(
         return str(args[key])
     if default is None:
         raise ValueError(f"{key} is required")
-    return str(confined(default, base))
+    return str(confined(default, base, cwd_relative=True))

@@ -45,7 +45,7 @@ class InitPlaywrightTool:
             from .path_confinement import confined
 
             try:
-                repo = confined(repo_path, repo_root)
+                repo = confined(repo_path, repo_root, cwd_relative=True)
             except ValueError as exc:
                 return {"status": "error", "message": str(exc)}
         else:
@@ -58,17 +58,31 @@ class InitPlaywrightTool:
             if confine_template and template_repo is not None and repo_root is not None:
                 from .path_confinement import confined
 
-                template = confined(template, repo_root)
+                template = confined(template, repo_root, cwd_relative=True)
 
             if not template.exists():
                 return {"status": "error", "message": f"Template not found: {template}"}
 
             files_created = []
 
+            from .path_confinement import confined_write_path
+
+            boundary = repo_root if repo_root is not None else repo
+
+            def _reject_escape(dst: Path) -> dict | None:
+                try:
+                    confined_write_path(dst, boundary)
+                except ValueError as exc:
+                    return {"status": "error", "message": str(exc)}
+                return None
+
             # Copy playwright.config.ts
             src_config = template / "playwright.config.ts"
             dst_config = repo / "playwright.config.ts"
             if src_config.exists():
+                blocked = _reject_escape(dst_config)
+                if blocked is not None:
+                    return blocked
                 shutil.copy2(src_config, dst_config)
                 files_created.append("playwright.config.ts")
 
@@ -86,30 +100,48 @@ class InitPlaywrightTool:
                                 "existing E2E test content."
                             ),
                         }
+                    blocked = _reject_escape(dst_e2e)
+                    if blocked is not None:
+                        return blocked
                     shutil.rmtree(dst_e2e)
+                blocked = _reject_escape(dst_e2e)
+                if blocked is not None:
+                    return blocked
                 shutil.copytree(src_e2e, dst_e2e)
                 files_created.append("tests/e2e/")
 
             # Copy e2e scripts
             src_scripts = template / "scripts"
             dst_scripts = repo / "scripts"
+            blocked = _reject_escape(dst_scripts)
+            if blocked is not None:
+                return blocked
             dst_scripts.mkdir(exist_ok=True)
             for script in ["e2e-record.sh", "e2e-record.ps1"]:
                 src = src_scripts / script
                 dst = dst_scripts / script
                 if src.exists():
+                    blocked = _reject_escape(dst)
+                    if blocked is not None:
+                        return blocked
                     shutil.copy2(src, dst)
                     files_created.append(f"scripts/{script}")
 
             # Generate sample .env if it doesn't exist
             env_file = repo / ".env.local"
             if not env_file.exists():
+                blocked = _reject_escape(env_file)
+                if blocked is not None:
+                    return blocked
                 env_file.write_text("BASE_URL=http://localhost:3000\n")
                 files_created.append(".env.local")
 
             # Ensure package.json has playwright dependency
             package_json = repo / "package.json"
             if package_json.exists():
+                blocked = _reject_escape(package_json)
+                if blocked is not None:
+                    return blocked
                 with open(package_json, encoding='utf-8-sig') as f:
                     data = json.load(f)
                 if "@playwright/test" not in data.get("devDependencies", {}):
@@ -167,7 +199,7 @@ class RecordE2eGifTool:
             from .path_confinement import confined
 
             try:
-                repo = confined(repo_path, repo_root)
+                repo = confined(repo_path, repo_root, cwd_relative=True)
             except ValueError as exc:
                 return {"status": "error", "message": str(exc)}
         else:
@@ -277,7 +309,7 @@ class ValidateE2eTestsTool:
             from .path_confinement import confined
 
             try:
-                repo = confined(repo_path, repo_root)
+                repo = confined(repo_path, repo_root, cwd_relative=True)
             except ValueError as exc:
                 return {
                     "status": "fail",

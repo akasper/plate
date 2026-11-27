@@ -19,21 +19,47 @@ def session_repo_root() -> Path:
     return cwd
 
 
-def confined(path: str | Path | None, root: Path | None = None) -> Path:
-    """Resolve ``path`` under ``root``; reject escapes (including symlinks)."""
-    base = (root or session_repo_root()).resolve()
+def confined(
+    path: str | Path | None,
+    root: Path | None = None,
+    *,
+    cwd_relative: bool = False,
+) -> Path:
+    """Resolve ``path`` inside repository ``root``; reject escapes (including symlinks).
+
+    When ``cwd_relative`` is true, relative segments and ``"."`` resolve from the server
+    working directory, while the allowed boundary remains ``root`` (the session git root).
+    """
+    boundary = (root or session_repo_root()).resolve()
+    resolve_base = Path.cwd().resolve() if cwd_relative else boundary
     if path is None or str(path).strip() in ("", "."):
-        candidate = base
+        candidate = resolve_base if cwd_relative else boundary
     else:
         raw = Path(path)
-        candidate = (base / raw).resolve() if not raw.is_absolute() else raw.resolve()
+        if raw.is_absolute():
+            candidate = raw.resolve()
+        else:
+            candidate = (resolve_base / raw).resolve()
     try:
-        candidate.relative_to(base)
+        candidate.relative_to(boundary)
     except ValueError as exc:
         raise PathConfinementError(
             "Path escapes the repository root"
         ) from exc
     return candidate
+
+
+def confined_write_path(path: Path, boundary: Path | None = None) -> Path:
+    """Ensure a write target resolves inside the boundary after following symlinks."""
+    base = (boundary or session_repo_root()).resolve()
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise PathConfinementError(
+            "Path escapes the repository root"
+        ) from exc
+    return resolved
 
 
 def confined_or_default(path: str | Path | None, root: Path | None = None) -> Path:
