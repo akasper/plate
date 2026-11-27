@@ -711,21 +711,22 @@ def plan_marker_merge(
         else:
             entry["action"] = "update_markers"
             would_write += 1
-            if apply:
-                try:
+        if apply:
+            try:
+                if changed:
                     backup_rel = _write_marker_merge_backup(root, rel, local)
                     entry["backup_path"] = backup_rel
                     local_path.write_text(merged, encoding="utf-8")
-                    save_persisted_marker_base(root, rel, merged)
-                    entry["applied"] = True
                     written += 1
-                except OSError as exc:
-                    entry["action"] = "write_error"
-                    entry["warnings"] = entry["warnings"] + [str(exc)]
-                    errors.append(f"{rel}: write failed: {exc}")
-            else:
-                # Dry-run preview: truncated unified-ish note
-                entry["preview_len"] = len(merged)
+                # Base is the upstream template snapshot, not merged output (#1477).
+                save_persisted_marker_base(root, rel, upstream)
+                entry["applied"] = True
+            except OSError as exc:
+                entry["action"] = "write_error"
+                entry["warnings"] = entry["warnings"] + [str(exc)]
+                errors.append(f"{rel}: write failed: {exc}")
+        elif changed:
+            entry["preview_len"] = len(merged)
         files.append(entry)
 
     mode = "apply" if apply else "dry_run"
