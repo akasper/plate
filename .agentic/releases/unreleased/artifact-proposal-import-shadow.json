@@ -1,0 +1,9 @@
+{
+  "slug": "artifact-proposal-import-shadow",
+  "change_type": "fix",
+  "surface": "gh plate artifact CLI; MCP plate_artifact_list / plate_artifact_decide",
+  "summary": "gh plate artifact --list/--decide and the MCP plate_artifact_list/plate_artifact_decide tools no longer crash with TypeError; the monitoring proposal functions no longer shadow the design/research artifact ones",
+  "migration_impact": "None. Upgrade plate-core to get working artifact list/decide commands.",
+  "agent_notes": "If an agent previously saw TypeError from plate_artifact_list or plate_artifact_decide, retry after upgrading; monitor tools are unchanged.",
+  "links": ["#1497"]
+}
