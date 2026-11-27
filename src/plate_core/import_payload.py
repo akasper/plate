@@ -3,7 +3,10 @@
 Plan and apply the canonical PLATE template payload into a target checkout
 (local filesystem). Strategies:
 
-- ``safe`` (default): create missing files only; skip existing paths.
+- ``safe`` (default): create missing paths only; skip other existing paths. Manifest
+  ``on_conflict: overwrite`` paths refresh only when the destination still matches
+  the hash recorded at the last ``import-payload --apply`` (never blindly overwrite
+  adopter edits).
 - ``conservative``: create missing only; report conflicts when content differs;
   never overwrite.
 - ``force``: write all payload files (overwrite existing).
@@ -172,6 +175,51 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+_PAYLOAD_HASH_LEDGER_REL = ".agentic/import-payload/content-hashes.json"
+
+
+def _load_payload_hash_ledger(repo_root: Path) -> dict[str, str]:
+    path = repo_root / _PAYLOAD_HASH_LEDGER_REL
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, val in data.items():
+        if isinstance(key, str) and isinstance(val, str):
+            out[key] = val
+    return out
+
+
+def _save_payload_hash_ledger(repo_root: Path, ledger: dict[str, str]) -> None:
+    path = repo_root / _PAYLOAD_HASH_LEDGER_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(sorted(ledger.items())), indent=2) + "\n", encoding="utf-8")
+
+
+def record_payload_content_hash(repo_root: Path, rel: str, content: bytes) -> None:
+    """Record sha256 of last payload-applied bytes for ``rel`` (#1477)."""
+    ledger = _load_payload_hash_ledger(repo_root)
+    ledger[rel] = hashlib.sha256(content).hexdigest()
+    _save_payload_hash_ledger(repo_root, ledger)
+
+
+def _record_marker_base_from_bytes(repo_root: Path, rel: str, data: bytes) -> None:
+    if b"PLATES-CORE" not in data:
+        return
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return
+    from .self_migrate import save_persisted_marker_base
+
+    save_persisted_marker_base(repo_root, rel, text)
+
+
 def _should_rewrite_docs_refs(rel: str) -> bool:
     """True when file should have docs/ refs rewritten during namespace (#1015)."""
     # AGENTS.md at root references docs/ paths extensively
@@ -210,16 +258,23 @@ def _decide_file(
     strategy: Strategy,
     classification: str,
     manifest: Any = None,
+    repo_root: Path | None = None,
 ) -> PayloadFileDecision:
     from .template_payload import load_template_payload_manifest
 
     mf = manifest if manifest is not None else load_template_payload_manifest()
     identical = False
+    dest_sha: str | None = None
     if dest.exists() and dest.is_file() and source.is_file():
         try:
-            identical = _file_sha256(dest) == _file_sha256(source)
+            dest_sha = _file_sha256(dest)
+            identical = dest_sha == _file_sha256(source)
         except OSError:
             identical = False
+
+    last_import_sha: str | None = None
+    if repo_root is not None:
+        last_import_sha = _load_payload_hash_ledger(repo_root).get(rel)
 
     plan = resolve_conflict_plan(
         rel,
@@ -227,6 +282,8 @@ def _decide_file(
         identical=identical,
         strategy=strategy,
         manifest=mf,
+        dest_sha256=dest_sha,
+        last_import_sha256=last_import_sha,
     )
     target = str(plan.get("target_path") or rel)
     return PayloadFileDecision(
@@ -620,6 +677,7 @@ def plan_import_payload(
             strategy=strat,  # type: ignore[arg-type]
             classification=classification,
             manifest=manifest,
+            repo_root=target,
         )
         # Override target_path for namespaced scripts/docs (path_rules install_as wins if set)
         if (ns and rel.startswith("scripts/")) or (nd and rel.startswith("docs/")):
@@ -657,6 +715,8 @@ def plan_import_payload(
                         namespaced_docs=nd,
                     )
                     write_dest.write_bytes(data)
+                    record_payload_content_hash(target, rel, data)
+                    _record_marker_base_from_bytes(target, rel, data)
                     report.created.append(label)
         elif decision.action == "overwrite":
             label = f"{rel} -> {write_rel}" if write_rel != rel else rel
@@ -671,6 +731,8 @@ def plan_import_payload(
                     namespaced_docs=nd,
                 )
                 write_dest.write_bytes(data)
+                record_payload_content_hash(target, rel, data)
+                _record_marker_base_from_bytes(target, rel, data)
                 report.overwritten.append(label)
         elif decision.action == "conflict":
             report.would_conflict.append(rel)

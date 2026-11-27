@@ -12,7 +12,9 @@ from plate_core.self_migrate import (
     plan_marker_merge,
     plan_self_migrate,
     plan_self_migrate_pr,
+    record_marker_merge_bases,
     resolve_upstream_version,
+    save_persisted_marker_base,
     verify_self_migrate,
 )
 from plate_core.cli import cmd_self_migrate
@@ -337,6 +339,7 @@ class PlanMarkerMergeTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "AGENTS.md").write_text(_LOCAL_AGENTS, encoding="utf-8")
+            record_marker_merge_bases(root, paths=["AGENTS.md"])
             report = plan_marker_merge(
                 root,
                 paths=["AGENTS.md"],
@@ -355,6 +358,7 @@ class PlanMarkerMergeTests(unittest.TestCase):
             root = Path(tmp2)
             agents = root / "AGENTS.md"
             agents.write_text(_LOCAL_AGENTS, encoding="utf-8")
+            record_marker_merge_bases(root, paths=["AGENTS.md"])
             plan_marker_merge(
                 root,
                 paths=["AGENTS.md"],
@@ -369,6 +373,7 @@ class PlanMarkerMergeTests(unittest.TestCase):
             root = Path(tmp)
             agents = root / "AGENTS.md"
             agents.write_text(_LOCAL_AGENTS, encoding="utf-8")
+            record_marker_merge_bases(root, paths=["AGENTS.md"])
             report = plan_marker_merge(
                 root,
                 paths=["AGENTS.md"],
@@ -429,6 +434,7 @@ new core block from upstream
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "AGENTS.md").write_text(_LOCAL_AGENTS, encoding="utf-8")
+            record_marker_merge_bases(root, paths=["AGENTS.md"])
             up = root / "upstream"
             up.mkdir()
             (up / "AGENTS.md").write_text(_UPSTREAM_AGENTS, encoding="utf-8")
