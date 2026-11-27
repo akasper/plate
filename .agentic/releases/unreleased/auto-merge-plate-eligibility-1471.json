@@ -1,0 +1,10 @@
+{
+  "slug": "auto-merge-plate-eligibility-1471",
+  "change_type": "fix",
+  "surface": ".github/workflows/auto-merge.yml",
+  "summary": "Auto-merge workflow reads `.plate` autonomy on the default branch, enforces documented eligibility (protected paths, need labels, risk tolerance, label sender), and removes the committed legacy AUTONOMOUS_MODE marker from plate and template payload.",
+  "migration_impact": "Repositories with only `.github/AUTONOMOUS_MODE` and no `.plate` `autonomy` section keep low-tolerance legacy behavior with a workflow warning. When `.plate` includes `autonomy`, configure `enabled: true` and the desired `risk_tolerance`, then delete `.github/AUTONOMOUS_MODE`. Re-import or sync `auto-merge.yml` from plate_core template payload.",
+  "agent_notes": "Do not recreate `.github/AUTONOMOUS_MODE` during transition unless the repo truly has no `.plate` autonomy section yet. auto-merge remains opt-in via label + branch protection.",
+  "links": ["#1471"],
+  "breaking": false
+}

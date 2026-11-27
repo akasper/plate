@@ -64,10 +64,6 @@
       "classification": "copy_to_downstream"
     },
     {
-      "path": ".github/AUTONOMOUS_MODE",
-      "classification": "copy_to_downstream"
-    },
-    {
       "path": ".github/CODEOWNERS",
       "classification": "copy_to_downstream"
     },

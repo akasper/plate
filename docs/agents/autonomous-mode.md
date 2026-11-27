@@ -9,7 +9,7 @@ Autonomous mode is the default operating posture for unattended sessions (overni
 **Configuration (single source of truth):** Use the `autonomy` section in `.plate` (added in #473, engine in #474):
 - `risk_tolerance`: "off" (fully manual), "low", "medium", or "high". Higher tolerance enables broader autonomous progress (e.g., auto-merge up to that risk level, apply-mode for procedures/audits, auto-stub generation in planning).
 - `enabled`, `token_budget` (daily/per_cycle/action: throttle|pause|warn), `schedules_enabled`, `pr_review_scope` (#496), etc.
-- Legacy `.github/AUTONOMOUS_MODE` (file presence) is supported for transition/compat but is sunset in favor of `.plate` (generalized in #476 PR; health/config surfaces emit migration guidance). Delete the marker file after configuring `.plate`.
+- Legacy `.github/AUTONOMOUS_MODE` (file presence) is supported only when `.plate` has no `autonomy` section: the workflow treats the marker as an opt-in at `risk_tolerance: low` and emits a migration warning. When `.plate` includes `autonomy`, that section is authoritative (`enabled: true` and `risk_tolerance` not `off` required); a committed marker does **not** override `autonomy.enabled: false` or `risk_tolerance: "off"`. Delete the marker after configuring `.plate`.
 
 **Agent routing for autonomy loops (#480):** When PLATE signals are present, the **plate** persona prefers AutonomyEngine thin surfaces for long-running work:
 1. `plate_what_next` for the next *process* step (still first for ordinary "what should I do?").
@@ -43,7 +43,7 @@ gh pr create --base <base> --label "risk:low" --label "auto-merge" [other requir
 gh pr merge --auto --squash <PR_NUMBER>
 ```
 
-The `.github/workflows/auto-merge.yml` workflow triggers on `auto-merge` label and checks `.plate` autonomy.risk_tolerance (with legacy AUTONOMOUS_MODE fallback) — providing the gate (generalized in #487).
+The `.github/workflows/auto-merge.yml` workflow triggers on the `auto-merge` label, reads `.plate` from the default branch, and enforces the eligibility criteria above (protected paths, `need:human-review` / `need:security-review`, effective `risk:*` versus configured tolerance, and collaborator/bot sender checks). Legacy marker-only repos without a `.plate` `autonomy` section still honor the marker at low tolerance until they migrate (#1471).
 
 **GitHub settings required** (one-time per repository):
 

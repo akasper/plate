@@ -4,25 +4,29 @@ Part of the PLATE agent operating rules (formerly in `AGENTS.md`). The always-lo
 
 ## Autonomous Mode
 
-Autonomous mode is an opt-in operating posture for unattended sessions (overnight runs, long-running autopilot, `/delegate` tasks) where no human reviewer is available interactively. It selectively lifts the self-merge prohibition for lightweight, low-risk PRs.
+Autonomous mode is the default operating posture for unattended sessions (overnight runs, long-running autopilot via `/loop` or scheduler, `/delegate` tasks) where no human reviewer is available interactively. It is driven by `.plate` config rather than a marker file.
 
-**Toggle:** Create `.github/AUTONOMOUS_MODE` on the default branch to enable. Delete it to return to normal human-in-the-loop operation. The file content is ignored; its presence is the signal.
+**Configuration (single source of truth):** Use the `autonomy` section in `.plate`:
 
-**When autonomous mode is active:**
+- `risk_tolerance`: `"off"` (fully manual), `"low"`, `"medium"`, or `"high"`. Higher tolerance enables broader autonomous progress (e.g., auto-merge up to that risk level). `risk:critical` is never auto-merge eligible.
+- `enabled`, `token_budget`, `schedules_enabled`, `pr_review_scope`, etc.
+- Legacy `.github/AUTONOMOUS_MODE` is supported only when `.plate` has **no** `autonomy` section (marker implies low tolerance with a migration warning). When `autonomy` is present, it is authoritative; delete the marker after configuring `.plate`.
+
+**When autonomous mode is active (`enabled: true` and `risk_tolerance` not `off`):**
 
 | Rule | Normal Mode | Autonomous Mode |
 |---|---|---|
-| Agent may merge own PRs | Never | Permitted for eligible `risk:low` PRs only |
+| Agent may merge own PRs | Never | Permitted for eligible PRs per tolerance |
 | Must wait for human merge | Always | May call `gh pr merge --auto --squash` on eligible PRs |
 | May add `auto-merge` label | No | Yes, for eligible PRs |
 
 **Eligibility criteria — all must be true for a PR to qualify:**
 
-- Labeled `risk:low` (see §Risk Assessment and Labeling above)
-- Does not modify `AGENTS.md`, `SPEC.md`, `.github/CODEOWNERS`, or any workflow file
-- Does not add, remove, or alter credential handling, payment logic, authentication, or security controls
+- Effective risk (exactly one `risk:*` label) is allowed by configured tolerance (e.g., `risk:low` only when tolerance is `low`)
+- Does not modify `AGENTS.md`, `SPEC.md`, `.github/CODEOWNERS`, `.plate`, or any workflow file
 - Does not carry `need:human-review` or `need:security-review`
-- Does not change public-facing claims in `README.md` or marketing documentation
+- Does not change public-facing claims in `README.md`
+- The `auto-merge` label was applied by a trusted bot or a collaborator with write access
 
 **How to auto-merge an eligible PR in autonomous mode:**
 
@@ -32,9 +36,9 @@ gh pr create --base <base> --label "risk:low" --label "auto-merge" [other requir
 gh pr merge --auto --squash <PR_NUMBER>
 ```
 
-For `Feedback Response` PRs, the `.github/workflows/auto-label-feedback-responses.yml` workflow applies both `risk:low` and `auto-merge` labels automatically, so the above workflow call is sufficient.
+For `Feedback Response` PRs, `.github/workflows/auto-label-feedback-responses.yml` may apply `risk:low` and `auto-merge` when policy allows.
 
-The `.github/workflows/auto-merge.yml` workflow also triggers on the `auto-merge` label and verifies the marker file before proceeding — providing a second gate.
+The `.github/workflows/auto-merge.yml` workflow triggers on the `auto-merge` label and enforces these gates before calling `gh pr merge --auto --squash`.
 
 **GitHub settings required** (one-time per repository):
 
@@ -42,10 +46,10 @@ The `.github/workflows/auto-merge.yml` workflow also triggers on the `auto-merge
 # Allow the repo to use auto-merge
 gh api -X PATCH repos/OWNER/REPO -f allow_auto_merge=true
 
-# Allow Actions to write PRs and contents (needed by the workflow)
+# Allow Actions to write PRs (contents read is sufficient for the eligibility check)
 gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
   -f default_workflow_permissions=write \
   -F can_approve_pull_request_reviews=false
 ```
 
-**Security posture:** Autonomous mode intentionally cannot self-escalate. An agent operating in autonomous mode may not create, modify, or delete `.github/AUTONOMOUS_MODE` itself, and may not relax branch protection rules or modify the eligibility criteria in this file.
+**Security posture:** Autonomous mode intentionally cannot self-escalate. Agents may not relax branch protection rules or modify the eligibility criteria. Use `risk_tolerance: "off"` or `enabled: false` for full manual control.
