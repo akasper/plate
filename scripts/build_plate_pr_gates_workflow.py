@@ -8,6 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Pinned action SHAs (aligned with #1478 / #1522 CI baseline).
+ACTION_CHECKOUT = "actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4"
+ACTION_GITHUB_SCRIPT = "actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8"
+
 import sys
 
 sys.path.insert(0, str(ROOT / "src"))
@@ -95,9 +99,11 @@ jobs:
       (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: @@LINUX_RUNS_ON@@
     steps:
-      - uses: actions/checkout@v4
+      - uses: @@ACTION_CHECKOUT@@
         with:
           fetch-depth: 0
+
+@@COLLECT_CHANGED_PATHS@@
 
       - name: Gate — PR title
         if: |
@@ -105,7 +111,7 @@ jobs:
           github.event_name == 'pull_request_review_comment' ||
           (github.event_name == 'pull_request' &&
           contains(fromJSON('["opened","edited","synchronize","reopened","labeled","unlabeled","milestoned","demilestoned","ready_for_review"]'), github.event.action))
-        uses: actions/github-script@v8
+        uses: @@ACTION_GITHUB_SCRIPT@@
         with:
 @@TITLE_SCRIPT@@
 
@@ -114,7 +120,7 @@ jobs:
           github.event_name == 'pull_request' ||
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment'
-        uses: actions/github-script@v8
+        uses: @@ACTION_GITHUB_SCRIPT@@
         with:
 @@ISSUE_LINK_SCRIPT@@
 
@@ -122,25 +128,19 @@ jobs:
 
 @@REVIEWER_MODEL_RUN@@
 
+@@UNITTEST_POLICY_RUN@@
+
       - name: Gate — Feature release fragment (labels)
         if: |
           github.event_name == 'pull_request' ||
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment'
         id: feature_labels
-        uses: actions/github-script@v8
+        uses: @@ACTION_GITHUB_SCRIPT@@
         with:
 @@FEATURE_LABELS_SCRIPT@@
 
-      - name: Gate — Feature release fragment
-        if: |
-          (github.event_name == 'pull_request' ||
-           github.event_name == 'pull_request_review' ||
-           github.event_name == 'pull_request_review_comment') &&
-          steps.feature_labels.outputs.is_feature == 'true'
-        uses: actions/github-script@v8
-        with:
-@@FEATURE_FRAGMENT_SCRIPT@@
+@@FEATURE_FRAGMENT_RUN@@
 
       - name: Gate — Feature release fragment (skip notice)
         if: |
@@ -155,7 +155,7 @@ jobs:
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment' ||
           (github.event_name == 'pull_request' && contains(fromJSON('["opened","reopened","synchronize","ready_for_review","labeled","unlabeled","milestoned","demilestoned","edited"]'), github.event.action))
-        uses: actions/github-script@v8
+        uses: @@ACTION_GITHUB_SCRIPT@@
         env:
           PLATE_PR_FEEDBACK_AGENTS: ${{ vars.PLATE_PR_FEEDBACK_AGENTS }}
         with:
@@ -175,7 +175,7 @@ jobs:
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment'
         id: release_gate_detect
-        uses: actions/github-script@v8
+        uses: @@ACTION_GITHUB_SCRIPT@@
         with:
 @@RELEASE_DETECT_SCRIPT@@
 
@@ -369,6 +369,111 @@ REVIEWER_MODEL_PLATE = """
           printf '%s' "${body}" | python3 -m plate_core.pr_reviewer_model_gate --stdin
 """
 
+COLLECT_CHANGED_PATHS = """
+      - name: Collect changed paths for release fragment
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr_number="${{ github.event.pull_request.number }}"
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files" --paginate \\
+            --jq '.[] | select(.status != "removed") | .filename' > /tmp/pr-changed-paths.txt
+"""
+
+UNITTEST_POLICY_PLATE = """
+      - name: Gate — unittest test policy
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        run: |
+          # pr-gates failure marker: stdlib unittest policy
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          python3 -m plate_core.pr_unittest_policy_gate --paths-file /tmp/pr-changed-paths.txt
+"""
+
+UNITTEST_POLICY_TEMPLATE = """
+      - name: Gate — unittest test policy
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        run: |
+          # pr-gates failure marker: stdlib unittest policy
+          set -euo pipefail
+          run_unittest_policy_gate() {
+            python3 -m plate_core.pr_unittest_policy_gate --paths-file /tmp/pr-changed-paths.txt
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            run_unittest_policy_gate
+          elif python3 -c "import plate_core.pr_unittest_policy_gate" 2>/dev/null; then
+            run_unittest_policy_gate
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
+            if python3 -c "import plate_core.pr_unittest_policy_gate" 2>/dev/null; then
+              run_unittest_policy_gate
+            else
+              echo "::warning title=Unittest policy (warn-only)::plate-core runtime unavailable; skipping unittest policy gate until plate-core is installed."
+            fi
+          fi
+"""
+
+FEATURE_FRAGMENT_PLATE = """
+      - name: Gate — Feature release fragment
+        if: |
+          (github.event_name == 'pull_request' ||
+           github.event_name == 'pull_request_review' ||
+           github.event_name == 'pull_request_review_comment') &&
+          steps.feature_labels.outputs.is_feature == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: per-feature change files
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          pr_number="${{ github.event.pull_request.number }}"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          python3 -m plate_core.pr_release_fragment_gate --labels "${labels}" --paths-file /tmp/pr-changed-paths.txt
+"""
+
+FEATURE_FRAGMENT_TEMPLATE = """
+      - name: Gate — Feature release fragment
+        if: |
+          (github.event_name == 'pull_request' ||
+           github.event_name == 'pull_request_review' ||
+           github.event_name == 'pull_request_review_comment') &&
+          steps.feature_labels.outputs.is_feature == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: per-feature change files
+          set -euo pipefail
+          pr_number="${{ github.event.pull_request.number }}"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          run_release_fragment_gate() {
+            python3 -m plate_core.pr_release_fragment_gate --labels "${labels}" --paths-file /tmp/pr-changed-paths.txt
+          }
+          if [ -d "${GITHUB_WORKSPACE}/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+            run_release_fragment_gate
+          elif python3 -c "import plate_core.pr_release_fragment_gate" 2>/dev/null; then
+            run_release_fragment_gate
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==@@PLATE_CORE_VERSION@@" || true
+            if python3 -c "import plate_core.pr_release_fragment_gate" 2>/dev/null; then
+              run_release_fragment_gate
+            else
+              echo "::warning title=Release fragment (warn-only)::plate-core runtime unavailable; skipping release fragment gate until plate-core is installed."
+            fi
+          fi
+"""
+
 REVIEWER_MODEL_TEMPLATE = """
       - name: Gate — reviewer model
         if: |
@@ -417,7 +522,7 @@ MARK_IMPLEMENTED_PLATE = """
       issues: write
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: @@ACTION_CHECKOUT@@
         with:
           fetch-depth: 1
 
@@ -447,7 +552,7 @@ MARK_IMPLEMENTED_TEMPLATE = """
       issues: write
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: @@ACTION_CHECKOUT@@
         with:
           fetch-depth: 1
 
@@ -486,12 +591,6 @@ def build(variant: str) -> str:
     feature_labels_script = _yaml_script(
         _extract_script_block(gates_src, "Gate — Feature release fragment (labels)")
     )
-    feature_fragment_script = _yaml_script(
-        _extract_script_block(
-            gates_src,
-            "Gate — Feature release fragment\n        if: |\n          (github.event_name == 'pull_request' ||\n           github.event_name == 'pull_request_review' ||\n           github.event_name == 'pull_request_review_comment') &&\n          steps.feature_labels.outputs.is_feature == 'true'",
-        )
-    )
     release_detect_script = _yaml_script(
         _extract_script_block(gates_src, "Gate — validate release PR (detect)")
     )
@@ -511,13 +610,27 @@ def build(variant: str) -> str:
         if variant == "plate"
         else REVIEWER_MODEL_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
     )
+    unittest_run = (
+        UNITTEST_POLICY_PLATE
+        if variant == "plate"
+        else UNITTEST_POLICY_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
+    )
+    fragment_run = (
+        FEATURE_FRAGMENT_PLATE
+        if variant == "plate"
+        else FEATURE_FRAGMENT_TEMPLATE.replace("@@PLATE_CORE_VERSION@@", _plate_core_pip_version())
+    )
     body = HEADER.replace("@@LINUX_RUNS_ON@@", LINUX_RUNS_ON_VAR_EXPRESSION)
+    body = body.replace("@@ACTION_CHECKOUT@@", ACTION_CHECKOUT)
+    body = body.replace("@@ACTION_GITHUB_SCRIPT@@", ACTION_GITHUB_SCRIPT)
+    body = body.replace("@@COLLECT_CHANGED_PATHS@@", COLLECT_CHANGED_PATHS.lstrip("\n").rstrip())
     body = body.replace("@@TITLE_SCRIPT@@", title_script)
     body = body.replace("@@ISSUE_LINK_SCRIPT@@", issue_link_script)
     body = body.replace("@@MAIN_SOURCE_RUN@@", main_source_run.lstrip("\n").rstrip())
     body = body.replace("@@REVIEWER_MODEL_RUN@@", reviewer_run.lstrip("\n").rstrip())
+    body = body.replace("@@UNITTEST_POLICY_RUN@@", unittest_run.lstrip("\n").rstrip())
     body = body.replace("@@FEATURE_LABELS_SCRIPT@@", feature_labels_script)
-    body = body.replace("@@FEATURE_FRAGMENT_SCRIPT@@", feature_fragment_script)
+    body = body.replace("@@FEATURE_FRAGMENT_RUN@@", fragment_run.lstrip("\n").rstrip())
     body = body.replace("@@RELEASE_DETECT_SCRIPT@@", release_detect_script)
     body = body.replace("@@FEEDBACK_SCRIPT@@", feedback_script)
     body = body.replace(
@@ -529,7 +642,9 @@ def build(variant: str) -> str:
         body += MARK_IMPLEMENTED_TEMPLATE.replace(
             "@@PLATE_CORE_VERSION@@", _plate_core_pip_version()
         )
-    return body.replace("@@LINUX_RUNS_ON@@", LINUX_RUNS_ON_VAR_EXPRESSION)
+    return body.replace("@@LINUX_RUNS_ON@@", LINUX_RUNS_ON_VAR_EXPRESSION).replace(
+        "@@ACTION_CHECKOUT@@", ACTION_CHECKOUT
+    )
 
 
 def main() -> None:

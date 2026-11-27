@@ -133,6 +133,33 @@ def check_feature_area_label(labels: list[str]) -> GateFailure | None:
     )
 
 
+_NON_EXEMPT_MARKDOWN_PREFIXES: tuple[str, ...] = (
+    ".github/",
+    ".agentic/",
+    "src/plate_core/template_payload/",
+)
+
+
+def is_pure_docs_chore_path(path: str) -> bool:
+    """True when a changed path is documentation-only per unreleased fragment README."""
+    norm = (path or "").strip().replace("\\", "/")
+    if not norm:
+        return False
+    if norm.startswith("docs/") and norm.endswith(".md"):
+        return True
+    if norm.endswith(".md") and not any(norm.startswith(prefix) for prefix in _NON_EXEMPT_MARKDOWN_PREFIXES):
+        return True
+    return False
+
+
+def is_pure_docs_chore_exempt(changed_paths: list[str]) -> bool:
+    """All non-empty changed paths are pure documentation chores (fragment not required)."""
+    active = [(p or "").strip() for p in changed_paths if (p or "").strip()]
+    if not active:
+        return False
+    return all(is_pure_docs_chore_path(path) for path in active)
+
+
 def has_feature_release_fragment(changed_paths: list[str]) -> bool:
     for raw in changed_paths:
         path = (raw or "").strip()
@@ -152,6 +179,8 @@ def check_feature_release_fragment(labels: list[str], changed_paths: list[str]) 
     if len(matches) != 1 or matches[0] not in FRAGMENT_REQUIRED_PR_TYPES:
         return None
     if has_feature_release_fragment(changed_paths):
+        return None
+    if is_pure_docs_chore_exempt(changed_paths):
         return None
     return GateFailure(
         "release_fragment",

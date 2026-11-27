@@ -72,6 +72,10 @@ PR_GATE_STEP_CONTRACTS: tuple[dict[str, str], ...] = (
         "failure_marker": "Reviewer model must differ from author model",
     },
     {
+        "step_name": "Gate — unittest test policy",
+        "failure_marker": "stdlib unittest policy",
+    },
+    {
         "step_name": "Gate — Feature release fragment",
         "failure_marker": "per-feature change files",
     },
@@ -148,7 +152,7 @@ _FEATURE_FRAGMENT_GATE_IF = re.compile(
     r"(?m)^      - name: Gate — Feature release fragment\n"
     r"        if: \|\n"
     r"((?:          .+\n)+?)"
-    r"        uses: actions/github-script@v8\n"
+    r"        (?:uses: actions/github-script@|env:\n|run: \|\n)"
 )
 
 
@@ -329,7 +333,7 @@ def validate_sidebar_link_replay_contract(text: str) -> list[str]:
 
 
 def validate_feature_fragment_ignores_removed_files(text: str) -> list[str]:
-    """Feature fragment gate must ignore pulls.listFiles entries with status removed (#1231)."""
+    """Feature fragment gate must ignore removed paths when building the paths file (#1231)."""
     errors: list[str] = []
     frag_idx = text.find("Gate — Feature release fragment\n        if:")
     if frag_idx < 0:
@@ -337,10 +341,27 @@ def validate_feature_fragment_ignores_removed_files(text: str) -> list[str]:
     if frag_idx < 0:
         errors.append("missing Feature release fragment gate for removed-file contract")
         return errors
-    block = text[frag_idx : frag_idx + 2500]
-    if 'status !== "removed"' not in block and "status !== 'removed'" not in block:
+    block = text[frag_idx : frag_idx + 3500]
+    if "pr_release_fragment_gate" not in block:
         errors.append(
-            'Feature fragment gate must filter listFiles with status !== "removed"'
+            "Feature fragment gate must delegate to plate_core.pr_release_fragment_gate"
+        )
+    paths_idx = text.find("pr-changed-paths.txt")
+    if paths_idx < 0:
+        errors.append("missing pr-changed-paths.txt wiring for fragment gate paths file")
+    collect_idx = text.find("Collect changed paths for release fragment")
+    if collect_idx < 0:
+        errors.append("missing Collect changed paths for release fragment step")
+    collect_block = text[collect_idx : collect_idx + 2000]
+    removed_filter = (
+        'status == "removed"' in collect_block
+        or "status == 'removed'" in collect_block
+        or 'status != "removed"' in collect_block
+        or "status != 'removed'" in collect_block
+    )
+    if not removed_filter:
+        errors.append(
+            'changed-path collection must filter out removed files (status ==/!= "removed")'
         )
     return errors
 
