@@ -3,5 +3,10 @@
   "title": "Locked budget spend and honest autonomy/PM delegation reporting",
   "change_type": "fix",
   "summary": "Budget spend uses locked atomic persistence with corrupt-state fail-closed; dry_run cycles do not persist charges; autonomy and PM stop fabricating executed work or synthetic USAGE REPORTs when delegation fails; state_store gains flock-based lock deadlines and mutate_json.",
-  "verification": "tests/test_budget_state_persistence_1476.py (incl. fleet/scheduled_ops concurrency) and tests/test_state_store.py"
+  "migration_impact": "Shared JSON state (PM queue, fleet handoffs, scheduled ops, budget spend) now uses advisory flock with a wait deadline. Operators upgrading from older plate-core builds must upgrade every writer together.",
+  "migration_guidance": [
+    "Upgrade the gh-plate extension, plate-mcp, and any other plate-core consumers in the same checkout together (#1476). Older writers that poll a live PID in a `.lock` file can hang when a newer flock-based writer has released the lock but left the PID behind; older writers without flock can race PM queue updates against new locked writers.",
+    "Corrupt durable budget spend fail-closed: see docs/wiki/Troubleshooting.md (repair or delete .agentic/budget/spend.json; restart plate-mcp or use clear_save_refusal only as documented there; gh plate autonomy --budget-reset does not fix corrupt files)."
+  ],
+  "verification": "tests/test_budget_state_persistence_1476.py (incl. fleet/scheduled_ops concurrency) and tests/test_state_store.py; operator recovery in docs/wiki/Troubleshooting.md"
 }
