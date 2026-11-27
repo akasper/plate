@@ -29,7 +29,7 @@ Preferred feedback handling is local **`gh plate pr babysit`** / MCP (`plate_pr_
 <!-- PLATES-CORE:END pr-handoff-comment-attribution-1236 -->
 
 <!-- PLATES-CORE:BEGIN import-payload-conservative-taxonomy-1250 -->
-**Conservative import-payload (#1250).** With `--strategy conservative`, differing existing payload paths are **conflicts** and are never written — including `.github/labels.yml`, `.github/ISSUE_TEMPLATE/*`, and `.github/PULL_REQUEST_TEMPLATE.md`. Identical files remain unchanged. Manifest `on_conflict: overwrite` applies only to `--strategy safe` (refresh taxonomy/templates on adopt) and `--strategy force`; do not expect conservative mode to refresh those files.
+**Import-payload strategies (#1250 / #1477).** With `--strategy conservative`, differing existing payload paths are **conflicts** and are never written — including `.github/labels.yml`, `.github/ISSUE_TEMPLATE/*`, and `.github/PULL_REQUEST_TEMPLATE.md`. Identical files remain unchanged. Manifest `on_conflict: overwrite` under `--strategy safe` refreshes those paths only when the destination still matches the hash recorded at the last `import-payload --apply` (`.agentic/import-payload/content-hashes.json`); adopter edits are skipped, not overwritten. Use `--strategy force` for a deliberate full overwrite. Marker merge (`--apply-markers`) needs a persisted 3-way base under `.agentic/marker-merge/bases/` — see [upstream-template-sync.md](upstream-template-sync.md).
 <!-- PLATES-CORE:END import-payload-conservative-taxonomy-1250 -->
 
 <!-- PLATES-CORE:BEGIN pre-push-hook-template-1281 -->

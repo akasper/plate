@@ -16,7 +16,7 @@ Do not overwrite customized files wholesale during upgrades.
 Use **sectional synchronization** for core behavior updates:
 
 1. Plan upgrades with `gh plate self-migrate --plan` (use `--verify` after apply).
-2. Import scaffold files with `gh plate import-payload` (dry-run first; pick a safe strategy).
+2. Import scaffold files with `gh plate import-payload` (dry-run first; pick a safe strategy). Safe creates missing paths; manifest `on_conflict: overwrite` paths refresh only when content still matches the last apply hash ledger (`.agentic/import-payload/content-hashes.json`) — not when adopters edited since import (#1477).
 3. For marker-owned files, merge only upstream `PLATES-CORE` blocks (via `gh plate self-migrate` marker merge or manual sectional import). Marker merge requires a persisted 3-way base under `.agentic/marker-merge/bases/` (seeded by `import-payload --apply` or `record_marker_merge_bases()`); `--apply-markers` refuses without one and writes a backup before overwrite (#1477).
 4. Open an atomic PR labeled `Feature` (or `Documentation` for doc-only syncs) and include `Closes #N` when tied to an issue.
 5. Update per-feature change files in `.agentic/releases/` with imported behavior and evidence links.
