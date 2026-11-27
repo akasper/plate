@@ -36,6 +36,19 @@ PLATE tooling reads GitHub + local `.plate` / `.agentic/` state and drives proce
 
 See `AGENTS.md`, `SPEC.md`, and `docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.md` for operating rules and first-slice surface status. Release **#654** tracks v1.0.0 readiness (do not claim 1.0 without checklist E2E).
 
+## User documentation
+
+Human-oriented guides (1.0 milestone [#1065](https://github.com/akasper/plate/issues/1065)):
+
+| Guide | Description |
+| --- | --- |
+| [docs/concepts.md](docs/concepts.md) | How issues, labels, release tracks, fragments, PRs, Tasks, and `.plate` fit together |
+| [docs/bootstrap/starting-a-new-repository.md](docs/bootstrap/starting-a-new-repository.md) | Bootstrap and greenfield adoption |
+| [docs/migration/adoption-guide.md](docs/migration/adoption-guide.md) | Adopt PLATE on an existing repository |
+| [docs/wiki/Troubleshooting.md](docs/wiki/Troubleshooting.md) | Common failures and fixes |
+
+Quickstart, CLI/MCP reference, and upgrade guide are tracked as sibling issues under #1065.
+
 ## Quick Start
 
 **New repository?** See **[docs/bootstrap/starting-a-new-repository.md](docs/bootstrap/starting-a-new-repository.md)** (empty `gh repo create`, then `gh plate bootstrap --greenfield`). Existing codebase: `docs/migration/adoption-guide.md`.
