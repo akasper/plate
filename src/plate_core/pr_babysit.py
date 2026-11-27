@@ -1000,6 +1000,26 @@ def _perform_local_rebase(
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        head_branch_fetch = run_hidden(
+            [
+                "git",
+                "-C",
+                repo_dir,
+                "fetch",
+                "origin",
+                f"+refs/heads/{head_ref}:refs/remotes/origin/{head_ref}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if head_branch_fetch.returncode != 0:
+            return {
+                "success": False,
+                "conflict": False,
+                "error": "cannot fetch live PR head from origin; refuse rebase",
+                "output": (head_branch_fetch.stdout or "") + (head_branch_fetch.stderr or ""),
+            }
         check_call_hidden(
             ["git", "-C", repo_dir, "fetch", "origin", head_ref_oid],
             stdout=subprocess.DEVNULL,
@@ -1052,6 +1072,27 @@ def _perform_local_rebase(
                 "conflict": False,
                 "error": "stale origin tracking ref for PR head; refuse rebase",
                 "output": None,
+            }
+
+        merge_base = run_hidden(
+            [
+                "git",
+                "-C",
+                repo_dir,
+                "merge-base",
+                f"refs/remotes/origin/{base_ref}",
+                head_ref_oid,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if merge_base.returncode != 0 or not (merge_base.stdout or "").strip():
+            return {
+                "success": False,
+                "conflict": False,
+                "error": "PR head and base ref share no common history; refuse rebase",
+                "output": (merge_base.stdout or "") + (merge_base.stderr or ""),
             }
 
         worktree_path = tempfile.mkdtemp(prefix="plate-babysit-rebase-")

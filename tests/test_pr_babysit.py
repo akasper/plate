@@ -1,3 +1,4 @@
+import os
 import subprocess
 import tempfile
 import unittest
@@ -716,6 +717,8 @@ class PrBabysitTests(unittest.TestCase):
 
         def _run_side(args, **_kwargs):
             argv = list(args)
+            if "merge-base" in argv and "--is-ancestor" not in argv:
+                return type("R", (), {"returncode": 0, "stdout": "f" * 40 + "\n", "stderr": ""})()
             if "rev-parse" in argv and any("origin/" in a for a in argv):
                 return type("R", (), {"returncode": 0, "stdout": head_oid + "\n", "stderr": ""})()
             if "rev-parse" in argv:
@@ -775,6 +778,8 @@ class PrBabysitTests(unittest.TestCase):
 
         def _run_side(args, **_kwargs):
             argv = list(args)
+            if "merge-base" in argv and "--is-ancestor" not in argv:
+                return type("R", (), {"returncode": 0, "stdout": "f" * 40 + "\n", "stderr": ""})()
             if "rev-parse" in argv:
                 return type("R", (), {"returncode": 0, "stdout": head_oid + "\n", "stderr": ""})()
             return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
@@ -818,10 +823,13 @@ class PrBabysitTests(unittest.TestCase):
 
         def _run_side(args, **_kwargs):
             argv = list(args)
+            if "rebase" in argv and "--abort" not in argv:
+                return type("R", (), {"returncode": 1, "stdout": "conflict!", "stderr": ""})()
+            if "merge-base" in argv and "--is-ancestor" not in argv:
+                return type("R", (), {"returncode": 0, "stdout": "f" * 40 + "\n", "stderr": ""})()
             if "rev-parse" in argv:
                 return type("R", (), {"returncode": 0, "stdout": head_oid + "\n", "stderr": ""})()
-            # rebase fails (conflict)
-            return type("R", (), {"returncode": 1, "stdout": "conflict!", "stderr": ""})()
+            return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
         mock_run.side_effect = _run_side
 
@@ -1265,6 +1273,69 @@ class PrBabysitTests(unittest.TestCase):
         self.assertIn("one-pass Full PR Green", persona)
 
 
+def _git_identity(repo: str) -> None:
+    subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=repo, check=True)
+
+
+def _build_behind_rebase_repos(tmp: str) -> tuple[str, str, str]:
+    """Bare origin with main ahead of feat; worker is single-branch clone (no origin/feat yet)."""
+    bare = os.path.join(tmp, "origin.git")
+    seed = os.path.join(tmp, "seed")
+    work = os.path.join(tmp, "work")
+    subprocess.run(["git", "init", "--bare", bare], check=True, capture_output=True)
+    subprocess.run(["git", "clone", bare, seed], check=True, capture_output=True)
+    _git_identity(seed)
+    subprocess.run(["git", "commit", "--allow-empty", "-m", "c1"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "branch", "-M", "main"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "checkout", "-b", "feat"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "--allow-empty", "-m", "feat1"], cwd=seed, check=True, capture_output=True)
+    head_oid = (
+        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=seed, text=True).strip()
+    )
+    subprocess.run(["git", "push", "-u", "origin", "feat"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "checkout", "main"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "--allow-empty", "-m", "c2"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "push", "origin", "main"], cwd=seed, check=True, capture_output=True)
+    bare_url = f"file://{bare}"
+    subprocess.run(
+        ["git", "clone", "-b", "main", "--single-branch", bare_url, work],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "remote", "set-url", "origin", bare_url], cwd=work, check=True)
+    _git_identity(work)
+    return work, head_oid, bare_url
+
+
+def _build_unrelated_head_on_origin(tmp: str) -> tuple[str, str, str]:
+    """Main history and orphan branch with no merge-base; worker tracks main only."""
+    bare = os.path.join(tmp, "origin.git")
+    seed = os.path.join(tmp, "seed")
+    work = os.path.join(tmp, "work")
+    subprocess.run(["git", "init", "--bare", bare], check=True, capture_output=True)
+    subprocess.run(["git", "clone", bare, seed], check=True, capture_output=True)
+    _git_identity(seed)
+    subprocess.run(["git", "commit", "--allow-empty", "-m", "main1"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "branch", "-M", "main"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "checkout", "--orphan", "orphan"], cwd=seed, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "--allow-empty", "-m", "orphan1"], cwd=seed, check=True, capture_output=True)
+    orphan_oid = (
+        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=seed, text=True).strip()
+    )
+    subprocess.run(["git", "push", "-u", "origin", "orphan"], cwd=seed, check=True, capture_output=True)
+    bare_url = f"file://{bare}"
+    subprocess.run(
+        ["git", "clone", "-b", "main", "--single-branch", bare_url, work],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "remote", "set-url", "origin", bare_url], cwd=work, check=True)
+    return work, orphan_oid, bare_url
+
+
 class BabysitActHarden1474Tests(unittest.TestCase):
     """Regression tests for #1474: fork refusal, origin match, pinned lease, stale locks only."""
 
@@ -1414,8 +1485,12 @@ class BabysitActHarden1474Tests(unittest.TestCase):
 
                         def _run_side(args, **_kwargs):
                             argv = list(args)
+                            if "fetch" in argv and "refs/heads/feat:" in " ".join(argv):
+                                return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
                             if "rev-parse" in argv and "refs/remotes/origin/feat" in " ".join(argv):
                                 return type("R", (), {"returncode": 0, "stdout": stale + "\n", "stderr": ""})()
+                            if "merge-base" in argv:
+                                return type("R", (), {"returncode": 0, "stdout": "c" * 40 + "\n", "stderr": ""})()
                             if "rev-parse" in argv:
                                 return type("R", (), {"returncode": 0, "stdout": live + "\n", "stderr": ""})()
                             return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
@@ -1440,8 +1515,12 @@ class BabysitActHarden1474Tests(unittest.TestCase):
 
                         def _run_side(args, **_kwargs):
                             argv = list(args)
-                            if "rev-parse" in argv and "refs/remotes/origin/feat" in " ".join(argv):
-                                return type("R", (), {"returncode": 1, "stdout": "", "stderr": "unknown"})()
+                            if "fetch" in argv and "refs/heads/feat:" in " ".join(argv):
+                                return type(
+                                    "R",
+                                    (),
+                                    {"returncode": 1, "stdout": "", "stderr": "could not find feat"},
+                                )()
                             if "rev-parse" in argv:
                                 return type("R", (), {"returncode": 0, "stdout": live + "\n", "stderr": ""})()
                             return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
@@ -1455,42 +1534,55 @@ class BabysitActHarden1474Tests(unittest.TestCase):
                             pr_number=99,
                         )
         self.assertFalse(res["success"])
-        self.assertIn("cannot resolve origin tracking ref", res.get("error") or "")
+        self.assertIn("cannot fetch live PR head", res.get("error") or "")
+
+    def test_perform_local_rebase_succeeds_without_preexisting_tracking_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, head_oid, _bare = _build_behind_rebase_repos(tmp)
+            missing = subprocess.run(
+                ["git", "-C", work, "rev-parse", "refs/remotes/origin/feat"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(missing.returncode, 0)
+            res = _perform_local_rebase("main", "feat", work, head_ref_oid=head_oid)
+            self.assertTrue(res["success"], res.get("error") or res.get("output"))
 
     def test_perform_local_rebase_succeeds_when_behind_base(self):
-        """BEHIND merge state: rebase must proceed (no is-ancestor gate on base vs head)."""
-        live = "a" * 40
-        with patch("plate_core.pr_babysit.check_output_hidden", return_value="/tmp/repo"):
-            with patch("plate_core.pr_babysit.cleanup_git_locks"):
-                with patch("plate_core.pr_babysit.check_call_hidden"):
-                    with patch("plate_core.pr_babysit.tempfile.mkdtemp", return_value="/tmp/wt"):
-                        with patch("plate_core.pr_babysit.run_hidden") as mock_run:
+        """Regression: old is-ancestor(base, head) gate refused this exact BEHIND case."""
+        with tempfile.TemporaryDirectory() as tmp:
+            work, head_oid, _bare = _build_behind_rebase_repos(tmp)
+            ancestor = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    work,
+                    "merge-base",
+                    "--is-ancestor",
+                    "refs/remotes/origin/main",
+                    head_oid,
+                ],
+                capture_output=True,
+            )
+            self.assertNotEqual(
+                ancestor.returncode,
+                0,
+                "fixture must be BEHIND: base tip must not be an ancestor of PR head",
+            )
+            res = _perform_local_rebase("main", "feat", work, head_ref_oid=head_oid)
+            self.assertTrue(res["success"], res.get("error") or res.get("output"))
 
-                            def _run_side(args, **_kwargs):
-                                argv = list(args)
-                                if "rev-parse" in argv:
-                                    return type(
-                                        "R", (), {"returncode": 0, "stdout": live + "\n", "stderr": ""}
-                                    )()
-                                if "rebase" in argv:
-                                    return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
-                                if "push" in argv:
-                                    self.assertIn(
-                                        f"--force-with-lease=refs/heads/feat:{live}",
-                                        argv,
-                                    )
-                                    return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
-                                return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
-
-                            mock_run.side_effect = _run_side
-                            res = _perform_local_rebase(
-                                "main",
-                                "feat",
-                                "/tmp/repo",
-                                head_ref_oid=live,
-                                pr_number=1,
-                            )
-        self.assertTrue(res["success"])
+    def test_perform_local_rebase_refuses_unrelated_base(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, orphan_oid, _bare = _build_unrelated_head_on_origin(tmp)
+            res = _perform_local_rebase(
+                "main",
+                "orphan",
+                work,
+                head_ref_oid=orphan_oid,
+            )
+            self.assertFalse(res["success"])
+            self.assertIn("no common history", (res.get("error") or "").lower())
 
     def test_enrich_rest_fallback_preserves_driver_human_label(self):
         pr_data = {
