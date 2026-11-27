@@ -96,8 +96,24 @@ def save_refused(path: Path | str) -> bool:
     return _path_key(Path(path)) in _refuse_save
 
 
-def clear_save_refusal(path: Path | str) -> None:
-    _refuse_save.discard(_path_key(Path(path)))
+def clear_save_refusal(path: Path | str, *, require_valid: bool = True) -> bool:
+    """Clear in-process save refusal only when the on-disk file is gone or valid (#1476).
+
+    Returns True when refusal was cleared (or was not set). Returns False when
+    ``require_valid`` is True and the file still exists but is corrupt JSON, so
+    callers cannot re-open write paths without fixing or replacing the file.
+    """
+    target = Path(path)
+    key = _path_key(target)
+    if key not in _refuse_save:
+        return True
+    if require_valid and target.is_file():
+        try:
+            load_strict(target)
+        except CorruptStateError:
+            return False
+    _refuse_save.discard(key)
+    return True
 
 
 def _mark_corrupt(path: Path) -> None:

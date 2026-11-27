@@ -74,7 +74,28 @@ class BudgetPersistence1476Tests(unittest.TestCase):
                 save_budget_spend({"date": "2099-01-01"}, base_dir=bdir)
 
             self.assertEqual(path.read_bytes(), corrupt_bytes)
-            clear_save_refusal(path)
+
+    def test_clear_save_refusal_without_fix_keeps_spend_blocked(self):
+        with TemporaryDirectory() as tmp:
+            bdir = Path(tmp) / "budget"
+            path = bdir / "spend.json"
+            path.parent.mkdir(parents=True)
+            corrupt_bytes = b'{"spent_today": 12, "torn"'
+            path.write_bytes(corrupt_bytes)
+
+            with self.assertRaises(CorruptStateError):
+                load_budget_spend(base_dir=bdir)
+            self.assertTrue(budget_spend_is_corrupt(base_dir=bdir))
+
+            cleared = clear_save_refusal(path)
+            self.assertFalse(cleared)
+            self.assertTrue(budget_spend_is_corrupt(base_dir=bdir))
+
+            self.assertFalse(record_budget_spend(10, base_dir=bdir).get("ok"))
+            self.assertFalse(reset_budget_spend(base_dir=bdir).get("ok"))
+            with self.assertRaises(CorruptStateError):
+                save_budget_spend({"date": "2099-01-01"}, base_dir=bdir)
+            self.assertEqual(path.read_bytes(), corrupt_bytes)
 
     def test_dry_run_does_not_persist_spend(self):
         with TemporaryDirectory() as tmp:
