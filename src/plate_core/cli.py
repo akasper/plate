@@ -4372,10 +4372,18 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
     perform_guarded_hard_reset, ensure_next_release_issue) for reuse by workflow automation in sibling slices.
     See docs/design/release-ceremony-refinement.md, AGENTS.md, and #591/#592.
     """
-    version = getattr(args, "version", None) or "vX.Y.Z"
-    dry_run = getattr(args, "dry_run", False)
-    apply = getattr(args, "apply", False)
+    version = getattr(args, "version", None)
+    if not version:
+        print("Error: version is required (e.g. v0.13.0).", file=sys.stderr)
+        return 1
+    dry_run = bool(getattr(args, "dry_run", False))
+    apply = bool(getattr(args, "apply", False))
     force_hard_reset = getattr(args, "force_hard_reset", False)
+    if dry_run and apply:
+        print("Error: --dry-run and --apply are mutually exclusive.", file=sys.stderr)
+        return 1
+    side_effects = apply and not dry_run
+    bare_version = version.lstrip("v")
     raw_releases = getattr(args, "releases_dir", None)
     releases_dir = Path(raw_releases) if raw_releases else Path(".agentic/releases")
     print(f"Running release finalize for {version} (dry_run={dry_run}, apply={apply})...")
@@ -4387,12 +4395,21 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
         report = validate_release_workspace(Path("."), releases_dir=releases_dir)
         if report.errors:
             print("Validation errors:", report.errors)
-            if not dry_run:
-                return 1
-        release_data = _load_release(releases_dir, version.lstrip("v")) or {}
+            return 1
+        if report.release_version and report.release_version != bare_version:
+            print(
+                f"Error: requested version {bare_version!r} does not match workspace "
+                f"{report.release_version!r}.",
+                file=sys.stderr,
+            )
+            return 1
+        release_data = _load_release(releases_dir, bare_version) or {}
+        if not release_data:
+            print(f"Error: no release artifact for v{bare_version}.", file=sys.stderr)
+            return 1
     except Exception as e:
-        print(f"Could not load release artifacts: {e}")
-        release_data = {}
+        print(f"Could not load release artifacts: {e}", file=sys.stderr)
+        return 1
 
     print("Finalize steps (executed where applicable):")
     print("  1. Tag verified/created by release.yml on merge (see validate_release_workspace).")
@@ -4415,17 +4432,18 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
         set_next_release_release_window_open,
     )
 
+    mutate = not side_effects
     create_info = create_github_release(
         version=version,
         releases_dir=releases_dir,
-        dry_run=dry_run,
+        dry_run=mutate,
     )
     print(f"\nGitHub Release: {create_info}")
 
     ff_info = fast_forward_release_branches(
         version,
-        dry_run=dry_run,
-        apply=apply and not force_hard_reset,
+        dry_run=mutate,
+        apply=side_effects and not force_hard_reset,
     )
     print(f"Release branch fast-forward: {ff_info}")
 
@@ -4434,17 +4452,28 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
         reset_info = perform_guarded_hard_reset(
             version=version,
             releases_dir=releases_dir,
-            dry_run=dry_run,
-            apply=apply,
+            dry_run=mutate,
+            apply=side_effects,
         )
         print(f"Admin hard reset: {reset_info}")
 
-    # Close merge-freeze window on the standing Next Release that was open during cut,
+    cut_cycle_issue = release_data.get("cut_cycle_next_release_issue")
+    extra_issue_numbers: list[int] = []
+    if isinstance(cut_cycle_issue, int):
+        extra_issue_numbers.append(cut_cycle_issue)
+    elif isinstance(cut_cycle_issue, str) and cut_cycle_issue.isdigit():
+        extra_issue_numbers.append(int(cut_cycle_issue))
+
+    # Close merge-freeze window on the cut-cycle and standing Next Release issues
     # before ensuring a fresh standing issue (new issue must not inherit release-window:open).
-    rw_close = set_next_release_release_window_open(want_open=False, dry_run=dry_run)
+    rw_close = set_next_release_release_window_open(
+        want_open=False,
+        dry_run=mutate,
+        extra_issue_numbers=extra_issue_numbers or None,
+    )
     print(f"Next Release release-window label: {rw_close}")
 
-    next_info = ensure_next_release_issue()
+    next_info = ensure_next_release_issue(dry_run=mutate)
     print(f"Next Release issue: {next_info}")
 
     gh_plate_plan = plan_gh_plate_sync(version)
@@ -4455,6 +4484,10 @@ def cmd_release_finalize(args: argparse.Namespace) -> int:
         print("[DRY RUN] No side effects executed (create/fast-forward simulated above).")
         if release_data:
             print("Release data preview keys:", list(release_data.keys())[:5])
+        return 0
+
+    if not side_effects:
+        print("\nNo --apply: plan only; no GitHub or git mutations were performed.")
         return 0
 
     if apply and not force_hard_reset and not ff_info.get("ok", True):
@@ -6477,7 +6510,7 @@ def build_parser() -> argparse.ArgumentParser:
     rel_finalize.add_argument(
         "--apply",
         action="store_true",
-        help="Perform side effects including fast-forward of release branches to the tag (no force push). GitHub Release creation is attempted by default (idempotent via existence check).",
+        help="Perform GitHub/git side effects (gh release create, fast-forward branches, Next Release repair). Without --apply, finalize is plan-only.",
     )
     rel_finalize.add_argument(
         "--force-hard-reset",

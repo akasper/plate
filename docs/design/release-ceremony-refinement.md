@@ -73,9 +73,11 @@ The goal of this small Epic is a refinement that makes the next release a first-
 
 6. **Finalization phase (after CI green + nothing left to merge)**:
    - PLATE performs (or orchestrates) the actual `git tag vX.Y.Z && push --tags`.
+   - On `akasper/plate`, the release workflow pushes tags with the lifecycle GitHub App token so PyPI and `gh-plate` publishers fire on the tag, and the workflow waits for both jobs to finish (#1488 / #1473 C9).
    - Configurable downstream triggers are kicked off (declared in the project under `.plate/` — some common ones like "documentation update" built into PLATE core library; others provided by extensions and gated by their `release_checks` with `human_approval_required`).
-   - This phase also ensures the next "Next Release" issue exists (if the rename step didn't already trigger it).
-   - `gh plate release finalize` (new or extended surface) provides the command/MCP hook; initially can be a guided step printer + invocation of declared core triggers, with full pluggable execution evolving.
+   - This phase also ensures the next "Next Release" issue exists (if the rename step didn't already trigger it), with the milestone inherited from the prior standing Next Release issue (#1488).
+   - `gh plate release finalize` performs GitHub writes only with `--apply`; dry-run and plan-only modes make no issues, labels, releases, or tags (#1473 C1). Finalize clears `release-window:open` on the cut-cycle Next Release issue recorded in `release.json` as well as on the open standing issue.
+   - Release cut auto-collects a Closes block with one `Closes #N` line per linked issue (#1473 C6).
    - Existing hard-reset of the appropriate branch (the versioned one or the next- track) remains.
 
 7. **Negotiation / on-hold visibility**:

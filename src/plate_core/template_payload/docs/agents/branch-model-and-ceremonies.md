@@ -77,6 +77,10 @@ After a Release PR merges to `main`, `.github/workflows/release.yml` fast-forwar
 
 If **`PLATE_APP_ID`** or **`PLATE_APP_PRIVATE_KEY`** is missing, the fast-forward job logs a workflow warning and does not attempt the push, so the workflow stays green while you add credentials or perform a manual fast-forward.
 
+**Tag push and publishing (`release.yml`, #1488):** On official publishing repos, the release tag is pushed with the lifecycle App token so tag-triggered publisher workflows run after a Release PR merges. Missing publishers should fail the release workflow; manual `workflow_dispatch` remains for recovery.
+
+**Finalize and Next Release hygiene:** `gh plate release finalize` mutates GitHub only with **`--apply`**; **`--dry-run`** is side-effect-free. Finalize clears `release-window:open` on the cut-cycle Next Release issue from `release.json` and on the open standing issue before spawning a fresh one. New Next Release issues inherit the previous standing issue's milestone.
+
 ### Fragment authoring
 
 Every Feature (or process-changing) PR that changes PLATE process, templates, or agent surfaces must include a fragment under `.agentic/releases/unreleased/<slug>.json`. See `.agentic/releases/unreleased/README.md` for the schema and field guide. This includes all changes in a Release ceremony refinement Epic (new labels, branch model updates, CI conditions, tooling enhancements, milestone rules, .plate config, etc.). Fragments accumulate across the Epic's lifetime and are swept into the versioned directory at release-cut time.

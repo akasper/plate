@@ -1143,7 +1143,7 @@ def collect_closes_block(fragments: list[dict]) -> str:
                 seen.append(link)
     if not seen:
         return ""
-    return "Closes " + ", ".join(seen)
+    return "\n".join(f"Closes {link}" for link in seen)
 
 
 def cut_release(
@@ -1226,6 +1226,14 @@ def cut_release(
             print(f"\n[DRY RUN] Recommended Closes block for Release PR body:\n{closes_block}")
         return 0
 
+    try:
+        rw = set_next_release_release_window_open(want_open=True)
+        cut_cycle = rw.get("issue_number")
+        if cut_cycle is not None:
+            release_data["cut_cycle_next_release_issue"] = int(cut_cycle)
+    except Exception as exc:
+        print(f"NOTE: release-window hook after cut failed: {exc}")
+
     versioned_dir.mkdir(parents=True, exist_ok=True)
     fragments_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1267,15 +1275,6 @@ def cut_release(
         f"  7. (Legacy) Hard-reset release branch: "
         f"git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease"
     )
-    try:
-        rw = set_next_release_release_window_open(want_open=True)
-        if not rw.get("ok"):
-            print(
-                f"NOTE: Could not apply `{RELEASE_WINDOW_OPEN_LABEL}` on the standing Next Release issue "
-                f"({rw.get('error', rw)}). Merge freezes still apply once the label is set manually."
-            )
-    except Exception as exc:
-        print(f"NOTE: release-window hook after cut failed: {exc}")
     return 0
 
 
@@ -1365,7 +1364,10 @@ def create_github_release(
             "would_create": True,
             "notes_preview": notes_body[:300] + ("..." if len(notes_body) > 300 else ""),
             "assets": asset_names,
-            "command_preview": f"gh release create {tag} --title 'PLATE {ver}' --notes-file <tmp> " + (" ".join(f"--asset {a}" for a in asset_names) if asset_names else ""),
+            "command_preview": (
+                f"gh release create {tag} --verify-tag --title 'PLATE {ver}' --notes-file <tmp>"
+                + (" " + " ".join(asset_names) if asset_names else "")
+            ),
         }
 
     # Write temp notes for gh release create (handles newlines reliably)
@@ -1375,12 +1377,14 @@ def create_github_release(
             f.write(notes_body)
 
         cmd = [
-            "gh", "release", "create", tag,
+            "gh", "release", "create",
+            tag,
+            "--verify-tag",
             "--title", f"PLATE {ver}",
             "--notes-file", notes_path,
         ]
         for asset in assets:
-            cmd.extend(["--asset", str(asset)])
+            cmd.append(str(asset))
 
         proc = run_hidden(cmd, capture_output=True, text=True, check=False)
         if proc.returncode != 0:
@@ -1445,45 +1449,131 @@ def find_standing_next_release_issue(
     return None
 
 
-def set_next_release_release_window_open(
+def inherit_next_release_milestone_number(
+    repo: str | None = None,
+    client: GhClient | None = None,
+) -> int | None:
+    """Return the milestone number from the most recent Next Release issue, if any (#1488)."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    q = quote_plus(f'repo:{target} is:issue label:Release "Next Release"')
+    try:
+        search = gh.api(f"search/issues?q={q}") or {}
+    except Exception:
+        return None
+    items = sorted(
+        (search.get("items") or []),
+        key=lambda item: int(item.get("number") or 0),
+        reverse=True,
+    )
+    for item in items:
+        milestone = item.get("milestone") or {}
+        number = milestone.get("number")
+        if number is not None:
+            return int(number)
+        issue_number = item.get("number")
+        if issue_number is None:
+            continue
+        try:
+            detail = gh.api(f"repos/{target}/issues/{issue_number}") or {}
+        except Exception:
+            continue
+        milestone = detail.get("milestone") or {}
+        number = milestone.get("number")
+        if number is not None:
+            return int(number)
+    return None
+
+
+def _patch_issue_release_window_label(
+    issue_number: int,
     *,
     want_open: bool,
     dry_run: bool = False,
     repo: str | None = None,
     client: GhClient | None = None,
 ) -> dict:
-    """Apply or remove ``release-window:open`` on the standing Next Release issue (#1439)."""
-    if dry_run:
-        return {"ok": True, "skipped": True, "reason": "dry_run", "would_set_open": want_open}
     gh = client or GhClient()
     target = resolve_repo(repo)
-    issue = find_standing_next_release_issue(repo=target, client=gh)
-    if not issue or not issue.get("number"):
-        return {"ok": True, "skipped": True, "reason": "no_next_release"}
-    number = int(issue["number"])
+    if dry_run:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "dry_run",
+            "issue_number": issue_number,
+            "would_set_open": want_open,
+        }
     try:
-        detail = gh.api(f"repos/{target}/issues/{number}") or {}
+        detail = gh.api(f"repos/{target}/issues/{issue_number}") or {}
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "issue_number": number}
-    names = [str(l.get("name", "")) for l in (detail.get("labels") or [])]
+        return {"ok": False, "error": str(exc), "issue_number": issue_number}
+    names = [str(label.get("name", "")) for label in (detail.get("labels") or [])]
     has = RELEASE_WINDOW_OPEN_LABEL in names
     if want_open and has:
-        return {"ok": True, "skipped": True, "issue_number": number, "state": "already_open"}
+        return {"ok": True, "skipped": True, "issue_number": issue_number, "state": "already_open"}
     if not want_open and not has:
-        return {"ok": True, "skipped": True, "issue_number": number, "state": "already_closed"}
+        return {"ok": True, "skipped": True, "issue_number": issue_number, "state": "already_closed"}
     if want_open:
         new_labels = names + [RELEASE_WINDOW_OPEN_LABEL]
     else:
-        new_labels = [n for n in names if n != RELEASE_WINDOW_OPEN_LABEL]
+        new_labels = [label for label in names if label != RELEASE_WINDOW_OPEN_LABEL]
     try:
         gh.api(
-            f"repos/{target}/issues/{number}",
+            f"repos/{target}/issues/{issue_number}",
             method="PATCH",
             fields={"labels": new_labels},
         )
     except Exception as exc:
-        return {"ok": False, "issue_number": number, "error": str(exc)}
-    return {"ok": True, "issue_number": number, "release_window_open": want_open}
+        return {"ok": False, "issue_number": issue_number, "error": str(exc)}
+    return {"ok": True, "issue_number": issue_number, "release_window_open": want_open}
+
+
+def set_next_release_release_window_open(
+    *,
+    want_open: bool,
+    dry_run: bool = False,
+    repo: str | None = None,
+    client: GhClient | None = None,
+    extra_issue_numbers: list[int] | None = None,
+) -> dict:
+    """Apply or remove ``release-window:open`` on the standing and cut-cycle Next Release issues (#1439, #1488)."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    issue_numbers: list[int] = []
+    if extra_issue_numbers:
+        for raw in extra_issue_numbers:
+            try:
+                num = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if num not in issue_numbers:
+                issue_numbers.append(num)
+    standing = find_standing_next_release_issue(repo=target, client=gh)
+    if standing and standing.get("number"):
+        standing_number = int(standing["number"])
+        if standing_number not in issue_numbers:
+            issue_numbers.append(standing_number)
+    if not issue_numbers:
+        if dry_run:
+            return {"ok": True, "skipped": True, "reason": "dry_run", "would_set_open": want_open}
+        return {"ok": True, "skipped": True, "reason": "no_next_release"}
+    results = [
+        _patch_issue_release_window_label(
+            number,
+            want_open=want_open,
+            dry_run=dry_run,
+            repo=target,
+            client=gh,
+        )
+        for number in issue_numbers
+    ]
+    primary = results[0]
+    if len(results) > 1:
+        primary = dict(primary)
+        primary["cleared_issue_numbers"] = [r.get("issue_number") for r in results]
+        primary["results"] = results
+    primary["ok"] = all(r.get("ok", True) for r in results)
+    return primary
 
 
 def post_release_fast_forward_comment(
@@ -1944,6 +2034,8 @@ def plan_gh_plate_sync(version: str | None) -> dict:
 def ensure_next_release_issue(
     repo: str | None = None,
     client: GhClient | None = None,
+    *,
+    dry_run: bool = False,
 ) -> dict:
     """Ensure a standing 'Next Release' issue (label: Release, title containing Next) exists.
     Low-risk; used by finalize for ceremony completeness.
@@ -1953,23 +2045,42 @@ def ensure_next_release_issue(
     q = quote_plus(f'repo:{target} is:issue is:open label:Release "Next Release"')
     try:
         search = gh.api(f"search/issues?q={q}") or {}
-        for item in (search.get("items") or []):
-            if "next" in (item.get("title") or "").lower():
-                return {"exists": True, "issue": {"number": item.get("number"), "url": item.get("html_url")}}
-    except Exception:
-        pass
-
+    except Exception as exc:
+        return {"ok": False, "error": f"search_failed: {exc}"}
+    for item in (search.get("items") or []):
+        if "next" in (item.get("title") or "").lower():
+            return {
+                "ok": True,
+                "exists": True,
+                "issue": {"number": item.get("number"), "url": item.get("html_url")},
+            }
+    milestone_number = inherit_next_release_milestone_number(repo=target, client=gh)
+    if dry_run:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "dry_run",
+            "would_create": True,
+            "milestone_number": milestone_number,
+        }
     fields = {
         "title": "Next Release",
         "body": "Standing target for the next PLATE release (auto-created by finalize). Use the Development sidebar to link Epics and work targeting this release.",
         # Window starts closed; `cut_release` opens via `set_next_release_release_window_open` (#1439).
         "labels": ["Release"],
     }
+    if milestone_number is not None:
+        fields["milestone"] = milestone_number
     try:
         created = gh.api(f"repos/{target}/issues", method="POST", fields=fields) or {}
-        return {"created": True, "issue": {"number": created.get("number"), "url": created.get("html_url")}}
+        return {
+            "ok": True,
+            "created": True,
+            "issue": {"number": created.get("number"), "url": created.get("html_url")},
+            "milestone_number": milestone_number,
+        }
     except Exception as e:
-        return {"error": f"create_failed: {e}"}
+        return {"ok": False, "error": f"create_failed: {e}"}
 
 
 # Standing Next Release starter issue messaging (#1194; mandatory adoption #1193).

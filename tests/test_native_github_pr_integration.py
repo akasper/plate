@@ -207,6 +207,23 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn('git tag "${RELEASE_TAG}" "${MERGE_SHA}"', workflow)
         self.assertIn('git push origin "refs/tags/${RELEASE_TAG}"', workflow)
 
+    def test_release_workflow_tag_push_uses_lifecycle_app_token(self):
+        for rel in (
+            ".github/workflows/release.yml",
+            "src/plate_core/template_payload/.github/workflows/release.yml",
+        ):
+            workflow = read_text(rel)
+            self.assertIn("Require lifecycle App token for tag push on official repo", workflow)
+            self.assertIn("x-access-token:${PLATE_APP_TOKEN}", workflow)
+            self.assertIn("id: plate-app-token", workflow)
+
+    def test_release_workflow_waits_for_publishers_after_tag_push(self):
+        workflow = read_text(".github/workflows/release.yml")
+        self.assertIn("verify-release-publishers:", workflow)
+        self.assertIn("publish-pypi.yml", workflow)
+        self.assertIn("publish-gh-plate-extension.yml", workflow)
+        self.assertIn("tag_pushed", workflow)
+
     def test_release_workflow_fast_forward_job_can_comment_on_issues(self):
         workflow = read_text(".github/workflows/release.yml")
         job_block = _fast_forward_release_job_block(workflow)

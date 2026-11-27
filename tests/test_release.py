@@ -37,6 +37,9 @@ from plate_core.release import (
     STANDING_TRACK_BRANCHES,
     format_fast_forward_failure_comment,
     ensure_next_release_issue,
+    inherit_next_release_milestone_number,
+    set_next_release_release_window_open,
+    RELEASE_WINDOW_OPEN_LABEL,
     diagnose_release_standing_state,
     repair_release_standing_state,
     pick_canonical_next_release_issue,
@@ -374,12 +377,14 @@ class ClosesBlockHelperTests(unittest.TestCase):
             {"slug": "d"},  # no links key
         ]
         block = collect_closes_block(frags)
-        self.assertTrue(block.startswith("Closes "))
-        self.assertIn("#569", block)
-        self.assertIn("#580", block)
-        self.assertIn("#111", block)
-        # unique
-        self.assertEqual(block.count("#569"), 1)
+        lines = [line for line in block.splitlines() if line.strip()]
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(lines[0], "Closes #569")
+        self.assertEqual(lines[1], "Closes #580")
+        self.assertEqual(lines[2], "Closes #111")
+        from plate_core.pr_gates_closing import parse_strict_closing_issue_numbers
+
+        self.assertEqual(parse_strict_closing_issue_numbers(block), [569, 580, 111])
 
     def test_empty(self):
         self.assertEqual(collect_closes_block([]), "")
@@ -1512,6 +1517,7 @@ class FinalizeAutomationTests(unittest.TestCase):
         mock_client = mock_client_cls.return_value
         mock_client.api.side_effect = [
             {"items": []},
+            {"items": [{"number": 100, "milestone": {"number": 5}}]},
             {"number": 999, "html_url": "https://ex/999"},
         ]
         info = ensure_next_release_issue(client=mock_client)
@@ -1523,7 +1529,70 @@ class FinalizeAutomationTests(unittest.TestCase):
         ]
         self.assertEqual(len(create_calls), 1)
         _args, kwargs = create_calls[0]
-        self.assertEqual(kwargs.get("fields", {}).get("labels"), ["Release"])
+        fields = kwargs.get("fields", {})
+        self.assertEqual(fields.get("labels"), ["Release"])
+        self.assertEqual(fields.get("milestone"), 5)
+
+    @patch("plate_core.release.GhClient")
+    def test_ensure_next_issue_dry_run_and_search_fail_closed(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = RuntimeError("search down")
+        info = ensure_next_release_issue(client=mock_client, dry_run=True)
+        self.assertFalse(info.get("ok", True))
+        self.assertIn("search_failed", info.get("error", ""))
+
+        mock_client.api.side_effect = [
+            {"items": [{"number": 12, "title": "Next Release", "html_url": "https://ex/12"}]},
+        ]
+        plan = ensure_next_release_issue(client=mock_client, dry_run=True)
+        self.assertTrue(plan.get("exists"))
+
+    @patch("plate_core.release.GhClient")
+    def test_inherit_next_release_milestone_number(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.return_value = {
+            "items": [
+                {"number": 200, "milestone": None},
+                {"number": 150, "milestone": {"number": 7}},
+            ]
+        }
+        self.assertEqual(inherit_next_release_milestone_number(client=mock_client), 7)
+
+    @patch("plate_core.release.GhClient")
+    def test_release_window_cleared_on_cut_cycle_closed_issue(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = [
+            {"items": []},
+            {"labels": [{"name": "Release"}, {"name": RELEASE_WINDOW_OPEN_LABEL}]},
+            None,
+        ]
+
+        info = set_next_release_release_window_open(
+            want_open=False,
+            client=mock_client,
+            extra_issue_numbers=[1454],
+        )
+        self.assertTrue(info.get("ok"))
+        self.assertEqual(info.get("issue_number"), 1454)
+
+    @patch("plate_core.release.GhClient")
+    @patch("plate_core.release.run_hidden")
+    def test_create_github_release_uses_verify_tag_and_positional_assets(
+        self, mock_run, mock_client_cls
+    ):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = [
+            GhApiError("404 not found"),
+            {"id": 1, "html_url": "https://example/releases/tag/v0.7.1"},
+        ]
+        mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        with TemporaryDirectory() as tmp:
+            d = self._make_versioned_release(tmp, "0.7.1")
+            create_github_release("0.7.1", releases_dir=d, client=mock_client)
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("--verify-tag", cmd)
+        self.assertNotIn("--asset", cmd)
+        self.assertIn("notes.md", cmd[-1])
 
 
 class GhPlateSyncPlanTests(unittest.TestCase):
