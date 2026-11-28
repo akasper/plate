@@ -1,0 +1,10 @@
+{
+  "slug": "ci-baseline-1478",
+  "change_type": "hardening",
+  "surface": ".github/workflows",
+  "summary": "CI baseline: ruff syntax gate, Python 3.10–3.13 matrix with wheel build-and-install, SHA-pinned actions, npm ci for e2e, optional copilot marketplace smoke job, and heavy-release wheel packaging smoke.",
+  "migration_impact": "Adopters copying akasper/plate workflows may adopt the same ruff baseline, matrix, and action pin pattern; pr-gates fail-open policy unchanged.",
+  "agent_notes": "Deferred S9/#1320 pr-gates fail-closed and release.yml/pages.yml SHA pins (documented on PR).",
+  "breaking": false,
+  "links": ["#1478"]
+}
