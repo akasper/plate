@@ -19,7 +19,7 @@ from plate_core.mcp.registry import (
 )
 from plate_core.mcp.tool_profiles import PROFILE_ALL, reset_mcp_tool_profile_session
 import plate_core.mcp_server  # noqa: F401 — registers tool executor
-from plate_core.mcp_server import _execute_mcp_tool
+from plate_core.mcp_server import MCP_TOOL_HANDLERS, _execute_mcp_tool
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LEAK_PREFIXES = (".agentic", "docs/curiosity")
@@ -74,6 +74,12 @@ class McpRegistryConsistencyTests(unittest.TestCase):
 
     def test_assert_catalog_dispatch_parity(self):
         assert_catalog_dispatch_parity()
+
+    def test_handler_map_keys_equal_dispatchable(self):
+        self.assertEqual(
+            frozenset(MCP_TOOL_HANDLERS.keys()),
+            dispatchable_tool_names(),
+        )
 
     def test_backfill_answers_is_mutating(self):
         registry = build_tool_registry()
