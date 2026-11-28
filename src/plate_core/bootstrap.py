@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from .github_client import GhApiError, GhClient
 from .github_labels import prepare_label_description, sync_repository_labels_from_registry
-from .health import get_health, resolve_repo
+from .health import bootstrap_adopt_apply_command, get_health, resolve_repo
 from .import_payload import build_minimal_current_md, list_payload_relative_paths
 from .payload_surface import filter_plate_scripts, prepare_copied_text, resolve_local_goals_wiki
 from .plate_config import (
@@ -180,6 +180,7 @@ def _adoption_next_steps(
     adoption_mode: bool,
     health: Any,
     local_root: Path | None = None,
+    github_repo: str | None = None,
 ) -> list[str]:
     if not adoption_mode:
         return [
@@ -187,28 +188,35 @@ def _adoption_next_steps(
             "Run `gh plate health` after apply and seed Goals.md content.",
             "Optional: set hooks.pre_push commands in .plate and run `gh plate hooks install` (docs/bootstrap/pre-push-hook.md).",
         ]
-    steps = [
-        "Adoption mode: prefer local `gh plate import-payload --strategy conservative --dry-run` then `--apply` before remote bootstrap file copy when working in a checkout.",
-        "Review CODEOWNERS / @handles, the Goals wiki mission text (docs/wiki/Goals.md, or docs/plate/wiki/Goals.md when PLATE docs are namespaced), and CI coexistence (product CI + PLATE enforcement).",
-        "Run `gh plate health` and fix remaining gaps; use `gh plate migrate plan` if this repo was template-derived.",
-        "Do not seed duplicate Epics/Questions when real planning already exists — bootstrap skips when open Epics/Questions present.",
-        "See docs/migration/adoption-guide.md for the full adoption path (#619 / #633).",
-    ]
-    if health is not None and not getattr(health, "goals_page_present", True):
-        steps.insert(
-            1,
-            "Seed or write the Goals wiki page (docs/wiki/Goals.md, or docs/plate/wiki/Goals.md when PLATE docs are namespaced) for Information Audits.",
-        )
     from .plate_config import local_root_plate_present
+    from .health import missing_local_adoption_payload_paths
 
     root = local_root or Path.cwd()
-    remote_plate = bool(getattr(health, "plate_config_present", False)) if health is not None else False
-    if not remote_plate and not local_root_plate_present(root):
-        steps.insert(
-            1,
-            "Ensure root `.plate` exists (`gh plate config init --apply` or re-run "
-            "`import-payload --apply` to seed locally).",
+    repo_slug = github_repo or (getattr(health, "repo", None) if health is not None else None)
+    mandatory = bootstrap_adopt_apply_command(repo_slug, repo_root=root).split("  #")[0]
+    steps: list[str] = []
+    local_missing = missing_local_adoption_payload_paths(root)
+    has_local_plate = local_root_plate_present(root)
+    if local_missing or not has_local_plate:
+        steps.append(
+            "Local payload (required): `gh plate import-payload --dry-run --strategy conservative` "
+            "then `gh plate import-payload --apply --strategy conservative` when the plan is clean."
         )
+    steps.append(
+        "Review CODEOWNERS / @handles, Goals wiki mission text, and CI coexistence (product CI + PLATE enforcement)."
+    )
+    if health is not None and not getattr(health, "goals_page_present", True):
+        steps.append(
+            "Seed or write the Goals wiki page (docs/wiki/Goals.md or docs/plate/wiki/Goals.md) "
+            "for Information Audits."
+        )
+    steps.append(
+        f"Required (not optional): `{mandatory}` — applies labels, the seed Epic, starter Questions, "
+        "and standing release tracks (#1193)."
+    )
+    steps.append(
+        "Verify with `gh plate health` until `adoption_complete` passes; see docs/migration/adoption-guide.md."
+    )
     return steps
 
 
@@ -1442,6 +1450,7 @@ def run_bootstrap(
         adoption_mode=adoption_mode,
         health=health,
         local_root=local_checkout,
+        github_repo=target,
     )
     if skipped_stale_paths:
         next_steps = list(next_steps) + [BOOTSTRAP_STALE_UPGRADE_POINTER]

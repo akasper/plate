@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import base64
+import fnmatch
 import json
 import re
+import shlex
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, quote_plus
 
 import yaml
 
@@ -28,6 +30,36 @@ from .procutil import run_hidden
 REQUIRED_LABELS = ["Bug", "Feature", "Epic", "Documentation", "Hardening", "Research", "Design", "Question", "Task"]
 
 LABEL_COVERAGE_FIX_COMMAND = "gh plate bootstrap --apply"
+
+# Hidden payload paths PyPI wheels omit; adopters need import-payload (#1115 / #1193).
+ADOPTION_LOCAL_PAYLOAD_FILES: tuple[str, ...] = (
+    ".github/labels.yml",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/workflows/plate-pr-gates.yml",
+    ".github/workflows/label-check.yml",
+    ".agentic/process.yml",
+    ".agentic/skills.yml",
+)
+
+ADOPTION_BRANCH_PROTECTION_HUMAN_HINT = (
+    "Enable PR-required branch protection on the default branch "
+    "(human configuration; see docs/bootstrap/starting-a-new-repository.md). "
+    "Health only reports protection state — it does not apply rulesets."
+)
+
+ADOPTION_README_REQUIRED_PHRASES: tuple[str, ...] = (
+    "Adopting PLATE",
+    "import-payload",
+    "--adopt --apply",
+    "adoption_complete",
+)
+
+ADOPTION_AGENTS_REQUIRED_PHRASES: tuple[str, ...] = (
+    "adoption_complete",
+    "not optional",
+    "import-payload",
+    "bootstrap",
+)
 
 
 def expected_labels_from_registry(repo_root: str | Path = ".") -> list[str]:
@@ -164,6 +196,12 @@ class HealthReport:
     stale_required_check_contexts: list[str] = field(default_factory=list)
     missing_recommended_check_contexts: list[str] = field(default_factory=list)
     label_case_mismatches: list[str] = field(default_factory=list)
+    # #1193 mandatory adoption completeness (fails health when gaps remain)
+    adoption_complete: bool | None = None
+    adoption_complete_gaps: list[str] = field(default_factory=list)
+    adoption_complete_fix_command: str | None = None
+    branch_protection_pr_reviews_required: bool | None = None
+    release_standing_health: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -406,6 +444,326 @@ def resolve_adoption_bootstrap_repo(
     return _ADOPTION_BOOTSTRAP_PLACEHOLDER, True
 
 
+def missing_local_adoption_payload_paths(repo_root: str | Path = ".") -> list[str]:
+    """Return payload paths required for PLATE adoption that are absent locally."""
+    root = Path(repo_root)
+    missing: list[str] = []
+    for rel in ADOPTION_LOCAL_PAYLOAD_FILES:
+        if not (root / rel).is_file():
+            missing.append(rel)
+    workflows = root / ".github" / "workflows"
+    if not workflows.is_dir():
+        missing.append(".github/workflows/")
+    return missing
+
+
+def adoption_messaging_content_gaps(repo_root: str | Path = ".") -> list[str]:
+    """Return gaps when README/AGENTS lack mandatory adoption guidance (#1193)."""
+    root = Path(repo_root)
+    gaps: list[str] = []
+    readme = root / "README.md"
+    if readme.is_file():
+        text = readme.read_text(encoding="utf-8")
+        for phrase in ADOPTION_README_REQUIRED_PHRASES:
+            if phrase not in text:
+                gaps.append(f"readme_missing:{phrase}")
+    else:
+        gaps.append("readme_missing:README.md")
+    agents = root / "AGENTS.md"
+    if agents.is_file():
+        lowered = agents.read_text(encoding="utf-8").lower()
+        for phrase in ADOPTION_AGENTS_REQUIRED_PHRASES:
+            if phrase.lower() not in lowered:
+                gaps.append(f"agents_md_missing:{phrase}")
+    else:
+        gaps.append("agents_md_missing:AGENTS.md")
+    return gaps
+
+
+def _ruleset_ref_matches(default_branch: str, pattern: str) -> bool:
+    pat = str(pattern).strip()
+    if not pat:
+        return False
+    if pat == "~ALL":
+        return True
+    branch = default_branch.removeprefix("refs/heads/")
+    candidates = {branch, f"refs/heads/{branch}"}
+    if pat.startswith("refs/heads/"):
+        return any(fnmatch.fnmatch(candidate, pat) for candidate in candidates)
+    return fnmatch.fnmatch(branch, pat) or fnmatch.fnmatch(
+        f"refs/heads/{branch}", f"refs/heads/{pat}"
+    )
+
+
+def _ruleset_applies_to_default_branch(
+    meta: dict,
+    detail: dict | None,
+    default_branch: str,
+) -> bool:
+    enforcement = str(meta.get("enforcement") or "").lower()
+    if enforcement != "active":
+        return False
+    source = detail if isinstance(detail, dict) else meta
+    target = str(source.get("target") or meta.get("target") or "").lower()
+    if target and target != "branch":
+        return False
+    conditions = source.get("conditions") if isinstance(source, dict) else None
+    if not isinstance(conditions, dict):
+        return False
+    ref_name = conditions.get("ref_name")
+    if not isinstance(ref_name, dict):
+        return False
+    includes = ref_name.get("include") or []
+    if not isinstance(includes, list) or not includes:
+        return False
+    excludes = ref_name.get("exclude") or []
+    if isinstance(excludes, list):
+        for pattern in excludes:
+            if _ruleset_ref_matches(default_branch, str(pattern)):
+                return False
+    return any(_ruleset_ref_matches(default_branch, str(pattern)) for pattern in includes)
+
+
+def _rulesets_require_pull_request_reviews(
+    gh: GhClient,
+    repo: str,
+    default_branch: str,
+) -> bool:
+    try:
+        rulesets = gh.api(f"repos/{repo}/rulesets?per_page=100")
+    except GhApiError:
+        return False
+    except Exception:
+        return False
+    if not isinstance(rulesets, list):
+        return False
+    for meta in rulesets:
+        if not isinstance(meta, dict):
+            continue
+        ruleset_id = meta.get("id")
+        if ruleset_id is None:
+            continue
+        try:
+            detail = gh.api(f"repos/{repo}/rulesets/{ruleset_id}")
+        except Exception:
+            continue
+        if not _ruleset_applies_to_default_branch(
+            meta, detail if isinstance(detail, dict) else None, default_branch
+        ):
+            continue
+        rules = (detail or {}).get("rules") if isinstance(detail, dict) else None
+        if not isinstance(rules, list):
+            continue
+        for rule in rules:
+            if isinstance(rule, dict) and str(rule.get("type") or "") == "pull_request":
+                return True
+    return False
+
+
+def branch_protection_requires_pull_requests(protection: dict | None) -> bool:
+    """True when classic protection requires at least one PR review (read-only signal)."""
+    if not isinstance(protection, dict):
+        return False
+    reviews = protection.get("required_pull_request_reviews")
+    if not isinstance(reviews, dict):
+        return False
+    count = reviews.get("required_approving_review_count")
+    if count is None:
+        return False
+    try:
+        return int(count) >= 1
+    except (TypeError, ValueError):
+        return False
+
+
+def effective_pull_request_reviews_required(
+    *,
+    gh: GhClient,
+    repo: str,
+    default_branch: str,
+    branch_protection_enabled: bool,
+    branch_protection_payload: dict | None,
+) -> bool:
+    classic = (
+        branch_protection_requires_pull_requests(branch_protection_payload)
+        if branch_protection_enabled
+        else False
+    )
+    if classic:
+        return True
+    return _rulesets_require_pull_request_reviews(gh, repo, default_branch)
+
+
+def adoption_release_standing_ok(standing: dict) -> bool:
+    """Adoption allows legacy-only or modern three-track models (#1193 / review #1528)."""
+    if standing.get("needs_next_issue") or standing.get("needs_dedupe_next"):
+        return False
+    if int(standing.get("next_release_count") or 0) != 1:
+        return False
+    branches = standing.get("branches") or {}
+    modern = all(branches.get(name) for name in ("release-major", "release-minor", "release-patch"))
+    legacy = bool(branches.get("release"))
+    return modern or legacy
+
+
+def _load_local_plate_config_dict(repo_root: Path) -> dict | None:
+    plate_path = repo_root / ".plate"
+    if not plate_path.is_file():
+        return None
+    try:
+        data = json.loads(plate_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _expected_bootstrap_seed_epic_title(repo_root: Path) -> str:
+    from .bootstrap import BOOTSTRAP_SEED_EPIC_NAME
+    from .plate_config import DEFAULT_CONFIG, format_epic_title
+
+    config = _load_local_plate_config_dict(repo_root) or DEFAULT_CONFIG
+    return format_epic_title(BOOTSTRAP_SEED_EPIC_NAME, config=config)
+
+
+def _verify_bootstrap_seed_epic(gh: GhClient, repo: str, repo_root: Path) -> tuple[bool, str]:
+    expected = _expected_bootstrap_seed_epic_title(repo_root)
+    try:
+        query = quote_plus(f'repo:{repo} is:issue is:open label:Epic')
+        search = gh.api(f"search/issues?q={query}") or {}
+    except Exception as exc:
+        return False, f"unverified ({exc})"
+    for item in search.get("items") or []:
+        title = str(item.get("title") or "").strip()
+        if title == expected:
+            return True, expected
+    return False, expected
+
+
+def _starter_questions_satisfied_from_marker(repo_root: Path) -> bool:
+    from .adoption import STARTER_QUESTIONS, first_qa_seed_status
+
+    status = first_qa_seed_status(repo_root)
+    if not status.get("seeded"):
+        return False
+    expected = {q["title"] for q in STARTER_QUESTIONS}
+    have = {str(t) for t in (status.get("titles") or [])}
+    return expected.issubset(have)
+
+
+def _verify_bootstrap_starter_questions(gh: GhClient, repo: str, repo_root: Path) -> bool:
+    if _starter_questions_satisfied_from_marker(repo_root):
+        return True
+    from .adoption import STARTER_QUESTIONS
+
+    for question in STARTER_QUESTIONS:
+        title = question["title"]
+        try:
+            query = quote_plus(f'repo:{repo} is:issue is:open "{title}"')
+            search = gh.api(f"search/issues?q={query}") or {}
+        except Exception:
+            return False
+        if int(search.get("total_count") or 0) < 1:
+            return False
+    return True
+
+
+def adoption_import_payload_fix_command(repo: str, repo_root: str | Path) -> str:
+    root = Path(repo_root).resolve()
+    return (
+        "gh plate import-payload --apply --strategy conservative "
+        f"--repo-root {shlex.quote(str(root))}"
+    )
+
+
+def adoption_release_repair_fix_command(repo: str) -> str:
+    return f"gh plate release repair --repo {shlex.quote(repo)} --apply"
+
+
+def assess_adoption_complete(
+    *,
+    repo: str,
+    repo_root: str | Path,
+    gh: GhClient,
+    default_branch: str,
+    label_coverage_ok: bool,
+    branch_protection_enabled: bool,
+    branch_protection_payload: dict | None,
+) -> tuple[bool, list[str], str | None, str | None, bool | None]:
+    """Return adoption_complete verdict, gaps, fix command, release standing, PR-review gate."""
+    from .release import diagnose_release_standing_state
+
+    gaps: list[str] = []
+    root = Path(repo_root)
+
+    local_missing = missing_local_adoption_payload_paths(root)
+    if local_missing:
+        gaps.append("local_payload:" + ", ".join(local_missing[:6]))
+        if len(local_missing) > 6:
+            gaps[-1] += f" (+{len(local_missing) - 6} more)"
+
+    for msg in adoption_messaging_content_gaps(root):
+        gaps.append(f"adoption_docs:{msg}")
+
+    if not label_coverage_ok:
+        gaps.append("remote_labels: canonical label registry not fully applied")
+
+    seed_epic_ok, expected_epic = _verify_bootstrap_seed_epic(gh, repo, root)
+    if not seed_epic_ok:
+        gaps.append(f"seed_epic:missing bootstrap Epic ({expected_epic})")
+
+    starter_ok = _verify_bootstrap_starter_questions(gh, repo, root)
+    if not starter_ok:
+        gaps.append("starter_questions:missing bootstrap Question titles or first_qa marker")
+
+    standing: dict = {}
+    release_health: str | None = None
+    try:
+        standing = diagnose_release_standing_state(repo, client=gh)
+        release_health = str(standing.get("health") or "")
+        if not adoption_release_standing_ok(standing):
+            parts: list[str] = []
+            if standing.get("missing_branches"):
+                parts.append(
+                    "branches=" + ", ".join(standing.get("missing_branches") or [])
+                )
+            if standing.get("needs_next_issue"):
+                parts.append("next_release_issue=missing")
+            if standing.get("needs_dedupe_next"):
+                parts.append("next_release_issue=duplicate")
+            if not parts:
+                parts.append(release_health or "incomplete")
+            gaps.append(f"release_standing:{' ; '.join(parts)}")
+    except Exception as exc:
+        gaps.append(f"release_standing:unverified ({exc})")
+        release_health = "error"
+
+    pr_required = effective_pull_request_reviews_required(
+        gh=gh,
+        repo=repo,
+        default_branch=default_branch,
+        branch_protection_enabled=branch_protection_enabled,
+        branch_protection_payload=branch_protection_payload,
+    )
+    ruleset_pr = _rulesets_require_pull_request_reviews(gh, repo, default_branch)
+    if not branch_protection_enabled and not ruleset_pr:
+        gaps.append("branch_protection:disabled on default branch")
+    elif not pr_required:
+        gaps.append("branch_protection:default branch lacks required pull request reviews")
+
+    fix: str | None = None
+    if local_missing or any(g.startswith("adoption_docs:") for g in gaps):
+        fix = adoption_import_payload_fix_command(repo, root)
+    elif not label_coverage_ok or not seed_epic_ok or not starter_ok:
+        fix = bootstrap_adopt_apply_command(repo, repo_root=root).split("  #")[0]
+    elif any(g.startswith("release_standing:") for g in gaps):
+        fix = adoption_release_repair_fix_command(repo)
+    elif gaps:
+        fix = ADOPTION_BRANCH_PROTECTION_HUMAN_HINT
+
+    complete = len(gaps) == 0
+    return complete, gaps, fix, release_health, pr_required
+
+
 def bootstrap_adopt_apply_command(
     explicit_repo: str | None = None,
     *,
@@ -414,7 +772,7 @@ def bootstrap_adopt_apply_command(
     slug, used_placeholder = resolve_adoption_bootstrap_repo(
         explicit_repo, repo_root=repo_root
     )
-    cmd = f"gh plate bootstrap --repo {slug} --adopt --apply"
+    cmd = f"gh plate bootstrap --repo {shlex.quote(slug)} --adopt --apply"
     if used_placeholder:
         cmd += (
             "  # could not resolve owner/name from --repo, .plate, or git origin; "
@@ -457,11 +815,13 @@ def get_health(
     branch_protection_required_contexts: list[str] = []
     stale_required_check_contexts: list[str] = []
     missing_recommended_check_contexts: list[str] = []
+    branch_protection_payload: dict | None = None
     default_branch = "main"
     try:
         repo_obj = gh.api(f"repos/{target}")
         default_branch = repo_obj["default_branch"]
         protection = gh.api(f"repos/{target}/branches/{default_branch}/protection")
+        branch_protection_payload = protection if isinstance(protection, dict) else None
         protected = True
         contexts = protection.get("required_status_checks") or {}
         if isinstance(contexts, dict):
@@ -755,6 +1115,42 @@ def get_health(
     except Exception as e:
         errors.append(f"self_migrate: {e}")
 
+    adoption_complete: bool | None = None
+    adoption_complete_gaps: list[str] = []
+    adoption_complete_fix_command: str | None = None
+    release_standing_health: str | None = None
+    branch_protection_pr_reviews_required: bool | None = None
+    try:
+        (
+            adoption_complete,
+            adoption_complete_gaps,
+            adoption_complete_fix_command,
+            release_standing_health,
+            branch_protection_pr_reviews_required,
+        ) = assess_adoption_complete(
+            repo=target,
+            repo_root=root,
+            gh=gh,
+            default_branch=default_branch,
+            label_coverage_ok=label_ok,
+            branch_protection_enabled=protected,
+            branch_protection_payload=branch_protection_payload,
+        )
+        if adoption_complete is False:
+            status = "fail"
+            if adoption_complete_gaps:
+                errors.append(
+                    "adoption_complete: " + "; ".join(adoption_complete_gaps[:4])
+                )
+    except Exception as e:
+        errors.append(f"adoption_complete: {e}")
+        adoption_complete = False
+        adoption_complete_gaps = [f"assessment_error:{e}"]
+        adoption_complete_fix_command = "gh plate health --json"
+        release_standing_health = "error"
+        branch_protection_pr_reviews_required = None
+        status = "fail"
+
     report = HealthReport(
         repo=target,
         label_coverage_ok=label_ok,
@@ -801,5 +1197,10 @@ def get_health(
         self_migrate_ready=self_migrate_ready,
         self_migrate_target=self_migrate_target,
         self_migrate_next_command=self_migrate_next_command,
+        adoption_complete=adoption_complete,
+        adoption_complete_gaps=list(adoption_complete_gaps),
+        adoption_complete_fix_command=adoption_complete_fix_command,
+        release_standing_health=release_standing_health,
+        branch_protection_pr_reviews_required=branch_protection_pr_reviews_required,
     )
     return report

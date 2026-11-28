@@ -40,6 +40,17 @@ See `AGENTS.md`, `SPEC.md`, and `docs/wiki/V1-Autonomy-Surfaces-Epic-Closeouts.m
 
 **New repository?** See **[docs/bootstrap/starting-a-new-repository.md](docs/bootstrap/starting-a-new-repository.md)** (empty `gh repo create`, then `gh plate bootstrap --greenfield`). Existing codebase: `docs/migration/adoption-guide.md`.
 
+### Adopting PLATE (existing codebase)
+
+Adoption is a **two-step required path**, not optional scaffolding:
+
+1. **Local payload:** `gh plate import-payload --dry-run --strategy conservative`, then `gh plate import-payload --apply --strategy conservative` when the plan is clean.
+2. **GitHub baseline (required):** `gh plate bootstrap --repo OWNER/REPO --adopt --apply`
+
+Bootstrap is mandatory for the canonical **label registry**, **seed Epic**, **starter Questions**, **standing release tracks** (`release-major` / `release-minor` / `release-patch` and/or legacy `release`), and the standing **Next Release** issue. Skipping bootstrap means the repo is not operating under PLATE.
+
+Verify with **`gh plate health`**: the **`adoption_complete`** verdict must pass (it reports gaps and a fix command when anything is missing). Full walkthrough: [docs/migration/adoption-guide.md](docs/migration/adoption-guide.md).
+
 ### Install versions (pip + gh-plate pin)
 
 After the **v0.12.0** cut, public surfaces are:

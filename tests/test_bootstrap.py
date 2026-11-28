@@ -322,6 +322,10 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(report.adoption_mode)
         self.assertTrue(report.next_steps)
         self.assertTrue(any("import-payload" in s for s in report.next_steps))
+        self.assertTrue(
+            any("not optional" in s or "#1193" in s for s in report.next_steps),
+            msg=report.next_steps,
+        )
         copy_action = next(a for a in report.actions if a.name == "copy-template-payload")
         self.assertIn("import-payload", copy_action.detail)
         epic = next(a for a in report.actions if a.name == "create-initial-epic")

@@ -533,6 +533,19 @@ class TestImportPayload(unittest.TestCase):
             self.assertIn("conservative", report["next_command"])
             self.assertIn("--dry-run", report["next_command"])
 
+    def test_next_steps_end_with_mandatory_bootstrap_command(self):
+        """#1193: next_steps always surface required bootstrap after apply."""
+        from plate_core.import_payload import import_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = import_payload(root, strategy="safe", apply=True)
+            joined = " ".join(report["next_steps"])
+            self.assertIn("#1193", joined)
+            self.assertIn("Required:", joined)
+            self.assertIn("adoption_complete", joined)
+            self.assertIn("bootstrap", report["next_command"])
+
     def test_post_import_next_steps_never_suggest_config_init_when_plate_exists(self):
         """#1189: after apply seeds .plate, printed next steps must not mention config init."""
         from plate_core.import_payload import format_import_payload_report, import_payload

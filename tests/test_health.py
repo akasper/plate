@@ -9,10 +9,18 @@ from plate_core.github_labels import load_labels_from_yaml
 from plate_core.health import (
     HealthReport,
     _repo_from_git_remote,
+    assess_adoption_complete,
+    adoption_messaging_content_gaps,
+    adoption_release_standing_ok,
     bootstrap_adopt_apply_command,
+    branch_protection_requires_pull_requests,
+    effective_pull_request_reviews_required,
+    _ruleset_applies_to_default_branch,
+    _rulesets_require_pull_request_reviews,
     expected_labels_from_registry,
     get_health,
     label_coverage_fix_command,
+    missing_local_adoption_payload_paths,
     resolve_adoption_bootstrap_repo,
     resolve_repo,
     summarize_spec_audit_for_health,
@@ -36,15 +44,30 @@ class FakeClient:
             return _registry_label_api_objects()
         if endpoint == "repos/akasper/plate_core":
             return {"default_branch": "main"}
-        if endpoint == "repos/akasper/plate_core/branches/main/protection":
+        if "/branches/" in endpoint and endpoint.endswith("/protection"):
             return {
                 "required_status_checks": {
                     "contexts": ["labels", "test", "pr-gates"],
-                }
+                },
+                "required_pull_request_reviews": {"required_approving_review_count": 1},
             }
+        if endpoint.endswith("/rulesets?per_page=100"):
+            return []
+        if endpoint.startswith("repos/") and "/branches/" in endpoint:
+            return {"name": endpoint.rsplit("/", 1)[-1]}
         if endpoint.startswith("search/issues"):
-            if "label:Question" in endpoint:
-                return {"total_count": 2}
+            if "Release" in endpoint:
+                return {
+                    "total_count": 1,
+                    "items": [{"number": 50, "title": "Next Release"}],
+                }
+            if "Epic" in endpoint:
+                return {
+                    "total_count": 1,
+                    "items": [{"number": 1, "title": "Epic: initial-plate-epic"}],
+                }
+            if "Question" in endpoint:
+                return {"total_count": 3}
             return {"total_count": 3}
         if "contents/docs/wiki/Goals.md" in endpoint:
             return {"name": "Goals.md", "type": "file"}
@@ -104,12 +127,12 @@ class HealthTests(unittest.TestCase):
         self.assertTrue(report.label_coverage_ok)
         self.assertEqual(report.missing_labels, [])
         self.assertTrue(report.branch_protection_enabled)
-        self.assertEqual(report.open_epic_count, 3)
+        self.assertEqual(report.open_epic_count, 1)
         self.assertEqual(report.binary_artifacts_tracked, 0)  # hygiene regression guard for #90
         self.assertEqual(report.status, "pass")
         self.assertEqual(report.errors, [])  # no partial errors
         self.assertTrue(report.goals_page_present)
-        self.assertEqual(report.open_question_count, 2)
+        self.assertEqual(report.open_question_count, 3)
         self.assertTrue(report.plate_config_present)
         self.assertTrue(report.plate_config_valid)
         self.assertEqual(report.plate_config_file_version, "1.0")
@@ -383,7 +406,8 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(report.open_epic_count, 0)  # failed search
         self.assertTrue(len(report.errors) >= 2)  # at least protection + search
         self.assertIn("rate limit", " ".join(report.errors))
-        self.assertEqual(report.status, "warn")  # some ok (labels partial succeeded)
+        self.assertEqual(report.status, "fail")  # adoption_complete fails when partial (#1193)
+        self.assertFalse(report.adoption_complete)
         # to_dict omits empty errors
         d = report.to_dict()
         self.assertIn("errors", d)
@@ -505,6 +529,336 @@ class HealthTests(unittest.TestCase):
                 self.assertEqual(resolve_repo(None), expected)
                 # also ensure resolve_repo passthrough still works
                 self.assertEqual(resolve_repo("explicit/owner"), "explicit/owner")
+
+
+class AdoptionCompleteVerdictTests(unittest.TestCase):
+    """#1193: adoption_complete fails with actionable fix when baseline is missing."""
+
+    def test_missing_local_payload_reports_import_fix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            complete, gaps, fix, standing, _ = assess_adoption_complete(
+                repo="acme/widget",
+                repo_root=tmp,
+                gh=FakeClient(),
+                default_branch="main",
+                label_coverage_ok=True,
+                branch_protection_enabled=True,
+                branch_protection_payload={
+                    "required_pull_request_reviews": {"required_approving_review_count": 1},
+                },
+            )
+        self.assertFalse(complete)
+        self.assertTrue(any(g.startswith("local_payload:") for g in gaps))
+        self.assertIn("import-payload --apply", fix or "")
+        self.assertIn("--repo-root", fix or "")
+
+    def test_missing_labels_points_at_bootstrap_adopt(self):
+        complete, gaps, fix, _, _ = assess_adoption_complete(
+            repo="acme/widget",
+            repo_root=str(REPO_ROOT),
+            gh=FakeClient(),
+            default_branch="main",
+            label_coverage_ok=False,
+            branch_protection_enabled=True,
+            branch_protection_payload={
+                "required_pull_request_reviews": {"required_approving_review_count": 1},
+            },
+        )
+        self.assertFalse(complete)
+        self.assertTrue(any("remote_labels" in g for g in gaps))
+        self.assertIn("bootstrap --repo", fix or "")
+        self.assertIn("--adopt --apply", fix or "")
+
+    def test_open_counts_without_seed_artifacts_are_incomplete(self):
+        class WrongEpicClient(FakeClient):
+            def api(self, endpoint, **kwargs):
+                if endpoint.startswith("search/issues") and "Epic" in endpoint:
+                    return {
+                        "total_count": 1,
+                        "items": [{"number": 9, "title": "Epic: product-roadmap"}],
+                    }
+                return super().api(endpoint, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for rel in (
+                ".github/labels.yml",
+                ".github/PULL_REQUEST_TEMPLATE.md",
+                ".github/workflows/plate-pr-gates.yml",
+                ".github/workflows/label-check.yml",
+                ".agentic/process.yml",
+                ".agentic/skills.yml",
+            ):
+                path = root / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# stub\n", encoding="utf-8")
+            (root / "README.md").write_text(
+                "\n".join(
+                    [
+                        "# x",
+                        "Adopting PLATE",
+                        "import-payload",
+                        "--adopt --apply",
+                        "adoption_complete",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (root / "AGENTS.md").write_text(
+                "adoption_complete not optional import-payload bootstrap\n",
+                encoding="utf-8",
+            )
+            complete, gaps, _, _, _ = assess_adoption_complete(
+                repo="acme/widget",
+                repo_root=root,
+                gh=WrongEpicClient(),
+                default_branch="main",
+                label_coverage_ok=True,
+                branch_protection_enabled=True,
+                branch_protection_payload={
+                    "required_pull_request_reviews": {"required_approving_review_count": 1},
+                },
+            )
+        self.assertFalse(complete)
+        self.assertTrue(any(g.startswith("seed_epic:") for g in gaps))
+
+    def test_zero_required_review_count_is_not_protected(self):
+        self.assertFalse(
+            branch_protection_requires_pull_requests(
+                {"required_pull_request_reviews": {"required_approving_review_count": 0}}
+            )
+        )
+
+    def test_assess_fails_closed_on_exception(self):
+        with patch(
+            "plate_core.release.diagnose_release_standing_state",
+            side_effect=RuntimeError("boom"),
+        ):
+            complete, gaps, _, _, _ = assess_adoption_complete(
+                repo="acme/widget",
+                repo_root=str(REPO_ROOT),
+                gh=FakeClient(),
+                default_branch="main",
+                label_coverage_ok=True,
+                branch_protection_enabled=True,
+                branch_protection_payload={
+                    "required_pull_request_reviews": {"required_approving_review_count": 1},
+                },
+            )
+        self.assertFalse(complete)
+        self.assertTrue(any("release_standing" in g for g in gaps))
+
+    def test_get_health_fails_closed_when_assess_raises(self):
+        with patch(
+            "plate_core.health.assess_adoption_complete",
+            side_effect=RuntimeError("assess failed"),
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+                repo_root=str(REPO_ROOT),
+            )
+        self.assertFalse(report.adoption_complete)
+        self.assertTrue(any("adoption_complete" in e for e in report.errors))
+
+    def test_health_surfaces_adoption_complete_fields(self):
+        with patch(
+            "plate_core.adoption.assess_adoption_readiness",
+            return_value={
+                "ok": True,
+                "core_ready": True,
+                "first_qa": {"seeded": True},
+                "estimated_minutes_remaining": 0,
+                "next_command": "gh plate health",
+            },
+        ):
+            report = get_health(
+                repo="akasper/plate_core",
+                client=FakeClient(),
+                include_spec_audit=False,
+                repo_root=str(REPO_ROOT),
+            )
+        self.assertTrue(report.adoption_complete)
+        d = report.to_dict()
+        self.assertIn("adoption_complete", d)
+        self.assertEqual(report.status, "pass")
+
+
+class RulesetProtectionMatchingTests(unittest.TestCase):
+    """#1528: ruleset-aware PR review gate (read-only reporting)."""
+
+    def _active_main_ruleset(self, *, rule_types: list[str]) -> tuple[dict, dict]:
+        meta = {
+            "id": 1,
+            "enforcement": "active",
+            "target": "branch",
+        }
+        detail = {
+            "target": "branch",
+            "conditions": {
+                "ref_name": {"include": ["~DEFAULT_BRANCH", "main"], "exclude": []}
+            },
+            "rules": [{"type": t} for t in rule_types],
+        }
+        return meta, detail
+
+    def test_ruleset_applies_respects_enforcement_and_ref_patterns(self):
+        active_meta, active_detail = self._active_main_ruleset(rule_types=["pull_request"])
+        self.assertTrue(
+            _ruleset_applies_to_default_branch(active_meta, active_detail, "main")
+        )
+        inactive = {**active_meta, "enforcement": "disabled"}
+        self.assertFalse(
+            _ruleset_applies_to_default_branch(inactive, active_detail, "main")
+        )
+        non_matching_detail = {
+            **active_detail,
+            "conditions": {
+                "ref_name": {"include": ["release"], "exclude": []}
+            },
+        }
+        self.assertFalse(
+            _ruleset_applies_to_default_branch(
+                active_meta, non_matching_detail, "main"
+            )
+        )
+
+    def test_active_matching_pull_request_ruleset_counts_as_protected(self):
+        class RulesetClient:
+            def api(self, endpoint, **kwargs):
+                if endpoint.endswith("/rulesets?per_page=100"):
+                    return [{"id": 7, "enforcement": "active", "target": "branch"}]
+                if endpoint.endswith("/rulesets/7"):
+                    _meta, detail = self_outer._active_main_ruleset(
+                        rule_types=["pull_request"]
+                    )
+                    return detail
+                raise AssertionError(endpoint)
+
+        self_outer = self
+        self.assertTrue(
+            _rulesets_require_pull_request_reviews(
+                RulesetClient(), "acme/widget", "main"
+            )
+        )
+
+    def test_inactive_or_nonmatching_ruleset_does_not_count(self):
+        class InactiveClient:
+            def api(self, endpoint, **kwargs):
+                if endpoint.endswith("/rulesets?per_page=100"):
+                    return [{"id": 2, "enforcement": "disabled", "target": "branch"}]
+                if endpoint.endswith("/rulesets/2"):
+                    return {
+                        "target": "branch",
+                        "conditions": {
+                            "ref_name": {"include": ["main"], "exclude": []}
+                        },
+                        "rules": [{"type": "pull_request"}],
+                    }
+                raise AssertionError(endpoint)
+
+        class NonMatchingClient:
+            def api(self, endpoint, **kwargs):
+                if endpoint.endswith("/rulesets?per_page=100"):
+                    return [{"id": 3, "enforcement": "active", "target": "branch"}]
+                if endpoint.endswith("/rulesets/3"):
+                    return {
+                        "target": "branch",
+                        "conditions": {
+                            "ref_name": {"include": ["release"], "exclude": []}
+                        },
+                        "rules": [{"type": "pull_request"}],
+                    }
+                raise AssertionError(endpoint)
+
+        self.assertFalse(
+            _rulesets_require_pull_request_reviews(
+                InactiveClient(), "acme/widget", "main"
+            )
+        )
+        self.assertFalse(
+            _rulesets_require_pull_request_reviews(
+                NonMatchingClient(), "acme/widget", "main"
+            )
+        )
+
+    def test_effective_gate_without_classic_protection_uses_ruleset(self):
+        class RulesetClient:
+            def api(self, endpoint, **kwargs):
+                if endpoint.endswith("/rulesets?per_page=100"):
+                    return [{"id": 9, "enforcement": "active", "target": "branch"}]
+                if endpoint.endswith("/rulesets/9"):
+                    return {
+                        "target": "branch",
+                        "conditions": {
+                            "ref_name": {"include": ["main"], "exclude": []}
+                        },
+                        "rules": [{"type": "pull_request"}],
+                    }
+                raise AssertionError(endpoint)
+
+        self.assertTrue(
+            effective_pull_request_reviews_required(
+                gh=RulesetClient(),
+                repo="acme/widget",
+                default_branch="main",
+                branch_protection_enabled=False,
+                branch_protection_payload=None,
+            )
+        )
+
+
+class AdoptionReleaseStandingModelTests(unittest.TestCase):
+    """#1528: adoption release standing accepts 3-track or legacy `release`."""
+
+    def _standing(self, branches: dict[str, bool], *, next_count: int = 1) -> dict:
+        return {
+            "branches": branches,
+            "next_release_count": next_count,
+            "needs_next_issue": next_count == 0,
+            "needs_dedupe_next": next_count > 1,
+        }
+
+    def test_modern_three_track_without_legacy_release_is_ok(self):
+        standing = self._standing(
+            {
+                "release-major": True,
+                "release-minor": True,
+                "release-patch": True,
+                "release": False,
+            }
+        )
+        self.assertTrue(adoption_release_standing_ok(standing))
+
+    def test_legacy_release_only_is_ok(self):
+        standing = self._standing(
+            {
+                "release-major": False,
+                "release-minor": False,
+                "release-patch": False,
+                "release": True,
+            }
+        )
+        self.assertTrue(adoption_release_standing_ok(standing))
+
+    def test_neither_model_fails(self):
+        standing = self._standing(
+            {
+                "release-major": False,
+                "release-minor": True,
+                "release-patch": False,
+                "release": False,
+            }
+        )
+        self.assertFalse(adoption_release_standing_ok(standing))
+
+    def test_missing_next_release_issue_fails(self):
+        standing = self._standing(
+            {"release-major": True, "release-minor": True, "release-patch": True},
+            next_count=0,
+        )
+        self.assertFalse(adoption_release_standing_ok(standing))
 
 
 class AdoptionBootstrapRepoResolutionTests(unittest.TestCase):

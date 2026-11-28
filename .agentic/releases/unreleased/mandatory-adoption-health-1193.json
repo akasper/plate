@@ -1,0 +1,8 @@
+{
+  "issue": 1193,
+  "change_type": "feature",
+  "summary": "Mandatory adoption messaging: README and payload AGENTS.md require import-payload then bootstrap --adopt --apply; import-payload/bootstrap next-steps end with resolved bootstrap command; gh plate health adoption_complete verdict with fix command (read-only protection reporting).",
+  "surface": "src/plate_core/health.py, import_payload.py, bootstrap.py, README.md, template_payload/AGENTS.md",
+  "verification": "tests/test_health.py adoption_complete tests; tests/test_import_payload.py next_steps; unittest full suite",
+  "links": ["#1193", "#1190", "#1189", "#1115", "#1194"]
+}
