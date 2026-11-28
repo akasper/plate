@@ -27,6 +27,7 @@ For each child stub, `gh pr list --state open --search "<n> in:body"` and issue 
 | [#1544](https://github.com/akasper/plate/pull/1544) | MCP `MCP_TOOL_HANDLERS` map (#1543) | New MCP tools: handler in `MCP_TOOL_HANDLERS`, schema in `src/plate_core/mcp/tool_definitions.py` (`MCP_TOOL_DEFINITIONS`), profile in `src/plate_core/mcp/tool_profiles.py`; registry tests in `tests/test_mcp_registry.py` |
 | [#1536](https://github.com/akasper/plate/pull/1536) | `docs/plate/research/public-surface-inventory.md` (#1056) | Any new **public** CLI `kg` family or MCP tools must be classified and listed in the inventory |
 | [#1538](https://github.com/akasper/plate/pull/1538) | `docs/cli-mcp-reference.md` + `scripts/generate-cli-mcp-reference.py` (#1068) | After inventory update: regenerate reference; `tests/test_cli_mcp_reference.py` / `--check` must pass |
+| [#1541](https://github.com/akasper/plate/pull/1541) | `tests/fixtures/public_surface_stable.json` contract snapshot (#1058) | Any new **stable** `kg` CLI or MCP surface must regenerate the snapshot so the contract tests pass; experimental items stay out of it |
 
 Binding **command and tool names** remain as in the Q&A pack and stub bodies: `gh plate kg refresh|query|get`, `plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse`.
 
@@ -38,7 +39,7 @@ These apply to every implementation PR; they are not repeated per stub.
 
 - **CLI:** Register under `build_parser()` in `src/plate_core/cli.py` (same pattern as `epic`, `autonomy`, `qanda`).
 - **MCP:** After [#1544](https://github.com/akasper/plate/pull/1544) lands, wire tools through **`MCP_TOOL_HANDLERS`** in `src/plate_core/mcp_server.py`, definitions in **`MCP_TOOL_DEFINITIONS`** (`src/plate_core/mcp/tool_definitions.py`), and **`profiles_for_tool()`** in `src/plate_core/mcp/tool_profiles.py`. Do not add a parallel dispatch path.
-- **Public surface:** Update `docs/plate/research/public-surface-inventory.md` ([#1536](https://github.com/akasper/plate/pull/1536)) and regenerate `docs/cli-mcp-reference.md` via `scripts/generate-cli-mcp-reference.py` ([#1538](https://github.com/akasper/plate/pull/1538)).
+- **Public surface:** Update `docs/plate/research/public-surface-inventory.md` ([#1536](https://github.com/akasper/plate/pull/1536)) and regenerate `docs/cli-mcp-reference.md` via `scripts/generate-cli-mcp-reference.py` ([#1538](https://github.com/akasper/plate/pull/1538)). For any surface classified **stable**, also regenerate `tests/fixtures/public_surface_stable.json` ([#1541](https://github.com/akasper/plate/pull/1541)).
 - **Storage:** Binding path `.agentic/kg/` with `graph.json` and `built_at` (Q&A pack); git policy is open question #3 below.
 - **Procedures:** `.agentic/procedures/*.json` loaded by `src/plate_core/autonomy.py` (see `nightly-drift-detection.json`).
 - **No `.plate` edits** in refinement/early Features unless a child issue explicitly requires runtime config (per stub #1043).
@@ -161,7 +162,7 @@ flowchart LR
 
 - MCP: register `plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse` via **`MCP_TOOL_HANDLERS`** + **`MCP_TOOL_DEFINITIONS`** + **`profiles_for_tool()`** ([#1544](https://github.com/akasper/plate/pull/1544)); extend `tests/test_mcp_registry.py` dispatch/key parity.
 - Tests: stub requires coverage per query — use fixtures from #1041; may extend `tests/test_mcp.py` rather than inventing parallel harness if equivalent.
-- **Public surface:** inventory ([#1536](https://github.com/akasper/plate/pull/1536)) + regenerated `docs/cli-mcp-reference.md` ([#1538](https://github.com/akasper/plate/pull/1538)).
+- **Public surface:** inventory ([#1536](https://github.com/akasper/plate/pull/1536)) + regenerated `docs/cli-mcp-reference.md` ([#1538](https://github.com/akasper/plate/pull/1538)) + regenerated `tests/fixtures/public_surface_stable.json` ([#1541](https://github.com/akasper/plate/pull/1541)) for any tool or command classified stable.
 
 ### Dependencies
 
