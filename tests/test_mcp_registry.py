@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from plate_core.mcp.registry import (
@@ -18,6 +20,45 @@ from plate_core.mcp.registry import (
 from plate_core.mcp.tool_profiles import PROFILE_ALL, reset_mcp_tool_profile_session
 import plate_core.mcp_server  # noqa: F401 — registers tool executor
 from plate_core.mcp_server import _execute_mcp_tool
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_LEAK_PREFIXES = (".agentic", "docs/curiosity")
+_STRAY_ROOT_FILES = frozenset(
+    {
+        "playwright.config.ts",
+        ".env.local",
+    }
+)
+
+
+def _checkout_leak_snapshot(repo_root: Path) -> frozenset[str]:
+    """Tracked paths that dispatch harnesses must not create in the real checkout."""
+    seen: set[str] = set()
+    for prefix in _LEAK_PREFIXES:
+        base = repo_root / prefix
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if path.is_file():
+                seen.add(path.relative_to(repo_root).as_posix())
+    for name in _STRAY_ROOT_FILES:
+        p = repo_root / name
+        if p.is_file():
+            seen.add(name)
+    return frozenset(seen)
+
+
+def _assert_no_checkout_leaks(
+    repo_root: Path,
+    before: frozenset[str],
+    after: frozenset[str],
+) -> None:
+    new_paths = sorted(after - before)
+    if new_paths:
+        raise AssertionError(
+            "MCP dispatch test polluted the repository checkout: "
+            f"{new_paths!r}"
+        )
 
 
 class McpRegistryConsistencyTests(unittest.TestCase):
@@ -103,9 +144,18 @@ class McpRegistryDispatchTests(unittest.TestCase):
             except Exception:
                 pass  # missing required args / mocked I/O is acceptable
 
-        for name in sorted(dispatchable_tool_names()):
-            with self.subTest(tool=name):
-                _exercise(tool_name=name)
+        before = _checkout_leak_snapshot(_REPO_ROOT)
+        prev_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory(prefix="plate-mcp-dispatch-") as tmp:
+            os.chdir(tmp)
+            try:
+                for name in sorted(dispatchable_tool_names()):
+                    with self.subTest(tool=name):
+                        _exercise(tool_name=name)
+            finally:
+                os.chdir(prev_cwd)
+        after = _checkout_leak_snapshot(_REPO_ROOT)
+        _assert_no_checkout_leaks(_REPO_ROOT, before, after)
 
     def test_execute_tool_uses_registered_executor(self):
         with patch("plate_core.mcp_server.get_health") as mock_health:

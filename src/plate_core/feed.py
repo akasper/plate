@@ -750,60 +750,6 @@ def build_feed_items(
     return items
 
 
-def _pin_feed_slice_priorities(
-    items: list[FeedItem],
-    *,
-    questions_injected: bool,
-    tasks_injected: bool,
-    pm_assignments: list[dict[str, Any]],
-) -> None:
-    """Keep offline-injected Q/T and PM queue rows visible under small limits (#631).
-
-    Durable local surfaces (approvals, ledger gates, packaging, etc.) can rank above
-    default issue scores; caller-supplied harvest lists must still surface in the slice.
-    """
-    if questions_injected:
-        for idx, it in enumerate(i for i in items if i.item_type == "question"):
-            it.rank = min(it.rank, 2 + idx)
-    if tasks_injected:
-        for idx, it in enumerate(i for i in items if i.item_type == "task"):
-            it.rank = min(it.rank, 2 + idx)
-    if pm_assignments:
-        for idx, it in enumerate(i for i in items if i.item_type == "pm_assignment"):
-            it.rank = min(it.rank, 11 + idx)
-
-
-def _ensure_required_types_in_slice(
-    items: list[FeedItem],
-    top: list[FeedItem],
-    limit: int,
-    *,
-    required_types: set[str],
-) -> list[FeedItem]:
-    """Merge missing ``required_types`` into ``top`` without rewriting their ranks."""
-    if not required_types:
-        return top
-    merged = list(top)
-    for req_type in sorted(required_types):
-        if any(it.item_type == req_type for it in merged):
-            continue
-        candidate = next((it for it in items if it.item_type == req_type), None)
-        if candidate is None:
-            continue
-        replaced = False
-        for idx in range(len(merged) - 1, -1, -1):
-            if merged[idx].item_type in required_types:
-                continue
-            merged[idx] = candidate
-            replaced = True
-            break
-        if not replaced:
-            merged.append(candidate)
-        merged.sort(key=lambda x: (x.rank, x.item_type, x.title.lower()))
-        merged = merged[: max(1, limit)]
-    return merged
-
-
 def get_user_feed(
     repo: str | None = None,
     client: GhClient | None = None,
@@ -1360,26 +1306,7 @@ def get_user_feed(
         approval_items=approval_items,
         pm_assignments=pm_assignments,
     )
-    _pin_feed_slice_priorities(
-        items,
-        questions_injected=questions is not None,
-        tasks_injected=tasks is not None,
-        pm_assignments=pm_assignments,
-    )
-    items.sort(key=lambda x: (x.rank, x.item_type, x.title.lower()))
     top = items[: max(1, limit)]
-    required_types: set[str] = set()
-    if questions is not None and q_items:
-        required_types.add("question")
-    if tasks is not None and t_items:
-        required_types.add("task")
-    if pm_assignments:
-        required_types.add("pm_assignment")
-    if include_process and process_items:
-        required_types.add("process")
-    top = _ensure_required_types_in_slice(
-        items, top, limit, required_types=required_types
-    )
     # Prefer pre-shaped ask_user_question from approval/plan/PM/cost sources when present
     pre_payloads: dict[str, Any] = {}
     for i, p in enumerate(process_items):
