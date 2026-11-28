@@ -29,7 +29,7 @@ Order respects declared stacks. **Features** land on `release-minor`; **bugs** o
 ### Track B — `release-minor` foundations
 
 7. **#1522** — CI baseline (#1478)
-8. **#1526** — pr-gates unittest policy (#1182) — **after #1522**
+8. **#1526** — pr-gates unittest policy (#1182) — **after #1522** (`pr-gates` red is structural: gate modules ship in #1522; expect green after #1522 lands)
 9. **#1517** — AGENTS / factual docs (#1479)
 10. **#1528** — adoption health (#1193) — **after #1517**
 
@@ -44,15 +44,15 @@ Order respects declared stacks. **Features** land on `release-minor`; **bugs** o
 
 ### Track D — public surface / compat stack (on #1536)
 
-15. **#1536** — public surface inventory (#1056) — fix PR type label (`Research` on the PR today fails `labels` CI)
+15. **#1536** — public surface inventory (#1056); PR type label is **Documentation** (prior `Research` label mismatch cleared on the PR)
 16. **#1538** — CLI/MCP stable reference + drift check (#1068) — **on #1536**
-17. **#1541** — compat contract tests (#1058) — **on #1536** (regenerate fixture after Track C checkpoint)
-18. **#1547** — consolidate loaders into `plate_core` (#1546) — **on #1541**
+17. **#1541** — compat contract tests (#1058) — **on #1536** (regenerate fixture after Track C checkpoint); **blocked on re-review** after must-fix at `1a06a415` (head `79e51c24` under review)
+18. **#1547** — consolidate loaders into `plate_core` (#1546) — **on #1541**; **hold until #1541 clears re-review**
 
 ### Track E — user docs on `release-minor` (coordinate README)
 
 19. **#1535** — token-scope reference (#1061) — green; awaits human security review
-20. **#1534** — `SECURITY.md` (#1060) — CI red (`labels`, `pr-gates`)
+20. **#1534** — `SECURITY.md` (#1060) — **ready once `pr-gates` reruns green** (private vulnerability reporting enabled; agent review thread resolved)
 21. **#1532** — concepts guide (#1067) — open questions in PR body
 22. **#1533** — quickstart (#1066) — 3 unresolved review threads, `pr-gates` failure
 
@@ -90,19 +90,19 @@ Until retargeted, children remain valid stacked PRs against parent branch heads;
 | 1522 | CI baseline | `f24781a045031ccf17f762964c34f1397c11ce8f` | `release-minor` | no | yes | yes | green | 0 | #1478 | — |
 | 1523 | Release ceremony hardening | `cb69ed344a12607cc6b613714e812f625b8ecc60` | `release-patch` | no | yes | yes | green | 0 | #1488 | — |
 | 1524 | MCP registry + confinement | `dab6f2d4cab4605b5e20886dbdad1182f16b2067` | `release-minor` | no | yes | yes | green | 0 | #1475 | — |
-| 1526 | Deterministic pr-gates checks | `437192a1d7dd9655a98b3174fe4a3e4471bf4966` | `cursor/ci-baseline-1478-4a75` | no | yes | yes | red (`pr-gates`) | 0 | #1182 | #1522 |
+| 1526 | Deterministic pr-gates checks | `437192a1d7dd9655a98b3174fe4a3e4471bf4966` | `cursor/ci-baseline-1478-4a75` | no | yes | yes | structural red (`pr-gates`; modules from #1522) | 0 | #1182 | #1522 |
 | 1528 | Adoption health | `35daed3729a2143256434e82d6bd2c4cff92db0c` | `cursor/docs-reconcile-1479-5605` | no | yes | yes | green | 0 | #1193 | #1517 |
 | 1530 | `gh plate evidence` wrapper | `99c8fdf9c3f015f256941e4ea0d1496a9f9f02b0` | `cursor/mcp-registry-confinement-1475-81f3` | no | yes | yes | red (`test`) | 0 | #1051 | #1524 |
 | 1532 | PLATE concepts guide | `875f60d7a1e5040066d4ab7d8dbadc43e67e5e7c` | `release-minor` | no | yes | yes | green | 0 | #1067 | — |
 | 1533 | User quickstart | `7f41f442a9e2f3c8b5cbcaa101af638fe6be04e7` | `release-minor` | no | yes | yes | red (`pr-gates`) | 3 | #1066 | — |
-| 1534 | `SECURITY.md` | `a25206eb020f6d88296668b6aea6fccda5911f54` | `release-minor` | no | yes | yes | red (`labels`, `pr-gates`) | 1 | #1060 | — |
+| 1534 | `SECURITY.md` | `a25206eb020f6d88296668b6aea6fccda5911f54` | `release-minor` | no | yes | yes | ready once `pr-gates` green | 0 | #1060 | — |
 | 1535 | Token-scope reference | `c653e12a800b8d7785772f88eff2b89921468908` | `release-minor` | no | yes | yes | green | 0 | #1061 | — |
-| 1536 | Public surface inventory | `6c0a1eb9a0f023c50e0140f7bd734bd67c81661d` | `release-minor` | no | yes | yes | red (`labels`) | 0 | #1056 | — |
+| 1536 | Public surface inventory | `6c0a1eb9a0f023c50e0140f7bd734bd67c81661d` | `release-minor` | no | yes | yes | green (Documentation label) | 0 | #1056 | — |
 | 1538 | CLI/MCP stable reference | `723933d6c8e887dfd7cef91167307c9fcf9ef477` | `plate/1056-public-surface-inventory` | no | yes | yes | green | 0 | #1068 | #1536 |
 | 1540 | MCP tools/list drift fix | `5c99a82f0e7dba6a644ef22b549e4294e3a70c97` | `cursor/mcp-registry-confinement-1475-81f3` | no | yes | yes | green | 0 | #1537 | #1524 |
-| 1541 | Public-surface compat tests | `1a06a4150dcf10c2efeeb9c2ccbd38fd34e70beb` | `plate/1056-public-surface-inventory` | no | yes | yes | red (`labels`) | 0 | #1058 | #1536 |
-| 1544 | MCP handler map refactor | `f09970d78f73d6a5505ddc634567ef3b09d500d6` | `plate/1537-mcp-drift` | no | yes | yes | red (`labels`) | 0 | #1543 | #1540 |
-| 1547 | Public-surface loader consolidation | `00314184ad5e25d285c88f0b1e6badb371523fb7` | `plate/1058-compat-contract` | no | yes | yes | red (`labels`) | 0 | #1546 | #1541 |
+| 1541 | Public-surface compat tests | `79e51c24612dc1bc1566668a75c989ebef2fa491` | `plate/1056-public-surface-inventory` | no | yes | yes | blocked on re-review | 0 | #1058 | #1536 |
+| 1544 | MCP handler map refactor | `f09970d78f73d6a5505ddc634567ef3b09d500d6` | `plate/1537-mcp-drift` | no | yes | yes | green | 0 | #1543 | #1540 |
+| 1547 | Public-surface loader consolidation | `00314184ad5e25d285c88f0b1e6badb371523fb7` | `plate/1058-compat-contract` | no | yes | yes | holding (#1541) | 0 | #1546 | #1541 |
 
 GitHub `mergeStateStatus` values: `BLOCKED` or `UNSTABLE` on several rows reflect missing human approval or label-check failures, not necessarily merge conflicts. Every open PR in the table is `mergeable: MERGEABLE` on GitHub at sweep time.
 
@@ -129,6 +129,7 @@ No PR in range had a stale base at sweep time; no local merge or rebase conflict
 | **#1533 open docs questions** | SPEC vs README MCP install line, stub #1066 refinement, CONTRIBUTING branch model, first Q&A seed path, bootstrap time budget (15 vs 30 minutes). |
 | **#1536 / #1541 open questions** | Autonomy CLI vs MCP naming; whether `regenerate_public_surface_stable.py --check` belongs in CI on every PR. |
 | **#1521 CODEOWNERS** | Scope item S7 (real CODEOWNERS handle) intentionally deferred in PR body. |
+| **#1116 stub** | Adopt/bootstrap defects (`status:stub`, `need:refinement`); not in the #1516–#1547 PR window—scope and landing track still open (#1522 CI baseline touches adjacent surfaces). |
 | **#1008 refinement drafts (#1031–#1038)** | Epic #1008 and child issues remain open with `need:refinement` / stub status; refinement drafts for #1031–#1038 are not yet posted on the tracker. |
 | **v0.12.1 / v0.13.0 release cuts** | Not represented in PRs #1516–#1547; release ceremony work (#1523) is patch-track only. Schedule cuts after integration branches absorb the above stacks. |
 
