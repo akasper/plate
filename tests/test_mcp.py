@@ -12,8 +12,14 @@ from plate_core.bootstrap import BootstrapAction, BootstrapReport
 from plate_core.epics import EpicStatusReport, EpicSummary
 from plate_core.features import FeatureFlag, FeatureReport
 from plate_core.health import HealthReport
+from plate_core.mcp.path_confinement import session_repo_root
 from plate_core.mcp.tools import ValidateE2eTestsTool
 from plate_core.mcp_server import _handle_tools_call, run
+
+
+def _confined_tempdir():
+    """Temporary directory guaranteed to sit under the MCP session repo root."""
+    return tempfile.TemporaryDirectory(dir=session_repo_root())
 from plate_core.pr_babysit import BabysitReport
 
 
@@ -167,7 +173,7 @@ class McpTests(unittest.TestCase):
 
     @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_config_get(self, mock_write):
-        with tempfile.TemporaryDirectory() as tmp:
+        with _confined_tempdir() as tmp:
             _handle_tools_call(12, {"name": "plate_config_get", "arguments": {"repo_root": tmp}})
             payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
             self.assertFalse(payload["present"])
@@ -175,7 +181,7 @@ class McpTests(unittest.TestCase):
 
     @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_hooks_status(self, mock_write):
-        with tempfile.TemporaryDirectory() as tmp:
+        with _confined_tempdir() as tmp:
             subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
             _handle_tools_call(903, {"name": "plate_hooks_status", "arguments": {"repo_root": tmp}})
             payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
@@ -184,7 +190,7 @@ class McpTests(unittest.TestCase):
 
     @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_hooks_install_pre_commit(self, mock_write):
-        with tempfile.TemporaryDirectory() as tmp:
+        with _confined_tempdir() as tmp:
             subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
             _handle_tools_call(
                 904,
@@ -199,7 +205,7 @@ class McpTests(unittest.TestCase):
 
     @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_config_init(self, mock_write):
-        with tempfile.TemporaryDirectory() as tmp:
+        with _confined_tempdir() as tmp:
             _handle_tools_call(13, {"name": "plate_config_init", "arguments": {"repo_root": tmp}})
             payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
             self.assertTrue(payload["present"])
@@ -207,7 +213,7 @@ class McpTests(unittest.TestCase):
 
     @patch("plate_core.mcp_server._write")
     def test_tools_call_plate_config_upgrade(self, mock_write):
-        with tempfile.TemporaryDirectory() as tmp:
+        with _confined_tempdir() as tmp:
             (Path(tmp) / ".plate").write_text(
                 json.dumps(
                     {
@@ -351,15 +357,18 @@ class McpTests(unittest.TestCase):
         expected = {"ok": True, "apply_mode": True, "actions": []}
         mock_migrate.return_value.to_dict.return_value = expected
 
+        repo_root = Path(".").resolve()
+        target = str(repo_root)
+
         _handle_tools_call(
             22,
             {
                 "name": "plate_migrate_docs_namespace",
-                "arguments": {"target_dir": "/tmp/repo", "apply": True},
+                "arguments": {"target_dir": target, "apply": True},
             },
         )
 
-        mock_migrate.assert_called_once_with(target_dir="/tmp/repo", apply=True)
+        mock_migrate.assert_called_once_with(target_dir=target, apply=True)
         payload = json.loads(mock_write.call_args[0][0]["result"]["content"][0]["text"])
         self.assertEqual(payload, expected)
 
@@ -463,7 +472,10 @@ class McpTests(unittest.TestCase):
         res = ValidateE2eTestsTool.execute("/non/existent/path/12345")
         self.assertEqual(res["status"], "fail")
         self.assertFalse(res["valid"])
-        self.assertIn("Repository not found", res["issues"][0])
+        self.assertTrue(
+            "Repository not found" in res["issues"][0]
+            or "outside confined root" in res["issues"][0]
+        )
         self.assertTrue(any("next_steps" in k or "next" in str(v).lower() for k, v in res.items() if isinstance(v, (list, str))))
 
         # Empty temp dir -> fail (missing core)
