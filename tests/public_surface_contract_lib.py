@@ -3,21 +3,26 @@
 from __future__ import annotations
 
 import argparse
-import ast
-import importlib
-import io
 import json
-import os
 import re
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT / "src"))
+
+from plate_core.public_surface_loader import (  # noqa: E402
+    load_cli_tree,
+    load_mcp_tool_definitions,
+)
+
+REPO_ROOT = _REPO_ROOT
 INVENTORY_PATH = REPO_ROOT / "docs" / "plate" / "research" / "public-surface-inventory.md"
 LABELS_PATH = REPO_ROOT / ".github" / "labels.yml"
-MCP_SERVER_PATH = REPO_ROOT / "src" / "plate_core" / "mcp_server.py"
 SNAPSHOT_VERSION = 1
 
 
@@ -128,9 +133,7 @@ def _option_strings(parser: argparse.ArgumentParser) -> list[str]:
 
 
 def load_live_cli(invocations: set[str]) -> dict[str, list[str]]:
-    from plate_core.cli import build_parser
-
-    root = build_parser()
+    root = load_cli_tree()
     live: dict[str, list[str]] = {}
     for inv in sorted(invocations):
         parts = inv.split()
@@ -146,77 +149,9 @@ def load_live_labels() -> list[str]:
     return sorted(str(row["name"]) for row in data if isinstance(row, dict) and row.get("name"))
 
 
-def _mcp_tools_via_refactor_layout() -> list[dict[str, Any]] | None:
-    for module_name, attr in (
-        ("plate_core.mcp.tool_definitions", "MCP_TOOL_DEFINITIONS"),
-        ("plate_core.mcp_server", "MCP_TOOL_DEFINITIONS"),
-    ):
-        try:
-            mod = importlib.import_module(module_name)
-        except ImportError:
-            continue
-        raw = getattr(mod, attr, None)
-        if raw is not None:
-            return list(raw)
-    for module_name in ("plate_core.mcp.tool_definitions", "plate_core.mcp_server"):
-        try:
-            mod = importlib.import_module(module_name)
-        except ImportError:
-            continue
-        fn = getattr(mod, "tool_definitions_for_list", None)
-        if callable(fn):
-            return list(fn())
-    return None
-
-
-def _mcp_tools_via_ast() -> list[dict[str, Any]]:
-    source = MCP_SERVER_PATH.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        for target in node.targets:
-            if isinstance(target, ast.Name) and target.id == "all_tools":
-                try:
-                    value = ast.literal_eval(node.value)
-                except (ValueError, SyntaxError):
-                    continue
-                if isinstance(value, list):
-                    return value
-    raise RuntimeError("Could not literal_eval all_tools from mcp_server.py")
-
-
-def _mcp_tools_via_stdio() -> list[dict[str, Any]]:
-    from unittest.mock import patch
-
-    from plate_core.mcp.tool_profiles import ENV_TOOL_PROFILES, PROFILE_ALL, reset_mcp_tool_profile_session
-    from plate_core.mcp_server import run
-
-    os.environ[ENV_TOOL_PROFILES] = PROFILE_ALL
-    reset_mcp_tool_profile_session()
-    line = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n"
-    written: list[dict] = []
-
-    def _capture(obj: dict) -> None:
-        written.append(obj)
-
-    with patch("plate_core.mcp_server.sys.stdin", io.StringIO(line)), patch(
-        "plate_core.mcp_server._write", side_effect=_capture
-    ):
-        run()
-    reset_mcp_tool_profile_session()
-    os.environ.pop(ENV_TOOL_PROFILES, None)
-    return written[0]["result"]["tools"]
-
-
 def load_live_mcp_tools() -> dict[str, dict[str, Any]]:
     """Tool name -> {properties: [...], required: [...]}."""
-    tools = _mcp_tools_via_refactor_layout()
-    if tools is None:
-        try:
-            tools = _mcp_tools_via_ast()
-        except RuntimeError:
-            tools = _mcp_tools_via_stdio()
+    tools = load_mcp_tool_definitions()
     by_name: dict[str, dict[str, Any]] = {}
     for entry in tools:
         name = str(entry.get("name") or "")

@@ -11,8 +11,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "public_surface_stable.json"
 
+sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "tests"))
 from public_surface_contract_lib import build_stable_snapshot  # noqa: E402
+# Live surfaces load via plate_core.public_surface_loader inside build_stable_snapshot.
 
 
 def main() -> int:
