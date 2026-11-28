@@ -6,6 +6,7 @@ import argparse
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from . import __version__
 from .cli import build_parser
@@ -146,79 +147,121 @@ def collect_stable_cli_commands(repo_root: Path) -> list[CliCommandRef]:
     return [by_invocation[key] for key in sorted(by_invocation)]
 
 
-def _extract_description(chunk: str) -> str:
-    match = re.search(r'"description":\s*\((.*?)\)\s*,', chunk, re.DOTALL)
-    if match:
-        parts = re.findall(r'"([^"]*)"', match.group(1))
-        return re.sub(r"\s+", " ", "".join(parts)).strip()
-    match = re.search(r'"description":\s*"([^"]*)"', chunk)
-    if match:
-        return match.group(1).strip()
-    return ""
+def _normalize_description(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, tuple):
+        text = "".join(str(part) for part in value)
+    else:
+        text = str(value)
+    return re.sub(r"\s+", " ", text).strip()
 
 
-def _extract_parameters(chunk: str) -> list[tuple[str, str]]:
-    schema_match = re.search(r'"inputSchema":\s*\{', chunk)
-    if not schema_match:
+def parameters_from_input_schema(schema: dict[str, Any] | None) -> list[tuple[str, str]]:
+    if not schema:
         return []
-    sub = chunk[schema_match.start() :]
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return []
     params: list[tuple[str, str]] = []
-    for prop in re.finditer(r'"([a-z][a-z0-9_]*)":\s*\{\s*\n\s+"type":', sub):
-        name = prop.group(1)
-        block = sub[prop.start() : prop.start() + 800]
-        desc = _extract_description(block)
+    for name in sorted(properties):
+        prop = properties[name]
+        if isinstance(prop, dict):
+            desc = _normalize_description(prop.get("description"))
+        else:
+            desc = ""
         params.append((name, desc))
-    params.sort(key=lambda item: item[0])
     return params
 
 
-def _mcp_tools_block(repo_root: Path) -> str:
+def _legacy_inline_tool_definitions(repo_root: Path) -> list[dict[str, Any]]:
+    """Extract inline ``all_tools`` from ``mcp_server.py`` when no registry module exists."""
     server_path = repo_root / "src" / "plate_core" / "mcp_server.py"
     text = server_path.read_text(encoding="utf-8")
-    start = text.find('elif method == "tools/list":')
+    marker = 'elif method == "tools/list":'
+    start = text.find(marker)
     if start < 0:
         raise ValueError("tools/list block not found in mcp_server.py")
-    sub = text[start:]
-    match = re.search(r"all_tools = \[(.*)\]\s*\n\s*visible_tools", sub, re.DOTALL)
-    if not match:
-        raise ValueError("all_tools list not found in mcp_server.py")
-    return match.group(1)
+    assign = "all_tools = ["
+    assign_at = text.find(assign, start)
+    if assign_at < 0:
+        raise ValueError("inline all_tools list not found in mcp_server.py")
+    bracket_at = text.find("[", assign_at)
+    depth = 0
+    list_src = ""
+    for idx in range(bracket_at, len(text)):
+        char = text[idx]
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                list_src = text[bracket_at : idx + 1]
+                break
+    if not list_src:
+        raise ValueError("could not bracket-match inline all_tools list")
+    namespace: dict[str, Any] = {}
+    exec(compile(f"_all_tools = {list_src}", str(server_path), "exec"), namespace, namespace)
+    tools = namespace["_all_tools"]
+    if not isinstance(tools, list):
+        raise ValueError("inline all_tools is not a list")
+    return tools
 
 
-def _split_mcp_tool_chunks(block: str) -> dict[str, str]:
-    names = [m.start() for m in re.finditer(r'"name": "', block)]
-    chunks: dict[str, str] = {}
-    for i, pos in enumerate(names):
-        end = names[i + 1] if i + 1 < len(names) else len(block)
-        piece = block[pos:end]
-        name_match = re.search(r'"name": "([^"]+)"', piece)
-        if name_match:
-            chunks[name_match.group(1)] = piece
-    return chunks
+def load_all_mcp_tool_definitions(repo_root: Path | None = None) -> list[dict[str, Any]]:
+    """Return plate-mcp tools/list definitions (registry module when present, else inline list)."""
+    try:
+        from plate_core.mcp.registry import tool_definitions_for_list
+
+        return tool_definitions_for_list()
+    except ImportError:
+        pass
+    try:
+        from plate_core.mcp.tool_definitions import MCP_TOOL_DEFINITIONS
+
+        return list(MCP_TOOL_DEFINITIONS)
+    except ImportError:
+        pass
+    try:
+        import plate_core.mcp_server as mcp_server
+
+        exported = getattr(mcp_server, "MCP_TOOL_DEFINITIONS", None)
+        if exported is not None:
+            return list(exported)
+    except ImportError:
+        pass
+    root = repo_root or Path(__file__).resolve().parents[2]
+    return _legacy_inline_tool_definitions(root)
+
+
+def mcp_tool_definitions_by_name(repo_root: Path | None = None) -> dict[str, dict[str, Any]]:
+    return {str(tool["name"]): tool for tool in load_all_mcp_tool_definitions(repo_root)}
 
 
 def collect_stable_mcp_tools(repo_root: Path) -> list[McpToolRef]:
     _, stable_mcp = load_stable_surface_keys(repo_root)
-    block = _mcp_tools_block(repo_root)
-    parsed_names = set(re.findall(r'"name": "([^"]+)"', block))
+    by_name = mcp_tool_definitions_by_name(repo_root)
     catalog_names = list_mcp_tool_names()
-    if parsed_names != set(catalog_names):
-        missing = catalog_names - parsed_names
-        extra = parsed_names - catalog_names
+    if set(by_name) != set(catalog_names):
+        missing = catalog_names - set(by_name)
+        extra = set(by_name) - catalog_names
         raise ValueError(f"MCP tool catalog mismatch: missing={sorted(missing)} extra={sorted(extra)}")
-    chunks = _split_mcp_tool_chunks(block)
     refs: list[McpToolRef] = []
     for name in sorted(stable_mcp):
-        if name not in chunks:
+        if name not in by_name:
             raise ValueError(f"stable MCP tool missing from tools/list: {name}")
+        tool = by_name[name]
+        schema = tool.get("inputSchema")
+        if schema is not None and not isinstance(schema, dict):
+            raise ValueError(f"MCP tool {name!r} inputSchema is not a dict")
         refs.append(
             McpToolRef(
                 name=name,
-                description=_extract_description(chunks[name]),
-                parameters=tuple(_extract_parameters(chunks[name])),
+                description=_normalize_description(tool.get("description")),
+                parameters=tuple(parameters_from_input_schema(schema if isinstance(schema, dict) else {})),
             )
         )
-    missing = stable_mcp - set(chunks)
+    missing = stable_mcp - set(by_name)
     if missing:
         raise ValueError(f"stable MCP tools not in catalog: {sorted(missing)}")
     return refs

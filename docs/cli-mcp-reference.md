@@ -787,7 +787,12 @@ Return optional PLATE capability detection for a repository.
 
 Ranked endless feed of open Questions + Tasks (plus process/autonomy signals) for native TUI/CLI presentation (#631). Prefer this for user-facing Q&A/Task surfacing.
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `include_autonomy` | Include open autonomy checkpoints (default true). |
+| `include_process` | Include plate_what_next process item (default true). |
+| `limit` | Max items (default 10). |
+| `repo` | owner/name. Optional. |
 
 ### `plate_get_actionable_review_threads`
 
@@ -825,7 +830,7 @@ Return PLATE health summary for a repository, including local SPEC audit drift s
 | Parameter | Description |
 | --- | --- |
 | `no_spec_audit` | When true, skip local SPEC audit summary. |
-| `repo` | Local checkout root for SPEC audit filesystem signals. Defaults to current working directory. |
+| `repo` | owner/name. Optional if running inside repo clone. |
 | `repo_root` | Local checkout root for SPEC audit filesystem signals. Defaults to current working directory. |
 
 ### `plate_hooks_install`
@@ -848,7 +853,7 @@ Report install state and configured commands for PLATE pre-push and pre-commit h
 
 ### `plate_import_payload`
 
-Import PLATE template payload into a local checkout (#616). Dry-run by default; set apply=true to write. Strategies: safe|conservative|force. namespace_scripts installs under scripts/plate/ when product scripts/ exists (#621). namespace_docs installs under docs/plate/ when product docs/ exists (#1015); omit for auto-detect, false to keep docs/ root.
+Import PLATE template payload into a local checkout (#616). Dry-run by default; set apply=true to write. Strategies: safe|conservative|force. namespace_scripts installs under scripts/plate/ when product scripts/ exists (#621). namespace_docs installs under docs/plate/ when product docs/ exists (#1015); omit for auto-detect, false to keep docs/ root. platform is posix (default), posix-and-windows, or windows; it filters PLATE-owned script twins and is written on apply. escape_hatch_dir writes plan.json+PLAN.md+DRAFT_PR_BODY.md for hard merges (#622); never force-overwrite high-value paths without human approval.
 
 | Parameter | Description |
 | --- | --- |
@@ -867,7 +872,10 @@ Import PLATE template payload into a local checkout (#616). Dry-run by default; 
 
 Apply migration steps (with checkpoint/rollback support). Use after reviewing plan.
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `dry_run` | Simulate only (default true for safety). |
+| `repo` | owner/name. Optional. |
 
 ### `plate_migrate_docs_namespace`
 
@@ -882,19 +890,27 @@ Migrate PLATE docs from docs/ root to docs/plate/ namespace (#1027). Uses git mv
 
 Generate dry-run migration plan for template-to-plate cutover using current inventory and .plate state.
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `repo` | owner/name. Optional. |
 
 ### `plate_payload_classify`
 
 Classify a relative path against the payload manifest (#621).
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `path` |  |
+| `template_repo` |  |
 
 ### `plate_payload_list`
 
 List PLATE template payload files with classification and path_rules (#621).
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `include_excluded` |  |
+| `template_repo` |  |
 
 ### `plate_payload_manifest`
 
@@ -906,7 +922,9 @@ _No schema properties (empty object)._
 
 Resolve package payload root path and source kind (#621).
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `template_repo` |  |
 
 ### `plate_pr_babysit`
 
@@ -914,9 +932,9 @@ Inspect a pull request for unresolved review feedback (scope: all|bot-only|human
 
 | Parameter | Description |
 | --- | --- |
-| `act` |  |
+| `act` | When true, post trigger comments if issues detected and auto-resolve outdated threads. |
 | `agents` | Optional comma-separated login allowlist (overrides scope). |
-| `branch_update_strategy` |  |
+| `branch_update_strategy` | How to handle out-of-sync base branch: local-rebase (default, local worktree rebase+push), copilot-request (opt-in, triggers Copilot merge assist), or none (detect only). |
 | `pr_number` | Pull request number. |
 | `repo` | owner/name. Optional if running inside repo clone. |
 | `scope` | pr_review_scope (#496). Default all (from .plate or built-in). |
@@ -927,10 +945,13 @@ Compact JSON evidence packet for PR review feedback (#1364): threads, failing ch
 
 | Parameter | Description |
 | --- | --- |
+| `cloud_agent_id` |  |
 | `max_bytes` | UTF-8 size cap before truncation (default 6144). |
 | `pr_number` | Pull request number. |
 | `record_ledger` | Record handoff_packet_size (+ optional turns) to spend ledger. |
 | `repo` | owner/name. Optional if running inside repo clone. |
+| `run_id` |  |
+| `turns` |  |
 
 ### `plate_pr_verify`
 
@@ -938,7 +959,7 @@ Run scripted pre-merge checks for a PR (base main, labels, fragment, milestone, 
 
 | Parameter | Description |
 | --- | --- |
-| `pr_number` | When true, run PYTHONPATH=src python3 -m unittest discover -s tests locally and include the count (warns on stale-base signatures). |
+| `pr_number` | Pull request number. |
 | `repo` | owner/name. Optional if running inside repo clone. |
 | `repo_root` | Repository root for run_tests (default: .). |
 | `run_tests` | When true, run PYTHONPATH=src python3 -m unittest discover -s tests locally and include the count (warns on stale-base signatures). |
@@ -958,31 +979,47 @@ Find dead remote branches (merged into base and no open PR) and optionally delet
 
 Approve/reject a media item in-memory (persist by editing fragment) (#635).
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `decision` |  |
+| `index` |  |
+| `path` |  |
+| `releases_dir` |  |
+| `url` |  |
 
 ### `plate_release_media_feed`
 
 Feed items for pending release media approval (#635).
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `releases_dir` |  |
 
 ### `plate_release_media_manifest`
 
 Aggregate GIF/video media from unreleased fragments for release notes (#635).
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `releases_dir` |  |
+| `version` |  |
 
 ### `plate_release_media_render`
 
 Render release media markdown from fragments (#635).
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `only_approved` |  |
+| `releases_dir` |  |
 
 ### `plate_release_media_validate_paths`
 
 Check that fragment media paths exist on disk (#635).
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `releases_dir` |  |
 
 ### `plate_release_notes`
 
@@ -998,7 +1035,10 @@ Return a structured diff of PLATE release notes between two versions, including 
 
 Init/repair standing release tracks (release-major/minor/patch + legacy release) and ensure exactly one Next Release issue (#320). Default dry-run; set apply=true to create missing artifacts.
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `apply` |  |
+| `repo` |  |
 
 ### `plate_release_status`
 
@@ -1110,25 +1150,53 @@ From SPEC audit findings, plan (default) or create follow-up issues and a SPEC d
 | --- | --- |
 | `apply` | Create issues when true (default false dry-run). |
 | `max_issues` | Cap actionable issues (default 10). |
+| `releases_dir` |  |
 | `repo` | owner/name for issue creation |
+| `repo_root` |  |
+| `spec_path` |  |
 
 ### `plate_task_close`
 
 Close a Task with <!-- PLATE-TASK-CLOSED --> after human completion (#359). Do not invent completion.
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `comment` |  |
+| `dry_run` |  |
+| `number` |  |
+| `repo` |  |
 
 ### `plate_task_create`
 
 Create a human-only Task issue with the 6-field contract (#359). Redacts secret-looking text. Agents never complete the human work.
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `context` |  |
+| `done_signal` |  |
+| `dry_run` |  |
+| `epic_milestone` |  |
+| `human_action` |  |
+| `instructions` |  |
+| `milestone` |  |
+| `related_links` |  |
+| `repo` |  |
+| `title` |  |
+| `why_agent_cannot` |  |
 
 ### `plate_task_detect`
 
 Detect human-only blockers (credentials, PyPI, billing, marketplace, external accounts) and optionally create Task issues (#360). Default detect-only (create=false, dry_run=true).
 
-_No schema properties (empty object)._
+| Parameter | Description |
+| --- | --- |
+| `context` |  |
+| `create` |  |
+| `dry_run` |  |
+| `repo` |  |
+| `signal` |  |
+| `signals` |  |
+| `text` |  |
 
 ### `plate_what_next`
 

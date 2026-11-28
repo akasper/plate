@@ -7,6 +7,19 @@ class CliMcpReferenceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.repo_root = Path(__file__).resolve().parents[1]
 
+    def test_stable_mcp_parameters_match_authoritative_input_schemas(self) -> None:
+        from plate_core.cli_mcp_reference import (
+            collect_stable_mcp_tools,
+            load_all_mcp_tool_definitions,
+            parameters_from_input_schema,
+        )
+
+        by_name = {tool["name"]: tool for tool in load_all_mcp_tool_definitions(self.repo_root)}
+        for ref in collect_stable_mcp_tools(self.repo_root):
+            schema = by_name[ref.name].get("inputSchema") or {}
+            expected = tuple(parameters_from_input_schema(schema))
+            self.assertEqual(ref.parameters, expected, msg=ref.name)
+
     def test_rendered_reference_lists_stable_counts(self) -> None:
         from plate_core.cli_mcp_reference import (
             collect_stable_cli_commands,
