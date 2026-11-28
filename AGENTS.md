@@ -10,22 +10,22 @@ These pages hold the full rule text moved out of the always-loaded core. Open by
 
 | Page | When to load |
 |---|---|
-| [real-world-tasks.md](agents/real-world-tasks.md) | Epic planning with human-only external Tasks (#625-style blockers). |
-| [default-plate-persona.md](agents/default-plate-persona.md) | Default `plate` persona, opt-out, and host auto-discovery. |
-| [autopilot-doctrine.md](agents/autopilot-doctrine.md) | Atomic PR discipline, PR titles, pacing, and human checkpoints. |
-| [task-management.md](agents/task-management.md) | `todo_write` requirements for multi-step agent work (#515). |
-| [stub-issues.md](agents/stub-issues.md) | Stub issues, `status:stub`, and `need:refinement`. |
-| [pm-orchestration.md](agents/pm-orchestration.md) | Project Manager / `plate_pm_*` orchestration (#660 / #662). |
-| [autonomous-mode.md](agents/autonomous-mode.md) | AutonomyEngine, `.plate` autonomy config, and auto-merge eligibility. |
-| [branch-model-and-ceremonies.md](agents/branch-model-and-ceremonies.md) | Release branches, epic-close, release ceremony, and `gh plate release status` (#513). |
-| [pr-feedback-and-babysit.md](agents/pr-feedback-and-babysit.md) | PR-green loop, `gh plate pr babysit`, address-pr-feedback skill, and merge gates. |
-| [github-actions-and-copilot.md](agents/github-actions-and-copilot.md) | Actions cost controls and Copilot review / autostart policy. |
-| [documentation-rules.md](agents/documentation-rules.md) | Fragments, PR labels, milestones, and release-status targeting for docs PRs. |
-| [script-policy.md](agents/script-policy.md) | POSIX vs PowerShell script policy and `.plate` `platform`. |
-| [database-migration-naming.md](agents/database-migration-naming.md) | UTC timestamp + slug filenames for new DB migrations (#1451). |
-| [cli-body-patterns.md](agents/cli-body-patterns.md) | Safe multiline `gh pr create` / issue bodies (#62). |
-| [upstream-template-sync.md](agents/upstream-template-sync.md) | `import-payload`, `self-migrate`, and PLATES-CORE marker sync. |
-| [wiki-sync.md](agents/wiki-sync.md) | Opt-in wiki sync and Goals page convention. |
+| [real-world-tasks.md](docs/agents/real-world-tasks.md) | Epic planning with human-only external Tasks (#625-style blockers). |
+| [default-plate-persona.md](docs/agents/default-plate-persona.md) | Default `plate` persona, opt-out, and host auto-discovery. |
+| [autopilot-doctrine.md](docs/agents/autopilot-doctrine.md) | Atomic PR discipline, PR titles, pacing, and human checkpoints. |
+| [task-management.md](docs/agents/task-management.md) | `todo_write` requirements for multi-step agent work (#515). |
+| [stub-issues.md](docs/agents/stub-issues.md) | Stub issues, `status:stub`, and `need:refinement`. |
+| [pm-orchestration.md](docs/agents/pm-orchestration.md) | Project Manager / `plate_pm_*` orchestration (#660 / #662). |
+| [autonomous-mode.md](docs/agents/autonomous-mode.md) | AutonomyEngine, `.plate` autonomy config, and auto-merge eligibility. |
+| [branch-model-and-ceremonies.md](docs/agents/branch-model-and-ceremonies.md) | Release branches, epic-close, release ceremony, and `gh plate release status` (#513). |
+| [pr-feedback-and-babysit.md](docs/agents/pr-feedback-and-babysit.md) | PR-green loop, `gh plate pr babysit`, address-pr-feedback skill, and merge gates. |
+| [github-actions-and-copilot.md](docs/agents/github-actions-and-copilot.md) | Actions cost controls and Copilot review / autostart policy. |
+| [documentation-rules.md](docs/agents/documentation-rules.md) | Fragments, PR labels, milestones, and release-status targeting for docs PRs. |
+| [script-policy.md](docs/agents/script-policy.md) | POSIX vs PowerShell script policy and `.plate` `platform`. |
+| [database-migration-naming.md](docs/agents/database-migration-naming.md) | UTC timestamp + slug filenames for new DB migrations (#1451). |
+| [cli-body-patterns.md](docs/agents/cli-body-patterns.md) | Safe multiline `gh pr create` / issue bodies (#62). |
+| [upstream-template-sync.md](docs/agents/upstream-template-sync.md) | `import-payload`, `self-migrate`, and PLATES-CORE marker sync. |
+| [wiki-sync.md](docs/agents/wiki-sync.md) | Opt-in wiki sync and Goals page convention. |
 
 ## Authority Model
 
@@ -54,15 +54,15 @@ Follow the loop that matches the issue type.
 | 4 | Implement the smallest coherent change that satisfies the issue. |
 | 5 | Update per-feature change files in `.agentic/releases/` to describe implemented behavior and verification evidence. |
 | 6 | Add or update `.agentic/releases/` when the change affects PLATE process or templates. |
-| 7 | Determine the correct base branch using `gh plate release status` (or by inspecting any Major/Minor/Patch label on the issue — see [branch-model-and-ceremonies.md](agents/branch-model-and-ceremonies.md)). For repositories on the legacy single-`release` model (the current state of this repo), target `release`. For multi-track, target the matching `release-major` / `release-minor` / `release-patch`. Open a PR labeled `Feature` **targeting that base branch** (`--base <base>` or equivalent in `gh pr create`, where <base> comes from the status command) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. Prefer `gh plate pr create …` or run `gh plate pr preflight` before `gh pr create` so plate-pr-gates and labels checks fail locally first (#1418). |
-| 8 | After the PR is green (including feedback-resolution for agent threads), wait for human review/approval (at minimum one `Approved` review or explicit human merge). Do not self-merge. Use `need:human-review` for escalation. See authority table, [autopilot-doctrine.md](agents/autopilot-doctrine.md), and [autonomous-mode.md](agents/autonomous-mode.md). |
+| 7 | Determine the correct base branch using `gh plate release status` (or by inspecting any Major/Minor/Patch label on the issue — see [branch-model-and-ceremonies.md](docs/agents/branch-model-and-ceremonies.md)). **This repository (`akasper/plate`) uses the multi-track model:** target the matching `release-major` / `release-minor` / `release-patch` reported by status (Features typically land on `release-minor`; Bugs on `release-patch`). Repositories still on the legacy single-`release` model target `release`. Open a PR labeled `Feature` **targeting that base branch** (`--base <base>` or equivalent in `gh pr create`, where <base> comes from the status command) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. Prefer `gh plate pr create …` or run `gh plate pr preflight` before `gh pr create` so plate-pr-gates and labels checks fail locally first (#1418). |
+| 8 | After the PR is green (including feedback-resolution for agent threads), wait for human review/approval (at minimum one `Approved` review or explicit human merge). Do not self-merge. Use `need:human-review` for escalation. See authority table, [autopilot-doctrine.md](docs/agents/autopilot-doctrine.md), and [autonomous-mode.md](docs/agents/autonomous-mode.md). |
 | 9 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
 **Bug**
 
 Reproduce the failure or document why reproduction is not yet possible. Add a regression test. Include `Closes #N` in the PR body. Label missing information with `need:reproduction`, `need:tests`, or `need:human-review`.
 
-After making the PR green (including feedback-resolution for any agent threads), **do not self-merge**. Wait for human review/approval (at minimum one `Approved` review from a human, or explicit human `gh pr merge`). Epics and Releases require at least one review as well. Use `need:human-review` for escalation. See [autopilot-doctrine.md](agents/autopilot-doctrine.md) human checkpoints and [autonomous-mode.md](agents/autonomous-mode.md).
+After making the PR green (including feedback-resolution for any agent threads), **do not self-merge**. Wait for human review/approval (at minimum one `Approved` review from a human, or explicit human `gh pr merge`). Epics and Releases require at least one review as well. Use `need:human-review` for escalation. See [autopilot-doctrine.md](docs/agents/autopilot-doctrine.md) human checkpoints and [autonomous-mode.md](docs/agents/autonomous-mode.md).
 
 **Hardening**
 
@@ -159,7 +159,7 @@ Every issue must close with a traceable artifact. For most issue types this is a
 | `Epic` | Wiki summary in `docs/wiki/` or epic comment summarizing child outcomes | `Documentation` |
 | `Release` | Aggregated `.agentic/releases/vX.Y.Z/` directory + tag + GitHub Release | `Documentation` |
 
-When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. **Always include a closing keyword in the PR body** when a PR is the intended closure path. This is enforced by `.github/workflows/pr-issue-link-check.yml` (warning gate). `Task` issues are exempt when they close via the Task completion comment instead.
+When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is present in the PR body and the PR merges to the default branch, GitHub automatically closes the linked issue. **Always include a closing keyword in the PR body** when a PR is the intended closure path. This is enforced by the `issue-link` gate in `.github/workflows/plate-pr-gates.yml` (warning-first for milestone; fails when required closing keywords are missing on typed PRs). `Task` issues are exempt when they close via the Task completion comment instead.
 
 Before closing any issue through an agent-run implementation or answer flow, post a final comment that includes a structured usage block:
 
@@ -177,7 +177,7 @@ duration: <hh:mm:ss>
 ## Merge and feedback gates
 
 - After a Bug, Feature, Hardening, or Documentation PR is green (including agent-thread **feedback-resolution**), **do not self-merge** — wait for human review/approval (minimum one `Approved` review or explicit human merge). Epics and Releases require at least one review as well. Use `need:human-review` to escalate.
-- The **feedback-resolution** check (third-party agent review threads) is separate from the human approval requirement; both apply where relevant. Full loop, babysit tooling, and pre-merge recheck: [pr-feedback-and-babysit.md](agents/pr-feedback-and-babysit.md).
+- The **feedback-resolution** check (third-party agent review threads) is separate from the human approval requirement; both apply where relevant. Full loop, babysit tooling, and pre-merge recheck: [pr-feedback-and-babysit.md](docs/agents/pr-feedback-and-babysit.md).
 
 ## UI screenshots in pull requests (#1050)
 
@@ -231,4 +231,4 @@ Escalate to a human when product intent is ambiguous, acceptance criteria confli
 
 ## Prohibited Actions
 
-Agents must not merge their own pull requests **unless autonomous mode is active and the PR meets all eligibility criteria in [autonomous-mode.md](agents/autonomous-mode.md)**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not clone, fork, or `gh repo create --template` from `akasper/plate_template` (or any template repo), and must not hand-copy PLATE payload files—use `gh plate bootstrap` and `gh plate import-payload` only. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body.
+Agents must not merge their own pull requests **unless autonomous mode is active and the PR meets all eligibility criteria in [autonomous-mode.md](docs/agents/autonomous-mode.md)**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not clone, fork, or `gh repo create --template` from `akasper/plate_template` (or any template repo), and must not hand-copy PLATE payload files—use `gh plate bootstrap` and `gh plate import-payload` only. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body.

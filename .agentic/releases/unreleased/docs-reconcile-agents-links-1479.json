@@ -1,0 +1,7 @@
+{
+  "slug": "docs-reconcile-agents-links-1479",
+  "change_type": "docs",
+  "surface": "AGENTS.md, SPEC.md, CONTRIBUTING.md, CHANGELOG.md, README.md, .agentic/COSTS.md, tests/test_agents_md_links.py",
+  "summary": "Reconcile documentation drift (#1479): fix on-demand AGENTS.md links to docs/agents/, multi-track branch guidance, CLI/MCP/profiles and plate-pr-gates citations in SPEC/AGENTS/README, and add a link-resolution unittest. Licence classifier (D3) and adoption-time claim remain for human follow-up.",
+  "links": ["https://github.com/akasper/plate/issues/1479"]
+}

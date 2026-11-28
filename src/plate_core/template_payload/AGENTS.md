@@ -10,22 +10,22 @@ These pages hold the full rule text moved out of the always-loaded core. Open by
 
 | Page | When to load |
 |---|---|
-| [autopilot-doctrine.md](agents/autopilot-doctrine.md) | Atomic PR discipline, PR titles, pacing, and human checkpoints. |
-| [e2e-and-demo-gifs.md](agents/e2e-and-demo-gifs.md) | Playwright E2E expectations and demo GIF recording for UI features. |
-| [plate-process-contract.md](agents/plate-process-contract.md) | Process contract table, Task/Spike/Stub semantics, and usage reports. |
-| [risk-assessment-and-labeling.md](agents/risk-assessment-and-labeling.md) | `risk:*` label family definitions and when to apply each level. |
-| [autonomous-mode.md](agents/autonomous-mode.md) | `.github/AUTONOMOUS_MODE` toggle and auto-merge eligibility. |
-| [third-party-agent-feedback.md](agents/third-party-agent-feedback.md) | Inline feedback response, PLATES-CORE tstack blocks, and merge gates. |
-| [interactive-epic-planning.md](agents/interactive-epic-planning.md) | Host-native epic planning Q&A and stub creation (#988). |
-| [documentation-rules.md](agents/documentation-rules.md) | Fragments, PR labels, milestones, and release-status targeting. |
-| [script-policy.md](agents/script-policy.md) | POSIX vs PowerShell script policy and `.plate` `platform`. |
-| [database-migration-naming.md](agents/database-migration-naming.md) | UTC timestamp + slug filenames for new DB migrations (#1451). |
-| [upstream-template-sync.md](agents/upstream-template-sync.md) | `import-payload`, `self-migrate`, and PLATES-CORE marker sync. |
-| [wiki-sync.md](agents/wiki-sync.md) | Opt-in wiki sync rules. |
-| [template-integrity-rules.md](agents/template-integrity-rules.md) | copilot-instructions, CI placeholder guards, and local temp paths. |
-| [real-world-tasks.md](agents/real-world-tasks.md) | Epic planning with human-only external Tasks (plate-core reference). |
-| [branch-model-and-ceremonies.md](agents/branch-model-and-ceremonies.md) | Release branches and ceremonies (plate-core reference). |
-| [pr-feedback-and-babysit.md](agents/pr-feedback-and-babysit.md) | Full PR-green babysit loop (plate-core reference). |
+| [autopilot-doctrine.md](docs/agents/autopilot-doctrine.md) | Atomic PR discipline, PR titles, pacing, and human checkpoints. |
+| [e2e-and-demo-gifs.md](docs/agents/e2e-and-demo-gifs.md) | Playwright E2E expectations and demo GIF recording for UI features. |
+| [plate-process-contract.md](docs/agents/plate-process-contract.md) | Process contract table, Task/Spike/Stub semantics, and usage reports. |
+| [risk-assessment-and-labeling.md](docs/agents/risk-assessment-and-labeling.md) | `risk:*` label family definitions and when to apply each level. |
+| [autonomous-mode.md](docs/agents/autonomous-mode.md) | `.github/AUTONOMOUS_MODE` toggle and auto-merge eligibility. |
+| [third-party-agent-feedback.md](docs/agents/third-party-agent-feedback.md) | Inline feedback response, PLATES-CORE tstack blocks, and merge gates. |
+| [interactive-epic-planning.md](docs/agents/interactive-epic-planning.md) | Host-native epic planning Q&A and stub creation (#988). |
+| [documentation-rules.md](docs/agents/documentation-rules.md) | Fragments, PR labels, milestones, and release-status targeting. |
+| [script-policy.md](docs/agents/script-policy.md) | POSIX vs PowerShell script policy and `.plate` `platform`. |
+| [database-migration-naming.md](docs/agents/database-migration-naming.md) | UTC timestamp + slug filenames for new DB migrations (#1451). |
+| [upstream-template-sync.md](docs/agents/upstream-template-sync.md) | `import-payload`, `self-migrate`, and PLATES-CORE marker sync. |
+| [wiki-sync.md](docs/agents/wiki-sync.md) | Opt-in wiki sync rules. |
+| [template-integrity-rules.md](docs/agents/template-integrity-rules.md) | copilot-instructions, CI placeholder guards, and local temp paths. |
+| [real-world-tasks.md](docs/agents/real-world-tasks.md) | Epic planning with human-only external Tasks (plate-core reference). |
+| [branch-model-and-ceremonies.md](docs/agents/branch-model-and-ceremonies.md) | Release branches and ceremonies (plate-core reference). |
+| [pr-feedback-and-babysit.md](docs/agents/pr-feedback-and-babysit.md) | Full PR-green babysit loop (plate-core reference). |
 
 ## Authority Model
 
@@ -51,7 +51,7 @@ Follow the loop that matches the issue type.
 | 3 | Add or update tests before or alongside implementation. |
 | 4 | Implement the smallest coherent change that satisfies the issue. |
 | 5 | Update per-feature change files in `.agentic/releases/` to describe the implemented behavior and verification evidence. |
-| 6 | If the feature includes UI changes, record a demo GIF (see [e2e-and-demo-gifs.md](agents/e2e-and-demo-gifs.md)). |
+| 6 | If the feature includes UI changes, record a demo GIF (see [e2e-and-demo-gifs.md](docs/agents/e2e-and-demo-gifs.md)). |
 | 7 | Determine the correct base branch using `gh plate release status` (legacy `release` for single-release repos; matching `release-*` track otherwise). Open a PR labeled `Feature` **targeting that base** (include `--base release` etc. in `gh pr create`) with `Closes #N` in the body. Complete the PR template. When using GitHub CLI, apply the type label in the `gh pr create` command itself rather than relying on a later edit step. |
 | 8 | Leave wiki-sync, release-note, and audit evidence for the human reviewer and post-merge workflows. |
 
@@ -154,7 +154,7 @@ When GitHub's native closing keyword (`Closes #N`, `Fixes #N`, `Resolves #N`) is
 ## Merge and feedback gates
 
 - Require the `pr-gates` check from `.github/workflows/plate-pr-gates.yml` on protected branches so merge waits until agent feedback threads are resolved where applicable.
-- Full third-party feedback steps, pre-merge recheck, and human escalation: [third-party-agent-feedback.md](agents/third-party-agent-feedback.md).
+- Full third-party feedback steps, pre-merge recheck, and human escalation: [third-party-agent-feedback.md](docs/agents/third-party-agent-feedback.md).
 
 ## UI screenshots in pull requests (#1050)
 
@@ -208,4 +208,4 @@ Escalate to a human when product intent is ambiguous, acceptance criteria confli
 
 ## Prohibited Actions
 
-Agents must not merge their own pull requests **unless autonomous mode is active and the PR meets all eligibility criteria in [autonomous-mode.md](agents/autonomous-mode.md)**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not clone, fork, or `gh repo create --template` from `akasper/plate_template` (or any template repo), and must not hand-copy PLATE payload files—use `gh plate bootstrap` and `gh plate import-payload` only. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`; `Feedback Response` PRs remain exempt from the issue-link rule. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body, except for `Feedback Response` PRs.
+Agents must not merge their own pull requests **unless autonomous mode is active and the PR meets all eligibility criteria in [autonomous-mode.md](docs/agents/autonomous-mode.md)**. Agents must not bypass required checks, remove documentation gates, weaken tests to pass CI, fabricate test results, silently rewrite product intent, expose secrets, enable write automation without approval, create or delete `.github/AUTONOMOUS_MODE` themselves, or treat chat history as more authoritative than repository artifacts. Agents must not clone, fork, or `gh repo create --template` from `akasper/plate_template` (or any template repo), and must not hand-copy PLATE payload files—use `gh plate bootstrap` and `gh plate import-payload` only. Agents must not close an issue without the required closure artifact: for most issue types, a corresponding PR that carries a `Closes #N` reference in its body; for `Task` issues, a completion comment containing `<!-- PLATE-TASK-CLOSED -->`; `Feedback Response` PRs remain exempt from the issue-link rule. Agents must not open a PR that resolves a specific issue without including `Closes #N`, `Fixes #N`, or `Resolves #N` in the PR body, except for `Feedback Response` PRs.
