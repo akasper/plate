@@ -56,9 +56,11 @@ Order respects declared stacks. **Features** land on `release-minor`; **bugs** o
 21. **#1532** — concepts guide (#1067) — open questions in PR body
 22. **#1533** — quickstart (#1066) — **approved** at `e94c843d` (3 review threads resolved; `pr-gates` green)
 
-### Track F — test isolation on `release-minor`
+### Track F — test isolation and CLI follow-ups on `release-minor`
 
 23. **#1550** — repo-wide checkout-isolation guard (#1542) — **approved** at `9088e478`. Order with **#1540**: whichever lands second must keep `python -m tests` in CI and `pr_verify` **and** keep #1540's `TemporaryDirectory` sandbox for the dispatch loop.
+24. **#1554** — fix multiprocessing flake in `test_issue_lifecycle_events` (#1551) — **approved** at `0eea356d` (bounded join, spawn + fork)
+25. **#1553** — `gh plate pr create --base` defaulting to integration base (#1552) — **approved** at `d2582772`. Coordinate its `docs/quickstart.md` wording with **#1533** if both touch the `--base` line (whichever lands second reconciles).
 
 Prefer merging **#1517** and **#1528** before **#1532** / **#1533** so adoption and AGENTS prose is stable. Local sequential simulation (1517 → 1528 → 1532 → 1533 → `release-minor`) merged without conflicts today; all three still edit `README.md` relative to the same merge-base, so integration order may still need manual README reconciliation if bases move.
 
@@ -108,6 +110,8 @@ Until retargeted, children remain valid stacked PRs against parent branch heads;
 | 1544 | MCP handler map refactor | `f09970d78f73d6a5505ddc634567ef3b09d500d6` | `plate/1537-mcp-drift` | no | yes | yes | green | 0 | #1543 | #1540 |
 | 1547 | Public-surface loader consolidation | `2f81f9bd8498d821bc2f075f6de98cf2a0d3ecac` | `plate/1058-compat-contract` | no | yes | yes | holding (#1541) | 0 | #1546 | #1541 |
 | 1550 | Checkout-isolation test guard | `9088e47805f84d1d23492c92fc5b8f9f6443def4` | `release-minor` | no | yes | yes | approved; green | 0 | #1542 | — |
+| 1553 | `pr create --base` | `d25827727101db639e5ea60f869042c7c4f5087c` | `release-minor` | no | not tested | not tested | approved | 0 | #1552 | — |
+| 1554 | Lifecycle multiprocessing flake fix | `0eea356d6dfd69c61ab88830dd8d5caa2e59ed1c` | `release-minor` | no | not tested | not tested | approved | 0 | #1551 | — |
 
 GitHub `mergeStateStatus` values: `BLOCKED` or `UNSTABLE` on several rows reflect missing human approval or label-check failures, not necessarily merge conflicts. Every open PR in the table is `mergeable: MERGEABLE` on GitHub at sweep time.
 
