@@ -1,0 +1,10 @@
+{
+  "slug": "test-isolation-guard-1542",
+  "change_type": "feature",
+  "surface": "tests/checkout_isolation_guard.py, tests/__main__.py, .github/workflows/ci.yml",
+  "summary": "Add a session-level unittest guard that fingerprints .agentic/**, docs/curiosity/**, and repo-root files before and after the suite and fails when tests leak into the checkout; CI runs via python -m tests.",
+  "migration_impact": "Adopters copying ci.yml should run python -m tests (or keep unittest discover only if they opt out with PLATE_SKIP_CHECKOUT_ISOLATION=1).",
+  "agent_notes": "Leaking tests are sandboxed with isolated_cwd (TemporaryDirectory + chdir). test_mcp_registry remains #1540 scope.",
+  "breaking": false,
+  "links": ["#1542", "#1537", "#1540"]
+}

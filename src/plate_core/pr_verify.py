@@ -374,7 +374,7 @@ def run_unittest_discover(
     runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
 ) -> dict[str, Any]:
     """Run the PLATE unit test suite locally (stdlib unittest discover)."""
-    cmd = [sys.executable, "-m", "unittest", "discover", "-s", "tests"]
+    cmd = [sys.executable, "-m", "tests"]
     env = {"PYTHONPATH": "src"}
     run = runner or run_hidden
     completed = run(

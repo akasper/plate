@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           python -m pip install --quiet pyyaml setuptools wheel
           export PYTHONPATH="$GITHUB_WORKSPACE/src"
-          python -m unittest discover -s tests -p "test_*.py"
+          python -m tests
 
       - name: Install Copilot CLI
         run: |
