@@ -153,7 +153,7 @@ Soft: #1532 can merge before #1538; add one sentence in concepts pointing to `do
 
 ### Source of truth
 
-**[PR #1538](https://github.com/akasper/plate/pull/1538)** — generated [`docs/cli-mcp-reference.md`](../cli-mcp-reference.md) (on PR branch), `scripts/generate-cli-mcp-reference.py`, `plate_core.cli_mcp_reference`, `tests/test_cli_mcp_reference.py`. **Do not hand-write** a parallel reference doc.
+**[PR #1538](https://github.com/akasper/plate/pull/1538)** — generated `docs/cli-mcp-reference.md` (on PR branch only until merge), `scripts/generate-cli-mcp-reference.py`, `plate_core.cli_mcp_reference`, `tests/test_cli_mcp_reference.py`. **Do not hand-write** a parallel reference doc.
 
 Stable membership comes from [**#1536**](https://github.com/akasper/plate/pull/1536) / `docs/plate/research/public-surface-inventory.md`. Contract tests in [**#1541**](https://github.com/akasper/plate/pull/1541) are adjacent compat work, not a second reference.
 
@@ -294,5 +294,5 @@ Stable membership comes from [**#1536**](https://github.com/akasper/plate/pull/1
 - Epic [#1065](https://github.com/akasper/plate/issues/1065), Release [#654](https://github.com/akasper/plate/issues/654)  
 - PR [#1532](https://github.com/akasper/plate/pull/1532) (#1067), [#1533](https://github.com/akasper/plate/pull/1533) (#1066), [#1536](https://github.com/akasper/plate/pull/1536), [#1538](https://github.com/akasper/plate/pull/1538) (#1068), [#1541](https://github.com/akasper/plate/pull/1541)  
 - Troubleshooting owner [#1063](https://github.com/akasper/plate/issues/1063) — [`docs/wiki/Troubleshooting.md`](../wiki/Troubleshooting.md)  
-- Style: [`refinement-drafts-1059-security-supportability.md`](refinement-drafts-1059-security-supportability.md) (PR [#1558](https://github.com/akasper/plate/pull/1558))  
+- Style: PR [#1558](https://github.com/akasper/plate/pull/1558) (`docs/curiosity/refinement-drafts-1059-security-supportability.md` on that branch); see also [`refinement-qa-pack-1009-new-repo-standard-workflows.md`](refinement-qa-pack-1009-new-repo-standard-workflows.md)  
 - Migration depth: [`adoption-guide.md`](../migration/adoption-guide.md), [`namespace-docs-migration.md`](../migration/namespace-docs-migration.md)
