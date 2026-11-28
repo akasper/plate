@@ -212,7 +212,7 @@ Stable membership comes from [**#1536**](https://github.com/akasper/plate/pull/1
 | Patch / minor (plate-core + gh-plate) | `pip install -U 'plate-core==X.Y.Z'`, `gh extension upgrade plate`, reinstall path after gh-plate history rewrite ([`Troubleshooting.md`](../wiki/Troubleshooting.md)) |
 | PLATE payload / markers | `gh plate self-migrate --plan` / `--apply`, `gh plate import-payload`, marker merge per README § Keeping Your Fork Current |
 | Docs namespace (0.8.x → namespaced) | `gh plate migrate-docs-namespace` — [`namespace-docs-migration.md`](../migration/namespace-docs-migration.md) |
-| Breaking / deprecated surfaces | Point to #1057 policy when published; until then link `docs/plate/research/public-surface-inventory.md`, `tests/fixtures/public_surface_deprecations.json` (#1541), and release notes under `.agentic/releases/v*/` |
+| Breaking / deprecated surfaces | Point to the #1057 policy at `docs/design/deprecation-and-compat-policy-1057.md` (planned in #1556) when published; until then link `docs/plate/research/public-surface-inventory.md` (lands with #1536) and `tests/fixtures/public_surface_deprecations.json` (lands with #1541) once merged, plus release notes under `.agentic/releases/v*/` |
 | 0.x → 1.0 checklist | Multi-track branches, fragment layout, label changes — release notes + self-migrate plan; **no** fixed calendar; semver per #654 |
 
 ### Non-goals
@@ -227,7 +227,7 @@ Stable membership comes from [**#1536**](https://github.com/akasper/plate/pull/1
 - [ ] `docs/upgrade-guide.md` exists; README user-docs table links it (stub AC).
 - [ ] Covers **0.x → 1.0** and **minor-to-minor** paths (stub AC).
 - [ ] Each listed breaking/deprecated item references a **release note fragment or inventory/stable deprecation entry**, not prose-only memory (stub AC spirit).
-- [ ] Cross-links: `migrate-docs-namespace`, self-migrate, compatibility policy #1057 placeholder (“policy pending #1057”).
+- [ ] Cross-links: `migrate-docs-namespace`, self-migrate, compatibility policy #1057 at `docs/design/deprecation-and-compat-policy-1057.md` (placeholder “policy pending #1057” until it exists).
 - [ ] Pin examples use current public pin from README at merge time (today **0.12.0**).
 
 ### Dependencies
@@ -236,8 +236,8 @@ Stable membership comes from [**#1536**](https://github.com/akasper/plate/pull/1
 |---|---|
 | #1533 / quickstart | Shared pin verify vocabulary |
 | #1538 / reference | “What changed” surface names |
-| #1536 + #1541 | Stable/deprecated CLI & MCP lists |
-| #1057 | Formal deprecation policy link (can ship guide with “pending” callout) |
+| #1536 + #1541 | Stable/deprecated CLI & MCP lists (inventory and `public_surface_deprecations.json` live on those PRs until merged) |
+| #1057 | Formal deprecation policy link (`docs/design/deprecation-and-compat-policy-1057.md`, per #1556) (can ship guide with “pending” callout) |
 | #649 | Self-migrate behavior truth |
 | #1029 | Namespace migration command availability |
 
