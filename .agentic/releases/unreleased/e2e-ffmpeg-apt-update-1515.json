@@ -1,0 +1,9 @@
+{
+  "slug": "e2e-ffmpeg-apt-update-1515",
+  "change_type": "bug",
+  "surface": "src/plate_core/template_payload/.github/workflows/test-e2e.yml, payload_surface windows GIF job",
+  "summary": "Template E2E workflow runs apt-get update before installing ffmpeg so Ubicloud and other runners with stale apt indexes no longer 404 before Playwright tests start.",
+  "migration_impact": "Adopters should import the updated test-e2e workflow or add apt-get update to any copied ffmpeg install step.",
+  "breaking": false,
+  "links": ["#1515"]
+}

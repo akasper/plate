@@ -514,5 +514,49 @@ class PayloadWorkflowLinuxRunsOnTests(unittest.TestCase):
         self.assertEqual(blocks[0], blocks[1])
 
 
+def _apt_install_step_violations(path: Path, text: str) -> list[str]:
+    """Steps that run apt-get install must also run apt-get update in the same run script."""
+    violations: list[str] = []
+    for doc in yaml.safe_load_all(text):
+        if not isinstance(doc, dict):
+            continue
+        jobs = doc.get("jobs") or {}
+        if not isinstance(jobs, dict):
+            continue
+        for job_id, job in jobs.items():
+            if not isinstance(job, dict):
+                continue
+            steps = job.get("steps") or []
+            if not isinstance(steps, list):
+                continue
+            for step_idx, step in enumerate(steps):
+                if not isinstance(step, dict):
+                    continue
+                run = step.get("run")
+                if not isinstance(run, str) or "apt-get install" not in run:
+                    continue
+                step_name = step.get("name", f"step[{step_idx}]")
+                if "apt-get update" not in run:
+                    violations.append(
+                        f"{path}:{job_id}:{step_name}: missing apt-get update before install"
+                    )
+                elif run.index("apt-get update") > run.index("apt-get install"):
+                    violations.append(
+                        f"{path}:{job_id}:{step_name}: apt-get update must precede apt-get install"
+                    )
+    return violations
+
+
+class PayloadWorkflowAptInstallTests(unittest.TestCase):
+    def test_payload_workflows_refresh_apt_before_install(self):
+        violations: list[str] = []
+        for root in (REPO_WORKFLOWS, PAYLOAD_WORKFLOWS):
+            if not root.is_dir():
+                continue
+            for path in sorted(root.glob("*.yml")):
+                violations.extend(_apt_install_step_violations(path, path.read_text(encoding="utf-8")))
+        self.assertEqual(violations, [])
+
+
 if __name__ == "__main__":
     unittest.main()
