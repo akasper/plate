@@ -38,7 +38,7 @@ NON_PATH_PARAMETERS = frozenset(
     }
 )
 
-LIST_PATH_PARAMETERS = frozenset({"paths", "artifact_paths"})
+LIST_PATH_PARAMETERS = frozenset({"paths", "artifact_paths", "images"})
 
 _PATH_NAME_MARKERS = (
     "_path",
@@ -71,6 +71,7 @@ _EXACT_PATH_PARAMETERS = frozenset(
         "fragment",
         "gif_path",
         "video_path",
+        "gh",
     }
 )
 

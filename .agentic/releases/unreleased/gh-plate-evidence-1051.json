@@ -1,0 +1,10 @@
+{
+  "slug": "gh-plate-evidence-1051",
+  "change_type": "feature",
+  "surface": "scripts/plate_evidence.sh, plate_core.plate_evidence, gh plate evidence, plate_pr_evidence MCP",
+  "summary": "gh plate evidence and plate_pr_evidence wrap gh pr edit --attach: gh >= 2.99 gate, alt-text body prep, user-attachments verification, and Copilot routing on refused third-party uploads.",
+  "migration_impact": "Agents embed UI proof with gh plate evidence instead of ad hoc gh pr edit; third-party cloud agents without attach should assign UI work to Copilot.",
+  "agent_notes": "Docs: docs/agents/pr-evidence.md. No PAT workaround on refused upload.",
+  "breaking": false,
+  "links": ["#1051", "#1048", "#1050"]
+}
