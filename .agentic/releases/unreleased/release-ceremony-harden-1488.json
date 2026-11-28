@@ -1,0 +1,9 @@
+{
+  "slug": "release-ceremony-harden-1488",
+  "change_type": "fix",
+  "surface": "src/plate_core/release.py, .github/workflows/release.yml, gh plate release finalize",
+  "summary": "Harden release ceremony: App-token tag push triggers publishers, finalize is apply-only, window/milestone/Closes block fixes (#1488, #1473 C1/C6).",
+  "migration_impact": "Run gh plate release finalize with --apply for live finalize; ensure PLATE_APP_ID and PLATE_APP_PRIVATE_KEY are set on akasper/plate so tag pushes trigger PyPI and gh-plate publishers.",
+  "agent_notes": "Regression tests cover publish-on-merge wiring, dry-run side-effect freedom, window cleanup on closed cut-cycle issues, milestone inheritance, and per-line Closes blocks.",
+  "links": ["#1488", "#1473"]
+}

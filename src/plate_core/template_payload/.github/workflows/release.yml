@@ -26,11 +26,32 @@ jobs:
     runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
     outputs:
       release_tag: ${{ steps.release-version.outputs.release_tag }}
+    env:
+      PLATE_FF_APP_ID: ${{ secrets.PLATE_APP_ID }}
+      PLATE_FF_APP_PRIVATE_KEY: ${{ secrets.PLATE_APP_PRIVATE_KEY }}
     steps:
+      - name: Require lifecycle App token for tag push on official repo
+        if: ${{ github.repository == 'akasper/plate' && (env.PLATE_FF_APP_ID == '' || env.PLATE_FF_APP_PRIVATE_KEY == '') }}
+        run: |
+          echo '::error::Release tag push requires PLATE_APP_ID and PLATE_APP_PRIVATE_KEY so tag-triggered publishers run without manual dispatch.'
+          exit 1
+
+      - uses: actions/create-github-app-token@v1
+        id: plate-app-token
+        if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}
+        with:
+          app-id: ${{ secrets.PLATE_APP_ID }}
+          private-key: ${{ secrets.PLATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            ${{ github.event.repository.name }}
+          permission-contents: write
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
+          token: ${{ steps.plate-app-token.outputs.token || github.token }}
 
       - name: Resolve release artifact version
         id: release-version
@@ -65,9 +86,11 @@ jobs:
           echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Create or verify release tag
+        id: tag-push
         env:
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           RELEASE_TAG: ${{ steps.release-version.outputs.release_tag }}
+          PLATE_APP_TOKEN: ${{ steps.plate-app-token.outputs.token }}
         run: |
           set -euo pipefail
           existing_sha="$(

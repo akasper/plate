@@ -1143,7 +1143,7 @@ def collect_closes_block(fragments: list[dict]) -> str:
                 seen.append(link)
     if not seen:
         return ""
-    return "Closes " + ", ".join(seen)
+    return "\n".join(f"Closes {link}" for link in seen)
 
 
 def cut_release(
@@ -1226,6 +1226,14 @@ def cut_release(
             print(f"\n[DRY RUN] Recommended Closes block for Release PR body:\n{closes_block}")
         return 0
 
+    try:
+        rw = set_next_release_release_window_open(want_open=True)
+        cut_cycle = rw.get("issue_number")
+        if cut_cycle is not None:
+            release_data["cut_cycle_next_release_issue"] = int(cut_cycle)
+    except Exception as exc:
+        print(f"NOTE: release-window hook after cut failed: {exc}")
+
     versioned_dir.mkdir(parents=True, exist_ok=True)
     fragments_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1267,15 +1275,6 @@ def cut_release(
         f"  7. (Legacy) Hard-reset release branch: "
         f"git checkout release && git fetch origin && git reset --hard origin/main && git push --force-with-lease"
     )
-    try:
-        rw = set_next_release_release_window_open(want_open=True)
-        if not rw.get("ok"):
-            print(
-                f"NOTE: Could not apply `{RELEASE_WINDOW_OPEN_LABEL}` on the standing Next Release issue "
-                f"({rw.get('error', rw)}). Merge freezes still apply once the label is set manually."
-            )
-    except Exception as exc:
-        print(f"NOTE: release-window hook after cut failed: {exc}")
     return 0
 
 
@@ -1365,7 +1364,10 @@ def create_github_release(
             "would_create": True,
             "notes_preview": notes_body[:300] + ("..." if len(notes_body) > 300 else ""),
             "assets": asset_names,
-            "command_preview": f"gh release create {tag} --title 'PLATE {ver}' --notes-file <tmp> " + (" ".join(f"--asset {a}" for a in asset_names) if asset_names else ""),
+            "command_preview": (
+                f"gh release create {tag} --verify-tag --title 'PLATE {ver}' --notes-file <tmp>"
+                + (" " + " ".join(asset_names) if asset_names else "")
+            ),
         }
 
     # Write temp notes for gh release create (handles newlines reliably)
@@ -1375,12 +1377,14 @@ def create_github_release(
             f.write(notes_body)
 
         cmd = [
-            "gh", "release", "create", tag,
+            "gh", "release", "create",
+            tag,
+            "--verify-tag",
             "--title", f"PLATE {ver}",
             "--notes-file", notes_path,
         ]
         for asset in assets:
-            cmd.extend(["--asset", str(asset)])
+            cmd.append(str(asset))
 
         proc = run_hidden(cmd, capture_output=True, text=True, check=False)
         if proc.returncode != 0:
@@ -1445,45 +1449,152 @@ def find_standing_next_release_issue(
     return None
 
 
-def set_next_release_release_window_open(
+def _issue_milestone_number(
+    issue_number: int,
+    *,
+    repo: str,
+    client: GhClient,
+) -> int | None:
+    try:
+        detail = client.api(f"repos/{repo}/issues/{issue_number}") or {}
+    except Exception:
+        return None
+    milestone = detail.get("milestone") or {}
+    number = milestone.get("number")
+    return int(number) if number is not None else None
+
+
+def inherit_next_release_milestone_number(
+    repo: str | None = None,
+    client: GhClient | None = None,
+    *,
+    from_issue_number: int | None = None,
+) -> int | None:
+    """Return the milestone number from the most recent Next Release issue, if any (#1488)."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    if from_issue_number is not None:
+        number = _issue_milestone_number(from_issue_number, repo=target, client=gh)
+        if number is not None:
+            return number
+    q = quote_plus(f'repo:{target} is:issue label:Release "Next Release"')
+    try:
+        search = gh.api(f"search/issues?q={q}") or {}
+    except Exception:
+        return None
+    items = sorted(
+        (search.get("items") or []),
+        key=lambda item: int(item.get("number") or 0),
+        reverse=True,
+    )
+    for item in items:
+        milestone = item.get("milestone") or {}
+        number = milestone.get("number")
+        if number is not None:
+            return int(number)
+        issue_number = item.get("number")
+        if issue_number is None:
+            continue
+        try:
+            detail = gh.api(f"repos/{target}/issues/{issue_number}") or {}
+        except Exception:
+            continue
+        milestone = detail.get("milestone") or {}
+        number = milestone.get("number")
+        if number is not None:
+            return int(number)
+    return None
+
+
+def _patch_issue_release_window_label(
+    issue_number: int,
     *,
     want_open: bool,
     dry_run: bool = False,
     repo: str | None = None,
     client: GhClient | None = None,
 ) -> dict:
-    """Apply or remove ``release-window:open`` on the standing Next Release issue (#1439)."""
-    if dry_run:
-        return {"ok": True, "skipped": True, "reason": "dry_run", "would_set_open": want_open}
     gh = client or GhClient()
     target = resolve_repo(repo)
-    issue = find_standing_next_release_issue(repo=target, client=gh)
-    if not issue or not issue.get("number"):
-        return {"ok": True, "skipped": True, "reason": "no_next_release"}
-    number = int(issue["number"])
+    if dry_run:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "dry_run",
+            "issue_number": issue_number,
+            "would_set_open": want_open,
+        }
     try:
-        detail = gh.api(f"repos/{target}/issues/{number}") or {}
+        detail = gh.api(f"repos/{target}/issues/{issue_number}") or {}
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "issue_number": number}
-    names = [str(l.get("name", "")) for l in (detail.get("labels") or [])]
+        return {"ok": False, "error": str(exc), "issue_number": issue_number}
+    names = [str(label.get("name", "")) for label in (detail.get("labels") or [])]
     has = RELEASE_WINDOW_OPEN_LABEL in names
     if want_open and has:
-        return {"ok": True, "skipped": True, "issue_number": number, "state": "already_open"}
+        return {"ok": True, "skipped": True, "issue_number": issue_number, "state": "already_open"}
     if not want_open and not has:
-        return {"ok": True, "skipped": True, "issue_number": number, "state": "already_closed"}
+        return {"ok": True, "skipped": True, "issue_number": issue_number, "state": "already_closed"}
     if want_open:
         new_labels = names + [RELEASE_WINDOW_OPEN_LABEL]
     else:
-        new_labels = [n for n in names if n != RELEASE_WINDOW_OPEN_LABEL]
+        new_labels = [label for label in names if label != RELEASE_WINDOW_OPEN_LABEL]
     try:
         gh.api(
-            f"repos/{target}/issues/{number}",
+            f"repos/{target}/issues/{issue_number}",
             method="PATCH",
             fields={"labels": new_labels},
         )
     except Exception as exc:
-        return {"ok": False, "issue_number": number, "error": str(exc)}
-    return {"ok": True, "issue_number": number, "release_window_open": want_open}
+        return {"ok": False, "issue_number": issue_number, "error": str(exc)}
+    return {"ok": True, "issue_number": issue_number, "release_window_open": want_open}
+
+
+def set_next_release_release_window_open(
+    *,
+    want_open: bool,
+    dry_run: bool = False,
+    repo: str | None = None,
+    client: GhClient | None = None,
+    extra_issue_numbers: list[int] | None = None,
+) -> dict:
+    """Apply or remove ``release-window:open`` on the standing and cut-cycle Next Release issues (#1439, #1488)."""
+    gh = client or GhClient()
+    target = resolve_repo(repo)
+    issue_numbers: list[int] = []
+    if extra_issue_numbers:
+        for raw in extra_issue_numbers:
+            try:
+                num = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if num not in issue_numbers:
+                issue_numbers.append(num)
+    standing = find_standing_next_release_issue(repo=target, client=gh)
+    if standing and standing.get("number"):
+        standing_number = int(standing["number"])
+        if standing_number not in issue_numbers:
+            issue_numbers.append(standing_number)
+    if not issue_numbers:
+        if dry_run:
+            return {"ok": True, "skipped": True, "reason": "dry_run", "would_set_open": want_open}
+        return {"ok": True, "skipped": True, "reason": "no_next_release"}
+    results = [
+        _patch_issue_release_window_label(
+            number,
+            want_open=want_open,
+            dry_run=dry_run,
+            repo=target,
+            client=gh,
+        )
+        for number in issue_numbers
+    ]
+    primary = results[0]
+    if len(results) > 1:
+        primary = dict(primary)
+        primary["cleared_issue_numbers"] = [r.get("issue_number") for r in results]
+        primary["results"] = results
+    primary["ok"] = all(r.get("ok", True) for r in results)
+    return primary
 
 
 def post_release_fast_forward_comment(
@@ -1532,6 +1643,127 @@ def _remote_branch_exists(branch: str, *, cwd: str) -> bool:
         check=False,
     )
     return bool((proc.stdout or "").strip())
+
+
+def _parse_ls_remote_tag_commit_sha(stdout: str, tag_name: str) -> str | None:
+    """Return the commit a tag points at (peeled SHA for annotated tags)."""
+    peeled_ref = f"refs/tags/{tag_name}^{{}}"
+    tag_ref = f"refs/tags/{tag_name}"
+    peeled: str | None = None
+    lightweight: str | None = None
+    for line in (stdout or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        sha, ref = parts[0], parts[1]
+        if len(sha) < 7:
+            continue
+        if ref == peeled_ref:
+            peeled = sha
+        elif ref == tag_ref:
+            lightweight = sha
+    return peeled or lightweight
+
+
+def _parse_ls_remote_exact_ref_sha(stdout: str, expected_ref: str) -> str | None:
+    for line in (stdout or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        sha, ref = parts[0], parts[1]
+        if len(sha) < 7:
+            continue
+        if ref == expected_ref:
+            return sha
+    return None
+
+
+def _ls_remote_sha(*, kind: str, name: str, cwd: str) -> str | None:
+    if kind == "tags":
+        proc = run_hidden(
+            [
+                "git",
+                "ls-remote",
+                "--tags",
+                "origin",
+                f"refs/tags/{name}",
+                f"refs/tags/{name}^{{}}",
+            ],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return _parse_ls_remote_tag_commit_sha(proc.stdout or "", name)
+    head_ref = f"refs/heads/{name}"
+    proc = run_hidden(
+        ["git", "ls-remote", "--heads", "origin", head_ref],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return _parse_ls_remote_exact_ref_sha(proc.stdout or "", head_ref)
+
+
+def _is_git_ancestor_ephemeral(ancestor: str, descendant: str, *, cwd: str) -> bool:
+    """Ancestry check in a disposable repo so plan-only finalize does not fetch into the user checkout."""
+    import tempfile
+
+    url_proc = run_hidden(
+        ["git", "remote", "get-url", "origin"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if url_proc.returncode != 0:
+        return False
+    remote_url = (url_proc.stdout or "").strip()
+    if not remote_url:
+        return False
+    with tempfile.TemporaryDirectory(prefix="plate-ff-plan-") as tmp:
+        init_proc = run_hidden(["git", "init"], cwd=tmp, capture_output=True, text=True, check=False)
+        if init_proc.returncode != 0:
+            return False
+        remote_proc = run_hidden(
+            ["git", "remote", "add", "origin", remote_url],
+            cwd=tmp,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if remote_proc.returncode != 0:
+            return False
+        fetch_proc = run_hidden(
+            ["git", "fetch", "--quiet", "--depth", "500", "origin", ancestor, descendant],
+            cwd=tmp,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if fetch_proc.returncode != 0:
+            return False
+        proc = run_hidden(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            cwd=tmp,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return proc.returncode == 0
+
+
+def _is_git_ancestor_for_plan(ancestor: str, descendant: str, *, cwd: str) -> bool:
+    if _is_git_ancestor(ancestor, descendant, cwd=cwd):
+        return True
+    return _is_git_ancestor_ephemeral(ancestor, descendant, cwd=cwd)
 
 
 def _resolve_local_ref(ref: str, *, cwd: str) -> str | None:
@@ -1610,12 +1842,19 @@ def fast_forward_release_branches(
 
     try:
         ls = run_hidden(
-            ["git", "ls-remote", "--tags", "origin", tag_name],
+            [
+                "git",
+                "ls-remote",
+                "--tags",
+                "origin",
+                f"refs/tags/{tag_name}",
+                f"refs/tags/{tag_name}^{{}}",
+            ],
             capture_output=True,
             text=True,
             check=False,
         )
-        if not (ls.stdout or "").strip():
+        if not _parse_ls_remote_tag_commit_sha(ls.stdout or "", tag_name):
             return {
                 "ok": False,
                 "error": "tag_not_found_on_origin",
@@ -1625,26 +1864,32 @@ def fast_forward_release_branches(
     except Exception as exc:
         return {"ok": False, "error": f"tag_check_failed: {exc}", "tag": tag_name}
 
+    plan_only = dry_run or not apply
     try:
         root = _release_git_root(repo_root)
         cwd = str(root)
-        fetch_refs = [tag_name, *branch_list]
-        fetch_proc = run_hidden(
-            ["git", "fetch", "origin", *fetch_refs],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if fetch_proc.returncode != 0:
-            return {
-                "ok": False,
-                "error": "fetch_failed",
-                "tag": tag_name,
-                "stderr": fetch_proc.stderr or fetch_proc.stdout,
-            }
+        if plan_only:
+            tag_commit = _ls_remote_sha(kind="tags", name=tag_name, cwd=cwd)
+        else:
+            fetch_refs = [tag_name, *branch_list]
+            fetch_proc = run_hidden(
+                ["git", "fetch", "origin", *fetch_refs],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if fetch_proc.returncode != 0:
+                return {
+                    "ok": False,
+                    "error": "fetch_failed",
+                    "tag": tag_name,
+                    "stderr": fetch_proc.stderr or fetch_proc.stdout,
+                }
+            tag_commit = _resolve_local_ref(f"refs/tags/{tag_name}", cwd=cwd) or _resolve_local_ref(
+                tag_name, cwd=cwd
+            )
 
-        tag_commit = _resolve_local_ref(f"refs/tags/{tag_name}", cwd=cwd) or _resolve_local_ref(tag_name, cwd=cwd)
         if not tag_commit:
             return {"ok": False, "error": "tag_commit_unresolved", "tag": tag_name}
 
@@ -1654,7 +1899,10 @@ def fast_forward_release_branches(
                 results.append({"branch": branch, "status": "skipped_missing"})
                 continue
 
-            branch_tip = _resolve_local_ref(f"origin/{branch}", cwd=cwd)
+            if plan_only:
+                branch_tip = _ls_remote_sha(kind="heads", name=branch, cwd=cwd)
+            else:
+                branch_tip = _resolve_local_ref(f"origin/{branch}", cwd=cwd)
             if not branch_tip:
                 return {
                     "ok": False,
@@ -1669,12 +1917,13 @@ def fast_forward_release_branches(
                 results.append({"branch": branch, "status": "noop", "commit": branch_tip})
                 continue
 
-            if not _is_git_ancestor(branch_tip, tag_commit, cwd=cwd):
+            ancestor_check = _is_git_ancestor_for_plan if plan_only else _is_git_ancestor
+            if not ancestor_check(branch_tip, tag_commit, cwd=cwd):
                 blocked = {
                     "branch": branch,
                     "branch_tip": branch_tip,
                     "tag_commit": tag_commit,
-                    "unshipped_commits": _unshipped_commit_summaries(tag_commit, branch, cwd=cwd),
+                    "unshipped_commits": [] if plan_only else _unshipped_commit_summaries(tag_commit, branch, cwd=cwd),
                 }
                 return {
                     "ok": False,
@@ -1686,7 +1935,7 @@ def fast_forward_release_branches(
                 }
 
             push_ref = f"{tag_commit}:refs/heads/{branch}"
-            if dry_run or not apply:
+            if plan_only:
                 results.append(
                     {
                         "branch": branch,
@@ -1944,6 +2193,9 @@ def plan_gh_plate_sync(version: str | None) -> dict:
 def ensure_next_release_issue(
     repo: str | None = None,
     client: GhClient | None = None,
+    *,
+    dry_run: bool = False,
+    predecessor_issue_number: int | None = None,
 ) -> dict:
     """Ensure a standing 'Next Release' issue (label: Release, title containing Next) exists.
     Low-risk; used by finalize for ceremony completeness.
@@ -1953,23 +2205,46 @@ def ensure_next_release_issue(
     q = quote_plus(f'repo:{target} is:issue is:open label:Release "Next Release"')
     try:
         search = gh.api(f"search/issues?q={q}") or {}
-        for item in (search.get("items") or []):
-            if "next" in (item.get("title") or "").lower():
-                return {"exists": True, "issue": {"number": item.get("number"), "url": item.get("html_url")}}
-    except Exception:
-        pass
-
+    except Exception as exc:
+        return {"ok": False, "error": f"search_failed: {exc}"}
+    for item in (search.get("items") or []):
+        if "next" in (item.get("title") or "").lower():
+            return {
+                "ok": True,
+                "exists": True,
+                "issue": {"number": item.get("number"), "url": item.get("html_url")},
+            }
+    milestone_number = inherit_next_release_milestone_number(
+        repo=target,
+        client=gh,
+        from_issue_number=predecessor_issue_number,
+    )
+    if dry_run:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "dry_run",
+            "would_create": True,
+            "milestone_number": milestone_number,
+        }
     fields = {
         "title": "Next Release",
         "body": "Standing target for the next PLATE release (auto-created by finalize). Use the Development sidebar to link Epics and work targeting this release.",
         # Window starts closed; `cut_release` opens via `set_next_release_release_window_open` (#1439).
         "labels": ["Release"],
     }
+    if milestone_number is not None:
+        fields["milestone"] = milestone_number
     try:
         created = gh.api(f"repos/{target}/issues", method="POST", fields=fields) or {}
-        return {"created": True, "issue": {"number": created.get("number"), "url": created.get("html_url")}}
+        return {
+            "ok": True,
+            "created": True,
+            "issue": {"number": created.get("number"), "url": created.get("html_url")},
+            "milestone_number": milestone_number,
+        }
     except Exception as e:
-        return {"error": f"create_failed: {e}"}
+        return {"ok": False, "error": f"create_failed: {e}"}
 
 
 # Standing Next Release starter issue messaging (#1194; mandatory adoption #1193).

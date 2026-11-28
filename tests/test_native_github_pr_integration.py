@@ -207,6 +207,39 @@ class NativeGitHubPrIntegrationTests(unittest.TestCase):
         self.assertIn('git tag "${RELEASE_TAG}" "${MERGE_SHA}"', workflow)
         self.assertIn('git push origin "refs/tags/${RELEASE_TAG}"', workflow)
 
+    def test_release_workflow_tag_push_uses_lifecycle_app_token(self):
+        for rel in (
+            ".github/workflows/release.yml",
+            "src/plate_core/template_payload/.github/workflows/release.yml",
+        ):
+            workflow = read_text(rel)
+            self.assertIn("Require lifecycle App token for tag push on official repo", workflow)
+            self.assertIn("id: plate-app-token", workflow)
+            self.assertIn(
+                "token: ${{ steps.plate-app-token.outputs.token || github.token }}",
+                workflow,
+            )
+            checkout_idx = workflow.index("uses: actions/checkout@v4")
+            token_step_idx = workflow.index("id: plate-app-token")
+            self.assertLess(token_step_idx, checkout_idx, msg=rel)
+            tag_job = workflow.split("fast-forward-release-branches:")[0]
+            self.assertIn("permission-contents: write", tag_job, msg=rel)
+
+    def test_release_workflow_waits_for_publishers_after_tag_push(self):
+        workflow = read_text(".github/workflows/release.yml")
+        self.assertIn("verify-release-publishers:", workflow)
+        self.assertIn("verify_publishers", workflow)
+        self.assertIn(
+            "needs.tag-release-merge.outputs.verify_publishers == 'true'",
+            workflow,
+        )
+        self.assertNotIn(
+            "needs.tag-release-merge.outputs.tag_pushed == 'true'",
+            workflow,
+        )
+        self.assertIn("plate_core.release_publish_gate", workflow)
+        self.assertIn("verify_publishers=true", workflow)
+
     def test_release_workflow_fast_forward_job_can_comment_on_issues(self):
         workflow = read_text(".github/workflows/release.yml")
         job_block = _fast_forward_release_job_block(workflow)

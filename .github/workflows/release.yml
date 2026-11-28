@@ -26,11 +26,34 @@ jobs:
     runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
     outputs:
       release_tag: ${{ steps.release-version.outputs.release_tag }}
+      tag_pushed: ${{ steps.tag-push.outputs.tag_pushed }}
+      verify_publishers: ${{ steps.tag-push.outputs.verify_publishers }}
+    env:
+      PLATE_FF_APP_ID: ${{ secrets.PLATE_APP_ID }}
+      PLATE_FF_APP_PRIVATE_KEY: ${{ secrets.PLATE_APP_PRIVATE_KEY }}
     steps:
+      - name: Require lifecycle App token for tag push on official repo
+        if: ${{ github.repository == 'akasper/plate' && (env.PLATE_FF_APP_ID == '' || env.PLATE_FF_APP_PRIVATE_KEY == '') }}
+        run: |
+          echo '::error::Release tag push requires PLATE_APP_ID and PLATE_APP_PRIVATE_KEY so tag-triggered publishers run without manual dispatch.'
+          exit 1
+
+      - uses: actions/create-github-app-token@v1
+        id: plate-app-token
+        if: ${{ env.PLATE_FF_APP_ID != '' && env.PLATE_FF_APP_PRIVATE_KEY != '' }}
+        with:
+          app-id: ${{ secrets.PLATE_APP_ID }}
+          private-key: ${{ secrets.PLATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            ${{ github.event.repository.name }}
+          permission-contents: write
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
+          token: ${{ steps.plate-app-token.outputs.token || github.token }}
 
       - name: Resolve release version
         id: release-version
@@ -55,9 +78,11 @@ jobs:
           PY
 
       - name: Create or verify release tag
+        id: tag-push
         env:
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           RELEASE_TAG: ${{ steps.release-version.outputs.release_tag }}
+          PLATE_APP_TOKEN: ${{ steps.plate-app-token.outputs.token }}
         run: |
           set -euo pipefail
           existing_sha="$(
@@ -74,11 +99,15 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git tag "${RELEASE_TAG}" "${MERGE_SHA}"
             git push origin "refs/tags/${RELEASE_TAG}"
+            echo "tag_pushed=true" >> "${GITHUB_OUTPUT}"
+            echo "verify_publishers=true" >> "${GITHUB_OUTPUT}"
             echo "Created ${RELEASE_TAG} at ${MERGE_SHA}."
             exit 0
           fi
 
           if [ "${existing_sha}" = "${MERGE_SHA}" ]; then
+            echo "tag_pushed=false" >> "${GITHUB_OUTPUT}"
+            echo "verify_publishers=true" >> "${GITHUB_OUTPUT}"
             echo "${RELEASE_TAG} already exists on ${MERGE_SHA}; nothing to do."
             exit 0
           fi
@@ -130,6 +159,41 @@ jobs:
       # Same simple assets convention (v{ver}/assets/ if present in the checked-out artifact).
       # Added in #593; idempotent via the helper; graceful on 404/exists/rate/etc.
       # (The explicit `gh plate release finalize` path remains available for repair/manual runs.)
+
+  verify-release-publishers:
+    needs: tag-release-merge
+    if: |
+      github.repository == 'akasper/plate' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      needs.tag-release-merge.outputs.verify_publishers == 'true' &&
+      (
+        contains(github.event.pull_request.labels.*.name, 'Release') ||
+        github.event.pull_request.head.ref == 'release' ||
+        startsWith(github.event.pull_request.head.ref, 'release-v')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Wait for plate-core PyPI and gh-plate publishers
+        env:
+          RELEASE_TAG: ${{ needs.tag-release-merge.outputs.release_tag }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${GITHUB_WORKSPACE}/src"
+          python -m plate_core.release_publish_gate \
+            --repo "${GITHUB_REPOSITORY}" \
+            --release-tag "${RELEASE_TAG}" \
+            --head-sha "${MERGE_SHA}"
 
   fast-forward-release-branches:
     needs: tag-release-merge

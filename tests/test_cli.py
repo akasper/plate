@@ -485,8 +485,14 @@ class CliTests(unittest.TestCase):
         mock_plan_sync,
     ):
         """#1439: close release window on the cut-cycle issue before creating the next standing Next Release."""
-        mock_validate.return_value = type("R", (), {"errors": []})()
-        mock_load_release.return_value = {}
+        repo_root = str(Path(__file__).resolve().parents[1])
+        mock_validate.return_value = type(
+            "R", (), {"errors": [], "release_version": "0.7.1", "repo_root": repo_root}
+        )()
+        mock_load_release.return_value = {
+            "version": "0.7.1",
+            "cut_cycle_next_release_issue": 1454,
+        }
         mock_create.return_value = {"tag": "v0.7.1", "exists": True, "created": False}
         mock_ff.return_value = {"ok": True, "results": []}
         mock_set_rw.return_value = {"ok": True, "issue_number": 50}
@@ -515,13 +521,26 @@ class CliTests(unittest.TestCase):
         _rw_kwargs = mock_set_rw.call_args.kwargs
         self.assertFalse(_rw_kwargs.get("want_open", True))
         self.assertTrue(_rw_kwargs.get("dry_run"))
+        self.assertEqual(_rw_kwargs.get("extra_issue_numbers"), [1454])
+        mock_ensure.assert_called_once()
+        self.assertTrue(mock_ensure.call_args.kwargs.get("dry_run"))
+        self.assertEqual(mock_ensure.call_args.kwargs.get("predecessor_issue_number"), 1454)
 
+    @patch("plate_core.release.validate_release_workspace")
+    @patch("plate_core.release._load_release")
     @patch("plate_core.release.create_github_release")
     @patch("plate_core.release.fast_forward_release_branches")
     @patch("plate_core.release.perform_guarded_hard_reset")
     @patch("plate_core.release.ensure_next_release_issue")
-    def test_release_finalize_dry_run_and_apply(self, mock_ensure, mock_reset, mock_ff, mock_create):
-        """#592/#1434: finalize calls create always; fast-forward on --apply; hard reset only with --force-hard-reset."""
+    def test_release_finalize_dry_run_and_apply(
+        self, mock_ensure, mock_reset, mock_ff, mock_create, mock_load, mock_validate
+    ):
+        """#592/#1434: finalize dry-run simulates; fast-forward on --apply; hard reset only with --force-hard-reset."""
+        repo_root = str(Path(__file__).resolve().parents[1])
+        mock_validate.return_value = type(
+            "R", (), {"errors": [], "release_version": "0.7.1", "repo_root": repo_root}
+        )()
+        mock_load.return_value = {"version": "0.7.1"}
         mock_create.return_value = {"tag": "v0.7.1", "exists": True, "created": False}
         mock_ff.return_value = {"ok": True, "results": []}
         mock_reset.return_value = {"would_reset": True, "commands": []}
@@ -534,7 +553,10 @@ class CliTests(unittest.TestCase):
         mock_ff.assert_called()
         _args, kwargs = mock_ff.call_args
         self.assertFalse(kwargs.get("apply", False))
+        self.assertTrue(kwargs.get("dry_run"))
         mock_reset.assert_not_called()
+        mock_ensure.assert_called_once()
+        self.assertTrue(mock_ensure.call_args.kwargs.get("dry_run"))
 
     @patch("plate_core.cli.get_autonomy_status")
     def test_autonomy_status_prints_pressure_and_pause(self, mock_status):

@@ -37,6 +37,9 @@ from plate_core.release import (
     STANDING_TRACK_BRANCHES,
     format_fast_forward_failure_comment,
     ensure_next_release_issue,
+    inherit_next_release_milestone_number,
+    set_next_release_release_window_open,
+    RELEASE_WINDOW_OPEN_LABEL,
     diagnose_release_standing_state,
     repair_release_standing_state,
     pick_canonical_next_release_issue,
@@ -374,12 +377,14 @@ class ClosesBlockHelperTests(unittest.TestCase):
             {"slug": "d"},  # no links key
         ]
         block = collect_closes_block(frags)
-        self.assertTrue(block.startswith("Closes "))
-        self.assertIn("#569", block)
-        self.assertIn("#580", block)
-        self.assertIn("#111", block)
-        # unique
-        self.assertEqual(block.count("#569"), 1)
+        lines = [line for line in block.splitlines() if line.strip()]
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(lines[0], "Closes #569")
+        self.assertEqual(lines[1], "Closes #580")
+        self.assertEqual(lines[2], "Closes #111")
+        from plate_core.pr_gates_closing import parse_strict_closing_issue_numbers
+
+        self.assertEqual(parse_strict_closing_issue_numbers(block), [569, 580, 111])
 
     def test_empty(self):
         self.assertEqual(collect_closes_block([]), "")
@@ -1346,15 +1351,21 @@ class FinalizeAutomationTests(unittest.TestCase):
     @patch("plate_core.release.run_hidden")
     def test_fast_forward_all_branches_legacy_release_only(self, mock_run, mock_root):
         mock_root.return_value = Path("/tmp/repo")
-        tag_commit = "tagsha"
-        release_tip = "releasesha"
+        tag_commit = "a" * 40
+        release_tip = "b" * 40
 
         def fake_run(argv, **kwargs):
             cmd = argv
             if cmd[:3] == ["git", "ls-remote", "--tags"]:
-                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v0.9.0", "returncode": 0})()
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_commit} refs/tags/v0.9.0\n"
+                        f"{tag_commit} refs/tags/v0.9.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
             if cmd[:3] == ["git", "ls-remote", "--heads"]:
-                branch = cmd[4]
+                branch = cmd[4].removeprefix("refs/heads/")
                 if branch == "release":
                     return type("P", (), {"stdout": f"{release_tip} refs/heads/release", "returncode": 0})()
                 return type("P", (), {"stdout": "", "returncode": 0})()
@@ -1388,14 +1399,20 @@ class FinalizeAutomationTests(unittest.TestCase):
     @patch("plate_core.release.run_hidden")
     def test_fast_forward_stop_on_first_block(self, mock_run, mock_root):
         mock_root.return_value = Path("/tmp/repo")
-        tag_commit = "tagsha"
-        tips = {"release-major": "majorsha", "release-minor": "minorsha"}
+        tag_commit = "c" * 40
+        tips = {"release-major": "d" * 40, "release-minor": "e" * 40}
 
         def fake_run(argv, **kwargs):
             if argv[:3] == ["git", "ls-remote", "--tags"]:
-                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v1.0.0", "returncode": 0})()
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_commit} refs/tags/v1.0.0\n"
+                        f"{tag_commit} refs/tags/v1.0.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
             if argv[:3] == ["git", "ls-remote", "--heads"]:
-                branch = argv[4]
+                branch = argv[4].removeprefix("refs/heads/")
                 if branch in tips:
                     return type("P", (), {"stdout": f"{tips[branch]} refs/heads/{branch}", "returncode": 0})()
                 return type("P", (), {"stdout": "", "returncode": 0})()
@@ -1430,13 +1447,64 @@ class FinalizeAutomationTests(unittest.TestCase):
 
     @patch("plate_core.release._release_git_root")
     @patch("plate_core.release.run_hidden")
+    def test_fast_forward_plan_mode_skips_fetch_in_user_checkout(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+        tag_commit = "a" * 40
+        release_tip = "b" * 40
+        fetch_calls: list[list[str]] = []
+
+        def fake_run(argv, **kwargs):
+            cwd = kwargs.get("cwd")
+            if argv[:2] == ["git", "fetch"]:
+                if cwd == "/tmp/repo" or cwd == str(Path("/tmp/repo")):
+                    fetch_calls.append(list(argv))
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "ls-remote", "--tags"]:
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_commit} refs/tags/v0.9.0\n"
+                        f"{tag_commit} refs/tags/v0.9.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
+            if argv[:3] == ["git", "ls-remote", "--heads"]:
+                branch = argv[4].removeprefix("refs/heads/")
+                if branch == "release":
+                    return type("P", (), {"stdout": f"{release_tip} refs/heads/release", "returncode": 0})()
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "remote"]:
+                return type("P", (), {"stdout": "https://github.com/o/r.git", "returncode": 0})()
+            if argv[:2] == ["git", "init"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "remote", "add"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        info = fast_forward_release_branches(
+            "v0.9.0",
+            dry_run=True,
+            apply=False,
+            branches=("release",),
+        )
+        self.assertTrue(info.get("ok"))
+        self.assertEqual(fetch_calls, [])
+        self.assertEqual(info["results"][0]["status"], "would_fast_forward")
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
     def test_fast_forward_idempotent_noop(self, mock_run, mock_root):
         mock_root.return_value = Path("/tmp/repo")
-        sha = "samecommit"
+        sha = "f" * 40
 
         def fake_run(argv, **kwargs):
             if argv[:3] == ["git", "ls-remote", "--tags"]:
-                return type("P", (), {"stdout": f"{sha} refs/tags/v0.9.1", "returncode": 0})()
+                return type("P", (), {
+                    "stdout": f"{sha} refs/tags/v0.9.1\n{sha} refs/tags/v0.9.1^{{}}",
+                    "returncode": 0,
+                })()
             if argv[:3] == ["git", "ls-remote", "--heads"]:
                 return type("P", (), {"stdout": f"{sha} refs/heads/release", "returncode": 0})()
             if argv[:2] == ["git", "fetch"]:
@@ -1457,14 +1525,20 @@ class FinalizeAutomationTests(unittest.TestCase):
     @patch("plate_core.release.run_hidden")
     def test_fast_forward_multi_track_skips_missing(self, mock_run, mock_root):
         mock_root.return_value = Path("/tmp/repo")
-        tag_commit = "tagsha"
-        tip = "branchsha"
+        tag_commit = "1" * 40
+        tip = "2" * 40
 
         def fake_run(argv, **kwargs):
             if argv[:3] == ["git", "ls-remote", "--tags"]:
-                return type("P", (), {"stdout": f"{tag_commit} refs/tags/v2.0.0", "returncode": 0})()
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_commit} refs/tags/v2.0.0\n"
+                        f"{tag_commit} refs/tags/v2.0.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
             if argv[:3] == ["git", "ls-remote", "--heads"]:
-                branch = argv[4]
+                branch = argv[4].removeprefix("refs/heads/")
                 if branch == "release-patch":
                     return type("P", (), {"stdout": f"{tip} refs/heads/{branch}", "returncode": 0})()
                 return type("P", (), {"stdout": "", "returncode": 0})()
@@ -1491,6 +1565,66 @@ class FinalizeAutomationTests(unittest.TestCase):
         self.assertEqual(by_branch["release-patch"], "fast_forwarded")
         self.assertEqual(by_branch["release"], "skipped_missing")
 
+    def test_parse_ls_remote_tag_commit_sha_prefers_peeled_annotated_tag(self):
+        from plate_core.release import _parse_ls_remote_tag_commit_sha
+
+        tag_object = "1" * 40
+        peeled = "2" * 40
+        stdout = f"{tag_object} refs/tags/v1.0.0\n{peeled} refs/tags/v1.0.0^{{}}"
+        self.assertEqual(_parse_ls_remote_tag_commit_sha(stdout, "v1.0.0"), peeled)
+
+    def test_parse_ls_remote_tag_commit_sha_lightweight_tag(self):
+        from plate_core.release import _parse_ls_remote_tag_commit_sha
+
+        commit = "3" * 40
+        stdout = f"{commit} refs/tags/v0.1.0"
+        self.assertEqual(_parse_ls_remote_tag_commit_sha(stdout, "v0.1.0"), commit)
+
+    @patch("plate_core.release._release_git_root")
+    @patch("plate_core.release.run_hidden")
+    def test_fast_forward_plan_uses_peeled_sha_for_annotated_tag(self, mock_run, mock_root):
+        mock_root.return_value = Path("/tmp/repo")
+        tag_object = "1" * 40
+        peeled = "2" * 40
+        release_tip = "b" * 40
+
+        def fake_run(argv, **kwargs):
+            if argv[:3] == ["git", "ls-remote", "--tags"]:
+                return type("P", (), {
+                    "stdout": (
+                        f"{tag_object} refs/tags/v0.9.0\n"
+                        f"{peeled} refs/tags/v0.9.0^{{}}"
+                    ),
+                    "returncode": 0,
+                })()
+            if argv[:3] == ["git", "ls-remote", "--heads"]:
+                branch = argv[4].removeprefix("refs/heads/")
+                if branch == "release":
+                    return type("P", (), {"stdout": f"{release_tip} refs/heads/release", "returncode": 0})()
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "remote"]:
+                return type("P", (), {"stdout": "https://github.com/o/r.git", "returncode": 0})()
+            if argv[:2] == ["git", "init"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:3] == ["git", "remote", "add"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            if argv[:2] == ["git", "fetch"]:
+                return type("P", (), {"stdout": "", "returncode": 0})()
+            raise AssertionError(argv)
+
+        mock_run.side_effect = fake_run
+        info = fast_forward_release_branches(
+            "v0.9.0",
+            dry_run=True,
+            apply=False,
+            branches=("release",),
+        )
+        self.assertTrue(info.get("ok"))
+        self.assertEqual(info["tag_commit"], peeled)
+        self.assertEqual(info["results"][0]["status"], "would_fast_forward")
+
     def test_format_fast_forward_failure_comment_includes_blocked_branch(self):
         body = format_fast_forward_failure_comment(
             {
@@ -1512,6 +1646,7 @@ class FinalizeAutomationTests(unittest.TestCase):
         mock_client = mock_client_cls.return_value
         mock_client.api.side_effect = [
             {"items": []},
+            {"items": [{"number": 100, "milestone": {"number": 5}}]},
             {"number": 999, "html_url": "https://ex/999"},
         ]
         info = ensure_next_release_issue(client=mock_client)
@@ -1523,7 +1658,101 @@ class FinalizeAutomationTests(unittest.TestCase):
         ]
         self.assertEqual(len(create_calls), 1)
         _args, kwargs = create_calls[0]
-        self.assertEqual(kwargs.get("fields", {}).get("labels"), ["Release"])
+        fields = kwargs.get("fields", {})
+        self.assertEqual(fields.get("labels"), ["Release"])
+        self.assertEqual(fields.get("milestone"), 5)
+
+    @patch("plate_core.release.GhClient")
+    def test_ensure_next_issue_dry_run_and_search_fail_closed(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = RuntimeError("search down")
+        info = ensure_next_release_issue(client=mock_client, dry_run=True)
+        self.assertFalse(info.get("ok", True))
+        self.assertIn("search_failed", info.get("error", ""))
+
+        mock_client.api.side_effect = [
+            {"items": [{"number": 12, "title": "Next Release", "html_url": "https://ex/12"}]},
+        ]
+        plan = ensure_next_release_issue(client=mock_client, dry_run=True)
+        self.assertTrue(plan.get("exists"))
+
+    @patch("plate_core.release.GhClient")
+    def test_inherit_next_release_milestone_number(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.return_value = {
+            "items": [
+                {"number": 200, "milestone": None},
+                {"number": 150, "milestone": {"number": 7}},
+            ]
+        }
+        self.assertEqual(inherit_next_release_milestone_number(client=mock_client), 7)
+
+    @patch("plate_core.release.resolve_repo", return_value="owner/repo")
+    @patch("plate_core.release.GhClient")
+    def test_inherit_milestone_from_renamed_predecessor_issue(self, mock_client_cls, _repo):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = [
+            {"milestone": {"number": 11}, "title": "v0.13.0"},
+        ]
+        self.assertEqual(
+            inherit_next_release_milestone_number(client=mock_client, from_issue_number=200),
+            11,
+        )
+        mock_client.api.assert_called_once_with("repos/owner/repo/issues/200")
+
+    @patch("plate_core.release.resolve_repo", return_value="owner/repo")
+    @patch("plate_core.release.GhClient")
+    def test_ensure_next_release_uses_predecessor_milestone(self, mock_client_cls, _repo):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = [
+            {"items": []},
+            {"milestone": {"number": 9}, "title": "v0.12.0"},
+            {"number": 300, "html_url": "https://ex/300"},
+        ]
+        info = ensure_next_release_issue(
+            client=mock_client,
+            predecessor_issue_number=200,
+        )
+        self.assertTrue(info.get("created"))
+        create_call = mock_client.api.call_args_list[-1]
+        self.assertEqual(create_call[0][0], "repos/owner/repo/issues")
+        self.assertEqual(create_call[1]["fields"]["milestone"], 9)
+
+    @patch("plate_core.release.GhClient")
+    def test_release_window_cleared_on_cut_cycle_closed_issue(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = [
+            {"items": []},
+            {"labels": [{"name": "Release"}, {"name": RELEASE_WINDOW_OPEN_LABEL}]},
+            None,
+        ]
+
+        info = set_next_release_release_window_open(
+            want_open=False,
+            client=mock_client,
+            extra_issue_numbers=[1454],
+        )
+        self.assertTrue(info.get("ok"))
+        self.assertEqual(info.get("issue_number"), 1454)
+
+    @patch("plate_core.release.GhClient")
+    @patch("plate_core.release.run_hidden")
+    def test_create_github_release_uses_verify_tag_and_positional_assets(
+        self, mock_run, mock_client_cls
+    ):
+        mock_client = mock_client_cls.return_value
+        mock_client.api.side_effect = [
+            GhApiError("404 not found"),
+            {"id": 1, "html_url": "https://example/releases/tag/v0.7.1"},
+        ]
+        mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        with TemporaryDirectory() as tmp:
+            d = self._make_versioned_release(tmp, "0.7.1")
+            create_github_release("0.7.1", releases_dir=d, client=mock_client)
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("--verify-tag", cmd)
+        self.assertNotIn("--asset", cmd)
+        self.assertIn("notes.md", cmd[-1])
 
 
 class GhPlateSyncPlanTests(unittest.TestCase):
