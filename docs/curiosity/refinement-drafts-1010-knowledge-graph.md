@@ -5,7 +5,43 @@
 **Milestone:** Knowledge graph brain  
 **Purpose:** Turn child stubs #1039–#1047 into implementation-ready plans without reopening settled decisions.
 
-Andrew's answers in the Q&A pack are **binding**. This document adds draft scope, non-goals, acceptance criteria anchored in this repository, dependency order, and **only** questions where the recorded answers leave a real gap.
+Andrew's answers in the Q&A pack are **binding**. This document adds dependency order, implementation constraints, **gaps only** (not a second copy of stub acceptance criteria), and open questions where answers still leave a real gap.
+
+---
+
+## In-flight audit (2026-11-28)
+
+For each child stub, `gh pr list --state open --search "<n> in:body"` and issue comments were checked before extending this draft.
+
+| Stub | Open PRs (body refs) | Issue comments with refinement |
+|------|---------------------|--------------------------------|
+| #1039–#1047 | None besides [PR #1557](https://github.com/akasper/plate/pull/1557) | **None** (0 comments each) |
+| Epic #1010 | — | [Comment (2026-10-23)](https://github.com/akasper/plate/issues/1010#issuecomment-6378007314): **code-level graph via optional external adapter** (#1198 admission), not in-process PLATE indexing — aligns with Q&A non-goals |
+
+**Source-of-truth order for each stub:** (1) child issue body **Known scope** + **Acceptance criteria**, (2) Q&A pack #1011, (3) Epic #1010 body, (4) this file (**gaps and cross-links only**).
+
+**Related open work (do not contradict):**
+
+| PR | Track | Implication for #1010 implementation |
+|----|-------|--------------------------------------|
+| [#1544](https://github.com/akasper/plate/pull/1544) | MCP `MCP_TOOL_HANDLERS` map (#1543) | New MCP tools: handler in `MCP_TOOL_HANDLERS`, schema in `src/plate_core/mcp/tool_definitions.py` (`MCP_TOOL_DEFINITIONS`), profile in `src/plate_core/mcp/tool_profiles.py`; registry tests in `tests/test_mcp_registry.py` |
+| [#1536](https://github.com/akasper/plate/pull/1536) | `docs/plate/research/public-surface-inventory.md` (#1056) | Any new **public** CLI `kg` family or MCP tools must be classified and listed in the inventory |
+| [#1538](https://github.com/akasper/plate/pull/1538) | `docs/cli-mcp-reference.md` + `scripts/generate-cli-mcp-reference.py` (#1068) | After inventory update: regenerate reference; `tests/test_cli_mcp_reference.py` / `--check` must pass |
+
+Binding **command and tool names** remain as in the Q&A pack and stub bodies: `gh plate kg refresh|query|get`, `plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse`.
+
+---
+
+## Shared implementation constraints (Features #1043–#1046)
+
+These apply to every implementation PR; they are not repeated per stub.
+
+- **CLI:** Register under `build_parser()` in `src/plate_core/cli.py` (same pattern as `epic`, `autonomy`, `qanda`).
+- **MCP:** After [#1544](https://github.com/akasper/plate/pull/1544) lands, wire tools through **`MCP_TOOL_HANDLERS`** in `src/plate_core/mcp_server.py`, definitions in **`MCP_TOOL_DEFINITIONS`** (`src/plate_core/mcp/tool_definitions.py`), and **`profiles_for_tool()`** in `src/plate_core/mcp/tool_profiles.py`. Do not add a parallel dispatch path.
+- **Public surface:** Update `docs/plate/research/public-surface-inventory.md` ([#1536](https://github.com/akasper/plate/pull/1536)) and regenerate `docs/cli-mcp-reference.md` via `scripts/generate-cli-mcp-reference.py` ([#1538](https://github.com/akasper/plate/pull/1538)).
+- **Storage:** Binding path `.agentic/kg/` with `graph.json` and `built_at` (Q&A pack); git policy is open question #3 below.
+- **Procedures:** `.agentic/procedures/*.json` loaded by `src/plate_core/autonomy.py` (see `nightly-drift-detection.json`).
+- **No `.plate` edits** in refinement/early Features unless a child issue explicitly requires runtime config (per stub #1043).
 
 ---
 
@@ -40,276 +76,143 @@ flowchart LR
 
 ## #1039 — Research: PLATE process ontology for the knowledge graph
 
-**Issue:** https://github.com/akasper/plate/issues/1039
+**Issue:** https://github.com/akasper/plate/issues/1039 — ACs and scope are on the issue; artifact `docs/plate/research/kg-ontology.md`.
 
-### Proposed scope
+### Gaps this draft adds
 
-- Author the v1 **entity catalog** (coarse node types + deep PLATE properties) and **edge catalog** (including Issue→Issue `depends-on` / `blocks`).
-- Map each node type to **concrete ingest sources** in this repo: GitHub Issues/PRs/review threads, Milestones, `.agentic/releases/unreleased/*.json` and versioned fragment dirs, root `AGENTS.md`, `SPEC.md`, `CURRENT.md`, `.plate`, design/research under `docs/plate/` (or legacy `docs/design/` / `docs/research/` when namespacing is absent — see bootstrap resolution in `src/plate_core/bootstrap.py`), and `docs/wiki/Goals.md`.
-- Document **excluded** sources (code tree, commits, `.github/workflows`, Actions runs) and **deferred** code-level edges.
-- Define minimal **stable IDs** for graph entities (e.g. `issue:akasper/plate#1010`, `fragment:unreleased/kg-build.json`) so CLI/MCP and tests can reference them consistently.
-
-### Non-goals
-
-- Implementing ingest or query code.
-- SaaS, embeddings, or natural-language query layers.
-- Choosing on-disk JSON schema version (left to #1041).
-
-### Draft acceptance criteria
-
-- [ ] `docs/plate/research/kg-ontology.md` exists (or `docs/research/kg-ontology.md` only if this repo has not yet completed #1015 namespacing — prefer `docs/plate/research/` in `akasper/plate`).
-- [ ] Every v1 node type lists ingest source paths and PLATE-specific properties (e.g. Epic success criteria, `risk:*`, release track, fragment `change_type` / `semver` signals).
-- [ ] Edge section includes Feature/Task/Question→Epic, PR→Issue, fragment→Feature, Epic→Release, design doc→Epic/Feature, wiki→Feature, and Issue→Issue depends-on/blocks with parsing rules (labels, sub-issues, body keywords).
-- [ ] Explicit "not in v1" table for code/commit/CI sources and file/function edges.
-- [ ] Cross-links to binding Q&A pack Q1–Q4, Q8.
+- **Stable entity IDs** for tests/MCP (e.g. `issue:owner/repo#N`, `fragment:unreleased/<slug>.json`) — not specified on the stub.
+- **Ingest path resolution:** use the same namespaced vs legacy doc roots as `src/plate_core/bootstrap.py` / #1015 migration doc (open question #6).
+- **Epic #1010 (2026-10-23):** document that future **code** graph is an **optional external adapter** (#1198), not v1 PLATE nodes — extends stub “no code edges” without reopening Q&A.
 
 ### Dependencies
 
-- **Blocks:** #1041, #1042, #1043, #1044.
-- **Blocked by:** none (start here).
+**Blocks:** #1041, #1042. **Blocked by:** none.
 
 ---
 
 ## #1040 — Research: Token savings baseline and measurement strategy
 
-**Issue:** https://github.com/akasper/plate/issues/1040
+**Issue:** https://github.com/akasper/plate/issues/1040 — ACs on the issue; artifact `docs/plate/research/kg-token-savings-baseline.md`.
 
-### Proposed scope
+### Gaps this draft adds
 
-- Define the **synthetic benchmark**: fixed query set aligned with the seven v1 process queries, each with a documented "naive baseline" prompt (e.g. full `AGENTS.md` excerpt + `gh issue list` dumps vs narrow KG subgraph).
-- Define the **controlled experiment** protocol (same agent task, with/without KG MCP tools; token count source — host usage or estimated prompt size; minimum run count).
-- Define **ongoing monitoring** after v1 (what to log, where — e.g. USAGE REPORT blocks, `.agentic/` ledgers — without new product code in this Research issue).
-- Set the success bar at **30–50%** on process-heavy queries only.
-
-### Non-goals
-
-- Running benchmarks or publishing final numbers (that's #1047).
-- Code/CI/provenance queries in the benchmark suite.
-
-### Draft acceptance criteria
-
-- [ ] `docs/plate/research/kg-token-savings-baseline.md` documents synthetic queries, naive baselines, and expected KG tool invocations (`plate_kg_query` / `gh plate kg query` per binding Q5).
-- [ ] Controlled experiment names concrete tasks (e.g. "plan next Feature for Epic #1010", "report epic status for milestone Knowledge graph brain") and references `tests/test_what_next.py` / `tests/test_epics.py` patterns for fixture repos.
-- [ ] Measurement order is synthetic → controlled experiment → monitoring (binding Q9).
-- [ ] Success bar stated as 30–50% process-heavy only (binding Q10).
+- Name **fixture harnesses** already in repo for controlled tasks: `tests/test_what_next.py`, `tests/test_epics.py`, USAGE REPORT harvesting in `src/plate_core/costs.py` (monitoring signal).
+- Synthetic runs should invoke the **same tool names** as #1044 (`plate_kg_*` / `gh plate kg *`) once implemented — no alternate naming.
 
 ### Dependencies
 
-- **Blocks:** #1047.
-- **Blocked by:** none (parallel with #1039).
+**Blocks:** #1047. **Parallel with:** #1039.
 
 ---
 
 ## #1041 — Design: Knowledge graph build pipeline and storage model
 
-**Issue:** https://github.com/akasper/plate/issues/1041
+**Issue:** https://github.com/akasper/plate/issues/1041 — ACs on the issue; artifact `docs/plate/design/kg-build-pipeline.md`.
 
-### Proposed scope
+### Gaps this draft adds
 
-- Design **full rebuild** pipeline: fetch GitHub (Issues, PRs, review threads, Milestones) + read local artifacts (`AGENTS.md`, `SPEC.md`, `CURRENT.md`, `.plate`, fragments under `.agentic/releases/`, docs paths from #1039, `docs/wiki/Goals.md`).
-- Specify on-disk layout under **`.agentic/kg/`** (binding: working file `graph.json` + metadata such as `built_at`, `repo`, `schema_version`, `github_api_snapshot` hints).
-- Specify **staleness** fields exposed to query layer (timestamp only in design; threshold policy is an open question below).
-- Align with **shell-script** operator conventions (#1017) for any auxiliary fetch scripts.
-- Propose implementation home: new package `src/plate_core/kg/` (build, schema, refresh) wired from `src/plate_core/cli.py`.
-
-### Non-goals
-
-- Incremental updates, webhooks, refresh-on-query.
-- `.plate` schema changes in the design PR (Feature #1043 owns runtime config if needed).
-- Hosted/SaaS storage.
-
-### Draft acceptance criteria
-
-- [ ] `docs/plate/design/kg-build-pipeline.md` describes fetch → normalize → emit graph steps and error handling when GitHub is unavailable.
-- [ ] JSON schema documents nodes, edges, properties, and provenance URLs for every entity.
-- [ ] Refresh triggers documented: on-demand `gh plate kg refresh` (new subparser alongside `health`, `epic`, `autonomy` in `src/plate_core/cli.py`) and periodic procedure hook (#1046).
-- [ ] Explicit exclusion of code/commit/CI inputs in pipeline diagram.
-- [ ] Fixture strategy for tests: small committed snapshot under `tests/fixtures/kg/` (referenced by #1043).
+- Recommend implementation package `src/plate_core/kg/` (final name on issue if Andrew prefers otherwise).
+- **Staleness metadata** field design only — threshold behavior deferred to open question #1 (#1042/query layer).
+- **Test fixtures:** committed snapshots under `tests/fixtures/kg/` (stub #1043 requires fixture coverage but not path).
+- Reuse GitHub fetch patterns from `src/plate_core/pr_babysit.py` for review threads where applicable.
 
 ### Dependencies
 
-- **Blocks:** #1043, #1046.
-- **Blocked by:** #1039.
+**Blocks:** #1043, #1046. **Blocked by:** #1039.
 
 ---
 
 ## #1042 — Design: Knowledge graph query API and result format
 
-**Issue:** https://github.com/akasper/plate/issues/1042
+**Issue:** https://github.com/akasper/plate/issues/1042 — ACs on the issue; artifact `docs/plate/design/kg-query-api.md`.
 
-### Proposed scope
+### Gaps this draft adds
 
-- Specify **CLI**: `gh plate kg refresh`, `gh plate kg query`, `gh plate kg get` (flags: `--json`, repo default from git remote, query templates for the seven v1 questions).
-- Specify **MCP** tools: `plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse` registered in `src/plate_core/mcp_server.py` and profiled in `src/plate_core/mcp/tool_profiles.py` (new `kg` or `process` profile — see open questions).
-- Specify **narrow cited subgraph** JSON: nodes, edges, `url`, `snippet`, `stale`, `fallback_used` — not full issue bodies (binding Q6).
-- For each **seven v1 queries**, document graph traversal (including blocking Features via Issue→Issue depends-on/blocks per binding Q4/Q8).
-- **Staleness behavior:** missing or stale graph → GitHub API fallback + log event (binding Q11); integrate with existing GitHub client patterns in `src/plate_core/epics.py`, `src/plate_core/what_next.py`.
-
-### Non-goals
-
-- Natural-language query translation.
-- Augmenting `plate_what_next` / `plate_epic_status` (that's #1045).
-- Browser UI.
-
-### Draft acceptance criteria
-
-- [ ] `docs/plate/design/kg-query-api.md` includes JSON Schema or exemplar payloads for each v1 query.
-- [ ] Release base branch query documents use of `src/plate_core/release.py` (`ReleaseStatus` / track branches `release-minor`, etc.) as fallback when graph edge is insufficient.
-- [ ] Refinement Issues query documents label intersection (`need:refinement`, `status:stub`) consistent with label-check workflows under `.github/workflows/`.
-- [ ] PRs awaiting human review query ties to merge gate / review state surfaces used in `src/plate_core/pr_babysit.py` and PR gate checks.
-- [ ] Fallback path specifies logging destination (stderr, `.agentic/kg/refresh.log`, or autonomy run log).
+- **MCP wire-up:** document handler + schema + profile locations per **Shared implementation constraints** (post-#1544); classify stable vs experimental in public-surface inventory ([#1536](https://github.com/akasper/plate/pull/1536)) — open question #7.
+- **Fallback helpers:** cite `src/plate_core/release.py` (release base branch), `src/plate_core/epics.py` / `src/plate_core/what_next.py` (GitHub live paths), `.github/workflows/labels.yml` + `label-check` (refinement label query).
+- Response envelope may include `stale` / `fallback_used` flags (binding Q11); exact JSON shape in design doc, not here.
 
 ### Dependencies
 
-- **Blocks:** #1044.
-- **Blocked by:** #1039 (traversals need ontology).
+**Blocks:** #1044. **Blocked by:** #1039.
 
 ---
 
 ## #1043 — Feature: Knowledge graph build and refresh
 
-**Issue:** https://github.com/akasper/plate/issues/1043
+**Issue:** https://github.com/akasper/plate/issues/1043 — follow issue ACs verbatim.
 
-### Proposed scope
+### Gaps this draft adds
 
-- Implement `gh plate kg refresh` per #1041; write `.agentic/kg/graph.json` + metadata.
-- Ingest all binding sources including **PR review threads** (reuse GitHub API patterns from PR babysit / review thread tooling in `src/plate_core/pr_babysit.py` where applicable).
-- Emit Issue→Issue depends-on/blocks edges.
-- Full rebuild every invocation; update `built_at`.
-
-### Non-goals
-
-- Incremental diff, webhooks, code/CI ingestion.
-- Changing `.plate` in the same PR unless a minimal optional `kg` section is required (prefer zero `.plate` change until config need is proven).
-
-### Draft acceptance criteria
-
-- [ ] `src/plate_core/kg/` (or approved module name from #1041) + CLI registration in `src/plate_core/cli.py` for `plate kg refresh`.
-- [ ] `tests/test_kg_build.py` (new) uses fixture repo data; asserts graph contains sample Issue, fragment from `.agentic/releases/unreleased/*.json`, and depends-on/blocks edge.
-- [ ] Asserts code paths do not read `src/` for symbol indexing.
-- [ ] Staleness timestamp written and readable by query layer.
-- [ ] Release fragment under `.agentic/releases/unreleased/` per AGENTS.md (Feature artifact).
+- Plus **shared constraints:** CLI `kg` subcommand in `src/plate_core/cli.py`; public-surface inventory + cli-mcp-reference update when `kg` is adopter-visible (likely **experimental** until 1.0 freeze).
+- Plus release fragment under `.agentic/releases/unreleased/` per AGENTS.md.
 
 ### Dependencies
 
-- **Blocks:** #1044, #1046.
-- **Blocked by:** #1041.
+**Blocks:** #1044, #1046. **Blocked by:** #1041.
 
 ---
 
 ## #1044 — Feature: Knowledge graph query CLI and MCP
 
-**Issue:** https://github.com/akasper/plate/issues/1044
+**Issue:** https://github.com/akasper/plate/issues/1044 — follow issue ACs (seven queries, narrow JSON, fallback).
 
-### Proposed scope
+### Gaps this draft adds
 
-- Implement query/get CLI and three MCP tools per #1042.
-- Return narrow cited JSON; implement all **seven v1 queries** as named operations or documented query parameters.
-- On missing/stale graph: **fallback to GitHub API** and set `fallback_used` in output (binding Q11).
-
-### Non-goals
-
-- Replacing GitHub as SOR.
-- Dumping full issue bodies.
-
-### Draft acceptance criteria
-
-- [ ] `tests/test_kg_query.py` covers each v1 query with fixture graph + one fallback test when graph absent.
-- [ ] `tests/test_mcp.py` registers and calls `plate_kg_query` / `plate_kg_get_entity` / `plate_kg_traverse`.
-- [ ] Wiki/Goals query reads `docs/wiki/Goals.md` (or namespaced path via bootstrap helper).
-- [ ] Fragments-per-Feature query links `.agentic/releases/unreleased/<slug>.json` entries via `links` / issue numbers in fragment JSON.
-- [ ] Release fragment under `.agentic/releases/unreleased/`.
+- MCP: register `plate_kg_query`, `plate_kg_get_entity`, `plate_kg_traverse` via **`MCP_TOOL_HANDLERS`** + **`MCP_TOOL_DEFINITIONS`** + **`profiles_for_tool()`** ([#1544](https://github.com/akasper/plate/pull/1544)); extend `tests/test_mcp_registry.py` dispatch/key parity.
+- Tests: stub requires coverage per query — use fixtures from #1041; may extend `tests/test_mcp.py` rather than inventing parallel harness if equivalent.
+- **Public surface:** inventory ([#1536](https://github.com/akasper/plate/pull/1536)) + regenerated `docs/cli-mcp-reference.md` ([#1538](https://github.com/akasper/plate/pull/1538)).
 
 ### Dependencies
 
-- **Blocks:** #1045, #1047.
-- **Blocked by:** #1042, #1043.
+**Blocks:** #1045, #1047. **Blocked by:** #1042, #1043.
 
 ---
 
 ## #1045 — Feature: Augment what-next and epic status with the knowledge graph
 
-**Issue:** https://github.com/akasper/plate/issues/1045
+**Issue:** https://github.com/akasper/plate/issues/1045 — ACs on the issue (what-next + epic status, fallback).
 
-### Proposed scope
+### Gaps this draft adds
 
-- When `.agentic/kg/graph.json` is **fresh**, `plate_what_next` and `plate_epic_status` may narrow GitHub fetches using the graph (`src/plate_core/what_next.py`, `src/plate_core/epics.py`, CLI `cmd_what_next` / `cmd_epic_status`, MCP handlers in `src/plate_core/mcp_server.py`).
-- On stale/missing graph, behavior matches **today's GitHub-only path** (binding Q7/Q11).
-- Optional: log when graph shortcut saved tokens (feeds #1047).
-
-### Non-goals
-
-- Making the graph mandatory for process surfaces.
-- Replacing PM orchestrator logic wholesale (`src/plate_core/pm.py`) — see open question on PM scope vs binding Q7.
-
-### Draft acceptance criteria
-
-- [ ] Tests in `tests/test_what_next.py` and `tests/test_epics.py` (or `tests/test_kg_integration.py`) cover fresh-graph and fallback paths.
-- [ ] No change to default ranking ladder in `SPEC.md` / `recommend_what_next` ordering unless graph path is strictly optional.
-- [ ] Release fragment documents surface touch points.
-- [ ] Document in artifact that PM augmentation is in or out of v1 per Andrew's answer to open question #2 below.
+- Touch points: `src/plate_core/what_next.py`, `src/plate_core/epics.py`, existing MCP/CLI paths (handlers remain in `MCP_TOOL_HANDLERS` — no new tool names required unless design adds read helpers).
+- **PM orchestrator:** binding Q7 mentions PM; stub #1045 does not — see open question #2 (do not implement PM graph reads until decided).
+- Optional token logging for #1047; do not alter `SPEC.md` what_next ladder ordering.
 
 ### Dependencies
 
-- **Blocks:** #1047 (controlled experiment realism).
-- **Blocked by:** #1044.
+**Blocks:** #1047 (realism). **Blocked by:** #1044.
 
 ---
 
 ## #1046 — Feature: Periodic knowledge graph refresh procedure
 
-**Issue:** https://github.com/akasper/plate/issues/1046
+**Issue:** https://github.com/akasper/plate/issues/1046 — ACs on the issue; working name `kg-refresh-nightly` in stub.
 
-### Proposed scope
+### Gaps this draft adds
 
-- Add JSON procedure under `.agentic/procedures/` (working name `kg-refresh-nightly.json`) modeled on `nightly-drift-detection.json`: cadence, `risk_level: low`, step invoking `gh plate kg refresh` or MCP equivalent shell step.
-- Register with AutonomyEngine loader in `src/plate_core/autonomy.py` (`_load_procedures` reads `.agentic/procedures/*.json`).
-- Safe to skip when autonomy `risk_tolerance` is `off` or schedules disabled.
-
-### Non-goals
-
-- Webhook listeners.
-- Incremental refresh.
-
-### Draft acceptance criteria
-
-- [ ] Procedure file exists and is valid against existing procedure schema.
-- [ ] `tests/test_autonomy.py` or dedicated test loads procedure and dry-run does not require network when skipped.
-- [ ] Documented in design doc and release fragment; no `.plate` edit unless autonomy schedules need explicit enablement.
-- [ ] Same full rebuild as manual refresh (#1043).
+- Model procedure JSON on `.agentic/procedures/nightly-drift-detection.json`; loader in `src/plate_core/autonomy.py`.
+- Cadence default: open question #8 (`enabled: false` until opt-in).
+- If procedure invokes MCP, use existing autonomy step patterns — no new autonomy MCP tools required.
 
 ### Dependencies
 
-- **Blocked by:** #1043.
-- **Parallel with:** #1045 after #1044.
+**Blocked by:** #1043. **Parallel with:** #1045 after #1044.
 
 ---
 
 ## #1047 — Research: Token savings verification and benchmark report
 
-**Issue:** https://github.com/akasper/plate/issues/1047
+**Issue:** https://github.com/akasper/plate/issues/1047 — ACs on the issue; artifact `docs/plate/research/kg-token-savings-report.md`.
 
-### Proposed scope
+### Gaps this draft adds
 
-- Execute synthetic benchmark from #1040 against implemented #1044 (and #1045 if in scope).
-- Run controlled experiment; document pass/fail vs **30–50%** bar.
-- Publish `docs/plate/research/kg-token-savings-report.md` with per-query tables and monitoring recommendations.
-
-### Non-goals
-
-- Claiming savings on code-navigation or CI queries.
-- SaaS or embedding follow-ups.
-
-### Draft acceptance criteria
-
-- [ ] Report separates synthetic, controlled, and monitoring sections (binding Q9 order).
-- [ ] Each of the seven v1 queries has a synthetic row with token counts (before/after).
-- [ ] States clearly whether the 30–50% bar was met for process-heavy workloads.
-- [ ] Links to test/fixture commands reproducible in CI or documented local script under `scripts/` (shell per #1017).
+- Runbook should reference #1040 methodology and **production surfaces** from #1044/#1045 only (no duplicate benchmark tooling in `scripts/` unless #1040 specifies).
+- Shell scripts for one-off runs stay **#1017**-style if added.
 
 ### Dependencies
 
-- **Blocked by:** #1040, #1044; **should follow** #1045 when PM/augment scope is settled.
+**Blocked by:** #1040, #1044; prefer **after** #1045 when open question #2 is settled.
 
 ---
 
@@ -335,8 +238,8 @@ Only gaps **not** closed by the Q&A pack or Epic body. Recommended defaults are 
 6. **`docs/plate/` vs legacy paths** — Epic artifacts target `docs/plate/` (#1015). Should build ingest use `resolve_local_goals_wiki` / import-payload path rules for adopters not yet namespaced?  
    **Recommended default:** **Yes** — same resolution as `src/plate_core/bootstrap.py` and `docs/migration/namespace-docs-migration.md`.
 
-7. **MCP tool profile** — Which `PLATE_MCP_TOOL_PROFILES` bucket should host KG tools?  
-   **Recommended default:** Add tools to existing **`process`** profile alongside `plate_what_next` and `plate_feed` in `src/plate_core/mcp/tool_profiles.py`.
+7. **MCP stable vs experimental** — How should `plate_kg_*` tools be classified in `docs/plate/research/public-surface-inventory.md` ([#1536](https://github.com/akasper/plate/pull/1536))?  
+   **Recommended default:** **experimental** for v1 (opt-in profile bucket TBD in #1042 design; default expansion likely `process` alongside `plate_what_next`).
 
 8. **Periodic refresh cadence** — Default schedule for `kg-refresh-nightly` when autonomy schedules are enabled?  
    **Recommended default:** **`nightly`** cadence, `risk_level: low`, `enabled: false` in template until user opts in (matches drift-detection pattern).
