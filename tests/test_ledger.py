@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -300,6 +301,15 @@ class TestSpendLedger1352(unittest.TestCase):
 
 
 class TestAutonomyLedgerWire(unittest.TestCase):
+    def setUp(self):
+        self._cwd_tmp = tempfile.TemporaryDirectory()
+        self._orig_cwd = os.getcwd()
+        os.chdir(self._cwd_tmp.name)
+
+    def tearDown(self):
+        os.chdir(self._orig_cwd)
+        self._cwd_tmp.cleanup()
+
     def test_run_cycle_writes_ledger_entries(self):
         from plate_core.autonomy import AutonomyEngine
 

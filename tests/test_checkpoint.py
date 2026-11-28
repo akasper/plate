@@ -252,39 +252,45 @@ class TestCheckpoint648(unittest.TestCase):
 
 class TestAutonomyCheckpointPause(unittest.TestCase):
     def test_run_cycle_pauses_on_open_checkpoint(self):
+        import os
+
         from plate_core.autonomy import AutonomyEngine
 
         with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp) / "cp"
-            base.mkdir()
-            create_checkpoint("pause me", "human required", impact="high", base_dir=base)
-            with patch("plate_core.checkpoint.CHECKPOINT_DIR", base):
-                with patch(
-                    "plate_core.checkpoint._ensure_dir",
-                    side_effect=lambda b=None: base if b is None else Path(b),
-                ):
-                    engine = AutonomyEngine(repo=None)
-                    engine.enabled = True
-                    engine.risk_tolerance = "medium"
-                    engine.autonomy_config = {
-                        "enabled": True,
-                        "risk_tolerance": "medium",
-                        "token_budget": {"daily": 50000, "per_cycle": 8000},
-                    }
-                    # Directly call with patched list via autonomy_is_paused
+            orig = os.getcwd()
+            try:
+                os.chdir(tmp)
+                base = Path(tmp) / "cp"
+                base.mkdir()
+                create_checkpoint("pause me", "human required", impact="high", base_dir=base)
+                with patch("plate_core.checkpoint.CHECKPOINT_DIR", base):
                     with patch(
-                        "plate_core.checkpoint.autonomy_is_paused_by_checkpoints",
-                        return_value={
-                            "paused": True,
-                            "open_count": 1,
-                            "checkpoint_ids": ["cp-test"],
-                            "titles": ["pause me"],
-                        },
+                        "plate_core.checkpoint._ensure_dir",
+                        side_effect=lambda b=None: base if b is None else Path(b),
                     ):
-                        report = engine.run_cycle(dry_run=True, max_steps=1)
-            self.assertTrue(report.paused)
-            self.assertEqual(report.status, "paused")
-            self.assertTrue(any("checkpoint" in a for a in report.actions_taken))
+                        engine = AutonomyEngine(repo=None)
+                        engine.enabled = True
+                        engine.risk_tolerance = "medium"
+                        engine.autonomy_config = {
+                            "enabled": True,
+                            "risk_tolerance": "medium",
+                            "token_budget": {"daily": 50000, "per_cycle": 8000},
+                        }
+                        with patch(
+                            "plate_core.checkpoint.autonomy_is_paused_by_checkpoints",
+                            return_value={
+                                "paused": True,
+                                "open_count": 1,
+                                "checkpoint_ids": ["cp-test"],
+                                "titles": ["pause me"],
+                            },
+                        ):
+                            report = engine.run_cycle(dry_run=True, max_steps=1)
+                self.assertTrue(report.paused)
+                self.assertEqual(report.status, "paused")
+                self.assertTrue(any("checkpoint" in a for a in report.actions_taken))
+            finally:
+                os.chdir(orig)
 
 
 if __name__ == "__main__":

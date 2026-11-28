@@ -18,6 +18,14 @@ from plate_core.autonomy import AutonomyEngine, Decision, ProcedureDef
 
 
 class TestAutonomyEngine(unittest.TestCase):
+    def setUp(self):
+        self._cwd_tmp = tempfile.TemporaryDirectory()
+        self._orig_cwd = os.getcwd()
+        os.chdir(self._cwd_tmp.name)
+
+    def tearDown(self):
+        os.chdir(self._orig_cwd)
+        self._cwd_tmp.cleanup()
 
     def test_load_procedures_builtin(self):
         engine = AutonomyEngine(repo=None)
@@ -414,6 +422,9 @@ class TestShadowSimulation645(unittest.TestCase):
     """#645: simulation/shadow mode for high-impact autonomous actions."""
 
     def setUp(self):
+        self._cwd_tmp = tempfile.TemporaryDirectory()
+        self._orig_cwd = os.getcwd()
+        os.chdir(self._cwd_tmp.name)
         self._patches = [
             patch("plate_core.autonomy.get_cost_report", side_effect=Exception("no network")),
             patch("plate_core.autonomy.get_health", side_effect=Exception("no network")),
@@ -442,6 +453,10 @@ class TestShadowSimulation645(unittest.TestCase):
         for p in self._patches:
             p.start()
             self.addCleanup(p.stop)
+
+    def tearDown(self):
+        os.chdir(self._orig_cwd)
+        self._cwd_tmp.cleanup()
 
     def test_classify_impact_catalog(self):
         from plate_core.autonomy import classify_action_impact

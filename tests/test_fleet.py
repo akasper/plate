@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -33,33 +34,34 @@ class TestHandoffs(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
         self.base = Path(self._td.name)
+        self._orig_cwd = os.getcwd()
+        os.chdir(self._td.name)
 
     def tearDown(self):
+        os.chdir(self._orig_cwd)
         self._td.cleanup()
 
     def test_create_list_complete(self):
         with patch("plate_core.fleet.record_decision", create=True):
-            # avoid ledger side effects if import path differs
-            pass
-        r = create_handoff(
-            from_agent="orchestrator",
-            to_agent="implementer",
-            task="Ship feature X",
-            budget_tokens=4000,
-            base_dir=self.base,
-            record_ledger=False,
-            use_live_budget=False,
-        )
-        self.assertTrue(r["ok"])
-        hid = r["handoff"]["handoff_id"]
-        open_h = list_handoffs(status="open", base_dir=self.base)
-        self.assertEqual(len(open_h), 1)
-        u = update_handoff(hid, status="accepted", base_dir=self.base, record_ledger=False)
-        self.assertEqual(u["handoff"]["status"], "accepted")
-        c = complete_handoff(hid, notes="done", artifacts=["PR #1"], base_dir=self.base)
-        self.assertTrue(c["ok"])
-        self.assertEqual(c["handoff"]["status"], "done")
-        self.assertEqual(list_handoffs(status="active", base_dir=self.base), [])
+            r = create_handoff(
+                from_agent="orchestrator",
+                to_agent="implementer",
+                task="Ship feature X",
+                budget_tokens=4000,
+                base_dir=self.base,
+                record_ledger=False,
+                use_live_budget=False,
+            )
+            self.assertTrue(r["ok"])
+            hid = r["handoff"]["handoff_id"]
+            open_h = list_handoffs(status="open", base_dir=self.base)
+            self.assertEqual(len(open_h), 1)
+            u = update_handoff(hid, status="accepted", base_dir=self.base, record_ledger=False)
+            self.assertEqual(u["handoff"]["status"], "accepted")
+            c = complete_handoff(hid, notes="done", artifacts=["PR #1"], base_dir=self.base)
+            self.assertTrue(c["ok"])
+            self.assertEqual(c["handoff"]["status"], "done")
+            self.assertEqual(list_handoffs(status="active", base_dir=self.base), [])
 
     def test_requires_fields(self):
         self.assertFalse(create_handoff(from_agent="a", to_agent="", task="t", base_dir=self.base, record_ledger=False)["ok"])
@@ -70,8 +72,11 @@ class TestBudgetAndPlan(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
         self.base = Path(self._td.name)
+        self._orig_cwd = os.getcwd()
+        os.chdir(self._td.name)
 
     def tearDown(self):
+        os.chdir(self._orig_cwd)
         self._td.cleanup()
 
     def test_allocate_sums(self):
@@ -357,40 +362,45 @@ class TestBudgetAndPlan(unittest.TestCase):
         from plate_core.feature_loop import list_feature_loops
 
         with tempfile.TemporaryDirectory() as tmp:
-            fleet_dir = Path(tmp) / "fleet"
-            feat_dir = Path(tmp) / "feats"
-            created = create_handoff(
-                from_agent="orchestrator",
-                to_agent="implementer",
-                task="Implement feed ranking",
-                related_issue=88,
-                risk="medium",
-                budget_tokens=4000,
-                budget_remaining=50_000,
-                use_live_budget=False,
-                base_dir=fleet_dir,
-                record_ledger=False,
-            )
-            self.assertTrue(created["ok"], created)
-            hid = created["handoff"]["handoff_id"]
-            acc = update_handoff(
-                hid,
-                status="accepted",
-                base_dir=fleet_dir,
-                record_ledger=False,
-                feature_loop_base_dir=feat_dir,
-            )
-            self.assertEqual(acc["handoff"]["status"], "accepted")
-            disp = acc.get("dispatch") or {}
-            self.assertTrue(disp.get("ok"), disp)
-            self.assertEqual(disp.get("dispatch_kind"), "feature_loop")
-            self.assertTrue(disp.get("run_id"))
-            self.assertEqual(
-                (acc["handoff"].get("context") or {}).get("loop_run_id"),
-                disp.get("run_id"),
-            )
-            loops = list_feature_loops(status="active", base_dir=feat_dir)
-            self.assertTrue(any(r.get("id") == disp.get("run_id") for r in loops))
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                fleet_dir = Path(tmp) / "fleet"
+                feat_dir = Path(tmp) / "feats"
+                created = create_handoff(
+                    from_agent="orchestrator",
+                    to_agent="implementer",
+                    task="Implement feed ranking",
+                    related_issue=88,
+                    risk="medium",
+                    budget_tokens=4000,
+                    budget_remaining=50_000,
+                    use_live_budget=False,
+                    base_dir=fleet_dir,
+                    record_ledger=False,
+                )
+                self.assertTrue(created["ok"], created)
+                hid = created["handoff"]["handoff_id"]
+                acc = update_handoff(
+                    hid,
+                    status="accepted",
+                    base_dir=fleet_dir,
+                    record_ledger=False,
+                    feature_loop_base_dir=feat_dir,
+                )
+                self.assertEqual(acc["handoff"]["status"], "accepted")
+                disp = acc.get("dispatch") or {}
+                self.assertTrue(disp.get("ok"), disp)
+                self.assertEqual(disp.get("dispatch_kind"), "feature_loop")
+                self.assertTrue(disp.get("run_id"))
+                self.assertEqual(
+                    (acc["handoff"].get("context") or {}).get("loop_run_id"),
+                    disp.get("run_id"),
+                )
+                loops = list_feature_loops(status="active", base_dir=feat_dir)
+                self.assertTrue(any(r.get("id") == disp.get("run_id") for r in loops))
+            finally:
+                os.chdir(orig_cwd)
 
     def test_accept_researcher_dispatches_artifact(self):
         """#644: accepting researcher handoff opens a #632 pending artifact."""
@@ -501,8 +511,11 @@ class TestFleetAcceptShadowGate883(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
         self.base = Path(self._td.name)
+        self._orig_cwd = os.getcwd()
+        os.chdir(self._td.name)
 
     def tearDown(self):
+        os.chdir(self._orig_cwd)
         self._td.cleanup()
 
     def test_medium_accept_unchanged(self):

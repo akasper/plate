@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,10 +26,13 @@ from plate_core.design_research_approval import (
 class TestDesignResearchApproval632(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.base = Path(self._tmp.name) / "approvals"
+        self._orig_cwd = os.getcwd()
+        os.chdir(self._tmp.name)
+        self.base = Path("approvals")
         self.base.mkdir()
 
     def tearDown(self):
+        os.chdir(self._orig_cwd)
         self._tmp.cleanup()
 
     def test_propose_design(self):

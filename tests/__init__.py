@@ -1,0 +1,1 @@
+"""PLATE unit test package (#1542 session runner: python -m tests)."""

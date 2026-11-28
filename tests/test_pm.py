@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -248,6 +249,15 @@ class TestPMTeamAndAssign(unittest.TestCase):
 
 
 class TestPMCycle(unittest.TestCase):
+    def setUp(self):
+        self._cwd_tmp = tempfile.TemporaryDirectory()
+        self._orig_cwd = os.getcwd()
+        os.chdir(self._cwd_tmp.name)
+
+    def tearDown(self):
+        os.chdir(self._orig_cwd)
+        self._cwd_tmp.cleanup()
+
     def _fake_status(self, **overrides):
         base = {
             "to_dict": lambda self: {
@@ -966,6 +976,15 @@ class TestPMCycle(unittest.TestCase):
 
 
 class TestPMPromoteCheckpoint885(unittest.TestCase):
+    def setUp(self):
+        self._cwd_tmp = tempfile.TemporaryDirectory()
+        self._orig_cwd = os.getcwd()
+        os.chdir(self._cwd_tmp.name)
+
+    def tearDown(self):
+        os.chdir(self._orig_cwd)
+        self._cwd_tmp.cleanup()
+
     def test_promote_after_checkpoint_approve(self):
         from plate_core.checkpoint import create_checkpoint, decide_checkpoint
         from plate_core.pm import ProjectManager
