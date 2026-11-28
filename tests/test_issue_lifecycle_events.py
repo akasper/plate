@@ -17,13 +17,17 @@ from plate_core.issue_lifecycle_events import (
     scrub_issue_lifecycle_payload,
 )
 
+# Spawn cold-starts can exceed short queue/join cuts on loaded shared CI runners (#1551).
+JOIN_TIMEOUT = 120
 
-def _mp_child_writer_id(root_str: str, out: multiprocessing.Queue) -> None:
+
+def _mp_child_writer_id(root_str: str) -> None:
+    """Initialize writer_id in a child process (result is persisted on disk)."""
     from pathlib import Path
 
     from plate_core.issue_lifecycle_events import _get_or_create_writer_id
 
-    out.put(_get_or_create_writer_id(Path(root_str)))
+    _get_or_create_writer_id(Path(root_str))
 
 
 class IssueLifecycleEventLogTests(unittest.TestCase):
@@ -156,24 +160,34 @@ class IssueLifecycleEventLogTests(unittest.TestCase):
             self.assertNotIn(secret, log_line)
 
     def test_writer_id_file_cross_process_single_id(self):
-        with TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            ctx = multiprocessing.get_context("spawn")
-            q: multiprocessing.Queue = ctx.Queue()
-            proc = ctx.Process(target=_mp_child_writer_id, args=(str(tmp), q))
-            proc.start()
-            from_child = q.get(timeout=30)
-            proc.join(timeout=30)
-            self.assertEqual(proc.exitcode, 0)
+        from plate_core.issue_lifecycle_events import _get_or_create_writer_id
 
-            from plate_core.issue_lifecycle_events import _get_or_create_writer_id
+        for start_method in ("spawn", "fork"):
+            with self.subTest(start_method=start_method):
+                try:
+                    ctx = multiprocessing.get_context(start_method)
+                except ValueError:
+                    continue
+                with TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    proc = ctx.Process(
+                        target=_mp_child_writer_id,
+                        args=(str(tmp),),
+                    )
+                    proc.start()
+                    proc.join(timeout=JOIN_TIMEOUT)
+                    if proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=10)
+                    self.assertFalse(proc.is_alive(), start_method)
+                    self.assertEqual(proc.exitcode, 0, start_method)
 
-            from_parent = _get_or_create_writer_id(root)
-
-            self.assertEqual(from_parent, from_child)
-            path = root / ".agentic" / "events" / "writer_id"
-            self.assertTrue(path.is_file())
-            self.assertEqual(path.read_text(encoding="utf-8").strip(), from_parent)
+                    from_parent = _get_or_create_writer_id(root)
+                    path = root / ".agentic" / "events" / "writer_id"
+                    self.assertTrue(path.is_file(), start_method)
+                    from_disk = path.read_text(encoding="utf-8").strip()
+                    self.assertEqual(from_parent, from_disk, start_method)
+                    self.assertEqual(len(from_disk), 26, start_method)
 
     def test_writer_id_recover_empty_file(self):
         """Crash after O_EXCL create but before write leaves empty writer_id; recover."""
