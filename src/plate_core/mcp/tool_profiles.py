@@ -97,6 +97,7 @@ def profiles_for_tool(name: str) -> frozenset[str]:
         "plate_get_question",
         "plate_record_answer",
         "plate_get_answers",
+        "plate_backfill_answers",
         "plate_synthesize_priorities",
         "plate_create_blocking_question",
         "plate_contemplate",
@@ -150,7 +151,12 @@ def profiles_for_tool(name: str) -> frozenset[str]:
         profiles.add("autonomy")
     elif name.startswith("plate_migrate_"):
         profiles.add("migrate")
-    elif name in ("plate_spec_audit", "plate_spec_audit_followups", "plate_perform_information_audit"):
+    elif name in (
+        "plate_spec_audit",
+        "plate_spec_audit_followups",
+        "plate_perform_information_audit",
+        "plate_perform_test_coverage_audit",
+    ):
         profiles.add("audit")
     elif "discussion" in name or name == "plate_list_open_ideas":
         profiles.add("discussions")

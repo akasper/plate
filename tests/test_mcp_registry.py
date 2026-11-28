@@ -7,9 +7,11 @@ import unittest
 from unittest.mock import patch
 
 from plate_core.mcp.registry import (
+    assert_catalog_dispatch_parity,
     assert_registry_consistency,
     build_tool_registry,
     dispatchable_tool_names,
+    dispatched_tool_names,
     execute_tool,
     listed_tool_names,
 )
@@ -25,6 +27,12 @@ class McpRegistryConsistencyTests(unittest.TestCase):
 
     def test_assert_registry_consistency(self):
         assert_registry_consistency()
+
+    def test_listed_equals_dispatched(self):
+        self.assertEqual(listed_tool_names(), dispatched_tool_names())
+
+    def test_assert_catalog_dispatch_parity(self):
+        assert_catalog_dispatch_parity()
 
 
 class McpRegistryDispatchTests(unittest.TestCase):

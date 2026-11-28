@@ -1175,6 +1175,31 @@ MCP_TOOL_DEFINITIONS: list[dict] = [
                                 },
                             },
                             {
+                                "name": "plate_backfill_answers",
+                                "description": "Backfill committed docs/curiosity answer storage from historical Question issue comments and bodies (Answer Model #258). Materializes the fast local index used by plate_get_answers.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional if running inside repo clone."},
+                                        "state": {
+                                            "type": "string",
+                                            "description": "Issue state filter when scanning Questions (default all).",
+                                            "default": "all",
+                                        },
+                                        "limit": {
+                                            "type": "integer",
+                                            "description": "Max Question issues to scan when question_numbers is omitted (default 50).",
+                                            "default": 50,
+                                        },
+                                        "question_numbers": {
+                                            "type": "array",
+                                            "items": {"type": "integer"},
+                                            "description": "Optional explicit Question issue numbers to backfill.",
+                                        },
+                                    },
+                                },
+                            },
+                            {
                                 "name": "plate_release_repair",
                                 "description": "Init/repair standing release tracks (release-major/minor/patch + legacy release) and ensure exactly one Next Release issue (#320). Default dry-run; set apply=true to create missing artifacts.",
                                 "inputSchema": {
@@ -3179,6 +3204,23 @@ MCP_TOOL_DEFINITIONS: list[dict] = [
                                         "max_questions": {"type": "integer", "description": "Cap on proposals (default 5)", "default": 5},
                                         "dry_run": {"type": "boolean", "description": "Propose only; do not create Issues (default false)", "default": False},
                                         "include_defaults": {"type": "boolean", "description": "Include platform + extension default informational goals (default true)", "default": True},
+                                    },
+                                },
+                            },
+                            {
+                                "name": "plate_perform_test_coverage_audit",
+                                "description": "Perform a test / feature-proof coverage audit (Epic #350). Returns classification counts and prioritized gap suggestions grounded in the #361 research inventory. Supports dry_run and scope (default repo).",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "repo": {"type": "string", "description": "owner/name. Optional."},
+                                        "scope": {"type": "string", "description": "repo | epic:<n> | label:<name> (default: repo)"},
+                                        "dry_run": {"type": "boolean", "description": "Report only; do not mutate (default true)", "default": True},
+                                        "include_defaults": {
+                                            "type": "boolean",
+                                            "description": "Include default classification baselines when true (default true)",
+                                            "default": True,
+                                        },
                                     },
                                 },
                             },
