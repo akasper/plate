@@ -108,6 +108,50 @@ class PublicSurfaceContractTests(unittest.TestCase):
         )
         self.assertEqual([], errors)
 
+    def test_unresolved_invocation_omitted_from_live_cli(self) -> None:
+        missing = "zzzz nonexistent plate invocation"
+        live_cli = load_live_cli({missing})
+        self.assertNotIn(missing, live_cli)
+
+    def test_unresolved_stable_invocation_fails_as_removed(self) -> None:
+        missing = "zzzz nonexistent plate invocation"
+        snapshot = {
+            "schema_version": 1,
+            "cli": {missing: ["--help"]},
+            "mcp_tools": {},
+            "labels": [],
+        }
+        live_cli = load_live_cli(set(snapshot["cli"]))
+        errors = compare_stable_surface(snapshot, deprecations=[], live_cli=live_cli)
+        self.assertTrue(
+            any("CLI invocation" in e and missing in e for e in errors),
+            msg=errors,
+        )
+
+    def test_cli_invocation_deprecation_exempts_unresolved_invocation(self) -> None:
+        missing = "zzzz nonexistent plate invocation"
+        snapshot = {
+            "schema_version": 1,
+            "cli": {missing: ["--help"]},
+            "mcp_tools": {},
+            "labels": [],
+        }
+        live_cli = load_live_cli(set(snapshot["cli"]))
+        deprecations = [
+            {
+                "kind": "cli_invocation",
+                "name": missing,
+                "since": "0.13.0",
+                "replacement": "adopt",
+            }
+        ]
+        errors = compare_stable_surface(
+            snapshot,
+            deprecations=deprecations,
+            live_cli=live_cli,
+        )
+        self.assertEqual([], errors)
+
 
 if __name__ == "__main__":
     unittest.main()

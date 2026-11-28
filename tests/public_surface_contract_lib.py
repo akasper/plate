@@ -136,9 +136,8 @@ def load_live_cli(invocations: set[str]) -> dict[str, list[str]]:
         parts = inv.split()
         sub = _resolve_subparser(root, parts)
         if sub is None:
-            live[inv] = []
-        else:
-            live[inv] = _option_strings(sub)
+            continue
+        live[inv] = _option_strings(sub)
     return live
 
 
