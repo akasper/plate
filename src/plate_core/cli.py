@@ -1647,6 +1647,7 @@ def cmd_pr_create(args: argparse.Namespace) -> int:
         gh_argv,
         repo=args.repo,
         repo_root=getattr(args, "repo_root", None) or ".",
+        base=getattr(args, "base", None),
     )
     if args.json:
         print(format_preflight_json(report), end="")
@@ -5566,11 +5567,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pr_create.add_argument("--repo", help="owner/name; defaults to git remote origin")
     pr_create.add_argument("--repo-root", default=".", help="Repository root (default: .)")
+    pr_create.add_argument(
+        "--base",
+        help="Integration base for gh pr create (default: configured integration base). "
+        "Do not combine with --base after --.",
+    )
     pr_create.add_argument("--json", action="store_true", help="Output JSON preflight report on failure")
     pr_create.add_argument(
         "gh_argv",
         nargs=argparse.REMAINDER,
-        help="Arguments forwarded to gh pr create after preflight passes",
+        help="Arguments forwarded to gh pr create after preflight (--base allowed here only if not passed above)",
     )
     pr_create.set_defaults(func=cmd_pr_create)
 
