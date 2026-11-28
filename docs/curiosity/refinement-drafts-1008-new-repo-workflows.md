@@ -94,7 +94,7 @@ Full CI workflow files remain **out of scope** for discovery (Q10).
 
 - `gh plate setup-ci` — **not** `gh plate ci audit`; new module e.g. `src/plate_core/ci_cd_discovery.py`.
 - MCP **`plate_discover_ci_cd`**: register via **`MCP_TOOL_HANDLERS`** in `src/plate_core/mcp_server.py` plus `src/plate_core/mcp/tool_definitions.py` and `src/plate_core/mcp/tool_profiles.py` **after** [PR #1544](https://github.com/akasper/plate/pull/1544) lands — not the legacy `elif` dispatch chain.
-- Any new public CLI/MCP surface must also update: [PR #1536](https://github.com/akasper/plate/pull/1536) public-surface inventory (`docs/plate/research/public-surface-inventory.md`), [PR #1538](https://github.com/akasper/plate/pull/1538) generated `docs/cli-mcp-reference.md`, and `tests/fixtures/public_surface_stable.json` (and related generator checks when those PRs land).
+- Any new public CLI/MCP surface must also update: [PR #1536](https://github.com/akasper/plate/pull/1536) public-surface inventory (`docs/plate/research/public-surface-inventory.md`), [PR #1538](https://github.com/akasper/plate/pull/1538) generated `docs/cli-mcp-reference.md`, and the [PR #1541](https://github.com/akasper/plate/pull/1541) snapshot `tests/fixtures/public_surface_stable.json` (and related generator checks when those PRs land).
 
 **Maintainer open questions (from comment):** final manifest location; idempotent re-run merge vs replace; MCP tool naming vs `plate_discover_ci_cd`.
 
@@ -125,7 +125,7 @@ Full CI workflow files remain **out of scope** for discovery (Q10).
 **Implementation notes (from comment, align with open PRs):**
 
 - `gh plate encode-team` and MCP **`plate_encode_team_philosophy`**; module e.g. `src/plate_core/team_philosophy.py`.
-- Same MCP registration path as #1033: **`MCP_TOOL_HANDLERS`**, `tool_definitions`, `tool_profiles` after **#1544**; update public-surface inventory, CLI/MCP reference, and **`tests/fixtures/public_surface_stable.json`** per **#1536** / **#1538**.
+- Same MCP registration path as #1033: **`MCP_TOOL_HANDLERS`**, `tool_definitions`, `tool_profiles` after **#1544**; update public-surface inventory, CLI/MCP reference, and **`tests/fixtures/public_surface_stable.json`** per **#1536** / **#1538** / **#1541** (the snapshot is #1541's).
 
 **Maintainer open questions (from comment):** idempotent merge for `AGENTS.md` philosophy section; `encode-team` vs `encode-philosophy` naming.
 
@@ -137,7 +137,7 @@ Full CI workflow files remain **out of scope** for discovery (Q10).
 
 **Implementation notes (from comment + [PR #1528](https://github.com/akasper/plate/pull/1528)):**
 
-- **Land after #1528.** Extend `get_health()` / `HealthReport` in `src/plate_core/health.py` and tests in `tests/test_health.py` without regressing **`adoption_complete`**, **`adoption_complete_gaps`**, **`adoption_complete_fix_command`**, **`adoption_next_command`**, **`release_standing_health`**, **`branch_protection_pr_reviews_required`**, or `_health_exit_code()` behavior from #1528.
+- **Land after #1528.** Extend `get_health()` / `HealthReport` in `src/plate_core/health.py` and tests in `tests/test_health.py` without regressing **`adoption_complete`**, **`adoption_complete_gaps`**, **`adoption_complete_fix_command`**, **`adoption_next_command`**, **`release_standing_health`**, **`branch_protection_pr_reviews_required`**, or `_health_exit_code()` behavior (in `src/plate_core/cli.py`) from #1528.
 - JSON shape: use `HealthReport.to_dict()` / `asdict` fields (same pattern as adoption verdicts). Prefer dedicated optional boolean or gap-list fields **or** append human-readable entries to existing **`plate_repo_signals`** — do not introduce a parallel ad hoc JSON schema.
 - Warn when missing `docs/plate/ci-cd/test-inventory.md` and `docs/plate/team.md`; message names `gh plate setup-ci` and `gh plate encode-team`. Optional tie-in: `src/plate_core/what_next.py`.
 - Warn-only for mature repos; coordinate with comment on suppression when `adoption_core_ready` / adoption incomplete.
