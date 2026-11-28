@@ -105,7 +105,7 @@ AGENTS.md documents that **local** agents with user PATs (`gho_`, `ghp_`, `githu
 
 | Token | Why | If missing / wrong |
 |---|---|---|
-| Optional `github-token` input (secret PAT) | Call “List self-hosted runners for a repository” | Probe 403/404; action falls back to `ubuntu-latest` (`docs/migration/self-hosted-runners.md`) |
+| Optional `github-token` input (repository secret **`PLATE_RUNNER_PROBE_PAT`**) | Call “List self-hosted runners for a repository” | Probe 403/404; action falls back to `ubuntu-latest` (`docs/migration/self-hosted-runners.md`, template `ci.yml` / `test-e2e.yml`) |
 
 ---
 
@@ -133,7 +133,7 @@ Workflows set least-privilege defaults via top-level or job-level `permissions:`
 |---|---|---|---|---|
 | `ci.yml` | `contents: read`, `actions: read` | — | Checkout, read Actions metadata | Cannot run checkout or inspect Actions (job fails early) |
 | `release.yml` | `contents: write` | `fast-forward-release-branches`: `contents: write`, `issues: write`; `deploy`: `contents: read` | Tag push, `create_github_release` via `GH_TOKEN: ${{ github.token }}`; optional App checkout token | No tag on merge; release create step fails; fast-forward skipped without App secrets (warning only) |
-| `plate-pr-gates.yml` | `contents: read`, `issues: read`, `pull-requests: write`, `actions: read` | `mark-implemented-on-release-merge`: `contents: read`, `issues: write`, `pull-requests: read` | `gh api` PR fetches; issue link gate; **`gh_actions_mark_implemented`** with `GITHUB_TOKEN` | PR checks cannot update; mark-implemented cannot label/close issues |
+| `plate-pr-gates.yml` | `contents: read`, `issues: read`, `pull-requests: write`, `actions: read` | `mark-implemented-on-release-merge`: `contents: read`, `issues: write`, `pull-requests: read` | Main job: read PR/issue via `gh api` + `github-script`, run local gate scripts (no PR body writes in visible steps). Merge job: **`gh_actions_mark_implemented`** | Missing read perms → gate steps 403 / `setFailed`. Missing `issues: write` on merge job → no `status:implemented` / integration close |
 | `label-check.yml` | `contents: read`, `issues: read` | — | Read issue labels | Gate cannot read issue labels → false failures or skipped validation |
 | `labels.yml` | `contents: read`, `pull-requests: read` | — | Read PR labels | Label type gate cannot read PR |
 | `plate-ui-pr-image-check.yml` | `contents: read`, `pull-requests: read` | — | `GH_TOKEN` + `gh` to inspect PR diffs | UI image gate cannot read PR/content |
@@ -147,7 +147,9 @@ Workflows set least-privilege defaults via top-level or job-level `permissions:`
 | `auto-merge.yml` | (none at workflow root) | Job `auto-merge`: `pull-requests: write`, `contents: write` | `gh pr merge --auto` with `secrets.GITHUB_TOKEN` | Cannot enable auto-merge |
 | `publish-pypi.yml` | `contents: read`, `id-token: write` | — | OIDC to PyPI trusted publisher | Publish 403 without PyPI trusted publisher setup |
 | `publish-gh-plate-extension.yml` | `contents: read` | — | Uses **`secrets.THIN_SHIM_DEPLOY_TOKEN`** for cross-repo push | Cannot push `akasper/gh-plate` shim (plate-core only workflow) |
-| `pages.yml` | *(no explicit block — repo default `GITHUB_TOKEN` permissions apply)* | — | Pages deploy | Depends on repository **Workflow permissions** default |
+| `pages.yml` | *(no `permissions:` block in file — same in template payload)* | — | **`actions/checkout@v4` only**; no `deploy-pages`, no wiki/git publish steps | Checkout fails if repo-default token cannot read contents; **this workflow does not deploy GitHub Pages** (placeholder hook on `push` to `main`) |
+
+Both `.github/workflows/pages.yml` and `src/plate_core/template_payload/.github/workflows/pages.yml` are identical eight-line stubs (trigger + checkout). With no workflow-level `permissions:`, the job token is whatever the repository sets under **Settings → Actions → General → Workflow permissions** (read-only or read/write default).
 
 ### 3.2 `mark-implemented-on-release-merge` (REST mapping)
 
@@ -182,7 +184,7 @@ Adopters receive these in addition to (or instead of) the plate-core repo set:
 | `THIN_SHIM_DEPLOY_TOKEN` | `publish-gh-plate-extension.yml` | Fine-grained PAT or App token **`contents: write` on `akasper/gh-plate` only** | Shim repo not updated |
 | `COPILOT_TRIGGER_PAT` | `plates-address-pr-feedback.yml` | User PAT able to route `@copilot` comments | Falls back to `GITHUB_TOKEN` (often insufficient for Copilot routing) |
 | `WIKI_TOKEN` | `sync-wiki-on-merge.yml` | PAT with push access to `*.wiki` git remote | Wiki sync fails when enabled |
-| `RUNNER_PROBE_TOKEN` (optional pattern) | Pass as `github-token` to `plate-select-runs-on` | Admin read / classic `repo` per action.yml | Idle-runner probe falls back to hosted |
+| `PLATE_RUNNER_PROBE_PAT` (optional) | `github-token: ${{ secrets.PLATE_RUNNER_PROBE_PAT \|\| github.token }}` on `plate-select-runs-on` (`template_payload` `ci.yml`, `test-e2e.yml`) | Administration read (FG) or classic `repo` per action.yml | Idle-runner probe falls back to hosted |
 
 ---
 
@@ -221,7 +223,7 @@ The codebase references GitHub Apps conceptually in `docs/design/issue-lifecycle
 | Release fast-forward | Dedicated GitHub App on one repo + bypass on release rulesets only |
 | Wiki sync | Separate `WIKI_TOKEN` with wiki-only scope when sync is enabled |
 | gh-plate shim publish | `THIN_SHIM_DEPLOY_TOKEN` limited to `akasper/gh-plate` contents write |
-| Self-hosted runners | Optional PAT with **Administration read** on one private repo for probe only |
+| Self-hosted runners | Optional `PLATE_RUNNER_PROBE_PAT` with **Administration read** (or classic `repo`) on one private repo for probe only |
 
 ---
 
@@ -233,15 +235,13 @@ These gaps are visible in the repository today; they are intentionally **not** i
 
 2. **Org bootstrap:** `POST orgs/{owner}/repos` failure paths are handled, but the exact OAuth scope or org role is not named in code—depends on GitHub org settings.
 
-3. **`pages.yml`:** No explicit `permissions:` block; effective token access follows the repository **Settings → Actions → General → Workflow permissions** default.
+3. **`plates-agentic-orchestrator.yml`:** Job body is still a stub (`console.log`); real API writes may need narrower permissions once implemented.
 
-4. **`plates-agentic-orchestrator.yml`:** Job body is still a stub (`console.log`); real API writes may need narrower permissions once implemented.
+4. **Copilot / Copilot CLI in CI:** `ci.yml` installs Copilot CLI for smoke tests but does not document a Copilot service token requirement for those steps (commands use public release assets).
 
-5. **Copilot / Copilot CLI in CI:** `ci.yml` installs Copilot CLI for smoke tests but does not document a Copilot service token requirement for those steps (commands use public release assets).
+5. **GraphQL rate limits vs REST fallback:** Babysit prefers GraphQL (`pr_babysit.py`); permission errors vs rate limits are not distinguished in user-facing doctor output.
 
-6. **GraphQL rate limits vs REST fallback:** Babysit prefers GraphQL (`pr_babysit.py`); permission errors vs rate limits are not distinguished in user-facing doctor output.
-
-7. **Epic #1059 security review:** This document satisfies the #1061 artifact; human review under `need:security-review` may refine App permission wording or add FG-PAT recipes.
+6. **Epic #1059 security review:** This document satisfies the #1061 artifact; human review under `need:security-review` may refine App permission wording or add FG-PAT recipes.
 
 ---
 
