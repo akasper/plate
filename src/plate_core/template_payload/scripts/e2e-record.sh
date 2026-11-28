@@ -172,7 +172,7 @@ if eval "npx playwright test $PW_OPTS"; then
                 if ! command -v ffmpeg &> /dev/null; then
                     echo -e "${RED}Error: ffmpeg is not installed${NC}"
                     echo "Install it with:"
-                    echo "  Ubuntu/Debian: sudo apt-get install ffmpeg"
+                    echo "  Ubuntu/Debian: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg"
                     echo "  Mac: brew install ffmpeg"
                     exit 1
                 fi
