@@ -133,6 +133,58 @@ def check_feature_area_label(labels: list[str]) -> GateFailure | None:
     )
 
 
+_CODE_BEARING_SUFFIXES: frozenset[str] = frozenset(
+    {
+        ".py",
+        ".yml",
+        ".yaml",
+        ".json",
+        ".toml",
+        ".sh",
+        ".ps1",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".sql",
+        ".ini",
+        ".cfg",
+    }
+)
+
+
+def is_pure_docs_chore_path(path: str) -> bool:
+    """True only for markdown under ``docs/`` (narrow docs-chore exemption)."""
+    norm = (path or "").strip().replace("\\", "/")
+    if not norm:
+        return False
+    return norm.startswith("docs/") and norm.endswith(".md")
+
+
+def _is_code_bearing_path(path: str) -> bool:
+    norm = (path or "").strip().replace("\\", "/")
+    if not norm:
+        return False
+    lower = norm.lower()
+    if any(lower.endswith(suffix) for suffix in _CODE_BEARING_SUFFIXES):
+        return True
+    if lower.startswith(("src/", "tests/", "scripts/", "services/")):
+        return True
+    if lower.startswith((".github/", ".agentic/", "src/plate_core/template_payload/")):
+        return True
+    return False
+
+
+def is_pure_docs_chore_exempt(scope_paths: list[str]) -> bool:
+    """All PR-scoped paths (including removals) are markdown under ``docs/`` only."""
+    active = [(p or "").strip() for p in scope_paths if (p or "").strip()]
+    if not active:
+        return False
+    if any(_is_code_bearing_path(path) for path in active):
+        return False
+    return all(is_pure_docs_chore_path(path) for path in active)
+
+
 def has_feature_release_fragment(changed_paths: list[str]) -> bool:
     for raw in changed_paths:
         path = (raw or "").strip()
@@ -147,11 +199,19 @@ def has_feature_release_fragment(changed_paths: list[str]) -> bool:
     return False
 
 
-def check_feature_release_fragment(labels: list[str], changed_paths: list[str]) -> GateFailure | None:
+def check_feature_release_fragment(
+    labels: list[str],
+    scope_paths: list[str],
+    *,
+    active_paths: list[str] | None = None,
+) -> GateFailure | None:
     matches = pr_type_matches(normalize_label_list(labels))
     if len(matches) != 1 or matches[0] not in FRAGMENT_REQUIRED_PR_TYPES:
         return None
-    if has_feature_release_fragment(changed_paths):
+    survivors = active_paths if active_paths is not None else scope_paths
+    if has_feature_release_fragment(survivors):
+        return None
+    if is_pure_docs_chore_exempt(scope_paths):
         return None
     return GateFailure(
         "release_fragment",
@@ -317,7 +377,7 @@ def run_preflight_gate_checks(
         check_pr_type_labels(labels),
         check_feature_area_label(labels),
         check_strict_closing_keyword(body, labels, owner=owner, repo=repo),
-        check_feature_release_fragment(labels, changed_paths),
+        check_feature_release_fragment(labels, changed_paths, active_paths=changed_paths),
     ):
         if check:
             failures.append(check)

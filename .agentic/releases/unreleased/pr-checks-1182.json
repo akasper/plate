@@ -1,0 +1,10 @@
+{
+  "slug": "pr-checks-1182",
+  "change_type": "feature",
+  "surface": ".github/workflows/plate-pr-gates.yml",
+  "summary": "Deterministic pr-gates checks for stdlib unittest test policy and Feature/Hardening release fragments.",
+  "migration_impact": "Adopters receive pinned plate-pr-gates steps that fail on pytest in changed tests and enforce unreleased fragments unless the PR is a pure docs chore.",
+  "agent_notes": "Extend plate-pr-gates via build_plate_pr_gates_workflow.py; shared logic lives in plate_core.pr_gates_test_policy and pr_gates_checks release-fragment helpers.",
+  "breaking": false,
+  "links": ["#1182"]
+}

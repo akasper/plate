@@ -45,9 +45,32 @@ jobs:
       (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ${{ (github.event.repository.private != true || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || ((startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '[') || startsWith((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON), '"')) && (fromJSON((vars.CI_RUNS_ON || vars.PLATE_RUNS_ON)) || 'ubuntu-latest')) || (vars.CI_RUNS_ON || vars.PLATE_RUNS_ON) || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+
+      - name: Collect changed paths for release fragment
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr_number="${{ github.event.pull_request.number }}"
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files" --paginate \
+            --jq '.[] | [.filename, .status] | @tsv' > /tmp/pr-scope-paths.tsv
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files" --paginate \
+            --jq '.[] | select(.status != "removed") | .filename' > /tmp/pr-active-paths.txt
+      - name: Checkout trusted gate runtime (base ref)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: gate-runtime
+          sparse-checkout: |
+            src/plate_core
+          sparse-checkout-cone-mode: true
 
       - name: Gate — PR title
         if: |
@@ -55,7 +78,7 @@ jobs:
           github.event_name == 'pull_request_review_comment' ||
           (github.event_name == 'pull_request' &&
           contains(fromJSON('["opened","edited","synchronize","reopened","labeled","unlabeled","milestoned","demilestoned","ready_for_review"]'), github.event.action))
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             async function loadPullRequest() {
@@ -119,7 +142,7 @@ jobs:
           github.event_name == 'pull_request' ||
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment'
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             async function loadPullRequest() {
@@ -485,13 +508,40 @@ jobs:
             fi
           fi
 
+      - name: Gate — unittest test policy
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # pr-gates failure marker: stdlib unittest policy
+          set -euo pipefail
+          if [ -d "${GITHUB_WORKSPACE}/gate-runtime/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/gate-runtime/src"
+          elif python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" 2>/dev/null; then
+            :
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.12.0"
+            python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" || {
+              echo "plate-core==0.12.0 does not provide plate_core gate modules; publish or pin a compatible version." >&2
+              exit 1
+            }
+          fi
+
+          python3 -m plate_core.pr_unittest_policy_gate \
+            --paths-file /tmp/pr-active-paths.txt \
+            --head-sha "${HEAD_SHA}" \
+            --repo-root "${GITHUB_WORKSPACE}"
+
       - name: Gate — Feature release fragment (labels)
         if: |
           github.event_name == 'pull_request' ||
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment'
         id: feature_labels
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             async function loadPullRequest() {
@@ -523,41 +573,29 @@ jobs:
            github.event_name == 'pull_request_review' ||
            github.event_name == 'pull_request_review_comment') &&
           steps.feature_labels.outputs.is_feature == 'true'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-              per_page: 100,
-            });
-            const changed = files
-              .filter((file) => file.status !== 'removed')
-              .map((file) => file.filename);
-            core.info(`Changed files:\n${changed.join('\n')}`);
-            // Fragment-first: require a fragment in .agentic/releases/unreleased/
-            const hasFragment = changed.some(
-              (file) =>
-                file.startsWith('.agentic/releases/unreleased/') &&
-                file.endsWith('.json')
-            );
-            // Also accept legacy flat files for backward compat
-            const hasLegacyFile = changed.some(
-              (file) =>
-                file.startsWith('.agentic/releases/') &&
-                !file.startsWith('.agentic/releases/unreleased/') &&
-                file.endsWith('.json')
-            );
-            const hasReleaseChangeFile = hasFragment || hasLegacyFile;
-            if (!hasReleaseChangeFile) {
-              core.setFailed(
-                'Feature and Hardening pull requests must include per-feature change files (a release fragment) in .agentic/releases/unreleased/<slug>.json. ' +
-                'See .agentic/releases/unreleased/README.md for the required schema. ' +
-                'If this PR is not a Feature or Hardening PR, remove the type label.'
-              );
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pr-gates failure marker: per-feature change files
+          set -euo pipefail
+          if [ -d "${GITHUB_WORKSPACE}/gate-runtime/src/plate_core" ]; then
+            export PYTHONPATH="${GITHUB_WORKSPACE}/gate-runtime/src"
+          elif python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" 2>/dev/null; then
+            :
+          else
+            python3 -m pip install --quiet --disable-pip-version-check "plate-core==0.12.0"
+            python3 -c "import plate_core.pr_unittest_policy_gate, plate_core.pr_release_fragment_gate" || {
+              echo "plate-core==0.12.0 does not provide plate_core gate modules; publish or pin a compatible version." >&2
+              exit 1
             }
+          fi
 
+          pr_number="${{ github.event.pull_request.number }}"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '[.labels[].name] | join(",")')"
+          python3 -m plate_core.pr_release_fragment_gate \
+            --labels "${labels}" \
+            --scope-paths-file /tmp/pr-scope-paths.tsv \
+            --active-paths-file /tmp/pr-active-paths.txt
 
       - name: Gate — Feature release fragment (skip notice)
         if: |
@@ -572,7 +610,7 @@ jobs:
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment' ||
           (github.event_name == 'pull_request' && contains(fromJSON('["opened","reopened","synchronize","ready_for_review","labeled","unlabeled","milestoned","demilestoned","edited"]'), github.event.action))
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           PLATE_PR_FEEDBACK_AGENTS: ${{ vars.PLATE_PR_FEEDBACK_AGENTS }}
         with:
@@ -693,7 +731,7 @@ jobs:
           github.event_name == 'pull_request_review' ||
           github.event_name == 'pull_request_review_comment'
         id: release_gate_detect
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             async function loadPullRequest() {
@@ -779,7 +817,7 @@ jobs:
       issues: write
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
 
