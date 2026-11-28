@@ -17,6 +17,9 @@ from plate_core.issue_lifecycle_events import (
     scrub_issue_lifecycle_payload,
 )
 
+# Spawn cold-starts can exceed short queue/join cuts on loaded shared CI runners (#1551).
+JOIN_TIMEOUT = 120
+
 
 def _mp_child_writer_id(root_str: str) -> None:
     """Initialize writer_id in a child process (result is persisted on disk)."""
@@ -172,7 +175,11 @@ class IssueLifecycleEventLogTests(unittest.TestCase):
                         args=(str(tmp),),
                     )
                     proc.start()
-                    proc.join()
+                    proc.join(timeout=JOIN_TIMEOUT)
+                    if proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=10)
+                    self.assertFalse(proc.is_alive(), start_method)
                     self.assertEqual(proc.exitcode, 0, start_method)
 
                     from_parent = _get_or_create_writer_id(root)
