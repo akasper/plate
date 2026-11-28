@@ -173,7 +173,10 @@ def _get_or_create_writer_id(plate_root: Path | None) -> str:
                     0o644,
                 )
             except FileExistsError:
-                # Peer or prior round left a file; re-read after unlink or valid fill.
+                # Peer left a file while we were waiting on the lock; valid ids win.
+                raced = _read_writer_id_file(path)
+                if raced is not None:
+                    return raced
                 continue
             try:
                 wid = _mint_writer_id()
