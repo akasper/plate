@@ -27,7 +27,7 @@ Searched `gh pr list --state all --search "<n> in:body"` per child, issue commen
 
 **Related (not children):** [#1086](https://github.com/akasper/plate/issues/1086) STE-lite Epic (pairs with #1122); [#1070](https://github.com/akasper/plate/issues/1070) live proof (consumer of #1126); [#1048](https://github.com/akasper/plate/issues/1048) Pretty PRs (#1127); [#1171](https://github.com/akasper/plate/issues/1171) local review cases (seed for #1126); [#1040](https://github.com/akasper/plate/issues/1040)/[#1047](https://github.com/akasper/plate/issues/1047) token measurement.
 
-**Broken refs in #1123:** `#1099` / `#1100` do not exist in the repo—treat as placeholders until relinked (open question below).
+**#1123 parent refs are valid:** `#1099` (skip wake for repeated resolved review comments) and `#1100` (cheap probe polling wired into babysit watch) are merged PRs; #1123's “Extends #1099/#1100” is correct.
 
 ---
 
@@ -78,7 +78,7 @@ flowchart LR
 
 **Gaps:** Standardize handoff block (plan steps done/running/blocked, paths/links, decisions, open issues, next step) for issue comments and/or `.agentic/` progress file—distinct from `fleet.py` multi-agent handoffs. Resume rule: next session reads handoff first (`docs/agents/task-management.md` todo visibility is complementary, not a substitute).
 
-**Dependencies:** Pretty PR / evidence (#1048); fix parent refs #1099/#1100 or file replacement issues.
+**Dependencies:** Pretty PR / evidence (#1048); builds on merged #1099 (skip-wake) and #1100 (cheap probe polling).
 
 ---
 
@@ -142,6 +142,8 @@ flowchart LR
 
 **Gaps (criteria **approved**; harness **not** built):** Implement proposed children from issue (task set, runner arms A–D, tier env `PLATE_MCP_PROFILE`, audit of 202 tools, scorecards under `docs/plate/research/tool-evals/`). Pass bar remains **draft** until first runs. Consolidate overlapping tool families per issue appendix using `tool_profiles.py`—no new tools without scorecard + checklist.
 
+**Decision (Andrew, 2026-10-23):** the #1010 code/knowledge graph is an optional external adapter under #1198, not core (consistent with #1557).
+
 **Dependencies:** #1126 task set; #1544 handler map; public-surface PRs #1536/#1538/#1541 for any new stable MCP/CLI.
 
 ---
@@ -150,8 +152,8 @@ flowchart LR
 
 Recommended defaults are for agents if you do not override.
 
-1. **#1123 parent refs** — `#1099` / `#1100` are missing. Retarget to contemplation/handoff issues (e.g. #1102–#1105 under #1070) or file new stubs?  
-   **Default:** Relink to **#1103** (adopter brief) and **delegation packet** design `docs/design/cost-control-narrow-delegation-packets.md` in implementation docs; open tiny Documentation PR to fix issue text when ready (out of scope for this draft PR).
+1. **#1123 scope vs shipped babysit work** — #1099/#1100 already cover skip-wake and cheap polling; should #1123 cover only the progress-file/handoff gap on top of them?  
+   **Default:** Yes. Scope #1123 to handoff/progress capture only, citing #1099/#1100 as the shipped base.
 
 2. **Progress file location** — Issue comment vs `.agentic/` file vs PR description for handoff (#1123)?  
    **Default:** **Issue or PR comment** as canonical; optional mirror under `.agentic/sessions/<run-id>.md` when ledger records a `run_id`.
