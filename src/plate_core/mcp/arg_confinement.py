@@ -9,8 +9,6 @@ from typing import Any
 from .path_confinement import PathConfinementError, confined, session_repo_root
 from .tool_definitions import MCP_TOOL_DEFINITIONS
 
-_MCP_SERVER_PATH = Path(__file__).resolve().parent.parent / "mcp_server.py"
-
 # Schema path keys -> handler fallback keys confined alongside the canonical name.
 _CANONICAL_PATH_ALIASES: dict[str, str] = {
     "spec_path": "spec",
@@ -22,9 +20,6 @@ _CANONICAL_PATH_ALIASES: dict[str, str] = {
 
 _OR_ALIAS_PATTERN = re.compile(
     r"args\.get\(\s*[\"'](\w+)[\"']\s*\)\s+or\s+args\.get\(\s*[\"'](\w+)[\"']\s*\)"
-)
-_DISPATCH_BRANCH_SPLIT = re.compile(
-    r'(?=(?:if|elif) name == "[^"]+":)'
 )
 
 NON_PATH_PARAMETERS = frozenset(
@@ -148,19 +143,12 @@ def all_registered_path_parameters() -> list[tuple[str, str]]:
 
 
 def _dispatch_tool_blocks() -> list[tuple[str, str]]:
-    """Return ``(tool_name, branch_source)`` for every ``if``/``elif`` branch in dispatch."""
-    text = _MCP_SERVER_PATH.read_text(encoding="utf-8")
-    marker = "def _execute_mcp_tool"
-    start = text.index(marker)
-    end = text.index("\ndef _handle_tools_call", start)
-    dispatch = text[start:end]
-    blocks: list[tuple[str, str]] = []
-    for part in _DISPATCH_BRANCH_SPLIT.split(dispatch):
-        head = re.match(r'(?:if|elif) name == "([^"]+)":', part)
-        if not head:
-            continue
-        blocks.append((head.group(1), part))
-    return blocks
+    """Return ``(tool_name, handler_source)`` for every entry in the dispatch map."""
+    import inspect
+
+    from ..mcp_server import MCP_TOOL_HANDLERS
+
+    return [(tool_name, inspect.getsource(handler)) for tool_name, handler in MCP_TOOL_HANDLERS.items()]
 
 
 def discover_handler_or_arg_aliases() -> list[tuple[str, str, str]]:

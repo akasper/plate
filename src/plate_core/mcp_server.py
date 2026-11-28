@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Callable
+
 import contextlib
 import io
 import json
@@ -322,1984 +324,2632 @@ def _what_next(repo: str | None, agent_type: str | None = None) -> dict:
         return {"next_action": "inspect with plate_health + plate_epic_status", "error": str(exc)}
 
 
+# --- MCP tool handlers (#1543); keep plate_health first for confinement scans. ---
+def _mcp_hdl_plate_health(args: dict, root: Any) -> object:
+    report = get_health(
+    args.get("repo"),
+    repo_root=str(resolve_mcp_path(args, "repo_root", ".", root)),
+    include_spec_audit=not bool(args.get("no_spec_audit", False)),
+    )
+    payload = report.to_dict()
+    return payload
+
+def _mcp_hdl_plate_epic_status(args: dict, root: Any) -> object:
+    report = get_epic_status(args.get("repo"))
+    payload = report.to_dict()
+    return payload
+
+def _mcp_hdl_init_playwright(args: dict, root: Any) -> object:
+    payload = InitPlaywrightTool.execute(
+        str(resolve_mcp_path(args, "repo_path", ".", root)),
+        args.get("template_repo"),
+        bool(args.get("force", False)),
+        repo_root=root,
+        confine_template=args.get("template_repo") is not None,
+    )
+    return payload
+
+def _mcp_hdl_record_e2e_gif(args: dict, root: Any) -> object:
+    test_name = args.get("test_name")
+    if not test_name:
+        raise ValueError("test_name is required")
+    allowed_quality = {"low", "medium", "high"}
+    quality = str(args.get("quality", "medium"))
+    if quality not in allowed_quality:
+        raise ValueError(f"quality must be one of {sorted(allowed_quality)}")
+    payload = RecordE2eGifTool.execute(
+        str(resolve_mcp_path(args, "repo_path", ".", root)),
+        test_name,
+        quality,
+        start=args.get("start"),
+        duration=args.get("duration"),
+        repo_root=root,
+    )
+    return payload
+
+def _mcp_hdl_validate_e2e_tests(args: dict, root: Any) -> object:
+    payload = ValidateE2eTestsTool.execute(
+        str(resolve_mcp_path(args, "repo_path", ".", root)),
+        repo_root=root,
+    )
+    return payload
+
+def _mcp_hdl_plate_agents(args: dict, root: Any) -> object:
+    payload = {"agents": [agent.to_dict() for agent in list_agents()]}
+    return payload
+
+def _mcp_hdl_plate_agent(args: dict, root: Any) -> object:
+    payload = get_agent(args.get("agent_id")).to_dict()
+    return payload
+
+def _mcp_hdl_plate_skills(args: dict, root: Any) -> object:
+    payload = {"skills": [skill.to_dict() for skill in list_skills()]}
+    return payload
+
+def _mcp_hdl_plate_skill(args: dict, root: Any) -> object:
+    payload = get_skill(args.get("skill_id")).to_dict()
+    return payload
+
+def _mcp_hdl_plate_contexts(args: dict, root: Any) -> object:
+    payload = {"contexts": [route.to_dict() for route in list_context_routes()]}
+    return payload
+
+def _mcp_hdl_plate_context(args: dict, root: Any) -> object:
+    payload = get_context_route(args.get("context_id")).to_dict()
+    return payload
+
+def _mcp_hdl_plate_delegate_to_agent(args: dict, root: Any) -> object:
+    agent_id = args.get("agent_id")
+    task_description = args.get("task_description")
+    if not agent_id:
+        raise ValueError("agent_id is required")
+    if not task_description:
+        raise ValueError("task_description is required")
+    payload = delegate_to_agent(agent_id, task_description).to_dict()
+    return payload
+
+def _mcp_hdl_plate_features(args: dict, root: Any) -> object:
+    payload = get_features(args.get("repo")).to_dict()
+    return payload
+
+def _mcp_hdl_plate_bootstrap(args: dict, root: Any) -> object:
+    adopt_arg = args.get("adopt")
+    if adopt_arg is None and args.get("existing_repo") is not None:
+        adopt_arg = args.get("existing_repo")
+    adopt_flag: bool | None
+    if adopt_arg is True or adopt_arg is False:
+        adopt_flag = bool(adopt_arg)
+    else:
+        adopt_flag = None
+    payload = run_bootstrap(
+        args.get("repo"),
+        apply_mode=bool(args.get("apply", False)),
+        adopt=adopt_flag,
+        local_root=args.get("local_root"),
+        platform=args.get("platform"),
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_adoption_status(args: dict, root: Any) -> object:
+    from .adoption import assess_adoption_readiness
+
+    payload = assess_adoption_readiness(
+        resolve_mcp_path(args, "repo_root", ".", root),
+        include_optional=not bool(args.get("no_optional", False)),
+    )
+    return payload
+
+def _mcp_hdl_plate_adoption_first_qa_plan(args: dict, root: Any) -> object:
+    from .adoption import plan_first_qa_seed
+
+    payload = plan_first_qa_seed(
+        resolve_mcp_path(args, "repo_root", ".", root),
+        apply=bool(args.get("apply", False)),
+        runner=None,
+    )
+    return payload
+
+def _mcp_hdl_plate_adoption_session(args: dict, root: Any) -> object:
+    from .adoption import (
+        adoption_session_status,
+        complete_adoption_session,
+        start_adoption_session,
+    )
+
+    action = str(args.get("action") or "status").lower()
+    root = resolve_mcp_path(args, "repo_root", ".", root)
+    if action == "start":
+        payload = start_adoption_session(root, force=bool(args.get("force", False)))
+    elif action == "complete":
+        payload = complete_adoption_session(
+            repo_root,
+            require_core_ready=bool(args.get("require_core_ready", False)),
+        )
+    else:
+        payload = adoption_session_status(repo_root)
+    return payload
+
+def _mcp_hdl_plate_self_migrate_plan(args: dict, root: Any) -> object:
+    from .self_migrate import plan_self_migrate
+
+    payload = plan_self_migrate(
+        resolve_mcp_path(args, "repo_root", ".", root),
+        target_version=args.get("target_version"),
+        include_payload=not bool(args.get("no_payload", False)),
+        resolve_upstream=bool(args.get("resolve_upstream", False)),
+        allow_network=bool(args.get("allow_network", False)),
+    )
+    return payload
+
+def _mcp_hdl_plate_self_migrate_merge_markers(args: dict, root: Any) -> object:
+    from .self_migrate import plan_marker_merge
+
+    paths = args.get("paths")
+    if isinstance(paths, str):
+        paths = [paths]
+    payload = plan_marker_merge(
+        resolve_mcp_path(args, "repo_root", ".", root),
+        paths=paths,
+        upstream_root=(
+            args.get("upstream_root")
+            or args.get("upstream_dir")
+            or resolve_mcp_path(args, "upstream_root", ".", root)
+        ),
+        apply=bool(args.get("apply", False)),
+    )
+    return payload
+
+def _mcp_hdl_plate_self_migrate_pr_plan(args: dict, root: Any) -> object:
+    from .self_migrate import apply_self_migrate_pr, plan_self_migrate_pr
+
+    pr_plan = plan_self_migrate_pr(
+        resolve_mcp_path(args, "repo_root", ".", root),
+        target_version=args.get("target_version"),
+        include_payload=not bool(args.get("no_payload", False)),
+        resolve_upstream=bool(args.get("resolve_upstream", False)),
+        allow_network=bool(args.get("allow_network", False)),
+        base=args.get("base") or "release",
+        closes=args.get("closes"),
+    )
+    if bool(args.get("apply", False)):
+        payload = {
+            "plan": pr_plan,
+            "apply": apply_self_migrate_pr(
+                pr_plan,
+                dry_run=False,
+                allow_high_risk=bool(args.get("allow_high_risk", False)),
+                runner=None,
+            ),
+        }
+    else:
+        payload = pr_plan
+    return payload
+
+def _mcp_hdl_plate_self_migrate_verify(args: dict, root: Any) -> object:
+    from .self_migrate import verify_self_migrate
+
+    payload = verify_self_migrate(
+        resolve_mcp_path(args, "repo_root", ".", root),
+        target_version=args.get("target_version"),
+        include_payload=not bool(args.get("no_payload", False)),
+        resolve_upstream=bool(args.get("resolve_upstream", False)),
+        allow_network=bool(args.get("allow_network", False)),
+    )
+    return payload
+
+def _mcp_hdl_plate_config_get(args: dict, root: Any) -> object:
+    payload = get_plate_config_report(resolve_mcp_path(args, "repo_root", ".", root)).to_dict()
+    return payload
+
+def _mcp_hdl_plate_config_validate(args: dict, root: Any) -> object:
+    payload = get_plate_config_report(resolve_mcp_path(args, "repo_root", ".", root)).to_dict()
+    return payload
+
+def _mcp_hdl_plate_config_init(args: dict, root: Any) -> object:
+    payload = init_plate_config(resolve_mcp_path(args, "repo_root", ".", root), force=bool(args.get("force", False))).to_dict()
+    return payload
+
+def _mcp_hdl_plate_config_upgrade(args: dict, root: Any) -> object:
+    payload = apply_plate_config_upgrade(
+        resolve_mcp_path(args, "repo_root", ".", root),
+        apply=bool(args.get("apply", False)),
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_hooks_install(args: dict, root: Any) -> object:
+    from .git_hooks import install_git_hook
+
+    hook = str(args.get("hook") or "pre-push")
+    try:
+        report = install_git_hook(
+            hook,
+            resolve_mcp_path(args, "repo_root", ".", root),
+            force=bool(args.get("force", False)),
+        )
+        payload = {"ok": True, **report.to_dict()}
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        payload = {"ok": False, "error": str(exc)}
+    return payload
+
+def _mcp_hdl_plate_hooks_status(args: dict, root: Any) -> object:
+    from .git_hooks import git_hooks_status
+
+    payload = git_hooks_status(resolve_mcp_path(args, "repo_root", ".", root)).to_dict()
+    return payload
+
+def _mcp_hdl_plate_plan_epic(args: dict, root: Any) -> object:
+    payload = _plan_epic_stub(args).to_dict()
+    return payload
+
+def _mcp_hdl_plate_planning_start(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = start_planning_session(
+        str(args.get("kind") or "feature"),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_planning_answer(args: dict, root: Any) -> object:
+    session = args.get("session") or {}
+    if isinstance(session, str):
+        try:
+            session = json.loads(session)
+        except Exception:
+            session = {}
+    payload = apply_planning_answer(
+        session if isinstance(session, dict) else {},
+        str(args.get("answer") or args.get("answer_text") or ""),
+        question_id=args.get("question_id"),
+    )
+    return payload
+
+def _mcp_hdl_plate_planning_build(args: dict, root: Any) -> object:
+    session = args.get("session") or {}
+    if isinstance(session, str):
+        try:
+            session = json.loads(session)
+        except Exception:
+            session = {}
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = build_plan_from_session(
+        session if isinstance(session, dict) else {},
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_planning_script(args: dict, root: Any) -> object:
+    payload = get_planning_script(str(args.get("kind") or "feature"))
+    return payload
+
+def _mcp_hdl_plate_planning_decide(args: dict, root: Any) -> object:
+    payload = decide_pending_plan(
+        str(args.get("plan_id") or args.get("id") or ""),
+        str(args.get("decision") or "approve"),
+        note=str(args.get("note") or ""),
+        decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
+    )
+    return payload
+
+def _mcp_hdl_plate_planning_resubmit(args: dict, root: Any) -> object:
+    payload = resubmit_pending_plan(
+        str(args.get("plan_id") or args.get("id") or ""),
+        title=args.get("title"),
+        body=args.get("body"),
+        note=str(args.get("note") or ""),
+        resubmitted_by=str(args.get("resubmitted_by") or args.get("by") or "mcp"),
+    )
+    return payload
+
+def _mcp_hdl_plate_planning_history(args: dict, root: Any) -> object:
+    payload = {
+        "history": get_plan_history(
+            str(args.get("plan_id") or args.get("id") or ""),
+            limit=int(args.get("limit") or 20),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_planning_list_pending(args: dict, root: Any) -> object:
+    if args.get("feed"):
+        payload = {"feed": planning_feed_items(limit=int(args.get("limit") or 20))}
+    elif args.get("actionable"):
+        payload = {
+            "actionable": list_actionable_plans(limit=int(args.get("limit") or 20))
+        }
+    else:
+        payload = {
+            "pending": list_pending_plans(limit=int(args.get("limit") or 20))
+        }
+    return payload
+
+def _mcp_hdl_plate_er_planning_start(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = start_er_session(
+        str(args.get("kind") or "epic"),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_er_planning_answer(args: dict, root: Any) -> object:
+    session = args.get("session") or {}
+    if isinstance(session, str):
+        try:
+            session = json.loads(session)
+        except Exception:
+            session = {}
+    payload = apply_er_answer(
+        session if isinstance(session, dict) else {},
+        str(args.get("answer") or args.get("answer_text") or ""),
+        question_id=args.get("question_id"),
+    )
+    return payload
+
+def _mcp_hdl_plate_er_planning_build(args: dict, root: Any) -> object:
+    session = args.get("session") or {}
+    if isinstance(session, str):
+        try:
+            session = json.loads(session)
+        except Exception:
+            session = {}
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = build_er_plan_from_session(
+        session if isinstance(session, dict) else {},
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_er_planning_script(args: dict, root: Any) -> object:
+    payload = get_er_script(str(args.get("kind") or "epic"))
+    return payload
+
+def _mcp_hdl_plate_er_planning_decide(args: dict, root: Any) -> object:
+    payload = decide_er_plan(
+        str(args.get("plan_id") or args.get("id") or ""),
+        str(args.get("decision") or "approve"),
+        note=str(args.get("note") or ""),
+        decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
+    )
+    return payload
+
+def _mcp_hdl_plate_er_planning_resubmit(args: dict, root: Any) -> object:
+    payload = resubmit_er_plan(
+        str(args.get("plan_id") or args.get("id") or ""),
+        title=args.get("title"),
+        body=args.get("body"),
+        note=str(args.get("note") or ""),
+        resubmitted_by=str(args.get("resubmitted_by") or args.get("by") or "mcp"),
+    )
+    return payload
+
+def _mcp_hdl_plate_er_planning_list_pending(args: dict, root: Any) -> object:
+    payload = {
+        "items": er_planning_feed_items(limit=int(args.get("limit") or 20))
+    }
+    return payload
+
+def _mcp_hdl_plate_artifact_propose(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = propose_artifact(
+        kind=str(args.get("kind") or "design"),
+        title=str(args.get("title") or "Artifact"),
+        summary=str(args.get("summary") or ""),
+        content_path=(
+            resolve_mcp_path(args, "content_path", ".", root)
+            if args.get("content_path")
+            else ""
+        ),
+        content_excerpt=str(args.get("content_excerpt") or ""),
+        related_issue=args.get("related_issue"),
+        related_epic=args.get("related_epic"),
+        originating_question=args.get("originating_question"),
+        media_links=list(args.get("media_links") or []),
+        actor=str(args.get("actor") or "agent"),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_artifact_decide(args: dict, root: Any) -> object:
+    payload = decide_proposal(
+        str(args.get("proposal_id") or args.get("id") or ""),
+        str(args.get("decision") or ""),
+        decided_by=str(args.get("decided_by") or "human"),
+        note=str(args.get("note") or ""),
+        open_checkpoint=bool(args.get("open_checkpoint") or False),
+    )
+    return payload
+
+def _mcp_hdl_plate_artifact_resubmit(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = resubmit_proposal(
+        str(args.get("proposal_id") or args.get("id") or ""),
+        summary=args.get("summary"),
+        content_path=args.get("content_path") or None,
+        content_excerpt=args.get("content_excerpt"),
+        media_links=list(args.get("media_links") or []) if args.get("media_links") is not None else None,
+        title=args.get("title"),
+        actor=str(args.get("actor") or "agent"),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_artifact_history(args: dict, root: Any) -> object:
+    payload = {
+        "history": get_proposal_history(
+            str(args.get("proposal_id") or args.get("id") or ""),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_artifact_list(args: dict, root: Any) -> object:
+    if args.get("authoritative"):
+        payload = {"proposals": list_authoritative(kind=args.get("kind"))}
+    elif args.get("actionable") or (args.get("status") == "actionable"):
+        payload = {
+            "proposals": list_actionable_proposals(
+                kind=args.get("kind"),
+                limit=int(args.get("limit") or 50),
+            )
+        }
+    else:
+        payload = {
+            "proposals": list_proposals(
+                status=args.get("status") or "pending",
+                kind=args.get("kind"),
+                limit=int(args.get("limit") or 50),
+            )
+        }
+    return payload
+
+def _mcp_hdl_plate_artifact_get(args: dict, root: Any) -> object:
+    payload = get_proposal(str(args.get("proposal_id") or args.get("id") or "")) or {
+        "error": "not found"
+    }
+    return payload
+
+def _mcp_hdl_plate_pr_babysit(args: dict, root: Any) -> object:
+    pr_number = args.get("pr_number")
+    if pr_number is None:
+        raise ValueError("pr_number is required")
+    pr_number = int(pr_number)
+    if pr_number <= 0:
+        raise ValueError("pr_number must be > 0")
+    payload = babysit_pr(
+        pr_number=pr_number,
+        repo=args.get("repo"),
+        agent_logins=args.get("agents"),
+        act=bool(args.get("act", False)),
+        branch_update_strategy=args.get("branch_update_strategy"),
+        pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_get_pr_merge_gates(args: dict, root: Any) -> object:
+    pr_number = args.get("pr_number")
+    if pr_number is None:
+        raise ValueError("pr_number is required")
+    pr_number = int(pr_number)
+    if pr_number <= 0:
+        raise ValueError("pr_number must be > 0")
+    payload = get_pr_merge_gates(
+        pr_number=pr_number,
+        repo=args.get("repo"),
+    )
+    return payload
+
+def _mcp_hdl_plate_pr_verify(args: dict, root: Any) -> object:
+    pr_number = args.get("pr_number")
+    if pr_number is None:
+        raise ValueError("pr_number is required")
+    pr_number = int(pr_number)
+    if pr_number <= 0:
+        raise ValueError("pr_number must be > 0")
+    root = session_repo_root()
+    payload = verify_pr(
+        pr_number=pr_number,
+        repo=args.get("repo"),
+        run_tests=bool(args.get("run_tests", False)),
+        repo_root=str(root) if bool(args.get("run_tests", False)) else None,
+    )
+    return payload
+
+def _mcp_hdl_plate_resolve_review_thread(args: dict, root: Any) -> object:
+    thread_id = args.get("thread_id")
+    if not thread_id:
+        raise ValueError("thread_id is required")
+    payload = resolve_review_thread(
+        thread_id=thread_id,
+        repo=args.get("repo"),
+    )
+    return payload
+
+def _mcp_hdl_plate_get_actionable_review_threads(args: dict, root: Any) -> object:
+    # High-level listing helper (encapsulates GraphQL pagination, DBID, filtering).
+    # Part of review thread encapsulation for #516.
+    payload = {
+        "repo": args.get("repo"),
+        "pr_number": args.get("pr_number"),
+        "threads": get_actionable_review_threads(
+            pr_number=args.get("pr_number"),
+            repo=args.get("repo"),
+            agent_logins=args.get("agent_logins"),
+            pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
+        ),
+    }
+    return payload
+
+def _mcp_hdl_plate_pr_packet(args: dict, root: Any) -> object:
+    pr_number = args.get("pr_number")
+    if pr_number is None:
+        raise ValueError("pr_number is required")
+    pr_number = int(pr_number)
+    if pr_number <= 0:
+        raise ValueError("pr_number must be > 0")
+    result = build_pr_packet(
+        pr_number=pr_number,
+        repo=args.get("repo"),
+        max_bytes=int(args.get("max_bytes") or 6144),
+        record_ledger=bool(args.get("record_ledger", False)),
+        turns=args.get("turns"),
+        run_id=args.get("run_id"),
+        cloud_agent_id=args.get("cloud_agent_id"),
+    )
+    payload = json.loads(result.json_text)
+    return payload
+
+def _mcp_hdl_plate_get_unresolved_review_threads(args: dict, root: Any) -> object:
+    pr_number = args.get("pr_number")
+    if pr_number is None:
+        raise ValueError("pr_number is required")
+    pr_number = int(pr_number)
+    if pr_number <= 0:
+        raise ValueError("pr_number must be > 0")
+    payload = {
+        "repo": args.get("repo"),
+        "pr_number": pr_number,
+        "threads": get_unresolved_review_threads(
+            pr_number=pr_number,
+            repo=args.get("repo"),
+        ),
+    }
+    return payload
+
+def _mcp_hdl_plate_what_next(args: dict, root: Any) -> object:
+    # What Next? (Epic #282 / #285 v1 static)
+    # Uses live state (health, epics, fragments, labels) to pick next PLATE step and prompt segment.
+    # For v1: simple decision tree over common paths; future data-driven.
+    payload = _what_next(args.get("repo"), args.get("agent_type"))
+    return payload
+
+def _mcp_hdl_plate_feed(args: dict, root: Any) -> object:
+    payload = get_user_feed(
+        repo=args.get("repo"),
+        limit=int(args.get("limit") or 10),
+        include_process=bool(args.get("include_process", True)),
+        include_autonomy=bool(args.get("include_autonomy", True)),
+    )
+    return payload
+
+def _mcp_hdl_plate_contemplate(args: dict, root: Any) -> object:
+    # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
+    qn = args.get("question_number")
+    if not qn:
+        raise ValueError("question_number is required")
+    payload = trigger_contemplation(
+        question_number=qn,
+        answer_text=args.get("answer_text", ""),
+        repo=args.get("repo"),
+        session=args.get("session"),
+        source=args.get("source", "contemplation"),
+        answered_by=args.get("answered_by", "engine"),
+    )
+    return payload
+
+def _mcp_hdl_plate_list_questions(args: dict, root: Any) -> object:
+    tool_cls = CURIOSITY_TOOLS['plate_list_questions']
+    return tool_cls.execute(**args)
+
+def _mcp_hdl_plate_get_question(args: dict, root: Any) -> object:
+    tool_cls = CURIOSITY_TOOLS['plate_get_question']
+    return tool_cls.execute(**args)
+
+def _mcp_hdl_plate_record_answer(args: dict, root: Any) -> object:
+    tool_cls = CURIOSITY_TOOLS['plate_record_answer']
+    return tool_cls.execute(**args)
+
+def _mcp_hdl_plate_get_answers(args: dict, root: Any) -> object:
+    tool_cls = CURIOSITY_TOOLS['plate_get_answers']
+    return tool_cls.execute(**args)
+
+def _mcp_hdl_plate_backfill_answers(args: dict, root: Any) -> object:
+    tool_cls = CURIOSITY_TOOLS['plate_backfill_answers']
+    return tool_cls.execute(**args)
+
+def _mcp_hdl_plate_synthesize_priorities(args: dict, root: Any) -> object:
+    tool_cls = CURIOSITY_TOOLS['plate_synthesize_priorities']
+    return tool_cls.execute(**args)
+
+def _mcp_hdl_plate_create_blocking_question(args: dict, root: Any) -> object:
+    tool_cls = CURIOSITY_TOOLS['plate_create_blocking_question']
+    return tool_cls.execute(**args)
+
+def _mcp_hdl_plate_release_status(args: dict, root: Any) -> object:
+    from pathlib import Path
+    releases_dir_arg = args.get("releases_dir")
+    payload = get_release_status(
+        repo=args.get("repo"),
+        releases_dir=Path(
+            resolve_mcp_path(args, "releases_dir", ".agentic/releases", root)
+        )
+        if releases_dir_arg is not None
+        else None,
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_release_repair(args: dict, root: Any) -> object:
+    from .release import repair_release_standing_state
+
+    payload = repair_release_standing_state(
+        repo=args.get("repo"),
+        dry_run=not bool(args.get("apply", False)),
+        apply=bool(args.get("apply", False)),
+    )
+    return payload
+
+def _mcp_hdl_plate_release_target_epic(args: dict, root: Any) -> object:
+    payload = get_release_target_epic_guidance(
+        epic_number=int(args.get("epic_number")),
+        repo=args.get("repo"),
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_release_cleanup_branches(args: dict, root: Any) -> object:
+    payload = cleanup_dead_branches(
+        repo=args.get("repo"),
+        base_branch=args.get("base_branch"),
+        apply=bool(args.get("apply", False)),
+        limit=args.get("limit"),
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_release_notes(args: dict, root: Any) -> object:
+    from pathlib import Path
+    releases_dir_arg = args.get("releases_dir")
+    payload = get_release_notes_diff(
+        from_version=args.get("from_version"),
+        to_version=args.get("to_version"),
+        releases_dir=Path(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
+        if releases_dir_arg is not None
+        else None,
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_costs(args: dict, root: Any) -> object:
+    from pathlib import Path as _LedgerPath
+
+    ledger_base = _LedgerPath(
+        resolve_mcp_path(args, "ledger_base_dir", ".agentic/ledger", root)
+    )
+    if args.get("run_cost"):
+        from .costs import compute_run_all_in_cost
+
+        payload = compute_run_all_in_cost(
+            run_id=args.get("run_id"),
+            cloud_agent_id=args.get("cloud_agent_id"),
+            base_dir=ledger_base,
+        )
+    elif args.get("spend_report") or args.get("spend_attribution"):
+        from .costs import get_spend_attribution_report
+
+        payload = get_spend_attribution_report(
+            base_dir=ledger_base,
+            limit=int(args.get("limit") or 500),
+        )
+    elif args.get("dashboard"):
+        from .costs import get_cost_dashboard
+        payload = get_cost_dashboard(
+            repo=args.get("repo"),
+            epic_label=args.get("epic_label"),
+        )
+    else:
+        payload = get_cost_report(
+            repo=args.get("repo"),
+            epic_label=args.get("epic_label"),
+        ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_autonomy_status(args: dict, root: Any) -> object:
+    payload = get_autonomy_status(args.get("repo"))
+    return payload
+
+def _mcp_hdl_plate_autonomy_budget(args: dict, root: Any) -> object:
+    if bool(args.get("reset")):
+        from .autonomy import reset_budget_spend
+
+        payload = reset_budget_spend(
+            reason=str(args.get("reset_reason") or "mcp plate_autonomy_budget reset=true"),
+        )
+    else:
+        est = args.get("estimated_tokens") or args.get("estimate_tokens")
+        payload = get_budget_snapshot(
+            args.get("repo"),
+            estimated_tokens=int(est) if est is not None else None,
+        )
+    return payload
+
+def _mcp_hdl_plate_pm_status(args: dict, root: Any) -> object:
+    payload = get_pm_status(args.get("repo"))
+    return payload
+
+def _mcp_hdl_plate_pm_team(args: dict, root: Any) -> object:
+    payload = {"team": list_team()}
+    return payload
+
+def _mcp_hdl_plate_pm_assign(args: dict, root: Any) -> object:
+    item = args.get("item") or {}
+    if isinstance(item, str):
+        try:
+            item = json.loads(item)
+        except Exception:
+            item = {"title": item}
+    st = get_autonomy_status(args.get("repo"))
+    payload = assign_work(
+        item if isinstance(item, dict) else {"title": str(item)},
+        risk_tolerance=str(st.get("risk_tolerance") or "medium"),
+        budget_remaining=st.get("budget_remaining_tokens"),
+    )
+    return payload
+
+def _mcp_hdl_plate_pm_run_cycle(args: dict, root: Any) -> object:
+    payload = run_pm_cycle(
+        repo=args.get("repo"),
+        dry_run=bool(args.get("dry_run", True)),
+        max_assignments=int(args.get("max_assignments") or 5),
+        dispatch_fleet=bool(args.get("dispatch_fleet", True)),
+        dispatch_loops=bool(args.get("dispatch_loops", True)),
+        tick_loops=bool(args.get("tick_loops", True)),
+        fetch_loop_gates=bool(args.get("fetch_loop_gates") or False),
+    )
+    return payload
+
+def _mcp_hdl_plate_pm_run_loop(args: dict, root: Any) -> object:
+    payload = run_pm_loop(
+        repo=args.get("repo"),
+        dry_run=bool(args.get("dry_run", True)),
+        max_cycles=int(args.get("max_cycles") or 3),
+        max_assignments=int(args.get("max_assignments") or 5),
+    )
+    return payload
+
+def _mcp_hdl_plate_pm_queue(args: dict, root: Any) -> object:
+    payload = {
+        "assignments": list_pm_queue(
+            repo=args.get("repo"),
+            status=args.get("status"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_pm_complete(args: dict, root: Any) -> object:
+    payload = complete_pm_assignment(
+        str(args.get("assignment_id") or ""),
+        status=str(args.get("status") or "done"),
+        note=str(args.get("note") or ""),
+        repo=args.get("repo"),
+    )
+    return payload
+
+def _mcp_hdl_plate_pm_tick_loops(args: dict, root: Any) -> object:
+    payload = tick_pm_loops(
+        args.get("repo"),
+        dry_run=bool(args.get("dry_run", True)),
+        fetch_gates=bool(args.get("fetch_gates") or args.get("fetch_loop_gates") or False),
+        limit=int(args.get("limit") or 20),
+        complete_when_done=bool(args.get("complete_when_done", True)),
+    )
+    return payload
+
+def _mcp_hdl_plate_fleet_status(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is None:
+        br = args.get("budget_tokens")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = fleet_status(
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+        risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
+    )
+    return payload
+
+def _mcp_hdl_plate_fleet_roles(args: dict, root: Any) -> object:
+    payload = {"roles": list_fleet_roles()}
+    return payload
+
+def _mcp_hdl_plate_fleet_handoff(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = create_handoff(
+        from_agent=str(args.get("from_agent") or "orchestrator"),
+        to_agent=str(args.get("to_agent") or ""),
+        task=str(args.get("task") or ""),
+        context=args.get("context") if isinstance(args.get("context"), dict) else {},
+        artifacts=list(args.get("artifacts") or []),
+        constraints=list(args.get("constraints") or []),
+        budget_tokens=args.get("budget_tokens"),
+        risk=str(args.get("risk") or "medium"),
+        related_issue=args.get("related_issue"),
+        related_pr=args.get("related_pr"),
+        parent_handoff_id=args.get("parent_handoff_id"),
+        requires_human=bool(args.get("requires_human", False)),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_fleet_update(args: dict, root: Any) -> object:
+    payload = update_handoff(
+        str(args.get("handoff_id") or args.get("id") or ""),
+        status=args.get("status"),
+        notes=args.get("notes") or args.get("note"),
+        artifacts=list(args.get("artifacts") or []) or None,
+        context_patch=args.get("context") if isinstance(args.get("context"), dict) else None,
+        shadow_ack=args.get("shadow_ack") or None,
+        approved=bool(args.get("approved") or False),
+        checkpoint_id=args.get("checkpoint_id") or None,
+    )
+    return payload
+
+def _mcp_hdl_plate_fleet_complete(args: dict, root: Any) -> object:
+    payload = complete_handoff(
+        str(args.get("handoff_id") or args.get("id") or ""),
+        notes=str(args.get("notes") or args.get("note") or ""),
+        artifacts=list(args.get("artifacts") or []) or None,
+    )
+    return payload
+
+def _mcp_hdl_plate_fleet_list(args: dict, root: Any) -> object:
+    payload = {
+        "handoffs": list_handoffs(
+            status=str(args.get("status") or "active"),
+            to_agent=args.get("to_agent"),
+            from_agent=args.get("from_agent"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_fleet_allocate(args: dict, root: Any) -> object:
+    roles = args.get("active_roles") or args.get("roles")
+    if isinstance(roles, str):
+        roles = [x.strip() for x in roles.split(",") if x.strip()]
+    payload = allocate_fleet_budget(
+        int(args.get("budget_tokens") or args.get("total_tokens") or 20000),
+        active_roles=list(roles) if roles else None,
+        risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
+    )
+    return payload
+
+def _mcp_hdl_plate_fleet_plan(args: dict, root: Any) -> object:
+    bt = args.get("budget_tokens")
+    if bt is not None:
+        try:
+            bt = int(bt)
+        except (TypeError, ValueError):
+            bt = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = plan_fleet_from_intent(
+        str(args.get("intent") or args.get("task") or ""),
+        budget_tokens=bt,
+        risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
+        related_issue=args.get("related_issue"),
+        create=bool(args.get("create") or args.get("apply") or False),
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_fleet_feed(args: dict, root: Any) -> object:
+    payload = {"items": handoff_feed_items(limit=int(args.get("limit") or 10))}
+    return payload
+
+def _mcp_hdl_plate_monitor_discussions(args: dict, root: Any) -> object:
+    dry = bool(args.get("dry_run", True))
+    discussions = args.get("discussions")
+    if isinstance(discussions, str):
+        try:
+            discussions = json.loads(discussions)
+        except Exception:
+            discussions = None
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    if dry:
+        payload = run_discussion_review_procedure(
+            repo=args.get("repo"),
+            discussions=list(discussions) if discussions else None,
+            dry_run=True,
+            fetch_live=False,
+            budget_remaining=br,
+            use_live_budget=bool(use_live),
+        )
+    else:
+        payload = review_discussions(
+            list(discussions) if discussions else None,
+            repo=args.get("repo"),
+            persist=bool(args.get("persist", True)),
+            fetch_live=bool(args.get("fetch_live", False)),
+            min_score=float(args.get("min_score") or 30),
+            limit=int(args.get("limit") or 10),
+            budget_remaining=br,
+            use_live_budget=bool(use_live),
+        )
+    return payload
+
+def _mcp_hdl_plate_monitor_market(args: dict, root: Any) -> object:
+    signals = args.get("signals") or []
+    if isinstance(signals, str):
+        try:
+            signals = json.loads(signals)
+        except Exception:
+            signals = [{"title": signals}]
+    dry = bool(args.get("dry_run", True))
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    if dry:
+        payload = run_market_monitor_procedure(
+            signals=list(signals),
+            dry_run=True,
+            budget_remaining=br,
+            use_live_budget=bool(use_live),
+        )
+    else:
+        payload = monitor_market_signals(
+            list(signals),
+            persist=bool(args.get("persist", True)),
+            min_score=float(args.get("min_score") or 40),
+            limit=int(args.get("limit") or 10),
+            budget_remaining=br,
+            use_live_budget=bool(use_live),
+        )
+    return payload
+
+def _mcp_hdl_plate_monitor_list(args: dict, root: Any) -> object:
+    payload = {
+        "proposals": list_proposals(
+            status=str(args.get("status") or "pending"),
+            source=args.get("source"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_monitor_decide(args: dict, root: Any) -> object:
+    payload = decide_proposal(
+        str(args.get("proposal_id") or args.get("id") or ""),
+        str(args.get("decision") or "approve"),
+        created_issue=args.get("created_issue"),
+    )
+    return payload
+
+def _mcp_hdl_plate_monitor_feed(args: dict, root: Any) -> object:
+    payload = {"items": monitoring_feed_items(limit=int(args.get("limit") or 10))}
+    return payload
+
+def _mcp_hdl_plate_stub_author(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = author_stub(
+        str(args.get("intent") or args.get("task") or ""),
+        issue_type=args.get("issue_type") or args.get("type"),
+        title=args.get("title"),
+        summary=args.get("summary"),
+        acceptance_criteria=list(args.get("acceptance_criteria") or []) or None,
+        parent_epic=args.get("parent_epic"),
+        milestone=args.get("milestone"),
+        related_links=list(args.get("related_links") or []) or None,
+        source=str(args.get("source") or "qa"),
+        labels=list(args.get("labels") or []) or None,
+        persist=bool(args.get("persist", True)),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_stub_refine(args: dict, root: Any) -> object:
+    payload = refine_stub(
+        str(args.get("draft_id") or args.get("id") or ""),
+        answers=args.get("answers") if isinstance(args.get("answers"), dict) else None,
+        add_acceptance=list(args.get("add_acceptance") or args.get("acceptance_criteria") or []) or None,
+        summary_append=args.get("summary_append") or args.get("summary"),
+        issue_type=args.get("issue_type") or args.get("type"),
+        note=args.get("note"),
+        mark_ready=bool(args.get("mark_ready") or args.get("ready") or False),
+    )
+    return payload
+
+def _mcp_hdl_plate_stub_create(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = create_stub_issue(
+        args.get("draft_id") or args.get("id"),
+        repo=args.get("repo"),
+        dry_run=bool(args.get("dry_run", True)),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_stub_list(args: dict, root: Any) -> object:
+    payload = {
+        "drafts": list_stubs(
+            status=str(args.get("status") or "all"),
+            issue_type=args.get("issue_type") or args.get("type"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_stub_get(args: dict, root: Any) -> object:
+    payload = {"draft": get_stub(str(args.get("draft_id") or args.get("id") or ""))}
+    return payload
+
+def _mcp_hdl_plate_stub_author_create(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = author_and_create(
+        str(args.get("intent") or ""),
+        issue_type=args.get("issue_type") or args.get("type"),
+        title=args.get("title"),
+        dry_run=bool(args.get("dry_run", True)),
+        repo=args.get("repo"),
+        summary=args.get("summary"),
+        source=str(args.get("source") or "qa"),
+        parent_epic=args.get("parent_epic"),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_stub_feed(args: dict, root: Any) -> object:
+    payload = {"items": stubs_feed_items(limit=int(args.get("limit") or 10))}
+    return payload
+
+def _mcp_hdl_plate_bug_loop_start(args: dict, root: Any) -> object:
+    labels = args.get("labels") or []
+    if isinstance(labels, str):
+        labels = [x.strip() for x in labels.split(",") if x.strip()]
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = start_bug_loop(
+        bug_number=args.get("bug_number") or args.get("bug"),
+        bug_title=str(args.get("bug_title") or args.get("title") or ""),
+        risk=str(args.get("risk") or "medium"),
+        size=str(args.get("size") or "medium"),
+        labels=list(labels) if labels else None,
+        paths=list(args.get("paths") or []) or None,
+        risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+        pr_number=args.get("pr_number") or args.get("pr"),
+        branch=args.get("branch"),
+        budget_remaining=args.get("budget_remaining"),
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_bug_loop_advance(args: dict, root: Any) -> object:
+    payload = advance_bug_loop(
+        str(args.get("run_id") or args.get("id") or ""),
+        pr_number=args.get("pr_number") or args.get("pr"),
+        branch=args.get("branch"),
+        note=args.get("note"),
+        force_skip_checkpoint=bool(args.get("force_skip_checkpoint") or False),
+        gates=args.get("gates") if isinstance(args.get("gates"), dict) else None,
+    )
+    return payload
+
+def _mcp_hdl_plate_bug_loop_tick(args: dict, root: Any) -> object:
+    payload = run_bug_loop_tick(
+        str(args.get("run_id") or args.get("id") or ""),
+        dry_run=bool(args.get("dry_run", True)),
+        fetch_gates=bool(args.get("fetch_gates") or False),
+        repo=args.get("repo"),
+    )
+    return payload
+
+def _mcp_hdl_plate_bug_loop_list(args: dict, root: Any) -> object:
+    payload = {
+        "runs": list_bug_loops(
+            status=str(args.get("status") or "active"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_bug_loop_get(args: dict, root: Any) -> object:
+    payload = {"run": get_bug_loop(str(args.get("run_id") or args.get("id") or ""))}
+    return payload
+
+def _mcp_hdl_plate_bug_loop_cancel(args: dict, root: Any) -> object:
+    payload = cancel_bug_loop(
+        str(args.get("run_id") or args.get("id") or ""),
+        note=str(args.get("note") or ""),
+    )
+    return payload
+
+def _mcp_hdl_plate_bug_loop_update(args: dict, root: Any) -> object:
+    payload = update_bug_loop(
+        str(args.get("run_id") or args.get("id") or ""),
+        stage=args.get("stage"),
+        status=args.get("status"),
+        pr_number=args.get("pr_number") or args.get("pr"),
+        branch=args.get("branch"),
+        note=args.get("note"),
+        checkpoint_id=args.get("checkpoint_id"),
+    )
+    return payload
+
+def _mcp_hdl_plate_bug_loop_feed(args: dict, root: Any) -> object:
+    payload = {"items": bug_loop_feed_items(limit=int(args.get("limit") or 10))}
+    return payload
+
+def _mcp_hdl_plate_feature_loop_estimate(args: dict, root: Any) -> object:
+    payload = estimate_feature_cost(
+        size=str(args.get("size") or "medium"),
+        needs_design_validation=bool(args.get("needs_design_validation") or args.get("design") or False),
+        needs_media=bool(args.get("needs_media", True)),
+        e2e=bool(args.get("e2e") or False),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_loop_start(args: dict, root: Any) -> object:
+    labels = args.get("labels") or []
+    if isinstance(labels, str):
+        labels = [x.strip() for x in labels.split(",") if x.strip()]
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = start_feature_loop(
+        feature_number=args.get("feature_number") or args.get("feature"),
+        feature_title=str(args.get("feature_title") or args.get("title") or ""),
+        risk=str(args.get("risk") or "medium"),
+        size=str(args.get("size") or "medium"),
+        labels=list(labels) if labels else None,
+        paths=list(args.get("paths") or []) or None,
+        risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+        needs_design_validation=bool(args.get("needs_design_validation") or args.get("design") or False),
+        needs_media_approval=bool(args.get("needs_media_approval", True)),
+        e2e=bool(args.get("e2e") or False),
+        pr_number=args.get("pr_number") or args.get("pr"),
+        branch=args.get("branch"),
+        budget_remaining=args.get("budget_remaining"),
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_loop_advance(args: dict, root: Any) -> object:
+    payload = advance_feature_loop(
+        str(args.get("run_id") or args.get("id") or ""),
+        pr_number=args.get("pr_number") or args.get("pr"),
+        branch=args.get("branch"),
+        note=args.get("note"),
+        force_skip_checkpoint=bool(args.get("force_skip_checkpoint") or False),
+        skip_media=bool(args.get("skip_media") or False),
+        gates=args.get("gates") if isinstance(args.get("gates"), dict) else None,
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_loop_tick(args: dict, root: Any) -> object:
+    payload = run_feature_loop_tick(
+        str(args.get("run_id") or args.get("id") or ""),
+        dry_run=bool(args.get("dry_run", True)),
+        fetch_gates=bool(args.get("fetch_gates") or False),
+        repo=args.get("repo"),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_loop_list(args: dict, root: Any) -> object:
+    payload = {
+        "runs": list_feature_loops(
+            status=str(args.get("status") or "active"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_feature_loop_get(args: dict, root: Any) -> object:
+    payload = {"run": get_feature_loop(str(args.get("run_id") or args.get("id") or ""))}
+    return payload
+
+def _mcp_hdl_plate_feature_loop_cancel(args: dict, root: Any) -> object:
+    payload = cancel_feature_loop(
+        str(args.get("run_id") or args.get("id") or ""),
+        note=str(args.get("note") or ""),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_loop_update(args: dict, root: Any) -> object:
+    payload = update_feature_loop(
+        str(args.get("run_id") or args.get("id") or ""),
+        stage=args.get("stage"),
+        status=args.get("status"),
+        pr_number=args.get("pr_number") or args.get("pr"),
+        branch=args.get("branch"),
+        note=args.get("note"),
+        checkpoint_id=args.get("checkpoint_id"),
+        cost_estimate_tokens=args.get("cost_estimate_tokens"),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_loop_feed(args: dict, root: Any) -> object:
+    payload = {"items": feature_loop_feed_items(limit=int(args.get("limit") or 10))}
+    return payload
+
+def _mcp_hdl_plate_design_contract_propose(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = propose_contract(
+        feature_number=args.get("feature_number") or args.get("feature"),
+        feature_title=str(args.get("feature_title") or args.get("title") or ""),
+        visual_specs=list(args.get("visual_specs") or []) or None,
+        interaction_criteria=list(args.get("interaction_criteria") or []) or None,
+        a11y_criteria=list(args.get("a11y_criteria") or []) or None,
+        artifact_paths=list(args.get("artifact_paths") or []) or None,
+        has_playwright=bool(args.get("has_playwright") or False),
+        submit_for_approval=bool(args.get("submit_for_approval", True)),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_design_contract_list(args: dict, root: Any) -> object:
+    payload = {
+        "contracts": list_contracts(
+            status=str(args.get("status") or "all"),
+            feature_number=args.get("feature_number") or args.get("feature"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_design_contract_get(args: dict, root: Any) -> object:
+    payload = {"contract": get_contract(str(args.get("contract_id") or args.get("id") or ""))}
+    return payload
+
+def _mcp_hdl_plate_design_contract_decide(args: dict, root: Any) -> object:
+    payload = decide_contract(
+        str(args.get("contract_id") or args.get("id") or ""),
+        str(args.get("decision") or "approve"),
+        decided_by=str(args.get("decided_by") or "human"),
+        note=args.get("note"),
+    )
+    return payload
+
+def _mcp_hdl_plate_design_contract_update(args: dict, root: Any) -> object:
+    payload = update_contract(
+        str(args.get("contract_id") or args.get("id") or ""),
+        visual_specs=list(args.get("visual_specs") or []) or None,
+        interaction_criteria=list(args.get("interaction_criteria") or []) or None,
+        a11y_criteria=list(args.get("a11y_criteria") or []) or None,
+        artifact_paths=list(args.get("artifact_paths") or []) or None,
+        status=args.get("status"),
+    )
+    return payload
+
+def _mcp_hdl_plate_design_contract_validate(args: dict, root: Any) -> object:
+    payload = validate_contract_readiness(
+        args.get("contract_id") or args.get("id"),
+    )
+    return payload
+
+def _mcp_hdl_plate_design_contract_scaffold(args: dict, root: Any) -> object:
+    c = get_contract(str(args.get("contract_id") or args.get("id") or ""))
+    if not c:
+        payload = {"ok": False, "error": "contract not found"}
+    else:
+        payload = build_failing_test_scaffold(
+            c, language=str(args.get("language") or "python")
+        )
+        payload["ok"] = True
+    return payload
+
+def _mcp_hdl_plate_design_contract_feed(args: dict, root: Any) -> object:
+    payload = {"items": contract_feed_items(limit=int(args.get("limit") or 10))}
+    return payload
+
+def _mcp_hdl_plate_release_media_manifest(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
+    frags = collect_release_fragments(rdir)
+    payload = build_media_manifest(frags, version=args.get("version"))
+    return payload
+
+def _mcp_hdl_plate_release_media_render(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
+    media = collect_release_media(collect_release_fragments(rdir))
+    payload = {
+        "markdown": render_media_markdown(
+            media, only_approved=bool(args.get("only_approved") or False)
+        ),
+        "n": len(media),
+    }
+    return payload
+
+def _mcp_hdl_plate_release_media_feed(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
+    media = collect_release_media(collect_release_fragments(rdir))
+    payload = {"items": media_feed_items(media)}
+    return payload
+
+def _mcp_hdl_plate_release_media_validate_paths(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
+    media = collect_release_media(collect_release_fragments(rdir))
+    payload = validate_media_paths(media, repo_root=_P("."))
+    return payload
+
+def _mcp_hdl_plate_release_media_decide(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
+    media = collect_release_media(collect_release_fragments(rdir))
+    payload = decide_media_item(
+        media,
+        index=args.get("index"),
+        path=args.get("path"),
+        url=args.get("url"),
+        decision=str(args.get("decision") or "approve"),
+    )
+    return payload
+
+def _mcp_hdl_plate_hybrid_list_kinds(args: dict, root: Any) -> object:
+    payload = {"kinds": list_project_kinds()}
+    return payload
+
+def _mcp_hdl_plate_hybrid_list_artifacts(args: dict, root: Any) -> object:
+    payload = {"artifact_types": list_artifact_types()}
+    return payload
+
+def _mcp_hdl_plate_hybrid_list_validation(args: dict, root: Any) -> object:
+    payload = {
+        "validation": list_validation_strategies(kind=args.get("kind"))
+    }
+    return payload
+
+def _mcp_hdl_plate_hybrid_detect(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    payload = detect_project_kind(_P(resolve_mcp_path(args, "repo_root", ".", root)))
+    return payload
+
+def _mcp_hdl_plate_hybrid_set_kind(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    base_dir = _P(resolve_mcp_path(args, "base_dir", ".agentic/hybrid", root))
+    payload = set_project_kind(
+        str(args.get("kind") or ""),
+        base_dir=base_dir,
+        note=str(args.get("note") or ""),
+    )
+    return payload
+
+def _mcp_hdl_plate_hybrid_profile(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    base_dir = _P(resolve_mcp_path(args, "base_dir", ".agentic/hybrid", root))
+    repo_root = _P(resolve_mcp_path(args, "repo_root", ".", root))
+    payload = load_project_profile(
+        base_dir=base_dir,
+        repo_root=repo_root,
+    )
+    return payload
+
+def _mcp_hdl_plate_hybrid_contract(args: dict, root: Any) -> object:
+    c = get_kind_contract(str(args.get("kind") or ""))
+    payload = {"ok": c is not None, "contract": c}
+    return payload
+
+def _mcp_hdl_plate_hybrid_planning_template(args: dict, root: Any) -> object:
+    payload = planning_template_for_kind(str(args.get("kind") or "software"))
+    return payload
+
+def _mcp_hdl_plate_hybrid_validation_plan(args: dict, root: Any) -> object:
+    payload = feature_validation_plan(
+        str(args.get("kind") or "software"),
+        feature_title=str(args.get("feature_title") or args.get("title") or ""),
+        artifact_types=args.get("artifact_types"),
+    )
+    return payload
+
+def _mcp_hdl_plate_hybrid_feed(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    payload = {
+        "items": hybrid_feed_items(
+            base_dir=_P(resolve_mcp_path(args, "base_dir", ".agentic/hybrid", root)),
+            repo_root=_P(str(resolve_mcp_path(args, "repo_root", ".", root))),
+            limit=int(args.get("limit") or 4),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_packaging_build(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
+    bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
+    frags = collect_release_fragments(rdir)
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = build_package(
+        str(args.get("version") or "unreleased"),
+        frags,
+        base_dir=bdir,
+        require_approved_media=bool(args.get("require_approved_media") or False),
+        persist=not bool(args.get("no_persist") or False),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_packaging_list(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
+    payload = {
+        "packages": list_packages(
+            base_dir=bdir,
+            status=str(args.get("status") or "all"),
+            limit=int(args.get("limit") or 20),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_packaging_get(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
+    p = get_package(str(args.get("package_id") or args.get("id") or ""), base_dir=bdir)
+    payload = {"package": p, "ok": p is not None}
+    return payload
+
+def _mcp_hdl_plate_packaging_render(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
+    pid = str(args.get("package_id") or args.get("id") or "")
+    p = get_package(pid, base_dir=bdir) if pid else None
+    if p is None and args.get("version"):
+        rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
+        br = args.get("budget_remaining")
+        if br is not None:
+            try:
+                br = int(br)
+            except (TypeError, ValueError):
+                br = None
+        use_live = args.get("use_live_budget")
+        if use_live is None:
+            use_live = True
+        built = build_package(
+            str(args.get("version")),
+            collect_release_fragments(rdir),
+            base_dir=bdir,
+            persist=False,
+            budget_remaining=br,
+            use_live_budget=bool(use_live),
+        )
+        if not built.get("ok"):
+            payload = built
+        else:
+            p = built.get("package")
+    if p is not None:
+        payload = {
+            "ok": True,
+            "markdown": render_package_markdown(p),
+            "package_id": p.get("id"),
+        }
+    elif "payload" not in locals():
+        payload = {"ok": False, "error": "package not found"}
+    return payload
+
+def _mcp_hdl_plate_packaging_decide(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
+    payload = decide_package_publish(
+        str(args.get("package_id") or args.get("id") or ""),
+        str(args.get("decision") or "approve"),
+        decided_by=str(args.get("decided_by") or "human"),
+        note=str(args.get("note") or ""),
+        base_dir=bdir,
+    )
+    return payload
+
+def _mcp_hdl_plate_packaging_feed(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
+    payload = {
+        "items": packaging_feed_items(
+            base_dir=bdir, limit=int(args.get("limit") or 8)
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_packaging_plan(args: dict, root: Any) -> object:
+    from pathlib import Path as _P
+
+    payload = plan_marketplace_package_op(
+        args.get("version"),
+        releases_dir=_P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root)),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_media_estimate_cost(args: dict, root: Any) -> object:
+    payload = estimate_feature_media_cost(
+        phase=str(args.get("phase") or "plan"),
+        quality=str(args.get("quality") or "medium"),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_media_plan(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = plan_feature_media(
+        feature_number=args.get("feature_number") or args.get("feature"),
+        feature_title=str(args.get("feature_title") or args.get("title") or ""),
+        test_name=args.get("test_name"),
+        caption=args.get("caption"),
+        fragment_slug=args.get("fragment_slug"),
+        quality=str(args.get("quality") or "medium"),
+        budget_remaining=int(br) if br is not None else None,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_media_register(args: dict, root: Any) -> object:
+    payload = register_capture(
+        str(args.get("record_id") or args.get("id") or ""),
+        gif_path=args.get("gif_path"),
+        video_path=args.get("video_path"),
+        size_bytes=args.get("size_bytes"),
+        quality=args.get("quality"),
+        capture_result=args.get("capture_result")
+        if isinstance(args.get("capture_result"), dict)
+        else None,
+        submit_for_approval=bool(args.get("submit_for_approval", True)),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_media_list(args: dict, root: Any) -> object:
+    payload = {
+        "records": list_feature_media(
+            status=str(args.get("status") or "all"),
+            feature_number=args.get("feature_number") or args.get("feature"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_feature_media_get(args: dict, root: Any) -> object:
+    payload = {
+        "record": get_feature_media(str(args.get("record_id") or args.get("id") or ""))
+    }
+    return payload
+
+def _mcp_hdl_plate_feature_media_decide(args: dict, root: Any) -> object:
+    payload = decide_feature_media(
+        str(args.get("record_id") or args.get("id") or ""),
+        str(args.get("decision") or "approve"),
+        decided_by=str(args.get("decided_by") or "human"),
+        note=args.get("note"),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_media_skip(args: dict, root: Any) -> object:
+    payload = skip_feature_media(
+        str(args.get("record_id") or args.get("id") or ""),
+        note=str(args.get("note") or ""),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_media_attach_fragment(args: dict, root: Any) -> object:
+    payload = attach_to_fragment_file(
+        str(args.get("record_id") or args.get("id") or ""),
+        str(args.get("fragment_path") or args.get("fragment") or ""),
+    )
+    return payload
+
+def _mcp_hdl_plate_feature_media_feed(args: dict, root: Any) -> object:
+    payload = {"items": feature_media_feed_items(limit=int(args.get("limit") or 10))}
+    return payload
+
+def _mcp_hdl_plate_scheduled_ops_list(args: dict, root: Any) -> object:
+    payload = {"ops": list_ops()}
+    return payload
+
+def _mcp_hdl_plate_scheduled_ops_status(args: dict, root: Any) -> object:
+    payload = scheduled_ops_status(
+        risk_tolerance=str(args.get("risk_tolerance") or "medium")
+    )
+    return payload
+
+def _mcp_hdl_plate_scheduled_op_plan(args: dict, root: Any) -> object:
+    payload = plan_op(
+        str(args.get("op_id") or args.get("id") or ""),
+        dry_run=bool(args.get("dry_run", True)),
+    )
+    return payload
+
+def _mcp_hdl_plate_scheduled_op_run(args: dict, root: Any) -> object:
+    br = args.get("budget_remaining")
+    if br is not None:
+        try:
+            br = int(br)
+        except (TypeError, ValueError):
+            br = None
+    use_live = args.get("use_live_budget")
+    if use_live is None:
+        use_live = True
+    payload = run_scheduled_op(
+        str(args.get("op_id") or args.get("id") or ""),
+        dry_run=bool(args.get("dry_run", True)),
+        risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+        approved=bool(args.get("approved") or False),
+        checkpoint_id=args.get("checkpoint_id"),
+        shadow_ack=args.get("shadow_ack") or None,
+        note=str(args.get("note") or ""),
+        budget_remaining=br,
+        use_live_budget=bool(use_live),
+    )
+    return payload
+
+def _mcp_hdl_plate_scheduled_op_runs(args: dict, root: Any) -> object:
+    payload = {
+        "runs": list_op_runs(
+            op_id=args.get("op_id"),
+            status=str(args.get("status") or "all"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_scheduled_op_complete(args: dict, root: Any) -> object:
+    payload = complete_op_run(
+        str(args.get("run_id") or args.get("id") or ""),
+        status=str(args.get("status") or "done"),
+        note=str(args.get("note") or ""),
+    )
+    return payload
+
+def _mcp_hdl_plate_scheduled_ops_feed(args: dict, root: Any) -> object:
+    payload = {
+        "items": ops_feed_items(
+            risk_tolerance=str(args.get("risk_tolerance") or "medium"),
+            limit=int(args.get("limit") or 10),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_task_create(args: dict, root: Any) -> object:
+    payload = create_task(
+        str(args.get("title") or ""),
+        human_action=str(args.get("human_action") or args.get("action") or ""),
+        why_agent_cannot=str(args.get("why_agent_cannot") or args.get("why") or ""),
+        context=str(args.get("context") or ""),
+        instructions=str(args.get("instructions") or ""),
+        done_signal=args.get("done_signal"),
+        related_links=args.get("related_links") or args.get("related"),
+        milestone=args.get("milestone"),
+        epic_milestone_name=args.get("epic_milestone"),
+        labels=list(args.get("labels") or []) if isinstance(args.get("labels"), list) else None,
+        repo=args.get("repo"),
+        dry_run=bool(args.get("dry_run", False)),
+    )
+    return payload
+
+def _mcp_hdl_plate_task_close(args: dict, root: Any) -> object:
+    payload = close_task_with_signal(
+        int(args.get("number") or args.get("issue_number") or 0),
+        comment=str(args.get("comment") or args.get("note") or "Task complete."),
+        repo=args.get("repo"),
+        dry_run=bool(args.get("dry_run", False)),
+    )
+    return payload
+
+def _mcp_hdl_plate_task_detect(args: dict, root: Any) -> object:
+    signals = args.get("signals")
+    if isinstance(signals, str):
+        signals = [signals]
+    payload = detect_and_create_tasks(
+        signals=list(signals) if isinstance(signals, list) else None,
+        text=str(args.get("text") or args.get("signal") or "") or None,
+        context=str(args.get("context") or ""),
+        repo=args.get("repo"),
+        dry_run=bool(args.get("dry_run", True)),
+        create=bool(args.get("create", False)),
+    )
+    return payload
+
+def _mcp_hdl_plate_collab_check(args: dict, root: Any) -> object:
+    labels = args.get("labels") or []
+    if isinstance(labels, str):
+        labels = [labels]
+    auth = None
+    if args.get("commits") or args.get("author_login"):
+        auth = analyze_pr_authorship(
+            pr_number=args.get("pr_number"),
+            author_login=args.get("author_login"),
+            commits=list(args.get("commits") or []) if isinstance(args.get("commits"), list) else None,
+        )
+    paths = args.get("paths") or []
+    if isinstance(paths, str):
+        paths = [p.strip() for p in paths.split(",") if p.strip()]
+    payload = collab_policy_check(
+        str(args.get("action") or "delegate"),
+        labels=list(labels),
+        authorship=auth,
+        paths=list(paths) if paths else None,
+        branch=args.get("branch"),
+        worktree_root=(
+            args.get("worktree_root")
+            or resolve_mcp_path(args, "worktree_root", ".", root)
+        ),
+        repo_root=resolve_mcp_path(args, "repo_root", ".", root),
+    )
+    payload["driver"] = get_driver(list(labels))
+    if auth is not None:
+        payload["authorship"] = auth.to_dict() if hasattr(auth, "to_dict") else auth
+    return payload
+
+def _mcp_hdl_plate_collab_issue_status(args: dict, root: Any) -> object:
+    issue = args.get("issue") or {}
+    if isinstance(issue, str):
+        issue = {"title": issue, "labels": args.get("labels") or []}
+    if not issue.get("labels") and args.get("labels"):
+        issue = dict(issue)
+        issue["labels"] = args.get("labels")
+    payload = collab_status_for_issue(issue if isinstance(issue, dict) else {})
+    return payload
+
+def _mcp_hdl_plate_collab_ownership_claim(args: dict, root: Any) -> object:
+    payload = claim_ownership(
+        kind=str(args.get("kind") or "path"),
+        target=str(args.get("target") or ""),
+        owner=str(args.get("owner") or "human"),
+        reason=str(args.get("reason") or ""),
+        related_issue=args.get("related_issue"),
+        actor=str(args.get("actor") or "human"),
+    )
+    return payload
+
+def _mcp_hdl_plate_collab_ownership_release(args: dict, root: Any) -> object:
+    payload = release_ownership(
+        args.get("claim_id") or args.get("id"),
+        kind=args.get("kind"),
+        target=args.get("target"),
+    )
+    return payload
+
+def _mcp_hdl_plate_collab_ownership_list(args: dict, root: Any) -> object:
+    payload = {
+        "claims": list_ownership_claims(
+            status=str(args.get("status") or "open"),
+            kind=args.get("kind"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_collab_etiquette(args: dict, root: Any) -> object:
+    payload = branch_etiquette_check(
+        args.get("branch"),
+        worktree_root=(
+            args.get("worktree_root")
+            or resolve_mcp_path(args, "worktree_root", ".", root)
+        ),
+        repo_root=resolve_mcp_path(args, "repo_root", ".", root),
+    )
+    return payload
+
+def _mcp_hdl_plate_collab_concurrent(args: dict, root: Any) -> object:
+    paths = args.get("paths") or []
+    if isinstance(paths, str):
+        paths = [p.strip() for p in paths.split(",") if p.strip()]
+    payload = concurrent_edit_risk(list(paths))
+    return payload
+
+def _mcp_hdl_plate_collab_ownership_feed(args: dict, root: Any) -> object:
+    payload = {"items": ownership_feed_items(limit=int(args.get("limit") or 10))}
+    return payload
+
+def _mcp_hdl_plate_ledger_record(args: dict, root: Any) -> object:
+    payload = record_decision(
+        action_kind=str(args.get("action_kind") or "unknown"),
+        decision=str(args.get("decision") or "proceed"),
+        reason=str(args.get("reason") or ""),
+        sources=list(args.get("sources") or []),
+        cost_estimate_tokens=args.get("cost_estimate_tokens"),
+        risk_tolerance=str(args.get("risk_tolerance") or ""),
+        impact=str(args.get("impact") or ""),
+        related_issue=args.get("related_issue"),
+        related_pr=args.get("related_pr"),
+        shadow_id=args.get("shadow_id"),
+        checkpoint_id=args.get("checkpoint_id"),
+        artifact_links=list(args.get("artifact_links") or []),
+        actor=str(args.get("actor") or "agent"),
+        session=str(args.get("session") or ""),
+        metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
+    )
+    return payload
+
+def _mcp_hdl_plate_ledger_record_spend(args: dict, root: Any) -> object:
+    payload = record_spend_interval(
+        cloud_agent_id=args.get("cloud_agent_id"),
+        parent_run_id=args.get("parent_run_id"),
+        run_id=args.get("run_id"),
+        lifecycle_task_type=str(args.get("lifecycle_task_type") or ""),
+        model=args.get("model"),
+        tier=args.get("tier"),
+        effort=args.get("effort"),
+        hardware=args.get("hardware"),
+        route_clarity=args.get("route_clarity"),
+        input_tokens=args.get("input_tokens"),
+        output_tokens=args.get("output_tokens"),
+        cached_read_tokens=args.get("cached_read_tokens"),
+        cache_write_tokens=args.get("cache_write_tokens"),
+        tool_output_tokens=args.get("tool_output_tokens"),
+        turns=args.get("turns"),
+        handoff_packet_size=args.get("handoff_packet_size"),
+        handoff_packet_unit=args.get("handoff_packet_unit"),
+        rediscovery_count=args.get("rediscovery_count"),
+        outcome_accepted=args.get("outcome_accepted"),
+        cost_usd=args.get("cost_usd"),
+        jev_score=args.get("jev_score"),
+        jev_suggested_tier=args.get("jev_suggested_tier"),
+        jev_model=args.get("jev_model"),
+        jev_route_clarity=args.get("jev_route_clarity"),
+        related_issue=args.get("related_issue"),
+        related_pr=args.get("related_pr"),
+        session=str(args.get("session") or ""),
+        metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
+    )
+    return payload
+
+def _mcp_hdl_plate_ledger_record_jev(args: dict, root: Any) -> object:
+    payload = record_jev_score(
+        jev_score=float(args["jev_score"]),
+        run_id=args.get("run_id"),
+        cloud_agent_id=args.get("cloud_agent_id"),
+        lifecycle_task_type=str(args.get("lifecycle_task_type") or ""),
+        jev_suggested_tier=args.get("jev_suggested_tier"),
+        jev_model=args.get("jev_model"),
+        jev_route_clarity=args.get("jev_route_clarity"),
+        tier=args.get("tier"),
+        model=args.get("model"),
+        route_clarity=args.get("route_clarity"),
+        hardware=args.get("hardware"),
+        effort=args.get("effort"),
+        outcome_accepted=args.get("outcome_accepted"),
+        related_issue=args.get("related_issue"),
+        related_pr=args.get("related_pr"),
+        session=str(args.get("session") or ""),
+        metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
+    )
+    return payload
+
+def _mcp_hdl_plate_ledger_list(args: dict, root: Any) -> object:
+    payload = {
+        "decisions": list_decisions(
+            action_kind=args.get("action_kind"),
+            decision=args.get("decision"),
+            related_issue=args.get("related_issue"),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_ledger_query(args: dict, root: Any) -> object:
+    payload = {
+        "decisions": query_decisions(
+            str(args.get("query") or ""),
+            limit=int(args.get("limit") or 50),
+        )
+    }
+    return payload
+
+def _mcp_hdl_plate_ledger_get(args: dict, root: Any) -> object:
+    payload = get_decision(str(args.get("decision_id") or args.get("id") or "")) or {
+        "error": "not found"
+    }
+    return payload
+
+def _mcp_hdl_plate_ledger_summary(args: dict, root: Any) -> object:
+    payload = ledger_summary(limit=int(args.get("limit") or 20))
+    return payload
+
+def _mcp_hdl_plate_autonomy_run_cycle(args: dict, root: Any) -> object:
+    max_steps = args.get("max_steps")
+    if max_steps is not None:
+        try:
+            max_steps = int(max_steps)
+        except (ValueError, TypeError):
+            max_steps = None
+    payload = run_autonomy_cycle(
+        repo=args.get("repo"),
+        dry_run=bool(args.get("dry_run", False)),
+        max_steps=max_steps,
+    )
+    return payload
+
+def _mcp_hdl_plate_autonomy_list_procedures(args: dict, root: Any) -> object:
+    from .autonomy import AutonomyEngine
+    engine = AutonomyEngine(args.get("repo"))
+    filtered = [
+        p for p in engine.procedures
+        if p.enabled and engine._risk_rank(p.risk_level) <= engine._risk_rank(engine.risk_tolerance)
+    ]
+    payload = {"procedures": [asdict(p) for p in filtered]}
+    return payload
+
+def _mcp_hdl_plate_autonomy_run_procedure(args: dict, root: Any) -> object:
+    from .autonomy import AutonomyEngine
+    engine = AutonomyEngine(args.get("repo"))
+    payload = engine.run_procedure(
+        proc_id=args.get("proc_id"),
+        dry_run=bool(args.get("dry_run", False)),
+        shadow_ack=args.get("shadow_ack"),
+        approved=bool(args.get("approved", False)),
+        checkpoint_id=args.get("checkpoint_id"),
+    )
+    return payload
+
+def _mcp_hdl_plate_autonomy_simulate(args: dict, root: Any) -> object:
+    from .autonomy import simulate_autonomy_action
+    scope = args.get("scope") or {}
+    if isinstance(scope, str):
+        try:
+            scope = json.loads(scope)
+        except Exception:
+            scope = {"raw": scope}
+    payload = simulate_autonomy_action(
+        action_kind=str(args.get("action_kind") or args.get("action") or "unknown"),
+        repo=args.get("repo"),
+        scope=scope if isinstance(scope, dict) else {},
+    )
+    return payload
+
+def _mcp_hdl_plate_checkpoint_create(args: dict, root: Any) -> object:
+    from .autonomy import AutonomyEngine
+    eng = AutonomyEngine(args.get("repo"))
+    scope = args.get("scope") or {}
+    if isinstance(scope, str):
+        try:
+            scope = json.loads(scope)
+        except Exception:
+            scope = {"raw": scope}
+    payload = create_checkpoint(
+        title=str(args.get("title") or "Human checkpoint"),
+        reason=str(args.get("reason") or "Human judgment required"),
+        impact=str(args.get("impact") or "medium"),
+        action_kind=str(args.get("action_kind") or ""),
+        scope=scope if isinstance(scope, dict) else {},
+        shadow_id=args.get("shadow_id"),
+        related_issue=args.get("related_issue"),
+        related_pr=args.get("related_pr"),
+        created_by=str(args.get("created_by") or "agent"),
+        risk_tolerance=eng.risk_tolerance,
+        autonomy_enabled=eng.enabled,
+    )
+    return payload
+
+def _mcp_hdl_plate_checkpoint_decide(args: dict, root: Any) -> object:
+    payload = decide_checkpoint(
+        checkpoint_id=str(args.get("checkpoint_id") or args.get("id") or ""),
+        decision=str(args.get("decision") or ""),
+        decided_by=str(args.get("decided_by") or "human"),
+        note=str(args.get("note") or ""),
+    )
+    return payload
+
+def _mcp_hdl_plate_checkpoint_list(args: dict, root: Any) -> object:
+    st = args.get("status") or "pending"
+    if args.get("open_only"):
+        payload = {"checkpoints": list_open_checkpoints(limit=int(args.get("limit") or 50))}
+    else:
+        payload = {
+            "checkpoints": list_checkpoints(
+                status=None if st == "all" else st,
+                limit=int(args.get("limit") or 50),
+            )
+        }
+    return payload
+
+def _mcp_hdl_plate_checkpoint_get(args: dict, root: Any) -> object:
+    payload = get_checkpoint(str(args.get("checkpoint_id") or args.get("id") or "")) or {
+        "error": "not found"
+    }
+    return payload
+
+def _mcp_hdl_plate_migrate_plan(args: dict, root: Any) -> object:
+    plan = generate_migration_plan()
+    if hasattr(plan, "to_dict"):
+        payload = plan.to_dict()
+    elif hasattr(plan, "__dict__"):
+        payload = plan.__dict__
+    else:
+        payload = {"plan": str(plan)}
+    return payload
+
+def _mcp_hdl_plate_migrate_apply(args: dict, root: Any) -> object:
+    dry = bool(args.get("dry_run", True))
+    plan = generate_migration_plan()
+    results = apply_migration_plan(plan, dry_run=dry)
+    payload = {"results": results, "dry_run": dry}
+    return payload
+
+def _mcp_hdl_plate_migrate_docs_namespace(args: dict, root: Any) -> object:
+    apply_mode = bool(args.get("apply", False))
+    target_dir = resolve_mcp_path(args, "target_dir", ".", root)
+    plan = migrate_docs_namespace(target_dir=target_dir, apply=apply_mode)
+    payload = plan.to_dict()
+    return payload
+
+def _mcp_hdl_plate_import_payload(args: dict, root: Any) -> object:
+    from .import_payload import import_payload
+
+    apply_mode = bool(args.get("apply", False))
+    dry = bool(args.get("dry_run", True))
+    if apply_mode:
+        dry = False
+    ns = args.get("namespace_scripts")
+    if ns is not None:
+        ns = bool(ns)
+    nd = args.get("namespace_docs")
+    if nd is not None:
+        nd = bool(nd)
+    target_dir = resolve_mcp_path(args, "target_dir", ".", root)
+    escape_hatch = args.get("escape_hatch_dir") or args.get("escape_hatch")
+    payload = import_payload(
+        target_dir=target_dir,
+        strategy=str(args.get("strategy") or "safe"),
+        template_repo=args.get("template_repo"),
+        dry_run=dry,
+        apply=apply_mode,
+        namespace_scripts=ns,
+        namespace_docs=nd,
+        escape_hatch_dir=escape_hatch,
+        escape_hatch_on_conflict=bool(args.get("escape_hatch_on_conflict", False)),
+        platform=args.get("platform"),
+    )
+    return payload
+
+def _mcp_hdl_plate_payload_list(args: dict, root: Any) -> object:
+    from .payload_surface import list_payload_files
+
+    payload = list_payload_files(
+        args.get("template_repo"),
+        include_excluded=bool(args.get("include_excluded", False)),
+    )
+    return payload
+
+def _mcp_hdl_plate_payload_root(args: dict, root: Any) -> object:
+    from .payload_surface import resolve_payload_root
+
+    payload = resolve_payload_root(args.get("template_repo"))
+    return payload
+
+def _mcp_hdl_plate_payload_manifest(args: dict, root: Any) -> object:
+    from .payload_surface import show_manifest
+
+    payload = show_manifest()
+    return payload
+
+def _mcp_hdl_plate_payload_classify(args: dict, root: Any) -> object:
+    from .payload_surface import classify_path
+
+    payload = classify_path(
+        resolve_mcp_path(args, "path", ".", root) if args.get("path") else "",
+        args.get("template_repo"),
+    )
+    return payload
+
+def _mcp_hdl_plate_spec_audit(args: dict, root: Any) -> object:
+    from .spec_audit import audit_spec
+
+    repo_root = resolve_mcp_path(args, "repo_root", ".", root)
+    releases_dir = (
+        resolve_mcp_path(args, "releases_dir", ".agentic/releases", root)
+        if args.get("releases_dir") is not None
+        else None
+    )
+    spec_path = args.get("spec_path") or args.get("spec")
+    spec_path = (
+        resolve_mcp_path(args, "spec_path", "SPEC.md", root) if spec_path else None
+    )
+    payload = audit_spec(
+        repo_root,
+        releases_dir=releases_dir,
+        spec_path=spec_path,
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_spec_audit_followups(args: dict, root: Any) -> object:
+    from .spec_audit import apply_audit_followups, audit_spec
+
+    repo_root = resolve_mcp_path(args, "repo_root", ".", root)
+    releases_dir = (
+        resolve_mcp_path(args, "releases_dir", ".agentic/releases", root)
+        if args.get("releases_dir") is not None
+        else None
+    )
+    spec_path = args.get("spec_path") or args.get("spec")
+    spec_path = (
+        resolve_mcp_path(args, "spec_path", "SPEC.md", root) if spec_path else None
+    )
+    report = audit_spec(
+        repo_root,
+        releases_dir=releases_dir,
+        spec_path=spec_path,
+    )
+    payload = apply_audit_followups(
+        report,
+        repo=args.get("repo"),
+        apply=bool(args.get("apply", False)),
+        max_issues=int(args.get("max_issues") or 10),
+    )
+    payload["audit_counts"] = report.counts
+    return payload
+
+def _mcp_hdl_plate_perform_test_coverage_audit(args: dict, root: Any) -> object:
+    from .mcp.audit_tools import PerformTestCoverageAuditTool
+    payload = PerformTestCoverageAuditTool.execute(
+        repo=args.get("repo"), dry_run=args.get("dry_run", True)
+    )
+    return payload
+
+def _mcp_hdl_plate_perform_information_audit(args: dict, root: Any) -> object:
+    from .mcp.audit_tools import PerformInformationAuditTool
+
+    payload = PerformInformationAuditTool.execute(
+        repo=args.get("repo"),
+        scope=str(args.get("scope") or "repo"),
+        agent_type=str(args.get("agent_type") or "general"),
+        max_questions=int(args.get("max_questions") or 5),
+        dry_run=bool(args.get("dry_run", False)),
+        include_defaults=bool(args.get("include_defaults", True)),
+    )
+    return payload
+
+def _mcp_hdl_plate_list_discussions(args: dict, root: Any) -> object:
+    from .discussions import list_discussions
+
+    payload = [
+        d.to_dict()
+        for d in list_discussions(
+            repo=args.get("repo"),
+            category=args.get("category"),
+            state=args.get("state"),
+            per_page=int(args.get("per_page") or 30),
+            page=int(args.get("page") or 1),
+        )
+    ]
+    return payload
+
+def _mcp_hdl_plate_get_discussion(args: dict, root: Any) -> object:
+    from .discussions import get_discussion
+
+    num = args.get("number")
+    if num is None:
+        raise ValueError("number is required")
+    payload = get_discussion(repo=args.get("repo"), number=int(num)).to_dict()
+    return payload
+
+def _mcp_hdl_plate_list_discussion_comments(args: dict, root: Any) -> object:
+    from .discussions import list_discussion_comments
+
+    num = args.get("number")
+    if num is None:
+        raise ValueError("number is required")
+    payload = [
+        c.to_dict()
+        for c in list_discussion_comments(
+            repo=args.get("repo"),
+            number=int(num),
+            per_page=int(args.get("per_page") or 30),
+        )
+    ]
+    return payload
+
+def _mcp_hdl_plate_add_discussion_comment(args: dict, root: Any) -> object:
+    from .discussions import add_discussion_comment
+
+    num = args.get("number")
+    body = args.get("body")
+    if num is None or not body:
+        raise ValueError("number and body are required")
+    payload = add_discussion_comment(
+        repo=args.get("repo"), number=int(num), body=str(body)
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_create_discussion(args: dict, root: Any) -> object:
+    from .discussions import create_discussion
+
+    title = args.get("title")
+    body = args.get("body")
+    if not title or not body:
+        raise ValueError("title and body are required")
+    payload = create_discussion(
+        repo=args.get("repo"),
+        category_slug=args.get("category_slug"),
+        category_id=args.get("category_id"),
+        title=str(title),
+        body=str(body),
+    ).to_dict()
+    return payload
+
+def _mcp_hdl_plate_list_discussion_categories(args: dict, root: Any) -> object:
+    from .discussions import list_discussion_categories
+
+    payload = list_discussion_categories(repo=args.get("repo"))
+    return payload
+
+def _mcp_hdl_plate_list_open_ideas(args: dict, root: Any) -> object:
+    from .discussions import list_open_ideas
+
+    payload = [d.to_dict() for d in list_open_ideas(repo=args.get("repo"))]
+    return payload
+
+MCP_TOOL_HANDLERS: dict[str, Callable[[dict, Any], object]] = {
+    "plate_health": _mcp_hdl_plate_health,
+    "plate_epic_status": _mcp_hdl_plate_epic_status,
+    "init_playwright": _mcp_hdl_init_playwright,
+    "record_e2e_gif": _mcp_hdl_record_e2e_gif,
+    "validate_e2e_tests": _mcp_hdl_validate_e2e_tests,
+    "plate_agents": _mcp_hdl_plate_agents,
+    "plate_agent": _mcp_hdl_plate_agent,
+    "plate_skills": _mcp_hdl_plate_skills,
+    "plate_skill": _mcp_hdl_plate_skill,
+    "plate_contexts": _mcp_hdl_plate_contexts,
+    "plate_context": _mcp_hdl_plate_context,
+    "plate_delegate_to_agent": _mcp_hdl_plate_delegate_to_agent,
+    "plate_features": _mcp_hdl_plate_features,
+    "plate_bootstrap": _mcp_hdl_plate_bootstrap,
+    "plate_adoption_status": _mcp_hdl_plate_adoption_status,
+    "plate_adoption_first_qa_plan": _mcp_hdl_plate_adoption_first_qa_plan,
+    "plate_adoption_session": _mcp_hdl_plate_adoption_session,
+    "plate_self_migrate_plan": _mcp_hdl_plate_self_migrate_plan,
+    "plate_self_migrate_merge_markers": _mcp_hdl_plate_self_migrate_merge_markers,
+    "plate_self_migrate_pr_plan": _mcp_hdl_plate_self_migrate_pr_plan,
+    "plate_self_migrate_verify": _mcp_hdl_plate_self_migrate_verify,
+    "plate_config_get": _mcp_hdl_plate_config_get,
+    "plate_config_validate": _mcp_hdl_plate_config_validate,
+    "plate_config_init": _mcp_hdl_plate_config_init,
+    "plate_config_upgrade": _mcp_hdl_plate_config_upgrade,
+    "plate_hooks_install": _mcp_hdl_plate_hooks_install,
+    "plate_hooks_status": _mcp_hdl_plate_hooks_status,
+    "plate_plan_epic": _mcp_hdl_plate_plan_epic,
+    "plate_planning_start": _mcp_hdl_plate_planning_start,
+    "plate_planning_answer": _mcp_hdl_plate_planning_answer,
+    "plate_planning_build": _mcp_hdl_plate_planning_build,
+    "plate_planning_script": _mcp_hdl_plate_planning_script,
+    "plate_planning_decide": _mcp_hdl_plate_planning_decide,
+    "plate_planning_resubmit": _mcp_hdl_plate_planning_resubmit,
+    "plate_planning_history": _mcp_hdl_plate_planning_history,
+    "plate_planning_list_pending": _mcp_hdl_plate_planning_list_pending,
+    "plate_er_planning_start": _mcp_hdl_plate_er_planning_start,
+    "plate_er_planning_answer": _mcp_hdl_plate_er_planning_answer,
+    "plate_er_planning_build": _mcp_hdl_plate_er_planning_build,
+    "plate_er_planning_script": _mcp_hdl_plate_er_planning_script,
+    "plate_er_planning_decide": _mcp_hdl_plate_er_planning_decide,
+    "plate_er_planning_resubmit": _mcp_hdl_plate_er_planning_resubmit,
+    "plate_er_planning_list_pending": _mcp_hdl_plate_er_planning_list_pending,
+    "plate_artifact_propose": _mcp_hdl_plate_artifact_propose,
+    "plate_artifact_decide": _mcp_hdl_plate_artifact_decide,
+    "plate_artifact_resubmit": _mcp_hdl_plate_artifact_resubmit,
+    "plate_artifact_history": _mcp_hdl_plate_artifact_history,
+    "plate_artifact_list": _mcp_hdl_plate_artifact_list,
+    "plate_artifact_get": _mcp_hdl_plate_artifact_get,
+    "plate_pr_babysit": _mcp_hdl_plate_pr_babysit,
+    "plate_get_pr_merge_gates": _mcp_hdl_plate_get_pr_merge_gates,
+    "plate_pr_verify": _mcp_hdl_plate_pr_verify,
+    "plate_resolve_review_thread": _mcp_hdl_plate_resolve_review_thread,
+    "plate_get_actionable_review_threads": _mcp_hdl_plate_get_actionable_review_threads,
+    "plate_pr_packet": _mcp_hdl_plate_pr_packet,
+    "plate_get_unresolved_review_threads": _mcp_hdl_plate_get_unresolved_review_threads,
+    "plate_what_next": _mcp_hdl_plate_what_next,
+    "plate_feed": _mcp_hdl_plate_feed,
+    "plate_contemplate": _mcp_hdl_plate_contemplate,
+    "plate_list_questions": _mcp_hdl_plate_list_questions,
+    "plate_get_question": _mcp_hdl_plate_get_question,
+    "plate_record_answer": _mcp_hdl_plate_record_answer,
+    "plate_get_answers": _mcp_hdl_plate_get_answers,
+    "plate_backfill_answers": _mcp_hdl_plate_backfill_answers,
+    "plate_synthesize_priorities": _mcp_hdl_plate_synthesize_priorities,
+    "plate_create_blocking_question": _mcp_hdl_plate_create_blocking_question,
+    "plate_release_status": _mcp_hdl_plate_release_status,
+    "plate_release_repair": _mcp_hdl_plate_release_repair,
+    "plate_release_target_epic": _mcp_hdl_plate_release_target_epic,
+    "plate_release_cleanup_branches": _mcp_hdl_plate_release_cleanup_branches,
+    "plate_release_notes": _mcp_hdl_plate_release_notes,
+    "plate_costs": _mcp_hdl_plate_costs,
+    "plate_autonomy_status": _mcp_hdl_plate_autonomy_status,
+    "plate_autonomy_budget": _mcp_hdl_plate_autonomy_budget,
+    "plate_pm_status": _mcp_hdl_plate_pm_status,
+    "plate_pm_team": _mcp_hdl_plate_pm_team,
+    "plate_pm_assign": _mcp_hdl_plate_pm_assign,
+    "plate_pm_run_cycle": _mcp_hdl_plate_pm_run_cycle,
+    "plate_pm_run_loop": _mcp_hdl_plate_pm_run_loop,
+    "plate_pm_queue": _mcp_hdl_plate_pm_queue,
+    "plate_pm_complete": _mcp_hdl_plate_pm_complete,
+    "plate_pm_tick_loops": _mcp_hdl_plate_pm_tick_loops,
+    "plate_fleet_status": _mcp_hdl_plate_fleet_status,
+    "plate_fleet_roles": _mcp_hdl_plate_fleet_roles,
+    "plate_fleet_handoff": _mcp_hdl_plate_fleet_handoff,
+    "plate_fleet_update": _mcp_hdl_plate_fleet_update,
+    "plate_fleet_complete": _mcp_hdl_plate_fleet_complete,
+    "plate_fleet_list": _mcp_hdl_plate_fleet_list,
+    "plate_fleet_allocate": _mcp_hdl_plate_fleet_allocate,
+    "plate_fleet_plan": _mcp_hdl_plate_fleet_plan,
+    "plate_fleet_feed": _mcp_hdl_plate_fleet_feed,
+    "plate_monitor_discussions": _mcp_hdl_plate_monitor_discussions,
+    "plate_monitor_market": _mcp_hdl_plate_monitor_market,
+    "plate_monitor_list": _mcp_hdl_plate_monitor_list,
+    "plate_monitor_decide": _mcp_hdl_plate_monitor_decide,
+    "plate_monitor_feed": _mcp_hdl_plate_monitor_feed,
+    "plate_stub_author": _mcp_hdl_plate_stub_author,
+    "plate_stub_refine": _mcp_hdl_plate_stub_refine,
+    "plate_stub_create": _mcp_hdl_plate_stub_create,
+    "plate_stub_list": _mcp_hdl_plate_stub_list,
+    "plate_stub_get": _mcp_hdl_plate_stub_get,
+    "plate_stub_author_create": _mcp_hdl_plate_stub_author_create,
+    "plate_stub_feed": _mcp_hdl_plate_stub_feed,
+    "plate_bug_loop_start": _mcp_hdl_plate_bug_loop_start,
+    "plate_bug_loop_advance": _mcp_hdl_plate_bug_loop_advance,
+    "plate_bug_loop_tick": _mcp_hdl_plate_bug_loop_tick,
+    "plate_bug_loop_list": _mcp_hdl_plate_bug_loop_list,
+    "plate_bug_loop_get": _mcp_hdl_plate_bug_loop_get,
+    "plate_bug_loop_cancel": _mcp_hdl_plate_bug_loop_cancel,
+    "plate_bug_loop_update": _mcp_hdl_plate_bug_loop_update,
+    "plate_bug_loop_feed": _mcp_hdl_plate_bug_loop_feed,
+    "plate_feature_loop_estimate": _mcp_hdl_plate_feature_loop_estimate,
+    "plate_feature_loop_start": _mcp_hdl_plate_feature_loop_start,
+    "plate_feature_loop_advance": _mcp_hdl_plate_feature_loop_advance,
+    "plate_feature_loop_tick": _mcp_hdl_plate_feature_loop_tick,
+    "plate_feature_loop_list": _mcp_hdl_plate_feature_loop_list,
+    "plate_feature_loop_get": _mcp_hdl_plate_feature_loop_get,
+    "plate_feature_loop_cancel": _mcp_hdl_plate_feature_loop_cancel,
+    "plate_feature_loop_update": _mcp_hdl_plate_feature_loop_update,
+    "plate_feature_loop_feed": _mcp_hdl_plate_feature_loop_feed,
+    "plate_design_contract_propose": _mcp_hdl_plate_design_contract_propose,
+    "plate_design_contract_list": _mcp_hdl_plate_design_contract_list,
+    "plate_design_contract_get": _mcp_hdl_plate_design_contract_get,
+    "plate_design_contract_decide": _mcp_hdl_plate_design_contract_decide,
+    "plate_design_contract_update": _mcp_hdl_plate_design_contract_update,
+    "plate_design_contract_validate": _mcp_hdl_plate_design_contract_validate,
+    "plate_design_contract_scaffold": _mcp_hdl_plate_design_contract_scaffold,
+    "plate_design_contract_feed": _mcp_hdl_plate_design_contract_feed,
+    "plate_release_media_manifest": _mcp_hdl_plate_release_media_manifest,
+    "plate_release_media_render": _mcp_hdl_plate_release_media_render,
+    "plate_release_media_feed": _mcp_hdl_plate_release_media_feed,
+    "plate_release_media_validate_paths": _mcp_hdl_plate_release_media_validate_paths,
+    "plate_release_media_decide": _mcp_hdl_plate_release_media_decide,
+    "plate_hybrid_list_kinds": _mcp_hdl_plate_hybrid_list_kinds,
+    "plate_hybrid_list_artifacts": _mcp_hdl_plate_hybrid_list_artifacts,
+    "plate_hybrid_list_validation": _mcp_hdl_plate_hybrid_list_validation,
+    "plate_hybrid_detect": _mcp_hdl_plate_hybrid_detect,
+    "plate_hybrid_set_kind": _mcp_hdl_plate_hybrid_set_kind,
+    "plate_hybrid_profile": _mcp_hdl_plate_hybrid_profile,
+    "plate_hybrid_contract": _mcp_hdl_plate_hybrid_contract,
+    "plate_hybrid_planning_template": _mcp_hdl_plate_hybrid_planning_template,
+    "plate_hybrid_validation_plan": _mcp_hdl_plate_hybrid_validation_plan,
+    "plate_hybrid_feed": _mcp_hdl_plate_hybrid_feed,
+    "plate_packaging_build": _mcp_hdl_plate_packaging_build,
+    "plate_packaging_list": _mcp_hdl_plate_packaging_list,
+    "plate_packaging_get": _mcp_hdl_plate_packaging_get,
+    "plate_packaging_render": _mcp_hdl_plate_packaging_render,
+    "plate_packaging_decide": _mcp_hdl_plate_packaging_decide,
+    "plate_packaging_feed": _mcp_hdl_plate_packaging_feed,
+    "plate_packaging_plan": _mcp_hdl_plate_packaging_plan,
+    "plate_feature_media_estimate_cost": _mcp_hdl_plate_feature_media_estimate_cost,
+    "plate_feature_media_plan": _mcp_hdl_plate_feature_media_plan,
+    "plate_feature_media_register": _mcp_hdl_plate_feature_media_register,
+    "plate_feature_media_list": _mcp_hdl_plate_feature_media_list,
+    "plate_feature_media_get": _mcp_hdl_plate_feature_media_get,
+    "plate_feature_media_decide": _mcp_hdl_plate_feature_media_decide,
+    "plate_feature_media_skip": _mcp_hdl_plate_feature_media_skip,
+    "plate_feature_media_attach_fragment": _mcp_hdl_plate_feature_media_attach_fragment,
+    "plate_feature_media_feed": _mcp_hdl_plate_feature_media_feed,
+    "plate_scheduled_ops_list": _mcp_hdl_plate_scheduled_ops_list,
+    "plate_scheduled_ops_status": _mcp_hdl_plate_scheduled_ops_status,
+    "plate_scheduled_op_plan": _mcp_hdl_plate_scheduled_op_plan,
+    "plate_scheduled_op_run": _mcp_hdl_plate_scheduled_op_run,
+    "plate_scheduled_op_runs": _mcp_hdl_plate_scheduled_op_runs,
+    "plate_scheduled_op_complete": _mcp_hdl_plate_scheduled_op_complete,
+    "plate_scheduled_ops_feed": _mcp_hdl_plate_scheduled_ops_feed,
+    "plate_task_create": _mcp_hdl_plate_task_create,
+    "plate_task_close": _mcp_hdl_plate_task_close,
+    "plate_task_detect": _mcp_hdl_plate_task_detect,
+    "plate_collab_check": _mcp_hdl_plate_collab_check,
+    "plate_collab_issue_status": _mcp_hdl_plate_collab_issue_status,
+    "plate_collab_ownership_claim": _mcp_hdl_plate_collab_ownership_claim,
+    "plate_collab_ownership_release": _mcp_hdl_plate_collab_ownership_release,
+    "plate_collab_ownership_list": _mcp_hdl_plate_collab_ownership_list,
+    "plate_collab_etiquette": _mcp_hdl_plate_collab_etiquette,
+    "plate_collab_concurrent": _mcp_hdl_plate_collab_concurrent,
+    "plate_collab_ownership_feed": _mcp_hdl_plate_collab_ownership_feed,
+    "plate_ledger_record": _mcp_hdl_plate_ledger_record,
+    "plate_ledger_record_spend": _mcp_hdl_plate_ledger_record_spend,
+    "plate_ledger_record_jev": _mcp_hdl_plate_ledger_record_jev,
+    "plate_ledger_list": _mcp_hdl_plate_ledger_list,
+    "plate_ledger_query": _mcp_hdl_plate_ledger_query,
+    "plate_ledger_get": _mcp_hdl_plate_ledger_get,
+    "plate_ledger_summary": _mcp_hdl_plate_ledger_summary,
+    "plate_autonomy_run_cycle": _mcp_hdl_plate_autonomy_run_cycle,
+    "plate_autonomy_list_procedures": _mcp_hdl_plate_autonomy_list_procedures,
+    "plate_autonomy_run_procedure": _mcp_hdl_plate_autonomy_run_procedure,
+    "plate_autonomy_simulate": _mcp_hdl_plate_autonomy_simulate,
+    "plate_checkpoint_create": _mcp_hdl_plate_checkpoint_create,
+    "plate_checkpoint_decide": _mcp_hdl_plate_checkpoint_decide,
+    "plate_checkpoint_list": _mcp_hdl_plate_checkpoint_list,
+    "plate_checkpoint_get": _mcp_hdl_plate_checkpoint_get,
+    "plate_migrate_plan": _mcp_hdl_plate_migrate_plan,
+    "plate_migrate_apply": _mcp_hdl_plate_migrate_apply,
+    "plate_migrate_docs_namespace": _mcp_hdl_plate_migrate_docs_namespace,
+    "plate_import_payload": _mcp_hdl_plate_import_payload,
+    "plate_payload_list": _mcp_hdl_plate_payload_list,
+    "plate_payload_root": _mcp_hdl_plate_payload_root,
+    "plate_payload_manifest": _mcp_hdl_plate_payload_manifest,
+    "plate_payload_classify": _mcp_hdl_plate_payload_classify,
+    "plate_spec_audit": _mcp_hdl_plate_spec_audit,
+    "plate_spec_audit_followups": _mcp_hdl_plate_spec_audit_followups,
+    "plate_perform_test_coverage_audit": _mcp_hdl_plate_perform_test_coverage_audit,
+    "plate_perform_information_audit": _mcp_hdl_plate_perform_information_audit,
+    "plate_list_discussions": _mcp_hdl_plate_list_discussions,
+    "plate_get_discussion": _mcp_hdl_plate_get_discussion,
+    "plate_list_discussion_comments": _mcp_hdl_plate_list_discussion_comments,
+    "plate_add_discussion_comment": _mcp_hdl_plate_add_discussion_comment,
+    "plate_create_discussion": _mcp_hdl_plate_create_discussion,
+    "plate_list_discussion_categories": _mcp_hdl_plate_list_discussion_categories,
+    "plate_list_open_ideas": _mcp_hdl_plate_list_open_ideas,
+}
+
+
 def _execute_mcp_tool(name: str | None, args: dict) -> object:
     root = session_repo_root()
     if name:
         assert_tool_allowed(str(name))
         args = confine_tool_arguments(str(name), dict(args), root)
-    if name == "plate_health":
-        report = get_health(
-        args.get("repo"),
-        repo_root=str(resolve_mcp_path(args, "repo_root", ".", root)),
-        include_spec_audit=not bool(args.get("no_spec_audit", False)),
-        )
-        payload = report.to_dict()
-    elif name == "plate_epic_status":
-        report = get_epic_status(args.get("repo"))
-        payload = report.to_dict()
-    elif name == "init_playwright":
-        payload = InitPlaywrightTool.execute(
-            str(resolve_mcp_path(args, "repo_path", ".", root)),
-            args.get("template_repo"),
-            bool(args.get("force", False)),
-            repo_root=root,
-            confine_template=args.get("template_repo") is not None,
-        )
-    elif name == "record_e2e_gif":
-        test_name = args.get("test_name")
-        if not test_name:
-            raise ValueError("test_name is required")
-        allowed_quality = {"low", "medium", "high"}
-        quality = str(args.get("quality", "medium"))
-        if quality not in allowed_quality:
-            raise ValueError(f"quality must be one of {sorted(allowed_quality)}")
-        payload = RecordE2eGifTool.execute(
-            str(resolve_mcp_path(args, "repo_path", ".", root)),
-            test_name,
-            quality,
-            start=args.get("start"),
-            duration=args.get("duration"),
-            repo_root=root,
-        )
-    elif name == "validate_e2e_tests":
-        payload = ValidateE2eTestsTool.execute(
-            str(resolve_mcp_path(args, "repo_path", ".", root)),
-            repo_root=root,
-        )
-    elif name == "plate_agents":
-        payload = {"agents": [agent.to_dict() for agent in list_agents()]}
-    elif name == "plate_agent":
-        payload = get_agent(args.get("agent_id")).to_dict()
-    elif name == "plate_skills":
-        payload = {"skills": [skill.to_dict() for skill in list_skills()]}
-    elif name == "plate_skill":
-        payload = get_skill(args.get("skill_id")).to_dict()
-    elif name == "plate_contexts":
-        payload = {"contexts": [route.to_dict() for route in list_context_routes()]}
-    elif name == "plate_context":
-        payload = get_context_route(args.get("context_id")).to_dict()
-    elif name == "plate_delegate_to_agent":
-        agent_id = args.get("agent_id")
-        task_description = args.get("task_description")
-        if not agent_id:
-            raise ValueError("agent_id is required")
-        if not task_description:
-            raise ValueError("task_description is required")
-        payload = delegate_to_agent(agent_id, task_description).to_dict()
-    elif name == "plate_features":
-        payload = get_features(args.get("repo")).to_dict()
-    elif name == "plate_bootstrap":
-        adopt_arg = args.get("adopt")
-        if adopt_arg is None and args.get("existing_repo") is not None:
-            adopt_arg = args.get("existing_repo")
-        adopt_flag: bool | None
-        if adopt_arg is True or adopt_arg is False:
-            adopt_flag = bool(adopt_arg)
-        else:
-            adopt_flag = None
-        payload = run_bootstrap(
-            args.get("repo"),
-            apply_mode=bool(args.get("apply", False)),
-            adopt=adopt_flag,
-            local_root=args.get("local_root"),
-            platform=args.get("platform"),
-        ).to_dict()
-    elif name == "plate_adoption_status":
-        from .adoption import assess_adoption_readiness
-
-        payload = assess_adoption_readiness(
-            resolve_mcp_path(args, "repo_root", ".", root),
-            include_optional=not bool(args.get("no_optional", False)),
-        )
-    elif name == "plate_adoption_first_qa_plan":
-        from .adoption import plan_first_qa_seed
-
-        payload = plan_first_qa_seed(
-            resolve_mcp_path(args, "repo_root", ".", root),
-            apply=bool(args.get("apply", False)),
-            runner=None,
-        )
-    elif name == "plate_adoption_session":
-        from .adoption import (
-            adoption_session_status,
-            complete_adoption_session,
-            start_adoption_session,
-        )
-
-        action = str(args.get("action") or "status").lower()
-        root = resolve_mcp_path(args, "repo_root", ".", root)
-        if action == "start":
-            payload = start_adoption_session(root, force=bool(args.get("force", False)))
-        elif action == "complete":
-            payload = complete_adoption_session(
-                repo_root,
-                require_core_ready=bool(args.get("require_core_ready", False)),
-            )
-        else:
-            payload = adoption_session_status(repo_root)
-    elif name == "plate_self_migrate_plan":
-        from .self_migrate import plan_self_migrate
-
-        payload = plan_self_migrate(
-            resolve_mcp_path(args, "repo_root", ".", root),
-            target_version=args.get("target_version"),
-            include_payload=not bool(args.get("no_payload", False)),
-            resolve_upstream=bool(args.get("resolve_upstream", False)),
-            allow_network=bool(args.get("allow_network", False)),
-        )
-    elif name == "plate_self_migrate_merge_markers":
-        from .self_migrate import plan_marker_merge
-
-        paths = args.get("paths")
-        if isinstance(paths, str):
-            paths = [paths]
-        payload = plan_marker_merge(
-            resolve_mcp_path(args, "repo_root", ".", root),
-            paths=paths,
-            upstream_root=(
-                args.get("upstream_root")
-                or args.get("upstream_dir")
-                or resolve_mcp_path(args, "upstream_root", ".", root)
-            ),
-            apply=bool(args.get("apply", False)),
-        )
-    elif name == "plate_self_migrate_pr_plan":
-        from .self_migrate import apply_self_migrate_pr, plan_self_migrate_pr
-
-        pr_plan = plan_self_migrate_pr(
-            resolve_mcp_path(args, "repo_root", ".", root),
-            target_version=args.get("target_version"),
-            include_payload=not bool(args.get("no_payload", False)),
-            resolve_upstream=bool(args.get("resolve_upstream", False)),
-            allow_network=bool(args.get("allow_network", False)),
-            base=args.get("base") or "release",
-            closes=args.get("closes"),
-        )
-        if bool(args.get("apply", False)):
-            payload = {
-                "plan": pr_plan,
-                "apply": apply_self_migrate_pr(
-                    pr_plan,
-                    dry_run=False,
-                    allow_high_risk=bool(args.get("allow_high_risk", False)),
-                    runner=None,
-                ),
-            }
-        else:
-            payload = pr_plan
-    elif name == "plate_self_migrate_verify":
-        from .self_migrate import verify_self_migrate
-
-        payload = verify_self_migrate(
-            resolve_mcp_path(args, "repo_root", ".", root),
-            target_version=args.get("target_version"),
-            include_payload=not bool(args.get("no_payload", False)),
-            resolve_upstream=bool(args.get("resolve_upstream", False)),
-            allow_network=bool(args.get("allow_network", False)),
-        )
-    elif name == "plate_config_get":
-        payload = get_plate_config_report(resolve_mcp_path(args, "repo_root", ".", root)).to_dict()
-    elif name == "plate_config_validate":
-        payload = get_plate_config_report(resolve_mcp_path(args, "repo_root", ".", root)).to_dict()
-    elif name == "plate_config_init":
-        payload = init_plate_config(resolve_mcp_path(args, "repo_root", ".", root), force=bool(args.get("force", False))).to_dict()
-    elif name == "plate_config_upgrade":
-        payload = apply_plate_config_upgrade(
-            resolve_mcp_path(args, "repo_root", ".", root),
-            apply=bool(args.get("apply", False)),
-        ).to_dict()
-    elif name == "plate_hooks_install":
-        from .git_hooks import install_git_hook
-
-        hook = str(args.get("hook") or "pre-push")
-        try:
-            report = install_git_hook(
-                hook,
-                resolve_mcp_path(args, "repo_root", ".", root),
-                force=bool(args.get("force", False)),
-            )
-            payload = {"ok": True, **report.to_dict()}
-        except (FileNotFoundError, RuntimeError, ValueError) as exc:
-            payload = {"ok": False, "error": str(exc)}
-    elif name == "plate_hooks_status":
-        from .git_hooks import git_hooks_status
-
-        payload = git_hooks_status(resolve_mcp_path(args, "repo_root", ".", root)).to_dict()
-    elif name == "plate_plan_epic":
-        payload = _plan_epic_stub(args).to_dict()
-    elif name == "plate_planning_start":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = start_planning_session(
-            str(args.get("kind") or "feature"),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_planning_answer":
-        session = args.get("session") or {}
-        if isinstance(session, str):
-            try:
-                session = json.loads(session)
-            except Exception:
-                session = {}
-        payload = apply_planning_answer(
-            session if isinstance(session, dict) else {},
-            str(args.get("answer") or args.get("answer_text") or ""),
-            question_id=args.get("question_id"),
-        )
-    elif name == "plate_planning_build":
-        session = args.get("session") or {}
-        if isinstance(session, str):
-            try:
-                session = json.loads(session)
-            except Exception:
-                session = {}
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = build_plan_from_session(
-            session if isinstance(session, dict) else {},
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_planning_script":
-        payload = get_planning_script(str(args.get("kind") or "feature"))
-    elif name == "plate_planning_decide":
-        payload = decide_pending_plan(
-            str(args.get("plan_id") or args.get("id") or ""),
-            str(args.get("decision") or "approve"),
-            note=str(args.get("note") or ""),
-            decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
-        )
-    elif name == "plate_planning_resubmit":
-        payload = resubmit_pending_plan(
-            str(args.get("plan_id") or args.get("id") or ""),
-            title=args.get("title"),
-            body=args.get("body"),
-            note=str(args.get("note") or ""),
-            resubmitted_by=str(args.get("resubmitted_by") or args.get("by") or "mcp"),
-        )
-    elif name == "plate_planning_history":
-        payload = {
-            "history": get_plan_history(
-                str(args.get("plan_id") or args.get("id") or ""),
-                limit=int(args.get("limit") or 20),
-            )
-        }
-    elif name == "plate_planning_list_pending":
-        if args.get("feed"):
-            payload = {"feed": planning_feed_items(limit=int(args.get("limit") or 20))}
-        elif args.get("actionable"):
-            payload = {
-                "actionable": list_actionable_plans(limit=int(args.get("limit") or 20))
-            }
-        else:
-            payload = {
-                "pending": list_pending_plans(limit=int(args.get("limit") or 20))
-            }
-    elif name == "plate_er_planning_start":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = start_er_session(
-            str(args.get("kind") or "epic"),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_er_planning_answer":
-        session = args.get("session") or {}
-        if isinstance(session, str):
-            try:
-                session = json.loads(session)
-            except Exception:
-                session = {}
-        payload = apply_er_answer(
-            session if isinstance(session, dict) else {},
-            str(args.get("answer") or args.get("answer_text") or ""),
-            question_id=args.get("question_id"),
-        )
-    elif name == "plate_er_planning_build":
-        session = args.get("session") or {}
-        if isinstance(session, str):
-            try:
-                session = json.loads(session)
-            except Exception:
-                session = {}
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = build_er_plan_from_session(
-            session if isinstance(session, dict) else {},
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_er_planning_script":
-        payload = get_er_script(str(args.get("kind") or "epic"))
-    elif name == "plate_er_planning_decide":
-        payload = decide_er_plan(
-            str(args.get("plan_id") or args.get("id") or ""),
-            str(args.get("decision") or "approve"),
-            note=str(args.get("note") or ""),
-            decided_by=str(args.get("decided_by") or args.get("by") or "mcp"),
-        )
-    elif name == "plate_er_planning_resubmit":
-        payload = resubmit_er_plan(
-            str(args.get("plan_id") or args.get("id") or ""),
-            title=args.get("title"),
-            body=args.get("body"),
-            note=str(args.get("note") or ""),
-            resubmitted_by=str(args.get("resubmitted_by") or args.get("by") or "mcp"),
-        )
-    elif name == "plate_er_planning_list_pending":
-        payload = {
-            "items": er_planning_feed_items(limit=int(args.get("limit") or 20))
-        }
-    elif name == "plate_artifact_propose":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = propose_artifact(
-            kind=str(args.get("kind") or "design"),
-            title=str(args.get("title") or "Artifact"),
-            summary=str(args.get("summary") or ""),
-            content_path=(
-                resolve_mcp_path(args, "content_path", ".", root)
-                if args.get("content_path")
-                else ""
-            ),
-            content_excerpt=str(args.get("content_excerpt") or ""),
-            related_issue=args.get("related_issue"),
-            related_epic=args.get("related_epic"),
-            originating_question=args.get("originating_question"),
-            media_links=list(args.get("media_links") or []),
-            actor=str(args.get("actor") or "agent"),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_artifact_decide":
-        payload = decide_proposal(
-            str(args.get("proposal_id") or args.get("id") or ""),
-            str(args.get("decision") or ""),
-            decided_by=str(args.get("decided_by") or "human"),
-            note=str(args.get("note") or ""),
-            open_checkpoint=bool(args.get("open_checkpoint") or False),
-        )
-    elif name == "plate_artifact_resubmit":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = resubmit_proposal(
-            str(args.get("proposal_id") or args.get("id") or ""),
-            summary=args.get("summary"),
-            content_path=args.get("content_path") or None,
-            content_excerpt=args.get("content_excerpt"),
-            media_links=list(args.get("media_links") or []) if args.get("media_links") is not None else None,
-            title=args.get("title"),
-            actor=str(args.get("actor") or "agent"),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_artifact_history":
-        payload = {
-            "history": get_proposal_history(
-                str(args.get("proposal_id") or args.get("id") or ""),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_artifact_list":
-        if args.get("authoritative"):
-            payload = {"proposals": list_authoritative(kind=args.get("kind"))}
-        elif args.get("actionable") or (args.get("status") == "actionable"):
-            payload = {
-                "proposals": list_actionable_proposals(
-                    kind=args.get("kind"),
-                    limit=int(args.get("limit") or 50),
-                )
-            }
-        else:
-            payload = {
-                "proposals": list_proposals(
-                    status=args.get("status") or "pending",
-                    kind=args.get("kind"),
-                    limit=int(args.get("limit") or 50),
-                )
-            }
-    elif name == "plate_artifact_get":
-        payload = get_proposal(str(args.get("proposal_id") or args.get("id") or "")) or {
-            "error": "not found"
-        }
-    elif name == "plate_pr_babysit":
-        pr_number = args.get("pr_number")
-        if pr_number is None:
-            raise ValueError("pr_number is required")
-        pr_number = int(pr_number)
-        if pr_number <= 0:
-            raise ValueError("pr_number must be > 0")
-        payload = babysit_pr(
-            pr_number=pr_number,
-            repo=args.get("repo"),
-            agent_logins=args.get("agents"),
-            act=bool(args.get("act", False)),
-            branch_update_strategy=args.get("branch_update_strategy"),
-            pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
-        ).to_dict()
-    elif name == "plate_get_pr_merge_gates":
-        pr_number = args.get("pr_number")
-        if pr_number is None:
-            raise ValueError("pr_number is required")
-        pr_number = int(pr_number)
-        if pr_number <= 0:
-            raise ValueError("pr_number must be > 0")
-        payload = get_pr_merge_gates(
-            pr_number=pr_number,
-            repo=args.get("repo"),
-        )
-    elif name == "plate_pr_verify":
-        pr_number = args.get("pr_number")
-        if pr_number is None:
-            raise ValueError("pr_number is required")
-        pr_number = int(pr_number)
-        if pr_number <= 0:
-            raise ValueError("pr_number must be > 0")
-        root = session_repo_root()
-        payload = verify_pr(
-            pr_number=pr_number,
-            repo=args.get("repo"),
-            run_tests=bool(args.get("run_tests", False)),
-            repo_root=str(root) if bool(args.get("run_tests", False)) else None,
-        )
-    elif name == "plate_resolve_review_thread":
-        thread_id = args.get("thread_id")
-        if not thread_id:
-            raise ValueError("thread_id is required")
-        payload = resolve_review_thread(
-            thread_id=thread_id,
-            repo=args.get("repo"),
-        )
-    elif name == "plate_get_actionable_review_threads":
-        # High-level listing helper (encapsulates GraphQL pagination, DBID, filtering).
-        # Part of review thread encapsulation for #516.
-        payload = {
-            "repo": args.get("repo"),
-            "pr_number": args.get("pr_number"),
-            "threads": get_actionable_review_threads(
-                pr_number=args.get("pr_number"),
-                repo=args.get("repo"),
-                agent_logins=args.get("agent_logins"),
-                pr_review_scope=args.get("scope") or args.get("pr_review_scope"),
-            ),
-        }
-    elif name == "plate_pr_packet":
-        pr_number = args.get("pr_number")
-        if pr_number is None:
-            raise ValueError("pr_number is required")
-        pr_number = int(pr_number)
-        if pr_number <= 0:
-            raise ValueError("pr_number must be > 0")
-        result = build_pr_packet(
-            pr_number=pr_number,
-            repo=args.get("repo"),
-            max_bytes=int(args.get("max_bytes") or 6144),
-            record_ledger=bool(args.get("record_ledger", False)),
-            turns=args.get("turns"),
-            run_id=args.get("run_id"),
-            cloud_agent_id=args.get("cloud_agent_id"),
-        )
-        payload = json.loads(result.json_text)
-    elif name == "plate_get_unresolved_review_threads":
-        pr_number = args.get("pr_number")
-        if pr_number is None:
-            raise ValueError("pr_number is required")
-        pr_number = int(pr_number)
-        if pr_number <= 0:
-            raise ValueError("pr_number must be > 0")
-        payload = {
-            "repo": args.get("repo"),
-            "pr_number": pr_number,
-            "threads": get_unresolved_review_threads(
-                pr_number=pr_number,
-                repo=args.get("repo"),
-            ),
-        }
-    elif name == "plate_what_next":
-        # What Next? (Epic #282 / #285 v1 static)
-        # Uses live state (health, epics, fragments, labels) to pick next PLATE step and prompt segment.
-        # For v1: simple decision tree over common paths; future data-driven.
-        payload = _what_next(args.get("repo"), args.get("agent_type"))
-    elif name == "plate_feed":
-        payload = get_user_feed(
-            repo=args.get("repo"),
-            limit=int(args.get("limit") or 10),
-            include_process=bool(args.get("include_process", True)),
-            include_autonomy=bool(args.get("include_autonomy", True)),
-        )
-    elif name == "plate_contemplate":
-        # Contemplation Engine entrypoint (Epic #139 / Feature #149 minimal slice)
-        qn = args.get("question_number")
-        if not qn:
-            raise ValueError("question_number is required")
-        payload = trigger_contemplation(
-            question_number=qn,
-            answer_text=args.get("answer_text", ""),
-            repo=args.get("repo"),
-            session=args.get("session"),
-            source=args.get("source", "contemplation"),
-            answered_by=args.get("answered_by", "engine"),
-        )
-    elif name in CURIOSITY_TOOLS:
-        # Curiosity / Q&A Mode tools (Epic #139 / Feature #154)
-        tool_cls = CURIOSITY_TOOLS[name]
-        # Pass through common args + any tool-specific ones
-        payload = tool_cls.execute(**args)
-    elif name == "plate_release_status":
-        from pathlib import Path
-        releases_dir_arg = args.get("releases_dir")
-        payload = get_release_status(
-            repo=args.get("repo"),
-            releases_dir=Path(
-                resolve_mcp_path(args, "releases_dir", ".agentic/releases", root)
-            )
-            if releases_dir_arg is not None
-            else None,
-        ).to_dict()
-    elif name == "plate_release_repair":
-        from .release import repair_release_standing_state
-
-        payload = repair_release_standing_state(
-            repo=args.get("repo"),
-            dry_run=not bool(args.get("apply", False)),
-            apply=bool(args.get("apply", False)),
-        )
-    elif name == "plate_release_target_epic":
-        payload = get_release_target_epic_guidance(
-            epic_number=int(args.get("epic_number")),
-            repo=args.get("repo"),
-        ).to_dict()
-    elif name == "plate_release_cleanup_branches":
-        payload = cleanup_dead_branches(
-            repo=args.get("repo"),
-            base_branch=args.get("base_branch"),
-            apply=bool(args.get("apply", False)),
-            limit=args.get("limit"),
-        ).to_dict()
-    elif name == "plate_release_notes":
-        from pathlib import Path
-        releases_dir_arg = args.get("releases_dir")
-        payload = get_release_notes_diff(
-            from_version=args.get("from_version"),
-            to_version=args.get("to_version"),
-            releases_dir=Path(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
-            if releases_dir_arg is not None
-            else None,
-        ).to_dict()
-    elif name == "plate_costs":
-        from pathlib import Path as _LedgerPath
-
-        ledger_base = _LedgerPath(
-            resolve_mcp_path(args, "ledger_base_dir", ".agentic/ledger", root)
-        )
-        if args.get("run_cost"):
-            from .costs import compute_run_all_in_cost
-
-            payload = compute_run_all_in_cost(
-                run_id=args.get("run_id"),
-                cloud_agent_id=args.get("cloud_agent_id"),
-                base_dir=ledger_base,
-            )
-        elif args.get("spend_report") or args.get("spend_attribution"):
-            from .costs import get_spend_attribution_report
-
-            payload = get_spend_attribution_report(
-                base_dir=ledger_base,
-                limit=int(args.get("limit") or 500),
-            )
-        elif args.get("dashboard"):
-            from .costs import get_cost_dashboard
-            payload = get_cost_dashboard(
-                repo=args.get("repo"),
-                epic_label=args.get("epic_label"),
-            )
-        else:
-            payload = get_cost_report(
-                repo=args.get("repo"),
-                epic_label=args.get("epic_label"),
-            ).to_dict()
-    elif name == "plate_autonomy_status":
-        payload = get_autonomy_status(args.get("repo"))
-    elif name == "plate_autonomy_budget":
-        if bool(args.get("reset")):
-            from .autonomy import reset_budget_spend
-
-            payload = reset_budget_spend(
-                reason=str(args.get("reset_reason") or "mcp plate_autonomy_budget reset=true"),
-            )
-        else:
-            est = args.get("estimated_tokens") or args.get("estimate_tokens")
-            payload = get_budget_snapshot(
-                args.get("repo"),
-                estimated_tokens=int(est) if est is not None else None,
-            )
-    elif name == "plate_pm_status":
-        payload = get_pm_status(args.get("repo"))
-    elif name == "plate_pm_team":
-        payload = {"team": list_team()}
-    elif name == "plate_pm_assign":
-        item = args.get("item") or {}
-        if isinstance(item, str):
-            try:
-                item = json.loads(item)
-            except Exception:
-                item = {"title": item}
-        st = get_autonomy_status(args.get("repo"))
-        payload = assign_work(
-            item if isinstance(item, dict) else {"title": str(item)},
-            risk_tolerance=str(st.get("risk_tolerance") or "medium"),
-            budget_remaining=st.get("budget_remaining_tokens"),
-        )
-    elif name == "plate_pm_run_cycle":
-        payload = run_pm_cycle(
-            repo=args.get("repo"),
-            dry_run=bool(args.get("dry_run", True)),
-            max_assignments=int(args.get("max_assignments") or 5),
-            dispatch_fleet=bool(args.get("dispatch_fleet", True)),
-            dispatch_loops=bool(args.get("dispatch_loops", True)),
-            tick_loops=bool(args.get("tick_loops", True)),
-            fetch_loop_gates=bool(args.get("fetch_loop_gates") or False),
-        )
-    elif name == "plate_pm_run_loop":
-        payload = run_pm_loop(
-            repo=args.get("repo"),
-            dry_run=bool(args.get("dry_run", True)),
-            max_cycles=int(args.get("max_cycles") or 3),
-            max_assignments=int(args.get("max_assignments") or 5),
-        )
-    elif name == "plate_pm_queue":
-        payload = {
-            "assignments": list_pm_queue(
-                repo=args.get("repo"),
-                status=args.get("status"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_pm_complete":
-        payload = complete_pm_assignment(
-            str(args.get("assignment_id") or ""),
-            status=str(args.get("status") or "done"),
-            note=str(args.get("note") or ""),
-            repo=args.get("repo"),
-        )
-    elif name == "plate_pm_tick_loops":
-        payload = tick_pm_loops(
-            args.get("repo"),
-            dry_run=bool(args.get("dry_run", True)),
-            fetch_gates=bool(args.get("fetch_gates") or args.get("fetch_loop_gates") or False),
-            limit=int(args.get("limit") or 20),
-            complete_when_done=bool(args.get("complete_when_done", True)),
-        )
-    elif name == "plate_fleet_status":
-        br = args.get("budget_remaining")
-        if br is None:
-            br = args.get("budget_tokens")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = fleet_status(
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-            risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
-        )
-    elif name == "plate_fleet_roles":
-        payload = {"roles": list_fleet_roles()}
-    elif name == "plate_fleet_handoff":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = create_handoff(
-            from_agent=str(args.get("from_agent") or "orchestrator"),
-            to_agent=str(args.get("to_agent") or ""),
-            task=str(args.get("task") or ""),
-            context=args.get("context") if isinstance(args.get("context"), dict) else {},
-            artifacts=list(args.get("artifacts") or []),
-            constraints=list(args.get("constraints") or []),
-            budget_tokens=args.get("budget_tokens"),
-            risk=str(args.get("risk") or "medium"),
-            related_issue=args.get("related_issue"),
-            related_pr=args.get("related_pr"),
-            parent_handoff_id=args.get("parent_handoff_id"),
-            requires_human=bool(args.get("requires_human", False)),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_fleet_update":
-        payload = update_handoff(
-            str(args.get("handoff_id") or args.get("id") or ""),
-            status=args.get("status"),
-            notes=args.get("notes") or args.get("note"),
-            artifacts=list(args.get("artifacts") or []) or None,
-            context_patch=args.get("context") if isinstance(args.get("context"), dict) else None,
-            shadow_ack=args.get("shadow_ack") or None,
-            approved=bool(args.get("approved") or False),
-            checkpoint_id=args.get("checkpoint_id") or None,
-        )
-    elif name == "plate_fleet_complete":
-        payload = complete_handoff(
-            str(args.get("handoff_id") or args.get("id") or ""),
-            notes=str(args.get("notes") or args.get("note") or ""),
-            artifacts=list(args.get("artifacts") or []) or None,
-        )
-    elif name == "plate_fleet_list":
-        payload = {
-            "handoffs": list_handoffs(
-                status=str(args.get("status") or "active"),
-                to_agent=args.get("to_agent"),
-                from_agent=args.get("from_agent"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_fleet_allocate":
-        roles = args.get("active_roles") or args.get("roles")
-        if isinstance(roles, str):
-            roles = [x.strip() for x in roles.split(",") if x.strip()]
-        payload = allocate_fleet_budget(
-            int(args.get("budget_tokens") or args.get("total_tokens") or 20000),
-            active_roles=list(roles) if roles else None,
-            risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
-        )
-    elif name == "plate_fleet_plan":
-        bt = args.get("budget_tokens")
-        if bt is not None:
-            try:
-                bt = int(bt)
-            except (TypeError, ValueError):
-                bt = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = plan_fleet_from_intent(
-            str(args.get("intent") or args.get("task") or ""),
-            budget_tokens=bt,
-            risk_tolerance=str(args.get("risk_tolerance") or args.get("risk") or "medium"),
-            related_issue=args.get("related_issue"),
-            create=bool(args.get("create") or args.get("apply") or False),
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_fleet_feed":
-        payload = {"items": handoff_feed_items(limit=int(args.get("limit") or 10))}
-    elif name == "plate_monitor_discussions":
-        dry = bool(args.get("dry_run", True))
-        discussions = args.get("discussions")
-        if isinstance(discussions, str):
-            try:
-                discussions = json.loads(discussions)
-            except Exception:
-                discussions = None
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        if dry:
-            payload = run_discussion_review_procedure(
-                repo=args.get("repo"),
-                discussions=list(discussions) if discussions else None,
-                dry_run=True,
-                fetch_live=False,
-                budget_remaining=br,
-                use_live_budget=bool(use_live),
-            )
-        else:
-            payload = review_discussions(
-                list(discussions) if discussions else None,
-                repo=args.get("repo"),
-                persist=bool(args.get("persist", True)),
-                fetch_live=bool(args.get("fetch_live", False)),
-                min_score=float(args.get("min_score") or 30),
-                limit=int(args.get("limit") or 10),
-                budget_remaining=br,
-                use_live_budget=bool(use_live),
-            )
-    elif name == "plate_monitor_market":
-        signals = args.get("signals") or []
-        if isinstance(signals, str):
-            try:
-                signals = json.loads(signals)
-            except Exception:
-                signals = [{"title": signals}]
-        dry = bool(args.get("dry_run", True))
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        if dry:
-            payload = run_market_monitor_procedure(
-                signals=list(signals),
-                dry_run=True,
-                budget_remaining=br,
-                use_live_budget=bool(use_live),
-            )
-        else:
-            payload = monitor_market_signals(
-                list(signals),
-                persist=bool(args.get("persist", True)),
-                min_score=float(args.get("min_score") or 40),
-                limit=int(args.get("limit") or 10),
-                budget_remaining=br,
-                use_live_budget=bool(use_live),
-            )
-    elif name == "plate_monitor_list":
-        payload = {
-            "proposals": list_proposals(
-                status=str(args.get("status") or "pending"),
-                source=args.get("source"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_monitor_decide":
-        payload = decide_proposal(
-            str(args.get("proposal_id") or args.get("id") or ""),
-            str(args.get("decision") or "approve"),
-            created_issue=args.get("created_issue"),
-        )
-    elif name == "plate_monitor_feed":
-        payload = {"items": monitoring_feed_items(limit=int(args.get("limit") or 10))}
-    elif name == "plate_stub_author":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = author_stub(
-            str(args.get("intent") or args.get("task") or ""),
-            issue_type=args.get("issue_type") or args.get("type"),
-            title=args.get("title"),
-            summary=args.get("summary"),
-            acceptance_criteria=list(args.get("acceptance_criteria") or []) or None,
-            parent_epic=args.get("parent_epic"),
-            milestone=args.get("milestone"),
-            related_links=list(args.get("related_links") or []) or None,
-            source=str(args.get("source") or "qa"),
-            labels=list(args.get("labels") or []) or None,
-            persist=bool(args.get("persist", True)),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_stub_refine":
-        payload = refine_stub(
-            str(args.get("draft_id") or args.get("id") or ""),
-            answers=args.get("answers") if isinstance(args.get("answers"), dict) else None,
-            add_acceptance=list(args.get("add_acceptance") or args.get("acceptance_criteria") or []) or None,
-            summary_append=args.get("summary_append") or args.get("summary"),
-            issue_type=args.get("issue_type") or args.get("type"),
-            note=args.get("note"),
-            mark_ready=bool(args.get("mark_ready") or args.get("ready") or False),
-        )
-    elif name == "plate_stub_create":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = create_stub_issue(
-            args.get("draft_id") or args.get("id"),
-            repo=args.get("repo"),
-            dry_run=bool(args.get("dry_run", True)),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_stub_list":
-        payload = {
-            "drafts": list_stubs(
-                status=str(args.get("status") or "all"),
-                issue_type=args.get("issue_type") or args.get("type"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_stub_get":
-        payload = {"draft": get_stub(str(args.get("draft_id") or args.get("id") or ""))}
-    elif name == "plate_stub_author_create":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = author_and_create(
-            str(args.get("intent") or ""),
-            issue_type=args.get("issue_type") or args.get("type"),
-            title=args.get("title"),
-            dry_run=bool(args.get("dry_run", True)),
-            repo=args.get("repo"),
-            summary=args.get("summary"),
-            source=str(args.get("source") or "qa"),
-            parent_epic=args.get("parent_epic"),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_stub_feed":
-        payload = {"items": stubs_feed_items(limit=int(args.get("limit") or 10))}
-    elif name == "plate_bug_loop_start":
-        labels = args.get("labels") or []
-        if isinstance(labels, str):
-            labels = [x.strip() for x in labels.split(",") if x.strip()]
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = start_bug_loop(
-            bug_number=args.get("bug_number") or args.get("bug"),
-            bug_title=str(args.get("bug_title") or args.get("title") or ""),
-            risk=str(args.get("risk") or "medium"),
-            size=str(args.get("size") or "medium"),
-            labels=list(labels) if labels else None,
-            paths=list(args.get("paths") or []) or None,
-            risk_tolerance=str(args.get("risk_tolerance") or "medium"),
-            pr_number=args.get("pr_number") or args.get("pr"),
-            branch=args.get("branch"),
-            budget_remaining=args.get("budget_remaining"),
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_bug_loop_advance":
-        payload = advance_bug_loop(
-            str(args.get("run_id") or args.get("id") or ""),
-            pr_number=args.get("pr_number") or args.get("pr"),
-            branch=args.get("branch"),
-            note=args.get("note"),
-            force_skip_checkpoint=bool(args.get("force_skip_checkpoint") or False),
-            gates=args.get("gates") if isinstance(args.get("gates"), dict) else None,
-        )
-    elif name == "plate_bug_loop_tick":
-        payload = run_bug_loop_tick(
-            str(args.get("run_id") or args.get("id") or ""),
-            dry_run=bool(args.get("dry_run", True)),
-            fetch_gates=bool(args.get("fetch_gates") or False),
-            repo=args.get("repo"),
-        )
-    elif name == "plate_bug_loop_list":
-        payload = {
-            "runs": list_bug_loops(
-                status=str(args.get("status") or "active"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_bug_loop_get":
-        payload = {"run": get_bug_loop(str(args.get("run_id") or args.get("id") or ""))}
-    elif name == "plate_bug_loop_cancel":
-        payload = cancel_bug_loop(
-            str(args.get("run_id") or args.get("id") or ""),
-            note=str(args.get("note") or ""),
-        )
-    elif name == "plate_bug_loop_update":
-        payload = update_bug_loop(
-            str(args.get("run_id") or args.get("id") or ""),
-            stage=args.get("stage"),
-            status=args.get("status"),
-            pr_number=args.get("pr_number") or args.get("pr"),
-            branch=args.get("branch"),
-            note=args.get("note"),
-            checkpoint_id=args.get("checkpoint_id"),
-        )
-    elif name == "plate_bug_loop_feed":
-        payload = {"items": bug_loop_feed_items(limit=int(args.get("limit") or 10))}
-    elif name == "plate_feature_loop_estimate":
-        payload = estimate_feature_cost(
-            size=str(args.get("size") or "medium"),
-            needs_design_validation=bool(args.get("needs_design_validation") or args.get("design") or False),
-            needs_media=bool(args.get("needs_media", True)),
-            e2e=bool(args.get("e2e") or False),
-        )
-    elif name == "plate_feature_loop_start":
-        labels = args.get("labels") or []
-        if isinstance(labels, str):
-            labels = [x.strip() for x in labels.split(",") if x.strip()]
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = start_feature_loop(
-            feature_number=args.get("feature_number") or args.get("feature"),
-            feature_title=str(args.get("feature_title") or args.get("title") or ""),
-            risk=str(args.get("risk") or "medium"),
-            size=str(args.get("size") or "medium"),
-            labels=list(labels) if labels else None,
-            paths=list(args.get("paths") or []) or None,
-            risk_tolerance=str(args.get("risk_tolerance") or "medium"),
-            needs_design_validation=bool(args.get("needs_design_validation") or args.get("design") or False),
-            needs_media_approval=bool(args.get("needs_media_approval", True)),
-            e2e=bool(args.get("e2e") or False),
-            pr_number=args.get("pr_number") or args.get("pr"),
-            branch=args.get("branch"),
-            budget_remaining=args.get("budget_remaining"),
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_feature_loop_advance":
-        payload = advance_feature_loop(
-            str(args.get("run_id") or args.get("id") or ""),
-            pr_number=args.get("pr_number") or args.get("pr"),
-            branch=args.get("branch"),
-            note=args.get("note"),
-            force_skip_checkpoint=bool(args.get("force_skip_checkpoint") or False),
-            skip_media=bool(args.get("skip_media") or False),
-            gates=args.get("gates") if isinstance(args.get("gates"), dict) else None,
-        )
-    elif name == "plate_feature_loop_tick":
-        payload = run_feature_loop_tick(
-            str(args.get("run_id") or args.get("id") or ""),
-            dry_run=bool(args.get("dry_run", True)),
-            fetch_gates=bool(args.get("fetch_gates") or False),
-            repo=args.get("repo"),
-        )
-    elif name == "plate_feature_loop_list":
-        payload = {
-            "runs": list_feature_loops(
-                status=str(args.get("status") or "active"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_feature_loop_get":
-        payload = {"run": get_feature_loop(str(args.get("run_id") or args.get("id") or ""))}
-    elif name == "plate_feature_loop_cancel":
-        payload = cancel_feature_loop(
-            str(args.get("run_id") or args.get("id") or ""),
-            note=str(args.get("note") or ""),
-        )
-    elif name == "plate_feature_loop_update":
-        payload = update_feature_loop(
-            str(args.get("run_id") or args.get("id") or ""),
-            stage=args.get("stage"),
-            status=args.get("status"),
-            pr_number=args.get("pr_number") or args.get("pr"),
-            branch=args.get("branch"),
-            note=args.get("note"),
-            checkpoint_id=args.get("checkpoint_id"),
-            cost_estimate_tokens=args.get("cost_estimate_tokens"),
-        )
-    elif name == "plate_feature_loop_feed":
-        payload = {"items": feature_loop_feed_items(limit=int(args.get("limit") or 10))}
-    elif name == "plate_design_contract_propose":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = propose_contract(
-            feature_number=args.get("feature_number") or args.get("feature"),
-            feature_title=str(args.get("feature_title") or args.get("title") or ""),
-            visual_specs=list(args.get("visual_specs") or []) or None,
-            interaction_criteria=list(args.get("interaction_criteria") or []) or None,
-            a11y_criteria=list(args.get("a11y_criteria") or []) or None,
-            artifact_paths=list(args.get("artifact_paths") or []) or None,
-            has_playwright=bool(args.get("has_playwright") or False),
-            submit_for_approval=bool(args.get("submit_for_approval", True)),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_design_contract_list":
-        payload = {
-            "contracts": list_contracts(
-                status=str(args.get("status") or "all"),
-                feature_number=args.get("feature_number") or args.get("feature"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_design_contract_get":
-        payload = {"contract": get_contract(str(args.get("contract_id") or args.get("id") or ""))}
-    elif name == "plate_design_contract_decide":
-        payload = decide_contract(
-            str(args.get("contract_id") or args.get("id") or ""),
-            str(args.get("decision") or "approve"),
-            decided_by=str(args.get("decided_by") or "human"),
-            note=args.get("note"),
-        )
-    elif name == "plate_design_contract_update":
-        payload = update_contract(
-            str(args.get("contract_id") or args.get("id") or ""),
-            visual_specs=list(args.get("visual_specs") or []) or None,
-            interaction_criteria=list(args.get("interaction_criteria") or []) or None,
-            a11y_criteria=list(args.get("a11y_criteria") or []) or None,
-            artifact_paths=list(args.get("artifact_paths") or []) or None,
-            status=args.get("status"),
-        )
-    elif name == "plate_design_contract_validate":
-        payload = validate_contract_readiness(
-            args.get("contract_id") or args.get("id"),
-        )
-    elif name == "plate_design_contract_scaffold":
-        c = get_contract(str(args.get("contract_id") or args.get("id") or ""))
-        if not c:
-            payload = {"ok": False, "error": "contract not found"}
-        else:
-            payload = build_failing_test_scaffold(
-                c, language=str(args.get("language") or "python")
-            )
-            payload["ok"] = True
-    elif name == "plate_design_contract_feed":
-        payload = {"items": contract_feed_items(limit=int(args.get("limit") or 10))}
-    elif name == "plate_release_media_manifest":
-        from pathlib import Path as _P
-
-        rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
-        frags = collect_release_fragments(rdir)
-        payload = build_media_manifest(frags, version=args.get("version"))
-    elif name == "plate_release_media_render":
-        from pathlib import Path as _P
-
-        rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
-        media = collect_release_media(collect_release_fragments(rdir))
-        payload = {
-            "markdown": render_media_markdown(
-                media, only_approved=bool(args.get("only_approved") or False)
-            ),
-            "n": len(media),
-        }
-    elif name == "plate_release_media_feed":
-        from pathlib import Path as _P
-
-        rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
-        media = collect_release_media(collect_release_fragments(rdir))
-        payload = {"items": media_feed_items(media)}
-    elif name == "plate_release_media_validate_paths":
-        from pathlib import Path as _P
-
-        rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
-        media = collect_release_media(collect_release_fragments(rdir))
-        payload = validate_media_paths(media, repo_root=_P("."))
-    elif name == "plate_release_media_decide":
-        from pathlib import Path as _P
-
-        rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
-        media = collect_release_media(collect_release_fragments(rdir))
-        payload = decide_media_item(
-            media,
-            index=args.get("index"),
-            path=args.get("path"),
-            url=args.get("url"),
-            decision=str(args.get("decision") or "approve"),
-        )
-    elif name == "plate_hybrid_list_kinds":
-        payload = {"kinds": list_project_kinds()}
-    elif name == "plate_hybrid_list_artifacts":
-        payload = {"artifact_types": list_artifact_types()}
-    elif name == "plate_hybrid_list_validation":
-        payload = {
-            "validation": list_validation_strategies(kind=args.get("kind"))
-        }
-    elif name == "plate_hybrid_detect":
-        from pathlib import Path as _P
-
-        payload = detect_project_kind(_P(resolve_mcp_path(args, "repo_root", ".", root)))
-    elif name == "plate_hybrid_set_kind":
-        from pathlib import Path as _P
-
-        base_dir = _P(resolve_mcp_path(args, "base_dir", ".agentic/hybrid", root))
-        payload = set_project_kind(
-            str(args.get("kind") or ""),
-            base_dir=base_dir,
-            note=str(args.get("note") or ""),
-        )
-    elif name == "plate_hybrid_profile":
-        from pathlib import Path as _P
-
-        base_dir = _P(resolve_mcp_path(args, "base_dir", ".agentic/hybrid", root))
-        repo_root = _P(resolve_mcp_path(args, "repo_root", ".", root))
-        payload = load_project_profile(
-            base_dir=base_dir,
-            repo_root=repo_root,
-        )
-    elif name == "plate_hybrid_contract":
-        c = get_kind_contract(str(args.get("kind") or ""))
-        payload = {"ok": c is not None, "contract": c}
-    elif name == "plate_hybrid_planning_template":
-        payload = planning_template_for_kind(str(args.get("kind") or "software"))
-    elif name == "plate_hybrid_validation_plan":
-        payload = feature_validation_plan(
-            str(args.get("kind") or "software"),
-            feature_title=str(args.get("feature_title") or args.get("title") or ""),
-            artifact_types=args.get("artifact_types"),
-        )
-    elif name == "plate_hybrid_feed":
-        from pathlib import Path as _P
-
-        payload = {
-            "items": hybrid_feed_items(
-                base_dir=_P(resolve_mcp_path(args, "base_dir", ".agentic/hybrid", root)),
-                repo_root=_P(str(resolve_mcp_path(args, "repo_root", ".", root))),
-                limit=int(args.get("limit") or 4),
-            )
-        }
-    elif name == "plate_packaging_build":
-        from pathlib import Path as _P
-
-        rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
-        bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
-        frags = collect_release_fragments(rdir)
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = build_package(
-            str(args.get("version") or "unreleased"),
-            frags,
-            base_dir=bdir,
-            require_approved_media=bool(args.get("require_approved_media") or False),
-            persist=not bool(args.get("no_persist") or False),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_packaging_list":
-        from pathlib import Path as _P
-
-        bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
-        payload = {
-            "packages": list_packages(
-                base_dir=bdir,
-                status=str(args.get("status") or "all"),
-                limit=int(args.get("limit") or 20),
-            )
-        }
-    elif name == "plate_packaging_get":
-        from pathlib import Path as _P
-
-        bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
-        p = get_package(str(args.get("package_id") or args.get("id") or ""), base_dir=bdir)
-        payload = {"package": p, "ok": p is not None}
-    elif name == "plate_packaging_render":
-        from pathlib import Path as _P
-
-        bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
-        pid = str(args.get("package_id") or args.get("id") or "")
-        p = get_package(pid, base_dir=bdir) if pid else None
-        if p is None and args.get("version"):
-            rdir = _P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root))
-            br = args.get("budget_remaining")
-            if br is not None:
-                try:
-                    br = int(br)
-                except (TypeError, ValueError):
-                    br = None
-            use_live = args.get("use_live_budget")
-            if use_live is None:
-                use_live = True
-            built = build_package(
-                str(args.get("version")),
-                collect_release_fragments(rdir),
-                base_dir=bdir,
-                persist=False,
-                budget_remaining=br,
-                use_live_budget=bool(use_live),
-            )
-            if not built.get("ok"):
-                payload = built
-            else:
-                p = built.get("package")
-        if p is not None:
-            payload = {
-                "ok": True,
-                "markdown": render_package_markdown(p),
-                "package_id": p.get("id"),
-            }
-        elif "payload" not in locals():
-            payload = {"ok": False, "error": "package not found"}
-    elif name == "plate_packaging_decide":
-        from pathlib import Path as _P
-
-        bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
-        payload = decide_package_publish(
-            str(args.get("package_id") or args.get("id") or ""),
-            str(args.get("decision") or "approve"),
-            decided_by=str(args.get("decided_by") or "human"),
-            note=str(args.get("note") or ""),
-            base_dir=bdir,
-        )
-    elif name == "plate_packaging_feed":
-        from pathlib import Path as _P
-
-        bdir = _P(resolve_mcp_path(args, "base_dir", ".agentic/packaging", root))
-        payload = {
-            "items": packaging_feed_items(
-                base_dir=bdir, limit=int(args.get("limit") or 8)
-            )
-        }
-    elif name == "plate_packaging_plan":
-        from pathlib import Path as _P
-
-        payload = plan_marketplace_package_op(
-            args.get("version"),
-            releases_dir=_P(resolve_mcp_path(args, "releases_dir", ".agentic/releases", root)),
-        )
-    elif name == "plate_feature_media_estimate_cost":
-        payload = estimate_feature_media_cost(
-            phase=str(args.get("phase") or "plan"),
-            quality=str(args.get("quality") or "medium"),
-        )
-    elif name == "plate_feature_media_plan":
-        br = args.get("budget_remaining")
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = plan_feature_media(
-            feature_number=args.get("feature_number") or args.get("feature"),
-            feature_title=str(args.get("feature_title") or args.get("title") or ""),
-            test_name=args.get("test_name"),
-            caption=args.get("caption"),
-            fragment_slug=args.get("fragment_slug"),
-            quality=str(args.get("quality") or "medium"),
-            budget_remaining=int(br) if br is not None else None,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_feature_media_register":
-        payload = register_capture(
-            str(args.get("record_id") or args.get("id") or ""),
-            gif_path=args.get("gif_path"),
-            video_path=args.get("video_path"),
-            size_bytes=args.get("size_bytes"),
-            quality=args.get("quality"),
-            capture_result=args.get("capture_result")
-            if isinstance(args.get("capture_result"), dict)
-            else None,
-            submit_for_approval=bool(args.get("submit_for_approval", True)),
-        )
-    elif name == "plate_feature_media_list":
-        payload = {
-            "records": list_feature_media(
-                status=str(args.get("status") or "all"),
-                feature_number=args.get("feature_number") or args.get("feature"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_feature_media_get":
-        payload = {
-            "record": get_feature_media(str(args.get("record_id") or args.get("id") or ""))
-        }
-    elif name == "plate_feature_media_decide":
-        payload = decide_feature_media(
-            str(args.get("record_id") or args.get("id") or ""),
-            str(args.get("decision") or "approve"),
-            decided_by=str(args.get("decided_by") or "human"),
-            note=args.get("note"),
-        )
-    elif name == "plate_feature_media_skip":
-        payload = skip_feature_media(
-            str(args.get("record_id") or args.get("id") or ""),
-            note=str(args.get("note") or ""),
-        )
-    elif name == "plate_feature_media_attach_fragment":
-        payload = attach_to_fragment_file(
-            str(args.get("record_id") or args.get("id") or ""),
-            str(args.get("fragment_path") or args.get("fragment") or ""),
-        )
-    elif name == "plate_feature_media_feed":
-        payload = {"items": feature_media_feed_items(limit=int(args.get("limit") or 10))}
-    elif name == "plate_scheduled_ops_list":
-        payload = {"ops": list_ops()}
-    elif name == "plate_scheduled_ops_status":
-        payload = scheduled_ops_status(
-            risk_tolerance=str(args.get("risk_tolerance") or "medium")
-        )
-    elif name == "plate_scheduled_op_plan":
-        payload = plan_op(
-            str(args.get("op_id") or args.get("id") or ""),
-            dry_run=bool(args.get("dry_run", True)),
-        )
-    elif name == "plate_scheduled_op_run":
-        br = args.get("budget_remaining")
-        if br is not None:
-            try:
-                br = int(br)
-            except (TypeError, ValueError):
-                br = None
-        use_live = args.get("use_live_budget")
-        if use_live is None:
-            use_live = True
-        payload = run_scheduled_op(
-            str(args.get("op_id") or args.get("id") or ""),
-            dry_run=bool(args.get("dry_run", True)),
-            risk_tolerance=str(args.get("risk_tolerance") or "medium"),
-            approved=bool(args.get("approved") or False),
-            checkpoint_id=args.get("checkpoint_id"),
-            shadow_ack=args.get("shadow_ack") or None,
-            note=str(args.get("note") or ""),
-            budget_remaining=br,
-            use_live_budget=bool(use_live),
-        )
-    elif name == "plate_scheduled_op_runs":
-        payload = {
-            "runs": list_op_runs(
-                op_id=args.get("op_id"),
-                status=str(args.get("status") or "all"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_scheduled_op_complete":
-        payload = complete_op_run(
-            str(args.get("run_id") or args.get("id") or ""),
-            status=str(args.get("status") or "done"),
-            note=str(args.get("note") or ""),
-        )
-    elif name == "plate_scheduled_ops_feed":
-        payload = {
-            "items": ops_feed_items(
-                risk_tolerance=str(args.get("risk_tolerance") or "medium"),
-                limit=int(args.get("limit") or 10),
-            )
-        }
-    elif name == "plate_task_create":
-        payload = create_task(
-            str(args.get("title") or ""),
-            human_action=str(args.get("human_action") or args.get("action") or ""),
-            why_agent_cannot=str(args.get("why_agent_cannot") or args.get("why") or ""),
-            context=str(args.get("context") or ""),
-            instructions=str(args.get("instructions") or ""),
-            done_signal=args.get("done_signal"),
-            related_links=args.get("related_links") or args.get("related"),
-            milestone=args.get("milestone"),
-            epic_milestone_name=args.get("epic_milestone"),
-            labels=list(args.get("labels") or []) if isinstance(args.get("labels"), list) else None,
-            repo=args.get("repo"),
-            dry_run=bool(args.get("dry_run", False)),
-        )
-    elif name == "plate_task_close":
-        payload = close_task_with_signal(
-            int(args.get("number") or args.get("issue_number") or 0),
-            comment=str(args.get("comment") or args.get("note") or "Task complete."),
-            repo=args.get("repo"),
-            dry_run=bool(args.get("dry_run", False)),
-        )
-    elif name == "plate_task_detect":
-        signals = args.get("signals")
-        if isinstance(signals, str):
-            signals = [signals]
-        payload = detect_and_create_tasks(
-            signals=list(signals) if isinstance(signals, list) else None,
-            text=str(args.get("text") or args.get("signal") or "") or None,
-            context=str(args.get("context") or ""),
-            repo=args.get("repo"),
-            dry_run=bool(args.get("dry_run", True)),
-            create=bool(args.get("create", False)),
-        )
-    elif name == "plate_collab_check":
-        labels = args.get("labels") or []
-        if isinstance(labels, str):
-            labels = [labels]
-        auth = None
-        if args.get("commits") or args.get("author_login"):
-            auth = analyze_pr_authorship(
-                pr_number=args.get("pr_number"),
-                author_login=args.get("author_login"),
-                commits=list(args.get("commits") or []) if isinstance(args.get("commits"), list) else None,
-            )
-        paths = args.get("paths") or []
-        if isinstance(paths, str):
-            paths = [p.strip() for p in paths.split(",") if p.strip()]
-        payload = collab_policy_check(
-            str(args.get("action") or "delegate"),
-            labels=list(labels),
-            authorship=auth,
-            paths=list(paths) if paths else None,
-            branch=args.get("branch"),
-            worktree_root=(
-                args.get("worktree_root")
-                or resolve_mcp_path(args, "worktree_root", ".", root)
-            ),
-            repo_root=resolve_mcp_path(args, "repo_root", ".", root),
-        )
-        payload["driver"] = get_driver(list(labels))
-        if auth is not None:
-            payload["authorship"] = auth.to_dict() if hasattr(auth, "to_dict") else auth
-    elif name == "plate_collab_issue_status":
-        issue = args.get("issue") or {}
-        if isinstance(issue, str):
-            issue = {"title": issue, "labels": args.get("labels") or []}
-        if not issue.get("labels") and args.get("labels"):
-            issue = dict(issue)
-            issue["labels"] = args.get("labels")
-        payload = collab_status_for_issue(issue if isinstance(issue, dict) else {})
-    elif name == "plate_collab_ownership_claim":
-        payload = claim_ownership(
-            kind=str(args.get("kind") or "path"),
-            target=str(args.get("target") or ""),
-            owner=str(args.get("owner") or "human"),
-            reason=str(args.get("reason") or ""),
-            related_issue=args.get("related_issue"),
-            actor=str(args.get("actor") or "human"),
-        )
-    elif name == "plate_collab_ownership_release":
-        payload = release_ownership(
-            args.get("claim_id") or args.get("id"),
-            kind=args.get("kind"),
-            target=args.get("target"),
-        )
-    elif name == "plate_collab_ownership_list":
-        payload = {
-            "claims": list_ownership_claims(
-                status=str(args.get("status") or "open"),
-                kind=args.get("kind"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_collab_etiquette":
-        payload = branch_etiquette_check(
-            args.get("branch"),
-            worktree_root=(
-                args.get("worktree_root")
-                or resolve_mcp_path(args, "worktree_root", ".", root)
-            ),
-            repo_root=resolve_mcp_path(args, "repo_root", ".", root),
-        )
-    elif name == "plate_collab_concurrent":
-        paths = args.get("paths") or []
-        if isinstance(paths, str):
-            paths = [p.strip() for p in paths.split(",") if p.strip()]
-        payload = concurrent_edit_risk(list(paths))
-    elif name == "plate_collab_ownership_feed":
-        payload = {"items": ownership_feed_items(limit=int(args.get("limit") or 10))}
-    elif name == "plate_ledger_record":
-        payload = record_decision(
-            action_kind=str(args.get("action_kind") or "unknown"),
-            decision=str(args.get("decision") or "proceed"),
-            reason=str(args.get("reason") or ""),
-            sources=list(args.get("sources") or []),
-            cost_estimate_tokens=args.get("cost_estimate_tokens"),
-            risk_tolerance=str(args.get("risk_tolerance") or ""),
-            impact=str(args.get("impact") or ""),
-            related_issue=args.get("related_issue"),
-            related_pr=args.get("related_pr"),
-            shadow_id=args.get("shadow_id"),
-            checkpoint_id=args.get("checkpoint_id"),
-            artifact_links=list(args.get("artifact_links") or []),
-            actor=str(args.get("actor") or "agent"),
-            session=str(args.get("session") or ""),
-            metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
-        )
-    elif name == "plate_ledger_record_spend":
-        payload = record_spend_interval(
-            cloud_agent_id=args.get("cloud_agent_id"),
-            parent_run_id=args.get("parent_run_id"),
-            run_id=args.get("run_id"),
-            lifecycle_task_type=str(args.get("lifecycle_task_type") or ""),
-            model=args.get("model"),
-            tier=args.get("tier"),
-            effort=args.get("effort"),
-            hardware=args.get("hardware"),
-            route_clarity=args.get("route_clarity"),
-            input_tokens=args.get("input_tokens"),
-            output_tokens=args.get("output_tokens"),
-            cached_read_tokens=args.get("cached_read_tokens"),
-            cache_write_tokens=args.get("cache_write_tokens"),
-            tool_output_tokens=args.get("tool_output_tokens"),
-            turns=args.get("turns"),
-            handoff_packet_size=args.get("handoff_packet_size"),
-            handoff_packet_unit=args.get("handoff_packet_unit"),
-            rediscovery_count=args.get("rediscovery_count"),
-            outcome_accepted=args.get("outcome_accepted"),
-            cost_usd=args.get("cost_usd"),
-            jev_score=args.get("jev_score"),
-            jev_suggested_tier=args.get("jev_suggested_tier"),
-            jev_model=args.get("jev_model"),
-            jev_route_clarity=args.get("jev_route_clarity"),
-            related_issue=args.get("related_issue"),
-            related_pr=args.get("related_pr"),
-            session=str(args.get("session") or ""),
-            metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
-        )
-    elif name == "plate_ledger_record_jev":
-        payload = record_jev_score(
-            jev_score=float(args["jev_score"]),
-            run_id=args.get("run_id"),
-            cloud_agent_id=args.get("cloud_agent_id"),
-            lifecycle_task_type=str(args.get("lifecycle_task_type") or ""),
-            jev_suggested_tier=args.get("jev_suggested_tier"),
-            jev_model=args.get("jev_model"),
-            jev_route_clarity=args.get("jev_route_clarity"),
-            tier=args.get("tier"),
-            model=args.get("model"),
-            route_clarity=args.get("route_clarity"),
-            hardware=args.get("hardware"),
-            effort=args.get("effort"),
-            outcome_accepted=args.get("outcome_accepted"),
-            related_issue=args.get("related_issue"),
-            related_pr=args.get("related_pr"),
-            session=str(args.get("session") or ""),
-            metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else {},
-        )
-    elif name == "plate_ledger_list":
-        payload = {
-            "decisions": list_decisions(
-                action_kind=args.get("action_kind"),
-                decision=args.get("decision"),
-                related_issue=args.get("related_issue"),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_ledger_query":
-        payload = {
-            "decisions": query_decisions(
-                str(args.get("query") or ""),
-                limit=int(args.get("limit") or 50),
-            )
-        }
-    elif name == "plate_ledger_get":
-        payload = get_decision(str(args.get("decision_id") or args.get("id") or "")) or {
-            "error": "not found"
-        }
-    elif name == "plate_ledger_summary":
-        payload = ledger_summary(limit=int(args.get("limit") or 20))
-    elif name == "plate_autonomy_run_cycle":
-        max_steps = args.get("max_steps")
-        if max_steps is not None:
-            try:
-                max_steps = int(max_steps)
-            except (ValueError, TypeError):
-                max_steps = None
-        payload = run_autonomy_cycle(
-            repo=args.get("repo"),
-            dry_run=bool(args.get("dry_run", False)),
-            max_steps=max_steps,
-        )
-    elif name == "plate_autonomy_list_procedures":
-        from .autonomy import AutonomyEngine
-        engine = AutonomyEngine(args.get("repo"))
-        filtered = [
-            p for p in engine.procedures
-            if p.enabled and engine._risk_rank(p.risk_level) <= engine._risk_rank(engine.risk_tolerance)
-        ]
-        payload = {"procedures": [asdict(p) for p in filtered]}
-    elif name == "plate_autonomy_run_procedure":
-        from .autonomy import AutonomyEngine
-        engine = AutonomyEngine(args.get("repo"))
-        payload = engine.run_procedure(
-            proc_id=args.get("proc_id"),
-            dry_run=bool(args.get("dry_run", False)),
-            shadow_ack=args.get("shadow_ack"),
-            approved=bool(args.get("approved", False)),
-            checkpoint_id=args.get("checkpoint_id"),
-        )
-    elif name == "plate_autonomy_simulate":
-        from .autonomy import simulate_autonomy_action
-        scope = args.get("scope") or {}
-        if isinstance(scope, str):
-            try:
-                scope = json.loads(scope)
-            except Exception:
-                scope = {"raw": scope}
-        payload = simulate_autonomy_action(
-            action_kind=str(args.get("action_kind") or args.get("action") or "unknown"),
-            repo=args.get("repo"),
-            scope=scope if isinstance(scope, dict) else {},
-        )
-    elif name == "plate_checkpoint_create":
-        from .autonomy import AutonomyEngine
-        eng = AutonomyEngine(args.get("repo"))
-        scope = args.get("scope") or {}
-        if isinstance(scope, str):
-            try:
-                scope = json.loads(scope)
-            except Exception:
-                scope = {"raw": scope}
-        payload = create_checkpoint(
-            title=str(args.get("title") or "Human checkpoint"),
-            reason=str(args.get("reason") or "Human judgment required"),
-            impact=str(args.get("impact") or "medium"),
-            action_kind=str(args.get("action_kind") or ""),
-            scope=scope if isinstance(scope, dict) else {},
-            shadow_id=args.get("shadow_id"),
-            related_issue=args.get("related_issue"),
-            related_pr=args.get("related_pr"),
-            created_by=str(args.get("created_by") or "agent"),
-            risk_tolerance=eng.risk_tolerance,
-            autonomy_enabled=eng.enabled,
-        )
-    elif name == "plate_checkpoint_decide":
-        payload = decide_checkpoint(
-            checkpoint_id=str(args.get("checkpoint_id") or args.get("id") or ""),
-            decision=str(args.get("decision") or ""),
-            decided_by=str(args.get("decided_by") or "human"),
-            note=str(args.get("note") or ""),
-        )
-    elif name == "plate_checkpoint_list":
-        st = args.get("status") or "pending"
-        if args.get("open_only"):
-            payload = {"checkpoints": list_open_checkpoints(limit=int(args.get("limit") or 50))}
-        else:
-            payload = {
-                "checkpoints": list_checkpoints(
-                    status=None if st == "all" else st,
-                    limit=int(args.get("limit") or 50),
-                )
-            }
-    elif name == "plate_checkpoint_get":
-        payload = get_checkpoint(str(args.get("checkpoint_id") or args.get("id") or "")) or {
-            "error": "not found"
-        }
-    elif name == "plate_migrate_plan":
-        plan = generate_migration_plan()
-        if hasattr(plan, "to_dict"):
-            payload = plan.to_dict()
-        elif hasattr(plan, "__dict__"):
-            payload = plan.__dict__
-        else:
-            payload = {"plan": str(plan)}
-    elif name == "plate_migrate_apply":
-        dry = bool(args.get("dry_run", True))
-        plan = generate_migration_plan()
-        results = apply_migration_plan(plan, dry_run=dry)
-        payload = {"results": results, "dry_run": dry}
-    elif name == "plate_migrate_docs_namespace":
-        apply_mode = bool(args.get("apply", False))
-        target_dir = resolve_mcp_path(args, "target_dir", ".", root)
-        plan = migrate_docs_namespace(target_dir=target_dir, apply=apply_mode)
-        payload = plan.to_dict()
-    elif name == "plate_import_payload":
-        from .import_payload import import_payload
-
-        apply_mode = bool(args.get("apply", False))
-        dry = bool(args.get("dry_run", True))
-        if apply_mode:
-            dry = False
-        ns = args.get("namespace_scripts")
-        if ns is not None:
-            ns = bool(ns)
-        nd = args.get("namespace_docs")
-        if nd is not None:
-            nd = bool(nd)
-        target_dir = resolve_mcp_path(args, "target_dir", ".", root)
-        escape_hatch = args.get("escape_hatch_dir") or args.get("escape_hatch")
-        payload = import_payload(
-            target_dir=target_dir,
-            strategy=str(args.get("strategy") or "safe"),
-            template_repo=args.get("template_repo"),
-            dry_run=dry,
-            apply=apply_mode,
-            namespace_scripts=ns,
-            namespace_docs=nd,
-            escape_hatch_dir=escape_hatch,
-            escape_hatch_on_conflict=bool(args.get("escape_hatch_on_conflict", False)),
-            platform=args.get("platform"),
-        )
-    elif name == "plate_payload_list":
-        from .payload_surface import list_payload_files
-
-        payload = list_payload_files(
-            args.get("template_repo"),
-            include_excluded=bool(args.get("include_excluded", False)),
-        )
-    elif name == "plate_payload_root":
-        from .payload_surface import resolve_payload_root
-
-        payload = resolve_payload_root(args.get("template_repo"))
-    elif name == "plate_payload_manifest":
-        from .payload_surface import show_manifest
-
-        payload = show_manifest()
-    elif name == "plate_payload_classify":
-        from .payload_surface import classify_path
-
-        payload = classify_path(
-            resolve_mcp_path(args, "path", ".", root) if args.get("path") else "",
-            args.get("template_repo"),
-        )
-    elif name == "plate_spec_audit":
-        from .spec_audit import audit_spec
-
-        repo_root = resolve_mcp_path(args, "repo_root", ".", root)
-        releases_dir = (
-            resolve_mcp_path(args, "releases_dir", ".agentic/releases", root)
-            if args.get("releases_dir") is not None
-            else None
-        )
-        spec_path = args.get("spec_path") or args.get("spec")
-        spec_path = (
-            resolve_mcp_path(args, "spec_path", "SPEC.md", root) if spec_path else None
-        )
-        payload = audit_spec(
-            repo_root,
-            releases_dir=releases_dir,
-            spec_path=spec_path,
-        ).to_dict()
-    elif name == "plate_spec_audit_followups":
-        from .spec_audit import apply_audit_followups, audit_spec
-
-        repo_root = resolve_mcp_path(args, "repo_root", ".", root)
-        releases_dir = (
-            resolve_mcp_path(args, "releases_dir", ".agentic/releases", root)
-            if args.get("releases_dir") is not None
-            else None
-        )
-        spec_path = args.get("spec_path") or args.get("spec")
-        spec_path = (
-            resolve_mcp_path(args, "spec_path", "SPEC.md", root) if spec_path else None
-        )
-        report = audit_spec(
-            repo_root,
-            releases_dir=releases_dir,
-            spec_path=spec_path,
-        )
-        payload = apply_audit_followups(
-            report,
-            repo=args.get("repo"),
-            apply=bool(args.get("apply", False)),
-            max_issues=int(args.get("max_issues") or 10),
-        )
-        payload["audit_counts"] = report.counts
-    elif name == "plate_perform_test_coverage_audit":
-        from .mcp.audit_tools import PerformTestCoverageAuditTool
-        payload = PerformTestCoverageAuditTool.execute(
-            repo=args.get("repo"), dry_run=args.get("dry_run", True)
-        )
-    elif name == "plate_perform_information_audit":
-        from .mcp.audit_tools import PerformInformationAuditTool
-
-        payload = PerformInformationAuditTool.execute(
-            repo=args.get("repo"),
-            scope=str(args.get("scope") or "repo"),
-            agent_type=str(args.get("agent_type") or "general"),
-            max_questions=int(args.get("max_questions") or 5),
-            dry_run=bool(args.get("dry_run", False)),
-            include_defaults=bool(args.get("include_defaults", True)),
-        )
-    elif name == "plate_list_discussions":
-        from .discussions import list_discussions
-
-        payload = [
-            d.to_dict()
-            for d in list_discussions(
-                repo=args.get("repo"),
-                category=args.get("category"),
-                state=args.get("state"),
-                per_page=int(args.get("per_page") or 30),
-                page=int(args.get("page") or 1),
-            )
-        ]
-    elif name == "plate_get_discussion":
-        from .discussions import get_discussion
-
-        num = args.get("number")
-        if num is None:
-            raise ValueError("number is required")
-        payload = get_discussion(repo=args.get("repo"), number=int(num)).to_dict()
-    elif name == "plate_list_discussion_comments":
-        from .discussions import list_discussion_comments
-
-        num = args.get("number")
-        if num is None:
-            raise ValueError("number is required")
-        payload = [
-            c.to_dict()
-            for c in list_discussion_comments(
-                repo=args.get("repo"),
-                number=int(num),
-                per_page=int(args.get("per_page") or 30),
-            )
-        ]
-    elif name == "plate_add_discussion_comment":
-        from .discussions import add_discussion_comment
-
-        num = args.get("number")
-        body = args.get("body")
-        if num is None or not body:
-            raise ValueError("number and body are required")
-        payload = add_discussion_comment(
-            repo=args.get("repo"), number=int(num), body=str(body)
-        ).to_dict()
-    elif name == "plate_create_discussion":
-        from .discussions import create_discussion
-
-        title = args.get("title")
-        body = args.get("body")
-        if not title or not body:
-            raise ValueError("title and body are required")
-        payload = create_discussion(
-            repo=args.get("repo"),
-            category_slug=args.get("category_slug"),
-            category_id=args.get("category_id"),
-            title=str(title),
-            body=str(body),
-        ).to_dict()
-    elif name == "plate_list_discussion_categories":
-        from .discussions import list_discussion_categories
-
-        payload = list_discussion_categories(repo=args.get("repo"))
-    elif name == "plate_list_open_ideas":
-        from .discussions import list_open_ideas
-
-        payload = [d.to_dict() for d in list_open_ideas(repo=args.get("repo"))]
-    else:
+    handler = MCP_TOOL_HANDLERS.get(name) if name else None
+    if handler is None:
         raise KeyError(f"Unknown tool: {name}")
-    return payload
+    return handler(args, root)
 
 def _handle_tools_call(req_id: object, params: dict) -> None:
     name = params.get("name")

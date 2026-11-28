@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable
 
 from .curiosity_tools import CURIOSITY_TOOLS
@@ -108,22 +106,10 @@ def listed_tool_names() -> frozenset[str]:
 
 
 def dispatched_tool_names() -> frozenset[str]:
-    """Tool names with handlers in ``mcp_server._execute_mcp_tool``.
+    """Tool names with handlers in ``mcp_server.MCP_TOOL_HANDLERS``."""
+    from ..mcp_server import MCP_TOOL_HANDLERS
 
-    TODO(#1537): replace source parse with an explicit frozenset or handler map.
-    """
-    server_path = Path(__file__).resolve().parent.parent / "mcp_server.py"
-    text = server_path.read_text(encoding="utf-8")
-    match = re.search(
-        r"def _execute_mcp_tool\(.*?\n(?P<body>.*?)\n\ndef _handle_tools_call",
-        text,
-        re.DOTALL,
-    )
-    body = match.group("body") if match else text
-    names = set(re.findall(r'elif name == "([^"]+)"', body))
-    first = re.search(r'if name == "([^"]+)"', body)
-    if first:
-        names.add(first.group(1))
+    names = set(MCP_TOOL_HANDLERS.keys())
     names.update(CURIOSITY_TOOLS.keys())
     return frozenset(names)
 

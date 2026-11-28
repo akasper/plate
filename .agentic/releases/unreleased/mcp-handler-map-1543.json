@@ -1,0 +1,10 @@
+{
+  "slug": "mcp-handler-map-1543",
+  "change_type": "hardening",
+  "surface": "plate_core.mcp_server, plate_core.mcp.registry, plate_core.mcp.arg_confinement, tests/test_mcp_registry",
+  "summary": "Replace MCP tool dispatch elif chain with an explicit MCP_TOOL_HANDLERS map; registry and confinement use the map instead of regex over source.",
+  "migration_impact": "None; dispatch behavior and catalog/dispatch parity are unchanged.",
+  "agent_notes": "Follow-up to #1537 / stacked on #1540; closes #1543.",
+  "breaking": false,
+  "links": ["#1543", "#1537", "#1540"]
+}
