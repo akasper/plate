@@ -27,4 +27,4 @@ Third-party cloud agents without a user PAT cannot use `gh --attach`. The comman
 
 - Local or Copilot-hosted agents with a supported token and **gh ≥ 2.99**.
 - Body file on disk; image paths must exist.
-- Each image should appear as `![meaningful alt](./file.png)` (the tool adds or fixes references when missing or empty).
+- Each image should appear as `![meaningful alt](https://github.com/user-attachments/assets/…)` in the PR body after upload (the tool adds or fixes references when missing or empty; local paths are only for `--attach` inputs).
