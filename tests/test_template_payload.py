@@ -144,23 +144,34 @@ class TemplatePayloadManifestTests(unittest.TestCase):
         self.assertEqual(plan["action"], "conflict")
 
     def test_path_rules_taxonomy_overwrite_safe_conservative(self):
-        """#1250: manifest overwrite rules honor global strategy."""
+        """#1250/#1477: manifest overwrite rules honor global strategy and import ledger."""
         from plate_core.template_payload import resolve_conflict_plan
 
         manifest = load_template_payload_manifest()
+        ledger_sha = "abc123" * 10 + "abcd"
         for path in (
             ".github/labels.yml",
             ".github/ISSUE_TEMPLATE/feature.yml",
             ".github/PULL_REQUEST_TEMPLATE.md",
         ):
-            safe = resolve_conflict_plan(
+            safe_no_ledger = resolve_conflict_plan(
                 path,
                 dest_exists=True,
                 identical=False,
                 strategy="safe",
                 manifest=manifest,
             )
-            self.assertEqual(safe["action"], "overwrite", msg=path)
+            self.assertEqual(safe_no_ledger["action"], "skip", msg=path)
+            safe_refresh = resolve_conflict_plan(
+                path,
+                dest_exists=True,
+                identical=False,
+                strategy="safe",
+                manifest=manifest,
+                dest_sha256=ledger_sha,
+                last_import_sha256=ledger_sha,
+            )
+            self.assertEqual(safe_refresh["action"], "overwrite", msg=path)
             conservative = resolve_conflict_plan(
                 path,
                 dest_exists=True,

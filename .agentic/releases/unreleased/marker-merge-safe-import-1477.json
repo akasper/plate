@@ -1,0 +1,13 @@
+{
+  "slug": "marker-merge-safe-import-1477",
+  "change_type": "fix",
+  "surface": "plate_core.self_migrate.plan_marker_merge, plate_core.import_payload, plate_core.template_payload.resolve_conflict_plan",
+  "summary": "Marker merge apply requires a real persisted 3-way base, writes timestamped backups, and refuses missing-base apply; safe import-payload only honors manifest overwrite when destination hash matches the last apply ledger (#1477).",
+  "migration_impact": "Run `gh plate import-payload --apply` (or call `record_marker_merge_bases`) once before the first `--apply-markers` if bases were never recorded. Safe re-import no longer overwrites customized labels/templates unless content still matches the last import hash.",
+  "verification": [
+    "tests/test_marker_import_safe_1477.py",
+    "tests/test_self_migrate.py",
+    "tests/test_template_payload.py"
+  ],
+  "related_issues": ["#1477"]
+}

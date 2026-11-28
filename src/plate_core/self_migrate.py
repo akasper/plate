@@ -12,7 +12,8 @@ import json
 import re
 import urllib.error
 import urllib.request
-from pathlib import Path
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping
 
 from . import __version__ as _INSTALLED_VERSION
@@ -511,6 +512,86 @@ def _default_marker_paths(repo_root: Path) -> list[str]:
     return out
 
 
+_MARKER_BASE_ROOT = Path(".agentic/marker-merge/bases")
+_MARKER_BACKUP_ROOT = Path(".agentic/marker-merge/backups")
+
+
+def _normalize_repo_rel(rel: str) -> str:
+    rel_posix = PurePosixPath(str(rel).replace("\\", "/").lstrip("/")).as_posix()
+    if ".." in PurePosixPath(rel_posix).parts:
+        raise ValueError(f"invalid repo-relative path: {rel!r}")
+    return rel_posix
+
+
+def _marker_sidecar_path(repo_root: Path, root_rel: Path, rel: str) -> Path:
+    rel_posix = _normalize_repo_rel(rel)
+    base_dir = (repo_root / root_rel).resolve()
+    dest = (base_dir / rel_posix).resolve()
+    if dest != base_dir and base_dir not in dest.parents:
+        raise ValueError(f"invalid repo-relative path: {rel!r}")
+    return dest
+
+
+def load_persisted_marker_base(repo_root: Path, rel: str) -> str | None:
+    """Load pinned merge-base text persisted under ``.agentic/marker-merge/bases/`` (#1477)."""
+    path = _marker_sidecar_path(repo_root, _MARKER_BASE_ROOT, rel)
+    try:
+        if path.is_file():
+            return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    return None
+
+
+def save_persisted_marker_base(repo_root: Path, rel: str, text: str) -> None:
+    """Persist merge-base text for a marker-owned path (#1477)."""
+    path = _marker_sidecar_path(repo_root, _MARKER_BASE_ROOT, rel)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def record_marker_merge_bases(
+    repo_root: str | Path | None = None,
+    *,
+    paths: list[str] | None = None,
+) -> dict[str, Any]:
+    """Snapshot current local files as merge bases (no merge, no upstream) (#1477)."""
+    root = Path(repo_root or ".").resolve()
+    rels = list(paths) if paths else _default_marker_paths(root)
+    recorded: list[str] = []
+    skipped: list[str] = []
+    for rel in rels:
+        p = root / rel
+        if not p.is_file():
+            skipped.append(rel)
+            continue
+        text = _read_text(p)
+        if text is None:
+            skipped.append(rel)
+            continue
+        save_persisted_marker_base(root, rel, text)
+        recorded.append(rel)
+    return {
+        "ok": True,
+        "repo_root": str(root),
+        "recorded": recorded,
+        "skipped": skipped,
+        "note": (
+            "Recorded merge bases from current local files. Required before "
+            "`--apply-markers` when bases were never seeded by import-payload."
+        ),
+    }
+
+
+def _write_marker_merge_backup(repo_root: Path, rel: str, local_text: str) -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_rel = str(_MARKER_BACKUP_ROOT / stamp / _normalize_repo_rel(rel))
+    dest = _marker_sidecar_path(repo_root, Path("."), backup_rel)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(local_text, encoding="utf-8")
+    return backup_rel
+
+
 def plan_marker_merge(
     repo_root: str | Path | None = None,
     *,
@@ -522,11 +603,12 @@ def plan_marker_merge(
 ) -> dict[str, Any]:
     """Plan (and optionally apply) PLATES-CORE sectional merges (#943 / #649).
 
-    For each path: 3-way merge via ``merge_with_diagnostics``.
-    When base is omitted for a path, base defaults to local content so unedited
-    marker blocks accept upstream while content outside markers is preserved
-    from local (and local marker customizations only win when a true base is
-    supplied that differs from local).
+    For each path: 3-way merge via ``merge_with_diagnostics`` with a real base
+    (explicit ``base_texts``, persisted under ``.agentic/marker-merge/bases/``,
+    or seeded by ``import-payload --apply`` on marker-owned files). Apply refuses
+    when no base exists; dry-run reports ``missing_base`` instead of assuming
+    local is unchanged. Writes a timestamped backup under
+    ``.agentic/marker-merge/backups/`` before overwriting local files.
 
     Dry-run by default (``apply=False``). Never performs network I/O.
     Upstream content comes from ``upstream_root`` files and/or ``upstream_texts``.
@@ -570,7 +652,32 @@ def plan_marker_merge(
             files.append(entry)
             continue
 
-        base = base_map.get(rel, local)
+        base: str | None
+        if rel in base_map:
+            base = base_map[rel]
+            entry["base_source"] = "explicit"
+        else:
+            persisted = load_persisted_marker_base(root, rel)
+            if persisted is not None:
+                base = persisted
+                entry["base_source"] = "persisted"
+            else:
+                base = None
+                entry["base_source"] = "missing"
+
+        if base is None:
+            entry["action"] = "missing_base"
+            msg = (
+                "No merge base for this path (#1477). Record bases with "
+                "`import-payload --apply`, `record_marker_merge_bases()`, or pass "
+                "base_texts; refusing to treat local as unchanged."
+            )
+            entry["warnings"] = [msg]
+            if apply:
+                errors.append(f"{rel}: {msg}")
+            files.append(entry)
+            continue
+
         try:
             result = merge_with_diagnostics(base, local, upstream)
         except MarkerParseError as exc:
@@ -604,18 +711,22 @@ def plan_marker_merge(
         else:
             entry["action"] = "update_markers"
             would_write += 1
-            if apply:
-                try:
+        if apply:
+            try:
+                if changed:
+                    backup_rel = _write_marker_merge_backup(root, rel, local)
+                    entry["backup_path"] = backup_rel
                     local_path.write_text(merged, encoding="utf-8")
-                    entry["applied"] = True
                     written += 1
-                except OSError as exc:
-                    entry["action"] = "write_error"
-                    entry["warnings"] = entry["warnings"] + [str(exc)]
-                    errors.append(f"{rel}: write failed: {exc}")
-            else:
-                # Dry-run preview: truncated unified-ish note
-                entry["preview_len"] = len(merged)
+                # Base is the upstream template snapshot, not merged output (#1477).
+                save_persisted_marker_base(root, rel, upstream)
+                entry["applied"] = True
+            except OSError as exc:
+                entry["action"] = "write_error"
+                entry["warnings"] = entry["warnings"] + [str(exc)]
+                errors.append(f"{rel}: write failed: {exc}")
+        elif changed:
+            entry["preview_len"] = len(merged)
         files.append(entry)
 
     mode = "apply" if apply else "dry_run"
@@ -632,8 +743,9 @@ def plan_marker_merge(
         "apply_requested": apply,
         "errors": errors,
         "note": (
-            "Marker merge only touches PLATES-CORE sections (via merge_with_diagnostics). "
-            "Outside-marker local content is preserved. Dry-run unless apply=true (#943)."
+            "Marker merge uses a real 3-way base (persisted or explicit); apply refuses "
+            "without one. Backups live under .agentic/marker-merge/backups/. "
+            "Dry-run unless apply=true (#943/#1477)."
         ),
         "related_issues": ["#943", "#649", "#939", "#633", "#654"],
         "next_command": (
