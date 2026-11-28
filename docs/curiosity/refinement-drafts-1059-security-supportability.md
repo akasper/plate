@@ -128,7 +128,7 @@ Exploit reproduction, downstream adopter app code, weakening gates to pass audit
 
 ### Draft acceptance criteria
 
-- [ ] Audit record lists channels, result, follow-up issue IDs.
+- [ ] Audit record lists channels, result, follow-up issue IDs. It records code locations and status only, never sample secrets or captured secret values.
 - [ ] No unmitigated high-severity gaps in PLATE emitters without documented human acceptance.
 - [ ] Regression tests where review finds weak coverage (`tests/test_tasks.py`, `tests/test_github_client.py` baseline today).
 
@@ -200,6 +200,11 @@ Auto-fix branch protection, workflows, secrets, autonomy gates (`docs/agents/aut
 - [ ] Subcommand exists; docs (#1063) updated.
 - [ ] `--apply` guardrails tested; exit non-zero on failure.
 - [ ] Release fragment for Feature.
+- [ ] New public surface registered: `gh plate doctor` (and any flags) added to the public-surface inventory (#1536), the CLI/MCP reference (#1538, drift check passes), and the `public_surface_stable.json` snapshot (#1541), or explicitly classified experimental there.
+
+### Dependencies
+
+After #1536, #1538 and #1541 merge (inventory, reference and snapshot must exist to update). #1063 doctor section follows this.
 
 ### Open questions for Andrew
 
