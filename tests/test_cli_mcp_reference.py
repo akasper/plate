@@ -1,11 +1,40 @@
+import importlib
 import subprocess
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 class CliMcpReferenceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.repo_root = Path(__file__).resolve().parents[1]
+
+    def test_legacy_inline_tool_definitions_via_ast(self) -> None:
+        from plate_core.cli_mcp_reference import (
+            _legacy_inline_tool_definitions,
+            load_all_mcp_tool_definitions,
+        )
+        from plate_core.mcp.tool_profiles import list_mcp_tool_names
+
+        legacy = _legacy_inline_tool_definitions(self.repo_root)
+        self.assertEqual({t["name"] for t in legacy}, set(list_mcp_tool_names()))
+        loaded = load_all_mcp_tool_definitions(self.repo_root)
+        self.assertEqual(len(legacy), len(loaded))
+
+    def test_load_all_mcp_tool_definitions_uses_ast_fallback_when_registry_missing(self) -> None:
+        from plate_core.cli_mcp_reference import load_all_mcp_tool_definitions
+        from plate_core.mcp.tool_profiles import list_mcp_tool_names
+
+        real_import = importlib.__import__
+
+        def import_hook(name, globals=None, locals=None, fromlist=(), level=0):
+            if name in ("plate_core.mcp.registry", "plate_core.mcp.tool_definitions"):
+                raise ImportError(f"blocked import for test: {name}")
+            return real_import(name, globals, locals, fromlist, level)
+
+        with mock.patch("builtins.__import__", side_effect=import_hook):
+            tools = load_all_mcp_tool_definitions(self.repo_root)
+        self.assertEqual({t["name"] for t in tools}, set(list_mcp_tool_names()))
 
     def test_stable_mcp_parameters_match_authoritative_input_schemas(self) -> None:
         from plate_core.cli_mcp_reference import (

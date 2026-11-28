@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -174,35 +175,30 @@ def parameters_from_input_schema(schema: dict[str, Any] | None) -> list[tuple[st
     return params
 
 
+def _find_all_tools_list_node(module: ast.Module) -> ast.AST | None:
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "all_tools":
+                return node.value
+    return None
+
+
 def _legacy_inline_tool_definitions(repo_root: Path) -> list[dict[str, Any]]:
     """Extract inline ``all_tools`` from ``mcp_server.py`` when no registry module exists."""
     server_path = repo_root / "src" / "plate_core" / "mcp_server.py"
-    text = server_path.read_text(encoding="utf-8")
-    marker = 'elif method == "tools/list":'
-    start = text.find(marker)
-    if start < 0:
-        raise ValueError("tools/list block not found in mcp_server.py")
-    assign = "all_tools = ["
-    assign_at = text.find(assign, start)
-    if assign_at < 0:
-        raise ValueError("inline all_tools list not found in mcp_server.py")
-    bracket_at = text.find("[", assign_at)
-    depth = 0
-    list_src = ""
-    for idx in range(bracket_at, len(text)):
-        char = text[idx]
-        if char == "[":
-            depth += 1
-        elif char == "]":
-            depth -= 1
-            if depth == 0:
-                list_src = text[bracket_at : idx + 1]
-                break
-    if not list_src:
-        raise ValueError("could not bracket-match inline all_tools list")
-    namespace: dict[str, Any] = {}
-    exec(compile(f"_all_tools = {list_src}", str(server_path), "exec"), namespace, namespace)
-    tools = namespace["_all_tools"]
+    module = ast.parse(server_path.read_text(encoding="utf-8"), filename=str(server_path))
+    list_node = _find_all_tools_list_node(module)
+    if list_node is None:
+        raise ValueError("inline all_tools assignment not found in mcp_server.py")
+    try:
+        tools = ast.literal_eval(list_node)
+    except (ValueError, SyntaxError) as exc:
+        raise ValueError(
+            f"inline all_tools in {server_path.as_posix()} is not a pure literal "
+            "(expected tool_definitions_for_list() after #1524)"
+        ) from exc
     if not isinstance(tools, list):
         raise ValueError("inline all_tools is not a list")
     return tools
@@ -231,6 +227,8 @@ def load_all_mcp_tool_definitions(repo_root: Path | None = None) -> list[dict[st
     except ImportError:
         pass
     root = repo_root or Path(__file__).resolve().parents[2]
+    # Fallback until #1524 lands: inline list literal in mcp_server.run(). Remove once
+    # tool_definitions_for_list() is always available.
     return _legacy_inline_tool_definitions(root)
 
 
