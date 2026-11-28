@@ -59,7 +59,7 @@ jobs:
 
       # Install ffmpeg for video/GIF processing (Phase 2 enhancement)
       - name: Install ffmpeg
-        run: sudo apt-get install -y ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
 
       # Install npm dependencies
       - name: Install dependencies

@@ -210,6 +210,8 @@ def resolve_conflict_plan(
     identical: bool,
     strategy: str,
     manifest: TemplatePayloadManifest,
+    dest_sha256: str | None = None,
+    last_import_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Plan create/skip/conflict/overwrite/create_as for one payload path (#617).
 
@@ -281,6 +283,29 @@ def resolve_conflict_plan(
                 "detail": "existing differs; conservative never overwrites",
                 "rule": rule.to_dict(),
             }
+        if strat == "safe":
+            if last_import_sha256 is None:
+                return {
+                    "path": rel,
+                    "target_path": rel,
+                    "action": "skip",
+                    "detail": (
+                        rule.reason
+                        or "path_rule: safe skips existing without prior import record (#1477)"
+                    ),
+                    "rule": rule.to_dict(),
+                }
+            if dest_sha256 is None or dest_sha256 != last_import_sha256:
+                return {
+                    "path": rel,
+                    "target_path": rel,
+                    "action": "skip",
+                    "detail": (
+                        "existing differs from last import-payload write; "
+                        "safe will not overwrite adopter edits (#1477)"
+                    ),
+                    "rule": rule.to_dict(),
+                }
         return {
             "path": rel,
             "target_path": rel,

@@ -26,7 +26,7 @@ Ensure you have:
 Install ffmpeg:
 ```bash
 # Ubuntu/Debian
-sudo apt-get install ffmpeg
+sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
 
 # macOS
 brew install ffmpeg
@@ -317,7 +317,7 @@ npm run test:e2e
 **A:** Install ffmpeg:
 ```bash
 # Ubuntu/Debian
-sudo apt-get install ffmpeg
+sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
 
 # macOS
 brew install ffmpeg
