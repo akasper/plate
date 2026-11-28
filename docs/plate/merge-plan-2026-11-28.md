@@ -54,7 +54,11 @@ Order respects declared stacks. **Features** land on `release-minor`; **bugs** o
 19. **#1535** — token-scope reference (#1061) — green; awaits human security review
 20. **#1534** — `SECURITY.md` (#1060) — **ready once `pr-gates` reruns green** (private vulnerability reporting enabled; agent review thread resolved)
 21. **#1532** — concepts guide (#1067) — open questions in PR body
-22. **#1533** — quickstart (#1066) — 3 unresolved review threads, `pr-gates` failure
+22. **#1533** — quickstart (#1066) — **approved** at `e94c843d` (3 review threads resolved; `pr-gates` green)
+
+### Track F — test isolation on `release-minor`
+
+23. **#1550** — repo-wide checkout-isolation guard (#1542) — **approved** at `9088e478`. Order with **#1540**: whichever lands second must keep `python -m tests` in CI and `pr_verify` **and** keep #1540's `TemporaryDirectory` sandbox for the dispatch loop.
 
 Prefer merging **#1517** and **#1528** before **#1532** / **#1533** so adoption and AGENTS prose is stable. Local sequential simulation (1517 → 1528 → 1532 → 1533 → `release-minor`) merged without conflicts today; all three still edit `README.md` relative to the same merge-base, so integration order may still need manual README reconciliation if bases move.
 
@@ -94,7 +98,7 @@ Until retargeted, children remain valid stacked PRs against parent branch heads;
 | 1528 | Adoption health | `35daed3729a2143256434e82d6bd2c4cff92db0c` | `cursor/docs-reconcile-1479-5605` | no | yes | yes | green | 0 | #1193 | #1517 |
 | 1530 | `gh plate evidence` wrapper | `b44eaf860356c7038a3848b3f4c503650bdf23ba` | `cursor/mcp-registry-confinement-1475-81f3` | no | yes | yes | green | 0 | #1051 | #1524 |
 | 1532 | PLATE concepts guide | `875f60d7a1e5040066d4ab7d8dbadc43e67e5e7c` | `release-minor` | no | yes | yes | green | 0 | #1067 | — |
-| 1533 | User quickstart | `7f41f442a9e2f3c8b5cbcaa101af638fe6be04e7` | `release-minor` | no | yes | yes | red (`pr-gates`) | 3 | #1066 | — |
+| 1533 | User quickstart | `e94c843d0c7bf4d8917952a1c7d79f63ab67bf9b` | `release-minor` | no | yes | yes | approved; green | 0 | #1066 | — |
 | 1534 | `SECURITY.md` | `a25206eb020f6d88296668b6aea6fccda5911f54` | `release-minor` | no | yes | yes | ready once `pr-gates` green | 0 | #1060 | — |
 | 1535 | Token-scope reference | `c653e12a800b8d7785772f88eff2b89921468908` | `release-minor` | no | yes | yes | green | 0 | #1061 | — |
 | 1536 | Public surface inventory | `6c0a1eb9a0f023c50e0140f7bd734bd67c81661d` | `release-minor` | no | yes | yes | green (Documentation label) | 0 | #1056 | — |
@@ -103,6 +107,7 @@ Until retargeted, children remain valid stacked PRs against parent branch heads;
 | 1541 | Public-surface compat tests | `79e51c24612dc1bc1566668a75c989ebef2fa491` | `plate/1056-public-surface-inventory` | no | yes | yes | approved | 0 | #1058 | #1536 |
 | 1544 | MCP handler map refactor | `f09970d78f73d6a5505ddc634567ef3b09d500d6` | `plate/1537-mcp-drift` | no | yes | yes | green | 0 | #1543 | #1540 |
 | 1547 | Public-surface loader consolidation | `2f81f9bd8498d821bc2f075f6de98cf2a0d3ecac` | `plate/1058-compat-contract` | no | yes | yes | holding (#1541) | 0 | #1546 | #1541 |
+| 1550 | Checkout-isolation test guard | `9088e47805f84d1d23492c92fc5b8f9f6443def4` | `release-minor` | no | yes | yes | approved; green | 0 | #1542 | — |
 
 GitHub `mergeStateStatus` values: `BLOCKED` or `UNSTABLE` on several rows reflect missing human approval or label-check failures, not necessarily merge conflicts. Every open PR in the table is `mergeable: MERGEABLE` on GitHub at sweep time.
 
