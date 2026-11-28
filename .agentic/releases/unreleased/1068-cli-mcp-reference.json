@@ -1,0 +1,10 @@
+{
+  "slug": "1068-cli-mcp-reference",
+  "change_type": "docs",
+  "surface": "docs/cli-mcp-reference.md",
+  "summary": "Adds generated stable CLI and MCP reference with drift check against parser and plate-mcp tool catalog.",
+  "migration_impact": "Adopters gain a stable-surface command and tool reference; no runtime behavior change.",
+  "agent_notes": "Regenerate with `python3 scripts/generate-cli-mcp-reference.py` after CLI or MCP schema changes; update #1056 inventory when stable classification changes.",
+  "breaking": false,
+  "links": ["#1068", "#1056"]
+}
