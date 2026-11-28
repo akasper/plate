@@ -1,0 +1,10 @@
+{
+  "slug": "1058-public-surface-compat-contract",
+  "change_type": "hardening",
+  "surface": "tests/test_public_surface_contract.py",
+  "summary": "Adds machine-readable stable public-surface snapshot, deprecation registry, regeneration script, and contract tests guarding CLI, MCP, and label removals.",
+  "migration_impact": "Maintainers must refresh tests/fixtures/public_surface_stable.json or add deprecations when intentionally shrinking the stable surface.",
+  "agent_notes": "Regenerate via scripts/regenerate_public_surface_stable.py after inventory stable-class changes; inventory refinement for #1058 is the agent brief on PR stacked on #1536.",
+  "breaking": false,
+  "links": ["#1058", "#1056"]
+}

@@ -1,0 +1,1018 @@
+{
+  "cli": {
+    "adopt": [
+      "--apply-first-qa",
+      "--complete-session",
+      "--first-qa-plan",
+      "--force",
+      "--help",
+      "--json",
+      "--no-optional",
+      "--repo-root",
+      "--require-core-ready",
+      "--session-status",
+      "--start-session",
+      "-h"
+    ],
+    "agents delegate": [
+      "--help",
+      "--json",
+      "--task",
+      "-h"
+    ],
+    "agents list": [
+      "--help",
+      "--json",
+      "-h"
+    ],
+    "agents show": [
+      "--help",
+      "--json",
+      "-h"
+    ],
+    "autonomy": [
+      "--budget",
+      "--budget-reset",
+      "--budget-reset-reason",
+      "--dry-run",
+      "--estimate-tokens",
+      "--help",
+      "--json",
+      "--loop",
+      "--max-cycles",
+      "--max-steps",
+      "--repo",
+      "--run",
+      "--scope",
+      "--simulate",
+      "--sleep-seconds",
+      "--status",
+      "-h"
+    ],
+    "bootstrap": [
+      "--adopt",
+      "--apply",
+      "--existing-repo",
+      "--greenfield",
+      "--help",
+      "--json",
+      "--local-root",
+      "--platform",
+      "--public",
+      "--repo",
+      "-h"
+    ],
+    "ci audit": [
+      "--help",
+      "--json",
+      "--limit",
+      "--repo",
+      "-h"
+    ],
+    "config init": [
+      "--apply",
+      "--force",
+      "--help",
+      "--json",
+      "--repo-root",
+      "-h"
+    ],
+    "config show": [
+      "--help",
+      "--json",
+      "--repo-root",
+      "-h"
+    ],
+    "config upgrade": [
+      "--apply",
+      "--help",
+      "--json",
+      "--repo-root",
+      "-h"
+    ],
+    "config validate": [
+      "--help",
+      "--json",
+      "--repo-root",
+      "-h"
+    ],
+    "context list": [
+      "--help",
+      "--json",
+      "-h"
+    ],
+    "context show": [
+      "--help",
+      "--json",
+      "-h"
+    ],
+    "epic status": [
+      "--help",
+      "--json",
+      "--repo",
+      "-h"
+    ],
+    "features": [
+      "--help",
+      "--json",
+      "--local",
+      "--repo",
+      "-h"
+    ],
+    "feed": [
+      "--help",
+      "--json",
+      "--limit",
+      "--no-autonomy",
+      "--no-process",
+      "--repo",
+      "-h"
+    ],
+    "health": [
+      "--help",
+      "--json",
+      "--no-spec-audit",
+      "--repo",
+      "--repo-root",
+      "-h"
+    ],
+    "hooks install": [
+      "--force",
+      "--help",
+      "--hook",
+      "--json",
+      "--repo-root",
+      "-h"
+    ],
+    "hooks run": [
+      "--help",
+      "--repo-root",
+      "-h"
+    ],
+    "hooks status": [
+      "--help",
+      "--json",
+      "--repo-root",
+      "-h"
+    ],
+    "import-payload": [
+      "--apply",
+      "--dry-run",
+      "--escape-hatch",
+      "--escape-hatch-on-conflict",
+      "--help",
+      "--json",
+      "--namespace-docs",
+      "--namespace-scripts",
+      "--no-namespace-docs",
+      "--no-namespace-scripts",
+      "--platform",
+      "--strategy",
+      "--target-dir",
+      "--template-repo",
+      "-h"
+    ],
+    "migrate apply": [
+      "--help",
+      "--json",
+      "--repo",
+      "-h"
+    ],
+    "migrate plan": [
+      "--help",
+      "--json",
+      "--repo",
+      "-h"
+    ],
+    "payload classify": [
+      "--help",
+      "--json",
+      "--template-repo",
+      "-h"
+    ],
+    "payload list": [
+      "--help",
+      "--include-excluded",
+      "--json",
+      "--template-repo",
+      "-h"
+    ],
+    "payload manifest": [
+      "--help",
+      "--json",
+      "-h"
+    ],
+    "payload root": [
+      "--help",
+      "--json",
+      "--template-repo",
+      "-h"
+    ],
+    "pm": [
+      "--apply",
+      "--complete",
+      "--complete-status",
+      "--fetch-loop-gates",
+      "--help",
+      "--json",
+      "--limit",
+      "--loop",
+      "--max-assignments",
+      "--max-cycles",
+      "--no-tick-loops",
+      "--note",
+      "--queue",
+      "--queue-status",
+      "--repo",
+      "--run",
+      "--status",
+      "--team",
+      "--tick-loops",
+      "-h"
+    ],
+    "pr babysit": [
+      "--act",
+      "--agents",
+      "--branch-update-strategy",
+      "--cap-hours",
+      "--full-every",
+      "--help",
+      "--interval",
+      "--json",
+      "--max-hours",
+      "--max-interval",
+      "--max-wakes",
+      "--min-interval",
+      "--repo",
+      "--reset-caps",
+      "--scope",
+      "--status",
+      "--stop",
+      "--watch",
+      "-h"
+    ],
+    "pr create": [
+      "--json",
+      "--repo",
+      "--repo-root"
+    ],
+    "pr health": [
+      "--help",
+      "--json",
+      "--repo",
+      "-h"
+    ],
+    "pr preflight": [
+      "--base",
+      "--body-file",
+      "--help",
+      "--json",
+      "--labels",
+      "--repo",
+      "--repo-root",
+      "-h"
+    ],
+    "pr verify": [
+      "--help",
+      "--json",
+      "--repo",
+      "--repo-root",
+      "--run-tests",
+      "-h"
+    ],
+    "qanda": [
+      "--answer",
+      "--by",
+      "--help",
+      "--json",
+      "--limit",
+      "--list",
+      "--question",
+      "--record",
+      "--repo",
+      "--synthesize",
+      "-h"
+    ],
+    "release cleanup-branches": [
+      "--apply",
+      "--base",
+      "--help",
+      "--json",
+      "--limit",
+      "--repo",
+      "-h"
+    ],
+    "release cut": [
+      "--dry-run",
+      "--help",
+      "--json",
+      "--releases-dir",
+      "--version-type",
+      "-h"
+    ],
+    "release finalize": [
+      "--apply",
+      "--dry-run",
+      "--force-hard-reset",
+      "--help",
+      "--json",
+      "--releases-dir",
+      "-h"
+    ],
+    "release init": [
+      "--apply",
+      "--help",
+      "--json",
+      "--repo",
+      "-h"
+    ],
+    "release notes": [
+      "--from",
+      "--help",
+      "--json",
+      "--releases-dir",
+      "--to",
+      "-h"
+    ],
+    "release repair": [
+      "--apply",
+      "--help",
+      "--json",
+      "--repo",
+      "-h"
+    ],
+    "release status": [
+      "--help",
+      "--json",
+      "--releases-dir",
+      "--repo",
+      "-h"
+    ],
+    "release target-epic": [
+      "--help",
+      "--json",
+      "--repo",
+      "-h"
+    ],
+    "runner add": [
+      "--apply",
+      "--help",
+      "--json",
+      "--os",
+      "--repo-root",
+      "-h"
+    ],
+    "runner doctor": [
+      "--help",
+      "--json",
+      "--repo-root",
+      "-h"
+    ],
+    "runner remove": [
+      "--apply",
+      "--help",
+      "--json",
+      "--repo",
+      "--repo-root",
+      "-h"
+    ],
+    "runner status": [
+      "--help",
+      "--json",
+      "--repo",
+      "--repo-root",
+      "-h"
+    ],
+    "self-migrate": [
+      "--allow-high-risk",
+      "--allow-network",
+      "--apply-markers",
+      "--apply-pr",
+      "--base",
+      "--closes",
+      "--help",
+      "--json",
+      "--merge-markers",
+      "--no-payload",
+      "--path",
+      "--plan",
+      "--pr-plan",
+      "--repo-root",
+      "--resolve-upstream",
+      "--target-version",
+      "--upstream-dir",
+      "--verify",
+      "-h"
+    ],
+    "skills list": [
+      "--help",
+      "--json",
+      "-h"
+    ],
+    "skills show": [
+      "--help",
+      "--json",
+      "-h"
+    ],
+    "spec-audit": [
+      "--apply-followups",
+      "--followups",
+      "--help",
+      "--json",
+      "--max-followups",
+      "--releases-dir",
+      "--repo",
+      "--repo-root",
+      "--show-draft",
+      "--spec",
+      "-h"
+    ],
+    "task": [
+      "--apply",
+      "--close",
+      "--comment",
+      "--context",
+      "--create",
+      "--detect",
+      "--done-signal",
+      "--dry-run",
+      "--epic-milestone",
+      "--help",
+      "--human-action",
+      "--instructions",
+      "--json",
+      "--milestone",
+      "--related",
+      "--repo",
+      "--signal",
+      "--title",
+      "--why",
+      "-h"
+    ],
+    "tasks validate": [
+      "--help",
+      "--json",
+      "--path",
+      "--repo-root",
+      "--tasks-dir",
+      "-h"
+    ],
+    "what-next": [
+      "--agent-type",
+      "--help",
+      "--json",
+      "--no-budget",
+      "--no-fragments",
+      "--no-prs",
+      "--repo",
+      "-h"
+    ]
+  },
+  "inventory_ref": "docs/plate/research/public-surface-inventory.md",
+  "labels": [
+    "Audit",
+    "Bug",
+    "Design",
+    "Documentation",
+    "Epic",
+    "Feature",
+    "Feedback Response",
+    "Hardening",
+    "Major",
+    "Migration",
+    "Minor",
+    "Patch",
+    "Question",
+    "Release",
+    "Research",
+    "Task",
+    "area:agent",
+    "area:backend",
+    "area:docs",
+    "area:frontend",
+    "area:infra",
+    "area:marketing",
+    "area:product",
+    "area:security",
+    "area:tests",
+    "auto-merge",
+    "need:decision",
+    "need:design",
+    "need:docs",
+    "need:human-review",
+    "need:reproduction",
+    "need:security-review",
+    "need:tests",
+    "need:wiki-sync",
+    "no-guidance-update",
+    "no-issue",
+    "risk:critical",
+    "risk:high",
+    "risk:low",
+    "risk:medium"
+  ],
+  "mcp_tools": {
+    "init_playwright": {
+      "properties": [
+        "force",
+        "repo_path",
+        "template_repo"
+      ],
+      "required": []
+    },
+    "plate_adoption_first_qa_plan": {
+      "properties": [
+        "apply",
+        "repo_root"
+      ],
+      "required": []
+    },
+    "plate_adoption_session": {
+      "properties": [
+        "action",
+        "force",
+        "repo_root",
+        "require_core_ready"
+      ],
+      "required": []
+    },
+    "plate_adoption_status": {
+      "properties": [
+        "no_optional",
+        "repo_root"
+      ],
+      "required": []
+    },
+    "plate_agent": {
+      "properties": [
+        "agent_id"
+      ],
+      "required": [
+        "agent_id"
+      ]
+    },
+    "plate_agents": {
+      "properties": [],
+      "required": []
+    },
+    "plate_bootstrap": {
+      "properties": [
+        "adopt",
+        "apply",
+        "existing_repo",
+        "local_root",
+        "platform",
+        "repo"
+      ],
+      "required": []
+    },
+    "plate_config_get": {
+      "properties": [
+        "repo_root"
+      ],
+      "required": []
+    },
+    "plate_config_init": {
+      "properties": [
+        "force",
+        "repo_root"
+      ],
+      "required": []
+    },
+    "plate_config_upgrade": {
+      "properties": [
+        "apply",
+        "repo_root"
+      ],
+      "required": []
+    },
+    "plate_config_validate": {
+      "properties": [
+        "repo_root"
+      ],
+      "required": []
+    },
+    "plate_context": {
+      "properties": [
+        "context_id"
+      ],
+      "required": [
+        "context_id"
+      ]
+    },
+    "plate_contexts": {
+      "properties": [],
+      "required": []
+    },
+    "plate_delegate_to_agent": {
+      "properties": [
+        "agent_id",
+        "task_description"
+      ],
+      "required": [
+        "agent_id",
+        "task_description"
+      ]
+    },
+    "plate_epic_status": {
+      "properties": [
+        "repo"
+      ],
+      "required": []
+    },
+    "plate_features": {
+      "properties": [
+        "repo"
+      ],
+      "required": []
+    },
+    "plate_feed": {
+      "properties": [
+        "include_autonomy",
+        "include_process",
+        "limit",
+        "repo"
+      ],
+      "required": []
+    },
+    "plate_get_actionable_review_threads": {
+      "properties": [
+        "agent_logins",
+        "pr_number",
+        "repo",
+        "scope"
+      ],
+      "required": [
+        "pr_number"
+      ]
+    },
+    "plate_get_pr_merge_gates": {
+      "properties": [
+        "pr_number",
+        "repo"
+      ],
+      "required": [
+        "pr_number"
+      ]
+    },
+    "plate_get_unresolved_review_threads": {
+      "properties": [
+        "pr_number",
+        "repo"
+      ],
+      "required": [
+        "pr_number"
+      ]
+    },
+    "plate_health": {
+      "properties": [
+        "no_spec_audit",
+        "repo",
+        "repo_root"
+      ],
+      "required": []
+    },
+    "plate_hooks_install": {
+      "properties": [
+        "force",
+        "hook",
+        "repo_root"
+      ],
+      "required": []
+    },
+    "plate_hooks_status": {
+      "properties": [
+        "repo_root"
+      ],
+      "required": []
+    },
+    "plate_import_payload": {
+      "properties": [
+        "apply",
+        "dry_run",
+        "escape_hatch_dir",
+        "escape_hatch_on_conflict",
+        "namespace_docs",
+        "namespace_scripts",
+        "platform",
+        "strategy",
+        "target_dir",
+        "template_repo"
+      ],
+      "required": []
+    },
+    "plate_migrate_apply": {
+      "properties": [
+        "dry_run",
+        "repo"
+      ],
+      "required": []
+    },
+    "plate_migrate_docs_namespace": {
+      "properties": [
+        "apply",
+        "target_dir"
+      ],
+      "required": []
+    },
+    "plate_migrate_plan": {
+      "properties": [
+        "repo"
+      ],
+      "required": []
+    },
+    "plate_payload_classify": {
+      "properties": [
+        "path",
+        "template_repo"
+      ],
+      "required": [
+        "path"
+      ]
+    },
+    "plate_payload_list": {
+      "properties": [
+        "include_excluded",
+        "template_repo"
+      ],
+      "required": []
+    },
+    "plate_payload_manifest": {
+      "properties": [],
+      "required": []
+    },
+    "plate_payload_root": {
+      "properties": [
+        "template_repo"
+      ],
+      "required": []
+    },
+    "plate_pr_babysit": {
+      "properties": [
+        "act",
+        "agents",
+        "branch_update_strategy",
+        "pr_number",
+        "repo",
+        "scope"
+      ],
+      "required": [
+        "pr_number"
+      ]
+    },
+    "plate_pr_packet": {
+      "properties": [
+        "cloud_agent_id",
+        "max_bytes",
+        "pr_number",
+        "record_ledger",
+        "repo",
+        "run_id",
+        "turns"
+      ],
+      "required": [
+        "pr_number"
+      ]
+    },
+    "plate_pr_verify": {
+      "properties": [
+        "pr_number",
+        "repo",
+        "repo_root",
+        "run_tests"
+      ],
+      "required": [
+        "pr_number"
+      ]
+    },
+    "plate_release_cleanup_branches": {
+      "properties": [
+        "apply",
+        "base_branch",
+        "limit",
+        "repo"
+      ],
+      "required": []
+    },
+    "plate_release_media_decide": {
+      "properties": [
+        "decision",
+        "index",
+        "path",
+        "releases_dir",
+        "url"
+      ],
+      "required": []
+    },
+    "plate_release_media_feed": {
+      "properties": [
+        "releases_dir"
+      ],
+      "required": []
+    },
+    "plate_release_media_manifest": {
+      "properties": [
+        "releases_dir",
+        "version"
+      ],
+      "required": []
+    },
+    "plate_release_media_render": {
+      "properties": [
+        "only_approved",
+        "releases_dir"
+      ],
+      "required": []
+    },
+    "plate_release_media_validate_paths": {
+      "properties": [
+        "releases_dir"
+      ],
+      "required": []
+    },
+    "plate_release_notes": {
+      "properties": [
+        "from_version",
+        "releases_dir",
+        "to_version"
+      ],
+      "required": []
+    },
+    "plate_release_repair": {
+      "properties": [
+        "apply",
+        "repo"
+      ],
+      "required": []
+    },
+    "plate_release_status": {
+      "properties": [
+        "releases_dir",
+        "repo"
+      ],
+      "required": []
+    },
+    "plate_release_target_epic": {
+      "properties": [
+        "epic_number",
+        "repo"
+      ],
+      "required": [
+        "epic_number"
+      ]
+    },
+    "plate_resolve_review_thread": {
+      "properties": [
+        "repo",
+        "thread_id"
+      ],
+      "required": [
+        "thread_id"
+      ]
+    },
+    "plate_self_migrate_merge_markers": {
+      "properties": [
+        "apply",
+        "paths",
+        "repo_root",
+        "upstream_root"
+      ],
+      "required": []
+    },
+    "plate_self_migrate_plan": {
+      "properties": [
+        "allow_network",
+        "no_payload",
+        "repo_root",
+        "resolve_upstream",
+        "target_version"
+      ],
+      "required": []
+    },
+    "plate_self_migrate_pr_plan": {
+      "properties": [
+        "allow_high_risk",
+        "allow_network",
+        "apply",
+        "base",
+        "closes",
+        "no_payload",
+        "repo_root",
+        "resolve_upstream",
+        "target_version"
+      ],
+      "required": []
+    },
+    "plate_self_migrate_verify": {
+      "properties": [
+        "allow_network",
+        "no_payload",
+        "repo_root",
+        "resolve_upstream",
+        "target_version"
+      ],
+      "required": []
+    },
+    "plate_skill": {
+      "properties": [
+        "skill_id"
+      ],
+      "required": [
+        "skill_id"
+      ]
+    },
+    "plate_skills": {
+      "properties": [],
+      "required": []
+    },
+    "plate_spec_audit": {
+      "properties": [
+        "releases_dir",
+        "repo_root",
+        "spec_path"
+      ],
+      "required": []
+    },
+    "plate_spec_audit_followups": {
+      "properties": [
+        "apply",
+        "max_issues",
+        "releases_dir",
+        "repo",
+        "repo_root",
+        "spec_path"
+      ],
+      "required": []
+    },
+    "plate_task_close": {
+      "properties": [
+        "comment",
+        "dry_run",
+        "number",
+        "repo"
+      ],
+      "required": [
+        "number"
+      ]
+    },
+    "plate_task_create": {
+      "properties": [
+        "context",
+        "done_signal",
+        "dry_run",
+        "epic_milestone",
+        "human_action",
+        "instructions",
+        "milestone",
+        "related_links",
+        "repo",
+        "title",
+        "why_agent_cannot"
+      ],
+      "required": [
+        "context",
+        "human_action",
+        "instructions",
+        "title",
+        "why_agent_cannot"
+      ]
+    },
+    "plate_task_detect": {
+      "properties": [
+        "context",
+        "create",
+        "dry_run",
+        "repo",
+        "signal",
+        "signals",
+        "text"
+      ],
+      "required": []
+    },
+    "plate_what_next": {
+      "properties": [
+        "agent_type",
+        "repo"
+      ],
+      "required": []
+    },
+    "record_e2e_gif": {
+      "properties": [
+        "quality",
+        "repo_path",
+        "test_name"
+      ],
+      "required": [
+        "repo_path",
+        "test_name"
+      ]
+    },
+    "validate_e2e_tests": {
+      "properties": [
+        "repo_path"
+      ],
+      "required": []
+    }
+  },
+  "schema_version": 1
+}
