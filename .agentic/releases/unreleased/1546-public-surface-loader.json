@@ -1,0 +1,10 @@
+{
+  "slug": "1546-public-surface-loader",
+  "change_type": "feature",
+  "surface": "plate_core.public_surface_loader",
+  "summary": "Consolidates MCP tool-definition and CLI parser loading into plate_core.public_surface_loader for contract tests and doc generators.",
+  "migration_impact": "#1538 generator should call load_mcp_tool_definitions() and load_cli_tree() instead of inlined loaders.",
+  "agent_notes": "Stdio MCP fallback removed; import and ast.literal_eval suffice on current tree (#1541).",
+  "breaking": false,
+  "links": ["#1546", "#1058", "#1541"]
+}
