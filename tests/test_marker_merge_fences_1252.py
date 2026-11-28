@@ -10,7 +10,7 @@ from plate_core.markers import (
     merge_with_diagnostics,
     validate_marker_document,
 )
-from plate_core.self_migrate import plan_marker_merge
+from plate_core.self_migrate import plan_marker_merge, record_marker_merge_bases
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -74,6 +74,7 @@ class MarkerMergeFenceTests1252(unittest.TestCase):
             root = Path(tmp)
             agents = root / "AGENTS.md"
             agents.write_text(_UPSTREAM_TEMPLATE_SYNC_LOCAL, encoding="utf-8")
+            record_marker_merge_bases(root, paths=["AGENTS.md"])
             report = plan_marker_merge(
                 root,
                 paths=["AGENTS.md"],
