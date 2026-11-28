@@ -38,11 +38,11 @@ Surface classes (from stub + Epic #1055), grounded in this repository:
 | Class | Where truth lives today | Inventory should capture |
 |---|---|---|
 | **CLI** | `src/plate_core/cli.py` (`prog="gh plate"`); entry `python -m plate_core.cli` / gh extension wiring | Top-level commands and subcommands (e.g. `health`, `bootstrap`, `config`, `release`, `pr`, `autonomy`, `import-payload`, `self-migrate`, `what-next`, `pm`, `stub`, …) and **stable flags** on adoption/release/review paths (`gh plate config validate`, `gh plate pr verify`, `gh plate release status`) |
-| **MCP** | `src/plate_core/mcp_server.py`, profiles in `src/plate_core/mcp/tool_profiles.py`, `docs/mcp.md` | Tool names matching `plate_*` (209 tools via `list_mcp_tool_names()`); profile names (`default`, `release`, `qanda`, `all`, …) as **experimental** unless promoted; JSON schema fields per tool where feasible |
+| **MCP** | `src/plate_core/mcp_server.py` (server), tool names and profiles in `src/plate_core/mcp/tool_profiles.py`, `docs/mcp.md` | Tool names matching `plate_*` (209 tools via `list_mcp_tool_names()`); profile names (`default`, `release`, `qanda`, `all`, …) as **experimental** unless promoted; JSON schema fields per tool where feasible |
 | **`.plate` config** | `src/plate_core/plate_config.py` (`CURRENT_CONFIG_VERSION` **1.4**, `ALLOWED_CONFIG_TOP_LEVEL_KEYS`, `DEFAULT_CONFIG`) | Top-level keys, nested keys under `methodology`, `extensions`, `release`, `autonomy`, `hooks`, `process_docs`; distinguish **documented adopter keys** vs parser internals |
 | **Release fragments** | `.agentic/releases/unreleased/README.md`, `validate_fragment()` in `src/plate_core/release.py` | Required fields: `slug`, `change_type`, `surface`, `summary`, `migration_impact`, `agent_notes`; allowed `change_type` values; optional `breaking`, `links`, `requires`, `media` |
 | **`.agentic/` layouts** | `.agentic/process.yml` `artifacts:` map; template payload `src/plate_core/template_payload/.agentic/` | Expected files: `process.yml`, `skills.yml`, `extensions.yml`, `audit.yml`, `traceability.yml`, `marketing.yml`, `migration.yml`, `ui-paths.yml`, `COSTS.md`, `releases/unreleased/` + `epic-<NNN>-<slug>/` convention |
-| **Labels** | `.github/labels.yml`, enforced by `.github/workflows/label-check` / `plate-pr-gates` | Issue type labels (`Feature`, `Bug`, …), PR type labels, `area:*`, `risk:*`, `need:*`, `status:*` (at most one), semver track `Major`/`Minor`/`Patch`, process labels (`no-issue`, `auto-merge`, release-window labels) |
+| **Labels** | `.github/labels.yml`, enforced by `.github/workflows/label-check.yml` / `plate-pr-gates` | Issue type labels (`Feature`, `Bug`, …), PR type labels, `area:*`, `risk:*`, `need:*`, `status:*` (at most one), semver track `Major`/`Minor`/`Patch`, process labels (`no-issue`, `auto-merge`, release-window labels) |
 
 The research note should list **gaps and inconsistencies** (e.g. repo `.plate` `version` **1.3** while code default is **1.4**; MCP tools hidden behind profiles; CLI commands with no MCP parity).
 
@@ -112,7 +112,7 @@ Design document that maps **inventory stability classes** to **semver semantics*
 - [ ] Table: for each surface class, examples of **major / minor / patch** drawn from real repo paths (e.g. removing an MCP tool = major if `stable`; adding optional `.plate` `hooks` key = minor).
 - [ ] Deprecation policy specifies minimum **one minor release** with documented warning before removing a `stable` item (exact N open question below).
 - [ ] Cross-links: #654, #1056 inventory path, #649 migration flows, placeholder link for #1065 upgrade guide section.
-- [ ] README / `docs/plate/README.md` (when present) lists policy; until then, `AGENTS.md` pointer only in design doc (no `AGENTS.md` edit in Design PR unless Andrew wants同步).
+- [ ] README / `docs/plate/README.md` (when present) lists policy; until then, `AGENTS.md` pointer only in design doc (no `AGENTS.md` edit in Design PR unless Andrew wants them kept in sync).
 
 ### Dependencies
 
