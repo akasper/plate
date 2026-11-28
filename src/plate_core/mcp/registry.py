@@ -40,8 +40,16 @@ _EXPLICIT_READ_ONLY = frozenset(
     }
 )
 
+_EXPLICIT_MUTATING = frozenset(
+    {
+        "plate_backfill_answers",
+    }
+)
+
 
 def _is_mutating(name: str) -> bool:
+    if name in _EXPLICIT_MUTATING:
+        return True
     if name in _EXPLICIT_READ_ONLY:
         return False
     if name.startswith("plate_get_") or name.startswith("plate_list_"):
@@ -100,7 +108,10 @@ def listed_tool_names() -> frozenset[str]:
 
 
 def dispatched_tool_names() -> frozenset[str]:
-    """Tool names with handlers in ``mcp_server._execute_mcp_tool``."""
+    """Tool names with handlers in ``mcp_server._execute_mcp_tool``.
+
+    TODO(#1537): replace source parse with an explicit frozenset or handler map.
+    """
     server_path = Path(__file__).resolve().parent.parent / "mcp_server.py"
     text = server_path.read_text(encoding="utf-8")
     match = re.search(

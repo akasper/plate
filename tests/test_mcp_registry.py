@@ -34,6 +34,10 @@ class McpRegistryConsistencyTests(unittest.TestCase):
     def test_assert_catalog_dispatch_parity(self):
         assert_catalog_dispatch_parity()
 
+    def test_backfill_answers_is_mutating(self):
+        registry = build_tool_registry()
+        self.assertTrue(registry["plate_backfill_answers"].mutating)
+
 
 class McpRegistryDispatchTests(unittest.TestCase):
     def setUp(self) -> None:
