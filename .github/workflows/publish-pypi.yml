@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout this repo at the release ref
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.ref || github.ref }}
@@ -133,7 +133,7 @@ jobs:
           echo "✅ Release version validated successfully: $VER"
 
       - name: Set up Python (>= 3.10 as declared in pyproject)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.10"
 
@@ -163,7 +163,7 @@ jobs:
           python -m twine check dist/* || echo "twine check produced warnings (non-fatal)"
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         # Trusted publishing: the workflow's OIDC token is exchanged for a
         # short-lived PyPI token automatically. The plate-core project on
         # PyPI must have akasper/plate + this workflow filename registered
