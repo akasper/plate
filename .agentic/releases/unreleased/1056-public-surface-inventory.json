@@ -1,0 +1,10 @@
+{
+  "slug": "1056-public-surface-inventory",
+  "change_type": "docs",
+  "surface": "docs/plate/research/public-surface-inventory.md",
+  "summary": "Adds code-derived PLATE 1.0 public-surface inventory (CLI, MCP, .plate, fragments, .agentic, labels) with stable/experimental/internal classification.",
+  "migration_impact": "Adopters may consult the new inventory when scoping agent tool profiles and semver commitments; no runtime behavior change.",
+  "agent_notes": "Regenerate via commands in the inventory Regeneration section after CLI or MCP changes; do not hand-edit tool lists.",
+  "breaking": false,
+  "links": ["#1056"]
+}
