@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 from .curiosity_tools import CURIOSITY_TOOLS
@@ -38,8 +40,16 @@ _EXPLICIT_READ_ONLY = frozenset(
     }
 )
 
+_EXPLICIT_MUTATING = frozenset(
+    {
+        "plate_backfill_answers",
+    }
+)
+
 
 def _is_mutating(name: str) -> bool:
+    if name in _EXPLICIT_MUTATING:
+        return True
     if name in _EXPLICIT_READ_ONLY:
         return False
     if name.startswith("plate_get_") or name.startswith("plate_list_"):
@@ -47,6 +57,7 @@ def _is_mutating(name: str) -> bool:
     if name in CURIOSITY_TOOLS and name not in (
         "plate_record_answer",
         "plate_create_blocking_question",
+        "plate_backfill_answers",
     ):
         return False
     if any(
@@ -96,11 +107,41 @@ def listed_tool_names() -> frozenset[str]:
     return tool_definition_names()
 
 
-def dispatchable_tool_names() -> frozenset[str]:
-    names = set(listed_tool_names())
+def dispatched_tool_names() -> frozenset[str]:
+    """Tool names with handlers in ``mcp_server._execute_mcp_tool``.
+
+    TODO(#1537): replace source parse with an explicit frozenset or handler map.
+    """
+    server_path = Path(__file__).resolve().parent.parent / "mcp_server.py"
+    text = server_path.read_text(encoding="utf-8")
+    match = re.search(
+        r"def _execute_mcp_tool\(.*?\n(?P<body>.*?)\n\ndef _handle_tools_call",
+        text,
+        re.DOTALL,
+    )
+    body = match.group("body") if match else text
+    names = set(re.findall(r'elif name == "([^"]+)"', body))
+    first = re.search(r'if name == "([^"]+)"', body)
+    if first:
+        names.add(first.group(1))
     names.update(CURIOSITY_TOOLS.keys())
-    names.add("plate_perform_test_coverage_audit")
     return frozenset(names)
+
+
+def dispatchable_tool_names() -> frozenset[str]:
+    return dispatched_tool_names()
+
+
+def assert_catalog_dispatch_parity() -> None:
+    listed = listed_tool_names()
+    dispatched = dispatched_tool_names()
+    if listed != dispatched:
+        catalog_only = sorted(listed - dispatched)
+        dispatch_only = sorted(dispatched - listed)
+        raise AssertionError(
+            "MCP catalog/dispatch drift: "
+            f"catalog_only={catalog_only!r} dispatch_only={dispatch_only!r}"
+        )
 
 
 def assert_registry_consistency() -> None:

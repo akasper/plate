@@ -1,0 +1,10 @@
+{
+  "slug": "mcp-catalog-dispatch-drift-1537",
+  "change_type": "bugfix",
+  "surface": "plate_core.mcp.tool_definitions, plate_core.mcp.registry, plate_core.mcp.tool_profiles, tests/test_mcp_registry",
+  "summary": "Align MCP tools/list catalog with dispatch: add missing definitions for plate_backfill_answers and plate_perform_test_coverage_audit, assign profiles, and fail CI when catalog and handler names diverge.",
+  "migration_impact": "MCP hosts with audit or qanda profiles now see plate_perform_test_coverage_audit and plate_backfill_answers in tools/list; behavior unchanged.",
+  "agent_notes": "Stacked on #1524; catalog parity is enforced by assert_catalog_dispatch_parity and test_listed_equals_dispatched.",
+  "breaking": false,
+  "links": ["#1537", "#1056"]
+}
