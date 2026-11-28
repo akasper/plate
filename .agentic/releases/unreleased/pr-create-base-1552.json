@@ -1,0 +1,10 @@
+{
+  "slug": "pr-create-base-1552",
+  "change_type": "feature",
+  "surface": "gh plate pr create, plate_core.pr_preflight",
+  "summary": "gh plate pr create accepts --base (defaulting to the configured integration base) and rejects duplicate --base with passthrough after --.",
+  "migration_impact": "Agents may use `gh plate pr create -- --body-file … --label Feature --label area:cli` without spelling `--base`, or `gh plate pr create --base <branch> -- --body-file … --label Feature`; pass gh-only flags after `--`.",
+  "agent_notes": "Do not pass --base both as a plate flag and after `--`. Run `PYTHONPATH=src python3 -m unittest tests.test_pr_preflight.PrCreateBaseTests` for regression.",
+  "breaking": false,
+  "links": ["#1552"]
+}

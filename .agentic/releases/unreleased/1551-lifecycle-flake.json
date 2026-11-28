@@ -1,0 +1,10 @@
+{
+  "slug": "1551-lifecycle-flake",
+  "change_type": "fix",
+  "surface": "tests/test_issue_lifecycle_events.py, plate_core.issue_lifecycle_events",
+  "summary": "Stabilize cross-process writer_id test by synchronizing on proc.join and on-disk writer_id instead of a multiprocessing Queue; exercise spawn and fork. Re-read writer_id after O_EXCL FileExistsError when a peer finished first.",
+  "migration_impact": "None.",
+  "agent_notes": "Full-suite runners should still keep lifecycle tests on TemporaryDirectory plate_root paths (never checkout .agentic/events).",
+  "breaking": false,
+  "links": ["#1551", "#1422"]
+}

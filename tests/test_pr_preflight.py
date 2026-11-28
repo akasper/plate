@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
 import unittest
+from unittest.mock import patch
 
 import plate_core.pr_gates_payload as payload
 import plate_core.pr_preflight as preflight
@@ -129,6 +131,75 @@ class HardeningPrTypeTests(unittest.TestCase):
             release_track_branches={"release": True},
         )
         self.assertEqual(failures, [])
+
+
+class PrCreateBaseTests(unittest.TestCase):
+    LEGACY_RELEASE_STATUS = {
+        "release_branch_mode": "legacy",
+        "release_track_branches": {"release": True},
+    }
+
+    def test_prepare_pr_create_argv_conflict(self):
+        gh_argv, _effective, err = preflight.prepare_pr_create_argv(
+            ["--base", "release-minor", "--body", "x"],
+            flag_base="release",
+            expected_base="release",
+        )
+        self.assertEqual(err, preflight.DUPLICATE_BASE_MESSAGE)
+        self.assertEqual(gh_argv, [])
+
+    def _run_create(self, argv: list[str], **kwargs):
+        captured: list[list[str]] = []
+
+        def gh_runner(cmd):
+            captured.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0)
+
+        passed = {"passed": True, "expected_base": "release"}
+        with patch.object(preflight, "run_preflight", return_value=passed):
+            code, report = preflight.create_pr_with_preflight(
+                argv,
+                release_status=self.LEGACY_RELEASE_STATUS,
+                gh_runner=gh_runner,
+                **kwargs,
+            )
+        return code, report, captured
+
+    def test_default_integration_base_used(self):
+        code, report, captured = self._run_create(["--body", "Closes #1"])
+        self.assertEqual(code, 0)
+        self.assertEqual(captured[0][0:4], ["gh", "pr", "create", "--base"])
+        self.assertEqual(captured[0][4], "release")
+        self.assertEqual(report.get("gh_argv")[0:2], ["--base", "release"])
+
+    def test_explicit_plate_base_flag(self):
+        code, _report, captured = self._run_create(["--body", "Closes #1"], base="release-minor")
+        self.assertEqual(code, 0)
+        self.assertEqual(captured[0][3:5], ["--base", "release-minor"])
+
+    def test_conflicting_base_sources_fail(self):
+        captured: list[list[str]] = []
+
+        def gh_runner(cmd):
+            captured.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0)
+
+        code, report = preflight.create_pr_with_preflight(
+            ["--base", "release-patch", "--body", "x"],
+            base="release",
+            release_status=self.LEGACY_RELEASE_STATUS,
+            gh_runner=gh_runner,
+        )
+        self.assertEqual(code, 2)
+        self.assertFalse(report["passed"])
+        self.assertEqual(report["failures"][0]["message"], preflight.DUPLICATE_BASE_MESSAGE)
+        self.assertEqual(captured, [])
+
+    def test_passthrough_base_still_works(self):
+        code, _report, captured = self._run_create(["--base", "release-patch", "--body", "Closes #1"])
+        self.assertEqual(code, 0)
+        self.assertEqual(captured[0].count("--base"), 1)
+        self.assertIn("release-patch", captured[0])
 
 
 if __name__ == "__main__":
