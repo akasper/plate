@@ -1,398 +1,236 @@
 # Refinement drafts: 1.0 security and supportability (Epic #1059)
 
-**Parent Epic:** [#1059](https://github.com/akasper/plate/issues/1059) — 1.0 security and supportability  
-**Roadmap anchor:** [#654](https://github.com/akasper/plate/issues/654) — 1.0 definition (decided 2026-10-04)  
+**Parent Epic:** [#1059](https://github.com/akasper/plate/issues/1059)  
+**Roadmap anchor:** [#654](https://github.com/akasper/plate/issues/654) (1.0 definition, 2026-10-04)  
 **Milestone:** 1.0  
-**Prepared for:** Andrew (refinement pass before clearing `status:stub` / `need:refinement` on children)  
-**Status:** Draft refinement text only — **does not** edit issues, labels, or stub bodies.
+**Status:** Draft refinement only — does not edit issues, labels, or stub bodies.
 
 ---
 
 ## Overview
 
-Epic #1059 closes four gaps called out in #654’s 1.0 bar: a published security policy, token-scope documentation, a secret-redaction audit, and a troubleshooting/doctor story adopters can follow. Five child stubs (#1060–#1064) carry the work; user-docs Epic #1065 links to troubleshooting content owned by #1063 rather than duplicating it.
+Epic #1059 covers `SECURITY.md`, token-scope documentation, a secret-redaction audit, troubleshooting content (#1063 owns it; #1065 links), and optionally `gh plate doctor` (#1064). Five child stubs: #1060–#1064.
 
-This document proposes scope, non-goals, acceptance criteria, dependencies, and open questions for each stub. It is written in the same spirit as the `docs/curiosity/refinement-qa-pack-*.md` artifacts: durable repo memory for a refinement session, not implementation.
-
-**Hard constraints for implementers (from Epic #1059 and AGENTS.md):**
-
-- Do not weaken autonomy merge gates, branch protection, or redaction tests to “pass” the audit.
-- Describe security gaps at a high level only; audit findings belong in `docs/audits/` without exploit reproduction detail.
-- Do not edit `LICENSE`, `.plate/`, workflow files, or `SECURITY.md` in follow-on PRs without their own issues (see in-flight work below).
+This file records **gaps and ordering** for stubs that still need refinement. Where an open PR or merged artifact already defines scope, this doc **defers** to it and does not propose alternate paths, filenames, or command shapes.
 
 ---
 
-## In-flight work (do not duplicate)
+## Discovery (2026-11-28)
 
-Open PR [#1534](https://github.com/akasper/plate/pull/1534) (`docs: add SECURITY.md with vulnerability disclosure path`) adds repository-root `SECURITY.md` and a README link. It targets **#1060** with `Closes #1060` (Andrew’s 2026-11-27 choice).
+| Issue | Open PR body match | Issue comments | In-repo artifact (not a PR) |
+|---|---|---|---|
+| #1060 | [**#1534**](https://github.com/akasper/plate/pull/1534) — root `SECURITY.md` + README link; `Closes #1060` | None | — |
+| #1061 | [**#1535**](https://github.com/akasper/plate/pull/1535) — `docs/security/token-scopes.md`; PR states it **is the refinement** for #1061; `Closes #1061` | None | — |
+| #1062 | None (only #1558 refs Epic) | None | — |
+| #1063 | None | None | [`docs/wiki/Troubleshooting.md`](../wiki/Troubleshooting.md) — symptom notes; defers “fuller guide” to #1063 |
+| #1064 | None | None | `gh plate runner doctor` only; wiki/catalog promise top-level `gh plate doctor` |
 
-| Artifact | State | Implication for refinement |
+**Search method:** `gh pr list --state open --search "<n> in:body"` per stub; `gh api …/issues/<n>/comments` (all empty for #1060–#1064).
+
+---
+
+## Recommended order (unchanged intent from #1059)
+
+1. #1060 via #1534 → 2. #1061 via #1535 → 3. #1062 audit → 4. #1064 and/or #1063 (parallel possible) → 5. #1063 links from README / #1065.
+
+Cross-links: #1057 (supported versions, SECURITY wording); #1054 (branch protection / `pr-gates`); token cross-link from troubleshooting should use **`docs/security/token-scopes.md`** after #1535 merges.
+
+---
+
+## High-level gaps (orientation only — no exploit detail)
+
+| Area | Gap | Where to look |
 |---|---|---|
-| `SECURITY.md` | Added in PR #1534 | #1060 refinement should treat disclosure policy as **in flight**; remaining #1060 work is follow-ups (template payload copy, #1057 supported-versions wording), not a second root policy. |
-| README security line | Same PR | README link AC largely satisfied on merge. |
-| `src/plate_core/template_payload/SECURITY.md` | Not in #1534 | Open product question whether adopters get a payload copy via `import-payload` (see #1060 questions). |
-
-Refinement drafts for #1060 below assume **merge or supersede #1534 first**, then file small Documentation follow-ups for payload and compat policy alignment.
-
----
-
-## Recommended order and dependencies
-
-```mermaid
-flowchart LR
-  PR1534["PR #1534 / #1060"]
-  I1061["#1061 token scopes"]
-  I1062["#1062 redaction audit"]
-  I1064["#1064 gh plate doctor"]
-  I1063["#1063 troubleshooting guide"]
-  PR1534 --> I1061
-  I1061 --> I1062
-  PR1534 --> I1063
-  I1064 --> I1063
-  I1062 --> I1063
-```
-
-| Order | Issue | Rationale |
-|---|---|---|
-| 1 | #1060 (via #1534) | Establishes disclosure path and scope table other docs can reference. |
-| 2 | #1061 | Token doc gives the audit (#1062) a permission baseline and surfaces least-privilege gaps. |
-| 3 | #1062 | Findings may spawn Bug/Hardening children; should complete before claiming 1.0 redaction bar. |
-| 4 | #1064 vs #1063 sequencing | **Parallel option:** start #1063 with `gh plate health` only; fold `doctor` sections when #1064 scope is decided. **Serial option:** implement #1064 first so the guide documents real behavior. |
-| 5 | #1063 | Consumes health/doctor surfaces; linked from README and #1065 user-docs Epic. |
-
-**Cross-Epic:** #1057 (compat / supported-versions policy) informs SECURITY.md supported-versions text and token-doc “which release” language. #1054 (branch-protection verification) overlaps troubleshooting content for protection and `pr-gates` contexts.
+| Disclosure | Root policy in flight in #1534 | PR #1534 |
+| Token matrix | In flight in #1535 | `docs/security/token-scopes.md` (PR branch) |
+| Redaction | Helpers exist; no audit record yet | `github_client.py`, `tasks.py`, `issue_lifecycle_events.py`, `mcp_server.py`, workflows |
+| Doctor | Docs promise `gh plate doctor`; CLI has `health` + `runner doctor` only | `cli.py`, `docs/wiki/Home.md` |
+| Troubleshooting | Wiki has adopter symptoms only | `docs/wiki/Troubleshooting.md` |
 
 ---
 
-## High-level security and supportability gaps (repository today)
+## #1060 — SECURITY.md with disclosure path
 
-No exploit steps or payloads — orientation for the audit and docs work only.
+### Source of truth
 
-| Area | Gap (high level) | Primary paths to inspect |
-|---|---|---|
-| **Disclosure** | No merged `SECURITY.md` on `release-minor` until #1534 lands | Root policy; link from README |
-| **Permission clarity** | Scopes are implied across CLI, MCP, Actions, and design docs—not one adopter-facing matrix | `docs/design/issue-lifecycle.md` (GitHub App permissions table), `.github/workflows/*.yml` `permissions:`, `docs/migration/self-hosted-runners.md`, `docs/agents/autonomous-mode.md` |
-| **Redaction coverage** | Best-effort helpers exist but coverage is uneven across surfaces | `src/plate_core/github_client.py` (`_sanitize_error`), `src/plate_core/tasks.py` (`redact_sensitive`), `src/plate_core/issue_lifecycle_events.py` (`scrub_issue_lifecycle_payload`), MCP Task creation in `src/plate_core/mcp_server.py`, `src/plate_core/pr_babysit.py` (high-risk path warnings) |
-| **Redaction testing** | Regression tests focus on `github_client` and `tasks`; not all emitters | `tests/test_github_client.py`, `tests/test_tasks.py` |
-| **Doctor drift** | Wiki/SPEC/catalog reference `gh plate doctor`; only `gh plate runner doctor` exists | `src/plate_core/cli.py` (`cmd_health`, `cmd_runner_doctor`), `docs/wiki/Home.md`, `docs/design/what-next-mcp-state-machine-catalog.md` |
-| **Autonomy vs secrets** | Autonomous mode blocks high-impact paths in guidance but is not a substitute for output redaction | `src/plate_core/autonomy.py`, `docs/agents/autonomous-mode.md` |
-| **Workflow token posture** | `GITHUB_TOKEN` permissions vary by workflow; some jobs need extra PAT secrets | e.g. `plate-pr-gates.yml`, `publish-pypi.yml`, runner probe PAT in template payload migration doc |
+**[PR #1534](https://github.com/akasper/plate/pull/1534)** — do not duplicate or contradict its `SECURITY.md` or README wording in other drafts.
 
----
+### Remaining gaps only (from #1534 open questions — not re-specified here)
 
-## #1060 — Documentation: SECURITY.md with disclosure path
+1. Template payload: whether `src/plate_core/template_payload/` ships a `SECURITY.md` or pointer via import-payload.
+2. Supported versions vs [#1057](https://github.com/akasper/plate/issues/1057) — #1534 deliberately stays on “latest release” until #1057 lands.
+3. GitHub private vulnerability reporting enabled on the repo (human/settings; not in PR diff).
 
-**Labels today:** `Documentation`, `area:docs`, `area:security`, `risk:medium`, `need:security-review`, `status:stub`, `need:refinement`
+### Refinement note
 
-### Proposed scope
+Stub clearance for #1060 is tied to **merge of #1534** and Andrew’s choice to `Closes #1060`. Follow-ups above should be **new issues**, not a second root policy PR.
 
-- Treat PR #1534 as the primary implementation of root `SECURITY.md` (private advisory path, scope table, `need:security-review` pointer, best-effort response).
-- After merge, refinement closure = confirm README link, decide template-payload policy, and align supported-versions wording with #1057 when available.
+### Open questions for Andrew (#1060-only)
 
-### Non-goals
+1. Template payload SECURITY copy — pointer vs full copy vs omit?  
+   **Default:** Pointer stub in template payload linking adopters to their own policy + upstream PLATE policy.
 
-- Editing SECURITY.md content in this refinement pass or duplicating PR #1534 in a second PR.
-- Enabling GitHub private reporting repo settings (human Task if disabled).
-- Bug-bounty programs, SLAs, or formal supported-version semver policy before #1057.
+2. File follow-ups as new issues after #1534 merge?  
+   **Default:** Yes.
 
-### Draft acceptance criteria (post-#1534)
-
-- [ ] Root `SECURITY.md` is on the integration branch and linked from `README.md` (satisfied by #1534 on merge).
-- [ ] Supported-versions section either matches #1057 compat policy **or** explicitly defers to “latest release” with a tracked follow-up issue until #1057 lands.
-- [ ] Decision recorded on whether `src/plate_core/template_payload/SECURITY.md` ships to adopters (copy, stub pointer to upstream, or omit).
-- [ ] Epic #1059 checklist item for SECURITY.md can be checked without reopening disclosure scope.
-
-### Dependencies
-
-- **Blocks:** None for merge of #1534.
-- **Blocked by:** #1057 for strict “supported versions” parity with compat policy (optional defer).
-- **Related:** #1061 may link to SECURITY.md for “report vs `need:security-review`” distinction (already summarized in #1534 draft).
-
-### Open questions for Andrew
-
-1. **Template payload copy** — Should adopters receive `SECURITY.md` (or a short pointer file) via `gh plate import-payload`?  
-   **Recommended default:** Ship a **pointer stub** in template payload that links to the upstream PLATE `SECURITY.md` and tells adopters to add their own policy for product code; do not fork full policy text on every import.
-
-2. **Close #1060 on #1534 merge** — Andrew already chose `Closes #1060`. Confirm follow-ups for payload + #1057 are **new issues** rather than keeping #1060 open.  
-   **Recommended default:** Close on merge; open Documentation follow-ups for payload and supported-versions alignment.
-
-3. **Private reporting enabled** — Is private vulnerability reporting enabled on `akasper/plate`?  
-   **Recommended default:** Human verifies Settings → Security; if off, open a Task (not a public issue) to enable before announcing 1.0.
+*(No proposed `SECURITY.md` content in this document.)*
 
 ---
 
-## #1061 — Documentation: token-scope documentation
+## #1061 — Token-scope documentation
 
-**Labels today:** `Documentation`, `area:docs`, `area:security`, `risk:medium`, `need:security-review`, `status:stub`, `need:refinement`
+### Source of truth
 
-### Proposed scope
+**[PR #1535](https://github.com/akasper/plate/pull/1535)** and **`docs/security/token-scopes.md`** on that branch. The PR body states known stub scope is implemented there; human `need:security-review` remains before merge.
 
-Publish a single adopter-facing document (proposed path: `docs/plate/security/token-scopes.md`, consistent with #1015 `docs/plate/` namespacing) that lists **each PLATE surface**, minimum GitHub permissions, why they are needed, and what breaks if they are missing.
+### What this draft adds (gaps not closed by #1535)
 
-**Surfaces to cover (grounded in repo today):**
+- **Epic wiring:** After merge, link `docs/security/token-scopes.md` from README and/or `SECURITY.md` if not already in #1534/#1535.
+- **#1062 input:** Audit should use this file as the permissions baseline (no second token doc).
+- **#1063 input:** Troubleshooting “auth/scopes” remedies should link here, not restate workflow tables.
 
-| Surface | Auth mechanism | Evidence in repo |
-|---|---|---|
-| Local `gh` + `gh plate` | OAuth / classic / fine-grained PAT via `gh auth` | `src/plate_core/github_client.py` (`gh api`), `gh plate health`, bootstrap, PR/release commands |
-| `plate-mcp` / agent sessions | Same as host `gh` credential | `src/plate_core/mcp_server.py` tools calling `get_health`, issue/PR APIs |
-| GitHub Actions `GITHUB_TOKEN` | Per-workflow `permissions:` | `.github/workflows/plate-pr-gates.yml`, `ci.yml`, `auto-merge.yml`, `publish-pypi.yml`, `plates-agentic-orchestrator.yml`, others under `.github/workflows/` |
-| Optional runner probe PAT | Repo secret (e.g. `PLATE_RUNNER_PROBE_PAT`) | `docs/migration/self-hosted-runners.md`, template payload copy, composite action in workflows |
-| PyPI / extension publish | OIDC + trusted publisher or human secrets | `publish-pypi.yml`, `publish-gh-plate-extension.yml` |
-| Future GitHub App (lifecycle) | Installation permissions | `docs/design/issue-lifecycle.md` §Adopter setup (“Minimal permissions” table) |
-| Cloud / third-party agents | Often **no** user PAT on runner | AGENTS.md §UI screenshots token matrix; scope doc should state what PLATE cannot do without a human PAT |
+### Open questions — defer to #1535 / doc § Open questions
 
-Include a **least-privilege** subsection: contrast ideal GitHub App/fine-grained scopes vs classic `repo`; call out that `gh plate bootstrap --apply` needs label/issue/admin-class capabilities on the target repo.
+Do **not** duplicate the six items in PR #1535 (fine-grained PAT mapping, org bootstrap role, `pages.yml` permissions, orchestrator stub, Copilot CI token, GraphQL vs REST messaging). Treat that PR + `docs/security/token-scopes.md` as authoritative; add answers via PR #1535 follow-up commits or a small Documentation PR after merge.
 
-### Non-goals
+### One Epic-level question (not in #1535 body)
 
-- Generating or storing tokens in docs; no example live secrets.
-- Documenting every third-party MCP the user might attach (Cursor, Composio, etc.) beyond a short “external integrations are out of PLATE core scope” note.
-- Implementing the GitHub App (#1420 family) — only document target permissions.
+1. Clear `status:stub` on #1061 on #1535 merge vs keep open until README/`SECURITY.md` links land?  
+   **Default:** Clear on merge if AC in stub is satisfied by the doc alone; link README in same or immediate follow-up.
 
-### Draft acceptance criteria
-
-- [ ] `docs/plate/security/token-scopes.md` (or agreed path) merged and linked from README and/or `SECURITY.md` “Scope” section.
-- [ ] Every row in the surfaces table above has: required scopes/permissions, purpose, failure symptom, and safer alternative where one exists.
-- [ ] Workflow section cites real workflow files under `.github/workflows/` and template payload workflows under `src/plate_core/template_payload/.github/workflows/`.
-- [ ] PR labeled `Documentation` and reviewed with `need:security-review` cleared by a human security pass.
-- [ ] Cross-link from troubleshooting guide (#1063) for “auth/scopes” remedies.
-
-### Dependencies
-
-- **After:** #1060 / #1534 (policy anchor).
-- **Before:** #1062 (audit uses doc as intended baseline).
-- **Related:** #1054, `docs/agents/branch-model-and-ceremonies.md` (App push path).
-
-### Open questions for Andrew
-
-1. **Canonical doc path** — `docs/plate/security/token-scopes.md` vs wiki page?  
-   **Recommended default:** `docs/plate/security/` (versioned with repo; wiki links outward).
-
-2. **Classic vs fine-grained as default narrative** — Lead with fine-grained + App target, with classic `repo` as “works but broader”?  
-   **Recommended default:** Yes — matches issue-lifecycle design and least-privilege bar.
-
-3. **Adopter template** — Should token-scope doc be copied into template payload for greenfield repos?  
-   **Recommended default:** Yes, as a trimmed “adopter checklist” appendix referencing PLATE upstream for core CLI scopes.
-
-4. **MCP tool profile matrix** — Include `default` / `planning` / `audit` profiles from `.plugin/` baseline catalog?  
-   **Recommended default:** One appendix table mapping profiles to **categories** of `gh api` usage, not every tool name (avoid rot).
+*(No alternate path such as `docs/plate/security/` — rejected to avoid conflicting with #1535.)*
 
 ---
 
 ## #1062 — Audit: secret-redaction audit
 
-**Labels today:** `Audit`, `area:security`, `risk:high`, `need:security-review`, `status:stub`, `need:refinement`
+**No open PR or issue comment refinement found.** Draft below is the refinement source until implementation PR exists.
 
 ### Proposed scope
 
-Structured audit of **PLATE-controlled output channels** where user or CI secrets might appear in clear text. Deliverable: `docs/audits/secret-redaction-1059.md` (name slug per `AGENTS.md` Audit loop) plus issue filings for gaps.
-
-**In-scope emitters and stores (checklist):**
+Audit PLATE-controlled **output channels** (logs, comments, artifacts, MCP payloads, local JSONL) for accidental secret disclosure. Use static review + existing tests; no live secret injection into GitHub.
 
 | Channel | Code / path | Existing control |
 |---|---|---|
-| CLI stderr/stdout from `gh api` failures | `src/plate_core/github_client.py` | `_sanitize_error` |
-| Task / human-blocker issue bodies | `src/plate_core/tasks.py` | `redact_sensitive`, `BLOCKER_CLASSES` |
-| Local lifecycle JSONL | `src/plate_core/issue_lifecycle_events.py` | `scrub_issue_lifecycle_payload` |
-| PR babysit / wake summaries | `src/plate_core/pr_babysit.py` | High-risk path policy; comment extraction |
-| MCP tool return payloads | `src/plate_core/mcp_server.py` | Task tool docs mention redaction; spot-check high-traffic tools |
-| Issue/PR comments created by PLATE automation | Workflows under `.github/workflows/`, Python callers | Manual review of templates and comment builders |
-| Release fragments / evidence JSON | `.agentic/releases/` conventions | Policy in AGENTS.md; audit sampling |
-| Usage reports on issue close | `.github/workflows/plates-on-issue-closed.yml` | Verify no secret-bearing fields |
-| Discussions integration | `src/plate_core/discussions.py` | Uses `GhClient` redaction |
-| Hybrid / autonomy simulation output | `src/plate_core/hybrid.py` (`secret_scan`) | Confirm dry-run paths |
+| `gh api` errors | `src/plate_core/github_client.py` | `_sanitize_error` |
+| Task / blocker bodies | `src/plate_core/tasks.py` | `redact_sensitive` |
+| Lifecycle JSONL | `src/plate_core/issue_lifecycle_events.py` | `scrub_issue_lifecycle_payload` |
+| Babysit / wake text | `src/plate_core/pr_babysit.py` | Policy + extraction paths |
+| MCP returns | `src/plate_core/mcp_server.py` | Spot-check tier-1 tools |
+| Automation comments | `.github/workflows/` | Template / script review |
+| Discussions | `src/plate_core/discussions.py` | `GhClient` |
 
-**Method (safe):** static code review, unit test inventory, synthetic fixtures in existing tests (`tests/test_tasks.py`, `tests/test_github_client.py`) — **no** live secret injection into GitHub.
+**Artifact:** `docs/audits/secret-redaction-1059.md` (per AGENTS.md Audit loop) + Bug/Hardening issues per gap.
 
 ### Non-goals
 
-- Penetration testing or publishing reproducers for any leak class.
-- Auditing adopter application code in downstream repos.
-- Replacing `audit-security-posture` plugin skill — audit **feeds** that skill with PLATE-specific findings.
+Exploit reproduction, downstream adopter app code, weakening gates to pass audit.
 
 ### Draft acceptance criteria
 
-- [ ] Audit record under `docs/audits/` lists each channel, reviewer, date, result (`pass`, `gap`, `n/a`), and linked follow-up issue IDs.
-- [ ] Every `gap` is either fixed in a Bug/Hardening PR or accepted with documented risk and human sign-off in the audit doc.
-- [ ] New or extended regression tests for any redaction path judged weak (minimal tests per AGENTS.md usefulness rule).
-- [ ] Audit summary comment posted on #1062 when the Documentation/Audit PR merges (usage report optional for Audit type).
+- [ ] Audit record lists channels, result, follow-up issue IDs.
+- [ ] No unmitigated high-severity gaps in PLATE emitters without documented human acceptance.
+- [ ] Regression tests where review finds weak coverage (`tests/test_tasks.py`, `tests/test_github_client.py` baseline today).
 
 ### Dependencies
 
-- **After:** #1061 (expected permission/token boundaries).
-- **Before:** #1063 final “secrets in logs/comments” troubleshooting entries.
-- **Parallel:** PR #1534 unrelated.
+After **#1535** merges (permission baseline). Before #1063 “secrets in output” troubleshooting section.
 
 ### Open questions for Andrew
 
-1. **Audit record strictness** — Must every channel be `pass` for 1.0, or are documented `accepted-risk` gaps allowed?  
-   **Recommended default:** No **high**-severity unmitigated gaps in PLATE-owned emitters; medium gaps allowed with issue + milestone.
-
-2. **MCP depth** — Full static pass on all tools in `mcp_server.py` vs sampled tier-1 tools (`plate_create_task`, babysit, health, autonomy)?  
-   **Recommended default:** Tier-1 full pass + checklist spot-check for remainder.
-
-3. **CI log exposure** — Include Actions log patterns (echo steps) in scope?  
-   **Recommended default:** Yes for workflows PLATE ships; reference `docs/agents/github-actions-and-copilot.md` cost/redaction norms.
-
-4. **Who signs off** — Andrew only vs security-auditor agent + human?  
-   **Recommended default:** Human clears `need:security-review`; agent prepares audit draft.
+1. Accept documented medium-risk gaps for 1.0? **Default:** No high-severity; medium with issues OK.  
+2. MCP depth — tier-1 tools full pass vs entire `mcp_server.py`? **Default:** Tier-1 + checklist for rest.  
+3. CI log review in scope? **Default:** Yes for PLATE-shipped workflows.
 
 ---
 
-## #1063 — Documentation: troubleshooting and doctor guide (owner)
+## #1063 — Troubleshooting and doctor guide (owner)
 
-**Labels today:** `Documentation`, `area:docs`, `area:cli`, `risk:low`, `status:stub`, `need:refinement`
+**No open PR or issue comment refinement found.** Partial content exists on `main`.
+
+### Existing artifact (source of truth for current wiki material)
+
+[`docs/wiki/Troubleshooting.md`](../wiki/Troubleshooting.md) — install/upgrade, PEP 668, Windows babysit flashes (#1073). Header states the **fuller guide is #1063**.
+
+Do not replace or relocate this file without an explicit #1063 implementation decision; **extend** it and/or add a README-linked hub that points here.
+
+### Proposed scope (gaps vs stub AC)
+
+- Map **`gh plate health`** / `HealthReport` fields (`src/plate_core/health.py`, `cmd_health`) to remedies: labels → `gh plate bootstrap --apply`; protection / stale `pr-gates` → branch-model docs + #1054; `.plate` layout; budget (#634); SPEC audit; adoption/self-migrate signals.
+- Auth/scopes: link **`docs/security/token-scopes.md`** (#1535), not inline tables.
+- Runners: `docs/migration/self-hosted-runners.md` + `gh plate runner doctor`.
+- **Doctor:** Until #1064 ships, state clearly that **`gh plate doctor` is not implemented**; use `gh plate health` and `gh plate runner doctor`. Align `docs/wiki/Home.md` and catalog strings in a separate doc PR if 1.0 accepts health-only.
+
+### Non-goals
+
+Duplicate #1065 quickstart/concepts ([#1532](https://github.com/akasper/plate/pull/1532) is separate user-docs track).
+
+### Draft acceptance criteria
+
+- [ ] Stub AC: guide exists, README-linked, #1065 references this owner doc.
+- [ ] Each major `cmd_health` line has a remedy or “informational only”.
+- [ ] No false `gh plate doctor` claims.
+
+### Dependencies
+
+#1535 merge (scopes link); #1062 summary (high-level leaks section, no repro); #1064 optional for doctor section text.
+
+### Open questions for Andrew
+
+1. Expand **`docs/wiki/Troubleshooting.md`** in place vs new `docs/troubleshooting.md` hub + wiki sync? **Default:** Expand wiki in place; README links to `docs/wiki/Troubleshooting.md`.  
+2. 1.0 bar if #1064 slips — health-only + doc fixes OK? **Default:** Yes.  
+3. Merge symptom content with health-class index in one page or split “operator symptoms” vs “health report legend”? **Default:** One page with two top-level sections.
+
+---
+
+## #1064 — Feature: `gh plate doctor`
+
+**No open PR or issue comment refinement found.**
 
 ### Proposed scope
 
-Single troubleshooting owner doc (proposed: `docs/plate/support/troubleshooting.md`) linked from README and referenced by Epic #1065. Maps **each `gh plate health` finding class** to symptoms, likely cause, fix commands, and when to escalate to a human Task.
-
-**Health finding classes to cover (from `src/plate_core/health.py` / `cmd_health` output):**
-
-- Label coverage and case mismatches → `gh plate bootstrap --apply`
-- Branch protection disabled / stale required checks (`pr-gates`) → `docs/agents/branch-model-and-ceremonies.md`, #1054
-- Missing Goals wiki / curiosity index → wiki sync, `docs/curiosity/`
-- `.plate` layout / version / upgrade available → `gh plate config` family
-- Budget pressure (#634) → `.plate` autonomy section, `docs/agents/autonomous-mode.md`
-- SPEC audit statuses (`actionable`, `missing`, `error`) → `gh plate spec-audit`
-- Adoption readiness (#633) → bootstrap checklist docs
-- Self-migrate drift (#649) → `gh plate self-migrate` verify paths
-- Binary artifacts tracked (#90)
-- Open Epic / Question counts (informational)
-
-**Additional troubleshooting topics from Epic stub:**
-
-- Install pins (`gh-plate` / `plate-core` versions)
-- Auth / scopes (link #1061)
-- Import / namespace / payload (`docs/migration/namespace-docs-migration.md`)
-- Self-hosted runners (`docs/migration/self-hosted-runners.md`, `gh plate runner doctor`)
-
-**Doctor behavior:** Document **`gh plate health`** as the supported diagnostic today. For `gh plate doctor`, either document #1064 behavior when shipped **or** explicitly state “not yet available—use health + runner doctor” until #1064 closes (resolves wiki drift).
+Top-level `gh plate doctor` in `src/plate_core/cli.py`: wraps `get_health`, structured remedies, `--json` for agents; `--apply` only for allow-listed low-risk fixes (likely label/bootstrap paths only — mirror bootstrap safety). Distinct from **`gh plate runner doctor`** (`src/plate_core/runner.py`).
 
 ### Non-goals
 
-- Duplicating full user-docs quickstart (#1065).
-- Replacing per-feature wiki pages; this is the **index of failures and fixes**.
-- Documenting exploit-style recovery from security incidents.
+Auto-fix branch protection, workflows, secrets, autonomy gates (`docs/agents/autonomous-mode.md`).
 
 ### Draft acceptance criteria
 
-- [ ] Guide merged at agreed path; README link under Support/Troubleshooting (section heading TBD).
-- [ ] Every health output line in `cmd_health` has a remedy entry or explicit “informational only”.
-- [ ] #1065 Epic body or wiki index links here without copying content.
-- [ ] All references to `gh plate doctor` match repository truth (feature or deferral language).
-- [ ] Documentation PR labeled `Documentation`; no release fragment required.
-
-### Dependencies
-
-- **After:** #1061 (auth section), #1062 (secrets/leaks section summary, no repro detail).
-- **Coupled with:** #1064 — guide should be updated in same or immediately following PR if doctor ships.
+- [ ] Subcommand exists; docs (#1063) updated.
+- [ ] `--apply` guardrails tested; exit non-zero on failure.
+- [ ] Release fragment for Feature.
 
 ### Open questions for Andrew
 
-1. **Doc path** — `docs/plate/support/troubleshooting.md` vs `docs/wiki/Troubleshooting.md`?  
-   **Recommended default:** `docs/plate/support/` in git; wiki sync optional later.
-
-2. **Doctor deferral** — If #1064 slips, is “health-only” acceptable for 1.0 checkbox in #654?  
-   **Recommended default:** Yes, provided wiki/SPEC/catalog references are fixed to stop promising `gh plate doctor` until it exists.
-
-3. **Runner doctor** — Promote `gh plate runner doctor` as primary for CI runner issues?  
-   **Recommended default:** Yes — separate subsection; distinguish from repo-level doctor.
-
-4. **Escalation template** — Standard “open a Task” snippet for credential/protection blockers?  
-   **Recommended default:** Link `docs/agents/` Task contract; use `need:human-review` examples from `tasks.py` blocker classes.
+1. Ship minimal doctor for 1.0 vs defer and fix wiki/catalog references only? **Default:** Ship minimal (health + remedies + narrow `--apply`).  
+2. `--apply` allow-list day one? **Default:** Label sync / bootstrap-class fixes only.  
+3. MCP `plate_doctor` same release? **Default:** Defer; use `gh plate doctor --json`.
 
 ---
 
-## #1064 — Feature: `gh plate doctor` command
+## Cross-cutting questions (Epic #1059)
 
-**Labels today:** `Feature`, `area:cli`, `risk:low`, `status:stub`, `need:refinement`
-
-### Proposed scope
-
-Add top-level `gh plate doctor` (distinct from `gh plate runner doctor`) that:
-
-- Runs **`get_health`** (same core as `gh plate health`) and prints **actionable** remediation steps (structured codes, not only human prose).
-- Supports **`--json`** for agents and **`--apply`** for a tightly allow-listed set of low-risk fixes (likely overlapping `gh plate bootstrap --apply` for labels, and config upgrade helpers—mirror patterns from `src/plate_core/health.py` and bootstrap modules).
-- Does **not** modify workflows, branch protection rules, secrets, or autonomy eligibility without explicit human approval flags.
-
-**Existing related code:**
-
-- `cmd_health` in `src/plate_core/cli.py`
-- `get_health` / `HealthReport` in `src/plate_core/health.py`
-- `run_runner_doctor` in `src/plate_core/runner.py` (pattern for pass/warn/fail checks)
-- Catalog references in `docs/design/what-next-mcp-state-machine-catalog.md`, `docs/wiki/Home.md`
-
-### Non-goals
-
-- Full replacement of `gh plate bootstrap`, `self-migrate`, or `spec-audit`.
-- Auto-fixing branch protection, Copilot settings (#1095), or security-sensitive paths listed in autonomy eligibility (`docs/agents/autonomous-mode.md`).
-- MCP exposure in v1 unless a thin `plate_doctor` wrapper is trivial after CLI stabilizes.
-
-### Draft acceptance criteria
-
-- [ ] `gh plate doctor` registered in `src/plate_core/cli.py` help output; documented in troubleshooting guide (#1063).
-- [ ] Default mode is read-only; `--apply` required for any repo mutation (labels, curiosity index repair, `.plate` upgrade if in allow-list).
-- [ ] Exit code non-zero when health status is not PASS or when apply failed.
-- [ ] Tests in `tests/` cover at least health delegation, apply guardrails, and JSON shape.
-- [ ] Release fragment under `.agentic/releases/unreleased/` per Feature rules.
-- [ ] Wiki/SPEC/catalog strings updated to match shipped behavior.
-
-### Dependencies
-
-- **After:** Stable health report fields (today’s `HealthReport`).
-- **Informs:** #1063 (must document `--apply` risks).
-- **Optional drop:** If scope collapses, Epic #1059 may satisfy 1.0 with health + troubleshooting only—requires Andrew decision and catalog/wiki cleanup.
-
-### Open questions for Andrew
-
-1. **Ship vs drop** — Is `gh plate doctor` required for 1.0 or optional if #1063 + `health` are thorough?  
-   **Recommended default:** **Ship a minimal doctor** (health + formatted remedies + `--apply` only for label/bootstrap fixes) to honor wiki/SPEC references and reduce adopter confusion.
-
-2. **Apply allow-list** — Which fixes may `--apply` touch on day one?  
-   **Recommended default:** Label sync via bootstrap path only; everything else prints fix commands without mutating.
-
-3. **MCP parity** — Add `plate_doctor` tool in same release?  
-   **Recommended default:** Defer MCP until CLI UX settles; agents can call `gh plate doctor --json` via shell.
-
-4. **Overlap with runner doctor** — Subcommand `gh plate doctor runners` vs separate `runner doctor`?  
-   **Recommended default:** Keep `gh plate runner doctor` separate; top-level doctor links to it in output when runner state is missing.
+1. Refinement closure: edit stub bodies on GitHub after Andrew answers, or Documentation PR only? **Default:** Human clears stub labels per `agents/stub-issues.md`.  
+2. Security review: per PR (#1534, #1535, #1062 audit PR). **Default:** Yes.
 
 ---
 
-## Cross-cutting open questions (Epic #1059)
+## Stub coverage
 
-1. **Refinement closure ceremony** — Apply these drafts via Andrew Q&A in chat, then edit stub bodies in a single Documentation PR, or patch issues directly on GitHub?  
-   **Recommended default:** Documentation PR updates this file with “Answered” sections; separate human pass edits issue bodies and clears stub labels per `agents/stub-issues.md`.
-
-2. **Security review ownership** — One review for #1061+#1062 or per PR?  
-   **Recommended default:** Per PR; same reviewer can batch.
-
-3. **Plugin skill alignment** — Update `audit-security-posture` skill examples to point at `docs/plate/security/` and audit record paths?  
-   **Recommended default:** Yes in the #1062 Documentation follow-up, via catalog regen if needed (out of scope for this drafts-only PR).
-
----
-
-## Stub coverage summary
-
-| Issue | Title | Covered in this doc |
-|---|---|---|
-| #1060 | SECURITY.md with disclosure path | § #1060 + in-flight #1534 |
-| #1061 | token-scope documentation | § #1061 |
-| #1062 | secret-redaction audit | § #1062 |
-| #1063 | troubleshooting and doctor guide | § #1063 |
-| #1064 | gh plate doctor command | § #1064 |
+| Issue | This doc’s role |
+|---|---|
+| #1060 | Points to #1534; gaps only |
+| #1061 | Points to #1535; Epic wiring only |
+| #1062 | Full refinement draft |
+| #1063 | Full draft; respects existing wiki page |
+| #1064 | Full refinement draft |
 
 ---
 
 ## References
 
-- Epic #1059: https://github.com/akasper/plate/issues/1059  
-- Release roadmap #654 (1.0 definition): https://github.com/akasper/plate/issues/654  
-- In-flight SECURITY.md PR #1534: https://github.com/akasper/plate/pull/1534  
-- User-docs Epic #1065: https://github.com/akasper/plate/issues/1065  
-- Compat / supported versions #1057: https://github.com/akasper/plate/issues/1057  
-- Branch protection #1054: https://github.com/akasper/plate/issues/1054  
-- Stub process: `agents/stub-issues.md`  
-- Prior refinement pack style: `docs/curiosity/refinement-qa-pack-1009-new-repo-standard-workflows.md`  
-- Plugin security skill: `plugin/skills/audit-security-posture/SKILL.md`  
+- Epic #1059, Release #654  
+- PR #1534 (#1060), PR #1535 (#1061)  
+- Wiki: `docs/wiki/Troubleshooting.md`, `docs/wiki/Home.md`  
+- Style: `docs/curiosity/refinement-qa-pack-1009-new-repo-standard-workflows.md`
