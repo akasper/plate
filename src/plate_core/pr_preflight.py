@@ -69,6 +69,29 @@ def read_body_from_argv(argv: list[str], repo_root: Path) -> str:
     return ""
 
 
+DUPLICATE_BASE_MESSAGE = (
+    "Pass --base only once: use `gh plate pr create --base <branch> …` "
+    "or `gh plate pr create -- --base <branch> …`, not both."
+)
+
+
+def prepare_pr_create_argv(
+    argv: list[str],
+    *,
+    flag_base: str | None,
+    expected_base: str,
+) -> tuple[list[str], str, str | None]:
+    """Resolve gh pr create argv and effective base for ``gh plate pr create`` (#1552)."""
+    passthrough_base = read_base_from_argv(argv)
+    if flag_base is not None and passthrough_base is not None:
+        return [], "", DUPLICATE_BASE_MESSAGE
+    if flag_base is not None:
+        return ["--base", flag_base, *argv], flag_base, None
+    if passthrough_base is not None:
+        return list(argv), passthrough_base, None
+    return ["--base", expected_base, *argv], expected_base, None
+
+
 def read_base_from_argv(argv: list[str]) -> str | None:
     idx = 0
     while idx < len(argv):
@@ -243,15 +266,47 @@ def create_pr_with_preflight(
     *,
     repo_root: str | Path = ".",
     repo: str | None = None,
+    base: str | None = None,
+    release_status: dict[str, Any] | None = None,
     gh_runner: Callable[..., subprocess.CompletedProcess[Any]] | None = None,
 ) -> tuple[int, dict[str, Any]]:
-    """Run preflight, then ``gh pr create`` with the same argv when passing."""
-    report = run_preflight(argv=argv, repo=repo, repo_root=repo_root)
+    """Run preflight, then ``gh pr create`` with resolved ``--base`` when passing (#1552)."""
+    argv = list(argv)
+    label_list = collect_labels_from_argv(argv)
+    if release_status is None:
+        report_rs = get_release_status(repo)
+        release_status = report_rs.to_dict()
+    mode = str(release_status.get("release_branch_mode") or "legacy")
+    tracks = release_status.get("release_track_branches") or {}
+    expected = resolve_expected_integration_base(
+        release_branch_mode=mode,
+        release_track_branches=tracks if isinstance(tracks, dict) else {},
+        pr_labels=label_list,
+    )
+    gh_argv, effective_base, base_err = prepare_pr_create_argv(
+        argv, flag_base=base, expected_base=expected
+    )
+    if base_err:
+        report = preflight_report_dict(
+            [GateFailure(check_id="base", message=base_err)],
+            expected_base=expected,
+            labels=label_list,
+        )
+        return 2, report
+
+    report = run_preflight(
+        base=effective_base,
+        repo=repo,
+        repo_root=repo_root,
+        argv=gh_argv,
+        release_status=release_status,
+    )
     if not report.get("passed"):
         return 1, report
     runner = gh_runner or run_hidden
-    cmd = ["gh", "pr", "create", *argv]
+    cmd = ["gh", "pr", "create", *gh_argv]
     completed = runner(cmd)
     report = dict(report)
     report["gh_exit_code"] = completed.returncode
+    report["gh_argv"] = gh_argv
     return (0 if completed.returncode == 0 else completed.returncode), report
