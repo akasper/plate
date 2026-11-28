@@ -71,6 +71,13 @@ PYTHONPATH=src python3 -c "import plate_core; print(plate_core.__version__)"
 
 `--apply` materializes scaffold, labels, starter issues, and baseline GitHub settings. Dry-run is the default without `--apply`.
 
+4. Sync the local clone — bootstrap writes the initial commit and release branches on GitHub only; an empty clone has no shared history until you fetch:
+
+   ```bash
+   git fetch origin
+   gh plate release status --json   # note integration_base for step 4.3 below
+   ```
+
 Follow `docs/bootstrap/new-repository-checklist.md` for human decisions after bootstrap.
 
 ### Existing codebase (adoption)
@@ -154,7 +161,7 @@ Always run release status **before** choosing a PR base branch (`SPEC.md` Target
 gh plate release status --json
 ```
 
-Use the integration base branch the status report expects for your repository’s release mode (legacy single `release` branch or track-specific `release-major` / `release-minor` / `release-patch`). Pass that branch explicitly as `--base` when opening a PR — do not assume the repository default branch.
+Use the integration base branch the status report expects for your repository’s release mode (legacy single `release` branch or track-specific `release-major` / `release-minor` / `release-patch`). Pass that branch explicitly when opening a PR (`gh plate pr preflight --base …`, or `gh pr create --base …`) — do not assume the repository default branch.
 
 If standing release branches or the “Next Release” issue are missing, plan repair (dry-run by default):
 
@@ -170,11 +177,16 @@ Create a GitHub Issue with the `Feature` label and an Epic milestone when your r
 
 ### 4.3 Implement on a feature branch
 
+Create the branch from the integration base tip (required after greenfield bootstrap — see step 2.4 — so your commits share history with `release` / `release-minor` / etc.):
+
 ```bash
-git checkout -b feature/short-slug
+git fetch origin
+git checkout -b feature/short-slug origin/<integration-base-from-release-status>
 # implement + tests (project test command; PLATE monorepo example:
 #   PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_*.py'
 ```
+
+If you already have the integration base checked out locally, `git checkout <integration-base> && git pull && git checkout -b feature/short-slug` is equivalent.
 
 Feature pull requests that change product behavior typically add a release fragment:
 
@@ -186,20 +198,25 @@ Fragments accumulate until release cut (`docs/agents/documentation-rules.md`).
 
 ### 4.4 Preflight and open the PR
 
-`gh plate pr preflight` runs local plate-pr-gates and label checks. `gh plate pr create` runs the same checks, then invokes `gh pr create` with your remaining arguments (`src/plate_core/pr_preflight.py`).
+`gh plate pr preflight` runs local plate-pr-gates and label checks and accepts PLATE flags such as `--base` and comma-separated `--labels`. `gh plate pr create` runs the same checks, then invokes `gh pr create`, but only forwards **trailing** `gh pr create` arguments (`src/plate_core/cli.py` — it does not register `--base` itself; use a `--` separator or run `gh pr create` after preflight passes).
+
+Feature PRs require exactly one PR type label **and** an `area:*` label (for example `area:product` or `area:cli`). Pick the area that matches the change.
 
 ```bash
 gh plate pr preflight \
   --base <integration-base-from-release-status> \
-  --labels Feature \
+  --labels Feature,area:product \
   --body-file /path/to/pr-body.md
 
-gh plate pr create \
+gh pr create \
   --base <integration-base-from-release-status> \
   --title "Short human-readable title" \
   --label Feature \
+  --label area:product \
   --body-file /path/to/pr-body.md
 ```
+
+To run preflight and create in one step, pass `gh` flags after `--`: `gh plate pr create -- --base <integration-base> --title "…" --label Feature --label area:product --body-file …`.
 
 Include a closing keyword in the PR body when the PR should close the issue (`Closes #N`). Set exactly one PR type label at create time (`Feature`, `Bug`, `Documentation`, `Feedback Response`, or `Hardening`).
 
