@@ -19,7 +19,7 @@ This file records **gaps-only** refinement: what is already merged is source of 
 | Child | #1080 | Closed (stub labels) | *(none)* | `src/plate_core/pr_watch_summary.py`; `docs/wiki/PR-Babysit-Wake-Summary.md`; `tests/test_pr_watch_summary.py`, `tests/test_pr_watch_summary_dedupe.py` (#1096) | Merged #1085. `RENDER_BYTE_BUDGET = 2048` enforced in tests. Watch prints `render_wake_summary`; `--json` adds `wake_summary` on actionable ticks. |
 | Child | #1081 | Closed (stub labels) | *(none)* | `src/plate_core/pr_watch_caps.py`; `tests/test_pr_watch_caps.py`; CLI `--max-wakes`, `--cap-hours`, `--status`, `--reset-caps` | Merged #1083. Ledger: `.agentic/babysit/<slug>-<pr>.caps.json`. Pause marker `<!-- plate-babysit-cap -->`. |
 | Wiring | — | — | — | Merged PR [#1100](https://github.com/akasper/plate/pull/1100) | Probe + summary path in production watch loop (not legacy). |
-| Guards | #1233, #1246 | Closed | *(none)* | `src/plate_core/pr_watch_guards.py`; `tests/test_pr_watch_guards.py` | Required checks, CI settle, REST fallback, event memory, base overlap — extends #1077 cost model (no new CLI names). |
+| Guards | #1233, #1245, #1247 | Closed | *(none)* | `src/plate_core/pr_watch_guards.py`; `tests/test_pr_watch_guards.py` | Required checks, CI settle, REST fallback, event memory, base overlap — extends #1077 cost model (no new CLI names). |
 | Dedupe | #1096 | Closed | *(none)* | `pr_watch_summary` filters + `tests/test_pr_watch_summary_dedupe.py` | Skip repeated resolved Copilot comments in deltas. |
 | MCP | — | — | Open [#1544](https://github.com/akasper/plate/pull/1544) (handler map; #1543) | `src/plate_core/mcp_server.py` `plate_pr_babysit` → one-shot `babysit_pr` only; `mcp/tool_profiles.py` lists tool | **No MCP `--watch` surface today.** Any new watch/MCP tool must follow #1544 registry + #1536 / #1538 / #1541 when those land. |
 | Docs drift | — | — | — | `docs/wiki/Goals.md` L67 vs L74 | L67 still says watch loop does not call probe libraries; L74 and code contradict. Fix in a separate Documentation PR (out of scope here). |
@@ -36,7 +36,7 @@ This file records **gaps-only** refinement: what is already merged is source of 
 3. **Documentation-only gaps** — Goals.md, optional skill cross-links (#1080), public-surface inventory when #1536/#1541 are ready.
 4. **Optional product gaps** — `.plate` cap defaults (#1081), MCP watch/delta surface (only if Andrew wants it; separate Feature).
 
-Dependencies: #1078 library → #1079 backoff in same loop → #1080 summary on `probe_result.changed` → #1081 caps around `record_wake`. Guards (#1233/#1246) assume all four; wiring (#1100) is already on `release-minor`.
+Dependencies: #1078 library → #1079 backoff in same loop → #1080 summary on `probe_result.changed` → #1081 caps around `record_wake`. Guards (#1233/#1245/#1247) assume all four; wiring (#1100) is already on `release-minor`.
 
 ---
 
@@ -47,7 +47,7 @@ Dependencies: #1078 library → #1079 backoff in same loop → #1080 summary on 
 | Gap | Draft acceptance criteria | Paths |
 |-----|-------------------------|-------|
 | Epic closure criteria | Andrew agrees children are refinement-complete; #1077 closes with a Documentation or Epic-summary PR that points at this file + wiki wake doc, not new code. | Issues only (ceremony) |
-| Stale epic comment | Epic body comment contradicts `release-minor`; refinement should note wiring landed in #1100 and guards in #1245. | GitHub #1077 comment (human) |
+| Stale epic comment | Epic body comment contradicts `release-minor`; refinement should note wiring landed in #1100 and guards in #1245 and #1247. | GitHub #1077 comment (human) |
 | Agent cost doctrine | `docs/wiki/PR-Babysit-Wake-Summary.md` is canonical for agents; link from `docs/agents/pr-feedback-and-babysit.md` if not already one hop away. | Wiki + agents doc |
 | Out of scope reaffirm | Event-driven webhooks replacing poll loop stays out of epic (per epic body). | — |
 
