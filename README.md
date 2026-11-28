@@ -18,6 +18,8 @@ All surfaces share the same library code under `src/plate_core/`, so CLI, MCP, a
 
 This project is licensed under a source-available model (MIT base + Commons Clause License Condition v1.0). Free for non-commercial/personal/internal use and modification. Commercial use, resale, or SaaS offerings require a separate license. See the [LICENSE](LICENSE) file for the full text.
 
+**Security** — Report vulnerabilities privately via GitHub security advisories; see [SECURITY.md](SECURITY.md).
+
 ## What It Does
 
 PLATE tooling reads GitHub + local `.plate` / `.agentic/` state and drives process loops:
