@@ -1,0 +1,10 @@
+{
+  "slug": "1066-user-quickstart",
+  "change_type": "docs",
+  "surface": "docs/quickstart.md",
+  "summary": "Add docs/quickstart.md: install pin, import-payload, bootstrap --adopt --apply, health, and first Feature/PR/release CLI flow; link from README for #1066 / #1070 adopter rehearsal.",
+  "migration_impact": "No runtime change. Adopters and rehearsal operators should follow docs/quickstart.md instead of AGENTS.md for first-time setup.",
+  "agent_notes": "Command inventory matches src/plate_core/cli.py registrations verified in PR.",
+  "breaking": false,
+  "links": ["#1066", "#1070"]
+}
