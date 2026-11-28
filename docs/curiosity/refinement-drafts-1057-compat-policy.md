@@ -37,7 +37,7 @@ This draft refines **#1057 only**. Inventory, contract tests, generated referenc
 
 ### Proposed scope
 
-Ship **`docs/plate/design/deprecation-and-compat-policy-1057.md`** that defines:
+Ship **`docs/design/deprecation-and-compat-policy-1057.md`** that defines:
 
 1. **Stability semantics** — same three classes as `docs/plate/research/public-surface-inventory.md` (§Classification criteria):
    - **stable:** semver-covered adopter contract; listed in snapshot + (for CLI/MCP) reference doc.
@@ -73,7 +73,8 @@ Ship **`docs/plate/design/deprecation-and-compat-policy-1057.md`** that defines:
 
 ### Draft acceptance criteria
 
-- [ ] Design doc at **`docs/plate/design/deprecation-and-compat-policy-1057.md`** with: stability semantics, semver table (above expanded with real command examples from inventory), deprecation registry + fragment rules, self-migrate pointer, link to [#1065](https://github.com/akasper/plate/issues/1065) upgrade section placeholder.
+- [ ] Design doc at **`docs/design/deprecation-and-compat-policy-1057.md`** with: stability semantics, semver table (above expanded with real command examples from inventory), deprecation registry + fragment rules, self-migrate pointer, link to [#1065](https://github.com/akasper/plate/issues/1065) upgrade section placeholder.
+- [ ] Policy linked from `README.md` (required by #1057).
 - [ ] Every rule cites [#1536](https://github.com/akasper/plate/pull/1536) inventory sections, [#1541](https://github.com/akasper/plate/pull/1541) deprecation `kind` values, or release ceremony docs—no alternate snapshot paths.
 - [ ] Contributor checklist: intentional stable shrink → deprecations JSON + inventory + regenerate script + reference generator `--check` green.
 - [ ] Documentation PR labeled `Documentation`, body `Closes #1057` when implemented (not this curiosity draft PR).
