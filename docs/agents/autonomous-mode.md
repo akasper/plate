@@ -57,6 +57,8 @@ gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \
   -F can_approve_pull_request_reviews=false
 ```
 
+**Durable budget spend and corrupt files (#1476):** Counter persistence uses `.agentic/budget/spend.json`. Corrupt or non-object spend files fail closed (autonomy and surface gates pause). Operator recovery steps, paths printed by `gh plate autonomy --budget` / `--budget-reset`, and the fact that `clear_save_refusal` is library-only (restart MCP or a documented Python one-liner) are in [Troubleshooting — corrupt spend](../wiki/Troubleshooting.md#corrupt-or-torn-durable-budget-spend-spendjson-1476).
+
 **Security posture:** Autonomous mode intentionally cannot self-escalate. An agent operating autonomously may not bypass `.plate` autonomy config (or create/modify/delete legacy `.github/AUTONOMOUS_MODE` during transition), and may not relax branch protection rules or modify the eligibility criteria. Use `risk:off` or remove permissive config for full manual control. The AutonomyEngine enforces budgets, risk, and quiet rules (terse bullets in loops; see quiet_operations guidance added in #480).
 
 See `docs/design/autonomous-plate-engine.md`, the autonomy fragment in `.agentic/releases/unreleased/`, Epic #470 (and children #471–482), and the generalized auto-merge/babysit PRs for full details. The engine + scheduled procedures enable the "very long time" budgeted autonomous operation that is the heart of the PLATE vision.

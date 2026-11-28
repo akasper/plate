@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .state_store import CorruptStateError, load_strict, locked_json
+from .state_store import CorruptStateError, load_strict, locked_json, mutate_json
 
 OPS_DIR = Path(".agentic/scheduled_ops")
 RUNS_FILE = "runs.json"
@@ -247,6 +247,17 @@ def _save(data: dict[str, Any], base: Path | None = None) -> Path:
         stored.clear()
         stored.update(_normalize_store(dict(data)))
     return path
+
+
+def _mutate_store(base: Path | None, mutator) -> dict[str, Any]:
+    """Locked read-modify-write for scheduled op runs (#1476)."""
+    path = _store_path(base)
+
+    def _wrap(data: dict[str, Any]) -> None:
+        _normalize_store(data)
+        mutator(data)
+
+    return mutate_json(path, _wrap, missing_factory=_empty_store)
 
 
 def render_op_marker(payload: dict[str, Any]) -> str:
@@ -692,16 +703,17 @@ def run_scheduled_op(
             run.notes.append(f"shadow preview {shadow_id} attached")
         run.status = "done"
 
-    data = _load(base_dir)
-    data["runs"].append(run.to_dict())
-    if not blocked:
-        data["last_run_by_op"][op_id] = {
-            "run_id": run.id,
-            "at": ts,
-            "dry_run": dry_run,
-            "status": run.status,
-        }
-    _save(data, base_dir)
+    def _append_run(data: dict[str, Any]) -> None:
+        data["runs"].append(run.to_dict())
+        if not blocked:
+            data["last_run_by_op"][op_id] = {
+                "run_id": run.id,
+                "at": ts,
+                "dry_run": dry_run,
+                "status": run.status,
+            }
+
+    _mutate_store(base_dir, _append_run)
 
     out: dict[str, Any] = {
         "ok": not blocked,
@@ -847,17 +859,18 @@ def run_scheduled_op(
             fleet_out = {"ok": False, "error": str(exc)}
         out["fleet_dispatch"] = fleet_out
         if fleet_out.get("handoff_id"):
-            # Persist handoff id on the run record
-            data2 = _load(base_dir)
-            for r in data2.get("runs") or []:
-                if r.get("id") == run.id:
-                    meta = dict(r.get("metadata") or {})
-                    meta["fleet_handoff_id"] = fleet_out.get("handoff_id")
-                    r["metadata"] = meta
-                    r["updated_at"] = _now()
-                    out["run"] = r
-                    break
-            _save(data2, base_dir)
+
+            def _attach_fleet_handoff(data: dict[str, Any]) -> None:
+                for r in data.get("runs") or []:
+                    if r.get("id") == run.id:
+                        meta = dict(r.get("metadata") or {})
+                        meta["fleet_handoff_id"] = fleet_out.get("handoff_id")
+                        r["metadata"] = meta
+                        r["updated_at"] = _now()
+                        out["run"] = r
+                        break
+
+            _mutate_store(base_dir, _attach_fleet_handoff)
             out.setdefault("notes", [])
             if isinstance(out["notes"], list):
                 out["notes"].append(
@@ -887,28 +900,35 @@ def complete_op_run(
     note: str = "",
     base_dir: Path | None = None,
 ) -> dict[str, Any]:
-    data = _load(base_dir)
-    found = None
-    for r in data["runs"]:
-        if r.get("id") == run_id:
-            found = r
-            break
-    if not found:
-        return {"ok": False, "error": f"run not found: {run_id}"}
-    found["status"] = status
-    found["updated_at"] = _now()
-    if status in ("done", "cancelled", "blocked"):
-        found["completed_at"] = _now()
-    if note:
-        found.setdefault("notes", []).append(note)
-    data["last_run_by_op"][found["op_id"]] = {
-        "run_id": run_id,
-        "at": found["updated_at"],
-        "dry_run": found.get("dry_run"),
-        "status": status,
-    }
-    _save(data, base_dir)
-    return {"ok": True, "run": found}
+    mutate_out: dict[str, Any] = {"abort": None, "run": None}
+
+    def _complete(data: dict[str, Any]) -> None:
+        found = None
+        for r in data.get("runs") or []:
+            if r.get("id") == run_id:
+                found = r
+                break
+        if not found:
+            mutate_out["abort"] = {"ok": False, "error": f"run not found: {run_id}"}
+            return
+        found["status"] = status
+        found["updated_at"] = _now()
+        if status in ("done", "cancelled", "blocked"):
+            found["completed_at"] = _now()
+        if note:
+            found.setdefault("notes", []).append(note)
+        data["last_run_by_op"][found["op_id"]] = {
+            "run_id": run_id,
+            "at": found["updated_at"],
+            "dry_run": found.get("dry_run"),
+            "status": status,
+        }
+        mutate_out["run"] = found
+
+    _mutate_store(base_dir, _complete)
+    if mutate_out["abort"] is not None:
+        return mutate_out["abort"]
+    return {"ok": True, "run": mutate_out["run"]}
 
 
 def list_op_runs(

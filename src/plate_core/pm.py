@@ -180,6 +180,46 @@ def get_persona(agent_id: str) -> dict[str, Any] | None:
     return None
 
 
+def _catalog_agent_id_for_assignment(assignment: dict[str, Any]) -> str:
+    """Resolve PM persona rows to baseline catalog agent ids for delegation (#1476)."""
+    from .baseline_catalog import BaselineCatalogError, load_baseline_catalog
+
+    persona_id = str(assignment.get("agent_id") or "")
+    pkt = assignment.get("packet") or {}
+    persona = pkt.get("persona") if isinstance(pkt.get("persona"), dict) else {}
+    role = str(persona.get("role") or "")
+    catalog = load_baseline_catalog()
+    for candidate in (
+        persona_id,
+        {
+            "developer": "software-engineer",
+            "designer": "designer",
+            "researcher": "research-agent",
+            "release": "project-manager",
+            "pm": "project-manager",
+        }.get(role, ""),
+        "project-manager",
+        "plate",
+    ):
+        if not candidate:
+            continue
+        try:
+            catalog.agent_by_id(candidate)
+            return candidate
+        except BaselineCatalogError:
+            continue
+    return "plate"
+
+
+def _delegation_task_description(assignment: dict[str, Any]) -> str:
+    pkt = assignment.get("packet") or {}
+    text = str(pkt.get("prompt_segment") or pkt.get("task_summary") or "")
+    if text.strip():
+        return text
+    title = str(assignment.get("work_title") or assignment.get("work_type") or "work item")
+    return f"Execute assignment: {title}"
+
+
 def classify_work_type(item: dict[str, Any]) -> str:
     """Map feed/what_next item to work type for assignment."""
     t = str(item.get("item_type") or item.get("type") or item.get("kind") or "").lower()
@@ -1194,22 +1234,16 @@ class ProjectManager:
             except Exception as exc:
                 out["loop"] = {"ok": False, "error": str(exc)}
 
-        try:
+        if found.get("status") == "delegated":
             from .baseline_catalog import delegate_to_agent
 
-            if found.get("status") == "delegated":
-                delegate_to_agent(
-                    agent_id="plate",
-                    prompt_segment=pkt.get("prompt_segment", ""),
-                    context={
-                        "pm_assignment": found.get("assignment_id"),
-                        "persona": found.get("agent_id"),
-                        "work_type": found.get("work_type"),
-                        "human_approved": True,
-                    },
-                )
-        except Exception:
-            pass
+            catalog_agent = _catalog_agent_id_for_assignment(found)
+            task_description = _delegation_task_description(found)
+            try:
+                delegate_to_agent(agent_id=catalog_agent, task_description=task_description)
+            except Exception as exc:
+                found["status"] = "proposed"
+                pkt["delegation_error"] = str(exc)
 
         self._save_queue()
         out["assignment"] = found
@@ -1868,21 +1902,19 @@ class ProjectManager:
                             "packet", {}
                         ).get("auto_delegate", not needs_cp)
                     else:
-                        asg["status"] = "delegated"
-                        try:
-                            from .baseline_catalog import delegate_to_agent
+                        from .baseline_catalog import delegate_to_agent
 
+                        catalog_agent = _catalog_agent_id_for_assignment(asg)
+                        task_description = _delegation_task_description(asg)
+                        try:
                             delegate_to_agent(
-                                agent_id="plate",
-                                prompt_segment=asg["packet"].get("prompt_segment", ""),
-                                context={
-                                    "pm_assignment": asg["assignment_id"],
-                                    "persona": asg["agent_id"],
-                                    "work_type": asg["work_type"],
-                                },
+                                agent_id=catalog_agent,
+                                task_description=task_description,
                             )
-                        except Exception:
-                            pass
+                            asg["status"] = "delegated"
+                        except Exception as exc:
+                            asg["status"] = "proposed"
+                            asg.setdefault("packet", {})["delegation_error"] = str(exc)
                         # #660/#644: open durable fleet handoff for multi-agent execution
                         if do_fleet:
                             try:

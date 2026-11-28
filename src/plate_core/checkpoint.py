@@ -27,6 +27,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .state_store import atomic_write_json
+
 CHECKPOINT_DIR = Path(".agentic/checkpoints")
 MARKER_BEGIN = "<!-- PLATE-CHECKPOINT:BEGIN -->"
 MARKER_END = "<!-- PLATE-CHECKPOINT:END -->"
@@ -177,7 +179,7 @@ def create_checkpoint(
         ),
     )
     path = _path_for(cid, base_dir)
-    path.write_text(json.dumps(rec.to_dict(), indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, rec.to_dict())
     out = rec.to_dict()
     out["marker"] = render_checkpoint_marker(rec)
     out["path"] = str(path)
@@ -213,7 +215,14 @@ def list_checkpoints(
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
         except Exception:
-            continue
+            # Unreadable checkpoint files fail closed: treat as open/pending (#1476).
+            data = {
+                "id": f.stem,
+                "status": "pending",
+                "title": f"(unreadable checkpoint {f.name})",
+                "pause_autonomy": True,
+                "corrupt": True,
+            }
         if status and status != "all" and data.get("status") != status:
             continue
         data["path"] = str(f)

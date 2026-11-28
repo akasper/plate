@@ -387,10 +387,28 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
                 if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
                     raise PlateConfigError(f"autonomy.token_budget.{k} must be integer number, got {v!r}")
             # per_action: optional single-action token ceiling (#634); action = policy string
-            allowed_tb = {"daily", "per_cycle", "per_action", "action"}
+            allowed_tb = {"daily", "per_cycle", "per_action", "action", "usd_per_1k_tokens"}
             unk_tb = set(tb) - allowed_tb
             if unk_tb:
                 raise PlateConfigError(f"unknown autonomy.token_budget keys: {', '.join(sorted(unk_tb))}")
+            rate_tb = tb.get("usd_per_1k_tokens")
+            if rate_tb is not None:
+                if isinstance(rate_tb, bool) or not isinstance(rate_tb, (int, float)):
+                    raise PlateConfigError(
+                        f"autonomy.token_budget.usd_per_1k_tokens must be a number, got {rate_tb!r}"
+                    )
+                if float(rate_tb) < 0:
+                    raise PlateConfigError(
+                        "autonomy.token_budget.usd_per_1k_tokens must be nonnegative"
+                    )
+        rate_auto = auto.get("usd_per_1k_tokens")
+        if rate_auto is not None:
+            if isinstance(rate_auto, bool) or not isinstance(rate_auto, (int, float)):
+                raise PlateConfigError(
+                    f"autonomy.usd_per_1k_tokens must be a number, got {rate_auto!r}"
+                )
+            if float(rate_auto) < 0:
+                raise PlateConfigError("autonomy.usd_per_1k_tokens must be nonnegative")
         allowed_auto = {
             "enabled",
             "risk_tolerance",
@@ -400,6 +418,7 @@ def validate_plate_config(config: dict[str, Any], *, strict: bool = False) -> No
             "cost_ceiling_usd",
             "schedules_enabled",
             "loop",
+            "usd_per_1k_tokens",
         }
         unk_auto = set(auto) - allowed_auto
         if unk_auto:

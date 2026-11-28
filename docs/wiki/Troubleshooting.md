@@ -2,6 +2,26 @@
 
 Symptom notes for PLATE operators. The fuller guide is tracked by #1063.
 
+## Corrupt or torn durable budget spend (`spend.json`, #1476)
+
+Durable token spend lives at **`.agentic/budget/spend.json`** (relative to the repository root). When that file is torn, empty, valid JSON but not a JSON **object** (for example `[]` or `null`), or otherwise unreadable, PLATE treats it **fail-closed**:
+
+- `gh plate autonomy --budget --json` sets `corrupt_spend: true`, `budget_pressure: "critical"`, `would_pause_next_cycle: true`, and `gate_reason` explaining the pause. The **`spend_path`** field in that snapshot is the file to fix.
+- `gh plate autonomy --budget-reset --json` returns `ok: false` with `corrupt_spend: true`; the **`path`** field (and the `error` text) is the same spend file. Reset does **not** overwrite corrupt bytes (by design).
+- Charges and normal saves/refuses while corrupt; a sidecar **`.agentic/budget/spend.json.corrupt`** may appear with a copy of the bad bytes for inspection.
+
+**Supported operator recovery (no special “unblock” CLI):**
+
+1. From the repo root, inspect: `gh plate autonomy --budget --json` and note `spend_path`.
+2. Repair **`spend.json`** to a single JSON **object** with normal counter fields (for example `date`, `spent_today`, `spent_this_cycle`, `spent_usd_today`), **or** delete `spend.json` if you accept zeroed counters for a fresh day file.
+3. **`clear_save_refusal` has no `gh plate` or MCP surface today.** It is an in-process library helper in `plate_core.state_store` used after on-disk repair. A **new** one-shot `gh plate` CLI process usually does not need it once the file on disk is valid or missing. **Restart `plate-mcp`** (or any other long-lived process that already loaded the corrupt file) after fixing or deleting `spend.json`, so in-memory refuse-save state is cleared.
+4. Optional advanced step (same machine, correct venv/`PYTHONPATH`): after step 2, run  
+   `python3 -c "from pathlib import Path; from plate_core.state_store import clear_save_refusal; clear_save_refusal(Path('.agentic/budget/spend.json'))"`  
+   from the repo root without restarting MCP.
+5. When `corrupt_spend` is false again, use `gh plate autonomy --budget-reset` only for **hygiene** (test debris exhausting limits), not as the corrupt-file fix.
+
+For healthy spend files that are simply exhausted by tests, `gh plate autonomy --budget-reset` remains the supported hygiene path (#634).
+
 ## `gh extension upgrade plate` does not change behavior
 
 The GitHub CLI extension only wraps the pinned `plate-core` version bundled with that extension build. If upgrade appears to do nothing, compare what is installed:

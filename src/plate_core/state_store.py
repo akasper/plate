@@ -8,9 +8,7 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Iterator, Sequence
-
-from .pr_watch_guards import atomic_write_json
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 __all__ = [
     "Machine",
@@ -18,10 +16,12 @@ __all__ = [
     "CorruptStateError",
     "locked_json",
     "atomic_write_json",
+    "mutate_json",
     "load_strict",
     "assert_terminal_states_have_no_outgoing",
     "save_refused",
     "clear_save_refusal",
+    "LOCK_WAIT_TIMEOUT_SEC",
 ]
 
 Transition = tuple[str, str, str]
@@ -29,6 +29,7 @@ Transition = tuple[str, str, str]
 # Empty lockfiles from a crashed creator between O_EXCL and pid write are not stale
 # until older than this grace window.
 _EMPTY_LOCK_MAX_AGE_SEC = 5.0
+LOCK_WAIT_TIMEOUT_SEC = 30.0
 
 _refuse_save: set[str] = set()
 
@@ -78,6 +79,15 @@ def assert_terminal_states_have_no_outgoing(machine: Machine) -> None:
             )
 
 
+def atomic_write_json(path: Path | str, payload: Mapping[str, Any]) -> None:
+    """Write JSON atomically (temp file + ``os.replace``) for Windows-safe persistence."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, target)
+
+
 def _path_key(path: Path) -> str:
     return str(path.resolve())
 
@@ -86,8 +96,24 @@ def save_refused(path: Path | str) -> bool:
     return _path_key(Path(path)) in _refuse_save
 
 
-def clear_save_refusal(path: Path | str) -> None:
-    _refuse_save.discard(_path_key(Path(path)))
+def clear_save_refusal(path: Path | str, *, require_valid: bool = True) -> bool:
+    """Clear in-process save refusal only when the on-disk file is gone or valid (#1476).
+
+    Returns True when refusal was cleared (or was not set). Returns False when
+    ``require_valid`` is True and the file still exists but is corrupt JSON, so
+    callers cannot re-open write paths without fixing or replacing the file.
+    """
+    target = Path(path)
+    key = _path_key(target)
+    if key not in _refuse_save:
+        return True
+    if require_valid and target.is_file():
+        try:
+            load_strict(target)
+        except CorruptStateError:
+            return False
+    _refuse_save.discard(key)
+    return True
 
 
 def _mark_corrupt(path: Path) -> None:
@@ -143,38 +169,76 @@ def _lock_is_stale(lock_path: Path) -> bool:
 
 
 @contextmanager
-def _lockfile(lock_path: Path) -> Iterator[None]:
+def _acquire_file_lock(lock_path: Path, *, timeout_sec: float) -> Iterator[Any]:
+    """Platform file lock with a wait deadline (#1476)."""
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    acquired = False
-    fd: int | None = None
-    while not acquired:
+    deadline = time.monotonic() + timeout_sec
+    if sys.platform == "win32":
+        import msvcrt
+
+        fh = open(lock_path, "a+b")
         try:
-            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            acquired = True
-        except FileExistsError:
-            if _lock_is_stale(lock_path):
+            while True:
                 try:
-                    lock_path.unlink()
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
                 except OSError:
-                    pass
-                continue
-            time.sleep(0.02)
-    try:
-        assert fd is not None
-        os.write(fd, f"{os.getpid()}\n".encode("ascii"))
-        os.close(fd)
-        fd = None
-        yield
-    finally:
-        if fd is not None:
+                    if time.monotonic() >= deadline:
+                        fh.close()
+                        raise TimeoutError(
+                            f"timed out waiting for lock on {lock_path} after {timeout_sec}s"
+                        )
+                    time.sleep(0.02)
+            fh.seek(0)
+            fh.truncate()
+            fh.write(f"{os.getpid()}\n".encode("ascii"))
+            fh.flush()
+            yield fh
+        finally:
             try:
-                os.close(fd)
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
             except OSError:
                 pass
+            fh.close()
+    else:
+        import fcntl
+
+        fh = open(lock_path, "a+b")
         try:
-            lock_path.unlink()
-        except OSError:
-            pass
+            while True:
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        fh.close()
+                        raise TimeoutError(
+                            f"timed out waiting for lock on {lock_path} after {timeout_sec}s"
+                        )
+                    time.sleep(0.02)
+            fh.seek(0)
+            fh.truncate()
+            fh.write(f"{os.getpid()}\n".encode("ascii"))
+            fh.flush()
+            yield fh
+        finally:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+            fh.close()
+
+
+@contextmanager
+def _lockfile(
+    lock_path: Path,
+    *,
+    timeout_sec: float = LOCK_WAIT_TIMEOUT_SEC,
+) -> Iterator[None]:
+    with _acquire_file_lock(lock_path, timeout_sec=timeout_sec):
+        yield
 
 
 def load_strict(path: Path | str) -> Any:
@@ -200,6 +264,7 @@ def locked_json(
     path: Path | str,
     *,
     missing_factory: Callable[[], dict[str, Any]] | None = None,
+    lock_timeout_sec: float = LOCK_WAIT_TIMEOUT_SEC,
 ) -> Iterator[dict[str, Any]]:
     """Load (or create) a JSON object under an exclusive lock, then atomically persist."""
     target = Path(path)
@@ -208,7 +273,7 @@ def locked_json(
     if save_refused(target):
         raise CorruptStateError(f"refusing locked access to corrupt store {target}")
 
-    with _lockfile(lock_path):
+    with _lockfile(lock_path, timeout_sec=lock_timeout_sec):
         if save_refused(target):
             raise CorruptStateError(f"refusing locked access to corrupt store {target}")
 
@@ -230,3 +295,21 @@ def locked_json(
 
         atomic_write_json(target, data)
         clear_save_refusal(target)
+
+
+def mutate_json(
+    path: Path | str,
+    mutator: Callable[[dict[str, Any]], None],
+    *,
+    missing_factory: Callable[[], dict[str, Any]] | None = None,
+    lock_timeout_sec: float = LOCK_WAIT_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Read-modify-write a JSON object under one exclusive lock (#1476)."""
+    target = Path(path)
+    with locked_json(
+        target,
+        missing_factory=missing_factory,
+        lock_timeout_sec=lock_timeout_sec,
+    ) as data:
+        mutator(data)
+        return dict(data)
